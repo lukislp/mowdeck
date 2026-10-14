@@ -56,8 +56,39 @@ async def _shared_manager() -> Any:
             manager = _NoDiscoveryManager(get_adapters(), slot_manager=None)
             set_manager(manager)
             await manager.async_setup()
+            install_bleak_wrappers()
             _manager = manager
     return _manager
+
+
+def install_bleak_wrappers() -> None:
+    """Route ``BleakClient`` and ``BleakScanner`` through habluetooth, i.e. the proxy.
+
+    PyMammotion opens its Bluetooth link with a bare ``BleakClient(address)``. Without the
+    wrappers bleak picks the platform backend (BlueZ in the container), which knows no such
+    device and fails with ``KeyError('path')``; the wrappers resolve the address through the
+    habluetooth manager, so the connection goes over the ESPHome proxy that saw the mower. This
+    is what Home Assistant does at start-up (``install_multiple_bleak_catcher``). Modules that
+    bound the names at import time, such as PyMammotion's ``bluetooth.ble``, are re-pointed as
+    well. Safe to call more than once.
+    """
+    import sys
+
+    from habluetooth import HaBleakClientWrapper, HaBleakScannerWrapper
+    from habluetooth.usage import (
+        ORIGINAL_BLEAK_CLIENT,
+        ORIGINAL_BLEAK_SCANNER,
+        install_multiple_bleak_catcher,
+    )
+
+    install_multiple_bleak_catcher()
+    for name, module in list(sys.modules.items()):
+        if not name.startswith("pymammotion") or module is None:
+            continue
+        if getattr(module, "BleakClient", None) is ORIGINAL_BLEAK_CLIENT:
+            setattr(module, "BleakClient", HaBleakClientWrapper)  # noqa: B010
+        if getattr(module, "BleakScanner", None) is ORIGINAL_BLEAK_SCANNER:
+            setattr(module, "BleakScanner", HaBleakScannerWrapper)  # noqa: B010
 
 
 async def open_proxy(

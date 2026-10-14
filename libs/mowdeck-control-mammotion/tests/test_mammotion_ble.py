@@ -259,3 +259,30 @@ def test_mammotion_fake_port_is_a_mammotion_port() -> None:
     from mowdeck_control_mammotion.port import MammotionPort
 
     assert isinstance(FakeMammotionPort(), MammotionPort)
+
+
+def test_mammotion_bleak_wrappers_route_pymammotion_through_the_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PyMammotion's bare ``BleakClient(address)`` must resolve through habluetooth."""
+    import sys
+    import types
+
+    bleak = pytest.importorskip("bleak")
+    habluetooth = pytest.importorskip("habluetooth")
+    usage = pytest.importorskip("habluetooth.usage")
+    from mowdeck_control_mammotion.esphome import install_bleak_wrappers
+
+    # A module that bound the names at import time, like pymammotion.bluetooth.ble.
+    bound = types.ModuleType("pymammotion._bound_for_test")
+    bound.BleakClient = usage.ORIGINAL_BLEAK_CLIENT  # type: ignore[attr-defined]
+    bound.BleakScanner = usage.ORIGINAL_BLEAK_SCANNER  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, bound.__name__, bound)
+    try:
+        install_bleak_wrappers()
+        install_bleak_wrappers()  # idempotent
+        assert bleak.BleakClient is habluetooth.HaBleakClientWrapper
+        assert bound.BleakClient is habluetooth.HaBleakClientWrapper
+        assert bound.BleakScanner is habluetooth.HaBleakScannerWrapper
+    finally:
+        usage.uninstall_multiple_bleak_catcher()
