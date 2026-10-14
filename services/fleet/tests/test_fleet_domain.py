@@ -30,6 +30,9 @@ EXPECTED = {
     "set_blade_height": Relation.CAN_CONTROL,
     "set_speed": Relation.CAN_CONTROL,
     "set_light": Relation.CAN_CONTROL,
+    "firmware_update": Relation.CAN_MANAGE_MOWERS,
+    "spot_mow": Relation.CAN_DRIVE,
+    "spot_stop": Relation.CAN_CONTROL,
     "manual_drive": Relation.CAN_DRIVE,
     "emergency_stop": Relation.CAN_EMERGENCY_STOP,
 }

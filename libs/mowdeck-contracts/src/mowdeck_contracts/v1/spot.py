@@ -21,6 +21,7 @@ import json
 import math
 from collections.abc import Iterable, Sequence
 from typing import Any, Final, Literal, Self
+from uuid import UUID
 
 from pydantic import Field, model_validator
 
@@ -226,3 +227,67 @@ class SpotMowPlan(ContractModel):
     def point_count(self) -> int:
         """Number of points of all segments."""
         return sum(len(segment.points()) for segment in self.segments)
+
+
+# --- Spot runs driven by MowDeck (ADR 0039) ---------------------------------------------------
+
+
+MAX_SPOT_MOW_SPEED_MPS: Final = 0.3
+"""Highest speed of a ``SpotMow`` run MowDeck drives itself over the Bluetooth bridge."""
+MAX_SPOT_POLYGON_POINTS: Final = 64
+"""Most corners of a ``SpotPolygon``."""
+
+LatLon = tuple[float, float]
+"""A WGS84 point as ``[lat, lon]`` (the Planner's ``polygon_wgs84`` convention)."""
+
+
+class SpotCircle(ContractModel):
+    """A round spot: ``radius_m`` around ``center_wgs84`` (``[lat, lon]``)."""
+
+    center_wgs84: LatLon
+    radius_m: float = Field(gt=0, le=10)
+
+
+class SpotPolygon(ContractModel):
+    """A drawn spot: a closed ring of WGS84 ``[lat, lon]`` corners (first point not repeated)."""
+
+    polygon_wgs84: list[LatLon] = Field(min_length=3, max_length=MAX_SPOT_POLYGON_POINTS)
+
+
+SpotTarget = SpotCircle | SpotPolygon
+"""Where a spot run was requested, kept for the audit record (the route is in ``plan``)."""
+
+SpotRunState = Literal[
+    "preparing", "spot_mowing", "paused_rtk", "stopping", "done", "aborted", "failed"
+]
+"""Life cycle of a spot run: ``preparing`` (checks, approach), ``spot_mowing`` (driving the
+plan), ``paused_rtk`` (waiting for a fixed RTK position), ``stopping`` (a stop was requested),
+then one of ``done``, ``aborted`` (``reason`` says why, e.g. ``rtk_lost``, ``geofence``,
+``link_lost``, ``stopped_by_user``, ``emergency_stop``, ``sensor_stop``, ``timeout``,
+``heading_mismatch``) or ``failed``."""
+
+SPOT_RUN_FINAL_STATES: Final[frozenset[str]] = frozenset({"done", "aborted", "failed"})
+"""States after which a spot run does not change any more."""
+
+
+class SpotRunStatus(ContractModel):
+    """Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``)."""
+
+    run_id: UUID
+    state: SpotRunState
+    progress_percent: int = Field(default=0, ge=0, le=100)
+    segment_index: int = Field(default=0, ge=0, description="The segment being driven (0-based).")
+    segments_total: int = Field(default=0, ge=0)
+    planned_points: int = Field(default=0, ge=0, description="Points of the plan in total.")
+    driven_points: int = Field(default=0, ge=0, description="Points reached so far.")
+    dry_run: bool = Field(
+        default=True, description="The blades stayed off for the whole run (the default)."
+    )
+    reason: str | None = Field(
+        default=None, max_length=200, description="Why the run ended early or paused, if so."
+    )
+
+    @property
+    def final(self) -> bool:
+        """True once the run has ended (``done``, ``aborted`` or ``failed``)."""
+        return self.state in SPOT_RUN_FINAL_STATES

@@ -544,6 +544,48 @@ export type components = {
             key: string;
         };
         /**
+         * FirmwareInfo
+         * @description The firmware state of a mower (``MowerState.firmware_info``).
+         */
+        FirmwareInfo: {
+            /**
+             * Available
+             * @description The newest version the vendor offers for this mower; null when none or unknown.
+             */
+            available?: string | null;
+            /**
+             * Checked At
+             * @description When the vendor was last asked; null when never.
+             */
+            checked_at?: string | null;
+            /**
+             * Failure Reason
+             * @description Why the last update failed, if known.
+             */
+            failure_reason?: string | null;
+            /**
+             * Installed
+             * @description The version running on the mower.
+             */
+            installed?: string | null;
+            /**
+             * Progress
+             * @description Percent done while `installing`, if reported.
+             */
+            progress?: number | null;
+            /**
+             * Release Notes
+             * @description Release notes of `available`, if given.
+             */
+            release_notes?: string | null;
+            /**
+             * Update State
+             * @default unknown
+             * @enum {string}
+             */
+            update_state: "idle" | "available" | "installing" | "failed" | "unknown";
+        };
+        /**
          * GeoPosition
          * @description A WGS84 position.
          */
@@ -741,6 +783,54 @@ export type components = {
          */
         Layer: "coverage" | "rtk" | "wifi" | "mnet";
         /**
+         * LinkStatus
+         * @description The state of one additional link as the Device-Gateway reports it in ``MowerState.links``.
+         */
+        LinkStatus: {
+            /**
+             * Compiled At
+             * @description When the bridge firmware was compiled, as ESPHome reports it (free text).
+             */
+            compiled_at?: string | null;
+            /**
+             * Connected
+             * @description The link is open right now.
+             * @default false
+             */
+            connected: boolean;
+            /**
+             * Esphome Version
+             * @description Firmware version of the bridge (the ESPHome release it runs).
+             */
+            esphome_version?: string | null;
+            /**
+             * Outdated
+             * @description The bridge firmware is older than what MowDeck expects; see `outdated_reason`.
+             * @default false
+             */
+            outdated: boolean;
+            /**
+             * Outdated Reason
+             * @description Why the firmware counts as outdated, e.g. `esphome_version`, `project_version` or `no_project`; null when up to date.
+             */
+            outdated_reason?: string | null;
+            /**
+             * Project Version
+             * @description Version of the MowDeck bridge template the firmware was built from; null when the firmware carries no `esphome.project`.
+             */
+            project_version?: string | null;
+            /**
+             * Rssi
+             * @description Signal strength of the mower at the bridge in dBm, if the bridge reports it.
+             */
+            rssi?: number | null;
+            /**
+             * Since
+             * @description When the link was opened (or lost), if known.
+             */
+            since?: string | null;
+        };
+        /**
          * MapArea
          * @description A mowable area (a "zone" in the Mammotion app).
          */
@@ -811,7 +901,7 @@ export type components = {
          * @description What the mower is doing right now.
          * @enum {string}
          */
-        MowerActivity: "idle" | "mowing" | "paused" | "returning" | "docked" | "charging" | "error" | "offline" | "unknown";
+        MowerActivity: "idle" | "mowing" | "paused" | "returning" | "docked" | "charging" | "error" | "offline" | "updating" | "unknown";
         /**
          * MowerCapabilities
          * @description Feature flags and limits of one mower behind one connection.
@@ -846,11 +936,22 @@ export type components = {
              */
             cutting_width_mm?: number | null;
             /**
+             * Firmware Update
+             * @description The connection can ask the manufacturer's firmware service for updates and install them (`firmware_check`, `firmware_update`).
+             * @default false
+             */
+            firmware_update: boolean;
+            /**
              * Light
              * @description The mower's light (the camera's headlamp on Mammotion mowers) can be switched with `set_light`.
              * @default false
              */
             light: boolean;
+            /**
+             * Links Supported
+             * @description Additional link kinds this connection can open next to its primary one (e.g. `ble_bridge`); empty when the mower has only its primary connection.
+             */
+            links_supported?: string[];
             /**
              * Manual Drive
              * @description Joystick driving is supported.
@@ -1140,11 +1241,20 @@ export type components = {
             error_message?: string | null;
             /** Firmware */
             firmware?: string | null;
+            /** @description Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor. */
+            firmware_info?: components["schemas"]["FirmwareInfo"] | null;
             /**
              * Light On
              * @description Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).
              */
             light_on?: boolean | null;
+            /**
+             * Links
+             * @description State of the mower's additional links by kind (e.g. `ble_bridge`); empty for a mower with only its primary connection.
+             */
+            links?: {
+                [key: string]: components["schemas"]["LinkStatus"];
+            };
             /**
              * Mower Id
              * Format: uuid
@@ -1175,6 +1285,8 @@ export type components = {
             rtk_source: components["schemas"]["RtkSource"];
             /** Speed Mps */
             speed_mps?: number | null;
+            /** @description The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one. */
+            spot_run?: components["schemas"]["SpotRunStatus"] | null;
         };
         /**
          * MowerStateList
@@ -1423,6 +1535,61 @@ export type components = {
          * @enum {string}
          */
         RtkSource: "base_station" | "network" | "unknown";
+        /**
+         * SpotRunStatus
+         * @description Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``).
+         */
+        SpotRunStatus: {
+            /**
+             * Driven Points
+             * @description Points reached so far.
+             * @default 0
+             */
+            driven_points: number;
+            /**
+             * Dry Run
+             * @description The blades stayed off for the whole run (the default).
+             * @default true
+             */
+            dry_run: boolean;
+            /**
+             * Planned Points
+             * @description Points of the plan in total.
+             * @default 0
+             */
+            planned_points: number;
+            /**
+             * Progress Percent
+             * @default 0
+             */
+            progress_percent: number;
+            /**
+             * Reason
+             * @description Why the run ended early or paused, if so.
+             */
+            reason?: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Segment Index
+             * @description The segment being driven (0-based).
+             * @default 0
+             */
+            segment_index: number;
+            /**
+             * Segments Total
+             * @default 0
+             */
+            segments_total: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "preparing" | "spot_mowing" | "paused_rtk" | "stopping" | "done" | "aborted" | "failed";
+        };
         /**
          * StateHistory
          * @description History of a mower in a time range.

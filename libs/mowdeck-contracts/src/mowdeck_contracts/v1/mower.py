@@ -12,7 +12,15 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
-from mowdeck_contracts.v1.spot import SpotMowPlan
+from mowdeck_contracts.v1.firmware import FirmwareInfo
+from mowdeck_contracts.v1.links import LinkStatus
+from mowdeck_contracts.v1.spot import (
+    MAX_SPOT_MOW_SPEED_MPS,
+    SpotCircle,
+    SpotMowPlan,
+    SpotPolygon,
+    SpotRunStatus,
+)
 
 
 class MowerActivity(StrEnum):
@@ -26,6 +34,8 @@ class MowerActivity(StrEnum):
     CHARGING = "charging"
     ERROR = "error"
     OFFLINE = "offline"
+    UPDATING = "updating"
+    """A firmware update runs; every command but the emergency stop is refused meanwhile."""
     UNKNOWN = "unknown"
 
 
@@ -114,6 +124,21 @@ class MowerState(ContractModel):
         default=None,
         description="Whether the mower's light (the camera's headlamp) is on, as the mower "
         "reports it; null when not reported (no light, or no answer yet).",
+    )
+    links: dict[str, LinkStatus] = Field(
+        default_factory=dict,
+        description="State of the mower's additional links by kind (e.g. `ble_bridge`); empty "
+        "for a mower with only its primary connection.",
+    )
+    firmware_info: FirmwareInfo | None = Field(
+        default=None,
+        description="Installed and available firmware and the update state; null when the "
+        "adapter has not checked (or cannot check) the vendor.",
+    )
+    spot_run: SpotRunStatus | None = Field(
+        default=None,
+        description="The spot run MowDeck drives on this mower right now (`SpotMow`), with its "
+        "final state kept until the next run; null when there never was one.",
     )
     raw: dict[str, Any] = Field(
         default_factory=dict,
@@ -254,6 +279,63 @@ class SetLight(ContractModel):
     on: bool = Field(description="True switches the light on, False off.")
 
 
+class FirmwareUpdate(ContractModel):
+    """Install the firmware version the vendor offers (``MowerState.firmware_info.available``).
+
+    The adapter refuses it unless ``update_state`` is ``available`` and ``version`` equals
+    ``available`` (a stale client), the mower is docked and charging with enough battery, no job
+    or drive session runs and no update is already installing. While it runs the mower reports
+    the activity ``updating``.
+    """
+
+    kind: Literal["firmware_update"] = "firmware_update"
+    version: str = Field(
+        min_length=1, max_length=64, description="The version to install, as offered."
+    )
+
+
+class SpotMow(ContractModel):
+    """Mow a small spot by driving the mower along ``plan`` with joystick frames (ADR 0039).
+
+    Unlike ``StartMow.spot_plan`` the mower runs no job of its own: MowDeck's gateway steers it
+    over the drive link (needs ``MowerCapabilities.manual_drive``, a fixed RTK position and an
+    idle mower). The blades stay off (a dry run) unless ``blades`` and ``confirm_blades`` are
+    both true and the mower allows blades while driving (``manual_drive_blades``). ``spot``
+    records what the user chose; the route is ``plan``. Progress arrives in
+    ``MowerState.spot_run``; ``SpotStop`` ends the run.
+    """
+
+    kind: Literal["spot_mow"] = "spot_mow"
+    plan: SpotMowPlan
+    blades: bool = Field(default=False, description="Cut while driving (else a dry run).")
+    confirm_blades: bool = Field(
+        default=False,
+        description="The user confirmed the blades separately; required with `blades`.",
+    )
+    speed_mps: float = Field(
+        default=0.2,
+        gt=0,
+        le=MAX_SPOT_MOW_SPEED_MPS,
+        description="Driving speed of the run in metres per second (at most 0.3).",
+    )
+    spot: SpotCircle | SpotPolygon | None = Field(
+        default=None, description="The spot as the user chose it (audit only)."
+    )
+
+    @model_validator(mode="after")
+    def _blades_confirmed(self) -> Self:
+        if self.blades and not self.confirm_blades:
+            msg = "blades need confirm_blades"
+            raise ValueError(msg)
+        return self
+
+
+class SpotStop(ContractModel):
+    """End the running spot run: zero frame, blades off, the mower stays where it is."""
+
+    kind: Literal["spot_stop"] = "spot_stop"
+
+
 MANUAL_DRIVE_TTL_MIN_MS = 100
 MANUAL_DRIVE_TTL_MAX_MS = 2000
 
@@ -285,6 +367,9 @@ MowerCommand = Annotated[
     | SetBladeHeight
     | SetSpeed
     | SetLight
+    | FirmwareUpdate
+    | SpotMow
+    | SpotStop
     | ManualDrive,
     Field(discriminator="kind"),
 ]
@@ -299,6 +384,9 @@ COMMAND_MODELS: tuple[type[ContractModel], ...] = (
     SetBladeHeight,
     SetSpeed,
     SetLight,
+    FirmwareUpdate,
+    SpotMow,
+    SpotStop,
     ManualDrive,
 )
 """All command model classes, in a stable order."""

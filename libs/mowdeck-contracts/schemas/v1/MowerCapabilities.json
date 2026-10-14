@@ -92,11 +92,26 @@
       "description": "Width of the cut swath in millimetres, if known (coverage heatmaps).",
       "title": "Cutting Width Mm"
     },
+    "firmware_update": {
+      "default": false,
+      "description": "The connection can ask the manufacturer's firmware service for updates and install them (`firmware_check`, `firmware_update`).",
+      "title": "Firmware Update",
+      "type": "boolean"
+    },
     "light": {
       "default": false,
       "description": "The mower's light (the camera's headlamp on Mammotion mowers) can be switched with `set_light`.",
       "title": "Light",
       "type": "boolean"
+    },
+    "links_supported": {
+      "description": "Additional link kinds this connection can open next to its primary one (e.g. `ble_bridge`); empty when the mower has only its primary connection.",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Links Supported",
+      "type": "array"
     },
     "manual_drive": {
       "default": false,

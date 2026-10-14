@@ -13,6 +13,29 @@
       "title": "EmergencyStop",
       "type": "object"
     },
+    "FirmwareUpdate": {
+      "description": "Install the firmware version the vendor offers (``MowerState.firmware_info.available``).\n\nThe adapter refuses it unless ``update_state`` is ``available`` and ``version`` equals\n``available`` (a stale client), the mower is docked and charging with enough battery, no job\nor drive session runs and no update is already installing. While it runs the mower reports\nthe activity ``updating``.",
+      "properties": {
+        "kind": {
+          "const": "firmware_update",
+          "default": "firmware_update",
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "description": "The version to install, as offered.",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "FirmwareUpdate",
+      "type": "object"
+    },
     "ManualDrive": {
       "description": "One joystick sample. The mower stops when no new sample arrives within ``ttl_ms``.\n\nThis is the dead-man switch: clients resend samples continuously while the stick is held.",
       "properties": {
@@ -168,6 +191,92 @@
       "title": "SetSpeed",
       "type": "object"
     },
+    "SpotCircle": {
+      "description": "A round spot: ``radius_m`` around ``center_wgs84`` (``[lat, lon]``).",
+      "properties": {
+        "center_wgs84": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Center Wgs84",
+          "type": "array"
+        },
+        "radius_m": {
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Radius M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "center_wgs84",
+        "radius_m"
+      ],
+      "title": "SpotCircle",
+      "type": "object"
+    },
+    "SpotMow": {
+      "description": "Mow a small spot by driving the mower along ``plan`` with joystick frames (ADR 0039).\n\nUnlike ``StartMow.spot_plan`` the mower runs no job of its own: MowDeck's gateway steers it\nover the drive link (needs ``MowerCapabilities.manual_drive``, a fixed RTK position and an\nidle mower). The blades stay off (a dry run) unless ``blades`` and ``confirm_blades`` are\nboth true and the mower allows blades while driving (``manual_drive_blades``). ``spot``\nrecords what the user chose; the route is ``plan``. Progress arrives in\n``MowerState.spot_run``; ``SpotStop`` ends the run.",
+      "properties": {
+        "blades": {
+          "default": false,
+          "description": "Cut while driving (else a dry run).",
+          "title": "Blades",
+          "type": "boolean"
+        },
+        "confirm_blades": {
+          "default": false,
+          "description": "The user confirmed the blades separately; required with `blades`.",
+          "title": "Confirm Blades",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "spot_mow",
+          "default": "spot_mow",
+          "title": "Kind",
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/SpotMowPlan"
+        },
+        "speed_mps": {
+          "default": 0.2,
+          "description": "Driving speed of the run in metres per second (at most 0.3).",
+          "exclusiveMinimum": 0,
+          "maximum": 0.3,
+          "title": "Speed Mps",
+          "type": "number"
+        },
+        "spot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpotCircle"
+            },
+            {
+              "$ref": "#/$defs/SpotPolygon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The spot as the user chose it (audit only).",
+          "title": "Spot"
+        }
+      },
+      "required": [
+        "plan"
+      ],
+      "title": "SpotMow",
+      "type": "object"
+    },
     "SpotMowPlan": {
       "description": "A computed mowing route for ``StartMow.spot_plan``.",
       "properties": {
@@ -252,6 +361,35 @@
       "title": "SpotNativeJob",
       "type": "object"
     },
+    "SpotPolygon": {
+      "description": "A drawn spot: a closed ring of WGS84 ``[lat, lon]`` corners (first point not repeated).",
+      "properties": {
+        "polygon_wgs84": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 64,
+          "minItems": 3,
+          "title": "Polygon Wgs84",
+          "type": "array"
+        }
+      },
+      "required": [
+        "polygon_wgs84"
+      ],
+      "title": "SpotPolygon",
+      "type": "object"
+    },
     "SpotSegment": {
       "description": "One part of a spot plan: drive along ``path`` with the blades on or off.",
       "properties": {
@@ -289,6 +427,19 @@
         "path"
       ],
       "title": "SpotSegment",
+      "type": "object"
+    },
+    "SpotStop": {
+      "description": "End the running spot run: zero frame, blades off, the mower stays where it is.",
+      "properties": {
+        "kind": {
+          "const": "spot_stop",
+          "default": "spot_stop",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "SpotStop",
       "type": "object"
     },
     "StartMow": {
@@ -359,6 +510,7 @@
       "discriminator": {
         "mapping": {
           "emergency_stop": "#/$defs/EmergencyStop",
+          "firmware_update": "#/$defs/FirmwareUpdate",
           "manual_drive": "#/$defs/ManualDrive",
           "pause_mow": "#/$defs/PauseMow",
           "resume_mow": "#/$defs/ResumeMow",
@@ -366,6 +518,8 @@
           "set_blade_height": "#/$defs/SetBladeHeight",
           "set_light": "#/$defs/SetLight",
           "set_speed": "#/$defs/SetSpeed",
+          "spot_mow": "#/$defs/SpotMow",
+          "spot_stop": "#/$defs/SpotStop",
           "start_mow": "#/$defs/StartMow"
         },
         "propertyName": "kind"
@@ -394,6 +548,15 @@
         },
         {
           "$ref": "#/$defs/SetLight"
+        },
+        {
+          "$ref": "#/$defs/FirmwareUpdate"
+        },
+        {
+          "$ref": "#/$defs/SpotMow"
+        },
+        {
+          "$ref": "#/$defs/SpotStop"
         },
         {
           "$ref": "#/$defs/ManualDrive"

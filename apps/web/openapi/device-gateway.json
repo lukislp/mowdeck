@@ -252,6 +252,7 @@
           "charging",
           "error",
           "offline",
+          "updating",
           "unknown"
         ],
         "title": "MowerActivity",

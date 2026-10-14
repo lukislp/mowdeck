@@ -21,6 +21,10 @@ Subject scheme:
 ``tracks.positions.query``            core NATS request: the position track of a mower (Telemetry)
 ``gateway.mower.<id>.camera.session``  core NATS request: a live camera session (Device-Gateway)
 ``gateway.mower.<id>.path.preview``   core NATS request: plan a route without starting (Gateway)
+``gateway.mower.<id>.bridge.scan``    core NATS request: look for the mower through a Bluetooth
+                                      bridge (Device-Gateway)
+``gateway.mower.<id>.firmware.check`` core NATS request: ask the vendor for firmware updates
+                                      (Device-Gateway)
 ``gateway.mower.<mower_id>.photo``    core NATS request: a still image of one mower (Vision)
 ``gateway.cloud.discover``            core NATS request: devices of a vendor cloud account
 ====================================  ============================================
@@ -195,6 +199,46 @@ def parse_path_preview_subject(subject: str) -> UUID:
     return UUID(parts[2])
 
 
+def bridge_scan_subject(mower_id: UUID) -> str:
+    """Core NATS request subject of a bridge scan: ``gateway.mower.<id>.bridge.scan``.
+
+    ``BridgeScanRequest`` in, ``BridgeScanReply`` out; answered by the gateway instance that
+    holds the mower (other shards stay silent).
+    """
+    return f"{GATEWAY_PREFIX}.{mower_id}.bridge.scan"
+
+
+def parse_bridge_scan_subject(subject: str) -> UUID:
+    """The mower id of a ``gateway.mower.<id>.bridge.scan`` subject."""
+    parts = subject.split(".")
+    if len(parts) != 5 or ".".join(parts[:2]) != GATEWAY_PREFIX or parts[3:] != ["bridge", "scan"]:
+        msg = f"not a bridge scan subject: {subject!r}"
+        raise ValueError(msg)
+    return UUID(parts[2])
+
+
+def firmware_check_subject(mower_id: UUID) -> str:
+    """Core NATS request subject of a firmware check: ``gateway.mower.<id>.firmware.check``.
+
+    ``FirmwareCheckRequest`` in, ``FirmwareCheckReply`` out; answered by the gateway instance
+    that holds the mower (other shards stay silent).
+    """
+    return f"{GATEWAY_PREFIX}.{mower_id}.firmware.check"
+
+
+def parse_firmware_check_subject(subject: str) -> UUID:
+    """The mower id of a ``gateway.mower.<id>.firmware.check`` subject."""
+    parts = subject.split(".")
+    if (
+        len(parts) != 5
+        or ".".join(parts[:2]) != GATEWAY_PREFIX
+        or parts[3:] != ["firmware", "check"]
+    ):
+        msg = f"not a firmware check subject: {subject!r}"
+        raise ValueError(msg)
+    return UUID(parts[2])
+
+
 def event_subject(domain: str, name: str) -> str:
     """Subject for a domain event: ``event.<domain>.<name>``.
 
@@ -229,6 +273,10 @@ ALL_CAMERA_SESSIONS = f"{GATEWAY_PREFIX}.*.camera.session"
 """Wildcard the Device-Gateway subscribes to for camera session requests (core NATS)."""
 ALL_PATH_PREVIEWS = f"{GATEWAY_PREFIX}.*.path.preview"
 """Wildcard the Device-Gateway subscribes to for path preview requests (core NATS)."""
+ALL_BRIDGE_SCANS = f"{GATEWAY_PREFIX}.*.bridge.scan"
+"""Wildcard the Device-Gateway subscribes to for bridge scan requests (core NATS)."""
+ALL_FIRMWARE_CHECKS = f"{GATEWAY_PREFIX}.*.firmware.check"
+"""Wildcard the Device-Gateway subscribes to for firmware check requests (core NATS)."""
 
 
 def event_wildcard(domain: str | None = None) -> str:

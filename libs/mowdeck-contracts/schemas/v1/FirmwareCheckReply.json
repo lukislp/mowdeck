@@ -1,0 +1,166 @@
+{
+  "$defs": {
+    "FirmwareCheckError": {
+      "description": "The error of a :class:`FirmwareCheckReply`.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/FirmwareCheckErrorCode"
+        },
+        "detail": {
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "FirmwareCheckError",
+      "type": "object"
+    },
+    "FirmwareCheckErrorCode": {
+      "description": "Why no firmware information was given.",
+      "enum": [
+        "not_found",
+        "forbidden",
+        "unsupported",
+        "unavailable"
+      ],
+      "title": "FirmwareCheckErrorCode",
+      "type": "string"
+    },
+    "FirmwareInfo": {
+      "description": "The firmware state of a mower (``MowerState.firmware_info``).",
+      "properties": {
+        "available": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The newest version the vendor offers for this mower; null when none or unknown.",
+          "title": "Available"
+        },
+        "checked_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the vendor was last asked; null when never.",
+          "title": "Checked At"
+        },
+        "failure_reason": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the last update failed, if known.",
+          "title": "Failure Reason"
+        },
+        "installed": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The version running on the mower.",
+          "title": "Installed"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Percent done while `installing`, if reported.",
+          "title": "Progress"
+        },
+        "release_notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Release notes of `available`, if given.",
+          "title": "Release Notes"
+        },
+        "update_state": {
+          "default": "unknown",
+          "enum": [
+            "idle",
+            "available",
+            "installing",
+            "failed",
+            "unknown"
+          ],
+          "title": "Update State",
+          "type": "string"
+        }
+      },
+      "title": "FirmwareInfo",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`FirmwareCheckRequest`: exactly one of ``info`` or ``error``.",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FirmwareCheckError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "info": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FirmwareInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "FirmwareCheckReply",
+  "type": "object"
+}

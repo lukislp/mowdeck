@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "BridgeScanError": {
+      "description": "The error of a :class:`BridgeScanReply`; ``detail`` never echoes the key.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/BridgeScanErrorCode"
+        },
+        "detail": {
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "BridgeScanError",
+      "type": "object"
+    },
+    "BridgeScanErrorCode": {
+      "description": "Why a bridge scan gave no result.",
+      "enum": [
+        "unreachable",
+        "auth_failed",
+        "timeout",
+        "busy",
+        "unsupported",
+        "not_found",
+        "forbidden"
+      ],
+      "title": "BridgeScanErrorCode",
+      "type": "string"
+    },
+    "ProxyInfo": {
+      "description": "What a scan learnt about the bridge itself (ESPHome ``device_info``).",
+      "properties": {
+        "bluetooth_mac": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The bridge's own Bluetooth address.",
+          "title": "Bluetooth Mac"
+        },
+        "checked_at": {
+          "description": "When the gateway read this information.",
+          "format": "date-time",
+          "title": "Checked At",
+          "type": "string"
+        },
+        "compiled_at": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compiled At"
+        },
+        "esphome_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Esphome Version"
+        },
+        "outdated": {
+          "default": false,
+          "title": "Outdated",
+          "type": "boolean"
+        },
+        "outdated_reason": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outdated Reason"
+        },
+        "project_name": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`esphome.project.name`, if set.",
+          "title": "Project Name"
+        },
+        "project_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`esphome.project.version`, if set.",
+          "title": "Project Version"
+        },
+        "proxy_name": {
+          "description": "The ESPHome node name.",
+          "maxLength": 100,
+          "title": "Proxy Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proxy_name",
+        "checked_at"
+      ],
+      "title": "ProxyInfo",
+      "type": "object"
+    },
+    "ScannedDevice": {
+      "description": "One mower advertisement the bridge saw during a scan.",
+      "properties": {
+        "address": {
+          "description": "Bluetooth address.",
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Address",
+          "type": "string"
+        },
+        "name": {
+          "description": "The Bluetooth name the mower advertises.",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "rssi": {
+          "description": "Signal strength at the bridge in dBm.",
+          "maximum": 20,
+          "minimum": -128,
+          "title": "Rssi",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "address",
+        "rssi"
+      ],
+      "title": "ScannedDevice",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`BridgeScanRequest`.\n\n``proxy`` is set as soon as the proxy answered, also with a ``timeout`` error (the bridge\nworks, the mower was not seen); ``devices`` lists every mower advertisement seen, so the\nclient can offer a different mower than expected. ``error`` is null when the scan succeeded.",
+  "properties": {
+    "devices": {
+      "items": {
+        "$ref": "#/$defs/ScannedDevice"
+      },
+      "maxItems": 50,
+      "title": "Devices",
+      "type": "array"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BridgeScanError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "proxy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProxyInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "BridgeScanReply",
+  "type": "object"
+}

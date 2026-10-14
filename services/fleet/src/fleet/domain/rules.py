@@ -30,6 +30,9 @@ COMMAND_RELATION: Final[Mapping[str, str]] = {
     "set_blade_height": CAN_CONTROL,
     "set_speed": CAN_CONTROL,
     "set_light": CAN_CONTROL,
+    "firmware_update": CAN_MANAGE_MOWERS,  # changes the device itself, like its settings
+    "spot_mow": CAN_DRIVE,  # MowDeck steers the mower with joystick frames
+    "spot_stop": CAN_CONTROL,
     "manual_drive": CAN_DRIVE,
     "emergency_stop": CAN_EMERGENCY_STOP,  # equals can_view in the model: whoever sees may stop
 }

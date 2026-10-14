@@ -18,6 +18,10 @@ Device-Gateway asks for them on
 :data:`~mowdeck_contracts.v1.subjects.FLEET_MOWERS_CREDENTIALS` (:class:`MowerCredentialsRequest`,
 :class:`MowerCredentialsReply`) each time it opens the connection and keeps them only in that
 connection.
+
+A mower may carry additional links next to its connection (ADR 0038, e.g. a Bluetooth bridge
+next to the cloud): :attr:`MowerRegistration.links` holds their public options by kind under the
+same rule, and :attr:`MowerCredentialsReply.link_secrets` their withheld secrets by kind.
 """
 
 from typing import Any, Final, Self
@@ -68,16 +72,24 @@ class MowerRegistration(ContractModel):
     name: str = Field(min_length=1, max_length=100)
     connection_kind: ConnectionKind
     connection_options: dict[str, Any] = Field(default_factory=dict)
+    links: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Additional links by kind (e.g. `ble_bridge`, ADR 0038): their public "
+        'options plus `credentials: "fleet"` and `credentials_rev` when secrets were withheld. '
+        "Empty for a mower with only its primary connection.",
+    )
 
     def __repr_args__(self) -> Any:
         """``repr`` masks the values of secret option keys (defence in depth for logs)."""
         for key, value in super().__repr_args__():
             if key == "connection_options" and isinstance(value, dict):
+                yield key, _masked(value)
+            elif key == "links" and isinstance(value, dict):
                 yield (
                     key,
                     {
-                        k: _MASK if k in SECRET_OPTION_KEYS or "secret" in k else v
-                        for k, v in value.items()
+                        kind: _masked(options) if isinstance(options, dict) else options
+                        for kind, options in value.items()
                     },
                 )
             else:
@@ -85,8 +97,27 @@ class MowerRegistration(ContractModel):
 
     @property
     def needs_credentials(self) -> bool:
-        """True when Fleet withheld secrets the gateway must fetch before connecting."""
+        """True when Fleet withheld secrets the gateway must fetch before connecting, for the
+        connection itself or for any of its links."""
+        return self.connection_needs_credentials or bool(self.links_needing_credentials)
+
+    @property
+    def connection_needs_credentials(self) -> bool:
+        """True when the ``connection_options`` carry ``credentials: "fleet"``."""
         return self.connection_options.get(CREDENTIALS_OPTION) == CREDENTIALS_FROM_FLEET
+
+    @property
+    def links_needing_credentials(self) -> frozenset[str]:
+        """The link kinds whose options carry ``credentials: "fleet"``."""
+        return frozenset(
+            kind
+            for kind, options in self.links.items()
+            if options.get(CREDENTIALS_OPTION) == CREDENTIALS_FROM_FLEET
+        )
+
+
+def _masked(options: dict[str, Any]) -> dict[str, Any]:
+    return {k: _MASK if k in SECRET_OPTION_KEYS or "secret" in k else v for k, v in options.items()}
 
 
 class MowerCredentialsRequest(ContractModel):
@@ -100,10 +131,13 @@ class MowerCredentialsReply(ContractModel):
     """Reply to :class:`MowerCredentialsRequest`: the withheld options (``account`` and
     ``password`` of a cloud mower, ``noise_psk`` of a BLE bridge), merged by the gateway into
     the options of the connection it opens. ``found`` is False for an unknown mower or another
-    account. Never log ``secret_options``."""
+    account. ``link_secrets`` holds the withheld options of every additional link by kind
+    (``{"ble_bridge": {"noise_psk": …}}``, ADR 0038). Never log ``secret_options`` or
+    ``link_secrets``."""
 
     found: bool
     secret_options: dict[str, str] = Field(default_factory=dict, repr=False)
+    link_secrets: dict[str, dict[str, str]] = Field(default_factory=dict, repr=False)
 
 
 class MowerListRequest(ContractModel):
