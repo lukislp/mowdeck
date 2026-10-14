@@ -1,13 +1,18 @@
 """The "Image sources" lines of infra/compose/.env.example are the one list of third-party images.
 
-Every image default in the Dockerfiles (``ARG *_IMAGE=`` and literal ``FROM``), in the Compose
-stack (``${*_IMAGE:-...}``, literal ``image:``) and in the CI workflows (service containers, the
-CI-only images pinned in their ``env``) must agree with that list, so the images CI pulls from the
-public registries cannot drift from the ones the stack runs. The workflows pull no package of the
-repository's own: no image mirror, no registry login outside the release workflow.
+Every image default in the Dockerfiles (``ARG *_IMAGE=`` and literal ``FROM``) and in the Compose
+stack (``${*_IMAGE:-...}``, literal ``image:``) must agree with that list. The CI workflows pull
+every image of the list through the repository's GHCR mirror ``ghcr.io/<owner>/mowdeck/mirror/
+<alias>:<tag>`` (alias: the variable name without ``_IMAGE``, lower case, ``-`` for ``_``), which
+.github/workflows/mirror-images.yml fills from the same list through infra/mirror-env.sh. No
+workflow pins an image of its own or pulls a listed image from its public registry, so the images
+CI runs cannot drift from the ones the stack runs.
 """
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -18,7 +23,11 @@ FROM_RE = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(\S+)", re.MULTILINE)
 VAR_DEFAULT_RE = re.compile(r"\$\{(\w+_IMAGE):-([^}]+)\}")
 IMAGE_LINE_RE = re.compile(r"^\s*image:\s*(\S+)\s*$", re.MULTILINE)
 ENV_LINE_RE = re.compile(r"^(\w+_IMAGE)=(\S*)\s*$", re.MULTILINE)
+MIRROR = "ghcr.io/${{ github.repository_owner }}/mowdeck/mirror"
+MIRROR_REF_RE = re.compile(r"mowdeck/mirror/([a-z0-9-]+):([\w.-]+)")
 WORKFLOWS = ["ci.yml", "helm-kind.yml", "release.yml"]
+MIRROR_WORKFLOW = "mirror-images.yml"
+MIRROR_SCRIPT = "infra/mirror-env.sh"
 
 
 def _images(repo_root: Path) -> dict[str, str]:
@@ -29,6 +38,10 @@ def _images(repo_root: Path) -> dict[str, str]:
         assert name not in images, f".env.example: {name} listed twice"
         images[name] = value
     return images
+
+
+def _alias(name: str) -> str:
+    return name.removesuffix("_IMAGE").lower().replace("_", "-")
 
 
 def _tag(image: str) -> str:
@@ -62,13 +75,24 @@ def _workflow(repo_root: Path, name: str) -> tuple[str, dict]:
     return text, yaml.safe_load(text)
 
 
+def _triggers(data: dict) -> dict:
+    # PyYAML reads the unquoted key ``on`` as the boolean True.
+    triggers: dict = data.get("on") or data.get(True) or {}
+    return triggers
+
+
 def test_image_list_is_well_formed(repo_root: Path) -> None:
     images = _images(repo_root)
     assert images, "infra/compose/.env.example pins no *_IMAGE"
+    aliases: dict[str, str] = {}
     for name, source in images.items():
-        assert "@" not in source, f"{name}={source}: pin a tag, not a digest"
+        assert "@" not in source, f"{name}={source}: pin a tag, not a digest (mirrored by tag)"
         assert _tag(source), f"{name}={source} must pin a tag"
         assert _tag(source) != "latest", f"{name}={source} must not use :latest"
+        alias = _alias(name)
+        assert re.fullmatch(r"[a-z0-9][a-z0-9-]*", alias), f"{name}: {alias!r} is no package name"
+        assert alias not in aliases, f"{name} and {aliases[alias]} share the alias {alias}"
+        aliases[alias] = name
 
 
 def test_dockerfiles_use_listed_base_images(repo_root: Path) -> None:
@@ -116,45 +140,107 @@ def test_env_example_covers_the_compose_variables(repo_root: Path) -> None:
     assert used <= images.keys(), f".env.example misses {sorted(used - images.keys())}"
 
 
+@pytest.mark.skipif(shutil.which("sh") is None, reason="sh is not available")
+def test_mirror_env_script_derives_from_the_list(repo_root: Path) -> None:
+    """infra/mirror-env.sh reads the same list and names the mirror images the same way."""
+    images = _images(repo_root)
+    sh = str(shutil.which("sh"))
+    script = (repo_root / MIRROR_SCRIPT).as_posix()
+    base = {k: v for k, v in os.environ.items() if k != "MOWDECK_IMAGE_MIRROR"}
+
+    def run(*args: str, mirror: str | None = None) -> subprocess.CompletedProcess[str]:
+        env = {**base, "MOWDECK_IMAGE_MIRROR": mirror} if mirror else base
+        return subprocess.run(  # noqa: S603
+            [sh, script, *args], capture_output=True, text=True, check=False, env=env
+        )
+
+    prefix = "registry.example.org/mowdeck"
+    expected = [f"{name}={prefix}/{_alias(name)}:{_tag(source)}" for name, source in images.items()]
+    by_argument = run("Registry.Example.org/mowdeck/")  # lower-cased, trailing slash dropped
+    assert by_argument.returncode == 0, by_argument.stderr
+    assert by_argument.stdout.splitlines() == expected
+    by_variable = run(mirror=prefix)
+    assert by_variable.returncode == 0, by_variable.stderr
+    assert by_variable.stdout.splitlines() == expected
+    listing = run("--list")
+    assert listing.returncode == 0, listing.stderr
+    assert listing.stdout.splitlines() == [f"{_alias(n)} {s}" for n, s in images.items()]
+    without_prefix = run()
+    assert without_prefix.returncode != 0 and "usage" in without_prefix.stderr
+
+
 @pytest.mark.parametrize("workflow", WORKFLOWS)
-def test_workflow_images_are_pinned_and_listed(repo_root: Path, workflow: str) -> None:
-    """Service containers and the CI-only images of the workflows agree with the list."""
+def test_workflows_pull_through_the_mirror(repo_root: Path, workflow: str) -> None:
     text, data = _workflow(repo_root, workflow)
     images = _images(repo_root)
-    sources = set(images.values())
-    for name, value in (data.get("env") or {}).items():
-        if not name.endswith("_IMAGE"):
-            continue
-        assert "${{" not in str(value), f"{workflow}: env {name} must be a literal image"
-        assert _tag(str(value)) not in {"", "latest"}, f"{workflow}: env {name}={value} not pinned"
-        if name in images:
-            assert images[name] == value, f"{workflow}: env {name}={value} != {images[name]}"
+    by_alias = {_alias(name): source for name, source in images.items()}
+    assert (data.get("env") or {}).get("MOWDECK_IMAGE_MIRROR") == MIRROR, (
+        f"{workflow}: env MOWDECK_IMAGE_MIRROR must be {MIRROR}"
+    )
+    assert f"sh {MIRROR_SCRIPT}" in text, f"{workflow}: the mirror references are not exported"
+    assert "docker/login-action" in text and "secrets.GITHUB_TOKEN" in text, (
+        f"{workflow}: no GHCR login with GITHUB_TOKEN"
+    )
+    # Only the list pins images: no workflow carries a version of its own.
+    scopes = [("workflow env", data.get("env") or {})]
+    scopes += [(f"job {name} env", job.get("env") or {}) for name, job in data["jobs"].items()]
+    for scope, mapping in scopes:
+        pinned = sorted(key for key in mapping if key.endswith("_IMAGE"))
+        assert not pinned, f"{workflow}: {scope} pins {pinned}; pin images in .env.example"
+    # A listed image is never pulled from its public registry.
+    for name, source in images.items():
+        assert source not in text, (
+            f"{workflow}: pulls {source} directly; use ${name} exported by the mirror step"
+        )
+    for alias, tag in MIRROR_REF_RE.findall(text):
+        assert alias in by_alias, f"{workflow}: mirror image {alias} is not in .env.example"
+        assert _tag(by_alias[alias]) == tag, f"{workflow}: {alias}:{tag} != {by_alias[alias]}"
     for job_name, job in data["jobs"].items():
         for service, spec in (job.get("services") or {}).items():
             image = spec["image"]
-            assert image in sources, (
-                f"{workflow}: job {job_name} service {service} runs {image}, "
-                "which .env.example does not pin"
+            assert image.startswith(f"{MIRROR}/"), (
+                f"{workflow}: job {job_name} service {service} runs {image}, not the mirror"
             )
-    assert "infra/compose/.env.example" in text, f"{workflow}: the image list is not used"
+            credentials = spec.get("credentials") or {}
+            assert credentials.get("password") == "${{ secrets.GITHUB_TOKEN }}", (
+                f"{workflow}: job {job_name} service {service} must log in with GITHUB_TOKEN"
+            )
 
 
-@pytest.mark.parametrize("workflow", WORKFLOWS)
-def test_workflows_use_no_image_mirror(repo_root: Path, workflow: str) -> None:
-    text, data = _workflow(repo_root, workflow)
-    assert "mowdeck-mirror" not in text and "mirror-env" not in text, (
-        f"{workflow}: the images come from the public registries, not from a mirror"
-    )
-    if workflow != "release.yml":
-        assert "packages" not in (data.get("permissions") or {}), (
-            f"{workflow}: only release.yml needs the packages permission"
-        )
+def test_packages_permission_matches_the_use(repo_root: Path) -> None:
+    """ci and helm-kind read the mirror; release and mirror-images write packages."""
+    for workflow in ("ci.yml", "helm-kind.yml"):
+        _, data = _workflow(repo_root, workflow)
+        assert data["permissions"].get("packages") == "read", f"{workflow}: packages: read"
+        for name, job in data["jobs"].items():
+            assert "packages" not in (job.get("permissions") or {}), f"{workflow}: job {name}"
+    _, release = _workflow(repo_root, "release.yml")
+    assert "packages" not in (release.get("permissions") or {})
+    assert release["jobs"]["images"]["permissions"].get("packages") == "write"
+    _, mirror = _workflow(repo_root, MIRROR_WORKFLOW)
+    assert mirror["permissions"] == {"contents": "read", "packages": "write"}
+
+
+def test_mirror_workflow_fills_the_namespace_from_the_list(repo_root: Path) -> None:
+    text, data = _workflow(repo_root, MIRROR_WORKFLOW)
+    triggers = _triggers(data)
+    assert "workflow_dispatch" in triggers, "the mirror must be fillable by hand"
+    assert triggers["push"]["branches"] == ["main"]
+    sources = {"infra/compose/.env.example", MIRROR_SCRIPT, f".github/workflows/{MIRROR_WORKFLOW}"}
+    for trigger in ("push", "pull_request"):
+        assert sources <= set(triggers[trigger]["paths"]), f"{trigger}: run when the list changes"
+    assert data["concurrency"]["cancel-in-progress"] is False
+    assert f"sh {MIRROR_SCRIPT} --list" in text, "the mirror must copy the list, not a copy of it"
+    assert "/mowdeck/mirror" in text
+    assert "docker/login-action" in text and "secrets.GITHUB_TOKEN" in text
+    assert "crane digest" in text and "crane copy" in text
 
 
 def test_kind_workflow_pushes_nothing(repo_root: Path) -> None:
-    """The kind install test builds locally and loads the images into the node."""
+    """The kind install test logs in to pull the mirror only; it builds and loads locally."""
     text, data = _workflow(repo_root, "helm-kind.yml")
-    assert "docker/login-action" not in text
+    assert data["permissions"].get("packages") == "read", "read access to the mirror, nothing more"
+    assert "push: true" not in text
     kind_test = (repo_root / "infra" / "helm" / "kind-test.sh").read_text("utf-8")
     assert "kind load docker-image" in kind_test
     for job in data["jobs"].values():
@@ -166,3 +252,11 @@ def test_kind_workflow_pushes_nothing(repo_root: Path) -> None:
         (repo_root / "infra" / "helm" / "mowdeck" / "ci" / "kind-values.yaml").read_text("utf-8")
     )
     assert values["image"]["pullPolicy"] in {"Never", "IfNotPresent"}
+
+
+def test_mirror_script_and_docs_name_the_namespace(repo_root: Path) -> None:
+    readme = (repo_root / "infra" / "compose" / "README.md").read_text("utf-8")
+    assert "mowdeck/mirror/<alias>:<tag>" in readme
+    assert MIRROR_SCRIPT in readme and "MOWDECK_IMAGE_MIRROR" in readme
+    env_example = (repo_root / "infra" / "compose" / ".env.example").read_text("utf-8")
+    assert "mowdeck/mirror" in env_example

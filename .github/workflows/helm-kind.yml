@@ -16,6 +16,11 @@ concurrency:
 
 permissions:
   contents: read
+  # Read access to the GHCR image mirror (see ci.yml); nothing is pushed here.
+  packages: read
+
+env:
+  MOWDECK_IMAGE_MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck/mirror
 
 jobs:
   kind:
@@ -23,11 +28,18 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
-      # NATS_IMAGE, OPENFGA_IMAGE, TRAEFIK_IMAGE and the base images as pinned in the Compose
-      # example file (public registries); the test script pulls the three infrastructure images
-      # on the runner and loads them into the kind node together with the images built below.
-      - name: Image versions (infra/compose/.env.example)
-        run: grep -E '^[A-Z_]+_IMAGE=' infra/compose/.env.example | tee -a "$GITHUB_ENV"
+      # NATS_IMAGE, OPENFGA_IMAGE, TRAEFIK_IMAGE and the base images from the GHCR mirror of the
+      # Compose example file's "Image sources" (the login is for pulling only); the test script
+      # pulls the three infrastructure images on the runner and loads them into the kind node
+      # together with the images built below.
+      - name: Log in to the GHCR image mirror
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Use the image mirror
+        run: sh infra/mirror-env.sh | tee -a "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           version: "0.12.24"

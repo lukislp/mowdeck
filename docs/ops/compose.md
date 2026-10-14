@@ -45,11 +45,11 @@ The complete operating notes are in the repository file `infra/compose/README.md
 
 ## Image sources
 
-All third-party images are pinned under "Image sources" in `.env.example` and chosen in `.env` by the same variables: `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images of the MowDeck builds. The defaults are public registries that need no login (ECR Public, `ghcr.io`, Docker Hub for the OpenFGA CLI).
+All third-party images are pinned under "Image sources" in `.env.example` and chosen in `.env` by the same variables: `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images of the MowDeck builds (plus `NTFY_IMAGE` and `STRIPE_MOCK_IMAGE`, which only the CI integration tests run). The defaults are public registries that need no login (ECR Public, `ghcr.io`, Docker Hub for the OpenFGA CLI, ntfy and stripe-mock).
 
-To use another registry at home (a pull-through cache or a mirror on the NAS), copy the images there with the same tags and set the variables in `.env`, for example `POSTGRES_IMAGE=registry.example.org/postgres:17.11-alpine`; a later line in `.env` overrides an earlier one. Log in to that registry first if it needs credentials.
+To use another registry at home (a pull-through cache or a mirror on the NAS), copy the images there with the same tags and set the variables in `.env`, for example `POSTGRES_IMAGE=registry.example.org/postgres:17.11-alpine`, or all of them at once with `MOWDECK_IMAGE_MIRROR=registry.example.org/mowdeck sh infra/mirror-env.sh >> infra/compose/.env`; a later line in `.env` overrides an earlier one. Log in to that registry first if it needs credentials.
 
-CI pulls the same pinned images directly from the public registries and exports the `*_IMAGE` lines of `.env.example` into its jobs; it needs no registry login and no image mirror. Details: `infra/compose/README.md`.
+CI pulls the same pinned images through the repository's GHCR mirror `ghcr.io/<owner>/mowdeck/mirror/<alias>:<tag>`, which the workflow `mirror-images.yml` fills from the same list, because anonymous pulls from the public registries are rate limited on the shared CI runners; the stack at home is not affected. Details: `infra/compose/README.md`, "Image sources".
 
 ## Authorization bootstrap
 
