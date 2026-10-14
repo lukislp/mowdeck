@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -67,7 +68,7 @@ def _compose_files(repo_root: Path) -> list[Path]:
     ]
 
 
-def _workflow(repo_root: Path, name: str) -> tuple[str, dict]:
+def _workflow(repo_root: Path, name: str) -> tuple[str, dict[str, Any]]:
     path = repo_root / ".github" / "workflows" / name
     if not path.is_file():
         pytest.skip(f"{name} does not exist")
@@ -75,9 +76,9 @@ def _workflow(repo_root: Path, name: str) -> tuple[str, dict]:
     return text, yaml.safe_load(text)
 
 
-def _triggers(data: dict) -> dict:
+def _triggers(data: dict[str, Any]) -> dict[str, Any]:
     # PyYAML reads the unquoted key ``on`` as the boolean True.
-    triggers: dict = data.get("on") or data.get(True) or {}
+    triggers: dict[str, Any] = data.get("on") or data.get(True) or {}
     return triggers
 
 
