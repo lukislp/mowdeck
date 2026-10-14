@@ -78,6 +78,7 @@ nav:
       - adr/0035-server-side-camera-frames-and-automatic-analysis.md
       - adr/0036-native-app-shells-with-capacitor.md
       - adr/0037-camera-panorama-calibration.md
+      - adr/0038-dual-link-per-mower-and-firmware-updates.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md

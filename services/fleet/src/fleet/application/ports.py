@@ -15,11 +15,15 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    BridgeScanReply,
+    BridgeScanRequest,
     CameraSessionReply,
     CameraSessionRequest,
     CloudDiscoverReply,
     CloudDiscoverRequest,
     CommandEnvelope,
+    FirmwareCheckReply,
+    FirmwareCheckRequest,
     PathPreviewGatewayRequest,
     PathPreviewReply,
 )
@@ -34,6 +38,7 @@ from fleet.domain.models import (
     Mower,
     MowerAreaName,
     MowerGroup,
+    MowerLink,
     Site,
 )
 
@@ -154,6 +159,11 @@ class Tx(Protocol):
         """Linked vendor cloud accounts."""
         ...
 
+    @property
+    def mower_links(self) -> Table[MowerLink]:
+        """Additional links of mowers (one row per mower and kind, ADR 0038)."""
+        ...
+
     async def try_lock(self, key: int) -> bool:
         """Take a lock held until the transaction ends; False if another holder has it."""
         ...
@@ -197,6 +207,22 @@ class PathPreviewGateway(Protocol):
     async def request(self, request: PathPreviewGatewayRequest) -> PathPreviewReply:
         """The gateway's reply; raises ``RequestTimeoutError`` when no gateway answers in time
         and the other bus errors when none can be asked."""
+        ...
+
+
+class BridgeScanGateway(Protocol):
+    """Asks the Device-Gateway that holds a mower to look for it through a Bluetooth bridge."""
+
+    async def request(self, request: BridgeScanRequest) -> BridgeScanReply:
+        """The gateway's reply; raises the bus errors when no gateway answers in time."""
+        ...
+
+
+class FirmwareCheckGateway(Protocol):
+    """Asks the Device-Gateway that holds a mower for its firmware state (ADR 0038)."""
+
+    async def request(self, request: FirmwareCheckRequest) -> FirmwareCheckReply:
+        """The gateway's reply; raises the bus errors when no gateway answers in time."""
         ...
 
 

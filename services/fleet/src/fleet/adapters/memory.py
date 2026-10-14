@@ -21,6 +21,7 @@ from fleet.domain.models import (
     Mower,
     MowerAreaName,
     MowerGroup,
+    MowerLink,
     Site,
 )
 
@@ -143,6 +144,7 @@ class MemoryTables:
     audit: MemoryTable[AuditEntry]
     drive_sessions: MemoryTable[DriveSession]
     linked_accounts: MemoryTable[LinkedAccount]
+    mower_links: MemoryTable[MowerLink]
 
 
 class MemoryTx:
@@ -187,6 +189,10 @@ class MemoryTx:
     def linked_accounts(self) -> MemoryTable[LinkedAccount]:
         return self._tables.linked_accounts
 
+    @property
+    def mower_links(self) -> MemoryTable[MowerLink]:
+        return self._tables.mower_links
+
     async def try_lock(self, key: int) -> bool:
         """Transactions run one at a time, so the lock is always free."""
         del key
@@ -208,6 +214,7 @@ class MemoryStore:
             audit=MemoryTable("id", id_factory=lambda: next(audit_ids)),
             drive_sessions=MemoryTable("id"),
             linked_accounts=MemoryTable("id", [("account_id", "email_key")]),
+            mower_links=MemoryTable("id", [("pair_key",)]),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

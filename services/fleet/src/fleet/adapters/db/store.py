@@ -26,6 +26,7 @@ from fleet.domain.models import (
     Mower,
     MowerAreaName,
     MowerGroup,
+    MowerLink,
     Site,
 )
 
@@ -176,6 +177,7 @@ class SqlTx:
     audit: SqlTable[AuditEntry]
     drive_sessions: SqlTable[DriveSession]
     linked_accounts: SqlTable[LinkedAccount]
+    mower_links: SqlTable[MowerLink]
 
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
@@ -192,6 +194,7 @@ class SqlTx:
             audit=SqlTable(conn, tables.audit_log, AuditEntry, "id", autoincrement=True),
             drive_sessions=SqlTable(conn, tables.drive_sessions, DriveSession, "id"),
             linked_accounts=SqlTable(conn, tables.linked_accounts, LinkedAccount, "id"),
+            mower_links=SqlTable(conn, tables.mower_links, MowerLink, "id"),
         )
 
     async def try_lock(self, key: int) -> bool:

@@ -49,6 +49,7 @@ from fleet.domain.models import (
     Mower,
     MowerAreaName,
     MowerGroup,
+    MowerLink,
     Site,
 )
 
@@ -506,3 +507,53 @@ async def test_fleet_db_linked_accounts_and_one_mower_per_iot_id(
             assert "linked_accounts" not in await table_names(engine)
         finally:
             await engine.dispose()
+
+
+@pytest.mark.parametrize("kind", STORES)
+async def test_fleet_db_mower_links_contract(kind: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Migration 0010: one link per mower and kind, JSON options and proxy info, encrypted
+    secrets as bytes, gone with the mower."""
+    acc = uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        async with store.transaction() as tx:
+            site = await tx.sites.add(site_row(acc, "Home"))
+            mower = Mower(uuid4(), acc, site.id, "M1", "cloud", uuid4(), NOW, NOW)
+            await tx.mowers.add(mower)
+            link = MowerLink(
+                id=uuid4(),
+                mower_id=mower.id,
+                account_id=acc,
+                kind="ble_bridge",
+                secrets_encrypted=b"\x01sealed",
+                created_at=NOW,
+                updated_at=NOW,
+                options={"host": "bridge.local", "port": 6053, "ble_address": "AA:BB:CC:DD:EE:FF"},
+            )
+            await tx.mower_links.add(link)
+            with pytest.raises(ConflictError):  # one link of a kind per mower
+                await tx.mower_links.add(
+                    MowerLink(uuid4(), mower.id, acc, "ble_bridge", b"x", NOW, NOW)
+                )
+        async with store.transaction() as tx:
+            found = await tx.mower_links.get(mower_id=mower.id, kind="ble_bridge")
+            assert found == link
+            link.options = {**link.options, "allow_manual_blades": True}
+            link.secrets_encrypted = b"\x01resealed"
+            await tx.mower_links.update(link)
+            assert (
+                await tx.mower_links.update_where(
+                    {"proxy_info": {"proxy_name": "bridge", "outdated": False}}, id=link.id
+                )
+                == 1
+            )
+        async with store.transaction() as tx:
+            again = await tx.mower_links.get(id=link.id)
+            assert again is not None
+            assert again.options["allow_manual_blades"] is True
+            assert again.secrets_encrypted == b"\x01resealed"
+            assert again.proxy_info == {"proxy_name": "bridge", "outdated": False}
+            assert [x.kind for x in await tx.mower_links.find(account_id=acc)] == ["ble_bridge"]
+            await tx.mower_links.delete(mower_id=mower.id)
+            await tx.mowers.delete(id=mower.id)
+        async with store.transaction() as tx:
+            assert await tx.mower_links.count(account_id=acc) == 0

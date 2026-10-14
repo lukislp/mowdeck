@@ -57,11 +57,21 @@ class KindSchema:
     linked_account: bool = False
     """Mowers of this kind come from a linked vendor account (``linked_account_id`` and
     ``device_name`` at registration, ADR 0034) instead of credentials in the options."""
+    supports_links: frozenset[str] = frozenset()
+    """The additional link kinds a mower of this kind may carry next to its connection (ADR
+    0038, e.g. ``ble_bridge`` next to the cloud). The options of a link are validated with the
+    schema of the link kind itself (``SCHEMAS[link_kind]``). Fleet decides eligibility from this
+    registry entry, never from the kind's name."""
 
     @property
     def managed_keys(self) -> frozenset[str]:
         """Keys Fleet sets itself (``managed`` options)."""
         return frozenset(o.key for o in self.options if o.managed)
+
+    @property
+    def secret_keys(self) -> frozenset[str]:
+        """Keys whose values are secrets (``secret`` options)."""
+        return frozenset(o.key for o in self.options if o.secret)
 
 
 MAC_PATTERN: Final = r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$"
@@ -111,6 +121,7 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
             "with: logging in with the main account logs the phone app out."
         ),
         linked_account=True,
+        supports_links=frozenset({"ble_bridge"}),
         options=(
             OptionSpec(
                 "device_name",
@@ -267,6 +278,14 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
 }
 """Every connection kind Fleet knows; ``MOWDECK_ALLOWED_CONNECTION_KINDS`` selects the offered."""
 
+
+def links_supported(connection_kind: str) -> frozenset[str]:
+    """The link kinds a mower with ``connection_kind`` may carry (empty for a kind without a
+    schema or without links)."""
+    schema = SCHEMAS.get(connection_kind)
+    return schema.supports_links if schema is not None else frozenset()
+
+
 LEGACY_CLOUD_SCHEMA: Final = KindSchema(
     kind="cloud",
     title="Mammotion cloud",
@@ -276,6 +295,7 @@ LEGACY_CLOUD_SCHEMA: Final = KindSchema(
         "app out."
     ),
     groups={"device": "Mower", "credential": "Credential"},
+    supports_links=frozenset({"ble_bridge"}),
     options=(
         OptionSpec(
             "account",

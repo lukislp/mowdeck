@@ -34,6 +34,8 @@ from mowdeck_contracts.v1 import (
     Principal,
     PrincipalKind,
     PrincipalRef,
+    SpotMow,
+    SpotMowPlan,
     StartMow,
 )
 from mowdeck_service_kit.correlation import get_correlation_id
@@ -44,10 +46,7 @@ from fleet.application.context import Actor, FleetConfig
 from fleet.application.plan import (
     EMERGENCY_STOP,
     FEATURE_BULK,
-    FEATURE_CONTROL,
-    FEATURE_LIGHT,
     FEATURE_SPOT,
-    SET_LIGHT,
     allow_all,
     require_feature,
 )
@@ -60,7 +59,14 @@ from fleet.domain.errors import (
     Unavailable,
 )
 from fleet.domain.models import CommandRecord, Mower
-from fleet.domain.rules import CAN_VIEW, advances_from, command_ttl, relation_for
+from fleet.domain.rules import (
+    CAN_VIEW,
+    SINGLE_MOWER_KINDS,
+    advances_from,
+    command_features,
+    command_ttl,
+    relation_for,
+)
 
 _log = logging.getLogger("fleet.commands")
 
@@ -114,6 +120,16 @@ def _start_pattern(record: CommandRecord) -> dict[str, Any] | None:
     return dict(pattern) if isinstance(pattern, dict) else None
 
 
+def spot_plan_of(command: ContractModel) -> tuple[str, SpotMowPlan] | None:
+    """The Planner route a command carries and the field it sits in: ``start_mow.spot_plan``
+    (a native job of the mower) or ``spot_mow.plan`` (a run MowDeck drives, ADR 0039)."""
+    if isinstance(command, StartMow) and command.spot_plan is not None:
+        return "spot_plan", command.spot_plan
+    if isinstance(command, SpotMow):
+        return "plan", command.plan
+    return None
+
+
 def audit_form(command: ContractModel) -> tuple[dict[str, Any], str | None]:
     """The command as stored in the record, and the spot plan hash if any.
 
@@ -121,9 +137,10 @@ def audit_form(command: ContractModel) -> tuple[dict[str, Any], str | None]:
     with the command and can be computed again by the Planner, the audit needs its identity.
     """
     dumped: dict[str, Any] = command.model_dump(mode="json")
-    if isinstance(command, StartMow) and command.spot_plan is not None:
-        plan = command.spot_plan
-        dumped["spot_plan"] = {
+    carried = spot_plan_of(command)
+    if carried is not None:
+        field_name, plan = carried
+        dumped[field_name] = {
             "plan_hash": plan.plan_hash,
             "pattern_chain": list(plan.pattern_chain),
             "segments": len(plan.segments),
@@ -224,19 +241,24 @@ class CommandService:
             return False
         return True
 
-    async def _check_spot_plan(self, account_id: UUID, request: CommandRequest) -> None:
-        """A spot plan needs the plan feature ``spot_mowing`` and must fit the size limit."""
+    async def _check_features(self, account_id: UUID, request: CommandRequest) -> None:
+        """The plan features of the kind (``command_features``), plus ``spot_mowing`` for a
+        ``start_mow`` with a spot plan; a carried spot plan must fit the size limit."""
         command = request.command
-        if not isinstance(command, StartMow) or command.spot_plan is None:
-            return
-        size = len(command.spot_plan.model_dump_json())
-        if size > self.config.spot_plan_max_bytes:
-            msg = (
-                f"the spot plan has {size} bytes as JSON, at most "
-                f"{self.config.spot_plan_max_bytes} are accepted"
-            )
-            raise InvalidInput(msg)
-        await require_feature(self.entitlements, account_id, FEATURE_SPOT)
+        features = set(command_features(command.kind))
+        carried = spot_plan_of(command)
+        if carried is not None:
+            _, plan = carried
+            size = len(plan.model_dump_json())
+            if size > self.config.spot_plan_max_bytes:
+                msg = (
+                    f"the spot plan has {size} bytes as JSON, at most "
+                    f"{self.config.spot_plan_max_bytes} are accepted"
+                )
+                raise InvalidInput(msg)
+            features.add(FEATURE_SPOT)
+        for feature in sorted(features):
+            await require_feature(self.entitlements, account_id, feature)
 
     # --- sending -------------------------------------------------------------------------
 
@@ -253,13 +275,10 @@ class CommandService:
         """Record and publish a command for one mower (the caller holds the relation).
 
         Every kind except the emergency stop needs the plan feature ``control``; ``set_light``
-        also ``camera``.
+        also ``camera``, ``spot_mow`` (and a ``start_mow`` with a spot plan) also
+        ``spot_mowing`` (``fleet.domain.rules.command_features``).
         """
-        if request.command.kind != EMERGENCY_STOP:
-            await require_feature(self.entitlements, account_id, FEATURE_CONTROL)
-        if request.command.kind == SET_LIGHT:
-            await require_feature(self.entitlements, account_id, FEATURE_LIGHT)
-        await self._check_spot_plan(account_id, request)
+        await self._check_features(account_id, request)
         now = self.clock()
         async with self.store.transaction() as tx:
             target = await tx.mowers.get(id=mower_id, account_id=account_id)
@@ -295,14 +314,12 @@ class CommandService:
         see are omitted, so a group never reveals them.
         """
         kind = request.command.kind
-        if isinstance(request.command, StartMow) and request.command.spot_plan is not None:
+        if kind in SINGLE_MOWER_KINDS or spot_plan_of(request.command) is not None:
             msg = "a spot plan is computed for one mower: send it to that mower"
             raise InvalidInput(msg)
+        await self._check_features(account_id, request)
         if kind != EMERGENCY_STOP:
-            await require_feature(self.entitlements, account_id, FEATURE_CONTROL)
             await require_feature(self.entitlements, account_id, FEATURE_BULK)
-        if kind == SET_LIGHT:
-            await require_feature(self.entitlements, account_id, FEATURE_LIGHT)
         async with self.store.transaction() as tx:
             if target_type == "site":
                 if await tx.sites.get(id=target_id, account_id=account_id) is None:

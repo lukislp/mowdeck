@@ -31,15 +31,18 @@ from fleet.application.context import Actor
 from fleet.application.services import Services
 from fleet.application.throttle import TooManyLoginAttempts as LoginThrottled
 from fleet.domain.errors import (
+    BridgeScanUnsupportedError,
     CameraUnsupportedError,
     ConflictError,
     FeatureNotInPlanError,
+    FirmwareCheckUnsupportedError,
     FleetError,
     ForbiddenError,
     GatewayTimeout,
     InvalidInput,
     LinkedAccountInUseError,
     LinkedAccountLoginError,
+    LinkNotApplicableError,
     MowerAlreadyRegisteredError,
     NotFoundError,
     PathPreviewRejectedError,
@@ -70,6 +73,30 @@ class PathPreviewRejected(Conflict):
 
     problem_type = "path-preview-rejected"
     title = "Path preview refused"
+
+
+class LinkNotApplicable(Conflict):
+    """409 ``urn:mowdeck:problem:link-not-applicable``: the mower's connection kind carries no
+    such additional link (the connection-kind registry decides, ADR 0038)."""
+
+    problem_type = "link-not-applicable"
+    title = "Link not applicable"
+
+
+class BridgeScanUnsupported(Conflict):
+    """409 ``urn:mowdeck:problem:bridge-scan-unsupported``: the Device-Gateway cannot scan
+    through this kind of bridge."""
+
+    problem_type = "bridge-scan-unsupported"
+    title = "Bridge scan not supported"
+
+
+class FirmwareCheckUnsupported(Conflict):
+    """409 ``urn:mowdeck:problem:firmware-check-unsupported``: the mower's connection cannot ask
+    the vendor for firmware."""
+
+    problem_type = "firmware-check-unsupported"
+    title = "Firmware check not supported"
 
 
 class GatewayTimedOut(ServiceError):  # noqa: N818 - HTTP status names read best
@@ -178,6 +205,12 @@ def to_service_error(exc: FleetError) -> ServiceError:
             return PathPreviewUnsupported(exc.message)
         case PathPreviewRejectedError():
             return PathPreviewRejected(exc.message)
+        case LinkNotApplicableError():
+            return LinkNotApplicable(exc.message)
+        case BridgeScanUnsupportedError():
+            return BridgeScanUnsupported(exc.message)
+        case FirmwareCheckUnsupportedError():
+            return FirmwareCheckUnsupported(exc.message)
         case GatewayTimeout():
             return GatewayTimedOut(exc.message)
         case LinkedAccountInUseError():

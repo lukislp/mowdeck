@@ -47,6 +47,21 @@ class CameraUnsupportedError(ConflictError):
     """The mower's connection has no camera (409 ``camera-unsupported``)."""
 
 
+class LinkNotApplicableError(ConflictError):
+    """The mower's connection kind carries no such link (409 ``link-not-applicable``, decided
+    by the connection-kind registry, ADR 0038)."""
+
+
+class BridgeScanUnsupportedError(ConflictError):
+    """The Device-Gateway cannot scan through this kind of bridge (409
+    ``bridge-scan-unsupported``)."""
+
+
+class FirmwareCheckUnsupportedError(ConflictError):
+    """The mower's connection cannot ask the vendor for firmware (409
+    ``firmware-check-unsupported``)."""
+
+
 class Unavailable(FleetError):  # noqa: N818 - reads like the HTTP status it maps to
     """OpenFGA or the bus is not reachable; nothing was changed (503)."""
 

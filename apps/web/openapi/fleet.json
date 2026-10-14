@@ -98,6 +98,183 @@
         "title": "AreaNamesOut",
         "type": "object"
       },
+      "BridgeLinkIn": {
+        "additionalProperties": false,
+        "description": "``PUT /mowers/{id}/links/ble_bridge``: a Bluetooth bridge (an ESPHome Bluetooth proxy)\nnext to the mower's connection. ``noise_psk`` is write-only; ``***`` keeps the stored key.",
+        "properties": {
+          "allow_manual_blades": {
+            "default": false,
+            "description": "Blades may run while the mower is driven manually.",
+            "title": "Allow Manual Blades",
+            "type": "boolean"
+          },
+          "ble_address": {
+            "description": "The mower's Bluetooth address (from the scan).",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Ble Address",
+            "type": "string"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mower's Bluetooth name (from the scan); the cloud device name when omitted.",
+            "title": "Device Name"
+          },
+          "host": {
+            "description": "Host name or IP of the bridge.",
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "manual_blade_height_mm": {
+            "anyOf": [
+              {
+                "maximum": 120.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Blade height for manual driving.",
+            "title": "Manual Blade Height Mm"
+          },
+          "noise_psk": {
+            "description": "The bridge's API encryption key (`api.encryption.key` of an ESPHome bridge); `***` keeps the stored key.",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Noise Psk",
+            "type": "string",
+            "writeOnly": true
+          },
+          "port": {
+            "default": 6053,
+            "description": "The bridge's API port.",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "host",
+          "noise_psk",
+          "ble_address"
+        ],
+        "title": "BridgeLinkIn",
+        "type": "object"
+      },
+      "BridgeScanError": {
+        "description": "The error of a :class:`BridgeScanReply`; ``detail`` never echoes the key.",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/BridgeScanErrorCode"
+          },
+          "detail": {
+            "maxLength": 500,
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "BridgeScanError",
+        "type": "object"
+      },
+      "BridgeScanErrorCode": {
+        "description": "Why a bridge scan gave no result.",
+        "enum": [
+          "unreachable",
+          "auth_failed",
+          "timeout",
+          "busy",
+          "unsupported",
+          "not_found",
+          "forbidden"
+        ],
+        "title": "BridgeScanErrorCode",
+        "type": "string"
+      },
+      "BridgeScanIn": {
+        "additionalProperties": false,
+        "description": "``POST /mowers/{id}/links/ble_bridge/scan``: where the bridge is and its key (`***`: the\nstored key of the existing link).",
+        "properties": {
+          "host": {
+            "maxLength": 253,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "noise_psk": {
+            "default": "***",
+            "description": "The bridge's API encryption key; `***` means the stored key.",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Noise Psk",
+            "type": "string",
+            "writeOnly": true
+          },
+          "port": {
+            "default": 6053,
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "host"
+        ],
+        "title": "BridgeScanIn",
+        "type": "object"
+      },
+      "BridgeScanReply": {
+        "description": "Reply to :class:`BridgeScanRequest`.\n\n``proxy`` is set as soon as the proxy answered, also with a ``timeout`` error (the bridge\nworks, the mower was not seen); ``devices`` lists every mower advertisement seen, so the\nclient can offer a different mower than expected. ``error`` is null when the scan succeeded.",
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/ScannedDevice"
+            },
+            "maxItems": 50,
+            "title": "Devices",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BridgeScanError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proxy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProxyInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "BridgeScanReply",
+        "type": "object"
+      },
       "BulkCommandAccepted": {
         "description": "Answer (202) to a command for every mower of a site or group.",
         "properties": {
@@ -1217,6 +1394,104 @@
         "title": "FeatureDef",
         "type": "object"
       },
+      "FirmwareInfo": {
+        "description": "The firmware state of a mower (``MowerState.firmware_info``).",
+        "properties": {
+          "available": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest version the vendor offers for this mower; null when none or unknown.",
+            "title": "Available"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the vendor was last asked; null when never.",
+            "title": "Checked At"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last update failed, if known.",
+            "title": "Failure Reason"
+          },
+          "installed": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The version running on the mower.",
+            "title": "Installed"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Percent done while `installing`, if reported.",
+            "title": "Progress"
+          },
+          "release_notes": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Release notes of `available`, if given.",
+            "title": "Release Notes"
+          },
+          "update_state": {
+            "default": "unknown",
+            "enum": [
+              "idle",
+              "available",
+              "installing",
+              "failed",
+              "unknown"
+            ],
+            "title": "Update State",
+            "type": "string"
+          }
+        },
+        "title": "FirmwareInfo",
+        "type": "object"
+      },
       "FirmwareUpdate": {
         "description": "Install the firmware version the vendor offers (``MowerState.firmware_info.available``).\n\nThe adapter refuses it unless ``update_state`` is ``available`` and ``version`` equals\n``available`` (a stale client), the mower is docked and charging with enough battery, no job\nor drive session runs and no update is already installing. While it runs the mower reports\nthe activity ``updating``.",
         "properties": {
@@ -1396,6 +1671,50 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LinkOut": {
+        "description": "An additional link of a mower (``MowerOut.links[kind]``, the link routes).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "options": {
+            "additionalProperties": true,
+            "description": "The link's options (`host`, `port`, `ble_address`, `device_name`, `allow_manual_blades`, `manual_blade_height_mm`); secret keys show `***` and sending `***` back keeps the stored value.",
+            "title": "Options",
+            "type": "object"
+          },
+          "proxy_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProxyInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the last scan or check learnt about the bridge; null until one answered. The live link state is `MowerState.links[kind]` from telemetry."
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "options",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LinkOut",
         "type": "object"
       },
       "LinkedAccountDetail": {
@@ -2438,6 +2757,14 @@
             "description": "The linked account a `cloud` mower connects through.",
             "title": "Linked Account Id"
           },
+          "links": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LinkOut"
+            },
+            "description": "Additional links next to the connection by kind (`ble_bridge`: a Bluetooth bridge, `PUT /mowers/{id}/links/ble_bridge`); empty for a mower with only its connection.",
+            "title": "Links",
+            "type": "object"
+          },
           "model": {
             "anyOf": [
               {
@@ -2718,6 +3045,109 @@
         "title": "PrincipalRef",
         "type": "object"
       },
+      "ProxyInfo": {
+        "description": "What a scan learnt about the bridge itself (ESPHome ``device_info``).",
+        "properties": {
+          "bluetooth_mac": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The bridge's own Bluetooth address.",
+            "title": "Bluetooth Mac"
+          },
+          "checked_at": {
+            "description": "When the gateway read this information.",
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "compiled_at": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compiled At"
+          },
+          "esphome_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Esphome Version"
+          },
+          "outdated": {
+            "default": false,
+            "title": "Outdated",
+            "type": "boolean"
+          },
+          "outdated_reason": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outdated Reason"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`esphome.project.name`, if set.",
+            "title": "Project Name"
+          },
+          "project_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`esphome.project.version`, if set.",
+            "title": "Project Version"
+          },
+          "proxy_name": {
+            "description": "The ESPHome node name.",
+            "maxLength": 100,
+            "title": "Proxy Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proxy_name",
+          "checked_at"
+        ],
+        "title": "ProxyInfo",
+        "type": "object"
+      },
       "ResumeMow": {
         "description": "Resume a paused job.",
         "properties": {
@@ -2747,6 +3177,39 @@
           }
         },
         "title": "ReturnToDock",
+        "type": "object"
+      },
+      "ScannedDevice": {
+        "description": "One mower advertisement the bridge saw during a scan.",
+        "properties": {
+          "address": {
+            "description": "Bluetooth address.",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Address",
+            "type": "string"
+          },
+          "name": {
+            "description": "The Bluetooth name the mower advertises.",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "rssi": {
+            "description": "Signal strength at the bridge in dBm.",
+            "maximum": 20.0,
+            "minimum": -128.0,
+            "title": "Rssi",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "address",
+          "rssi"
+        ],
+        "title": "ScannedDevice",
         "type": "object"
       },
       "SetBladeHeight": {
@@ -4759,6 +5222,59 @@
         ]
       }
     },
+    "/api/v1/fleet/mowers/{mower_id}/firmware/check": {
+      "post": {
+        "description": "Ask the vendor for firmware updates now (``can_view``, hidden otherwise; ADR 0038). Fleet\nrelays the request to the Device-Gateway that holds the mower, which asks through the\nmower's connection and answers the fresh ``FirmwareInfo`` (installed and available version,\nrelease notes, update state); the same information arrives with telemetry as\n``MowerState.firmware_info``. Installing is the command ``firmware_update``\n(``can_manage_mowers``).",
+        "operationId": "check_firmware_api_v1_fleet_mowers__mower_id__firmware_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirmwareInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "`firmware-check-unsupported`: the mower's connection cannot ask the vendor (no cloud link)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The mower is offline, the vendor did not answer, or no Device-Gateway answered in time."
+          }
+        },
+        "summary": "Check Firmware",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
     "/api/v1/fleet/mowers/{mower_id}/groups": {
       "put": {
         "description": "Make the mower a member of exactly these groups (``can_manage_mowers`` on the mower and\non every added or removed group).",
@@ -4808,6 +5324,266 @@
           }
         },
         "summary": "Set Mower Groups",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/links/ble_bridge": {
+      "delete": {
+        "description": "Remove the mower's Bluetooth bridge link (``can_manage_mowers``, hidden otherwise).\nAudits ``mower.link_removed`` and publishes ``mower.updated`` without the link, so the\nDevice-Gateway closes it.",
+        "operationId": "delete_bridge_link_api_v1_fleet_mowers__mower_id__links_ble_bridge_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_manage_mowers`."
+          },
+          "404": {
+            "description": "The mower is not visible or has no bridge link."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Bridge Link",
+        "tags": [
+          "mowers"
+        ]
+      },
+      "get": {
+        "description": "The mower's Bluetooth bridge link (``can_view``, hidden otherwise): its options with the\nkey masked and the cached bridge information of the last scan. The live link state comes\nwith telemetry (``MowerState.links.ble_bridge``).",
+        "operationId": "get_bridge_link_api_v1_fleet_mowers__mower_id__links_ble_bridge_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The mower is not visible or has no bridge link."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Bridge Link",
+        "tags": [
+          "mowers"
+        ]
+      },
+      "put": {
+        "description": "Create or replace the mower's Bluetooth bridge link (``can_manage_mowers``, hidden\notherwise): the bridge's host, port and API encryption key, the mower's Bluetooth address and\nname (from the scan) and the blade settings for manual driving. The options are validated\nwith the ``ble_bridge`` schema of ``GET /connection-kinds``; the key is stored encrypted and\nnever returned (``***``; sending ``***`` keeps it). Audits ``mower.link_set`` and publishes\n``mower.updated`` with the full registration, so the Device-Gateway opens the link.",
+        "operationId": "set_bridge_link_api_v1_fleet_mowers__mower_id__links_ble_bridge_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BridgeLinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_manage_mowers`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "`link-not-applicable`: the mower's connection kind carries no Bluetooth bridge link (decided by the connection-kind registry, `GET /connection-kinds`)."
+          },
+          "422": {
+            "description": "An option the `ble_bridge` schema refuses (`#/links/ble_bridge/<key>`)."
+          },
+          "503": {
+            "description": "Fleet has no credential encryption key."
+          }
+        },
+        "summary": "Set Bridge Link",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/links/ble_bridge/check": {
+      "post": {
+        "description": "Scan again through the stored link (\"re-check\", ``can_manage_mowers``, hidden otherwise):\nthe stored host, port and key; the reply is as for the scan and the link's ``proxy_info``\n(bridge firmware, outdated flag) is refreshed. While the Device-Gateway holds the link open\nit answers from the live scanner.",
+        "operationId": "check_bridge_link_api_v1_fleet_mowers__mower_id__links_ble_bridge_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeScanReply"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_manage_mowers`."
+          },
+          "404": {
+            "description": "The mower is not visible or has no bridge link."
+          },
+          "409": {
+            "description": "`link-not-applicable`: the connection kind carries no bridge link; `bridge-scan-unsupported`: the Device-Gateway cannot scan through this bridge."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "No Device-Gateway answered in time or holds the mower right now."
+          }
+        },
+        "summary": "Check Bridge Link",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/links/ble_bridge/scan": {
+      "post": {
+        "description": "Look for the mower through a Bluetooth bridge before storing the link (``can_manage_mowers``,\nhidden otherwise). Fleet relays the request to the Device-Gateway that holds the mower; the\ngateway connects to the bridge at ``host``:``port`` with the key, reads the bridge's\ninformation and collects mower advertisements for up to 30 s (early when the expected name\nshows up). The answer is the gateway's ``BridgeScanReply``: ``proxy`` as soon as the bridge\nanswered, ``devices`` seen so far, and ``error`` for the outcomes the user must act on\n(``unreachable``, ``auth_failed``, ``timeout``, ``busy``) — these are a 200 with the reply,\nso a timeout still shows the bridge and the other mowers seen. When the mower already has a\nlink to the same bridge its ``proxy_info`` is refreshed. ``***`` as key means the stored key.\nThe key is never returned or logged.",
+        "operationId": "scan_bridge_api_v1_fleet_mowers__mower_id__links_ble_bridge_scan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BridgeScanIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeScanReply"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_manage_mowers`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "`link-not-applicable`: the connection kind carries no bridge link; `bridge-scan-unsupported`: the Device-Gateway cannot scan through this bridge."
+          },
+          "422": {
+            "description": "`***` as key without a stored link (`#/links/ble_bridge/noise_psk`)."
+          },
+          "503": {
+            "description": "No Device-Gateway answered in time or holds the mower right now."
+          }
+        },
+        "summary": "Scan Bridge",
         "tags": [
           "mowers"
         ]

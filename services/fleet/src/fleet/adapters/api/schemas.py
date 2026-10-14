@@ -5,15 +5,16 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import ConnectionKind, MowPattern
+from mowdeck_contracts.v1 import ConnectionKind, MowPattern, ProxyInfo
 from pydantic import BaseModel, ConfigDict, Field
 
 from fleet.application.linked_accounts import DeviceView, LinkedAccountView
+from fleet.application.links import ScanInput, proxy_info_of
 from fleet.application.mowers import MowerView
 from fleet.domain import models
 from fleet.domain.connections import SCHEMAS, KindSchema, OptionSpec
-from fleet.domain.models import Group, Site
-from fleet.domain.rules import mask_connection_options
+from fleet.domain.models import Group, MowerLink, Site
+from fleet.domain.rules import SECRET_MASK, mask_connection_options, mask_link_options
 
 
 class In(BaseModel):
@@ -218,6 +219,94 @@ class MowDefaults(BaseModel):
         return cls(pattern=saved.pattern) if saved is not None else None
 
 
+# --- additional links (ADR 0038) -----------------------------------------------------------
+
+
+class BridgeLinkIn(In):
+    """``PUT /mowers/{id}/links/ble_bridge``: a Bluetooth bridge (an ESPHome Bluetooth proxy)
+    next to the mower's connection. ``noise_psk`` is write-only; ``***`` keeps the stored key."""
+
+    host: str = Field(min_length=1, max_length=253, description="Host name or IP of the bridge.")
+    port: int = Field(default=6053, ge=1, le=65535, description="The bridge's API port.")
+    noise_psk: str = Field(
+        min_length=1,
+        max_length=256,
+        json_schema_extra={"writeOnly": True},
+        description="The bridge's API encryption key (`api.encryption.key` of an ESPHome "
+        "bridge); `***` keeps the stored key.",
+    )
+    ble_address: str = Field(
+        min_length=1, max_length=32, description="The mower's Bluetooth address (from the scan)."
+    )
+    device_name: str | None = Field(
+        default=None,
+        max_length=100,
+        description="The mower's Bluetooth name (from the scan); the cloud device name when "
+        "omitted.",
+    )
+    allow_manual_blades: bool = Field(
+        default=False, description="Blades may run while the mower is driven manually."
+    )
+    manual_blade_height_mm: int | None = Field(
+        default=None, ge=10, le=120, description="Blade height for manual driving."
+    )
+
+    def to_options(self) -> dict[str, Any]:
+        """The link options the use case validates with the `ble_bridge` schema."""
+        options = self.model_dump(exclude_none=True)
+        if not options.get("device_name"):
+            options.pop("device_name", None)
+        return options
+
+
+class BridgeScanIn(In):
+    """``POST /mowers/{id}/links/ble_bridge/scan``: where the bridge is and its key (`***`: the
+    stored key of the existing link)."""
+
+    host: str = Field(min_length=1, max_length=253)
+    port: int = Field(default=6053, ge=1, le=65535)
+    noise_psk: str = Field(
+        default=SECRET_MASK,
+        min_length=1,
+        max_length=256,
+        json_schema_extra={"writeOnly": True},
+        description="The bridge's API encryption key; `***` means the stored key.",
+    )
+
+    def to_input(self) -> ScanInput:
+        """The use case input."""
+        return ScanInput(host=self.host, port=self.port, noise_psk=self.noise_psk)
+
+
+class LinkOut(BaseModel):
+    """An additional link of a mower (``MowerOut.links[kind]``, the link routes)."""
+
+    kind: str
+    options: dict[str, Any] = Field(
+        description="The link's options (`host`, `port`, `ble_address`, `device_name`, "
+        "`allow_manual_blades`, `manual_blade_height_mm`); secret keys show `***` and sending "
+        "`***` back keeps the stored value."
+    )
+    proxy_info: ProxyInfo | None = Field(
+        default=None,
+        description="What the last scan or check learnt about the bridge; null until one "
+        "answered. The live link state is `MowerState.links[kind]` from telemetry.",
+    )
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def of(cls, link: MowerLink) -> "LinkOut":
+        """From the entity (never the secrets)."""
+        return cls(
+            kind=link.kind,
+            options=mask_link_options(link.kind, link.options),
+            proxy_info=proxy_info_of(link),
+            created_at=link.created_at,
+            updated_at=link.updated_at,
+        )
+
+
 class MowerOut(BaseModel):
     """A mower."""
 
@@ -249,6 +338,12 @@ class MowerOut(BaseModel):
             "null until saved: then stripes at 0 degrees with one border lap."
         ),
     )
+    links: dict[str, LinkOut] = Field(
+        default_factory=dict,
+        description="Additional links next to the connection by kind (`ble_bridge`: a Bluetooth "
+        "bridge, `PUT /mowers/{id}/links/ble_bridge`); empty for a mower with only its "
+        "connection.",
+    )
     created_by: UUID
     created_at: datetime
     updated_at: datetime
@@ -270,6 +365,7 @@ class MowerOut(BaseModel):
             group_ids=found.group_ids,
             area_names=dict(found.area_names),
             mow_defaults=MowDefaults.of(item.mow_defaults),
+            links={link.kind: LinkOut.of(link) for link in found.links},
             created_by=item.created_by,
             created_at=item.created_at,
             updated_at=item.updated_at,
