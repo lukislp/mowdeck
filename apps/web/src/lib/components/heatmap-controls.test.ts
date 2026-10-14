@@ -14,6 +14,32 @@ const handlers = () => ({
 const base = { period: '7d' as const, cell: 1 as const };
 
 describe('HeatmapControls', () => {
+  it('holds the mow path toggle only when the page offers it', async () => {
+    const on = handlers();
+    const onpath = vi.fn();
+    const { unmount } = render(HeatmapControls, {
+      props: { ...base, ...on, layer: 'off', status: 'idle' },
+    });
+    expect(screen.queryByTestId('mow-path-toggle')).toBeNull();
+    unmount();
+    render(HeatmapControls, {
+      props: {
+        ...base,
+        ...on,
+        layer: 'off',
+        status: 'idle',
+        pathShown: true,
+        pathNote: '230 of 1,800 points',
+        onpath,
+      },
+    });
+    const toggle = screen.getByTestId('mow-path-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('mow-path-note').textContent).toBe('230 of 1,800 points');
+    await fireEvent.click(toggle);
+    expect(onpath).toHaveBeenCalledWith(false);
+  });
+
   it('shows only the switcher while the layer is off', async () => {
     const on = handlers();
     render(HeatmapControls, { props: { ...base, ...on, layer: 'off', status: 'idle' } });

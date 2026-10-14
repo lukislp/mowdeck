@@ -10,8 +10,9 @@
  * `publishing` the uids the player reports as publishing video, `activeUid` the one shown. A
  * chosen camera that does not publish is `missing`: the panel says so instead of switching.
  *
- * Layout (`layout.ts`): `single` or `both` (the stereo pair side by side, when the session has
- * one; kept per browser). `live` are the uids whose picture is on a tile; a wanted camera that
+ * Layout (`layout.ts`): `single`, `both` (the stereo pair side by side, when the session has
+ * one) or `panorama` (the pair blended into one wide picture; the two tiles stay as its
+ * sources); kept per browser. `live` are the uids whose picture is on a tile; a wanted camera that
  * shows nothing within {@link NO_DATA_MS} lands in `stalled` ("no data from this camera").
  * `tiles` says for every view what it shows.
  *
@@ -25,6 +26,7 @@ import { asProblem } from '$lib/api/problem';
 
 import type { DiagnosticsSnapshot, TrackDiagnostics } from './diagnostics';
 import {
+  effectiveLayout,
   layoutChoice,
   loadLayout,
   NO_DATA_MS,
@@ -160,9 +162,14 @@ export class CameraViewer {
     });
   }
 
-  /** Both front cameras are on screen. */
+  /** Both front cameras are on screen (side by side or as the panorama). */
   get both(): boolean {
     return this.tiles.length > 1;
+  }
+
+  /** Both front cameras are blended into one wide picture. */
+  get panorama(): boolean {
+    return effectiveLayout(this.layout, this.pair) === 'panorama';
   }
 
   /** A chosen camera publishes no video while others do. */
@@ -234,6 +241,16 @@ export class CameraViewer {
   async showBoth(): Promise<void> {
     if (!this.pair) return;
     this.setLayout('both');
+    await this.showChoice();
+  }
+
+  /**
+   * Show both front cameras as one wide picture (only with a stereo pair). The player keeps the
+   * same two subscriptions as `both`; only the panel draws them differently.
+   */
+  async showPanorama(): Promise<void> {
+    if (!this.pair) return;
+    this.setLayout('panorama');
     await this.showChoice();
   }
 

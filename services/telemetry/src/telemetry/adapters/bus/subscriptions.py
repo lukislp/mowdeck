@@ -27,6 +27,7 @@ from mowdeck_contracts.v1 import (
     EventEnvelope,
     MowerCapabilitiesSnapshot,
     MowerMapSnapshot,
+    MowerPathSnapshot,
     MowerRegistration,
     MowerState,
     PositionTrackReply,
@@ -144,10 +145,12 @@ def snapshot_handler(ingest: Ingest) -> MessageHandler:
             mower_id, kind = parse_device_subject(message.subject)
         except ValueError as exc:
             raise DropMessage(f"unexpected subject {message.subject!r}") from exc
-        snapshot: MowerMapSnapshot | MowerCapabilitiesSnapshot
+        snapshot: MowerMapSnapshot | MowerCapabilitiesSnapshot | MowerPathSnapshot
         try:
             if kind == "map":
                 snapshot = message.model(MowerMapSnapshot)
+            elif kind == "path":
+                snapshot = message.model(MowerPathSnapshot)
             else:
                 snapshot = message.model(MowerCapabilitiesSnapshot)
         except ValidationError as exc:

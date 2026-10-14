@@ -925,6 +925,156 @@
         "title": "ModuleDescriptor",
         "type": "object"
       },
+      "MowPath": {
+        "description": "The route a mower planned, in the local metres of its map.",
+        "properties": {
+          "area_ids": {
+            "description": "The map areas the route covers, in order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "mow",
+                    "edge",
+                    "transfer",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The kind of every polyline (same length), when known.",
+            "title": "Kinds"
+          },
+          "path_hash": {
+            "description": "The vendor's id of the planned route.",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Path Hash",
+            "type": "string"
+          },
+          "planned_at": {
+            "description": "When MowDeck received the route (UTC).",
+            "format": "date-time",
+            "title": "Planned At",
+            "type": "string"
+          },
+          "points_total": {
+            "description": "Number of points over all polylines.",
+            "minimum": 0.0,
+            "title": "Points Total",
+            "type": "integer"
+          },
+          "polylines": {
+            "description": "The route as polylines in driving order.",
+            "items": {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "title": "Polylines",
+            "type": "array"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MowPathProgress"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Progress of the running job; None for a preview."
+          }
+        },
+        "required": [
+          "path_hash",
+          "points_total",
+          "planned_at"
+        ],
+        "title": "MowPath",
+        "type": "object"
+      },
+      "MowPathOut": {
+        "description": "The route the mower planned for its running job, with the progress along it.",
+        "properties": {
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "When the gateway read the path (UTC).",
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "path": {
+            "$ref": "#/components/schemas/MowPath"
+          },
+          "received_at": {
+            "description": "When Telemetry stored it (UTC).",
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "observed_at",
+          "received_at",
+          "path"
+        ],
+        "title": "MowPathOut",
+        "type": "object"
+      },
+      "MowPathProgress": {
+        "description": "Where the mower is along its path.",
+        "properties": {
+          "direction": {
+            "default": 0,
+            "description": "The vendor's traversal direction flag (0 or 1).",
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Direction",
+            "type": "integer"
+          },
+          "index": {
+            "description": "Points done so far, counted over all polylines in order: the points with a flat index below this value are mowed.",
+            "minimum": 0.0,
+            "title": "Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "title": "MowPathProgress",
+        "type": "object"
+      },
       "MowerActivity": {
         "description": "What the mower is doing right now.",
         "enum": [
@@ -1064,6 +1214,28 @@
             },
             "title": "Native Patterns",
             "type": "array"
+          },
+          "path_spacing_range_mm": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive (min, max) distance between neighbouring mowing paths in millimetres (`MowPattern.spacing_m`), if the model has a settable spacing.",
+            "title": "Path Spacing Range Mm"
           },
           "rtk_sources": {
             "description": "RTK correction sources the mower can report.",
@@ -2783,6 +2955,53 @@
           }
         },
         "summary": "Get Map",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/path": {
+      "get": {
+        "description": "The route the mower planned for its running job (local metres of its map) with the\nprogress along it, as the Device-Gateway last published it; 404 ``no-path`` without a job\nor before the route arrived. Clients poll it while the mower works.",
+        "operationId": "get_mow_path_api_v1_telemetry_mowers__mower_id__path_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowPathOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "`no-path`: no running job whose route is known."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Mow Path",
         "tags": [
           "telemetry"
         ]

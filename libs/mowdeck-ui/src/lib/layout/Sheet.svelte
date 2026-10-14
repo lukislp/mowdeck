@@ -14,8 +14,19 @@
     children: Snippet;
     footer?: Snippet;
     testid?: string;
+    /** Desktop: about 760 px wide (two columns inside) instead of 400 px. */
+    wide?: boolean;
   }
-  let { open, title, closeLabel, onclose, children, footer, testid }: Props = $props();
+  let {
+    open,
+    title,
+    closeLabel,
+    onclose,
+    children,
+    footer,
+    testid,
+    wide = false,
+  }: Props = $props();
 
   function keydown(event: KeyboardEvent): void {
     if (open && event.key === 'Escape') onclose();
@@ -25,7 +36,7 @@
 <svelte:window onkeydown={keydown} />
 
 {#if open}
-  <div class="md-sheet" role="dialog" aria-label={title} data-testid={testid}>
+  <div class="md-sheet" class:wide role="dialog" aria-label={title} data-testid={testid}>
     <div class="head">
       <h2>{title}</h2>
       <button type="button" class="close" aria-label={closeLabel} onclick={onclose}>
@@ -95,6 +106,10 @@
       width: 400px;
       border: var(--md-hairline) solid var(--md-color-line-strong);
       border-radius: var(--md-radius-3);
+    }
+
+    .md-sheet.wide {
+      width: min(760px, calc(100vw - 2 * var(--md-space-6)));
     }
   }
 

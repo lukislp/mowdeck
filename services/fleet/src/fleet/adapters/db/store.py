@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from fleet.adapters.db import tables
+from fleet.adapters.db.codecs import MOWER_CODECS, Codec
 from fleet.application.ports import Gt, In, Lt
 from fleet.domain.errors import ConflictError
 from fleet.domain.models import (
@@ -30,7 +31,11 @@ from fleet.domain.models import (
 
 
 class SqlTable[T]:
-    """``Table`` port for one entity class on one SQL table."""
+    """``Table`` port for one entity class on one SQL table.
+
+    ``codecs`` name the columns whose domain value is stored in another shape (JSON); they
+    are applied to every value written, compared or read, so callers only see domain values.
+    """
 
     def __init__(
         self,
@@ -40,16 +45,25 @@ class SqlTable[T]:
         pk: str,
         *,
         autoincrement: bool = False,
+        codecs: Mapping[str, Codec] | None = None,
     ) -> None:
         self.conn = conn
         self.table = table
         self.entity = entity
         self.pk = pk
         self.autoincrement = autoincrement
+        self.codecs = dict(codecs or {})
         self.fields = [f.name for f in dataclasses.fields(entity)]  # type: ignore[arg-type]
 
+    def _encode(self, name: str, value: Any) -> Any:
+        codec = self.codecs.get(name)
+        return codec.encode(value) if codec is not None else value
+
     def _values(self, item: T) -> dict[str, Any]:
-        return {name: getattr(item, name) for name in self.fields}
+        return {name: self._encode(name, getattr(item, name)) for name in self.fields}
+
+    def _column_values(self, values: Mapping[str, Any]) -> dict[str, Any]:
+        return {name: self._encode(name, value) for name, value in values.items()}
 
     def _where(self, where: Mapping[str, Any]) -> list[ColumnElement[bool]]:
         clauses: list[ColumnElement[bool]] = []
@@ -65,11 +79,15 @@ class SqlTable[T]:
                 case In(values):
                     clauses.append(column.in_(list(values)))
                 case _:
-                    clauses.append(column == condition)
+                    clauses.append(column == self._encode(name, condition))
         return clauses
 
     def _entity(self, row: Any) -> T:
-        return self.entity(**dict(row._mapping))
+        data = dict(row._mapping)
+        for name, codec in self.codecs.items():
+            if name in data:
+                data[name] = codec.decode(data[name])
+        return self.entity(**data)
 
     async def add(self, item: T) -> T:
         values = self._values(item)
@@ -129,7 +147,7 @@ class SqlTable[T]:
 
     async def update_where(self, values: Mapping[str, Any], **where: Any) -> int:
         result = await self.conn.execute(
-            update(self.table).where(*self._where(where)).values(**dict(values))
+            update(self.table).where(*self._where(where)).values(**self._column_values(values))
         )
         return int(result.rowcount)
 
@@ -166,7 +184,7 @@ class SqlTx:
             conn=conn,
             sites=SqlTable(conn, tables.sites, Site, "id"),
             groups=SqlTable(conn, tables.groups, Group, "id"),
-            mowers=SqlTable(conn, tables.mowers, Mower, "id"),
+            mowers=SqlTable(conn, tables.mowers, Mower, "id", codecs=MOWER_CODECS),
             mower_groups=SqlTable(conn, tables.mower_groups, MowerGroup, "id"),
             # Composite key: change rows with update_where/delete, never update().
             area_names=SqlTable(conn, tables.mower_area_names, MowerAreaName, "mower_id"),

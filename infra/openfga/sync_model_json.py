@@ -7,8 +7,8 @@ so Python code (``bootstrap_model()``, ``InMemoryAuthorizer``) needs no DSL pars
     python infra/openfga/sync_model_json.py --write   # regenerate (uv run poe fga-json)
     python infra/openfga/sync_model_json.py --check   # fail if stale (CI)
 
-Requires Docker; the CLI image is pinned below (``FGA_CLI_IMAGE`` overrides it, CI uses the
-GHCR mirror of ``infra/images.txt``).
+Requires Docker; the CLI image is pinned below (``FGA_CLI_IMAGE`` overrides it; CI passes the
+value pinned in ``infra/compose/.env.example``).
 """
 
 import argparse

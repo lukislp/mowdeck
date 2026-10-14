@@ -40,3 +40,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0034](0034-linked-cloud-accounts-and-device-discovery.md) | Linked cloud accounts and device discovery | Accepted |
 | [0035](0035-server-side-camera-frames-and-automatic-analysis.md) | Server-side camera frames and automatic AI analysis on errors | Accepted |
 | [0036](0036-native-app-shells-with-capacitor.md) | Native app shells with Capacitor, loading the web app from the server | Accepted |
+| [0037](0037-camera-panorama-calibration.md) | Camera panorama calibration in the browser, with the AI supplying points only | Accepted |

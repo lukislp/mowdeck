@@ -62,6 +62,7 @@ export default defineConfig({
         'src/lib/schedules/preview.ts',
         'src/lib/schedules/recurrence.ts',
         'src/lib/mower/rtk-range.ts',
+        'src/lib/mower/mow-pattern.ts',
         'src/lib/drive/pilot.ts',
         'src/lib/health/series.ts',
         'src/lib/plan/usage.ts',

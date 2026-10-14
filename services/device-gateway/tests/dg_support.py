@@ -250,3 +250,6 @@ class SilentPublisher:
 
     async def capabilities_snapshot(self, snapshot: object, fingerprint: str) -> None:
         return None
+
+    async def path_snapshot(self, snapshot: object, fingerprint: str) -> None:
+        return None

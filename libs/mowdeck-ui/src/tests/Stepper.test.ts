@@ -51,4 +51,26 @@ describe('Stepper', () => {
     vi.advanceTimersByTime(600);
     expect(oncommit).not.toHaveBeenCalled();
   });
+
+  it('commits at every step with immediate', async () => {
+    const oncommit = vi.fn();
+    render(Stepper, {
+      props: {
+        id: 'speed',
+        label: 'Speed',
+        value: 0.3,
+        min: 0.2,
+        max: 0.6,
+        step: 0.1,
+        unit: 'm/s',
+        decimals: 2,
+        decreaseLabel: 'Slower',
+        increaseLabel: 'Faster',
+        immediate: true,
+        oncommit,
+      },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Faster' }));
+    expect(oncommit).toHaveBeenCalledExactlyOnceWith(0.4);
+  });
 });

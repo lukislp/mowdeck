@@ -91,6 +91,7 @@ class MammotionCloudConnection(MammotionBase):
             clock=clock,
             refresh_interval_s=options.refresh_seconds,
             active_refresh_interval_s=options.refresh_seconds_active,
+            report_stream_s=options.report_stream_seconds,
         )
         self.options = options
 

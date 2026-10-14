@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import GeoReference, MowerCapabilities, MowerMap, MowerState
+from mowdeck_contracts.v1 import GeoReference, MowerCapabilities, MowerMap, MowerState, MowPath
 from pydantic import BaseModel, Field
 
 from telemetry.application.queries import HeatmapResult
@@ -172,6 +172,25 @@ class MowerCapabilitiesOut(BaseModel):
             observed_at=row.observed_at,
             received_at=row.received_at,
             capabilities=MowerCapabilities.model_validate(row.body),
+        )
+
+
+class MowPathOut(BaseModel):
+    """The route the mower planned for its running job, with the progress along it."""
+
+    mower_id: UUID
+    observed_at: datetime = Field(description="When the gateway read the path (UTC).")
+    received_at: datetime = Field(description="When Telemetry stored it (UTC).")
+    path: MowPath
+
+    @classmethod
+    def of(cls, row: SnapshotRow) -> "MowPathOut":
+        """Build from a stored row."""
+        return cls(
+            mower_id=row.mower_id,
+            observed_at=row.observed_at,
+            received_at=row.received_at,
+            path=MowPath.model_validate(row.body),
         )
 
 

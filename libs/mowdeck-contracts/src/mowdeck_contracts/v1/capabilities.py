@@ -89,6 +89,11 @@ class MowerCapabilities(ContractModel):
     blade_height_range_mm: tuple[int, int] | None = Field(
         default=None, description="Inclusive (min, max) blade height in millimetres, if settable."
     )
+    path_spacing_range_mm: tuple[int, int] | None = Field(
+        default=None,
+        description="Inclusive (min, max) distance between neighbouring mowing paths in "
+        "millimetres (`MowPattern.spacing_m`), if the model has a settable spacing.",
+    )
     cutting_width_mm: int | None = Field(
         default=None,
         gt=0,
@@ -114,6 +119,11 @@ class MowerCapabilities(ContractModel):
             low, high = self.blade_height_range_mm
             if not 0 <= low <= high:
                 msg = "blade_height_range_mm must be (min, max) with 0 <= min <= max"
+                raise ValueError(msg)
+        if self.path_spacing_range_mm is not None:
+            low, high = self.path_spacing_range_mm
+            if not 0 < low <= high:
+                msg = "path_spacing_range_mm must be (min, max) with 0 < min <= max"
                 raise ValueError(msg)
         if (
             self.min_speed_mps is not None

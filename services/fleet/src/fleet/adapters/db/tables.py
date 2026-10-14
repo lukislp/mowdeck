@@ -128,6 +128,8 @@ mowers = Table(
     Column("linked_account_id", Uuid, ForeignKey("linked_accounts.id", ondelete="RESTRICT")),
     # The vendor's device id: one physical mower in one MowDeck account only, across accounts.
     Column("iot_id", String(100)),
+    # The mowing defaults of every client ({"pattern": MowPattern}); NULL until saved.
+    Column("mow_defaults", JSONB),
     # Serial numbers are unique per account (several NULLs are allowed).
     UniqueConstraint("account_id", "serial", name="uq_mowers_account_serial"),
     Index("ix_mowers_account_site", "account_id", "site_id"),

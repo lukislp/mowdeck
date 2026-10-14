@@ -104,5 +104,9 @@ export function mapLabels(): MowerMapLabels {
     rtkMajority: m.map_rtk_majority(),
     selectArea: (name) => m.map_select_area({ name }),
     renameArea: (name) => m.area_rename_label({ name }),
+    path: m.map_path(),
+    pathDone: m.map_path_done(),
+    pathAhead: m.map_path_ahead(),
+    pathPreview: m.map_path_preview(),
   };
 }

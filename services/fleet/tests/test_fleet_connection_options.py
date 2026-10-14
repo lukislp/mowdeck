@@ -242,6 +242,8 @@ async def test_fleet_api_lists_the_allowed_connection_kinds_with_their_schema() 
     active = options["refresh_seconds_active"]
     assert active["advanced"] is True and active["type"] == "number"
     assert (active["minimum"], active["maximum"], active["default"]) == (2, 60, 5)
+    stream = options["report_stream_seconds"]
+    assert (stream["minimum"], stream["maximum"], stream["default"]) == (0, 300, 60)
     assert cloud["groups"] == []
     ble_options = {o["key"]: o for o in ble["options"]}
     assert ble_options["port"]["default"] == 6053

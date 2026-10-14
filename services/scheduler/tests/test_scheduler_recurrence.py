@@ -153,7 +153,28 @@ def test_scheduler_validation_normalises_and_refuses() -> None:
 
 
 def test_scheduler_rotation_cycles_through_the_angles() -> None:
-    assert pattern_for_run(None, [], 3) is None
-    assert pattern_for_run({"spacing": 1}, [], 0) == {"spacing": 1}
-    angles = [pattern_for_run({"spacing": 1}, [0, 45, 90], i)["angle"] for i in range(5)]  # type: ignore[index]
+    angles = [pattern_for_run({"spacing": 1}, [0, 45, 90], i)["angle_deg"] for i in range(5)]
     assert angles == [0, 45, 90, 0, 45]
+    assert "angle" not in pattern_for_run({"angle": 10}, [0, 45], 1)
+
+
+def test_scheduler_run_pattern_is_mow_pattern_shaped() -> None:
+    # No settings at all: stripes at 0 degrees with one border lap (the edges get mowed).
+    assert pattern_for_run(None, [], 3) == {"name": "stripes", "angle_deg": 0.0, "border_laps": 1}
+    # The legacy key "angle" becomes angle_deg; other keys are kept.
+    assert pattern_for_run({"angle": 200, "spacing": 1}, [], 0) == {
+        "name": "stripes",
+        "angle_deg": 20.0,
+        "border_laps": 1,
+        "spacing": 1,
+    }
+    assert pattern_for_run(None, [-45], 0)["angle_deg"] == 135.0
+
+
+def test_scheduler_run_pattern_merges_the_mower_defaults() -> None:
+    defaults = {"name": "diagonal", "angle_deg": 30.0, "border_laps": 2, "spacing_m": 0.3}
+    # Without an angle of its own the schedule runs the defaults unchanged.
+    assert pattern_for_run(None, [], 0, defaults) == defaults
+    # The schedule only sets the angle.
+    assert pattern_for_run({"angle": 90}, [], 0, defaults) == {**defaults, "angle_deg": 90.0}
+    assert pattern_for_run(None, [0, 120], 1, defaults) == {**defaults, "angle_deg": 120.0}

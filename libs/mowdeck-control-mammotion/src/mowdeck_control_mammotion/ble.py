@@ -107,6 +107,7 @@ class MammotionBleProxyConnection(MammotionBase):
     async def start_drive_session(self) -> DriveSession:
         self._require_connected()
         self._require_no_sensor_stop()
+        self.boost_refresh()  # no refresh loop over BLE: a no-op there
         if self._session is not None and self._session.is_open:
             await self._session.close()
         self._session = BleDriveSession(

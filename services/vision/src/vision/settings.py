@@ -85,6 +85,16 @@ class Settings(ServiceSettings):
     vision_hosted_account_daily_requests: int = Field(default=50, ge=0, le=100000)
     """Analyses with the installation default per account and UTC day."""
 
+    vision_calibration_daily_requests: int = Field(default=10, ge=0, le=1000)
+    """AI-assisted panorama calibrations (corresponding points) per user and UTC day."""
+
+    vision_hosted_account_daily_calibrations: int = Field(default=20, ge=0, le=10000)
+    """AI-assisted panorama calibrations with the installation default per account and day."""
+
+    vision_calibration_timeout_seconds: float = Field(default=150.0, gt=0, le=600)
+    """Total time budget of one calibration call, all model attempts and retries included
+    (504 ``vision-provider-timeout`` beyond it); the browser's deadline sits above it."""
+
     vision_keep_images_days: int = Field(default=0, ge=0, le=365)
     """Keep the images of a proposal this many days longer than its TTL (0: delete with it)."""
 

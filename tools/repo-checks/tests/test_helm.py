@@ -4,7 +4,7 @@
   migration Job or the authorization bootstrap), or is replaced by a named alternative.
 * Every variable of infra/compose/.env.example appears in values.yaml, and every `config` and
   `secrets` key of values.yaml is a variable of .env.example (same names on both sides).
-* The third-party images of values.yaml come from infra/images.txt.
+* The third-party images of values.yaml are the ones pinned in infra/compose/.env.example.
 * Rendered (when helm and the chart dependencies are available): every MOWDECK_* variable a
   Compose service receives reaches the same Kubernetes container, directly or as a _FILE secret.
 """
@@ -52,13 +52,9 @@ def _values(repo_root: Path) -> dict[str, Any]:
 
 
 def _images(repo_root: Path) -> dict[str, str]:
-    images: dict[str, str] = {}
-    for raw in (repo_root / "infra" / "images.txt").read_text("utf-8").splitlines():
-        line = raw.strip()
-        if line and not line.startswith("#"):
-            alias, source = line.split()
-            images[alias] = source
-    return images
+    """Variable -> image of the ``*_IMAGE=`` lines of .env.example (the pinned image list)."""
+    text = (repo_root / "infra" / "compose" / ".env.example").read_text("utf-8")
+    return dict(re.findall(r"^(\w+_IMAGE)=(\S+)\s*$", text, re.MULTILINE))
 
 
 def test_every_compose_service_has_a_template(repo_root: Path) -> None:
@@ -103,9 +99,9 @@ def test_secrets_have_no_default_values(repo_root: Path) -> None:
 def test_chart_images_come_from_the_image_list(repo_root: Path) -> None:
     images = _images(repo_root)
     values = _values(repo_root)
-    assert values["nats"]["container"]["image"]["fullImageName"] == images["nats"]
+    assert values["nats"]["container"]["image"]["fullImageName"] == images["NATS_IMAGE"]
     openfga = values["openfga"]["image"]
-    assert f"{openfga['repository']}:{openfga['tag']}" == images["openfga"]
+    assert f"{openfga['repository']}:{openfga['tag']}" == images["OPENFGA_IMAGE"]
 
 
 def test_service_template_has_no_helm_values(repo_root: Path) -> None:

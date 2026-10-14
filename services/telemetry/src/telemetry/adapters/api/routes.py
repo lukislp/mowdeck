@@ -38,6 +38,7 @@ from telemetry.adapters.api.schemas import (
     MowerMapOut,
     MowerStateList,
     MowerStateSnapshot,
+    MowPathOut,
     PositionOut,
     PositionTrack,
     ReportSummary,
@@ -161,6 +162,20 @@ async def get_capabilities(
     gateway reported it."""
     row = await services.queries.snapshot(account_id, mower_id, "capabilities")
     return MowerCapabilitiesOut.of(row)
+
+
+@router.get(
+    "/mowers/{mower_id}/path",
+    responses={404: {"description": "`no-path`: no running job whose route is known."}},
+)
+async def get_mow_path(
+    mower_id: UUID, _: ViewMower, account_id: CurrentAccountId, services: ServicesDep
+) -> MowPathOut:
+    """The route the mower planned for its running job (local metres of its map) with the
+    progress along it, as the Device-Gateway last published it; 404 ``no-path`` without a job
+    or before the route arrived. Clients poll it while the mower works."""
+    row = await services.queries.mow_path(account_id, mower_id)
+    return MowPathOut.of(row)
 
 
 @router.get("/mowers/{mower_id}/heatmap")

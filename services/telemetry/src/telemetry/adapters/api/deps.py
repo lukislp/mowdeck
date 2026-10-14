@@ -53,6 +53,13 @@ class NoCapabilitiesProblem(NotFound):
     title: ClassVar[str] = "No capabilities yet"
 
 
+class NoPathProblem(NotFound):
+    """The mower is visible but runs no job whose route the gateway knows."""
+
+    problem_type: ClassVar[str] = "no-path"
+    title: ClassVar[str] = "No mow path"
+
+
 def get_services(request: Request) -> Services:
     """The use cases created at startup (503 before startup finished)."""
     services: Services | None = getattr(request.app.state, "telemetry", None)
@@ -104,6 +111,8 @@ def to_service_error(exc: TelemetryError) -> ServiceError:
             return NoTelemetryProblem(exc.message)
         case NoSnapshotYetError(kind="map"):
             return NoMapProblem(exc.message)
+        case NoSnapshotYetError(kind="path"):
+            return NoPathProblem(exc.message)
         case NoSnapshotYetError():
             return NoCapabilitiesProblem(exc.message)
         case InvalidQueryError():

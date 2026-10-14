@@ -316,7 +316,12 @@ class Runner:
         command = StartMow(
             area_ids=area_ids,
             pattern=pattern_for_run(
-                schedule.pattern, schedule.rotation_angles, schedule.rotation_index
+                schedule.pattern,
+                schedule.rotation_angles,
+                schedule.rotation_index,
+                target.mow_pattern.model_dump(mode="json", exclude_none=True)
+                if target.mow_pattern is not None
+                else None,
             ),
         )
         result = run(Outcome.STARTED)
@@ -346,7 +351,9 @@ class Runner:
         result.window_end_at = closes
         pattern = command.pattern or {}
         result.details = f"areas {', '.join(area_ids)}" + (
-            f", angle {pattern['angle']:g}" if "angle" in pattern else ""
+            f", angle {pattern['angle_deg']:g}"
+            if isinstance(pattern.get("angle_deg"), int | float)
+            else ""
         )
         return result
 

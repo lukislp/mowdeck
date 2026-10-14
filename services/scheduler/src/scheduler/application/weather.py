@@ -37,6 +37,8 @@ class WeatherAnswer:
     location: Location | None
     forecast: Forecast | None
     provider: str
+    settings: RainSettings
+    """The rain pause settings the decision applied (echoed so clients need no defaults)."""
 
 
 class WeatherService:
@@ -72,10 +74,11 @@ class WeatherService:
         self, settings: RainSettings, location: Location | None, at: datetime
     ) -> WeatherAnswer:
         """The rain decision at ``at`` for ``location``."""
+        name = self.provider.name
         if not settings.enabled:
-            return WeatherAnswer(decide(settings, None, at), location, None, self.provider.name)
+            return WeatherAnswer(decide(settings, None, at), location, None, name, settings)
         if location is None:
             decision = RainDecision(Verdict.NO_LOCATION, "no location known, running anyway")
-            return WeatherAnswer(decision, None, None, self.provider.name)
+            return WeatherAnswer(decision, None, None, name, settings)
         forecast = await self.provider.forecast(location.latitude, location.longitude)
-        return WeatherAnswer(decide(settings, forecast, at), location, forecast, self.provider.name)
+        return WeatherAnswer(decide(settings, forecast, at), location, forecast, name, settings)

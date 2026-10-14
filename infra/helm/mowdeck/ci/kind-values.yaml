@@ -16,7 +16,8 @@ ingress:
   className: traefik
   host: ""
 image:
-  # Images built locally and loaded into the kind node (never pulled).
+  # Images built into the local Docker daemon and loaded into the kind node with
+  # `kind load docker-image` (infra/helm/kind-test.sh): never pulled from a registry.
   pullPolicy: Never
 postgresql:
   cloudnativepg:

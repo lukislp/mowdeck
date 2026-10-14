@@ -107,7 +107,8 @@ class HistoryPoint:
 class SnapshotRow:
     """The newest device snapshot of one mower and kind (table ``mower_snapshots``).
 
-    ``kind`` is ``map`` or ``capabilities``; ``body`` is the map or the capabilities as JSON,
+    ``kind`` is ``map``, ``capabilities`` or ``path``; ``body`` is the map, the capabilities or
+    the mow path as JSON (``{}`` for a path the gateway cleared),
     served as is; ``revision`` is the map revision (or a content hash) and the HTTP ETag.
     """
 

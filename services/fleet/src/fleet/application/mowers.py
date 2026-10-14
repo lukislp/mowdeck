@@ -49,7 +49,7 @@ from fleet.domain.errors import (
     MowerAlreadyRegisteredError,
     NotFoundError,
 )
-from fleet.domain.models import LinkedAccount, Mower, MowerGroup
+from fleet.domain.models import LinkedAccount, MowDefaults, Mower, MowerGroup
 from fleet.domain.rules import (
     CAN_MANAGE_MOWERS,
     clean_name,
@@ -92,6 +92,13 @@ class MowerView:
     mower: Mower
     group_ids: list[UUID]
     area_names: dict[str, str] = field(default_factory=dict)
+
+
+def audited_defaults(defaults: MowDefaults | None) -> dict[str, Any] | None:
+    """Mowing defaults as the audit log records them (``{"pattern": {...}}``, JSON)."""
+    if defaults is None:
+        return None
+    return {"pattern": defaults.pattern.model_dump(mode="json", exclude_none=True)}
 
 
 def registration(item: Mower) -> MowerRegistration:
@@ -312,6 +319,7 @@ class MowerService:
                     timezone=sites[m.site_id].timezone,
                     latitude=sites[m.site_id].latitude,
                     longitude=sites[m.site_id].longitude,
+                    mow_pattern=m.mow_defaults.pattern if m.mow_defaults is not None else None,
                 )
                 for m in members
                 if m.site_id in sites
@@ -579,6 +587,39 @@ class MowerService:
             after = (item.name, item.connection_kind, item.connection_options, item.site_id)
             if after != before:
                 work.emit(MOWER_UPDATED, account_id, await self._registration(work.tx, item))
+        return MowerView(item, sorted((link.group_id for link in links), key=str), names)
+
+    async def set_mow_defaults(
+        self,
+        actor: Actor,
+        account_id: UUID,
+        mower_id: UUID,
+        defaults: MowDefaults | None,
+    ) -> MowerView:
+        """Keep ``defaults`` as the mower's mowing defaults; None drops them (clients fall back
+        to stripes with one border lap). Nothing is sent to the mower. An unchanged value
+        changes nothing (no audit row); a change is audited as ``mower.mow_defaults_changed``."""
+        async with self.uow() as work:
+            item = await work.tx.mowers.get(id=mower_id, account_id=account_id)
+            if item is None:
+                raise NotFoundError("mower not found")
+            if item.mow_defaults != defaults:
+                previous = item.mow_defaults
+                await work.tx.mowers.update_where({"mow_defaults": defaults}, id=mower_id)
+                item.mow_defaults = defaults
+                await work.audit(
+                    actor,
+                    "mower.mow_defaults_changed",
+                    account_id,
+                    "mower",
+                    mower_id,
+                    {
+                        "mow_defaults": audited_defaults(defaults),
+                        "previous": audited_defaults(previous),
+                    },
+                )
+            links = await work.tx.mower_groups.find(mower_id=mower_id)
+            names = await names_of(work.tx, mower_id)
         return MowerView(item, sorted((link.group_id for link in links), key=str), names)
 
     async def set_groups(

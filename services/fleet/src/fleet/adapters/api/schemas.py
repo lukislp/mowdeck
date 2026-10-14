@@ -5,11 +5,12 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import ConnectionKind
+from mowdeck_contracts.v1 import ConnectionKind, MowPattern
 from pydantic import BaseModel, ConfigDict, Field
 
 from fleet.application.linked_accounts import DeviceView, LinkedAccountView
 from fleet.application.mowers import MowerView
+from fleet.domain import models
 from fleet.domain.connections import SCHEMAS, KindSchema, OptionSpec
 from fleet.domain.models import Group, Site
 from fleet.domain.rules import mask_connection_options
@@ -187,6 +188,36 @@ class MowerGroupsIn(In):
     group_ids: list[UUID] = Field(max_length=50)
 
 
+class MowPatternIn(MowPattern):
+    """``MowPattern`` as a request body: unknown keys are refused (422)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, title="MowPatternIn")
+
+
+class MowDefaultsIn(In):
+    """``PUT /mowers/{id}/mow-defaults``: the mowing defaults every client starts with.
+    ``pattern: null`` drops them (clients then use stripes, 0 degrees, one border lap)."""
+
+    pattern: MowPatternIn | None
+
+    def to_domain(self) -> models.MowDefaults | None:
+        """The domain value the use case keeps; None drops the defaults."""
+        if self.pattern is None:
+            return None
+        return models.MowDefaults(pattern=MowPattern.model_validate(self.pattern.model_dump()))
+
+
+class MowDefaults(BaseModel):
+    """The saved mowing defaults of a mower (``MowerOut.mow_defaults``)."""
+
+    pattern: MowPattern
+
+    @classmethod
+    def of(cls, saved: models.MowDefaults | None) -> "MowDefaults | None":
+        """From the domain value; None when nothing is saved."""
+        return cls(pattern=saved.pattern) if saved is not None else None
+
+
 class MowerOut(BaseModel):
     """A mower."""
 
@@ -211,6 +242,13 @@ class MowerOut(BaseModel):
             "show the mower's own name, else `Area N` in map order."
         ),
     )
+    mow_defaults: MowDefaults | None = Field(
+        default=None,
+        description=(
+            "The mowing defaults every client starts with (`PUT /mowers/{id}/mow-defaults`); "
+            "null until saved: then stripes at 0 degrees with one border lap."
+        ),
+    )
     created_by: UUID
     created_at: datetime
     updated_at: datetime
@@ -231,6 +269,7 @@ class MowerOut(BaseModel):
             site_id=item.site_id,
             group_ids=found.group_ids,
             area_names=dict(found.area_names),
+            mow_defaults=MowDefaults.of(item.mow_defaults),
             created_by=item.created_by,
             created_at=item.created_at,
             updated_at=item.updated_at,

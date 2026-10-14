@@ -268,6 +268,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/mowers/{mower_id}/path": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Mow Path
+         * @description The route the mower planned for its running job (local metres of its map) with the
+         *     progress along it, as the Device-Gateway last published it; 404 ``no-path`` without a job
+         *     or before the route arrived. Clients poll it while the mower works.
+         */
+        get: operations["get_mow_path_api_v1_telemetry_mowers__mower_id__path_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/mowers/{mower_id}/positions": {
         parameters: {
             query?: never;
@@ -862,6 +884,14 @@ export type components = {
              */
             native_patterns?: string[];
             /**
+             * Path Spacing Range Mm
+             * @description Inclusive (min, max) distance between neighbouring mowing paths in millimetres (`MowPattern.spacing_m`), if the model has a settable spacing.
+             */
+            path_spacing_range_mm?: [
+                number,
+                number
+            ] | null;
+            /**
              * Rtk Sources
              * @description RTK correction sources the mower can report.
              */
@@ -1181,6 +1211,89 @@ export type components = {
              */
             stale: boolean;
             state: components["schemas"]["MowerState"];
+        };
+        /**
+         * MowPath
+         * @description The route a mower planned, in the local metres of its map.
+         */
+        MowPath: {
+            /**
+             * Area Ids
+             * @description The map areas the route covers, in order.
+             */
+            area_ids?: string[];
+            /**
+             * Kinds
+             * @description The kind of every polyline (same length), when known.
+             */
+            kinds?: ("mow" | "edge" | "transfer" | "other")[] | null;
+            /**
+             * Path Hash
+             * @description The vendor's id of the planned route.
+             */
+            path_hash: string;
+            /**
+             * Planned At
+             * Format: date-time
+             * @description When MowDeck received the route (UTC).
+             */
+            planned_at: string;
+            /**
+             * Points Total
+             * @description Number of points over all polylines.
+             */
+            points_total: number;
+            /**
+             * Polylines
+             * @description The route as polylines in driving order.
+             */
+            polylines?: [
+                number,
+                number
+            ][][];
+            /** @description Progress of the running job; None for a preview. */
+            progress?: components["schemas"]["MowPathProgress"] | null;
+        };
+        /**
+         * MowPathOut
+         * @description The route the mower planned for its running job, with the progress along it.
+         */
+        MowPathOut: {
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
+            /**
+             * Observed At
+             * Format: date-time
+             * @description When the gateway read the path (UTC).
+             */
+            observed_at: string;
+            path: components["schemas"]["MowPath"];
+            /**
+             * Received At
+             * Format: date-time
+             * @description When Telemetry stored it (UTC).
+             */
+            received_at: string;
+        };
+        /**
+         * MowPathProgress
+         * @description Where the mower is along its path.
+         */
+        MowPathProgress: {
+            /**
+             * Direction
+             * @description The vendor's traversal direction flag (0 or 1).
+             * @default 0
+             */
+            direction: number;
+            /**
+             * Index
+             * @description Points done so far, counted over all polylines in order: the points with a flat index below this value are mowed.
+             */
+            index: number;
         };
         /**
          * PermissionDef
@@ -1778,6 +1891,44 @@ export interface operations {
             };
             /** @description Not modified (``If-None-Match`` equals the ETag) */
             304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_mow_path_api_v1_telemetry_mowers__mower_id__path_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowPathOut"];
+                };
+            };
+            /** @description `no-path`: no running job whose route is known. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

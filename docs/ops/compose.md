@@ -45,11 +45,11 @@ The complete operating notes are in the repository file `infra/compose/README.md
 
 ## Image sources
 
-All third-party images are pinned in `infra/images.txt` and chosen in `.env` by the variables under "Image sources": `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images of the MowDeck builds. The defaults are public registries that need no login (ECR Public, `ghcr.io`, Docker Hub for the OpenFGA CLI).
+All third-party images are pinned under "Image sources" in `.env.example` and chosen in `.env` by the same variables: `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images of the MowDeck builds. The defaults are public registries that need no login (ECR Public, `ghcr.io`, Docker Hub for the OpenFGA CLI).
 
-To use another registry at home (a pull-through cache or a mirror on the NAS), copy the images there with the same tags and append the variables to `.env`: `sh infra/mirror-env.sh registry.example.org/mowdeck-mirror >> infra/compose/.env` prints one `NAME_IMAGE=<prefix>/<alias>:<tag>` line per image. Log in to that registry first if it needs credentials.
+To use another registry at home (a pull-through cache or a mirror on the NAS), copy the images there with the same tags and set the variables in `.env`, for example `POSTGRES_IMAGE=registry.example.org/postgres:17.11-alpine`; a later line in `.env` overrides an earlier one. Log in to that registry first if it needs credentials.
 
-CI pulls every image from the repository's own mirror `ghcr.io/<owner>/mowdeck-mirror/<alias>:<tag>` with `GITHUB_TOKEN`, so the shared anonymous rate limits of Docker Hub and ECR Public cannot break a run. The workflow `mirror-images` fills it with `crane copy` (all architectures) when the list changes on `main` or in a pull request, or when started by hand. The mirror packages are private; make them public in the package settings on GitHub if a home installation should pull them without a login. Details: `infra/compose/README.md`.
+CI pulls the same pinned images directly from the public registries and exports the `*_IMAGE` lines of `.env.example` into its jobs; it needs no registry login and no image mirror. Details: `infra/compose/README.md`.
 
 ## Authorization bootstrap
 

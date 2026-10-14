@@ -33,6 +33,14 @@ def test_mammotion_cloud_options_with_password_warn(caplog: pytest.LogCaptureFix
     assert options.confirm_timeout_s == 10
     assert options.refresh_seconds == 20
     assert options.refresh_seconds_active == 5
+    assert options.report_stream_seconds == 60
+    assert (
+        CloudOptions.parse({**CLOUD_OPTIONS, "report_stream_seconds": 0}).report_stream_seconds == 0
+    )
+    assert (
+        CloudOptions.parse({**CLOUD_OPTIONS, "report_stream_seconds": 10}).report_stream_seconds
+        == 10
+    )
     assert (
         CloudOptions.parse({**CLOUD_OPTIONS, "refresh_seconds_active": 2}).refresh_seconds_active
         == 2
@@ -70,6 +78,9 @@ def test_mammotion_cloud_options_with_a_credential_reference(tmp_path: Path) -> 
         ({**CLOUD_OPTIONS, "refresh_seconds": 5}, "between 10.0 and 300.0"),
         ({**CLOUD_OPTIONS, "refresh_seconds": 301}, "between 10.0 and 300.0"),
         ({**CLOUD_OPTIONS, "refresh_seconds": True}, "must be a number"),
+        ({**CLOUD_OPTIONS, "report_stream_seconds": 5}, "between 10.0 and 300.0"),
+        ({**CLOUD_OPTIONS, "report_stream_seconds": 301}, "between 10.0 and 300.0"),
+        ({**CLOUD_OPTIONS, "report_stream_seconds": True}, "must be a number"),
         ({**CLOUD_OPTIONS, "refresh_seconds_active": 1}, "between 2.0 and 60.0"),
         ({**CLOUD_OPTIONS, "refresh_seconds_active": 61}, "between 2.0 and 60.0"),
         ({**CLOUD_OPTIONS, "refresh_seconds_active": "5"}, "must be a number"),

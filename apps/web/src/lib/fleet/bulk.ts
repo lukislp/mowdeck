@@ -41,8 +41,11 @@ export function bulkTargets(
 }
 
 /** The command body of a kind. */
-export function bulkCommand(kind: BulkKind): { kind: BulkKind } {
-  return { kind };
+export function bulkCommand(
+  kind: BulkKind,
+): { kind: 'pause_mow' } | { kind: 'return_to_dock'; end_job: false } {
+  // A bulk dock keeps the jobs paused on the mowers (the default of `end_job`).
+  return kind === 'return_to_dock' ? { kind, end_job: false } : { kind };
 }
 
 /** One outcome per mower over several answers; an `accepted` wins over other outcomes. */

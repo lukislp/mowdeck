@@ -22,10 +22,12 @@ camera also implements :class:`CameraCapable` (see :func:`camera_session_of`); a
 can rebuild its map from what it already holds implements :class:`MapRebuildable` (see
 :func:`current_map_of`); an adapter that confirms commands through the mower's state implements
 :class:`TwoPhaseExecution` (see :func:`dispatch_of`), so the controller can release its queue
-while the confirmation is pending.
+while the confirmation is pending; an adapter that knows the route the mower planned for its job
+implements :class:`MowPathSource` (see :func:`current_path_of`), and one that can ask the mower
+to plan a route without starting it implements :class:`PathPreviewCapable`.
 """
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
@@ -38,6 +40,7 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerMap,
     MowerState,
+    MowPath,
     PauseMow,
     ResumeMow,
     ReturnToDock,
@@ -318,3 +321,45 @@ def current_map_of(connection: object) -> MowerMap | None:
     if not isinstance(connection, MapRebuildable):
         return None
     return connection.current_map()
+
+
+@runtime_checkable
+class MowPathSource(Protocol):
+    """Optional capability of a :class:`MowerConnection`: the route the mower planned for its
+    running job, with the progress along it.
+
+    The adapter fetches the route in the background once a job runs (never blocking a command)
+    and keeps it until the job ended. :meth:`current_path` only reads what the adapter holds:
+    no traffic to the mower, cheap enough to call on every state.
+    """
+
+    def current_path(self) -> MowPath | None:
+        """The path of the running job with fresh progress; None without a job or before the
+        route arrived."""
+        ...
+
+
+def current_path_of(connection: object) -> MowPath | None:
+    """The path of the running job of ``connection``; None when it does not implement
+    :class:`MowPathSource` or has no path."""
+    if not isinstance(connection, MowPathSource):
+        return None
+    return connection.current_path()
+
+
+@runtime_checkable
+class PathPreviewCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection`: ask the mower to plan the route of a
+    start (areas and pattern as in :class:`~mowdeck_contracts.v1.StartMow`) without starting it.
+
+    Raises :class:`~mowdeck_control.errors.CommandRejected` while a job runs or for areas or a
+    pattern the mower cannot run, :class:`~mowdeck_control.errors.NotConnected` without a link
+    and :class:`~mowdeck_control.errors.PathUnavailable` when the route did not arrive (the
+    adapter bounds the wait itself).
+    """
+
+    async def preview_path(
+        self, area_ids: Sequence[str], pattern: Mapping[str, Any] | None
+    ) -> MowPath:
+        """The route the mower planned (``progress`` is None)."""
+        ...

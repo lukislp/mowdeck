@@ -11,6 +11,9 @@ from mowdeck_contracts.v1 import (
     CommandEnvelope,
     MowerRegistration,
     MowerState,
+    MowPath,
+    PathPreviewErrorCode,
+    PathPreviewGatewayRequest,
 )
 
 
@@ -70,6 +73,49 @@ def camera_rejection(
     if registration.account_id != request.account_id:
         return CameraSessionErrorCode.FORBIDDEN, "the request's account does not own this mower"
     return None
+
+
+def preview_rejection(
+    registration: MowerRegistration | None, request: PathPreviewGatewayRequest
+) -> tuple[PathPreviewErrorCode, str] | None:
+    """Why a path preview must not run, or None if it may (the command account rule)."""
+    if registration is None:
+        return PathPreviewErrorCode.NOT_FOUND, "unknown mower"
+    if registration.account_id != request.account_id:
+        return PathPreviewErrorCode.FORBIDDEN, "the request's account does not own this mower"
+    return None
+
+
+def path_geometry_key(path: MowPath | None) -> str:
+    """What makes a mow path a different one (not its progress): its route and point count."""
+    if path is None:
+        return "none"
+    return f"{path.path_hash}:{path.points_total}:{path.planned_at.isoformat()}"
+
+
+def path_publish_due(
+    published: tuple[str, str] | None,
+    path: MowPath | None,
+    *,
+    since_last_seconds: float,
+    progress_interval_seconds: float,
+) -> bool:
+    """Whether the path snapshot must be published now.
+
+    ``published`` is the geometry key and progress of the last publish (None: nothing published
+    on this connection yet, so the first check always publishes, also a cleared path: a value
+    left on the stream from before must not outlive the job). A new route or a cleared path is
+    published at once; a progress change at most every ``progress_interval_seconds``.
+    """
+    if published is None:
+        return True
+    geometry = path_geometry_key(path)
+    if geometry != published[0]:
+        return True
+    progress = path.progress.model_dump_json() if path and path.progress else ""
+    if progress == published[1]:
+        return False
+    return since_last_seconds >= progress_interval_seconds
 
 
 def is_significant_change(previous: MowerState | None, current: MowerState) -> bool:

@@ -444,6 +444,55 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fleet/mowers/{mower_id}/mow-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Mow Defaults
+         * @description Keep the mowing defaults of the mower (``can_control``; 403 when the mower is visible,
+         *     else 404): the pattern settings every client starts with (web start sheet, Home Assistant,
+         *     schedules). ``pattern: null`` drops them. Nothing is sent to the mower; a start still
+         *     names its own pattern in ``StartMow.pattern``. Whether the mower runs the pattern is its
+         *     capabilities' business (``native_patterns``). Answers the mower with ``mow_defaults``.
+         */
+        put: operations["set_mow_defaults_api_v1_fleet_mowers__mower_id__mow_defaults_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/mowers/{mower_id}/path-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Mow Path
+         * @description Let the mower plan the route of a start (areas and pattern as for ``start_mow``) without
+         *     starting it, as the vendor app does before a start: ``can_control`` on the mower (hidden
+         *     otherwise) and the plan feature ``control``. Fleet relays the request to the Device-Gateway
+         *     that holds the mower; planning and fetching the route take a few seconds to about a minute
+         *     (over 4G longer), so clients show progress and allow up to 90 s. The route is not stored;
+         *     the start uses the same areas and pattern and the mower plans the same route again.
+         */
+        post: operations["preview_mow_path_api_v1_fleet_mowers__mower_id__path_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fleet/sites": {
         parameters: {
             query?: never;
@@ -806,6 +855,11 @@ export type components = {
             /** Correlation Id */
             correlation_id: string;
             /**
+             * End Job
+             * @description For a `return_to_dock`: whether it also ended the job; None for other kinds.
+             */
+            end_job?: boolean | null;
+            /**
              * Expires At
              * Format: date-time
              */
@@ -828,6 +882,13 @@ export type components = {
              * @description Service that issued the command on behalf of `issued_by` (e.g. `scheduler`); None for commands sent through the API.
              */
             origin?: string | null;
+            /**
+             * Pattern
+             * @description For a `start_mow` on map areas: the pattern settings it was sent with (`StartMow.pattern`, mostly `MowPattern` keys); None otherwise or when it had none.
+             */
+            pattern?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Plan Hash
              * @description Hash of the spot plan of a `start_mow` with `spot_plan`, if any.
@@ -1375,6 +1436,21 @@ export type components = {
             version: string;
         };
         /**
+         * MowDefaults
+         * @description The saved mowing defaults of a mower (``MowerOut.mow_defaults``).
+         */
+        MowDefaults: {
+            pattern: components["schemas"]["MowPattern"];
+        };
+        /**
+         * MowDefaultsIn
+         * @description ``PUT /mowers/{id}/mow-defaults``: the mowing defaults every client starts with.
+         *     ``pattern: null`` drops them (clients then use stripes, 0 degrees, one border lap).
+         */
+        MowDefaultsIn: {
+            pattern: components["schemas"]["MowPatternIn"] | null;
+        };
+        /**
          * MowerGroupsIn
          * @description ``PUT /mowers/{id}/groups``: the complete set of groups.
          */
@@ -1470,6 +1546,8 @@ export type components = {
             linked_account_id?: string | null;
             /** Model */
             model: string | null;
+            /** @description The mowing defaults every client starts with (`PUT /mowers/{id}/mow-defaults`); null until saved: then stripes at 0 degrees with one border lap. */
+            mow_defaults?: components["schemas"]["MowDefaults"] | null;
             /** Name */
             name: string;
             /** Serial */
@@ -1503,6 +1581,149 @@ export type components = {
             serial?: string | null;
             /** Site Id */
             site_id?: string | null;
+        };
+        /**
+         * MowPath
+         * @description The route a mower planned, in the local metres of its map.
+         */
+        MowPath: {
+            /**
+             * Area Ids
+             * @description The map areas the route covers, in order.
+             */
+            area_ids?: string[];
+            /**
+             * Kinds
+             * @description The kind of every polyline (same length), when known.
+             */
+            kinds?: ("mow" | "edge" | "transfer" | "other")[] | null;
+            /**
+             * Path Hash
+             * @description The vendor's id of the planned route.
+             */
+            path_hash: string;
+            /**
+             * Planned At
+             * Format: date-time
+             * @description When MowDeck received the route (UTC).
+             */
+            planned_at: string;
+            /**
+             * Points Total
+             * @description Number of points over all polylines.
+             */
+            points_total: number;
+            /**
+             * Polylines
+             * @description The route as polylines in driving order.
+             */
+            polylines?: [
+                number,
+                number
+            ][][];
+            /** @description Progress of the running job; None for a preview. */
+            progress?: components["schemas"]["MowPathProgress"] | null;
+        };
+        /**
+         * MowPathProgress
+         * @description Where the mower is along its path.
+         */
+        MowPathProgress: {
+            /**
+             * Direction
+             * @description The vendor's traversal direction flag (0 or 1).
+             * @default 0
+             */
+            direction: number;
+            /**
+             * Index
+             * @description Points done so far, counted over all polylines in order: the points with a flat index below this value are mowed.
+             */
+            index: number;
+        };
+        /**
+         * MowPattern
+         * @description The pattern settings of a native start (``StartMow.pattern``) that every client offers:
+         *     the pattern, its base angle, the border laps and the path spacing.
+         *
+         *     Adapters may accept further keys in ``StartMow.pattern``; this is the common, validated
+         *     part, also kept per mower as the mowing defaults in Fleet (``MowerOut.mow_defaults``).
+         *     Whether the mower runs the pattern is decided with ``MowerCapabilities.native_patterns``.
+         */
+        MowPattern: {
+            /**
+             * Angle Deg
+             * @description Base angle of the stripes in degrees (diagonal adds 45, checkerboard crosses at 90; ignored for `edge_only` and `random_angle`).
+             * @default 0
+             */
+            angle_deg: number;
+            /**
+             * Border Laps
+             * @description Laps along the area edge before the fill (`edge_only`: at least one).
+             * @default 1
+             */
+            border_laps: number;
+            /**
+             * Name
+             * @description The native pattern.
+             * @default stripes
+             * @enum {string}
+             */
+            name: "stripes" | "diagonal" | "checkerboard" | "edge_only" | "random_angle";
+            /**
+             * Spacing M
+             * @description Distance between neighbouring paths in metres; None for the mower's own default. Model limits: `MowerCapabilities.path_spacing_range_mm`.
+             */
+            spacing_m?: number | null;
+        };
+        /**
+         * MowPatternIn
+         * @description ``MowPattern`` as a request body: unknown keys are refused (422).
+         */
+        MowPatternIn: {
+            /**
+             * Angle Deg
+             * @description Base angle of the stripes in degrees (diagonal adds 45, checkerboard crosses at 90; ignored for `edge_only` and `random_angle`).
+             * @default 0
+             */
+            angle_deg: number;
+            /**
+             * Border Laps
+             * @description Laps along the area edge before the fill (`edge_only`: at least one).
+             * @default 1
+             */
+            border_laps: number;
+            /**
+             * Name
+             * @description The native pattern.
+             * @default stripes
+             * @enum {string}
+             */
+            name: "stripes" | "diagonal" | "checkerboard" | "edge_only" | "random_angle";
+            /**
+             * Spacing M
+             * @description Distance between neighbouring paths in metres; None for the mower's own default. Model limits: `MowerCapabilities.path_spacing_range_mm`.
+             */
+            spacing_m?: number | null;
+        };
+        /**
+         * PathPreviewRequest
+         * @description Body of ``POST /api/v1/fleet/mowers/{id}/path-preview``: the areas and pattern of a
+         *     start whose route the mower should plan without starting.
+         */
+        PathPreviewRequest: {
+            /**
+             * Area Ids
+             * @description Map area ids, in order.
+             */
+            area_ids: string[];
+            /**
+             * Pattern
+             * @description Pattern settings as for `StartMow.pattern`.
+             */
+            pattern?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * PauseMow
@@ -1575,9 +1796,14 @@ export type components = {
         };
         /**
          * ReturnToDock
-         * @description Stop the job and drive back to the charging station.
+         * @description Pause or end the job and drive back to the charging station.
          */
         ReturnToDock: {
+            /**
+             * End Job
+             * @default false
+             */
+            end_job: boolean;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2918,6 +3144,123 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    set_mow_defaults_api_v1_fleet_mowers__mower_id__mow_defaults_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MowDefaultsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowerOut"];
+                };
+            };
+            /** @description The caller sees the mower but has no `can_control`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The mower does not exist or is not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown pattern, a value out of range or an unknown key. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    preview_mow_path_api_v1_fleet_mowers__mower_id__path_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PathPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowPath"];
+                };
+            };
+            /** @description The plan does not include the feature `control`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The mower does not exist or is not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `path-preview-unsupported`: the connection cannot plan without starting; `path-preview-rejected`: a job runs, or the areas or pattern do not fit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The Device-Gateway did not answer or the mower is offline. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `gateway-timeout`: the mower did not hand back its route in time. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

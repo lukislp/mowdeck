@@ -36,11 +36,14 @@ from fleet.domain.errors import (
     FeatureNotInPlanError,
     FleetError,
     ForbiddenError,
+    GatewayTimeout,
     InvalidInput,
     LinkedAccountInUseError,
     LinkedAccountLoginError,
     MowerAlreadyRegisteredError,
     NotFoundError,
+    PathPreviewRejectedError,
+    PathPreviewUnsupportedError,
     PlanLimitError,
     Unavailable,
 )
@@ -51,6 +54,30 @@ class CameraUnsupported(Conflict):
 
     problem_type = "camera-unsupported"
     title = "Camera not supported"
+
+
+class PathPreviewUnsupported(Conflict):
+    """409 ``urn:mowdeck:problem:path-preview-unsupported``: the mower's connection cannot plan
+    a route without starting."""
+
+    problem_type = "path-preview-unsupported"
+    title = "Path preview not supported"
+
+
+class PathPreviewRejected(Conflict):
+    """409 ``urn:mowdeck:problem:path-preview-rejected``: the mower refused to plan (a job runs,
+    unknown areas, a pattern it cannot run)."""
+
+    problem_type = "path-preview-rejected"
+    title = "Path preview refused"
+
+
+class GatewayTimedOut(ServiceError):  # noqa: N818 - HTTP status names read best
+    """504 ``urn:mowdeck:problem:gateway-timeout``: the mower did not answer in time."""
+
+    status = 504
+    problem_type = "gateway-timeout"
+    title = "The mower did not answer in time"
 
 
 class LinkedAccountInUse(Conflict):
@@ -147,6 +174,12 @@ def to_service_error(exc: FleetError) -> ServiceError:
             return Forbidden(exc.message)
         case CameraUnsupportedError():
             return CameraUnsupported(exc.message)
+        case PathPreviewUnsupportedError():
+            return PathPreviewUnsupported(exc.message)
+        case PathPreviewRejectedError():
+            return PathPreviewRejected(exc.message)
+        case GatewayTimeout():
+            return GatewayTimedOut(exc.message)
         case LinkedAccountInUseError():
             return LinkedAccountInUse(
                 exc.message,

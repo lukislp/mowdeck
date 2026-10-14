@@ -36,6 +36,8 @@ def snapshot_handler(ingest: Ingest) -> MessageHandler:
             mower_id, kind = parse_device_subject(message.subject)
         except ValueError as exc:
             raise DropMessage(f"unexpected subject {message.subject!r}") from exc
+        if kind not in ("map", "capabilities"):
+            return  # the mow path and later kinds are not the planner's
         snapshot: MowerMapSnapshot | MowerCapabilitiesSnapshot
         try:
             if kind == "map":

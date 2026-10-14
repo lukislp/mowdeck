@@ -1,0 +1,161 @@
+{
+  "$defs": {
+    "MowPath": {
+      "description": "The route a mower planned, in the local metres of its map.",
+      "properties": {
+        "area_ids": {
+          "description": "The map areas the route covers, in order.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Area Ids",
+          "type": "array"
+        },
+        "kinds": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "mow",
+                  "edge",
+                  "transfer",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The kind of every polyline (same length), when known.",
+          "title": "Kinds"
+        },
+        "path_hash": {
+          "description": "The vendor's id of the planned route.",
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Path Hash",
+          "type": "string"
+        },
+        "planned_at": {
+          "description": "When MowDeck received the route (UTC).",
+          "format": "date-time",
+          "title": "Planned At",
+          "type": "string"
+        },
+        "points_total": {
+          "description": "Number of points over all polylines.",
+          "minimum": 0,
+          "title": "Points Total",
+          "type": "integer"
+        },
+        "polylines": {
+          "description": "The route as polylines in driving order.",
+          "items": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "title": "Polylines",
+          "type": "array"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MowPathProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Progress of the running job; None for a preview."
+        }
+      },
+      "required": [
+        "path_hash",
+        "points_total",
+        "planned_at"
+      ],
+      "title": "MowPath",
+      "type": "object"
+    },
+    "MowPathProgress": {
+      "description": "Where the mower is along its path.",
+      "properties": {
+        "direction": {
+          "default": 0,
+          "description": "The vendor's traversal direction flag (0 or 1).",
+          "maximum": 255,
+          "minimum": 0,
+          "title": "Direction",
+          "type": "integer"
+        },
+        "index": {
+          "description": "Points done so far, counted over all polylines in order: the points with a flat index below this value are mowed.",
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "MowPathProgress",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The mow path of the running job, published on ``device.mower.<id>.path``.\n\nPublished when the path or the progress along it changed; ``path`` is None once the job\nended (the last value per subject then tells late consumers that there is no path).",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "observed_at": {
+      "description": "When the gateway read the path (UTC).",
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "path": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MowPath"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id",
+    "observed_at"
+  ],
+  "title": "MowerPathSnapshot",
+  "type": "object"
+}

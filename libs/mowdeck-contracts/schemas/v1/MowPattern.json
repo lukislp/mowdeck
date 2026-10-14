@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The pattern settings of a native start (``StartMow.pattern``) that every client offers:\nthe pattern, its base angle, the border laps and the path spacing.\n\nAdapters may accept further keys in ``StartMow.pattern``; this is the common, validated\npart, also kept per mower as the mowing defaults in Fleet (``MowerOut.mow_defaults``).\nWhether the mower runs the pattern is decided with ``MowerCapabilities.native_patterns``.",
+  "properties": {
+    "angle_deg": {
+      "default": 0.0,
+      "description": "Base angle of the stripes in degrees (diagonal adds 45, checkerboard crosses at 90; ignored for `edge_only` and `random_angle`).",
+      "maximum": 180,
+      "minimum": 0,
+      "title": "Angle Deg",
+      "type": "number"
+    },
+    "border_laps": {
+      "default": 1,
+      "description": "Laps along the area edge before the fill (`edge_only`: at least one).",
+      "maximum": 4,
+      "minimum": 0,
+      "title": "Border Laps",
+      "type": "integer"
+    },
+    "name": {
+      "default": "stripes",
+      "description": "The native pattern.",
+      "enum": [
+        "stripes",
+        "diagonal",
+        "checkerboard",
+        "edge_only",
+        "random_angle"
+      ],
+      "title": "Name",
+      "type": "string"
+    },
+    "spacing_m": {
+      "anyOf": [
+        {
+          "maximum": 2.0,
+          "minimum": 0.05,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Distance between neighbouring paths in metres; None for the mower's own default. Model limits: `MowerCapabilities.path_spacing_range_mm`.",
+      "title": "Spacing M"
+    }
+  },
+  "title": "MowPattern",
+  "type": "object"
+}

@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from mowdeck_contracts.v1 import MowPattern
+
 
 @dataclass(slots=True)
 class Site:
@@ -56,6 +58,16 @@ class Group:
         return self.name.casefold()
 
 
+@dataclass(frozen=True, slots=True)
+class MowDefaults:
+    """The mowing defaults every client starts with (web start sheet, Home Assistant, the
+    Scheduler): the pattern settings of a native start. Set with
+    ``PUT /mowers/{id}/mow-defaults`` (ADR 0030, amendment 2026-10-14); nothing is sent to the
+    mower. How the value is stored is the database adapter's business (``adapters.db``)."""
+
+    pattern: MowPattern
+
+
 @dataclass(slots=True)
 class Mower:
     """A registered mower. It always belongs to one site and to any number of groups."""
@@ -77,6 +89,8 @@ class Mower:
     iot_id: str | None = None
     """The vendor's stable device id (Mammotion IoT id) of a cloud mower: one physical mower
     can be registered in one MowDeck account only, installation-wide (``uq_mowers_iot_id``)."""
+    mow_defaults: MowDefaults | None = None
+    """The mowing defaults every client starts with; None until someone saved them."""
 
 
 @dataclass(slots=True)

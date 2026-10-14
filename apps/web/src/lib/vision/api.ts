@@ -36,6 +36,7 @@ export const VISION_PROBLEMS = {
   quota: 'vision-quota',
   expired: 'vision-proposal-expired',
   providerFailed: 'vision-provider-failed',
+  providerTimeout: 'vision-provider-timeout',
   notInPlan: 'feature-not-in-plan',
   conflict: 'conflict',
 } as const;

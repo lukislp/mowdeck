@@ -30,7 +30,7 @@ image:
 imagePullSecrets: []
 # Base images of the MowDeck images are build arguments, not deployment settings: PYTHON_IMAGE,
 # UV_IMAGE, NODE_IMAGE, NGINX_IMAGE, BUSYBOX_IMAGE, FGA_CLI_IMAGE and JQ_IMAGE are set by the release
-# workflow from infra/images.txt. TRAEFIK_IMAGE and WHOAMI_IMAGE have no counterpart: the cluster's
+# workflow from infra/compose/.env.example. TRAEFIK_IMAGE and WHOAMI_IMAGE have no counterpart: the cluster's
 # ingress controller replaces Traefik (see `ingress`) and the whoami demo route is Compose only.
 
 # --- Plain configuration (ConfigMaps) ---
@@ -62,10 +62,18 @@ config:
   # --- Fleet ---
   # Connection kinds accepted when a mower is registered (simulated, cloud, ble_bridge).
   FLEET_ALLOWED_CONNECTION_KINDS: simulated,cloud,ble_bridge
+  # How long Fleet waits for the route a mower plans for a path preview (504 after). The
+  # timeouts must stay ordered: GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS (75) <
+  # FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS (85) < the web app's 90 s.
+  FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS: "85"
 
   # --- Device-Gateway ---
   # Development only: the fake Mammotion cloud (refused with MOWDECK_ENVIRONMENT=prod).
   GATEWAY_FAKE_MAMMOTION_CLOUD: "false"
+  # Longest time the gateway lets a mower plan a path preview; keep it below Fleet's
+  # FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS (75 < 85 < the web app's 90 s), so Fleet gets
+  # the gateway's "timeout" reply instead of running into its own.
+  GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS: "75"
 
   # --- Telemetry ---
   TELEMETRY_HEARTBEAT_HISTORY_SECONDS: "300"
@@ -177,6 +185,11 @@ config:
   # Automatic AI analysis on errors (ADR 0035): users opt in in the web app; a mower entering a
   # recoverable error gets a proposal that still needs an approval. "false": off for everyone.
   VISION_AUTO_ENABLED: "true"
+  VISION_CALIBRATION_DAILY_REQUESTS: "10"
+  VISION_HOSTED_ACCOUNT_DAILY_CALIBRATIONS: "20"
+  # Total time budget of one calibration call in seconds (all model attempts and retries);
+  # the browser waits 180 s for the answer, so keep it below that.
+  VISION_CALIBRATION_TIMEOUT_SECONDS: "150"
   # No automatic analysis for a mower within this many minutes after the previous analysis.
   VISION_AUTO_COOLDOWN_MINUTES: "10"
   # Automatic analyses per mower and UTC day.
@@ -629,7 +642,7 @@ nats:
   fullnameOverride: mowdeck-nats
   container:
     image:
-      # Same image as NATS_IMAGE in infra/images.txt.
+      # Same image as NATS_IMAGE in infra/compose/.env.example.
       fullImageName: public.ecr.aws/docker/library/nats:2.15.0-alpine
     resources:
       requests: {cpu: 50m, memory: 64Mi}
@@ -667,7 +680,7 @@ openfga:
   fullnameOverride: mowdeck-openfga
   replicaCount: 1
   image:
-    # Same image as OPENFGA_IMAGE in infra/images.txt.
+    # Same image as OPENFGA_IMAGE in infra/compose/.env.example.
     repository: ghcr.io/openfga/openfga
     tag: v1.22.0
     pullPolicy: IfNotPresent

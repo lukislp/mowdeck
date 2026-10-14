@@ -218,6 +218,12 @@ export type components = {
              * Format: date-time
              */
             end: string;
+            /**
+             * Past
+             * @description The hour ended before the decision time.
+             * @default false
+             */
+            past: boolean;
             /** Precipitation Mm */
             precipitation_mm: number | null;
             /** Probability Percent */
@@ -353,15 +359,37 @@ export type components = {
             location_source: ("site" | "map" | "position") | null;
             /** Longitude */
             longitude: number | null;
+            /**
+             * Pause Until
+             * @description When a `hold` ends, by the Scheduler's rule; null when not holding or when the forecast does not reach that time.
+             */
+            pause_until?: string | null;
             /** Provider */
             provider: string;
             /** Reason */
             reason: string;
+            /** Recent Mm 6H */
+            recent_mm_6h?: number | null;
+            /** Recent Mm 24H */
+            recent_mm_24h?: number | null;
+            /** @description The rain pause settings the decision applied (the schedule's, or the query parameters and defaults). */
+            settings: components["schemas"]["RainPause"];
             /**
              * Verdict
              * @enum {string}
              */
             verdict: "run" | "hold" | "unknown_run" | "unknown_hold" | "no_location" | "disabled";
+            /**
+             * Wet
+             * @description The lawn is still wet from earlier rain.
+             * @default false
+             */
+            wet: boolean;
+            /**
+             * Wet Until
+             * @description Estimated dry time.
+             */
+            wet_until?: string | null;
         };
         /**
          * RainPause

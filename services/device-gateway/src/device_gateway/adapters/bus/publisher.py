@@ -6,6 +6,7 @@ from mowdeck_contracts.v1 import (
     MowerCapabilitiesSnapshot,
     MowerConnectionEvent,
     MowerMapSnapshot,
+    MowerPathSnapshot,
     MowerState,
 )
 from mowdeck_contracts.v1.subjects import device_subject, telemetry_subject
@@ -56,4 +57,14 @@ class BusPublisher:
             device_subject(snapshot.mower_id, "capabilities"),
             snapshot,
             msg_id=f"{snapshot.mower_id}:capabilities:{fingerprint}",
+        )
+
+    async def path_snapshot(self, snapshot: MowerPathSnapshot, fingerprint: str) -> None:
+        """``device.mower.<id>.path`` (stream ``DEVICE``, msg id ``<mower>:path:<fingerprint>``;
+        the fingerprint covers ``observed_at``, so clearing the path twice is never dropped as
+        a duplicate)."""
+        await self._bus.publish(
+            device_subject(snapshot.mower_id, "path"),
+            snapshot,
+            msg_id=f"{snapshot.mower_id}:path:{fingerprint}",
         )

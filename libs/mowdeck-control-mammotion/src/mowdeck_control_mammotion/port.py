@@ -13,7 +13,8 @@ PyMammotion API names used (file references are relative to the installed packag
 * ``client.MammotionClient``: ``login_and_initiate_cloud``, ``restore_credentials``,
   ``to_cache``, ``on_credentials_updated``, ``reauth_required`` (``client_auth.py``);
   ``add_ble_only_device``, ``send_command_with_args``, ``send_command_and_wait``,
-  ``start_map_sync``, ``refresh_status``, ``ensure_fresh_state``, ``mower``,
+  ``start_map_sync``, ``refresh_status``, ``ensure_fresh_state``, ``start_report_stream``,
+  ``mower``,
   ``device_registry``, ``stop``,
   ``get_stream_subscription``, ``mammotion_http`` (``client.py``).
 * ``http.http.MammotionHTTP.get_video_resource`` and the models ``StreamSubscriptionResponse``,
@@ -23,6 +24,11 @@ PyMammotion API names used (file references are relative to the installed packag
   ``has_usable_transport``, ``is_transport_connected``, ``get_transport``, ``queue.is_saga_active``,
   ``last_report_data_at``, ``firmware_version`` (fallback), ``snapshot.raw.device_firmwares``,
   ``mqtt_properties.params.items.extMod``, ``product_key``, ``iot_id``, ``wait_for``.
+* ``messaging.mow_path_saga.MowPathSaga`` (the planned route: ``generate_route_information``
+  unless ``skip_planning``, the line hash list sub_cmd 3, the ``cover_path_upload`` frames into
+  ``HashList.current_mow_path``), enqueued with ``DeviceHandle.enqueue_saga`` like
+  ``MammotionClient.start_mow_path_saga`` does, gated like it by
+  ``DeviceHandle.mow_path_fetch_enabled``; ``GenerateRouteInformation.from_current_task_settings``.
 * ``data.model.coordinates.CoordinateConverter.enu_to_lla`` (the dock position in WGS84, the
   same forward transform as ``MowerDevice.update_report_data``).
 * ``messaging.command_queue.Priority`` (``EMERGENCY``, ``USER``).
@@ -62,9 +68,13 @@ from pymammotion.data.model.hash_list import (
     CommDataCouple,
     FrameList,
     HashList,
+    MowPathPacket,
     NavGetCommData,
+    NavGetHashListData,
     PathType,
+    RootHashList,
 )
+from pymammotion.data.model.hash_list import MowPath as MowPathFrame
 from pymammotion.data.model.location import Dock, LocationPoint
 from pymammotion.data.model.mowing_modes import CuttingMode, PathAngleSetting
 from pymammotion.data.model.report_info import LocationData
@@ -75,6 +85,7 @@ from pymammotion.http.model.camera_stream import (
     VideoResourceResponse,
 )
 from pymammotion.messaging.command_queue import Priority
+from pymammotion.messaging.mow_path_saga import MowPathSaga
 from pymammotion.proto import SystemUpdateBufMsg
 from pymammotion.transport.base import (
     AccountInUseError,
@@ -90,6 +101,7 @@ from pymammotion.utility.constant.device_enums import WorkMode
 from pymammotion.utility.device_type import DeviceType
 
 __all__ = [
+    "MOW_PATH_SAGA_CEILING_S",
     "AccountInUseError",
     "AgoraTokenClaims",
     "AreaHashNameList",
@@ -112,8 +124,12 @@ __all__ = [
     "LoginFailedError",
     "MammotionClient",
     "MammotionPort",
+    "MowPathFetchError",
+    "MowPathFrame",
+    "MowPathPacket",
     "MowerDevice",
     "NavGetCommData",
+    "NavGetHashListData",
     "NoTransportAvailableError",
     "OpenedClient",
     "OperationSettings",
@@ -122,9 +138,11 @@ __all__ = [
     "PortClosedError",
     "Priority",
     "RTKStatus",
+    "RootHashList",
     "StateListener",
     "StreamSubscriptionResponse",
     "SystemUpdateBufMsg",
+    "TrackedMowPathSaga",
     "TransportError",
     "TransportType",
     "VideoResourceResponse",
@@ -230,6 +248,48 @@ class PortClosedError(TransportError):
     """The port has no open client (never opened, or closed)."""
 
 
+class MowPathFetchError(Exception):
+    """PyMammotion did not fetch the mow path: the fetch is switched off over MQTT, or the saga
+    failed (the message names the reason, never secrets)."""
+
+
+MOW_PATH_SAGA_CEILING_S = 90.0
+"""Hard limit of one route fetch inside PyMammotion (``Saga.total_timeout``, default 300 s): an
+abandoned fetch must not hold the device queue (map syncs, reads) for five minutes."""
+
+
+class TrackedMowPathSaga(MowPathSaga):
+    """PyMammotion's ``MowPathSaga`` that reports when it ended (also on failure) and the route
+    hash the mower confirmed when it planned.
+
+    ``MammotionClient.start_mow_path_saga`` only calls back on success; a caller that waits for
+    the route needs the end either way.
+    """
+
+    total_timeout = MOW_PATH_SAGA_CEILING_S
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.finished = asyncio.Event()
+        self.error: BaseException | None = None
+        self.confirmed_hash: int | None = None
+
+    async def execute(self, broker: Any) -> None:
+        try:
+            await super().execute(broker)
+        except BaseException as exc:
+            self.error = exc
+            raise
+        finally:
+            self.finished.set()
+
+    async def _plan_route(self, broker: Any) -> None:
+        await super()._plan_route(broker)
+        route = self._route_val
+        if route is not None:
+            self.confirmed_hash = int(getattr(route, "path_hash", 0) or 0)
+
+
 @runtime_checkable
 class MammotionPort(Protocol):
     """What the adapter needs from PyMammotion for one mower."""
@@ -324,8 +384,30 @@ class MammotionPort(Protocol):
         """
         ...
 
+    async def start_report_stream(self, duration_ms: int) -> None:
+        """Open (or renew) PyMammotion's continuous report window of ``duration_ms``: while the
+        mower is in an active work mode it pushes about one report per second until the window
+        ends; a call while docked or idle falls back to a one-shot request. Best effort: never
+        raises for a failed send."""
+        ...
+
     async def sync_map(self, timeout_s: float) -> None:
         """Fetch the complete map into ``device().map``; raises ``TimeoutError``."""
+        ...
+
+    async def fetch_mow_path(
+        self, route: GenerateRouteInformation | None, *, plan: bool, timeout_s: float
+    ) -> int | None:
+        """Run PyMammotion's ``MowPathSaga`` and wait until it ended: with ``plan`` it first
+        sends ``route`` (``generate_route_information``) and waits for the mower's confirmation,
+        without it the route the mower already planned is fetched (``skip_planning``; ``route``
+        may then be None: the running job's settings are used). The route lands in
+        ``device().map`` (line hash list and ``current_mow_path``).
+
+        Returns the route hash the mower confirmed when planning (None without ``plan``).
+        Raises :class:`MowPathFetchError` (switched off, saga failed) and ``TimeoutError``
+        after ``timeout_s`` (the saga itself ends after :data:`MOW_PATH_SAGA_CEILING_S`).
+        """
         ...
 
     async def stream_subscription(
@@ -581,6 +663,15 @@ class ClientPort:
         except Exception:
             _log.debug("fresh state request for %s failed", self.device_name, exc_info=True)
 
+    async def start_report_stream(self, duration_ms: int) -> None:
+        client = self._require_client()
+        try:
+            # Active work mode: RPT_START (count=0, about 1 Hz) plus a stop timer, repeated calls
+            # reset the window; docked or idle: PyMammotion falls back to a one-shot poll.
+            await client.start_report_stream(self.device_name, duration_ms=duration_ms)
+        except Exception:
+            _log.debug("report stream request for %s failed", self.device_name, exc_info=True)
+
     async def sync_map(self, timeout_s: float) -> None:
         client = self._require_client()
         await client.start_map_sync(self.device_name)
@@ -595,6 +686,44 @@ class ClientPort:
                 msg = f"map sync of {self.device_name} did not finish within {timeout_s:.0f} s"
                 raise TimeoutError(msg)
             await asyncio.sleep(_SAGA_POLL_S)
+
+    async def fetch_mow_path(
+        self, route: GenerateRouteInformation | None, *, plan: bool, timeout_s: float
+    ) -> int | None:
+        self._require_client()
+        handle = self._require_handle()
+        ble = handle.is_transport_connected(TransportType.BLE)
+        if not handle.mow_path_fetch_enabled and not ble:
+            msg = "the mow path fetch over the cloud is switched off in PyMammotion"
+            raise MowPathFetchError(msg)
+        if route is None:
+            if plan:
+                msg = "planning needs a route"
+                raise ValueError(msg)
+            route = GenerateRouteInformation.from_current_task_settings(self.device().work)
+        saga = TrackedMowPathSaga(
+            command_builder=handle.commands,
+            send_command=handle.send_raw,
+            get_map=lambda: self.device().map,
+            zone_hashs=list(route.one_hashs),
+            route_info=route,
+            skip_planning=not plan,
+            device_name=handle.device_name,
+            sync_type=2 if ble else 3,  # as MammotionClient.start_mow_path_saga
+        )
+        await handle.enqueue_saga(saga)
+        try:
+            async with asyncio.timeout(timeout_s):
+                await saga.finished.wait()
+        except TimeoutError:
+            msg = f"the mow path of {self.device_name} did not arrive within {timeout_s:.0f} s"
+            raise TimeoutError(msg) from None
+        if saga.error is not None:
+            msg = f"the mow path fetch failed: {type(saga.error).__name__}"
+            raise MowPathFetchError(msg) from saga.error
+        if saga.failed:
+            _log.warning("mow path of %s arrived incomplete", self.device_name)
+        return saga.confirmed_hash if plan else None
 
     async def stream_subscription(
         self, *, all_cameras: bool = True

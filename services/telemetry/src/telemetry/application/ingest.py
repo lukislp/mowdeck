@@ -25,6 +25,7 @@ from mowdeck_contracts.v1 import (
     CommandStatus,
     MowerCapabilitiesSnapshot,
     MowerMapSnapshot,
+    MowerPathSnapshot,
     MowerRegistration,
     MowerState,
     drive_session_of,
@@ -177,8 +178,10 @@ class Ingest:
                 )
             )
 
-    async def record_snapshot(self, snapshot: MowerMapSnapshot | MowerCapabilitiesSnapshot) -> bool:
-        """Store a map or capability snapshot; False when an equal or newer one is stored.
+    async def record_snapshot(
+        self, snapshot: MowerMapSnapshot | MowerCapabilitiesSnapshot | MowerPathSnapshot
+    ) -> bool:
+        """Store a map, capability or mow path snapshot (a cleared path as an empty body).
 
         Raises :class:`AccountMismatchError` when the directory assigns the mower to another
         account than the snapshot names.
@@ -192,6 +195,10 @@ class Ingest:
             revision = (
                 f"{snapshot.map.revision}.{content[:12]}" if snapshot.map.revision else content
             )
+        elif isinstance(snapshot, MowerPathSnapshot):
+            kind = "path"
+            body = snapshot.path.model_dump(mode="json") if snapshot.path is not None else {}
+            revision = _content_hash(body)
         else:
             kind, body = "capabilities", snapshot.capabilities.model_dump(mode="json")
             revision = _content_hash(body)

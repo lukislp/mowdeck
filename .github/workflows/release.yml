@@ -31,9 +31,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck-mirror
-
 jobs:
   version:
     runs-on: ubuntu-24.04
@@ -108,9 +105,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Base images from the GHCR mirror of infra/images.txt (all architectures were copied).
-      - name: Use the image mirror
-        run: sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" | tee -a "$GITHUB_ENV"
+      # Base images as pinned in the Compose example file (public registries, multi-platform).
+      - name: Image versions (infra/compose/.env.example)
+        run: grep -E '^[A-Z_]+_IMAGE=' infra/compose/.env.example | tee -a "$GITHUB_ENV"
       - name: Build arguments and tags
         id: args
         env:

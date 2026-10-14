@@ -16,6 +16,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -24,14 +25,16 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from fleet_support import API, fake_gateway, harness
+from mowdeck_contracts.v1 import MowPattern
 from mowdeck_service_kit.db import async_database_url
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from fleet.adapters.db.codecs import MOWER_CODECS, decode_mow_defaults, encode_mow_defaults
 from fleet.adapters.db.migrate import alembic_config
-from fleet.adapters.db.store import SqlStore
-from fleet.adapters.db.tables import metadata
+from fleet.adapters.db.store import SqlStore, SqlTable
+from fleet.adapters.db.tables import metadata, mowers
 from fleet.adapters.memory import MemoryStore
 from fleet.application.drive import drive_lock_key
 from fleet.application.ports import Gt, In, Lt, Store
@@ -42,6 +45,7 @@ from fleet.domain.models import (
     DriveSession,
     Group,
     LinkedAccount,
+    MowDefaults,
     Mower,
     MowerAreaName,
     MowerGroup,
@@ -51,6 +55,10 @@ from fleet.domain.models import (
 ADMIN_URL = os.environ.get("MOWDECK_TEST_DATABASE_URL")
 needs_db = pytest.mark.skipif(not ADMIN_URL, reason="needs MOWDECK_TEST_DATABASE_URL")
 NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
+DIAGONAL = MowDefaults(pattern=MowPattern(name="diagonal", angle_deg=45, border_laps=2))
+DIAGONAL_JSON: dict[str, Any] = {
+    "pattern": {"name": "diagonal", "angle_deg": 45.0, "border_laps": 2}
+}
 
 
 @asynccontextmanager
@@ -211,6 +219,8 @@ async def test_fleet_db_store_contract(kind: str, monkeypatch: pytest.MonkeyPatc
             assert len(await tx.sites.find(created_by=None, account_id=acc)) == 3
             m1.name, m1.connection_options = "Renamed", {"time_scale": 5}
             await tx.mowers.update(m1)
+            m2.mow_defaults = DIAGONAL  # a typed value; the SQL store keeps it as JSON
+            await tx.mowers.update(m2)
             m2.serial = "S"
             with pytest.raises(ConflictError):
                 await tx.mowers.update(m2)  # the savepoint keeps the transaction usable
@@ -218,6 +228,9 @@ async def test_fleet_db_store_contract(kind: str, monkeypatch: pytest.MonkeyPatc
                 await tx.commands.add(record(acc, m1.id, NOW - timedelta(days=age)))
         async with store.transaction() as tx:
             assert (await tx.mowers.get(id=m1.id)).connection_options == {"time_scale": 5}  # type: ignore[union-attr]
+            assert (await tx.mowers.get(id=m2.id)).mow_defaults == DIAGONAL  # type: ignore[union-attr]
+            assert await tx.mowers.update_where({"mow_defaults": None}, id=m2.id) == 1
+            assert (await tx.mowers.get(id=m2.id)).mow_defaults is None  # type: ignore[union-attr]
             old = await tx.commands.find(issued_at=Lt(NOW - timedelta(days=2)))
             recent = await tx.commands.find(issued_at=Gt(NOW - timedelta(days=2)))
             assert (len(old), len(recent)) == (1, 1)
@@ -239,6 +252,46 @@ async def test_fleet_db_store_contract(kind: str, monkeypatch: pytest.MonkeyPatc
         async with store.transaction() as tx:
             assert await tx.mowers.get(id=m3.id) is not None
             assert {c.status for c in await tx.commands.find(account_id=acc)} == {"executed"}
+
+
+def test_fleet_db_mow_defaults_codec_keeps_the_stored_shape() -> None:
+    """``mowers.mow_defaults`` stays ``{"pattern": {...}}`` without unset optional keys, so
+    rows written before the typed domain value still load; unreadable rows read as None."""
+    assert encode_mow_defaults(DIAGONAL) == DIAGONAL_JSON
+    assert encode_mow_defaults(None) is None
+    assert decode_mow_defaults(DIAGONAL_JSON) == DIAGONAL
+    assert decode_mow_defaults(encode_mow_defaults(DIAGONAL)) == DIAGONAL
+    with_spacing = MowDefaults(pattern=MowPattern(spacing_m=0.25))
+    assert encode_mow_defaults(with_spacing) == {
+        "pattern": {"name": "stripes", "angle_deg": 0.0, "border_laps": 1, "spacing_m": 0.25}
+    }
+    assert decode_mow_defaults(encode_mow_defaults(with_spacing)) == with_spacing
+    unreadable: list[object] = [None, {}, {"pattern": None}, {"pattern": "diagonal"}, [], "x"]
+    for raw in unreadable:
+        assert decode_mow_defaults(raw) is None, raw
+    assert decode_mow_defaults({"pattern": {"name": "spiral"}}) is None
+    assert decode_mow_defaults({"pattern": {"border_laps": 9}}) is None
+
+
+def test_fleet_db_sql_table_applies_the_mower_codecs() -> None:
+    """The SQL table encodes on every write and comparison and decodes on every read."""
+    table: SqlTable[Mower] = SqlTable(None, mowers, Mower, "id", codecs=MOWER_CODECS)  # type: ignore[arg-type]
+    item = Mower(uuid4(), uuid4(), uuid4(), "M", "simulated", uuid4(), NOW, NOW)
+    assert table._values(item)["mow_defaults"] is None
+    item.mow_defaults = DIAGONAL
+    values = table._values(item)
+    assert values["mow_defaults"] == DIAGONAL_JSON
+    assert table._column_values({"mow_defaults": DIAGONAL, "name": "N"}) == {
+        "mow_defaults": DIAGONAL_JSON,
+        "name": "N",
+    }
+    (clause,) = table._where({"mow_defaults": DIAGONAL})
+    assert clause.right.value == DIAGONAL_JSON
+    loaded = table._entity(SimpleNamespace(_mapping=values))
+    assert loaded == item
+    assert loaded.mow_defaults == DIAGONAL
+    legacy = table._entity(SimpleNamespace(_mapping={**values, "mow_defaults": {"pattern": 1}}))
+    assert legacy.mow_defaults is None
 
 
 @needs_db

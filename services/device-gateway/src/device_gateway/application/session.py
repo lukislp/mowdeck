@@ -11,8 +11,10 @@ mower ever waits for another one.
 import asyncio
 import contextlib
 import hashlib
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
@@ -26,8 +28,10 @@ from mowdeck_contracts.v1 import (
     MowerCapabilitiesSnapshot,
     MowerConnectionEvent,
     MowerMapSnapshot,
+    MowerPathSnapshot,
     MowerRegistration,
     MowerState,
+    MowPath,
     utc_now,
 )
 from mowdeck_control import (
@@ -49,7 +53,13 @@ from device_gateway.application.ports import (
     GatewayPublisher,
     NoCredentials,
 )
-from device_gateway.domain.rules import ConnectionStatus, backoff, is_significant_change
+from device_gateway.domain.rules import (
+    ConnectionStatus,
+    backoff,
+    is_significant_change,
+    path_geometry_key,
+    path_publish_due,
+)
 
 _log = get_logger(__name__)
 
@@ -76,6 +86,9 @@ class SessionTiming:
     snapshot_recheck_seconds: float = 30.0
     """Capabilities and map are compared again (and republished when changed) this often
     while states arrive: a mower learns its model, limits or dock only after connecting."""
+    path_progress_seconds: float = 5.0
+    """A mow path whose only change is the progress is republished at most this often (a new
+    route or a cleared one at once)."""
 
 
 class ConnectionLost(Exception):  # noqa: N818 - reads as an event
@@ -84,6 +97,10 @@ class ConnectionLost(Exception):  # noqa: N818 - reads as an event
 
 class PhotoUnsupported(Exception):  # noqa: N818 - reads as a state
     """The adapter of the mower cannot take photos."""
+
+
+class PathPreviewUnsupported(Exception):  # noqa: N818 - reads as a state
+    """The adapter of the mower cannot plan a route without starting."""
 
 
 def snapshot_camera_uid(session: CameraSession) -> int | None:
@@ -126,6 +143,10 @@ class MowerSession:
         self._snapshot_tasks: set[asyncio.Task[None]] = set()
         self._published_map: str | None = None
         self._published_capabilities: str | None = None
+        self._published_path: tuple[str, str] | None = None
+        """Geometry key and progress of the last path snapshot of this connection."""
+        self._path_published_at = 0.0
+        self._path_lock = asyncio.Lock()
 
     @property
     def mower_id(self) -> UUID:
@@ -236,6 +257,8 @@ class MowerSession:
             _log.info("mower connected", mower_id=str(self.mower_id), kind=str(connection.kind))
             await self._connection_event(MOWER_CONNECTED, None)
             await self._publish_snapshots(controller, refresh_map=False)
+            self._published_path = None
+            await self._publish_path(controller)
             await self._run_connected(controller, connection)
             reason = "connection lost"
             raise ConnectionLost
@@ -311,6 +334,7 @@ class MowerSession:
                         continue
                     state = latest
                     rechecked_at = self._recheck_due(controller, rechecked_at)
+                    await self._publish_path(controller)
                 else:
                     self.last_state = state
                     self.last_activity_at = self._clock()
@@ -318,6 +342,7 @@ class MowerSession:
                         self._refresh_map_later(controller)
                     previous_activity = state.activity
                     rechecked_at = self._recheck_due(controller, rechecked_at)
+                    await self._publish_path(controller)
                     if not is_significant_change(published, state):
                         continue
                 await self._publish_state(state)
@@ -399,6 +424,60 @@ class MowerSession:
                 self._published_map = print_map
         except Exception as exc:
             _log.warning("map snapshot failed", mower_id=str(self.mower_id), error=repr(exc))
+
+    async def _publish_path(self, controller: MowerController) -> None:
+        """Publish the mow path of the running job when it changed (see
+        :func:`~device_gateway.domain.rules.path_publish_due`); a cleared path publishes
+        ``path = None``. Reading it costs nothing (the adapter holds it), so it is checked on
+        every state. A failure is logged and never ends the connection."""
+        async with self._path_lock:
+            try:
+                path = controller.current_path()
+            except Exception as exc:
+                _log.warning("mow path read failed", mower_id=str(self.mower_id), error=repr(exc))
+                return
+            now = asyncio.get_running_loop().time()
+            if not path_publish_due(
+                self._published_path,
+                path,
+                since_last_seconds=now - self._path_published_at,
+                progress_interval_seconds=self._timing.path_progress_seconds,
+            ):
+                return
+            snapshot = MowerPathSnapshot(
+                mower_id=self.mower_id,
+                account_id=self.registration.account_id,
+                observed_at=self._clock(),
+                path=path,
+            )
+            try:
+                await self._publisher.path_snapshot(snapshot, fingerprint(snapshot))
+            except Exception as exc:
+                _log.warning("path snapshot failed", mower_id=str(self.mower_id), error=repr(exc))
+                return
+            progress = path.progress.model_dump_json() if path and path.progress else ""
+            self._published_path = (path_geometry_key(path), progress)
+            self._path_published_at = now
+            if path is None:
+                _log.debug("mow path cleared", mower_id=str(self.mower_id))
+
+    # --- mow path preview ---------------------------------------------------------------------
+
+    async def preview_path(
+        self, area_ids: Sequence[str], pattern: Mapping[str, Any] | None
+    ) -> MowPath:
+        """Let the mower plan the route of a start without starting it.
+
+        Raises :class:`~mowdeck_control.NotConnected` while the mower is not connected,
+        :class:`PathPreviewUnsupported` when the adapter cannot, and the controller's
+        ``CommandRejected`` and ``PathUnavailable``.
+        """
+        controller = self._controller
+        if controller is None:
+            raise NotConnected("the mower is not connected")
+        if not controller.can_preview_path:
+            raise PathPreviewUnsupported("this connection cannot plan a route without starting")
+        return await controller.preview_path(area_ids, pattern)
 
     async def _publish_state(self, state: MowerState) -> None:
         try:

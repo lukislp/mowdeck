@@ -20,6 +20,8 @@ from mowdeck_contracts.v1 import (
     CloudDiscoverReply,
     CloudDiscoverRequest,
     CommandEnvelope,
+    PathPreviewGatewayRequest,
+    PathPreviewReply,
 )
 from pydantic import BaseModel
 
@@ -186,6 +188,15 @@ class CameraGateway(Protocol):
 
     async def request(self, request: CameraSessionRequest) -> CameraSessionReply:
         """The gateway's reply; raises when no gateway answers in time."""
+        ...
+
+
+class PathPreviewGateway(Protocol):
+    """Asks the Device-Gateway that holds a mower to plan a route without starting."""
+
+    async def request(self, request: PathPreviewGatewayRequest) -> PathPreviewReply:
+        """The gateway's reply; raises ``RequestTimeoutError`` when no gateway answers in time
+        and the other bus errors when none can be asked."""
         ...
 
 

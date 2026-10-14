@@ -152,6 +152,29 @@
           "type": "array",
           "uniqueItems": true
         },
+        "path_spacing_range_mm": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Inclusive (min, max) distance between neighbouring mowing paths in millimetres (`MowPattern.spacing_m`), if the model has a settable spacing.",
+          "title": "Path Spacing Range Mm"
+        },
         "rtk_sources": {
           "description": "RTK correction sources the mower can report.",
           "items": {

@@ -13,6 +13,7 @@ from mowdeck_contracts.v1 import (
     MowerCapabilitiesSnapshot,
     MowerConnectionEvent,
     MowerMapSnapshot,
+    MowerPathSnapshot,
     MowerRegistration,
     MowerState,
 )
@@ -73,6 +74,10 @@ class GatewayPublisher(Protocol):
         self, snapshot: MowerCapabilitiesSnapshot, fingerprint: str
     ) -> None:
         """Publish the capabilities on ``device.mower.<id>.capabilities``."""
+        ...
+
+    async def path_snapshot(self, snapshot: MowerPathSnapshot, fingerprint: str) -> None:
+        """Publish the mow path of the running job on ``device.mower.<id>.path``."""
         ...
 
 

@@ -119,6 +119,29 @@ test('3 detail shows the readouts and the map; tapping areas selects them for St
 test('4 Start uses the areas chosen on the map: executed, then mowing live', async () => {
   const page = ownerPage;
   // The sheet sends exactly the areas chosen on the map, in tap order (checked in step 3).
+  // Without saved defaults it offers the simulator's native patterns and pre-fills stripes at
+  // 0 degrees with one border lap; a start without touching them sends exactly that.
+  const picker = page.getByTestId('area-picker');
+  // On phones the settings are folded behind "Anpassen"; the summary stays visible.
+  await expect(picker.getByTestId('start-summary')).toBeVisible();
+  const settingsToggle = picker.getByTestId('start-settings-toggle');
+  if (await settingsToggle.isVisible()) await settingsToggle.click();
+  await expect(picker.getByTestId('start-pattern-stripes')).toHaveAttribute('aria-checked', 'true');
+  await expect(picker.getByTestId('start-pattern-edge_only')).toHaveCount(0);
+  await expect(picker.getByTestId('start-border-laps')).toContainText('1');
+  await expect(picker.getByTestId('start-summary')).toHaveText('Streifen 0° · 1 Randrunde');
+  await expect(picker.getByTestId('start-remember')).toBeVisible();
+  // Blade height and speed are set in the sheet; unchanged values send no command.
+  await expect(picker.getByTestId('start-blade')).toBeVisible();
+  await expect(picker.getByTestId('start-speed')).toBeVisible();
+  // "Pfad berechnen": the simulator plans the route without starting; the map previews it.
+  const status = picker.getByTestId('start-preview-status');
+  await picker.getByTestId('start-preview-path').click();
+  await expect(status).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
+  await expect(status).toContainText('Vorschau');
+  const map = page.getByTestId('mower-map');
+  await expect(map).toHaveAttribute('data-path-preview', 'true');
+  await expect(map.getByTestId('mow-path-legend')).toContainText('Vorschau');
   const startButton = page.getByTestId('area-start');
   await expect(startButton).toHaveText('Starten (2)');
   await startButton.click();
@@ -131,6 +154,9 @@ test('4 Start uses the areas chosen on the map: executed, then mowing live', asy
     timeout: 30_000,
   });
   await expect(page.getByTestId('mower-state')).toContainText('Mäht', { timeout: 30_000 });
+  await expect(page.getByTestId('recent-commands')).toContainText(
+    'Mähen starten · Streifen 0° · 1 Randrunde',
+  );
 });
 
 test('11 the map follows the mowing mower: the chevron moves, the route grows', async () => {
@@ -149,6 +175,13 @@ test('11 the map follows the mowing mower: the chevron moves, the route grows', 
     .poll(async () => Number(await map.getAttribute('data-route-points')), { timeout: 30_000 })
     .toBeGreaterThanOrEqual(2);
   await expect(map.locator('path.md-route').first()).toBeAttached();
+  // The mower's planned path with its progress (device.mower.<id>.path through Telemetry).
+  await expect(page.getByTestId('mow-path-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect
+    .poll(async () => Number(await map.getAttribute('data-path-points')), { timeout: 30_000 })
+    .toBeGreaterThan(0);
+  await expect(map).not.toHaveAttribute('data-path-preview', 'true');
+  await expect(map.locator('path.md-mowpath').first()).toBeAttached();
 
   // Full-screen map on the phone: the emergency stop stays visible and usable.
   await map.getByTestId('map-expand').click();
@@ -182,7 +215,8 @@ test('5 blade height 50 mm while mowing is executed and confirmed', async () => 
 
 test('6 return to dock: returning or docked', async () => {
   const page = ownerPage;
-  await page.getByRole('button', { name: 'Zur Station' }).click();
+  await page.getByRole('button', { name: 'Zur Station', exact: true }).click();
+  await page.getByTestId('dock-choice-end').click();
   await expect(page.getByTestId('mower-state')).toContainText(/Fährt zurück|Angedockt|Lädt/, {
     timeout: 60_000,
   });

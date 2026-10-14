@@ -18,6 +18,35 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vision/calibration/correspondences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calibration Correspondences
+         * @description Corresponding points for the camera panorama calibration (ADR 0037): the caller's
+         *     provider (or the installation's) gets the ``left`` and ``right`` front camera frame of the
+         *     same moment and returns 8 to 16 points that show the same detail in both, in pixels of each
+         *     frame. Points off the images are dropped; fewer than four usable ones answer 502
+         *     ``vision-provider-failed``, a call beyond the calibration's time budget 504
+         *     ``vision-provider-timeout``. Nothing is proposed or driven: ``can_view`` on the mower is
+         *     enough. Recorded for cost accounting as ``kind = calibration`` with its own daily cap (429
+         *     ``vision-quota``). 403 ``feature-not-in-plan`` without ``ai_recover``, 409
+         *     ``vision-provider-missing`` without a usable provider, 422 for images that cannot be
+         *     decoded or were captured too far apart.
+         */
+        post: operations["calibration_correspondences_api_v1_vision_calibration_correspondences_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vision/me/preferences": {
         parameters: {
             query?: never;
@@ -339,6 +368,55 @@ export type components = {
             task: components["schemas"]["VisionTask"];
         };
         /**
+         * CalibrationIn
+         * @description ``POST /calibration/correspondences``: a left and a right front camera frame of the same
+         *     moment (JPEG or PNG, base64) for the mower the cameras belong to.
+         */
+        CalibrationIn: {
+            left: components["schemas"]["ImageIn"];
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
+            right: components["schemas"]["ImageIn"];
+        };
+        /**
+         * CalibrationOut
+         * @description The corresponding points (4 to 16, all on both images); the web app fits the
+         *     homography from them with RANSAC.
+         */
+        CalibrationOut: {
+            cost: components["schemas"]["CostOut"];
+            /**
+             * Dropped
+             * @description Points of the answer that were off the images.
+             */
+            dropped: number;
+            left_size: components["schemas"]["FrameSizeOut"];
+            /** Model */
+            model: string;
+            /** Points */
+            points: components["schemas"]["PointPairOut"][];
+            right_size: components["schemas"]["FrameSizeOut"];
+        };
+        /**
+         * CostOut
+         * @description What the model call cost (``cost_usd`` is LiteLLM's estimate; None without a price).
+         */
+        CostOut: {
+            /** Cost Usd */
+            cost_usd: number | null;
+            /** Hosted */
+            hosted: boolean;
+            /** Input Tokens */
+            input_tokens: number | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Output Tokens */
+            output_tokens: number | null;
+        };
+        /**
          * EventDef
          * @description An event type a module publishes.
          */
@@ -418,6 +496,16 @@ export type components = {
              * @enum {string}
              */
             source: "upload" | "mower";
+        };
+        /**
+         * FrameSizeOut
+         * @description The pixel size of a frame as the service decoded it (what the points refer to).
+         */
+        FrameSizeOut: {
+            /** Height */
+            height: number;
+            /** Width */
+            width: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -517,6 +605,18 @@ export type components = {
             implied_by?: string[];
             /** Key */
             key: string;
+        };
+        /**
+         * PointPairOut
+         * @description One correspondence: ``[x, y]`` in pixels of the left and of the right frame.
+         */
+        PointPairOut: {
+            /** Label */
+            label: string;
+            /** Left */
+            left: number[];
+            /** Right */
+            right: number[];
         };
         /**
          * PreferencesIn
@@ -972,6 +1072,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModuleDescriptor"];
+                };
+            };
+        };
+    };
+    calibration_correspondences_api_v1_vision_calibration_correspondences_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalibrationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -10,6 +10,7 @@ from mowdeck_contracts.v1 import (
     MowerActivity,
     MowerCapabilities,
     MowerState,
+    MowPattern,
     PositionSource,
     RtkFixStatus,
     RtkSource,
@@ -306,6 +307,38 @@ def test_mammotion_raw_carries_the_device_blade_counter_when_reported() -> None:
     assert raw["blade_used_s"] == 12 * 3600 + 30 and "blade_used_warn_s" not in raw
 
 
+def test_mammotion_raw_carries_cutter_geometry_and_position_type() -> None:
+    device = sample_device()
+    raw = _state(device).raw
+    assert "cutter_offset_m" not in raw and "cutter_width_m" not in raw
+    assert raw["pos_type"] == 0
+    device.report_data.work.cutter_offset = 0.12
+    device.report_data.work.cutter_width = 0.3
+    device.location.position_type = 4
+    raw = _state(device).raw
+    assert raw["cutter_offset_m"] == pytest.approx(0.12)
+    assert raw["cutter_width_m"] == pytest.approx(0.3)
+    assert raw["pos_type"] == 4
+
+
+def test_mammotion_capabilities_prefer_the_reported_cutting_width() -> None:
+    device = MowerDevice(name="Luba-VP12345")
+
+    def caps(d: MowerDevice) -> MowerCapabilities:
+        return mapping.capabilities_of(
+            d,
+            device_name="Luba-VP12345",
+            product_key="",
+            manual_drive=False,
+            manual_drive_blades=False,
+        )
+
+    assert caps(device).cutting_width_mm == 400  # family constant
+    device.report_data.work.cutter_width = 0.3504
+    assert caps(device).cutting_width_mm == 350
+    assert mapping.reported_cutting_width_mm(device) == 350
+
+
 def test_mammotion_position_heading_is_the_reported_compass_course() -> None:
     """No RTK reference needed: the orientation is a compass course (hardware, 2026-10-10)."""
     device = sample_device()
@@ -434,6 +467,7 @@ def test_mammotion_capability_limits_from_the_sub_model() -> None:
     )
     assert caps.model == "LUBA 2 AWD 5000X"
     assert caps.blade_height_range_mm == (25, 70)
+    assert caps.path_spacing_range_mm == (200, 350)
     # the mowing speed (cutting_speed), not the travel speed (working_speed 0.2 to 0.8)
     assert caps.min_speed_mps == pytest.approx(0.2)
     assert caps.max_speed_mps == pytest.approx(0.6)
@@ -454,6 +488,7 @@ def test_mammotion_capability_limits_unknown_until_the_sub_model_is_known() -> N
     )
     assert caps.blade_height_range_mm is None
     assert caps.min_speed_mps is None and caps.max_speed_mps is None
+    assert caps.path_spacing_range_mm is None
     assert not caps.speed_allowed(0.3)
     assert mapping.path_spacing_of(device, "a1iMygIwxFC") is None
     device.mower_state.sub_model_id = "HM030070LB2PAWD50OMNI"
@@ -660,6 +695,27 @@ def test_mammotion_pattern_extras_and_border_laps() -> None:
     s = plan.settings
     assert (s.channel_width, s.mowing_laps, s.border_mode, s.obstacle_laps) == (30, 3, 3, 2)
     assert (s.blade_height, s.speed) == (45, 0.5)
+
+
+def test_mammotion_start_sheet_pattern_reaches_the_route_plan() -> None:
+    # The web start sheet sends a ``MowPattern``: border laps and angle must reach the mower.
+    pattern = MowPattern(name="stripes", angle_deg=45, border_laps=2)
+    command = StartMow.model_validate(
+        {
+            "kind": "start_mow",
+            "area_ids": [str(FRONT_HASH)],
+            "pattern": pattern.model_dump(mode="json", exclude_none=True),
+        }
+    )
+    plan = mapping.route_plan(
+        command, _caps(), blade_height_mm=55, speed_mps=0.3, path_spacing_cm=(20, 35)
+    )
+    s = plan.settings
+    assert (s.toward, s.toward_mode) == (45, PathAngleSetting.absolute_angle)
+    assert (s.mowing_laps, s.border_mode) == (2, 2)
+    assert plan.job.border_laps == 2
+    assert plan.job.passes == (45.0,)
+    assert s.channel_width == 25  # no spacing given: the default 0.25 m
 
 
 @pytest.mark.parametrize(

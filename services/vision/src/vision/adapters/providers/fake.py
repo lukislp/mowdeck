@@ -5,12 +5,18 @@ The model string selects the behaviour: ``fake/recover`` (the default) answers `
 and a short approach computed from the scene context; ``fake/people`` flags people,
 ``fake/low_confidence`` is unsure, ``fake/empty`` proposes nothing, ``fake/fail`` and
 ``fake/invalid`` fail like a broken model.
+
+Corresponding points (panorama calibration): every mode except ``fail`` and ``invalid`` answers
+with ten points of a pure shift, the right frame starting 88 % of the width into the left one (a
+12 % overlap, the panorama's default) with one deliberately wrong point the browser's RANSAC has
+to reject.
 """
 
 import math
 
 from mowdeck_contracts.v1 import VisionTask
 
+from vision.domain.calibration import Correspondences, CorrespondencesOut, FrameSize, PointPair
 from vision.domain.context import SceneContext
 from vision.domain.errors import ProviderFailed
 from vision.domain.models import (
@@ -60,6 +66,43 @@ class FakeVisionProvider:
             )
         return Assessment(
             answer, self.model, "fake", Usage(latency_ms=0, cost_usd=0.0, mode="fake")
+        )
+
+    async def correspond(
+        self, left: Image, right: Image, left_size: FrameSize, right_size: FrameSize
+    ) -> Correspondences:
+        """Points of a 12 % overlap plus one outlier (see the module docstring)."""
+        if self.mode == "fail":
+            raise ProviderFailed("the fake provider failed on purpose")
+        if self.mode == "invalid":
+            raise ProviderFailed("the model's answer was not valid JSON for the schema")
+        shift = 0.88 * left_size.width
+        sx = right_size.width / max(1, left_size.width)
+        sy = right_size.height / max(1, left_size.height)
+        points: list[PointPair] = []
+        for row in range(3):
+            for col in range(3):
+                rx = (0.01 + 0.05 * col) * right_size.width
+                ry = (0.15 + 0.35 * row) * right_size.height
+                points.append(
+                    PointPair(
+                        left=[round(rx / sx + shift, 2), round(ry / sy, 2)],
+                        right=[round(rx, 2), round(ry, 2)],
+                        label=f"grid point {row * 3 + col + 1}",
+                    )
+                )
+        points.append(
+            PointPair(
+                left=[0.9 * left_size.width, 0.1 * left_size.height],
+                right=[0.02 * right_size.width, 0.9 * right_size.height],
+                label="wrong on purpose",
+            )
+        )
+        return Correspondences(
+            CorrespondencesOut(points=points),
+            self.model,
+            "fake",
+            Usage(latency_ms=0, cost_usd=0.0, mode="fake"),
         )
 
     def _answer(self, context: SceneContext, task: VisionTask) -> AssessmentOut:

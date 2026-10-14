@@ -158,6 +158,19 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
                 maximum=60,
                 default=5,
             ),
+            OptionSpec(
+                "report_stream_seconds",
+                "number",
+                "Live reports while mowing (s)",
+                "Length of the continuous report window kept open while the mower works (renewed "
+                "every half window); about one report per second, which keeps the live position "
+                "smooth. 0 turns it off and uses the plain refresh. Only while mowing, so no "
+                "extra 4G traffic while docked.",
+                advanced=True,
+                minimum=0,
+                maximum=300,
+                default=60,
+            ),
             *_TIMEOUTS,
         ),
     ),
@@ -337,6 +350,19 @@ LEGACY_CLOUD_SCHEMA: Final = KindSchema(
             minimum=2,
             maximum=60,
             default=5,
+        ),
+        OptionSpec(
+            "report_stream_seconds",
+            "number",
+            "Live reports while mowing (s)",
+            "Length of the continuous report window kept open while the mower works (renewed "
+            "every half window); about one report per second, which keeps the live position "
+            "smooth. 0 turns it off and uses the plain refresh. Only while mowing, so no "
+            "extra 4G traffic while docked.",
+            advanced=True,
+            minimum=0,
+            maximum=300,
+            default=60,
         ),
         *_TIMEOUTS,
     ),

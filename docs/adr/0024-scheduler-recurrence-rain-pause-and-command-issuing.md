@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-09)
+Accepted (2026-10-09). Addendum of 2026-10-14 below: the rain rule lives in the Scheduler only; the web app displays its answer.
 
 ## Context
 
@@ -31,3 +31,7 @@ Five questions had to be answered: how occurrences are computed in a site's time
 - Durable consumers start at new messages, so a Scheduler deployed after a mower's map was published learns the map only with the next snapshot (the Device-Gateway publishes a map when it changed, and again after its own restart); site coordinates and explicit `area_ids` do not have this gap.
 - Open-Meteo needs internet access from the Scheduler; offline installations use the static provider (rain pause effectively off). Another provider is one class implementing the port.
 - Not covered yet: per-mower areas for group schedules, maintenance reminders (also a Scheduler task in the plan), planner-generated routes as a schedule target, and the UI (a later task).
+
+## Addendum: the web shows what the Scheduler decides (2026-10-14)
+
+A review found the rain rule twice: the mower page had its own default thresholds (60 %, 0.5 mm) and computed the end of a rain pause from the forecast hours, next to `domain/rain.py`. The rule now exists only in the Scheduler. `GET /weather/{mower_id}` (and the preview's `weather`) return, besides `wet` and `wet_until`, **`pause_until`**, the first time at which the same rule would let a run go ahead (the walk from the decision time past the last rainy hour of the lookahead and the drying time, repeated; `null` when not holding or when the forecast ends first), and **`settings`**, the rain pause settings the decision applied (the schedule's, or the query parameters and defaults). The web app's `apps/web/src/lib/mower/rain.ts` keeps presentation helpers only (strip bars, "it rains now", the start warning) and reads verdict, hold, `pause_until` and thresholds from the answer; it holds no defaults of the rule. A change of the rule is a Scheduler change with its tests, followed by `uv run poe openapi` and `pnpm codegen`.

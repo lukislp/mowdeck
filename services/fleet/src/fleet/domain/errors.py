@@ -51,6 +51,20 @@ class Unavailable(FleetError):  # noqa: N818 - reads like the HTTP status it map
     """OpenFGA or the bus is not reachable; nothing was changed (503)."""
 
 
+class PathPreviewUnsupportedError(ConflictError):
+    """The mower's connection cannot plan a route without starting (409
+    ``path-preview-unsupported``)."""
+
+
+class PathPreviewRejectedError(ConflictError):
+    """The mower refused to plan: a job runs, or the areas or pattern do not fit (409
+    ``path-preview-rejected``)."""
+
+
+class GatewayTimeout(FleetError):  # noqa: N818 - reads like the HTTP status it maps to
+    """The mower or the Device-Gateway did not answer in time (504)."""
+
+
 class PlanLimitError(ConflictError):
     """The plan of the account allows no more of ``key`` (409 ``plan-limit``, ADR 0028)."""
 

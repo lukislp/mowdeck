@@ -49,21 +49,19 @@ Model and model tests: `infra/openfga/README.md`.
 
 ## Image sources
 
-Every third-party image the stack runs or builds from is pinned in one list, `infra/images.txt` (`<alias> <source-image:tag>`), and selected by a variable in `.env` (heading "Image sources"): `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure, and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images, passed to the Dockerfiles as build arguments. The defaults are public registries without a login: the official Docker images from ECR Public (`public.ecr.aws/docker/library/...`), OpenFGA, whoami, jq and uv from `ghcr.io`, and only the OpenFGA CLI and ntfy (CI only) from Docker Hub. A repository check (`tools/repo-checks/tests/test_images.py`) keeps the Dockerfile, Compose and `.env.example` defaults equal to the list.
+Every third-party image the stack runs or builds from is pinned in one place, the `*_IMAGE` lines under the heading "Image sources" of `.env.example`, and selected by the same variable in `.env`: `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure, and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images, passed to the Dockerfiles as build arguments. The defaults are public registries without a login: the official Docker images from ECR Public (`public.ecr.aws/docker/library/...`, Docker's mirror of Docker Hub), OpenFGA, whoami, jq and uv from `ghcr.io`, and only the OpenFGA CLI from Docker Hub (plus ntfy and stripe-mock, which CI alone runs and `.github/workflows/ci.yml` pins). A repository check (`tools/repo-checks/tests/test_images.py`) keeps the Dockerfile and Compose defaults, the Helm chart and the CI workflows equal to that list.
 
-**Other registries for a home installation.** To pull from a registry of your own (a pull-through cache, a Harbor or a mirror on your NAS), copy the images there with the same tags and set the variables in `.env`, one by one or all at once:
+**Other registries for a home installation.** To pull from a registry of your own (a pull-through cache, a Harbor or a mirror on your NAS), copy the images there with the same tags and set the variables in `.env`:
 
 ```bash
-sh infra/mirror-env.sh registry.example.org/mowdeck-mirror >> infra/compose/.env
+echo 'POSTGRES_IMAGE=registry.example.org/postgres:17.11-alpine' >> infra/compose/.env
 docker login registry.example.org        # if the registry needs a login
 docker compose up -d --build --wait
 ```
 
-`infra/mirror-env.sh` prints one `NAME_IMAGE=<prefix>/<alias>:<tag>` line per image of the list (alias in upper case, `-` as `_`, plus `_IMAGE`); a later line in `.env` overrides an earlier one, and a variable exported in the shell overrides `.env`. Remove the lines again to go back to the public defaults.
+A later line in `.env` overrides an earlier one, and a variable exported in the shell overrides `.env`. Remove the lines again to go back to the public defaults.
 
-**The CI mirror.** CI does not pull from the public registries: GitHub-hosted runners share their IP addresses, so the anonymous limits of Docker Hub and ECR Public (`toomanyrequests`) break builds. The workflow `.github/workflows/mirror-images.yml` copies every image of the list with `crane copy` (all architectures, digests unchanged) to `ghcr.io/<owner>/mowdeck-mirror/<alias>:<tag>`; it runs when `infra/images.txt` or the workflow changes on `main` or in a pull request, and by hand (`gh workflow run mirror-images.yml`), skips images whose digest already matches and retries with backoff on rate limits. The CI jobs log in to GHCR with `GITHUB_TOKEN` (`packages: read`), export the mirror names with `infra/mirror-env.sh` and write them into `infra/compose/.env` and the build arguments. A pull request that adds or bumps an image fills the mirror itself; when its CI started pulling before the copy finished, re-run the failed jobs.
-
-The mirror packages are private, like the repository, so pulling them outside CI needs `docker login ghcr.io` with a token that has `read:packages`. To let a home installation pull the mirror without a login, make the packages public (GitHub: Your profile, Packages, `mowdeck-mirror/<alias>`, Package settings, Change visibility); they contain only the unchanged public images.
+**CI.** The workflows pull the same pinned images directly from the same public registries: nearly everything comes from ECR Public or `ghcr.io`, so there are no anonymous Docker Hub pulls of consequence, and a mirror of the images in the repository's own GHCR namespace would add packages to fill, a login step in every job and a second copy of the version list without a benefit ([ADR 0029](../../docs/adr/0029-helm-chart-and-release-pipeline.md), amendment). Each job exports the `*_IMAGE` lines of `.env.example` into its environment (`Image versions` step: build arguments and the `docker run` commands use them) and the Compose jobs copy the example file to `.env`. CI needs no registry login and no package of its own; only `release.yml` pushes to GHCR.
 
 ## Authorization bootstrap
 

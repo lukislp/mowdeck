@@ -131,6 +131,53 @@ class MowerState(ContractModel):
 # --- Commands ---------------------------------------------------------------------------------
 
 
+NATIVE_PATTERN_NAMES: tuple[str, ...] = (
+    "stripes",
+    "diagonal",
+    "checkerboard",
+    "edge_only",
+    "random_angle",
+)
+"""Pattern names a mower may run natively on its own map areas (``native_patterns``)."""
+
+MAX_BORDER_LAPS = 4
+"""Most border laps a native job runs (LUBA: 0 to 4)."""
+
+
+class MowPattern(ContractModel):
+    """The pattern settings of a native start (``StartMow.pattern``) that every client offers:
+    the pattern, its base angle, the border laps and the path spacing.
+
+    Adapters may accept further keys in ``StartMow.pattern``; this is the common, validated
+    part, also kept per mower as the mowing defaults in Fleet (``MowerOut.mow_defaults``).
+    Whether the mower runs the pattern is decided with ``MowerCapabilities.native_patterns``.
+    """
+
+    name: Literal["stripes", "diagonal", "checkerboard", "edge_only", "random_angle"] = Field(
+        default="stripes", description="The native pattern."
+    )
+    angle_deg: float = Field(
+        default=0.0,
+        ge=0,
+        le=180,
+        description="Base angle of the stripes in degrees (diagonal adds 45, checkerboard "
+        "crosses at 90; ignored for `edge_only` and `random_angle`).",
+    )
+    border_laps: int = Field(
+        default=1,
+        ge=0,
+        le=MAX_BORDER_LAPS,
+        description="Laps along the area edge before the fill (`edge_only`: at least one).",
+    )
+    spacing_m: float | None = Field(
+        default=None,
+        ge=0.05,
+        le=2.0,
+        description="Distance between neighbouring paths in metres; None for the mower's own "
+        "default. Model limits: `MowerCapabilities.path_spacing_range_mm`.",
+    )
+
+
 class StartMow(ContractModel):
     """Start mowing the given areas, a stored plan or an inline spot plan (exactly one)."""
 
@@ -169,9 +216,11 @@ class ResumeMow(ContractModel):
 
 
 class ReturnToDock(ContractModel):
-    """Stop the job and drive back to the charging station."""
+    """Pause or end the job and drive back to the charging station."""
 
     kind: Literal["return_to_dock"] = "return_to_dock"
+    end_job: bool = False
+    """Also end the running or paused job, so it does not resume later."""
 
 
 class EmergencyStop(ContractModel):

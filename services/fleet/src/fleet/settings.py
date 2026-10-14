@@ -68,6 +68,10 @@ class Settings(ServiceSettings):
     camera_request_timeout_seconds: float = Field(default=15.0, ge=1, le=60)
     """How long Fleet waits for the Device-Gateway's camera session (503 after)."""
 
+    path_preview_request_timeout_seconds: float = Field(default=85.0, ge=5, le=120)
+    """How long Fleet waits for a route the mower plans for a preview (504 after); a little
+    longer than the gateway's ``MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS``."""
+
     credential_encryption_key: SecretStr | None = None
     """256-bit key (base64 or hex) that encrypts the passwords of linked Mammotion accounts at
     rest (ADR 0034). Without it linked accounts are unavailable (503) and old cloud mowers keep

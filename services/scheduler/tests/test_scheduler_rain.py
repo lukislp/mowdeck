@@ -35,14 +35,17 @@ DRY = [(h, 0.0, 10.0) for h in range(-3, 6)]
 def test_scheduler_rain_dry_forecast_runs() -> None:
     decision = decide(RainSettings(), hours(*DRY), AT)
     assert decision.verdict == Verdict.RUN and not decision.verdict.holds
-    # cooldown 2 h and lookahead 3 h: the hours ending -1 .. +3 (and the one ending at AT)
+    # the last 12 past hours are returned for the readout, then the 3 h lookahead
     assert [int((p.end - AT).total_seconds() // 3600) for p in decision.points] == [
+        -3,
+        -2,
         -1,
         0,
         1,
         2,
         3,
     ]
+    assert not decision.wet and decision.wet_until is None
 
 
 def test_scheduler_rain_probability_threshold_holds() -> None:
@@ -69,6 +72,31 @@ def test_scheduler_rain_cooldown_after_rain_holds() -> None:
     assert decide(RainSettings(cooldown_hours=0), forecast, AT).verdict == Verdict.RUN
 
 
+def test_scheduler_rain_wet_lawn_until_end_of_rain_plus_cooldown() -> None:
+    forecast = hours((-4, 0.0, 0.0), (-3, 1.0, 50.0), *[(h, 0.0, 0.0) for h in range(-2, 6)])
+    # the wet hour ended at -3 h; with a 2 h cooldown the lawn dried at -1 h: no hold
+    dry = decide(RainSettings(cooldown_hours=2), forecast, AT)
+    assert dry.verdict == Verdict.RUN and not dry.wet
+    # with a 4 h cooldown it is wet until +1 h
+    wet = decide(RainSettings(cooldown_hours=4), forecast, AT)
+    assert wet.verdict == Verdict.HOLD and wet.wet
+    assert wet.wet_until == AT + timedelta(hours=1)
+    assert wet.recent_mm_6h == 1.0 and wet.recent_mm_24h == 1.0
+
+
+def test_scheduler_rain_heavy_rain_dries_slower_capped_at_six_hours() -> None:
+    forecast = hours((-4, 3.0, 90.0), (-3, 3.0, 90.0), *[(h, 0.0, 0.0) for h in range(-2, 8)])
+    # 6 mm in 6 h: drying 1.5 x 2 h = 3 h after the last wet hour (ended -3 h) -> AT
+    settings = RainSettings(cooldown_hours=2)
+    assert decide(settings, forecast, AT).wet is False
+    settings = RainSettings(cooldown_hours=3)  # 4.5 h after -3 h -> +1.5 h
+    wet = decide(settings, forecast, AT)
+    assert wet.wet and wet.wet_until == AT + timedelta(hours=1, minutes=30)
+    capped = decide(RainSettings(cooldown_hours=5), forecast, AT)
+    assert capped.wet_until == AT + timedelta(hours=3)  # 6 h cap after -3 h
+    assert decide(RainSettings(cooldown_hours=0), forecast, AT).wet is False
+
+
 def test_scheduler_rain_unknown_disabled_and_uncovered() -> None:
     assert decide(RainSettings(), None, AT).verdict == Verdict.UNKNOWN_RUN
     held = decide(RainSettings(run_when_unknown=False), None, AT)
@@ -77,6 +105,27 @@ def test_scheduler_rain_unknown_disabled_and_uncovered() -> None:
     old = hours((-30, 0.0, 0.0))
     assert decide(RainSettings(), old, AT).verdict == Verdict.UNKNOWN_RUN
     assert decide(RainSettings(run_when_unknown=False), old, AT).verdict.holds
+    assert decide(RainSettings(run_when_unknown=False), None, AT).pause_until is None
+
+
+def test_scheduler_rain_pause_until_is_when_the_rule_lets_a_run_go() -> None:
+    # a dry forecast holds nothing: no end to report
+    assert decide(RainSettings(), hours(*DRY), AT).pause_until is None
+    # 60 % in the hour [+1, +2]: the hold ends with that hour, probability leaves no wet lawn
+    chance = hours(*DRY[:5], (2, 0.0, 60.0), *DRY[6:])
+    held = decide(RainSettings(), chance, AT)
+    assert held.verdict == Verdict.HOLD and held.pause_until == AT + timedelta(hours=2)
+    # 1 mm in the same hour: the lawn then dries for the cooldown, so +2 h becomes +4 h
+    shower = hours(*DRY[:5], (2, 1.0, 50.0), *DRY[6:])
+    assert decide(RainSettings(), shower, AT).pause_until == AT + timedelta(hours=4)
+    # a wet lawn alone holds until it is dry: pause_until is wet_until
+    past = hours((-4, 0.0, 0.0), (-3, 1.0, 50.0), *[(h, 0.0, 0.0) for h in range(-2, 6)])
+    wet = decide(RainSettings(cooldown_hours=4), past, AT)
+    assert wet.wet_until == AT + timedelta(hours=1) and wet.pause_until == wet.wet_until
+    # rain through the end of the forecast: the pause is open-ended as far as we know
+    pouring = hours(*[(h, 2.0, 90.0) for h in range(-3, 6)])
+    soaked = decide(RainSettings(), pouring, AT)
+    assert soaked.verdict == Verdict.HOLD and soaked.pause_until is None
 
 
 def test_scheduler_rain_settings_round_trip() -> None:
@@ -171,3 +220,18 @@ async def test_scheduler_static_provider_modes() -> None:
     provider.mode = "unknown"
     assert await provider.forecast(1, 2) is None
     assert StaticWeatherProvider().name == "static"
+
+
+async def test_scheduler_static_rain_decision_marks_past_hours() -> None:
+    from scheduler.adapters.api.schemas import RainDecisionOut
+    from scheduler.application.weather import Location, WeatherAnswer
+
+    forecast = await StaticWeatherProvider("rain", clock=lambda: AT).forecast(52.5, 13.4)
+    decision = decide(RainSettings(), forecast, AT)
+    settings = RainSettings(cooldown_hours=3)
+    answer = WeatherAnswer(decision, Location(52.5, 13.4, "site"), forecast, "static", settings)
+    out = RainDecisionOut.of(answer)
+    assert out.wet and out.wet_until is not None and out.recent_mm_24h == 48.0
+    # the API echoes the settings it applied and the end of the hold (none: it keeps raining)
+    assert out.settings.cooldown_hours == 3 and out.pause_until is None
+    assert any(h.past for h in out.hours) and any(not h.past for h in out.hours)

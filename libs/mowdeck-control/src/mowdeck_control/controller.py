@@ -38,6 +38,11 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    because it did go out. ``SetBladeHeight`` and ``SetSpeed`` leave pending confirmations
    alone. A ``ManualDrive`` frame is rejected while a confirmation is pending (the mower may be
    about to start or drive home).
+10. A path preview (:meth:`MowerController.preview_path`, adapters with
+   :class:`~mowdeck_control.connection.PathPreviewCapable`) is refused while a job runs, a
+   start waits for its confirmation or a drive session is open, and its areas and pattern are
+   checked like a ``StartMow``. It does not take the queue: the mower only plans, and a start
+   sent meanwhile simply plans the same route again.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -49,11 +54,11 @@ import contextlib
 import inspect
 import logging
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
@@ -66,6 +71,7 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerMap,
     MowerState,
+    MowPath,
     PauseMow,
     ResumeMow,
     ReturnToDock,
@@ -83,7 +89,9 @@ from mowdeck_control.connection import (
     JobCommand,
     MowerConnection,
     Outcome,
+    PathPreviewCapable,
     current_map_of,
+    current_path_of,
     dispatch_of,
 )
 from mowdeck_control.errors import CommandRejected, NotConnected, UnsupportedPattern
@@ -97,6 +105,8 @@ StateCallback = Callable[[MowerState], Awaitable[None] | None]
 MAX_REASON_LENGTH = 500
 DEFAULT_DEDUP_SIZE = 1024
 _DRIVE_BLOCKING_ACTIVITIES = frozenset({MowerActivity.MOWING, MowerActivity.RETURNING})
+_JOB_ACTIVITIES = frozenset({MowerActivity.MOWING, MowerActivity.PAUSED, MowerActivity.RETURNING})
+"""Activities of a running job: no path preview then (rule 10)."""
 _SUPERSEDING = (StartMow, PauseMow, ResumeMow, ReturnToDock, EmergencyStop)
 """Job commands that end the confirmation wait of every earlier command (rule 9)."""
 
@@ -229,6 +239,55 @@ class MowerController:
         elif rebuild and (current := current_map_of(self._connection)) is not None:
             self._map = current
         return self._map
+
+    # --- Mow path -----------------------------------------------------------------------------
+
+    def current_path(self) -> MowPath | None:
+        """The route of the running job with its progress, when the adapter knows it
+        (:class:`~mowdeck_control.connection.MowPathSource`); None otherwise."""
+        return current_path_of(self._connection)
+
+    @property
+    def can_preview_path(self) -> bool:
+        """True when the adapter can plan a route without starting
+        (:class:`~mowdeck_control.connection.PathPreviewCapable`)."""
+        return isinstance(self._connection, PathPreviewCapable)
+
+    async def preview_path(
+        self, area_ids: Sequence[str], pattern: Mapping[str, Any] | None = None
+    ) -> MowPath:
+        """Let the mower plan the route of a start without starting it (rule 10).
+
+        Raises :class:`~mowdeck_control.errors.CommandRejected` when the adapter cannot, a job
+        runs, a start awaits its confirmation, a drive session is open, or the areas or the
+        pattern are refused; the adapter's :class:`~mowdeck_control.errors.NotConnected` and
+        :class:`~mowdeck_control.errors.PathUnavailable` pass through.
+        """
+        connection = self._connection
+        if not isinstance(connection, PathPreviewCapable):
+            raise CommandRejected("this connection cannot plan a route without starting")
+        if self._session is not None:
+            raise CommandRejected("a manual drive session is open")
+        if self._confirming:
+            raise CommandRejected("a command is still waiting for its confirmation")
+        state = self._last_state
+        if state is not None and state.activity in _JOB_ACTIVITIES:
+            msg = f"the mower is {state.activity.value}; a preview is possible before a start"
+            raise CommandRejected(msg)
+        try:
+            start = StartMow(area_ids=list(area_ids), pattern=dict(pattern) if pattern else None)
+        except ValueError as exc:
+            raise CommandRejected("choose at least one area") from exc
+        problem = await self._validate_start(start)
+        if problem is not None:
+            raise CommandRejected(problem)
+        self._log.info(
+            "path preview for mower %s (%s)",
+            self._mower_id,
+            ", ".join(area_ids),
+            extra={"mower_id": str(self._mower_id)},
+        )
+        return await connection.preview_path(list(area_ids), start.pattern)
 
     # --- Commands -----------------------------------------------------------------------------
 

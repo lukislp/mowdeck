@@ -19,20 +19,28 @@ usual environment variable (``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``, ``GEMINI_
 import asyncio
 import importlib
 import logging
+import sys
+import threading
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Final
 
 from mowdeck_contracts.v1 import VisionTask
 from mowdeck_service_kit import get_logger
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
+from vision.adapters.providers.calibration_prompt import (
+    CORRESPONDENCE_FORMAT,
+    calibration_content,
+    calibration_system_prompt,
+)
 from vision.adapters.providers.prompt import (
     RESPONSE_FORMAT,
     extract_json,
     system_prompt,
     user_content,
 )
+from vision.domain.calibration import Correspondences, CorrespondencesOut, FrameSize
 from vision.domain.context import SceneContext
 from vision.domain.errors import ProviderFailed
 from vision.domain.models import Assessment, AssessmentOut, Image, ProviderConfig, Usage
@@ -46,17 +54,51 @@ _NO_SCHEMA: set[str] = set()
 _configured = False
 
 
+_IMPORT_LOCK = threading.Lock()
+_REQUIRED_ATTRIBUTES: Final = ("acompletion", "exceptions", "supports_response_schema")
+
+
+def _complete(module: Any) -> bool:
+    return all(hasattr(module, name) for name in _REQUIRED_ATTRIBUTES)
+
+
+def _purge_litellm() -> None:
+    for name in [n for n in sys.modules if n == "litellm" or n.startswith("litellm.")]:
+        sys.modules.pop(name, None)
+
+
 def load_litellm() -> Any:
-    """Import LiteLLM (slow: done lazily or in a warm-up thread) and silence its logging."""
+    """Import LiteLLM (slow: done lazily or in a warm-up thread) and silence its logging.
+
+    One import at a time: LiteLLM's package initialisation is not safe against two threads
+    importing it concurrently (the warm-up thread and a first request once raced into an
+    import deadlock, which left a half-initialised module without ``exceptions`` in
+    ``sys.modules`` and every later call failed). A module that is missing its public
+    attributes is dropped from ``sys.modules`` and imported again; an import error drops it
+    too, so the next caller retries instead of inheriting the broken state.
+    """
     global _configured
-    module = importlib.import_module("litellm")
-    if not _configured:
-        for flag in ("suppress_debug_info", "turn_off_message_logging", "drop_params"):
-            setattr(module, flag, True)
-        for name in ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy", "httpx"):
-            logging.getLogger(name).setLevel(logging.WARNING)
-        _configured = True
-    return module
+    with _IMPORT_LOCK:
+        module = sys.modules.get("litellm")
+        if module is None or not _complete(module):
+            if module is not None:
+                _purge_litellm()
+            try:
+                module = importlib.import_module("litellm")
+            except Exception:
+                _purge_litellm()
+                raise
+            if not _complete(module):
+                _purge_litellm()
+                msg = "litellm imported without its public API (partial initialisation)"
+                raise ImportError(msg)
+        if not _configured:
+            for flag in ("suppress_debug_info", "turn_off_message_logging", "drop_params"):
+                setattr(module, flag, True)
+            for name in ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy", "httpx"):
+                logging.getLogger(name).setLevel(logging.WARNING)
+            _configured = True
+        return module
 
 
 class LiteLlmProvider:
@@ -98,10 +140,39 @@ class LiteLlmProvider:
         self, images: list[Image], context: SceneContext, task: VisionTask
     ) -> Assessment:
         """Ask the model; validate the answer (one retry with the error when invalid)."""
+        answer, usage = await self._ask(
+            lambda prompt_mode: system_prompt(prompt_mode=prompt_mode),
+            user_content(images, context, task),
+            AssessmentOut,
+            RESPONSE_FORMAT,
+        )
+        return Assessment(answer, self.config.model, self.config.family, usage)
+
+    async def correspond(
+        self, left: Image, right: Image, left_size: FrameSize, right_size: FrameSize
+    ) -> Correspondences:
+        """Ask the model for corresponding points of the two frames (panorama calibration)."""
+        answer, usage = await self._ask(
+            lambda prompt_mode: calibration_system_prompt(prompt_mode=prompt_mode),
+            calibration_content(left, right, left_size, right_size),
+            CorrespondencesOut,
+            CORRESPONDENCE_FORMAT,
+        )
+        return Correspondences(answer, self.config.model, self.config.family, usage)
+
+    async def _ask[T: BaseModel](
+        self,
+        system: Callable[[bool], str],
+        content: list[dict[str, Any]],
+        schema: type[T],
+        response_format: dict[str, Any],
+    ) -> tuple[T, Usage]:
+        """One structured question: the JSON schema as ``response_format`` when the model
+        supports it (else in the prompt), the answer validated against ``schema`` with one
+        retry that names the validation error, usage and cost summed over the attempts."""
         module = self._module()
         completion = self._completion or module.acompletion
         use_schema = self._schema_supported()
-        content = user_content(images, context, task)
         corrections: list[dict[str, Any]] = []
         started = time.monotonic()
         attempts = 0
@@ -110,12 +181,14 @@ class LiteLlmProvider:
         corrected = False
         while True:
             messages: list[dict[str, Any]] = [
-                {"role": "system", "content": system_prompt(prompt_mode=not use_schema)},
+                {"role": "system", "content": system(not use_schema)},
                 {"role": "user", "content": content},
                 *corrections,
             ]
             try:
-                response, tries = await self._call(completion, messages, use_schema)
+                response, tries = await self._call(
+                    completion, messages, response_format if use_schema else None
+                )
             except _SchemaRefused:
                 _NO_SCHEMA.add(self.config.model)
                 use_schema = False
@@ -127,7 +200,7 @@ class LiteLlmProvider:
             costs.append(self._cost(module, response))
             text = _text_of(response)
             try:
-                answer = AssessmentOut.model_validate(extract_json(text))
+                answer = schema.model_validate(extract_json(text))
             except (ValueError, ValidationError) as exc:
                 if corrected:
                     raise ProviderFailed(
@@ -148,22 +221,20 @@ class LiteLlmProvider:
         latency = round((time.monotonic() - started) * 1000)
         known = [c for c in costs if c is not None]
         cost = round(sum(known), 6) if costs and len(known) == len(costs) else None
-        return Assessment(
-            answer,
-            self.config.model,
-            self.config.family,
-            Usage(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost_usd=cost,
-                latency_ms=latency,
-                attempts=attempts,
-                mode="json_schema" if use_schema else "prompt",
-            ),
+        return answer, Usage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost,
+            latency_ms=latency,
+            attempts=attempts,
+            mode="json_schema" if use_schema else "prompt",
         )
 
     async def _call(
-        self, completion: Completion, messages: list[dict[str, Any]], use_schema: bool
+        self,
+        completion: Completion,
+        messages: list[dict[str, Any]],
+        response_format: dict[str, Any] | None,
     ) -> tuple[Any, int]:
         module = self._module()
         exceptions = module.exceptions
@@ -189,8 +260,9 @@ class LiteLlmProvider:
             kwargs["api_key"] = self.config.api_key
         if self.config.headers:
             kwargs["extra_headers"] = dict(self.config.headers)
+        use_schema = response_format is not None
         if use_schema:
-            kwargs["response_format"] = RESPONSE_FORMAT
+            kwargs["response_format"] = response_format
         for attempt in range(self.retries + 1):
             try:
                 response = await completion(**kwargs)

@@ -1,13 +1,15 @@
 /**
- * The camera panel's layout (stereo cameras): one camera (`single`) or both front cameras side
- * by side (`both`, stacked on phones), kept per browser in `localStorage`
- * (`mowdeck.cameraLayout`). The tiles say for every view what it shows: live video, still
+ * The camera panel's layout (stereo cameras): one camera (`single`), both front cameras side
+ * by side (`both`, stacked on phones) or both blended into one wide picture (`panorama`, see
+ * `panorama.ts`), kept per browser in `localStorage` (`mowdeck.cameraLayout`). The tiles say for every view what it shows: live video, still
  * connecting, a camera that does not publish (`missing`) or one that delivered nothing within
  * {@link NO_DATA_MS} (`no_data`). A tile never shows another camera's picture in its place.
  */
 import { sideOf, type CameraInfo, type StereoPair } from './session';
 
-export type CameraLayout = 'single' | 'both';
+export type CameraLayout = 'single' | 'both' | 'panorama';
+
+const LAYOUTS: readonly CameraLayout[] = ['single', 'both', 'panorama'];
 
 export const LAYOUT_KEY = 'mowdeck.cameraLayout';
 
@@ -42,9 +44,14 @@ export interface TileInput {
   stalled: readonly number[];
 }
 
-/** `both` only when the session has a stereo pair, otherwise `single`. */
+/** `both` and `panorama` only when the session has a stereo pair, otherwise `single`. */
 export function effectiveLayout(layout: CameraLayout, pair: StereoPair | null): CameraLayout {
-  return layout === 'both' && pair ? 'both' : 'single';
+  return layout !== 'single' && pair ? layout : 'single';
+}
+
+/** The layout shows both front cameras (side by side or as one panorama). */
+export function showsPair(layout: CameraLayout, pair: StereoPair | null): boolean {
+  return effectiveLayout(layout, pair) !== 'single';
 }
 
 /** What the player is asked to show: the pair's uids side by side, or the single choice. */
@@ -53,9 +60,7 @@ export function layoutChoice(
   pair: StereoPair | null,
   cameraUid: number | null,
 ): number | null | number[] {
-  return effectiveLayout(layout, pair) === 'both' && pair
-    ? [pair.left.uid, pair.right.uid]
-    : cameraUid;
+  return showsPair(layout, pair) && pair ? [pair.left.uid, pair.right.uid] : cameraUid;
 }
 
 /** The uids that must deliver a picture (an explicit choice; the first publisher is not). */
@@ -75,11 +80,11 @@ function status(
   return 'connecting';
 }
 
-/** The tiles of the panel, left to right. */
+/** The tiles of the panel, left to right (the panorama keeps both tiles as its sources). */
 export function tilesOf(input: TileInput): CameraTile[] {
   const camera = (uid: number | null) =>
     uid === null ? undefined : input.cameras.find((c) => c.uid === uid);
-  if (effectiveLayout(input.layout, input.pair) === 'both' && input.pair) {
+  if (showsPair(input.layout, input.pair) && input.pair) {
     return [input.pair.left, input.pair.right].map((c, slot) => ({
       slot,
       uid: c.uid,
@@ -110,7 +115,8 @@ function safeStorage(): Storage | null {
 
 export function loadLayout(storage: Pick<Storage, 'getItem'> | null = safeStorage()): CameraLayout {
   try {
-    return storage?.getItem(LAYOUT_KEY) === 'both' ? 'both' : 'single';
+    const stored = storage?.getItem(LAYOUT_KEY);
+    return LAYOUTS.find((layout) => layout === stored) ?? 'single';
   } catch {
     return 'single';
   }

@@ -45,6 +45,10 @@ const OPTIONS: Record<string, Record<string, OptionText>> = {
       label: m.conn_cloud_refresh_active,
       help: m.conn_cloud_refresh_active_help,
     },
+    report_stream_seconds: {
+      label: m.conn_cloud_report_stream,
+      help: m.conn_cloud_report_stream_help,
+    },
     ...TIMEOUTS,
   },
   ble_bridge: {

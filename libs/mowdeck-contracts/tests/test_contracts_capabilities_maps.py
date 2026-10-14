@@ -144,3 +144,12 @@ def test_capabilities_speed_range_respects_the_minimum() -> None:
 def test_capabilities_reject_bad_speed_range(low: float, high: float | None, match: str) -> None:
     with pytest.raises(ValidationError, match=match):
         MowerCapabilities(min_speed_mps=low, max_speed_mps=high)
+
+
+def test_capabilities_path_spacing_range_is_optional_and_ordered() -> None:
+    assert MowerCapabilities().path_spacing_range_mm is None
+    caps = MowerCapabilities(path_spacing_range_mm=(200, 350))
+    assert json.loads(caps.model_dump_json())["path_spacing_range_mm"] == [200, 350]
+    for bad in [(350, 200), (0, 100)]:
+        with pytest.raises(ValidationError, match="path_spacing_range_mm"):
+            MowerCapabilities(path_spacing_range_mm=bad)

@@ -13,7 +13,9 @@ Commands (Mammotion-HA order for ``StartMow``, spike 0001 section 3.3):
                    (no reply awaited), confirmed by the state mapping to ``mowing``
 ``PauseMow``       ``pause_execute_task``, confirmed by the work mode ``MODE_PAUSE``
 ``ResumeMow``      ``resume_execute_task``, confirmed by ``MODE_WORKING``
-``ReturnToDock``   ``return_to_dock``, confirmed by returning, charging or docked
+``ReturnToDock``   ``return_to_dock``, confirmed by returning, charging or docked; with
+                   ``end_job`` first ``cancel_job`` and a short wait until the work mode left
+                   the job modes (working, paused), so the job does not resume later
 ``EmergencyStop``  ``Priority.EMERGENCY``: ``pause_execute_task`` (halts an autonomous job,
                    wheels and blades, in place), ``send_movement(0, 0)`` (halts manual
                    motion) and ``operate_on_device`` with blades off; every step is tried
@@ -46,6 +48,18 @@ halt a running job, it stops in place and keeps the job so a person decides what
 what ``cancel_job`` does with a mower that is out on the lawn (stop or drive home) is not
 documented in PyMammotion. Spike step 4 verifies the pause on hardware.
 
+Mow path (:class:`~mowdeck_control.MowPathSource`, :class:`~mowdeck_control.PathPreviewCapable`):
+once the work mode shows a job (working, paused, returning) and the report names a route
+(``work.path_hash`` above 1) that the adapter does not hold yet, a background task runs
+PyMammotion's ``MowPathSaga`` with ``skip_planning`` (:meth:`MammotionPort.fetch_mow_path`): the
+route the mower already planned is fetched, never planned again. It never blocks a command,
+waits at most ``PATH_FETCH_TIMEOUT_S``, and a failure is logged and tried again after
+``PATH_RETRY_S`` (``PATH_ATTEMPTS`` per route); after a reconnect during a job the same rule
+fetches it. :meth:`MammotionBase.current_path` adds the progress of every report
+(``ub_path_hash``, ``now_index``, ``path_direction``) and returns None once the job ended.
+:meth:`MammotionBase.preview_path` plans a start's route without ``start_job``, as the vendor app
+does before a start: the saga sends ``generate_route_information`` itself.
+
 Fresh state: the Mammotion broker forwards reports only when someone asks for them, so with
 ``refresh_interval_s > 0`` a background task sleeps that long and then calls
 :meth:`MammotionPort.ensure_fresh` (a one-shot report when the last one is older than half the
@@ -59,7 +73,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, Final
 
@@ -71,6 +85,7 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerMap,
     MowerState,
+    MowPath,
     PauseMow,
     ResumeMow,
     ReturnToDock,
@@ -88,6 +103,7 @@ from mowdeck_control import (
     JobCommand,
     NotConnected,
     Outcome,
+    PathUnavailable,
     SensorStop,
     StateBroadcaster,
     StateSubscription,
@@ -97,8 +113,10 @@ from mowdeck_control import (
 from mowdeck_control_mammotion import mapping
 from mowdeck_control_mammotion.port import (
     CommandTimeoutError,
+    GenerateRouteInformation,
     MammotionPort,
     MowerDevice,
+    MowPathFetchError,
     NoTransportAvailableError,
     PortClosedError,
     Priority,
@@ -117,6 +135,16 @@ MAP_MAX_AGE_S: Final = 300.0
 UNCHANGED_REPUBLISH_S: Final = 5.0
 """An unchanged state is published again on a device update after this many seconds."""
 _PAUSED_JOB_CLEAR_S: Final = 15.0
+_JOB_MODES: Final = frozenset(
+    int(m)
+    for m in (
+        WorkMode.MODE_PAUSE,
+        WorkMode.MODE_WORKING,
+        WorkMode.MODE_CHARGING_PAUSE,
+        WorkMode.MODE_CORRIDOR_PAUSE,
+    )
+)
+"""Work modes of a running or paused job; ``ReturnToDock(end_job=True)`` waits until they end."""
 DEVICE_INFO_RETRY_S: Final = 30.0
 """Wait before the missing device information is requested again."""
 DEVICE_INFO_ATTEMPTS: Final = 4
@@ -150,6 +178,14 @@ LIGHT_READ_TIMEOUT_S: Final = 5.0
 """Wait per attempt for the answer to a light read (PyMammotion sends twice)."""
 LIGHT_CONFIRM_S: Final = 3.0
 """How long a light switch waits for the device state to show the answered read."""
+PATH_FETCH_TIMEOUT_S: Final = 90.0
+"""Longest wait for the route of a running job (PyMammotion's saga ends itself by then too)."""
+PATH_PREVIEW_TIMEOUT_S: Final = 90.0
+"""Longest wait for a planned preview route."""
+PATH_RETRY_S: Final = 30.0
+"""Wait before the route of a running job is fetched again after a failed attempt."""
+PATH_ATTEMPTS: Final = 3
+"""Fetches of the route of one job at most."""
 
 
 class MammotionBase:
@@ -172,6 +208,7 @@ class MammotionBase:
         monotonic: Callable[[], float] | None = None,
         refresh_interval_s: float = 0.0,
         active_refresh_interval_s: float | None = None,
+        report_stream_s: float = 0.0,
         device_info_retry_s: float = DEVICE_INFO_RETRY_S,
     ) -> None:
         if refresh_interval_s < 0:
@@ -183,6 +220,11 @@ class MammotionBase:
         self._port = port
         self._refresh_interval_s = refresh_interval_s
         self._active_refresh_interval_s = active_refresh_interval_s
+        if report_stream_s < 0:
+            msg = "report_stream_s must be 0 (off) or positive"
+            raise ValueError(msg)
+        self._report_stream_s = report_stream_s
+        self._boost_until = 0.0
         self._refresh_wake = asyncio.Event()
         self._refresher: asyncio.Task[None] | None = None
         self._device_info_retry_s = device_info_retry_s
@@ -204,6 +246,13 @@ class MammotionBase:
         self._speed_mps: float | None = None
         self._light_reported = False
         self._lock = asyncio.Lock()
+        self._planned: mapping.PlannedPath | None = None
+        self._path_task: asyncio.Task[None] | None = None
+        self._path_tries: tuple[str, int, float] | None = None
+        """Route hash, attempts and loop time of the last fetch of a job's route."""
+        self._route: GenerateRouteInformation | None = None
+        """The route of the last start (used as the job settings of a later fetch)."""
+        self._preview_lock = asyncio.Lock()
 
     # --- MowerConnection: lifecycle -------------------------------------------------------
 
@@ -254,6 +303,7 @@ class MammotionBase:
             self._connected = False
             await self._stop_refresh()
             await self._stop_device_info()
+            await self._stop_path_fetch()
             if self._unsubscribe is not None:
                 self._unsubscribe()
                 self._unsubscribe = None
@@ -282,9 +332,47 @@ class MammotionBase:
             return True
         return state is not None and state.activity in ACTIVE_ACTIVITIES
 
+    @property
+    def report_stream_s(self) -> float:
+        """Length of the continuous report window kept open while active (0: off)."""
+        return self._report_stream_s
+
+    def _clock_s(self) -> float:
+        return asyncio.get_running_loop().time()
+
+    def boost_refresh(self) -> None:
+        """A job command went out (or a drive session started): ask for reports at once and
+        keep doing so for :data:`BOOST_MIN_S` (at least one stream window) even though the
+        state still says docked, so the first ``mowing`` state arrives within seconds instead
+        of after the idle interval plus PyMammotion's 15 s debounce. No-op without a refresh
+        loop (BLE bridge)."""
+        if self._refresh_interval_s <= 0 or self._refresher is None:
+            return
+        self._boost_until = self._clock_s() + max(BOOST_MIN_S, self._report_stream_s)
+        self._refresh_wake.set()
+
+    def _boosted(self) -> bool:
+        return self._clock_s() < self._boost_until
+
+    def _mode(self) -> str:
+        """``stream`` (active, window renewed), ``boost`` (command sent, not yet active: stream
+        call plus fast polls) or ``poll`` (one-shots at the activity's interval)."""
+        if self._report_stream_s > 0 and self._is_active():
+            return "stream"
+        if self._boosted() and not self._is_active():
+            return "boost"
+        return "poll"
+
     def _current_refresh_interval_s(self) -> float:
-        """The interval for the mower's current activity: the active one (never longer than
-        the idle one) while mowing, returning, paused off the dock or driving."""
+        """The interval for the mower's current activity: half the report stream window while
+        streaming, the fast boost poll after a command, else the active one (never longer than
+        the idle one) while mowing, returning, paused off the dock or driving, else the idle
+        one."""
+        mode = self._mode()
+        if mode == "stream":
+            return self._report_stream_s / 2
+        if mode == "boost":
+            return min(BOOST_POLL_S, self._refresh_interval_s)
         if self._active_refresh_interval_s is not None and self._is_active():
             return min(self._active_refresh_interval_s, self._refresh_interval_s)
         return self._refresh_interval_s
@@ -292,16 +380,27 @@ class MammotionBase:
     async def _refresh_loop(self) -> None:
         """Ask the mower for a fresh report while connected, at the interval of its activity.
 
-        The interval is re-read on every wake-up, and a change of the activity wakes the loop
-        (:meth:`_publish`), so a start shortens the wait that is already running (counted from
-        the last request) and a return to the dock lengthens it again.
+        While active (and ``report_stream_s`` > 0) the loop renews PyMammotion's continuous
+        report window every half window (about one report per second from the mower); when the
+        mower becomes inactive the window is left to expire and the idle one-shot requests
+        resume. After a job command (:meth:`boost_refresh`) it opens the window at once and, as
+        PyMammotion only streams once its own state is active, also asks for an undebounced
+        report (:meth:`MammotionPort.refresh`) every :data:`BOOST_POLL_S`. The interval is
+        re-read on every wake-up, and a change of the activity or a boost wakes the loop, so a
+        start shortens the wait that is already running (counted from the last request; a
+        stream or boost starts at once) and a return to the dock lengthens it.
         """
         loop = asyncio.get_running_loop()
         last = loop.time()
+        previous_mode = "poll"
         while self._connected:
             self._refresh_wake.clear()
+            mode = self._mode()
             interval = self._current_refresh_interval_s()
             remaining = last + interval - loop.time()
+            if mode != "poll" and mode != previous_mode:
+                remaining = 0  # open the window / start polling as soon as it applies
+            previous_mode = mode
             if remaining > 0:
                 with contextlib.suppress(TimeoutError):
                     async with asyncio.timeout(remaining):
@@ -311,9 +410,17 @@ class MammotionBase:
                 return
             last = loop.time()
             try:
-                # Half the interval: the answer to the previous request lands a moment after
-                # it was sent, so its age at the next tick is a little under ``interval``.
-                await self._port.ensure_fresh(interval / 2)
+                if mode == "poll":
+                    # Half the interval: the answer to the previous request lands a moment after
+                    # it was sent, so its age at the next tick is a little under ``interval``.
+                    await self._port.ensure_fresh(interval / 2)
+                    continue
+                if self._report_stream_s > 0:
+                    await self._port.start_report_stream(
+                        max(1, round(self._report_stream_s * 1000))
+                    )
+                if mode == "boost":
+                    await self._port.refresh()  # user path: no debounce, no queue
             except Exception:  # the loop never dies on a failed request
                 _log.debug("fresh state request failed", exc_info=True)
 
@@ -409,6 +516,13 @@ class MammotionBase:
 
     async def _stop_device_info(self) -> None:
         task, self._device_info_task = self._device_info_task, None
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    async def _stop_path_fetch(self) -> None:
+        task, self._path_task = self._path_task, None
         if task is not None:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -514,6 +628,8 @@ class MammotionBase:
                     await self._send("resume_execute_task")
                     return self._awaiting("resume_execute_task", {WorkMode.MODE_WORKING}, "mowing")
                 case ReturnToDock():
+                    if command.end_job:
+                        await self._end_job()
                     await self._send("return_to_dock")
                     return self._awaiting(
                         "return_to_dock",
@@ -577,6 +693,8 @@ class MammotionBase:
         self, command: str, *, priority: Priority = Priority.USER, **kwargs: Any
     ) -> None:
         await self._port.send(command, priority=priority, **kwargs)
+        if command in BOOST_COMMANDS:
+            self.boost_refresh()
 
     def _awaiting(
         self, sent: str, modes: set[WorkMode], label: str, *, dock: bool = False
@@ -625,6 +743,38 @@ class MammotionBase:
         if activity in (MowerActivity.MOWING, MowerActivity.RETURNING):
             msg = f"the mower is {activity.value}; pause or end the job first"
             raise CommandRejected(msg)
+        plan, route = await self._route_for(command, device)
+        if activity is MowerActivity.PAUSED:
+            _log.info("ending the paused job of %s before a new start", self._port.device_name)
+            await self._send("cancel_job")
+            await self._port.wait_for(
+                lambda d: d.report_data.dev.sys_status != int(WorkMode.MODE_PAUSE),
+                _PAUSED_JOB_CLEAR_S,
+            )
+        # The route request is idempotent: PyMammotion may re-send it while no reply arrives.
+        # Its wait holds the command queue, so it is short (the mower answers within seconds);
+        # a later pause or return must not expire behind it.
+        await self._port.send_and_wait(
+            "generate_route_information",
+            "bidire_reqconver_path",
+            priority=Priority.USER,
+            timeout_s=min(self._confirm_timeout_s, ROUTE_REQUEST_TIMEOUT_S),
+            generate_route_information=route,
+        )
+        # ``start_job`` exactly once: no reply to wait for, no automatic resend.
+        await self._send("start_job")
+        self._route = route
+        self._path_tries = None  # a new job: its route gets fresh attempts
+        areas = ", ".join(command.area_ids)
+        return Dispatch.awaiting(
+            f"start_job sent ({areas} with {plan.job.pattern})", self._confirm_mowing
+        )
+
+    async def _route_for(
+        self, command: StartMow, device: MowerDevice
+    ) -> tuple[mapping.RoutePlan, GenerateRouteInformation]:
+        """The route settings of an area start; raises ``CommandRejected`` for unknown areas or
+        settings the mower cannot run."""
         known = set(device.map.area)
         unknown = [a for a in command.area_ids if not a.isdigit() or int(a) not in known]
         if unknown:
@@ -642,29 +792,150 @@ class MammotionBase:
             )
         except (ValueError, UnsupportedPattern) as exc:
             raise CommandRejected(str(exc)) from exc
-        if activity is MowerActivity.PAUSED:
-            _log.info("ending the paused job of %s before a new start", self._port.device_name)
-            await self._send("cancel_job")
-            await self._port.wait_for(
-                lambda d: d.report_data.dev.sys_status != int(WorkMode.MODE_PAUSE),
-                _PAUSED_JOB_CLEAR_S,
+        return plan, build_route_information(self._port.device_name, device, plan.settings)
+
+    # --- mow path -------------------------------------------------------------------------
+
+    def current_path(self) -> MowPath | None:
+        """:class:`~mowdeck_control.MowPathSource`: the route of the running job with the
+        progress of the latest report; None without a job, before the route arrived or while the
+        report names another route."""
+        planned = self._planned
+        if planned is None or not self.is_connected:
+            return None
+        try:
+            device = self._port.device()
+        except Exception:
+            return None
+        if str(device.report_data.work.path_hash) != planned.path.path_hash:
+            return None
+        progress = mapping.path_progress_of(device, planned)
+        return planned.path.model_copy(update={"progress": progress})
+
+    async def preview_path(
+        self, area_ids: Sequence[str], pattern: Mapping[str, Any] | None
+    ) -> MowPath:
+        """:class:`~mowdeck_control.PathPreviewCapable`: let the mower plan the route of a start
+        without starting it (``MowPathSaga`` with planning; no ``start_job``).
+
+        Refused while a job runs or for areas or settings the mower cannot run; raises
+        :class:`~mowdeck_control.PathUnavailable` when no route arrived within
+        ``PATH_PREVIEW_TIMEOUT_S``. One preview at a time: a second one waits for the first.
+        """
+        self._require_connected()
+        self._require_no_sensor_stop()
+        try:
+            command = StartMow(area_ids=list(area_ids), pattern=dict(pattern) if pattern else None)
+        except ValueError as exc:
+            raise CommandRejected("choose at least one area") from exc
+        device = self._port.device()
+        activity = mapping.activity_of(device, has_report=self._port.has_report)
+        if activity in ACTIVE_ACTIVITIES or mapping.path_job_running(device):
+            msg = f"the mower is {activity.value}; a route is planned before a start"
+            raise CommandRejected(msg)
+        _plan, route = await self._route_for(command, device)
+        async with self._preview_lock:
+            try:
+                confirmed = await self._port.fetch_mow_path(
+                    route, plan=True, timeout_s=PATH_PREVIEW_TIMEOUT_S
+                )
+            except TimeoutError as exc:
+                raise PathUnavailable(
+                    "the mower did not hand back its route in time", timed_out=True
+                ) from exc
+            except (NoTransportAvailableError, PortClosedError) as exc:
+                raise NotConnected("no usable link to the mower") from exc
+            except MowPathFetchError as exc:
+                raise PathUnavailable(str(exc)) from exc
+            except TransportError as exc:
+                raise PathUnavailable(f"transport error: {type(exc).__name__}") from exc
+            planned = mapping.mow_path_of(
+                self._port.device(), planned_at=self._clock(), complete_only=False
             )
-        route = build_route_information(self._port.device_name, device, plan.settings)
-        # The route request is idempotent: PyMammotion may re-send it while no reply arrives.
-        # Its wait holds the command queue, so it is short (the mower answers within seconds);
-        # a later pause or return must not expire behind it.
-        await self._port.send_and_wait(
-            "generate_route_information",
-            "bidire_reqconver_path",
-            priority=Priority.USER,
-            timeout_s=min(self._confirm_timeout_s, ROUTE_REQUEST_TIMEOUT_S),
-            generate_route_information=route,
+        if planned is None:
+            raise PathUnavailable("the mower planned no route for these areas")
+        if confirmed and str(confirmed) != planned.path.path_hash:
+            _log.warning(
+                "route of %s confirmed as %s but its lines hash to %s",
+                self._port.device_name,
+                confirmed,
+                planned.path.path_hash,
+            )
+        _log.info(
+            "route preview of %s: %d lines, %d points",
+            self._port.device_name,
+            len(planned.path.polylines),
+            planned.path.points_total,
         )
-        # ``start_job`` exactly once: no reply to wait for, no automatic resend.
-        await self._send("start_job")
-        areas = ", ".join(command.area_ids)
-        return Dispatch.awaiting(
-            f"start_job sent ({areas} with {plan.job.pattern})", self._confirm_mowing
+        return planned.path
+
+    def _track_path(self) -> None:
+        """Fetch the route of a running job in the background when the report names one the
+        adapter does not hold (see the module docstring); forget it once the job ended."""
+        try:
+            device = self._port.device()
+        except Exception:
+            return
+        if not mapping.path_job_running(device):
+            if self._port.has_report:
+                self._planned = None
+            return
+        path_hash = device.report_data.work.path_hash
+        if path_hash <= 1:
+            return
+        wanted = str(path_hash)
+        if self._planned is not None and self._planned.path.path_hash == wanted:
+            return
+        if self._path_task is not None and not self._path_task.done():
+            return
+        now = self._clock_s()
+        tries = self._path_tries
+        count = 1
+        if tries is not None and tries[0] == wanted:
+            if tries[1] >= PATH_ATTEMPTS or now - tries[2] < PATH_RETRY_S:
+                return
+            count = tries[1] + 1
+        self._path_tries = (wanted, count, now)
+        self._path_task = asyncio.create_task(
+            self._fetch_path(wanted), name=f"mow-path-{self._port.device_name}"
+        )
+
+    async def _fetch_path(self, wanted: str) -> None:
+        """One background fetch of the running job's route (``skip_planning``)."""
+        name = self._port.device_name
+        try:
+            await self._port.fetch_mow_path(self._route, plan=False, timeout_s=PATH_FETCH_TIMEOUT_S)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _log.warning("mow path of %s not fetched: %s", name, exc)
+            return
+        try:
+            planned = mapping.mow_path_of(self._port.device(), planned_at=self._clock())
+        except Exception:
+            _log.exception("cannot map the mow path of %s", name)
+            return
+        if planned is None or planned.path.path_hash != wanted:
+            _log.info("mow path of %s incomplete or of another route", name)
+            return
+        self._planned = planned
+        _log.info(
+            "mow path of %s: %d lines, %d points",
+            name,
+            len(planned.path.polylines),
+            planned.path.points_total,
+        )
+        if self._connected:
+            self._publish(force=True)
+
+    async def _end_job(self) -> None:
+        """``cancel_job`` for a running or paused job, then wait until the mower left the job
+        modes (a missing change within ``_PAUSED_JOB_CLEAR_S`` is not an error: the return
+        follows anyway)."""
+        _log.info("ending the job of %s before returning", self._port.device_name)
+        await self._send("cancel_job")
+        await self._port.wait_for(
+            lambda d: d.report_data.dev.sys_status not in _JOB_MODES, _PAUSED_JOB_CLEAR_S
         )
 
     async def _set_light(self, *, on: bool) -> Outcome:
@@ -749,6 +1020,7 @@ class MammotionBase:
             return
         previous = self._last_state
         self._last_state = state
+        self._track_path()
         if (previous is None) or previous.activity is not state.activity:
             self._refresh_wake.set()  # the refresh interval depends on the activity
         now = self._publish_clock()
@@ -768,6 +1040,14 @@ class MammotionBase:
             raise SensorStop(msg)
 
 
+BOOST_COMMANDS: Final = frozenset(
+    {"start_job", "pause_execute_task", "resume_execute_task", "return_to_dock"}
+)
+"""Sent commands after which the refresh loop boosts (:meth:`MammotionBase.boost_refresh`)."""
+BOOST_POLL_S: Final = 3.0
+"""Seconds between undebounced report requests while boosted."""
+BOOST_MIN_S: Final = 30.0
+"""Shortest boost, seconds (it lasts at least one report stream window)."""
 ACTIVE_ACTIVITIES: Final = frozenset(
     {MowerActivity.MOWING, MowerActivity.RETURNING, MowerActivity.PAUSED}
 )
