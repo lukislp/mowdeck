@@ -3,7 +3,7 @@
 import importlib
 import sys
 import threading
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
@@ -22,6 +22,14 @@ def _clean_litellm(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in [n for n in sys.modules if n == "litellm" or n.startswith("litellm.")]:
         monkeypatch.delitem(sys.modules, name, raising=False)
     monkeypatch.setattr(llm, "_configured", False)
+
+
+def _module(**attrs: object) -> ModuleType:
+    """A module object with the given attributes (what ``sys.modules`` holds)."""
+    module = ModuleType("litellm")
+    for name, value in attrs.items():
+        setattr(module, name, value)
+    return module
 
 
 def test_loader_replaces_a_partially_initialised_module(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,7 +53,7 @@ def test_loader_replaces_a_partially_initialised_module(monkeypatch: pytest.Monk
 
 def test_loader_drops_the_module_when_the_import_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     def failing_import(name: str) -> Any:
-        sys.modules["litellm"] = SimpleNamespace()
+        sys.modules["litellm"] = _module()
         msg = "boom"
         raise ImportError(msg)
 
@@ -57,7 +65,7 @@ def test_loader_drops_the_module_when_the_import_fails(monkeypatch: pytest.Monke
 
 def test_loader_rejects_an_import_that_stays_incomplete(monkeypatch: pytest.MonkeyPatch) -> None:
     def partial_import(name: str) -> Any:
-        module = SimpleNamespace(acompletion=object())
+        module = _module(acompletion=object())
         sys.modules["litellm"] = module
         return module
 

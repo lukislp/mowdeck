@@ -9,6 +9,7 @@ repository's own: no image mirror, no registry login outside the release workflo
 
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -54,7 +55,7 @@ def _compose_files(repo_root: Path) -> list[Path]:
     ]
 
 
-def _workflow(repo_root: Path, name: str) -> tuple[str, dict]:
+def _workflow(repo_root: Path, name: str) -> tuple[str, dict[str, Any]]:
     path = repo_root / ".github" / "workflows" / name
     if not path.is_file():
         pytest.skip(f"{name} does not exist")
