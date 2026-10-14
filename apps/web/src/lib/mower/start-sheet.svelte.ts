@@ -6,6 +6,8 @@
  * the job?") lives here too. The page constructs it with the real API calls and binds to its
  * state; `start-sheet.test.ts` drives it with fakes.
  */
+import { untrack } from 'svelte';
+
 import { asProblem } from '$lib/api/problem';
 import type { HourBar } from '$lib/schedules/preview';
 
@@ -108,7 +110,7 @@ export class StartSheetFlow {
     return this.#picked;
   }
   set picked(ids: string[]) {
-    const before = this.key;
+    const before = untrack(() => this.key);
     this.#picked = ids;
     this.#selectionChanged(before);
   }
@@ -118,14 +120,19 @@ export class StartSheetFlow {
     return this.#patternDraft;
   }
   set patternDraft(draft: PatternDraft) {
-    const before = this.key;
+    const before = untrack(() => this.key);
     this.#patternDraft = draft;
     this.#selectionChanged(before);
   }
 
-  /** A changed selection (other areas or another pattern) asks for the confirmation again. */
+  /**
+   * A changed selection (other areas or another pattern) asks for the confirmation again. The
+   * comparison reads `key` untracked: a write to the sheet (also `reset()` from the page's
+   * mower effect) must not subscribe the caller's effect to the selection, the pattern or the
+   * context behind them; otherwise that effect re-runs on every pick and resets it again.
+   */
   #selectionChanged(before: string): void {
-    if (this.key !== before) this.rainConfirmed = false;
+    if (untrack(() => this.key) !== before) this.rainConfirmed = false;
   }
 
   /** The pattern the sheet would send now (null: the mower's own settings). */
