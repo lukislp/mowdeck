@@ -4,6 +4,11 @@
 :func:`sample_device`), records every command and, like a cooperative mower, moves the work mode
 on the commands it understands (start, pause, resume, dock, cancel), so confirmations and the
 StartMow sequence can be exercised without hardware. The owner script's ``--dry-run`` uses it.
+
+The fake mower also plans a route: :data:`SAMPLE_PATH_LINES` (two border laps and stripes on the
+front lawn). ``start_job`` sets the report's ``work.path_hash`` to it, and
+:meth:`FakeMammotionPort.fetch_mow_path` writes its frames into ``device().map`` like
+PyMammotion's ``MowPathSaga`` (:func:`install_mow_path`).
 """
 
 import asyncio
@@ -18,14 +23,19 @@ from mowdeck_control_mammotion.port import (
     CommandTimeoutError,
     CommDataCouple,
     FrameList,
+    GenerateRouteInformation,
     LampInfo,
     LocationData,
     MowerDevice,
+    MowPathFrame,
+    MowPathPacket,
     NavGetCommData,
+    NavGetHashListData,
     NoTransportAvailableError,
     PathType,
     PortClosedError,
     Priority,
+    RootHashList,
     StateListener,
     StreamSubscriptionResponse,
     SystemUpdateBufMsg,
@@ -50,6 +60,80 @@ RTK_YAW_DEG: Final = 12.5
 DOCK_X: Final = -1.0
 DOCK_Y: Final = 1.0
 DOCK_ROTATION_DEG: Final = 0
+
+PathLine = tuple[int, int, int, list[tuple[float, float]]]
+"""One line of a planned route: ``(line_hash, path_type, zone_hash, points)``; ``path_type`` 0 is
+the fill, 2 a border lap."""
+EDGE_LINE_HASH: Final = 2_000_000_000_000_000_001
+STRIPE_LINE_HASH: Final = 2_000_000_000_000_000_002
+SAMPLE_PATH_LINES: Final[tuple[PathLine, ...]] = (
+    (EDGE_LINE_HASH, 2, FRONT_HASH, [(0.2, 0.2), (11.8, 0.2), (11.8, 7.8), (0.2, 7.8), (0.2, 0.4)]),
+    (
+        STRIPE_LINE_HASH,
+        0,
+        FRONT_HASH,
+        [(0.5, 0.6), (11.5, 0.6), (11.5, 1.1), (0.5, 1.1), (0.5, 1.6), (11.5, 1.6)],
+    ),
+)
+"""The route the fake mower plans for a start: one border lap and three stripes (11 points)."""
+_LINE_SUB_CMD: Final = 3
+
+
+def install_mow_path(
+    device: MowerDevice,
+    lines: tuple[PathLine, ...] | list[PathLine],
+    *,
+    transaction_id: int = 1_700_000_000_000,
+    packets_per_line: int = 1,
+) -> None:
+    """Store ``lines`` like PyMammotion's ``MowPathSaga``: the line hash list (sub_cmd 3, in
+    route order) replaces the previous one, and one complete ``cover_path_upload`` transaction
+    (one frame per line, ``packets_per_line`` packets each) lands in ``map.current_mow_path``."""
+    hash_list = device.map
+    hash_list.root_hash_lists = [r for r in hash_list.root_hash_lists if r.sub_cmd != _LINE_SUB_CMD]
+    hash_list.root_hash_lists.append(
+        RootHashList(
+            total_frame=1,
+            sub_cmd=_LINE_SUB_CMD,
+            data=[
+                NavGetHashListData(
+                    sub_cmd=_LINE_SUB_CMD,
+                    total_frame=1,
+                    current_frame=1,
+                    data_couple=[line[0] for line in lines],
+                )
+            ],
+        )
+    )
+    frames: dict[int, MowPathFrame] = {}
+    for index, (line_hash, path_type, zone_hash, points) in enumerate(lines, start=1):
+        size = max(1, math.ceil(len(points) / packets_per_line))
+        chunks = [points[i : i + size] for i in range(0, len(points), size)] or [[]]
+        frames[index] = MowPathFrame(
+            total_frame=len(lines),
+            current_frame=index,
+            transaction_id=transaction_id,
+            path_packets=[
+                MowPathPacket(
+                    path_hash=line_hash,
+                    path_type=path_type,
+                    path_total=len(chunks),
+                    path_cur=cur,
+                    zone_hash=zone_hash,
+                    data_couple=[CommDataCouple(x=x, y=y) for x, y in chunk],
+                )
+                for cur, chunk in enumerate(chunks, start=1)
+            ],
+        )
+    hash_list.current_mow_path[transaction_id] = frames
+
+
+def route_hash(lines: tuple[PathLine, ...] | list[PathLine]) -> int:
+    """The ``work.path_hash`` a mower reports for ``lines`` (PyMammotion's
+    ``HashList.computed_path_hash`` of the line list)."""
+    scratch = MowerDevice(name="route")
+    install_mow_path(scratch, lines)
+    return int(scratch.map.computed_path_hash)
 
 
 def dock_buffer(
@@ -229,6 +313,10 @@ class FakeMammotionPort:
         self.map_syncs = 0
         self.fresh_requests: list[float] = []
         """``max_age_s`` of every :meth:`ensure_fresh` call, in order."""
+        self.refreshes = 0
+        """Number of undebounced :meth:`refresh` calls."""
+        self.report_stream_requests: list[int] = []
+        """``duration_ms`` of every :meth:`start_report_stream` call, in order."""
         self.map_sync_error: Exception | None = None
         self.on_map_sync: Callable[[MowerDevice], None] | None = None
         self.stream: StreamSubscriptionResponse | None = None
@@ -239,6 +327,16 @@ class FakeMammotionPort:
         """``all_cameras`` of every :meth:`stream_subscription` call, in order."""
         self.video: VideoResourceResponse | None = None
         self.video_error: Exception | None = None
+        self.path_lines: tuple[PathLine, ...] | None = SAMPLE_PATH_LINES
+        """The route the mower plans: ``start_job`` reports its hash in ``work.path_hash`` and
+        :meth:`fetch_mow_path` stores its frames; None: the mower plans nothing (the fetch ends
+        without a route)."""
+        self.path_error: Exception | None = None
+        """What :meth:`fetch_mow_path` raises (for example ``MowPathFetchError``)."""
+        self.path_gate: asyncio.Event | None = None
+        """When set, :meth:`fetch_mow_path` waits for this event (up to its timeout)."""
+        self.path_fetches: list[tuple[bool, GenerateRouteInformation | None]] = []
+        """``(plan, route)`` of every :meth:`fetch_mow_path` call, in order."""
         self.wait_real = False
         """When True, :meth:`wait_for` waits up to ``timeout_s`` for a state change
         (:meth:`emit`) that satisfies the predicate, like PyMammotion; otherwise it answers at
@@ -349,10 +447,16 @@ class FakeMammotionPort:
         return True
 
     async def refresh(self) -> None:
+        self.refreshes += 1
         await self.emit()
 
     async def ensure_fresh(self, max_age_s: float) -> None:
         self.fresh_requests.append(max_age_s)
+        if self._open:
+            await self.emit()
+
+    async def start_report_stream(self, duration_ms: int) -> None:
+        self.report_stream_requests.append(duration_ms)
         if self._open:
             await self.emit()
 
@@ -362,6 +466,27 @@ class FakeMammotionPort:
             raise self.map_sync_error
         if self.on_map_sync is not None:
             self.on_map_sync(self._device)
+
+    async def fetch_mow_path(
+        self, route: GenerateRouteInformation | None, *, plan: bool, timeout_s: float
+    ) -> int | None:
+        self.path_fetches.append((plan, route))
+        if not self._open or not self.link:
+            raise NoTransportAvailableError("fake link is down")
+        if self.path_gate is not None:
+            try:
+                async with asyncio.timeout(timeout_s):
+                    await self.path_gate.wait()
+            except TimeoutError:
+                msg = f"the mow path did not arrive within {timeout_s:.0f} s"
+                raise TimeoutError(msg) from None
+        if self.path_error is not None:
+            raise self.path_error
+        if self.path_lines is None:
+            return 0 if plan else None
+        install_mow_path(self._device, self.path_lines)
+        await self.emit()
+        return route_hash(self.path_lines) if plan else None
 
     async def stream_subscription(
         self, *, all_cameras: bool = True
@@ -446,6 +571,9 @@ class FakeMammotionPort:
             await self.emit()
             return
         mode = _MODE_AFTER.get(command)
+        if command == "start_job" and self.cooperative and self.path_lines is not None:
+            self._device.report_data.work.path_hash = route_hash(self.path_lines)
+            self._device.report_data.work.ub_path_hash = self.path_lines[0][0]
         if self.cooperative and mode is not None:
             self.set_mode(mode)
             if mode is not WorkMode.MODE_READY:
@@ -458,17 +586,23 @@ __all__ = [
     "DOCK_ROTATION_DEG",
     "DOCK_X",
     "DOCK_Y",
+    "EDGE_LINE_HASH",
     "FRONT_HASH",
     "NOGO_HASH",
     "OBSTACLE_HASH",
     "PATH_HASH",
     "SAMPLE_DEVICE_NAME",
+    "SAMPLE_PATH_LINES",
     "SAMPLE_PRODUCT_KEY",
     "SAMPLE_SUB_MODEL_ID",
+    "STRIPE_LINE_HASH",
     "CommandTimeoutError",
     "FakeMammotionPort",
+    "PathLine",
     "SentCommand",
     "dock_buffer",
     "frames",
+    "install_mow_path",
+    "route_hash",
     "sample_device",
 ]

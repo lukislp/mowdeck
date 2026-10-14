@@ -48,6 +48,7 @@ from fleet.adapters.api.deps import install_error_mapping
 from fleet.adapters.api.routes import ROUTERS
 from fleet.adapters.bus.camera import BusCameraGateway
 from fleet.adapters.bus.cloud import BusCloudDiscovery
+from fleet.adapters.bus.path_preview import BusPathPreviewGateway
 from fleet.adapters.bus.publisher import BusCommandPublisher, BusEventPublisher
 from fleet.adapters.bus.subscriptions import subscribe_all
 from fleet.adapters.crypto import cipher_from_key
@@ -130,6 +131,9 @@ def build_app(
             entitlements=plans,
             camera_gateway=BusCameraGateway(
                 active_bus, timeout_seconds=settings.camera_request_timeout_seconds
+            ),
+            path_preview_gateway=BusPathPreviewGateway(
+                active_bus, timeout_seconds=settings.path_preview_request_timeout_seconds
             ),
             cloud_discovery=BusCloudDiscovery(
                 active_bus, timeout_seconds=settings.cloud_discovery_timeout_seconds

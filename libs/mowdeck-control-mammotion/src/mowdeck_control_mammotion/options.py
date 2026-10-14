@@ -25,6 +25,9 @@ _MAC: Final = re.compile(r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")
 DEFAULT_ESPHOME_PORT: Final = 6053
 DEFAULT_REFRESH_SECONDS: Final = 20.0
 """Default of the cloud option ``refresh_seconds`` (fresh state requests, 10 to 300 s)."""
+DEFAULT_REPORT_STREAM_SECONDS: Final = 60.0
+"""Default of the cloud option ``report_stream_seconds`` (continuous report window while the
+mower is active, 10 to 300 s, 0 off)."""
 DEFAULT_ACTIVE_REFRESH_SECONDS: Final = 5.0
 """Default of the cloud option ``refresh_seconds_active`` (while mowing, 2 to 60 s)."""
 
@@ -55,6 +58,14 @@ def _number(options: Mapping[str, Any], key: str, default: float, low: float, hi
         msg = f"option '{key}' must be between {low} and {high}"
         raise OptionsError(msg)
     return float(value)
+
+
+def _report_stream(options: Mapping[str, Any]) -> float:
+    """``report_stream_seconds``: 0 (off) or 10 to 300."""
+    value = options.get("report_stream_seconds", DEFAULT_REPORT_STREAM_SECONDS)
+    if value == 0 and not isinstance(value, bool):
+        return 0.0
+    return _number(options, "report_stream_seconds", DEFAULT_REPORT_STREAM_SECONDS, 10.0, 300.0)
 
 
 def _bool(options: Mapping[str, Any], key: str, default: bool) -> bool:
@@ -105,6 +116,7 @@ class CloudOptions:
     confirm_timeout_s: float = 30.0
     refresh_seconds: float = DEFAULT_REFRESH_SECONDS
     refresh_seconds_active: float = DEFAULT_ACTIVE_REFRESH_SECONDS
+    report_stream_seconds: float = DEFAULT_REPORT_STREAM_SECONDS
     all_cameras: bool = True
     """Ask the cloud for every camera of the mower (both front cameras of a LUBA 2 AWD X, the
     rear one of a Yuka) instead of the front left one only (``cameraStates`` of the stream
@@ -135,6 +147,7 @@ class CloudOptions:
                     "confirm_timeout_s",
                     "refresh_seconds",
                     "refresh_seconds_active",
+                    "report_stream_seconds",
                     "all_cameras",
                     # Set by Fleet for mowers of a linked account (ADR 0034); informational.
                     "linked_account_id",
@@ -176,6 +189,7 @@ class CloudOptions:
             refresh_seconds_active=_number(
                 options, "refresh_seconds_active", DEFAULT_ACTIVE_REFRESH_SECONDS, 2.0, 60.0
             ),
+            report_stream_seconds=_report_stream(options),
             all_cameras=_bool(options, "all_cameras", True),
         )
 

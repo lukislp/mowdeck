@@ -89,15 +89,36 @@ def validate_schedule(schedule: Schedule) -> None:
     _check_rain(schedule)
 
 
+RUN_PATTERN_BASE: Mapping[str, Any] = {"name": "stripes", "angle_deg": 0.0, "border_laps": 1}
+"""A scheduled start without saved mower defaults: stripes with one border lap (the edges get
+mowed), like the web start sheet's fallback (``MowPattern`` defaults)."""
+
+
 def pattern_for_run(
-    pattern: Mapping[str, Any] | None, rotation: Sequence[float], index: int
-) -> dict[str, Any] | None:
-    """The pattern settings of the next run: the base pattern with ``angle`` taken round robin
-    from ``rotation`` (the plan's "rotate between patterns", e.g. a new direction every week)."""
-    if not rotation:
-        return dict(pattern) if pattern is not None else None
-    result = dict(pattern or {})
-    result["angle"] = rotation[index % len(rotation)]
+    pattern: Mapping[str, Any] | None,
+    rotation: Sequence[float],
+    index: int,
+    defaults: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The ``StartMow.pattern`` of the next run, shaped like ``MowPattern``.
+
+    Starts from :data:`RUN_PATTERN_BASE`, then the mower's saved mowing defaults
+    (``TargetMower.mow_pattern``), then the schedule's own pattern keys (its legacy ``angle``
+    becomes ``angle_deg``: the adapters read ``angle_deg`` only), then the angle taken round
+    robin from ``rotation`` (the plan's "rotate between patterns", e.g. a new direction every
+    week). Angles are normalised to 0 up to 180 degrees (stripes have no direction).
+    """
+    result: dict[str, Any] = {**RUN_PATTERN_BASE, **(defaults or {})}
+    own = dict(pattern or {})
+    legacy = own.pop("angle", None)
+    result.update(own)
+    if legacy is not None and "angle_deg" not in own:
+        result["angle_deg"] = legacy
+    if rotation:
+        result["angle_deg"] = rotation[index % len(rotation)]
+    angle = result.get("angle_deg")
+    if isinstance(angle, int | float) and math.isfinite(angle):
+        result["angle_deg"] = float(angle) % 180.0
     return result
 
 

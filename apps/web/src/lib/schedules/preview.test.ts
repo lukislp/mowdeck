@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { hourBars, parsePreview, verdictBadge } from './preview';
-import type { Preview, RainDecision } from './types';
+import type { ForecastHour, Preview, RainDecision } from './types';
 
-const decision = (verdict: RainDecision['verdict'], hours: RainDecision['hours'] = []) =>
+const decision = (verdict: RainDecision['verdict'], hours: ForecastHour[] = []) =>
   ({
     verdict,
     holds: verdict === 'hold',
@@ -13,7 +13,18 @@ const decision = (verdict: RainDecision['verdict'], hours: RainDecision['hours']
     longitude: 11.5,
     location_source: 'site',
     attribution: null,
-    hours,
+    wet: false,
+    pause_until: null,
+    // The settings the Scheduler applied (the schedule's); the web shows them, it has no defaults.
+    settings: {
+      enabled: true,
+      probability_threshold: 60,
+      precipitation_mm_threshold: 0.5,
+      lookahead_hours: 3,
+      cooldown_hours: 2,
+      run_when_unknown: true,
+    },
+    hours: hours.map((hour) => ({ past: false, ...hour })),
   }) satisfies RainDecision;
 
 const item = (at: string, skipped = false) => ({

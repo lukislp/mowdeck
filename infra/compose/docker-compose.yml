@@ -332,6 +332,10 @@ services:
       MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_ALLOWED_CONNECTION_KINDS: ${FLEET_ALLOWED_CONNECTION_KINDS:-simulated}
+      # How long Fleet waits for the route a mower plans for a path preview (504 after). The
+      # timeouts must stay ordered: GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS (75) <
+      # FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS (85) < the web app's 90 s.
+      MOWDECK_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS: ${FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS:-85}
       # Encrypts the passwords of linked Mammotion accounts (empty: no linked accounts).
       MOWDECK_CREDENTIAL_ENCRYPTION_KEY: ${FLEET_CREDENTIAL_ENCRYPTION_KEY:-}
       MOWDECK_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS: ${FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS:-}
@@ -382,6 +386,10 @@ services:
       # mower.registered/updated/removed events); no mower is seeded here.
       MOWDECK_SIM_TIME_SCALE: ${MOWDECK_SIM_TIME_SCALE:-1}
       MOWDECK_TELEMETRY_HEARTBEAT_SECONDS: ${MOWDECK_TELEMETRY_HEARTBEAT_SECONDS:-10}
+      # Longest time the gateway lets a mower plan a path preview; it must stay below Fleet's
+      # FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS (75 < 85 < the web app's 90 s), so Fleet
+      # gets the gateway's "timeout" reply instead of running into its own.
+      MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS: ${GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS:-75}
       # Development only: the fake Mammotion cloud for linked accounts and cloud mowers.
       MOWDECK_FAKE_MAMMOTION_CLOUD: ${GATEWAY_FAKE_MAMMOTION_CLOUD:-false}
       # Photos of real cameras (ADR 0035): the capture worker of the `capture` profile
@@ -843,6 +851,9 @@ services:
       MOWDECK_VISION_KEEP_IMAGES_DAYS: ${VISION_KEEP_IMAGES_DAYS:-0}
       # Automatic AI analysis on errors (ADR 0035, opt-in per user in the web app).
       MOWDECK_VISION_AUTO_ENABLED: ${VISION_AUTO_ENABLED:-true}
+      MOWDECK_VISION_CALIBRATION_DAILY_REQUESTS: ${VISION_CALIBRATION_DAILY_REQUESTS:-10}
+      MOWDECK_VISION_HOSTED_ACCOUNT_DAILY_CALIBRATIONS: ${VISION_HOSTED_ACCOUNT_DAILY_CALIBRATIONS:-20}
+      MOWDECK_VISION_CALIBRATION_TIMEOUT_SECONDS: ${VISION_CALIBRATION_TIMEOUT_SECONDS:-150}
       MOWDECK_VISION_AUTO_COOLDOWN_MINUTES: ${VISION_AUTO_COOLDOWN_MINUTES:-10}
       MOWDECK_VISION_AUTO_DAILY_PER_MOWER: ${VISION_AUTO_DAILY_PER_MOWER:-20}
       MOWDECK_VISION_PHOTO_TIMEOUT_SECONDS: ${VISION_PHOTO_TIMEOUT_SECONDS:-35}

@@ -1,7 +1,8 @@
 <!--
   A setpoint control (blade height, speed): minus, the value as a monospaced readout with its
-  scale, plus. The value is committed 600 ms after the last step, never per tap; until the mower
-  confirms it the readout stays in the pending style.
+  scale, plus. The value is committed 600 ms after the last step, never per tap (with `immediate`
+  at every step, for a draft that only a later action sends); until the mower confirms it the
+  readout stays in the pending style. The control shrinks with its container (no clipped plus).
 -->
 <script lang="ts">
   interface Props {
@@ -22,6 +23,8 @@
     /** A commanded value is on its way (shown as pending until confirmed). */
     pending?: boolean;
     commitDelayMs?: number;
+    /** Commit at every step instead of after the delay (a draft, not a command). */
+    immediate?: boolean;
     oncommit: (value: number) => void;
   }
   let {
@@ -39,6 +42,7 @@
     disabled = false,
     pending = false,
     commitDelayMs = 600,
+    immediate = false,
     oncommit,
   }: Props = $props();
 
@@ -60,7 +64,8 @@
     const base = draft ?? value ?? min;
     draft = clamp(base + direction * step);
     clearTimeout(timer);
-    timer = setTimeout(commit, commitDelayMs);
+    if (immediate) commit();
+    else timer = setTimeout(commit, commitDelayMs);
   }
 
   function commit(): void {
@@ -88,6 +93,7 @@
       {id}
       aria-labelledby="{id}-label"
       aria-live="polite"
+      data-value={shown ?? ''}
       data-testid="{id}-value"
     >
       <span class="number">{text}</span><span class="unit">{unit}</span>
@@ -114,6 +120,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--md-space-1);
+    min-inline-size: 0;
     padding: var(--md-space-2) var(--md-space-3) var(--md-space-2);
     background: var(--md-color-surface-sunken);
   }
@@ -129,7 +136,7 @@
 
   .row {
     display: grid;
-    grid-template-columns: var(--md-target) 1fr var(--md-target);
+    grid-template-columns: var(--md-target) minmax(0, 1fr) var(--md-target);
     align-items: center;
     gap: var(--md-space-2);
   }
@@ -159,8 +166,9 @@
     align-items: baseline;
     justify-content: center;
     gap: 0.25em;
+    min-inline-size: 0;
     font-family: var(--md-font-mono);
-    font-size: var(--md-font-size-28);
+    font-size: var(--md-font-size-24);
     line-height: var(--md-line-32);
     font-weight: var(--md-weight-medium);
     font-variant-numeric: tabular-nums slashed-zero;

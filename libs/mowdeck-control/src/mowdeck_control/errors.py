@@ -35,3 +35,12 @@ class UnsupportedPattern(ControlError):  # noqa: N818 - outcome names read best
 
 class UnknownConnectionKind(ControlError, LookupError):  # noqa: N818 - outcome names read best
     """No connection factory is registered for the requested kind."""
+
+
+class PathUnavailable(ControlError):  # noqa: N818 - outcome names read best
+    """The mower did not hand back a planned mow path (no answer in time, or an empty one)."""
+
+    def __init__(self, reason: str, *, timed_out: bool = False) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.timed_out = timed_out

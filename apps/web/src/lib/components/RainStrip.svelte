@@ -17,15 +17,39 @@
     hourLabel: (iso: string) => string;
     summary: string;
     testid?: string;
+    /** Epoch ms of "now": past hours are dimmed and the current hour carries a mark. */
+    now?: number | null;
+    /** Label of the now mark ("jetzt"). */
+    nowLabel?: string;
   }
-  let { bars, threshold, window = null, hourLabel, summary, testid }: Props = $props();
+  let {
+    bars,
+    threshold,
+    window = null,
+    hourLabel,
+    summary,
+    testid,
+    now = null,
+    nowLabel = '',
+  }: Props = $props();
+
+  const isPast = (bar: HourBar) => now !== null && Date.parse(bar.end) <= now;
+  const nowIndex = $derived(
+    now === null
+      ? -1
+      : bars.findIndex((b) => Date.parse(b.start) <= now && now < Date.parse(b.end)),
+  );
 
   const inWindow = (bar: HourBar) =>
     !!window &&
     Date.parse(bar.end) > Date.parse(window.start) &&
     Date.parse(bar.start) < Date.parse(window.end);
   const ticks = $derived(
-    bars.length ? [0, Math.floor((bars.length - 1) / 2), bars.length - 1] : [],
+    bars.length
+      ? nowIndex > 0
+        ? [0, nowIndex, bars.length - 1]
+        : [0, Math.floor((bars.length - 1) / 2), bars.length - 1]
+      : [],
   );
 </script>
 
@@ -38,12 +62,16 @@
         class:wet={bar.wet}
         class:window={inWindow(bar)}
         class:missing={bar.probability === null}
+        class:past={isPast(bar)}
+        class:now={i === nowIndex}
         data-wet={bar.wet}
         style:--h="{Math.max(4, Math.round((bar.probability ?? 0) * 100))}%"
         aria-hidden="true"
       >
         {#if bar.wet}<span class="drop"></span>{/if}
-        {#if ticks.includes(i)}<span class="tick">{hourLabel(bar.start)}</span>{/if}
+        {#if ticks.includes(i)}<span class="tick"
+            >{i === nowIndex && nowLabel ? nowLabel : hourLabel(bar.start)}</span
+          >{/if}
       </span>
     {/each}
   </div>
@@ -84,6 +112,18 @@
   .bar.missing {
     background: none;
     border: var(--md-hairline) dashed var(--md-color-line);
+  }
+
+  .bar.past {
+    opacity: 0.45;
+  }
+
+  .bar.now::before {
+    content: '';
+    position: absolute;
+    inset-block: -6px 0;
+    inset-inline-start: -2px;
+    border-inline-start: var(--md-hairline) solid var(--md-color-ink);
   }
 
   .bar.wet {

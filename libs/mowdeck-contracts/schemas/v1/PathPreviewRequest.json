@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Body of ``POST /api/v1/fleet/mowers/{id}/path-preview``: the areas and pattern of a\nstart whose route the mower should plan without starting.",
+  "properties": {
+    "area_ids": {
+      "description": "Map area ids, in order.",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Area Ids",
+      "type": "array"
+    },
+    "pattern": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Pattern settings as for `StartMow.pattern`.",
+      "title": "Pattern"
+    }
+  },
+  "required": [
+    "area_ids"
+  ],
+  "title": "PathPreviewRequest",
+  "type": "object"
+}

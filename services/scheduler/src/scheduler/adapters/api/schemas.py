@@ -270,11 +270,13 @@ class HourOut(BaseModel):
     precipitation_mm: float | None
     probability_percent: float | None
     rain_mm: float | None
+    past: bool = Field(default=False, description="The hour ended before the decision time.")
 
     @classmethod
-    def of(cls, point: HourlyPoint) -> "HourOut":
-        """From the domain value."""
+    def of(cls, point: HourlyPoint, at: datetime | None = None) -> "HourOut":
+        """From the domain value; ``at`` is the decision time (past hours ended at or before)."""
         return cls(
+            past=at is not None and point.end <= at,
             start=point.start,
             end=point.end,
             precipitation_mm=point.precipitation_mm,
@@ -295,12 +297,27 @@ class RainDecisionOut(BaseModel):
     longitude: float | None
     hours: list[HourOut] = Field(description="The forecast hours the decision looked at.")
     attribution: str | None = None
+    wet: bool = Field(default=False, description="The lawn is still wet from earlier rain.")
+    wet_until: datetime | None = Field(default=None, description="Estimated dry time.")
+    recent_mm_6h: float | None = None
+    recent_mm_24h: float | None = None
+    pause_until: datetime | None = Field(
+        default=None,
+        description="When a `hold` ends, by the Scheduler's rule; null when not holding or when "
+        "the forecast does not reach that time.",
+    )
+    settings: RainPause = Field(
+        description="The rain pause settings the decision applied (the schedule's, or the "
+        "query parameters and defaults)."
+    )
 
     @classmethod
     def of(cls, answer: WeatherAnswer) -> "RainDecisionOut":
         """From the use case answer."""
         location = answer.location
         return cls(
+            pause_until=answer.decision.pause_until,
+            settings=RainPause.of(answer.settings),
             verdict=answer.decision.verdict.value,
             holds=answer.decision.verdict.holds,
             reason=answer.decision.reason,
@@ -308,7 +325,11 @@ class RainDecisionOut(BaseModel):
             location_source=location.source if location else None,
             latitude=location.latitude if location else None,
             longitude=location.longitude if location else None,
-            hours=[HourOut.of(p) for p in answer.decision.points],
+            hours=[HourOut.of(p, answer.decision.at) for p in answer.decision.points],
+            wet=answer.decision.wet,
+            wet_until=answer.decision.wet_until,
+            recent_mm_6h=answer.decision.recent_mm_6h,
+            recent_mm_24h=answer.decision.recent_mm_24h,
             attribution=(
                 "Weather data by Open-Meteo.com (CC BY 4.0)"
                 if answer.provider == "open_meteo"

@@ -23,7 +23,7 @@ def _reads(port: FakeMammotionPort) -> list[dict[str, object]]:
     ("name", "product_key", "expected"),
     [
         ("Luba-VPDRYRUN", "a1iMygIwxFC", True),
-        ("Luba-VPNRXLU2", "", True),  # the owner's LUBA 2 AWD X
+        ("Luba-VPAWDX01", "", True),  # a LUBA 2 AWD X
         ("Luba-VA1234", "", True),
         ("Luba-12345", "", False),  # Luba 1: no headlamp
         ("Yuka-12345", "", False),

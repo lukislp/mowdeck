@@ -13,6 +13,8 @@ from mowdeck_contracts.v1 import (
     CommandRequest,
     CommandView,
     DriveSessionView,
+    MowPath,
+    PathPreviewRequest,
 )
 from mowdeck_service_kit import CurrentAccountId
 from pydantic import BaseModel
@@ -30,6 +32,7 @@ from fleet.adapters.api.schemas import (
     AreaNamesOut,
     ConnectionKindList,
     ConnectionKindOut,
+    MowDefaultsIn,
     MowerGroupsIn,
     MowerIn,
     MowerList,
@@ -177,6 +180,32 @@ async def set_area_name(
     return AreaNamesOut(names=names)
 
 
+@router.put(
+    "/mowers/{mower_id}/mow-defaults",
+    responses={
+        403: {"description": "The caller sees the mower but has no `can_control`."},
+        404: {"description": "The mower does not exist or is not visible to the caller."},
+        422: {"description": "Unknown pattern, a value out of range or an unknown key."},
+    },
+)
+async def set_mow_defaults(
+    mower_id: UUID,
+    body: MowDefaultsIn,
+    principal: ControlMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> MowerOut:
+    """Keep the mowing defaults of the mower (``can_control``; 403 when the mower is visible,
+    else 404): the pattern settings every client starts with (web start sheet, Home Assistant,
+    schedules). ``pattern: null`` drops them. Nothing is sent to the mower; a start still
+    names its own pattern in ``StartMow.pattern``. Whether the mower runs the pattern is its
+    capabilities' business (``native_patterns``). Answers the mower with ``mow_defaults``."""
+    found = await services.mowers.set_mow_defaults(
+        actor_of(principal), account_id, mower_id, body.to_domain()
+    )
+    return MowerOut.of(found)
+
+
 @router.delete("/mowers/{mower_id}", status_code=204)
 async def delete_mower(
     mower_id: UUID, principal: ManageMower, account_id: CurrentAccountId, services: ServicesDep
@@ -271,6 +300,37 @@ async def open_camera_session(
     ``expires_at``."""
     response.headers["Cache-Control"] = "no-store"
     return await services.camera.open(actor_of(principal), account_id, mower_id)
+
+
+@router.post(
+    "/mowers/{mower_id}/path-preview",
+    responses={
+        403: {"description": "The plan does not include the feature `control`."},
+        404: {"description": "The mower does not exist or is not visible to the caller."},
+        409: {
+            "description": "`path-preview-unsupported`: the connection cannot plan without "
+            "starting; `path-preview-rejected`: a job runs, or the areas or pattern do not fit."
+        },
+        503: {"description": "The Device-Gateway did not answer or the mower is offline."},
+        504: {"description": "`gateway-timeout`: the mower did not hand back its route in time."},
+    },
+)
+async def preview_mow_path(
+    mower_id: UUID,
+    body: PathPreviewRequest,
+    principal: ControlMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    response: Response,
+) -> MowPath:
+    """Let the mower plan the route of a start (areas and pattern as for ``start_mow``) without
+    starting it, as the vendor app does before a start: ``can_control`` on the mower (hidden
+    otherwise) and the plan feature ``control``. Fleet relays the request to the Device-Gateway
+    that holds the mower; planning and fetching the route take a few seconds to about a minute
+    (over 4G longer), so clients show progress and allow up to 90 s. The route is not stored;
+    the start uses the same areas and pattern and the mower plans the same route again."""
+    response.headers["Cache-Control"] = "no-store"
+    return await services.path_preview.preview(actor_of(principal), account_id, mower_id, body)
 
 
 @router.get("/commands/{command_id}")

@@ -57,3 +57,11 @@ async def test_planner_drops_bad_snapshots(
     message = BusMessage(subject=subject or device_subject(mower_id, "map"), data=payload)
     with pytest.raises(DropMessage, match=reason):
         await handler(message)
+
+
+async def test_planner_ignores_the_mow_path_snapshot() -> None:
+    store = MemoryStore()
+    handler = snapshot_handler(Ingest(store))
+    mower_id = uuid4()
+    await handler(BusMessage(subject=device_subject(mower_id, "path"), data=b"{}"))
+    assert mower_id not in store.data.facts

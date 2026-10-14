@@ -6,11 +6,16 @@ chance of more than 0.1 mm in it). A run at ``at`` is held when
 
 * an hour overlapping ``[at, at + lookahead]`` has a precipitation probability at or above the
   threshold, or precipitation at or above the millimetre threshold (it will rain), or
-* an hour overlapping ``[at - cooldown, at]`` had precipitation at or above the millimetre
-  threshold (the grass is still wet).
+* the lawn is still wet (:func:`wet_lawn`): the last hour with precipitation at or above the
+  millimetre threshold ended less than the drying time ago. The drying time is the cooldown,
+  times 1.5 (at most 6 h) when 5 mm or more fell in the last 6 hours.
 
 Without a forecast (provider failure) the verdict is ``unknown`` and the schedule's setting
 decides whether to run or hold; without a location it is ``no_location`` and the run goes ahead.
+
+A ``hold`` also says when it ends (:func:`pause_end`): the first time at which the same rule
+would let a run go ahead, found by walking the forecast. Clients display that value; they do
+not re-derive it from the hours.
 """
 
 from dataclasses import dataclass, field
@@ -102,10 +107,80 @@ class RainDecision:
     verdict: Verdict
     reason: str
     points: tuple[HourlyPoint, ...] = field(default_factory=tuple)
+    at: datetime | None = None
+    """The time the decision is for (hours ending at or before it are past)."""
+    wet: bool = False
+    """The lawn is still wet from earlier rain (needs ``cooldown_hours`` > 0)."""
+    wet_until: datetime | None = None
+    recent_mm_6h: float | None = None
+    recent_mm_24h: float | None = None
+    pause_until: datetime | None = None
+    """When a ``hold`` ends (:func:`pause_end`); None when not holding or open-ended."""
+
+
+PAST_HOURS_SHOWN = 12
+HEAVY_RAIN_MM_6H = 5.0
+HEAVY_RAIN_FACTOR = 1.5
+MAX_DRYING = timedelta(hours=6)
+
+
+def recent_mm(points: tuple[HourlyPoint, ...], at: datetime, hours: int) -> float:
+    """Precipitation of the hours that ended within ``hours`` before ``at``."""
+    since = at - timedelta(hours=hours)
+    return sum((p.precipitation_mm or 0.0) for p in points if since < p.end <= at)
+
+
+def wet_lawn(
+    settings: RainSettings, points: tuple[HourlyPoint, ...], at: datetime
+) -> tuple[bool, datetime | None]:
+    """``(wet, wet_until)``: end of the last wet hour that has started plus the drying time."""
+    if settings.cooldown_hours <= 0:
+        return False, None
+    mm = settings.precipitation_mm_threshold
+    wet_hours = [p for p in points if p.start < at and (p.precipitation_mm or 0) >= mm]
+    if not wet_hours:
+        return False, None
+    drying = timedelta(hours=settings.cooldown_hours)
+    if recent_mm(points, at, 6) >= HEAVY_RAIN_MM_6H:
+        drying = min(drying * HEAVY_RAIN_FACTOR, max(MAX_DRYING, drying))
+    until = max(p.end for p in wet_hours) + drying
+    return until > at, until
 
 
 def _overlaps(point: HourlyPoint, start: datetime, end: datetime) -> bool:
     return point.start < end and point.end > start
+
+
+def _rainy(settings: RainSettings, point: HourlyPoint) -> bool:
+    """The hour reaches the probability or the millimetre threshold."""
+    return (point.probability_percent or 0) >= settings.probability_threshold or (
+        point.precipitation_mm or 0
+    ) >= settings.precipitation_mm_threshold
+
+
+def pause_end(
+    settings: RainSettings, points: tuple[HourlyPoint, ...], at: datetime
+) -> datetime | None:
+    """When a hold at ``at`` ends: the first time at or after ``at`` at which the rule lets a
+    run go ahead. From ``at`` the walk jumps to the end of the last rainy hour in the lookahead,
+    then past the drying time, and repeats until neither holds. None when the forecast runs out
+    first (the pause is open-ended as far as the forecast knows)."""
+    lookahead = timedelta(hours=settings.lookahead_hours)
+    now = at
+    for _ in range(2 * len(points) + 2):
+        ahead = [p for p in points if _overlaps(p, now, now + lookahead)]
+        if not ahead:
+            return None
+        rainy = [p.end for p in ahead if _rainy(settings, p)]
+        if rainy:
+            now = max(rainy)
+            continue
+        wet, until = wet_lawn(settings, points, now)
+        if wet and until is not None:
+            now = until
+            continue
+        return now
+    return None
 
 
 def decide(settings: RainSettings, forecast: Forecast | None, at: datetime) -> RainDecision:
@@ -117,38 +192,41 @@ def decide(settings: RainSettings, forecast: Forecast | None, at: datetime) -> R
             return RainDecision(Verdict.UNKNOWN_RUN, "no forecast available, running anyway")
         return RainDecision(Verdict.UNKNOWN_HOLD, "no forecast available, holding")
     ahead_end = at + timedelta(hours=settings.lookahead_hours)
-    behind_start = at - timedelta(hours=settings.cooldown_hours)
+    shown_start = at - timedelta(hours=max(settings.cooldown_hours, PAST_HOURS_SHOWN))
     ahead = tuple(p for p in forecast.points if _overlaps(p, at, ahead_end))
-    behind = tuple(
-        p for p in forecast.points if settings.cooldown_hours > 0 and _overlaps(p, behind_start, at)
-    )
+    behind = tuple(p for p in forecast.points if _overlaps(p, shown_start, at))
     used = tuple(sorted({*behind, *ahead}, key=lambda p: p.end))
+    wet, wet_until = wet_lawn(settings, forecast.points, at)
+    recent_6h = recent_mm(forecast.points, at, 6)
+    recent_24h = recent_mm(forecast.points, at, 24)
+
+    def out(verdict: Verdict, reason: str) -> RainDecision:
+        until = pause_end(settings, forecast.points, at) if verdict is Verdict.HOLD else None
+        return RainDecision(
+            verdict, reason, used, at, wet, wet_until, recent_6h, recent_24h, pause_until=until
+        )
+
     mm = settings.precipitation_mm_threshold
     for point in ahead:
         if (point.probability_percent or 0) >= settings.probability_threshold:
-            return RainDecision(
+            return out(
                 Verdict.HOLD,
                 f"rain probability {point.probability_percent:.0f} % at "
                 f"{point.start:%H:%M} UTC (threshold {settings.probability_threshold} %)",
-                used,
             )
         if (point.precipitation_mm or 0) >= mm:
-            return RainDecision(
+            return out(
                 Verdict.HOLD,
                 f"{point.precipitation_mm:.1f} mm expected at {point.start:%H:%M} UTC "
                 f"(threshold {mm:g} mm)",
-                used,
             )
-    for point in behind:
-        if (point.precipitation_mm or 0) >= mm:
-            return RainDecision(
-                Verdict.HOLD,
-                f"{point.precipitation_mm:.1f} mm fell at {point.start:%H:%M} UTC, cooling down "
-                f"for {settings.cooldown_hours} h",
-                used,
-            )
+    if wet and wet_until is not None:
+        return out(
+            Verdict.HOLD,
+            f"{recent_6h:.1f} mm fell in the last 6 h, cooling down until {wet_until:%H:%M} UTC",
+        )
     if not ahead:
         if settings.run_when_unknown:
-            return RainDecision(Verdict.UNKNOWN_RUN, "the forecast does not cover the run", used)
-        return RainDecision(Verdict.UNKNOWN_HOLD, "the forecast does not cover the run", used)
-    return RainDecision(Verdict.RUN, "dry", used)
+            return out(Verdict.UNKNOWN_RUN, "the forecast does not cover the run")
+        return out(Verdict.UNKNOWN_HOLD, "the forecast does not cover the run")
+    return out(Verdict.RUN, "dry")

@@ -680,3 +680,18 @@ async def test_delayed_resume_waits_for_mowing() -> None:
 def test_start_delay_options_are_validated(options: dict[str, Any], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         SimulationConfig(**options)
+
+
+@pytest.mark.parametrize("end_job", [False, True])
+async def test_return_to_dock_leaves_no_job_to_resume(end_job: bool) -> None:
+    sim = await _connected()
+    assert (await sim.execute(StartMow(area_ids=["front"]))).status == "executed"
+    sim.tick(30)
+    assert (await sim.execute(PauseMow())).status == "executed"
+    outcome = await sim.execute(ReturnToDock(end_job=end_job))
+    assert outcome.status == "executed"
+    assert ("job ended" in (outcome.reason or "")) is end_job
+    state = await sim.get_state()
+    assert state.activity is MowerActivity.RETURNING
+    assert "job_areas" not in state.raw
+    assert (await sim.execute(ResumeMow())).status == "rejected"

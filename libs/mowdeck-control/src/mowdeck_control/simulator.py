@@ -29,7 +29,11 @@ What it simulates:
   a real mower (:class:`~mowdeck_control.connection.TwoPhaseExecution`), so the controller's
   interrupted-confirmation path runs without hardware;
 * a light (``SetLight``, capability ``light``) that keeps its state in ``light_on``; switching
-  it works in every state, also while stuck or lifted.
+  it works in every state, also while stuck or lifted;
+* its own planned route (:class:`~mowdeck_control.connection.MowPathSource`): every leg of the
+  job is one point of the path, split into polylines at the transfers, and the progress counts
+  the legs done; :meth:`SimulatedMower.preview_path` plans the same route without starting
+  (:class:`~mowdeck_control.connection.PathPreviewCapable`).
 
 ``SimulationConfig.time_scale`` makes simulated time run faster than real time.
 """
@@ -38,7 +42,7 @@ import asyncio
 import itertools
 import logging
 import math
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta
 from typing import Any, Final
@@ -62,6 +66,9 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerMap,
     MowerState,
+    MowPath,
+    MowPathKind,
+    MowPathProgress,
     PauseMow,
     PositionSource,
     ResumeMow,
@@ -82,7 +89,7 @@ from mowdeck_control.errors import CommandRejected, NotConnected, SensorStop, Un
 from mowdeck_control.geo import distance, point_in_polygon, to_geo_position
 from mowdeck_control.paths import stripe_path
 from mowdeck_control.photo import render_scene
-from mowdeck_control.translation import MowRequest, Pattern, plan_to_native_job
+from mowdeck_control.translation import MowRequest, NativeJob, Pattern, plan_to_native_job
 
 _log = logging.getLogger("mowdeck_control.simulator")
 
@@ -104,6 +111,10 @@ _POSITION_SOURCE: Final = {
 }
 """The simulated position is the RTK solution; without a fix it counts as plain GNSS."""
 _DRIVE_STEP_S = 0.1
+_PATH_ACTIVITIES: Final = frozenset(
+    {MowerActivity.MOWING, MowerActivity.PAUSED, MowerActivity.RETURNING}
+)
+"""Activities in which the route of the job stays shown."""
 
 
 DEFAULT_ORIGIN: Final = (48.137154, 11.576124)
@@ -338,6 +349,8 @@ class SimulatedMower:
         self._drive_cmd = _DriveCommand()
         self._backed_off_m = 0.0
         self._pending_start: _PendingStart | None = None
+        self._path: MowPath | None = None
+        self._path_done = 0
         self._changed = asyncio.Event()
         self._light_on = False
         self._capabilities = MowerCapabilities(
@@ -447,7 +460,7 @@ class SimulatedMower:
                 outcome = self._resume()
             case ReturnToDock():
                 self._pending_start = None
-                outcome = self._return_to_dock()
+                outcome = self._return_to_dock(end_job=command.end_job)
             case SetBladeHeight():
                 outcome = self._set_blade_height(command.mm)
             case SetSpeed():
@@ -523,6 +536,37 @@ class SimulatedMower:
     def theta(self) -> float:
         """Current direction in the local frame (radians, counter-clockwise from +x)."""
         return self._theta
+
+    def current_path(self) -> MowPath | None:
+        """:class:`~mowdeck_control.connection.MowPathSource`: the route of the job with the legs
+        done as progress; None without a job (it ends at the dock)."""
+        path = self._path
+        if path is None:
+            return None
+        if self._status.activity not in _PATH_ACTIVITIES:
+            self._path = None
+            return None
+        index = min(self._path_done, path.points_total)
+        return path.model_copy(update={"progress": MowPathProgress(index=index)})
+
+    async def preview_path(
+        self, area_ids: Sequence[str], pattern: Mapping[str, Any] | None
+    ) -> MowPath:
+        """:class:`~mowdeck_control.connection.PathPreviewCapable`: the route a start of
+        ``area_ids`` with ``pattern`` would drive, without starting."""
+        self._require_connected()
+        if self._status.activity in _PATH_ACTIVITIES:
+            msg = f"the mower is {self._status.activity.value}; pause or end the job first"
+            raise CommandRejected(msg)
+        try:
+            command = StartMow(area_ids=list(area_ids), pattern=dict(pattern) if pattern else None)
+        except ValueError as exc:
+            raise CommandRejected("choose at least one area") from exc
+        planned = self._plan_areas(command)
+        if isinstance(planned, str):
+            raise CommandRejected(planned)
+        job, legs, _ = planned
+        return self._route_path(legs, job.area_ids)
 
     async def capture_photo(self) -> Photo:
         """A still image of the surroundings drawn from the map (:class:`PhotoCapture`)."""
@@ -710,10 +754,34 @@ class SimulatedMower:
             return Outcome.rejected(f"unknown area ids: {', '.join(unknown)}")
         if self._battery < self.config.min_start_battery_percent:
             return Outcome.rejected("battery too low to start")
+        planned = self._plan_areas(command)
+        if isinstance(planned, str):
+            return Outcome.rejected(planned)
+        job, legs, mow_length = planned
+        path = self._route_path(legs, job.area_ids)
+
+        def begin() -> None:
+            status = self._status
+            self._end_drive_session()
+            self._job = _Job(area_ids=job.area_ids, pattern=job.pattern, mow_length_m=mow_length)
+            self._path, self._path_done = path, 0
+            status.legs = legs
+            status.activity = MowerActivity.MOWING
+            status.resume_activity = None
+            status.emergency_stopped = False
+
+        self._begin_or_defer(begin)
+        return Outcome.executed(f"mowing {', '.join(job.area_ids)} with {job.pattern}")
+
+    def _plan_areas(self, command: StartMow) -> tuple[NativeJob, list["_Leg"], float] | str:
+        """The legs of a native area start, or why it is refused."""
+        unknown = [a for a in command.area_ids if self._map.area(a) is None]
+        if unknown:
+            return f"unknown area ids: {', '.join(unknown)}"
         try:
             job = plan_to_native_job(MowRequest.from_start_mow(command), self._capabilities)
         except (UnsupportedPattern, ValueError) as exc:
-            return Outcome.rejected(str(exc))
+            return str(exc)
         forbidden = [zone.boundary for zone in self._map.forbidden_zones()]
         legs: list[_Leg] = []
         mow_length = 0.0
@@ -734,18 +802,31 @@ class SimulatedMower:
                 for previous, point in itertools.pairwise(points):
                     legs.append(_Leg(point, blade=True, area_id=area_id))
                     mow_length += distance(previous, point)
+        return job, legs, mow_length
 
-        def begin() -> None:
-            status = self._status
-            self._end_drive_session()
-            self._job = _Job(area_ids=job.area_ids, pattern=job.pattern, mow_length_m=mow_length)
-            status.legs = legs
-            status.activity = MowerActivity.MOWING
-            status.resume_activity = None
-            status.emergency_stopped = False
-
-        self._begin_or_defer(begin)
-        return Outcome.executed(f"mowing {', '.join(job.area_ids)} with {job.pattern}")
+    def _route_path(self, legs: Sequence["_Leg"], area_ids: Sequence[str]) -> MowPath:
+        """The route of ``legs`` as a path: one point per leg, a new polyline at every transfer
+        (blades off), so the progress is simply the number of legs done."""
+        polylines: list[list[LocalPoint]] = []
+        kinds: list[MowPathKind] = []
+        for leg in legs:
+            if not leg.blade or not polylines:
+                polylines.append([])
+                kinds.append("mow")
+            polylines[-1].append(leg.target)
+        digest = 0
+        for leg in legs:
+            digest = (digest * 31 + round(leg.target[0] * 100) * 7 + round(leg.target[1] * 100)) % (
+                10**12
+            )
+        return MowPath(
+            path_hash=f"sim-{digest}",
+            polylines=polylines,
+            kinds=kinds,
+            points_total=len(legs),
+            area_ids=list(area_ids),
+            planned_at=self._clock(),
+        )
 
     def _start_spot(self, plan: SpotMowPlan) -> Outcome:
         """Follow a Planner route segment by segment (blades and speed per segment)."""
@@ -767,10 +848,12 @@ class SimulatedMower:
                     mow_length += distance(previous, point)
             here = points[-1]
         pattern = "+".join(plan.pattern_chain)
+        path = self._route_path(legs, (SPOT_AREA_ID,)) if legs else None
 
         def begin() -> None:
             status = self._status
             self._end_drive_session()
+            self._path, self._path_done = path, 0
             self._job = _Job(
                 area_ids=(SPOT_AREA_ID,),
                 pattern=pattern,
@@ -823,14 +906,16 @@ class SimulatedMower:
             begin()
         return Outcome.executed(f"resumed {target}")
 
-    def _return_to_dock(self) -> Outcome:
+    def _return_to_dock(self, *, end_job: bool = False) -> Outcome:
         status = self._status
         if status.activity in (MowerActivity.DOCKED, MowerActivity.CHARGING):
             return Outcome.executed("already docked")
         self._end_drive_session()
+        # The simulator keeps no job on the way home (``_begin_return`` drops the job and its
+        # progress), so a later ``resume_mow`` is refused either way; ``end_job`` only words it.
         self._begin_return()
         status.emergency_stopped = False
-        return Outcome.executed("returning to dock")
+        return Outcome.executed("job ended, returning to dock" if end_job else "returning to dock")
 
     def _set_blade_height(self, mm: int) -> Outcome:
         if not self._capabilities.blade_height_allowed(mm):
@@ -973,6 +1058,8 @@ class SimulatedMower:
             if needed <= budget:
                 self._x, self._y = leg.target
                 status.legs.pop(0)
+                if status.activity is MowerActivity.MOWING and self._job is not None:
+                    self._path_done += 1
             else:
                 fraction = budget / needed
                 self._x += (leg.target[0] - self._x) * fraction

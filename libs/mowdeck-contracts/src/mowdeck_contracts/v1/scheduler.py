@@ -28,6 +28,7 @@ from pydantic import Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 from mowdeck_contracts.v1.commands import CommandAccepted, CommandRequest
+from mowdeck_contracts.v1.mower import MowPattern
 from mowdeck_contracts.v1.principal import PrincipalRef
 
 SCHEDULER_RUN_RECORDED: Final = "scheduler.run.recorded"
@@ -108,6 +109,11 @@ class TargetMower(ContractModel):
     timezone: str = Field(min_length=1, max_length=64, description="IANA name of the site.")
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+    mow_pattern: MowPattern | None = Field(
+        default=None,
+        description="The mower's saved mowing defaults (`MowerOut.mow_defaults.pattern`); "
+        "None when none are saved. A schedule starts from them and sets only its angle.",
+    )
 
 
 class ResolveTargetReply(ContractModel):

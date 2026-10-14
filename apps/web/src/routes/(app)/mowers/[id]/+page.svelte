@@ -15,6 +15,7 @@
     Switch,
     TopBar,
     areasOfGap,
+    isPositionInexact,
     rtkSummary,
     type HeatGap,
     type Activity,
@@ -29,7 +30,14 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import { apiFetch, fleetApi, schedulerApi, telemetryApi, unwrap } from '$lib/api/client';
+  import {
+    apiFetch,
+    fleetApi,
+    fleetSlowApi,
+    schedulerApi,
+    telemetryApi,
+    unwrap,
+  } from '$lib/api/client';
   import { asProblem, type ApiProblem } from '$lib/api/problem';
   import { clock } from '$lib/clock.svelte';
   import AreaPlan from '$lib/components/AreaPlan.svelte';
@@ -40,7 +48,9 @@
   import LightToggle from '$lib/components/LightToggle.svelte';
   import AssistSheet from '$lib/components/AssistSheet.svelte';
   import LiveStatus from '$lib/components/LiveStatus.svelte';
+  import MowSettings from '$lib/components/MowSettings.svelte';
   import PlanBanner from '$lib/components/PlanBanner.svelte';
+  import RainReadout from '$lib/components/RainReadout.svelte';
   import SlowLoading from '$lib/components/SlowLoading.svelte';
   import ToneBadge from '$lib/components/ToneBadge.svelte';
   import { loadConfig, type MapTilesConfig } from '$lib/config';
@@ -50,6 +60,7 @@
     commandLabel,
     connectionLabel,
     formatAge,
+    formatClock,
     formatDateTime,
     formatNumber,
     formatTime,
@@ -61,6 +72,9 @@
     type RtkSource,
   } from '$lib/i18n';
   import { commands, permissions, realtime, revoked, sendCommand } from '$lib/live.svelte';
+  import { formatDuration } from '$lib/mower/duration';
+  import { rainNow, readoutBars, stripBars } from '$lib/mower/rain';
+  import type { RainDecision } from '$lib/schedules/types';
   import { availability, polygonArea, primaryCommand, type BarCommand } from '$lib/mower/commands';
   import {
     bladeRange as bladeLimits,
@@ -69,6 +83,22 @@
     speedRange as speedLimits,
   } from '$lib/mower/limits';
   import { areaNamer, mapLabels } from '$lib/mower/map-labels';
+  import {
+    offeredPatterns,
+    readPattern,
+    spacingRange,
+    type MowPattern,
+  } from '$lib/mower/mow-pattern';
+  import {
+    PATH_POLL_MS,
+    donePercent,
+    isJobActivity,
+    loadPathShown,
+    reconcilePath,
+    savePathShown,
+    shownPath,
+    type MowPath,
+  } from '$lib/mower/mow-path';
   import { RTK_PAGE, isRtkRange, loadRange, rangeStart, type RtkRange } from '$lib/mower/rtk-range';
   import {
     ROUTE_LIMIT,
@@ -77,6 +107,8 @@
     windowStart,
     type RouteWindow,
   } from '$lib/mower/route';
+  import { StartSheetFlow } from '$lib/mower/start-sheet.svelte';
+  import { jobActive, rainStatusOf } from '$lib/mower/start-sheet';
   import { assistProposal } from '$lib/notifications/kinds';
   import {
     fetchHeatmap,
@@ -113,6 +145,9 @@
     blade_height_range_mm?: number[] | null;
     min_speed_mps?: number | null;
     max_speed_mps?: number | null;
+    cutting_width_mm?: number | null;
+    native_patterns?: string[];
+    path_spacing_range_mm?: number[] | null;
     model?: string | null;
     manual_drive?: boolean;
     camera?: string;
@@ -139,12 +174,10 @@
   let canControl = $state(false);
   let canManage = $state(false);
   let canDrive = $state(false);
-  let picking = $state(false);
   // The live camera panel (ADR 0032), inline in the side column (after the status block, before the areas) whenever the mower has
   // a camera; open unless the viewer collapsed it (remembered per browser). Collapsed means no
   // session: the panel unmounts and leaves the channel.
   let cameraOpen = $state(storedCameraOpen());
-  let picked = $state<string[]>([]);
   // Renaming an area: in the rename sheet (from a map label) or inline in an area list.
   let renaming = $state<string | null>(null);
   let renamingInline = $state<string | null>(null);
@@ -171,9 +204,71 @@
   // AI assist: the sheet, what a new request asks for, and the proposal a link opened.
   let assisting = $state(false);
   let assistTask = $state<VisionTask>('recover');
+  // The mower's planned mow path: the running job's (polled from Telemetry), the last job's
+  // (kept until the next start) and a preview computed in the start sheet (`sheet.preview`); the
+  // toggle is remembered per browser.
+  let pathShown = $state(loadPathShown());
+  let livePath = $state.raw<MowPath | null>(null);
+  let lastPath = $state.raw<MowPath | null>(null);
+  // The last path came from the mower (a preview seed is not polled and not cleared by a null).
+  let lastFromJob = $state(false);
+  // The path whose job the owner ended ("Zur Station, Aufgabe abbrechen"): not shown again.
+  let endedHash = $state<string | null>(null);
   // The next schedule that starts this mower (null: none; undefined: Scheduler not reachable).
   let nextSchedule = $state<Schedule | null | undefined>(undefined);
   let nextPreview = $state<PreviewView | null>(null);
+  // The weather at the mower (Scheduler): loaded once and every 15 min. `unreachable` hides the
+  // readout, `no_site` is a 404 or a verdict without coordinates.
+  type Weather =
+    | { kind: 'loading' }
+    | { kind: 'unreachable' }
+    | { kind: 'no_site' }
+    | { kind: 'ok'; decision: RainDecision };
+  let weather = $state.raw<Weather>({ kind: 'loading' });
+  // The start sheet (areas, pattern and setpoint drafts, preview, rain confirmation, start) and
+  // the dock choice: `$lib/mower/start-sheet.svelte` holds the flow, this page the API calls.
+  const sheet = new StartSheetFlow({
+    preview: (request, signal) =>
+      unwrap(
+        fleetSlowApi.POST('/api/v1/fleet/mowers/{mower_id}/path-preview', {
+          params: { path: { mower_id: id } },
+          body: request.pattern
+            ? { area_ids: request.area_ids, pattern: { ...request.pattern } }
+            : { area_ids: request.area_ids },
+          signal,
+        }),
+      ),
+    setpoint: (command) => sendCommand(id, command),
+    start: (request) => sendCommand(id, { kind: 'start_mow', ...request }),
+    dock: (endJob) => sendCommand(id, { kind: 'return_to_dock', end_job: endJob }),
+    saveDefaults: (pattern) => saveMowDefaults(pattern),
+    paths: {
+      replace: (seed) => {
+        dropPath(false);
+        lastPath = seed;
+      },
+      ended: () => dropPath(true),
+    },
+    now: () => clock.now,
+    context: () => ({
+      areas: mowerMap?.areas ?? [],
+      offered,
+      spacing: spacingLimits,
+      savedPattern,
+      bladeRange,
+      speedRange,
+      reportedBladeMm: ms?.blade_height_mm,
+      reportedSpeedMps: ms?.speed_mps,
+      cuttingWidthMm: caps?.cutting_width_mm,
+      rain:
+        weather.kind === 'ok' && rainStatus === 'ok'
+          ? {
+              bars: rainBars,
+              wetUntil: weather.decision.wet ? (weather.decision.wet_until ?? null) : null,
+            }
+          : null,
+    }),
+  });
 
   async function loadMower(mowerId: string): Promise<void> {
     // The last answer of this tab shows at once; the page never blanks while it reloads.
@@ -218,6 +313,36 @@
       .catch(() => undefined);
     void loadRecent(mowerId);
     void loadNextSchedule(mowerId, mower.group_ids);
+  }
+
+  async function loadWeather(
+    mowerId: string,
+    pause: Schedule['rain_pause'] | undefined,
+  ): Promise<void> {
+    try {
+      // The next schedule's rain pause decides what counts as wet and how long drying takes.
+      const query = pause
+        ? {
+            probability_threshold: pause.probability_threshold,
+            precipitation_mm_threshold: pause.precipitation_mm_threshold,
+            lookahead_hours: pause.lookahead_hours,
+            cooldown_hours: pause.cooldown_hours,
+          }
+        : {};
+      const answer = await unwrap(
+        schedulerApi.GET('/api/v1/scheduler/weather/{mower_id}', {
+          params: { path: { mower_id: mowerId }, query },
+        }),
+      );
+      if (mowerId !== id) return;
+      weather =
+        answer.decision.verdict === 'no_location'
+          ? { kind: 'no_site' }
+          : { kind: 'ok', decision: answer.decision };
+    } catch (error) {
+      if (mowerId !== id) return;
+      weather = asProblem(error).status === 404 ? { kind: 'no_site' } : { kind: 'unreachable' };
+    }
   }
 
   async function loadNextSchedule(mowerId: string, groupIds: string[]): Promise<void> {
@@ -335,9 +460,13 @@
     mowerMap = lastLoad.get<MowerMapData>(`map:${mowerId}`) ?? null;
     mapEtag = null;
     caps = lastLoad.get<Capabilities>(`caps:${mowerId}`) ?? null;
-    picked = [];
+    sheet.reset();
     renaming = null;
     renamingInline = null;
+    livePath = null;
+    lastPath = null;
+    lastFromJob = false;
+    endedHash = null;
     void loadMower(mowerId);
     // The gateway publishes map and capabilities right after connecting: poll briefly for them.
     let tries = 0;
@@ -354,6 +483,17 @@
       clearTimeout(timer);
       clearInterval(refresh);
     };
+  });
+  $effect(() => {
+    void id;
+    weather = { kind: 'loading' };
+  });
+  $effect(() => {
+    const mowerId = id;
+    const pause = nextSchedule?.rain_pause;
+    untrack(() => void loadWeather(mowerId, pause));
+    const refresh = setInterval(() => void loadWeather(mowerId, pause), 15 * 60_000);
+    return () => clearInterval(refresh);
   });
   $effect(() => realtime.watch([id]));
   $effect(() => {
@@ -436,7 +576,7 @@
   $effect(() => {
     if (assistLink && mower) {
       untrack(() => {
-        picking = false;
+        sheet.close();
         assisting = true;
       });
     }
@@ -449,7 +589,7 @@
 
   function openAssist(task: VisionTask): void {
     assistTask = task;
-    picking = false;
+    sheet.close();
     assisting = true;
   }
 
@@ -464,6 +604,58 @@
         keepFocus: true,
       });
     }
+  }
+
+  // --- planned mow path: polled while a job runs and while its path is held; the job's path stays
+  // while the job exists on the mower and goes when the gateway has none and the mower rests ---
+
+  const jobRunning = $derived(isJobActivity(activity));
+  const pollPath = $derived(jobRunning || (lastPath !== null && lastFromJob));
+
+  function applyPolled(polled: MowPath | null): void {
+    const next = reconcilePath(
+      { live: livePath, last: lastPath },
+      polled,
+      untrack(() => activity),
+      endedHash,
+    );
+    livePath = next.live;
+    lastPath = next.last;
+    lastFromJob = next.last !== null;
+  }
+
+  $effect(() => {
+    const mowerId = id;
+    if (!pollPath) {
+      livePath = null;
+      return;
+    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = async (): Promise<void> => {
+      try {
+        const { data, response } = await telemetryApi.GET(
+          '/api/v1/telemetry/mowers/{mower_id}/path',
+          { params: { path: { mower_id: mowerId } } },
+        );
+        if (cancelled) return;
+        if (response.ok && data) applyPolled(data.path ?? null);
+        else if (response.status === 404) applyPolled(null);
+      } catch {
+        // Keep what is shown; the next poll tries again.
+      }
+      if (!cancelled) timer = setTimeout(() => void load(), PATH_POLL_MS);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  });
+
+  function setPathShown(shown: boolean): void {
+    pathShown = shown;
+    savePathShown(shown);
   }
 
   // --- driven route: the track of the chosen window plus the live positions -------------------
@@ -633,7 +825,7 @@
 
   /** Open the area start with the spot's area chosen (spot mowing itself is not in the app). */
   function mowGapArea(areaId: string): void {
-    picked = [areaId];
+    sheet.picked = [areaId];
     void onaction('start');
   }
 
@@ -655,7 +847,7 @@
 
   /** A map label was tapped: rename inline while the picker is open, else in the sheet. */
   function openRename(areaId: string): void {
-    if (picking) renamingInline = areaId;
+    if (sheet.picking) renamingInline = areaId;
     else renaming = areaId;
   }
 
@@ -710,27 +902,95 @@
   async function onaction(action: string): Promise<void> {
     if (action === 'start') {
       // Areas tapped on the map are already chosen; the sheet confirms (and can change) them.
-      const known = new Set((mowerMap?.areas ?? []).map((a) => a.id));
-      picked = picked.filter((areaId) => known.has(areaId));
       assisting = false;
       renaming = null;
       renamingInline = null;
-      picking = true;
+      sheet.open();
+      return;
+    }
+    if (action === 'dock' && jobActive(activity)) {
+      sheet.dockChoice = true;
       return;
     }
     const item = BAR.find((b) => b.id === action);
     if (item) await sendCommand(id, { kind: item.kind });
   }
 
-  async function startPicked(): Promise<void> {
-    const areaIds = [...picked];
-    picking = false;
-    picked = [];
-    await sendCommand(id, { kind: 'start_mow', area_ids: areaIds });
+  /** The owner ended the job (or starts another): the planned path goes from the map. */
+  function dropPath(ended: boolean): void {
+    endedHash = ended ? (livePath?.path_hash ?? lastPath?.path_hash ?? endedHash) : null;
+    livePath = null;
+    lastPath = null;
+    lastFromJob = false;
   }
 
-  function togglePick(areaId: string): void {
-    picked = picked.includes(areaId) ? picked.filter((a) => a !== areaId) : [...picked, areaId];
+  // Patterns the mower runs natively; none (or unknown capabilities): the start names no
+  // pattern and the mower uses its own settings, as before.
+  const offered = $derived(offeredPatterns(caps?.native_patterns));
+  const spacingLimits = $derived(spacingRange(caps?.path_spacing_range_mm));
+  const savedPattern = $derived(readPattern(mower?.mow_defaults?.pattern));
+
+  const mapPath = $derived(
+    shownPath({ shown: pathShown, preview: sheet.previewPath, live: livePath, last: lastPath }),
+  );
+  const pathNote = $derived.by(() => {
+    const percent = donePercent(livePath);
+    if (livePath?.progress && percent !== null) {
+      const done = m.path_status_done({
+        done: formatNumber(Math.min(livePath.progress.index, livePath.points_total)),
+        total: formatNumber(livePath.points_total),
+      });
+      return `${percent} % · ${done}`;
+    }
+    return jobRunning && !livePath ? m.path_status_waiting() : null;
+  });
+
+  // Rain at the mower: the readout in the side column and the warning in the start sheet. The
+  // Scheduler decides (verdict, when the hold ends, the thresholds it applied); the page shows it.
+  const rainThresholds = $derived(weather.kind === 'ok' ? weather.decision.settings : null);
+  const rainBars = $derived(
+    weather.kind === 'ok'
+      ? readoutBars(weather.decision.hours, weather.decision.settings, clock.now)
+      : [],
+  );
+  const rainStatus = $derived(
+    rainStatusOf(weather.kind === 'ok' ? weather.decision.verdict : null),
+  );
+  const rainPaused = $derived(
+    weather.kind === 'ok' && !!nextSchedule?.rain_pause.enabled && weather.decision.holds,
+  );
+  const rainPausedUntil = $derived(
+    rainPaused && weather.kind === 'ok' ? (weather.decision.pause_until ?? null) : null,
+  );
+
+  /** The pattern of a start that went out becomes the mower's mow defaults. */
+  async function saveMowDefaults(pattern: MowPattern): Promise<void> {
+    const mowerId = id;
+    try {
+      const saved = await unwrap(
+        fleetApi.PUT('/api/v1/fleet/mowers/{mower_id}/mow-defaults', {
+          params: { path: { mower_id: mowerId } },
+          body: { pattern: { ...pattern } },
+        }),
+      );
+      if (mowerId !== id) return;
+      mower = saved;
+      lastLoad.set(`mower:${mowerId}`, saved);
+    } catch (error) {
+      const p = asProblem(error);
+      toasts.push(
+        'error',
+        m.start_defaults_failed(),
+        problemMessage(p),
+        p.correlationId ?? undefined,
+      );
+    }
+  }
+
+  /** From the start sheet to the blade height and speed steppers. */
+  function adjustSetpoints(): void {
+    sheet.close();
+    document.getElementById('mow-controls')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   const hasMap = $derived(!!mowerMap?.areas?.length);
@@ -738,7 +998,7 @@
     canControl && availability('start', activity).enabled && !!mowerMap?.areas?.length,
   );
   /** Areas on the map can be tapped whenever a start is possible (or the picker is open). */
-  const mapSelectable = $derived(canControl && (canStart || picking));
+  const mapSelectable = $derived(canControl && (canStart || sheet.picking));
 
   const labels = $derived(mapLabels());
   const routeOptions = $derived([
@@ -911,28 +1171,30 @@
             map={mowerMap}
             state={ms}
             {route}
-            selectedAreas={picked}
+            selectedAreas={sheet.picked}
             selectable={mapSelectable}
             {stale}
             {tiles}
             {labels}
             {heat}
             {highlightGap}
+            path={mapPath.path}
+            pathPreview={mapPath.preview}
             {areaName}
-            onselectionchange={(ids) => (picked = ids)}
+            onselectionchange={(ids) => (sheet.picked = ids)}
             onarealabel={canControl ? openRename : undefined}
             onfail={() => (mapFailed = true)}
             expanded={mapExpanded}
             onexpandchange={phone ? (value) => (mapExpanded = value) : undefined}
           />
-          {#if picked.length && !picking}
+          {#if sheet.picked.length && !sheet.picking}
             <div class="chosen" data-testid="map-selection">
-              <span class="mono">{m.map_selected({ count: picked.length })}</span>
+              <span class="mono">{m.map_selected({ count: sheet.picked.length })}</span>
               <button
                 type="button"
                 class="chosen-clear"
                 aria-label={m.map_clear_selection()}
-                onclick={() => (picked = [])}
+                onclick={() => (sheet.picked = [])}
               >
                 <Icon name="close" size={18} />
               </button>
@@ -953,6 +1215,9 @@
           onperiod={setHeatPeriod}
           oncell={setHeatCell}
           onrefresh={() => (heatReload += 1)}
+          {pathShown}
+          {pathNote}
+          onpath={setPathShown}
         />
         {#if heatLayer === 'coverage' && (heatStatus === 'ready' || heatStatus === 'empty')}
           <HeatmapGaps
@@ -968,7 +1233,7 @@
         <div class="map-box">
           <AreaPlan
             map={mowerMap}
-            selected={picking ? picked : []}
+            selected={sheet.picking ? sheet.picked : []}
             label={m.detail_areas()}
             {areaName}
           />
@@ -1039,7 +1304,13 @@
             tone={tone(ms?.rtk_fix)}
             emptyText={m.no_data()}
             testid="readout-rtk"
-          />
+          >
+            {#if isPositionInexact(ms)}
+              <span class="hint inexact" data-testid="readout-rtk-inexact"
+                >{m.detail_rtk_inexact()}</span
+              >
+            {/if}
+          </Readout>
           <Readout
             label={m.detail_blade()}
             value={ms?.blade_height_mm != null ? formatNumber(ms.blade_height_mm) : null}
@@ -1124,6 +1395,7 @@
           </div>
         {/if}
         {#if canControl}
+          <div id="mow-controls"></div>
           <Panel label={m.detail_controls()} testid="controls">
             <div class="steppers">
               {#if lightCapable && !hasCamera}
@@ -1195,6 +1467,27 @@
               {m.map_route_points({ count: formatNumber(route.length) })}
               {#if routeTruncated}· {m.map_route_truncated()}{/if}
             </p>
+          </Panel>
+        {/if}
+
+        {#if weather.kind !== 'unreachable'}
+          <Panel label={m.rain_title()} testid="rain-panel">
+            {#if weather.kind === 'loading'}
+              <p class="hint"><SlowLoading /></p>
+            {:else}
+              <RainReadout
+                status={rainStatus}
+                now={rainNow(rainBars, clock.now)}
+                bars={stripBars(rainBars, clock.now)}
+                threshold={rainThresholds?.probability_threshold ?? 0}
+                paused={rainPaused}
+                pauseUntil={rainPausedUntil}
+                clock={clock.now}
+                wet={weather.kind === 'ok' && weather.decision.wet}
+                wetUntil={weather.kind === 'ok' ? (weather.decision.wet_until ?? null) : null}
+                settingsHref="/mowers/{id}/settings"
+              />
+            {/if}
           </Panel>
         {/if}
 
@@ -1296,7 +1589,7 @@
           <Panel label={m.detail_areas()}>
             <ul class="areas">
               {#each mowerMap.areas ?? [] as area (area.id)}
-                {@const order = picked.indexOf(area.id)}
+                {@const order = sheet.picked.indexOf(area.id)}
                 <li>
                   <span class="area-row">
                     <span class="area-label">
@@ -1313,7 +1606,7 @@
                         type="button"
                         class="rename-open"
                         aria-label={m.area_rename_label({ name: areaName(area) })}
-                        aria-expanded={renamingInline === area.id && !picking}
+                        aria-expanded={renamingInline === area.id && !sheet.picking}
                         data-testid="area-rename-open"
                         data-rename-area={area.id}
                         onclick={() =>
@@ -1323,7 +1616,7 @@
                       </button>
                     {/if}
                   </span>
-                  {#if canControl && renamingInline === area.id && !picking}
+                  {#if canControl && renamingInline === area.id && !sheet.picking}
                     <AreaRenameForm
                       mowerId={id}
                       {area}
@@ -1351,7 +1644,13 @@
             <ol class="recent">
               {#each recent as item (item.command_id)}
                 <li data-status={item.status}>
-                  <span class="kind">{commandLabel(item.kind as CommandKind)}</span>
+                  <span class="kind"
+                    >{commandLabel(
+                      item.kind as CommandKind,
+                      item.end_job,
+                      readPattern(item.pattern),
+                    )}</span
+                  >
                   <span class="outcome">{outcomeLabel(outcomeOf(item.status))}</span>
                   <span class="when mono">{formatDateTime(item.issued_at)}</span>
                 </li>
@@ -1376,74 +1675,184 @@
       />
     </div>
     <Sheet
-      open={picking}
+      open={sheet.picking}
       title={m.area_picker_title()}
       closeLabel={m.close()}
-      onclose={() => (picking = false)}
+      onclose={() => sheet.close()}
       testid="area-picker"
+      wide
     >
-      <p class="hint">{m.area_picker_hint()}</p>
-      <ul class="picker">
-        {#each mowerMap?.areas ?? [] as area (area.id)}
-          {@const order = picked.indexOf(area.id)}
-          <li class="pick-row">
-            <div class="pick-line">
-              <button
-                type="button"
-                class="pick"
-                aria-pressed={order >= 0}
-                data-area={area.id}
-                onclick={() => togglePick(area.id)}
-              >
-                <span class="order mono">{order >= 0 ? order + 1 : ''}</span>
-                <span class="area-name">{areaName(area)}</span>
-                <span class="mono size">
-                  {m.detail_area_size({
-                    size: formatNumber(polygonArea(area.boundary)),
-                  })}
-                </span>
-              </button>
-              {#if canControl}
-                <button
-                  type="button"
-                  class="rename-open"
-                  aria-label={m.area_rename_label({ name: areaName(area) })}
-                  aria-expanded={renamingInline === area.id}
-                  data-testid="area-rename-open"
-                  data-rename-area={area.id}
-                  onclick={() => (renamingInline = renamingInline === area.id ? null : area.id)}
-                >
-                  <Icon name="edit" size={18} />
-                </button>
-              {/if}
-            </div>
-            {#if canControl && renamingInline === area.id}
-              <AreaRenameForm
-                mowerId={id}
-                {area}
-                index={areaIndex.get(area.id) ?? null}
-                names={areaNames}
-                compact
-                onsaved={areaNamesSaved}
-                oncancel={() => (renamingInline = null)}
-              />
-            {/if}
-          </li>
-        {/each}
-      </ul>
+      <div class="start-grid">
+        <div class="start-areas">
+          <p class="hint">{m.area_picker_hint()}</p>
+          <ul class="picker">
+            {#each mowerMap?.areas ?? [] as area (area.id)}
+              {@const order = sheet.picked.indexOf(area.id)}
+              <li class="pick-row">
+                <div class="pick-line">
+                  <button
+                    type="button"
+                    class="pick"
+                    aria-pressed={order >= 0}
+                    data-area={area.id}
+                    onclick={() => sheet.togglePick(area.id)}
+                  >
+                    <span class="order mono">{order >= 0 ? order + 1 : ''}</span>
+                    <span class="area-name">{areaName(area)}</span>
+                    <span class="mono size">
+                      {m.detail_area_size({
+                        size: formatNumber(polygonArea(area.boundary)),
+                      })}
+                    </span>
+                  </button>
+                  {#if canControl}
+                    <button
+                      type="button"
+                      class="rename-open"
+                      aria-label={m.area_rename_label({ name: areaName(area) })}
+                      aria-expanded={renamingInline === area.id}
+                      data-testid="area-rename-open"
+                      data-rename-area={area.id}
+                      onclick={() => (renamingInline = renamingInline === area.id ? null : area.id)}
+                    >
+                      <Icon name="edit" size={18} />
+                    </button>
+                  {/if}
+                </div>
+                {#if canControl && renamingInline === area.id}
+                  <AreaRenameForm
+                    mowerId={id}
+                    {area}
+                    index={areaIndex.get(area.id) ?? null}
+                    names={areaNames}
+                    compact
+                    onsaved={areaNamesSaved}
+                    oncancel={() => (renamingInline = null)}
+                  />
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </div>
+        <div class="start-mow">
+          {#if offered.length}
+            <MowSettings
+              {offered}
+              spacing={spacingLimits}
+              bind:draft={sheet.patternDraft}
+              bind:remember={sheet.rememberPattern}
+              blade={ms?.blade_height_mm != null ? `${formatNumber(ms.blade_height_mm)} mm` : null}
+              speed={ms?.speed_mps != null ? `${formatNumber(ms.speed_mps, 2)} m/s` : null}
+              onadjust={adjustSetpoints}
+              bind:setpoints={sheet.setpointDraft}
+              {bladeRange}
+              {speedRange}
+            />
+          {:else}
+            <p class="hint" data-testid="start-no-patterns">{m.start_no_patterns()}</p>
+          {/if}
+        </div>
+      </div>
       {#snippet footer()}
-        <Button
-          variant="primary"
-          full
-          icon="play"
-          disabled={picked.length === 0}
-          onclick={startPicked}
-          testid="area-start">{m.area_picker_start({ count: picked.length })}</Button
-        >
+        {@const preview = sheet.preview}
+        {@const warning = sheet.startWarning}
+        <div class="start-row" data-testid="start-preview" data-state={preview.kind}>
+          {#if sheet.jobMinutes !== null}
+            <p class="start-duration mono" data-testid="start-duration">
+              {m.start_duration({ duration: formatDuration(sheet.jobMinutes) })}
+            </p>
+          {/if}
+          {#if warning}
+            <p class="start-rain-warning" role="alert" data-testid="start-rain-warning">
+              <Icon name="alert" size={16} />
+              {warning.kind === 'wet'
+                ? m.start_rain_wet({ time: formatClock(warning.start, locale) })
+                : warning.kind === 'now'
+                  ? m.start_rain_now({
+                      percent: warning.percent === null ? '–' : `${warning.percent} %`,
+                    })
+                  : m.start_rain_soon({
+                      time: formatClock(warning.start, locale),
+                      percent: warning.percent === null ? '–' : `${warning.percent} %`,
+                    })}
+            </p>
+          {/if}
+          <p
+            class="preview-status"
+            role="status"
+            data-testid="start-preview-status"
+            data-state={sheet.previewStale ? 'outdated' : preview.kind}
+          >
+            {#if preview.kind === 'loading'}
+              {m.start_preview_loading()}
+            {:else if sheet.previewStale}
+              {m.start_preview_outdated()}
+            {:else if preview.kind === 'ready'}
+              <span class="mono"
+                >{m.start_preview_ready({ count: formatNumber(preview.path.points_total) })}</span
+              >
+            {:else if preview.kind === 'error'}
+              <span class="bad">{m.start_preview_failed({ reason: preview.reason })}</span>
+            {:else}
+              {m.start_preview_hint()}
+            {/if}
+          </p>
+          <div class="start-buttons">
+            <Button
+              icon="route"
+              disabled={sheet.picked.length === 0 || preview.kind === 'loading'}
+              pending={preview.kind === 'loading'}
+              onclick={() => sheet.computePreview()}
+              testid="start-preview-path"
+              >{preview.kind === 'ready' && !sheet.previewStale
+                ? m.start_preview_again()
+                : m.start_preview_path()}</Button
+            >
+            <div class="start-go">
+              <Button
+                variant="primary"
+                full
+                icon="play"
+                disabled={sheet.picked.length === 0 || sheet.starting}
+                pending={sheet.starting}
+                onclick={() => sheet.startClick()}
+                testid="area-start"
+                >{sheet.starting
+                  ? m.start_sending()
+                  : warning && !sheet.rainConfirmed
+                    ? m.start_rain_anyway()
+                    : m.area_picker_start({ count: sheet.picked.length })}</Button
+              >
+            </div>
+          </div>
+        </div>
       {/snippet}
     </Sheet>
     <Sheet
-      open={!!renamingArea && !picking}
+      open={sheet.dockChoice}
+      title={m.dock_choice_title()}
+      closeLabel={m.close()}
+      onclose={() => (sheet.dockChoice = false)}
+      testid="dock-choice"
+    >
+      <p class="hint">{m.dock_choice_hint()}</p>
+      <div class="dock-choice">
+        <Button
+          variant="primary"
+          full
+          icon="dock"
+          testid="dock-choice-end"
+          onclick={() => sheet.dock(true)}>{m.dock_choice_end()}</Button
+        >
+        <Button full icon="dock" testid="dock-choice-keep" onclick={() => sheet.dock(false)}
+          >{m.dock_choice_keep()}</Button
+        >
+        <Button variant="ghost" full onclick={() => (sheet.dockChoice = false)}>{m.cancel()}</Button
+        >
+      </div>
+    </Sheet>
+    <Sheet
+      open={!!renamingArea && !sheet.picking}
       title={m.area_rename_title()}
       closeLabel={m.close()}
       onclose={() => (renaming = null)}
@@ -1511,6 +1920,79 @@
 
   .camera-off {
     margin: 0;
+  }
+
+  /* The start sheet: areas left, "Mähen" settings right from 1024 px; the start row is the
+     sheet's footer, always visible. */
+  .start-grid {
+    display: grid;
+    gap: var(--md-space-2);
+    min-inline-size: 0;
+  }
+
+  .start-areas,
+  .start-mow {
+    min-inline-size: 0;
+  }
+
+  @media (min-width: 1024px) {
+    .start-grid {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+      gap: var(--md-space-6);
+      align-items: start;
+    }
+
+    .start-mow {
+      padding-block-start: var(--md-space-2);
+    }
+  }
+
+  /* "Pfad berechnen" and "Starten" with what the mower answered, pinned in the sheet. */
+  .start-row {
+    display: grid;
+    gap: var(--md-space-2);
+  }
+
+  .start-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--md-space-2);
+  }
+
+  .start-go {
+    flex: 1 1 10rem;
+  }
+
+  .start-duration {
+    margin: 0;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+    line-height: var(--md-line-16);
+  }
+
+  .start-rain-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--md-space-2);
+    margin: 0;
+    padding: var(--md-space-2) var(--md-space-3);
+    border-inline-start: 3px solid var(--md-state-paused);
+    background: var(--md-color-surface-sunken);
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-12);
+    line-height: var(--md-line-16);
+  }
+
+  .preview-status {
+    margin: 0;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+    line-height: var(--md-line-16);
+  }
+
+  .preview-status .bad {
+    color: var(--md-state-error);
   }
 
   .status {
@@ -1658,6 +2140,12 @@
   .steppers {
     display: grid;
     gap: var(--md-space-2);
+  }
+
+  .hint.inexact {
+    margin-top: 0;
+    font-size: var(--md-font-size-12, 0.75rem);
+    font-style: italic;
   }
 
   .hint {
@@ -1845,6 +2333,12 @@
 
   .pick-row {
     border-bottom: var(--md-hairline) solid var(--md-color-line);
+  }
+
+  .dock-choice {
+    display: grid;
+    gap: var(--md-space-2);
+    margin-top: var(--md-space-3);
   }
 
   .pick-line {

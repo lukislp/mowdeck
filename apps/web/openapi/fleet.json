@@ -609,6 +609,18 @@
             "title": "Correlation Id",
             "type": "string"
           },
+          "end_job": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a `return_to_dock`: whether it also ended the job; None for other kinds.",
+            "title": "End Job"
+          },
           "expires_at": {
             "format": "date-time",
             "title": "Expires At",
@@ -645,6 +657,19 @@
             ],
             "description": "Service that issued the command on behalf of `issued_by` (e.g. `scheduler`); None for commands sent through the API.",
             "title": "Origin"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a `start_mow` on map areas: the pattern settings it was sent with (`StartMow.pattern`, mostly `MowPattern` keys); None otherwise or when it had none.",
+            "title": "Pattern"
           },
           "plan_hash": {
             "anyOf": [
@@ -1917,6 +1942,258 @@
         "title": "ModuleDescriptor",
         "type": "object"
       },
+      "MowDefaults": {
+        "description": "The saved mowing defaults of a mower (``MowerOut.mow_defaults``).",
+        "properties": {
+          "pattern": {
+            "$ref": "#/components/schemas/MowPattern"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "title": "MowDefaults",
+        "type": "object"
+      },
+      "MowDefaultsIn": {
+        "additionalProperties": false,
+        "description": "``PUT /mowers/{id}/mow-defaults``: the mowing defaults every client starts with.\n``pattern: null`` drops them (clients then use stripes, 0 degrees, one border lap).",
+        "properties": {
+          "pattern": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MowPatternIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "title": "MowDefaultsIn",
+        "type": "object"
+      },
+      "MowPath": {
+        "description": "The route a mower planned, in the local metres of its map.",
+        "properties": {
+          "area_ids": {
+            "description": "The map areas the route covers, in order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "mow",
+                    "edge",
+                    "transfer",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The kind of every polyline (same length), when known.",
+            "title": "Kinds"
+          },
+          "path_hash": {
+            "description": "The vendor's id of the planned route.",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Path Hash",
+            "type": "string"
+          },
+          "planned_at": {
+            "description": "When MowDeck received the route (UTC).",
+            "format": "date-time",
+            "title": "Planned At",
+            "type": "string"
+          },
+          "points_total": {
+            "description": "Number of points over all polylines.",
+            "minimum": 0.0,
+            "title": "Points Total",
+            "type": "integer"
+          },
+          "polylines": {
+            "description": "The route as polylines in driving order.",
+            "items": {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "title": "Polylines",
+            "type": "array"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MowPathProgress"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Progress of the running job; None for a preview."
+          }
+        },
+        "required": [
+          "path_hash",
+          "points_total",
+          "planned_at"
+        ],
+        "title": "MowPath",
+        "type": "object"
+      },
+      "MowPathProgress": {
+        "description": "Where the mower is along its path.",
+        "properties": {
+          "direction": {
+            "default": 0,
+            "description": "The vendor's traversal direction flag (0 or 1).",
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "title": "Direction",
+            "type": "integer"
+          },
+          "index": {
+            "description": "Points done so far, counted over all polylines in order: the points with a flat index below this value are mowed.",
+            "minimum": 0.0,
+            "title": "Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "title": "MowPathProgress",
+        "type": "object"
+      },
+      "MowPattern": {
+        "description": "The pattern settings of a native start (``StartMow.pattern``) that every client offers:\nthe pattern, its base angle, the border laps and the path spacing.\n\nAdapters may accept further keys in ``StartMow.pattern``; this is the common, validated\npart, also kept per mower as the mowing defaults in Fleet (``MowerOut.mow_defaults``).\nWhether the mower runs the pattern is decided with ``MowerCapabilities.native_patterns``.",
+        "properties": {
+          "angle_deg": {
+            "default": 0.0,
+            "description": "Base angle of the stripes in degrees (diagonal adds 45, checkerboard crosses at 90; ignored for `edge_only` and `random_angle`).",
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Angle Deg",
+            "type": "number"
+          },
+          "border_laps": {
+            "default": 1,
+            "description": "Laps along the area edge before the fill (`edge_only`: at least one).",
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Border Laps",
+            "type": "integer"
+          },
+          "name": {
+            "default": "stripes",
+            "description": "The native pattern.",
+            "enum": [
+              "stripes",
+              "diagonal",
+              "checkerboard",
+              "edge_only",
+              "random_angle"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "spacing_m": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Distance between neighbouring paths in metres; None for the mower's own default. Model limits: `MowerCapabilities.path_spacing_range_mm`.",
+            "title": "Spacing M"
+          }
+        },
+        "title": "MowPattern",
+        "type": "object"
+      },
+      "MowPatternIn": {
+        "additionalProperties": false,
+        "description": "``MowPattern`` as a request body: unknown keys are refused (422).",
+        "properties": {
+          "angle_deg": {
+            "default": 0.0,
+            "description": "Base angle of the stripes in degrees (diagonal adds 45, checkerboard crosses at 90; ignored for `edge_only` and `random_angle`).",
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Angle Deg",
+            "type": "number"
+          },
+          "border_laps": {
+            "default": 1,
+            "description": "Laps along the area edge before the fill (`edge_only`: at least one).",
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Border Laps",
+            "type": "integer"
+          },
+          "name": {
+            "default": "stripes",
+            "description": "The native pattern.",
+            "enum": [
+              "stripes",
+              "diagonal",
+              "checkerboard",
+              "edge_only",
+              "random_angle"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "spacing_m": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Distance between neighbouring paths in metres; None for the mower's own default. Model limits: `MowerCapabilities.path_spacing_range_mm`.",
+            "title": "Spacing M"
+          }
+        },
+        "title": "MowPatternIn",
+        "type": "object"
+      },
       "MowerGroupsIn": {
         "additionalProperties": false,
         "description": "``PUT /mowers/{id}/groups``: the complete set of groups.",
@@ -2137,6 +2414,17 @@
             ],
             "title": "Model"
           },
+          "mow_defaults": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MowDefaults"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mowing defaults every client starts with (`PUT /mowers/{id}/mow-defaults`); null until saved: then stripes at 0 degrees with one border lap."
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2259,6 +2547,39 @@
         "title": "MowerPatch",
         "type": "object"
       },
+      "PathPreviewRequest": {
+        "description": "Body of ``POST /api/v1/fleet/mowers/{id}/path-preview``: the areas and pattern of a\nstart whose route the mower should plan without starting.",
+        "properties": {
+          "area_ids": {
+            "description": "Map area ids, in order.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pattern settings as for `StartMow.pattern`.",
+            "title": "Pattern"
+          }
+        },
+        "required": [
+          "area_ids"
+        ],
+        "title": "PathPreviewRequest",
+        "type": "object"
+      },
       "PauseMow": {
         "description": "Pause the current job.",
         "properties": {
@@ -2376,8 +2697,13 @@
         "type": "object"
       },
       "ReturnToDock": {
-        "description": "Stop the job and drive back to the charging station.",
+        "description": "Pause or end the job and drive back to the charging station.",
         "properties": {
+          "end_job": {
+            "default": false,
+            "title": "End Job",
+            "type": "boolean"
+          },
           "kind": {
             "const": "return_to_dock",
             "default": "return_to_dock",
@@ -4320,6 +4646,128 @@
           }
         },
         "summary": "Set Mower Groups",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/mow-defaults": {
+      "put": {
+        "description": "Keep the mowing defaults of the mower (``can_control``; 403 when the mower is visible,\nelse 404): the pattern settings every client starts with (web start sheet, Home Assistant,\nschedules). ``pattern: null`` drops them. Nothing is sent to the mower; a start still\nnames its own pattern in ``StartMow.pattern``. Whether the mower runs the pattern is its\ncapabilities' business (``native_patterns``). Answers the mower with ``mow_defaults``.",
+        "operationId": "set_mow_defaults_api_v1_fleet_mowers__mower_id__mow_defaults_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MowDefaultsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_control`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "422": {
+            "description": "Unknown pattern, a value out of range or an unknown key."
+          }
+        },
+        "summary": "Set Mow Defaults",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/path-preview": {
+      "post": {
+        "description": "Let the mower plan the route of a start (areas and pattern as for ``start_mow``) without\nstarting it, as the vendor app does before a start: ``can_control`` on the mower (hidden\notherwise) and the plan feature ``control``. Fleet relays the request to the Device-Gateway\nthat holds the mower; planning and fetching the route take a few seconds to about a minute\n(over 4G longer), so clients show progress and allow up to 90 s. The route is not stored;\nthe start uses the same areas and pattern and the mower plans the same route again.",
+        "operationId": "preview_mow_path_api_v1_fleet_mowers__mower_id__path_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PathPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowPath"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The plan does not include the feature `control`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "`path-preview-unsupported`: the connection cannot plan without starting; `path-preview-rejected`: a job runs, or the areas or pattern do not fit."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The Device-Gateway did not answer or the mower is offline."
+          },
+          "504": {
+            "description": "`gateway-timeout`: the mower did not hand back its route in time."
+          }
+        },
+        "summary": "Preview Mow Path",
         "tags": [
           "mowers"
         ]

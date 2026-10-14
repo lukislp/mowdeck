@@ -264,6 +264,135 @@ async def test_mammotion_cloud_active_refresh_comes_from_the_option() -> None:
     assert ble_conn.refresh_interval_s == 0  # the BLE bridge has no refresh loop
 
 
+async def _wait_for_streams(port: FakeMammotionPort, count: int, timeout_s: float = 3.0) -> None:
+    async with asyncio.timeout(timeout_s):
+        while len(port.report_stream_requests) < count:  # noqa: ASYNC110
+            await asyncio.sleep(0.005)
+
+
+async def test_mammotion_report_stream_is_renewed_while_mowing() -> None:
+    port = FakeMammotionPort()
+    port.set_mode(WorkMode.MODE_WORKING)
+    conn = MammotionBase(
+        port, config(), refresh_interval_s=30.0, active_refresh_interval_s=5.0, report_stream_s=0.04
+    )
+    assert conn.report_stream_s == 0.04
+    await conn.connect()
+    await _wait_for_streams(port, 3)
+    await conn.disconnect()
+    assert set(port.report_stream_requests) == {40}  # the window, in ms
+    assert port.fresh_requests == []  # no one-shots while streaming
+
+
+async def test_mammotion_report_stream_is_not_started_while_docked() -> None:
+    port = FakeMammotionPort()
+    port.set_mode(WorkMode.MODE_READY)
+    conn = MammotionBase(
+        port,
+        config(),
+        refresh_interval_s=0.02,
+        active_refresh_interval_s=0.01,
+        report_stream_s=0.04,
+    )
+    await conn.connect()
+    await asyncio.sleep(0.15)
+    await conn.disconnect()
+    assert port.report_stream_requests == []
+    assert port.fresh_requests  # the idle one-shots
+
+
+async def test_mammotion_report_stream_stops_renewing_after_docking() -> None:
+    port = FakeMammotionPort()
+    port.set_mode(WorkMode.MODE_WORKING)
+    conn = MammotionBase(
+        port, config(), refresh_interval_s=30.0, active_refresh_interval_s=5.0, report_stream_s=0.04
+    )
+    await conn.connect()
+    await _wait_for_streams(port, 2)
+    port.set_mode(WorkMode.MODE_READY)
+    await port.emit()
+    await asyncio.sleep(0.05)
+    seen = len(port.report_stream_requests)
+    await asyncio.sleep(0.2)
+    assert len(port.report_stream_requests) == seen  # the window is left to expire, no stop command
+    assert all(c.name != "stop_report_stream" for c in port.sent)
+    await conn.disconnect()
+
+
+async def test_mammotion_report_stream_off_falls_back_to_one_shots() -> None:
+    port = FakeMammotionPort()
+    port.set_mode(WorkMode.MODE_WORKING)
+    conn = MammotionBase(
+        port, config(), refresh_interval_s=30.0, active_refresh_interval_s=0.01, report_stream_s=0
+    )
+    await conn.connect()
+    await _wait_for_requests(port, 3)
+    await conn.disconnect()
+    assert port.report_stream_requests == []
+    with pytest.raises(ValueError, match="report_stream_s"):
+        MammotionBase(FakeMammotionPort(), config(), report_stream_s=-1)
+
+
+async def test_mammotion_cloud_report_stream_comes_from_the_option() -> None:
+    conn, _ = cloud()
+    assert conn.report_stream_s == 60
+    assert cloud(report_stream_seconds=0)[0].report_stream_s == 0
+    assert ble()[0].report_stream_s == 0
+
+
+async def test_mammotion_job_command_boosts_reports_before_the_state_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mammotion_base, "BOOST_POLL_S", 0.02)
+    port = FakeMammotionPort()
+    port.cooperative = False  # the real mower reports the new mode a few seconds later
+    port.set_mode(WorkMode.MODE_READY)
+    conn = MammotionBase(
+        port, config(), refresh_interval_s=30.0, active_refresh_interval_s=5.0, report_stream_s=60
+    )
+    await conn.connect()
+    await asyncio.sleep(0.1)
+    assert port.report_stream_requests == [] and port.refreshes == 0  # docked, no commands
+    assert port.fresh_requests == []
+    await conn.dispatch(ResumeMow())
+    await _wait_for_streams(port, 3)  # still docked: the stream call is repeated with the polls
+    assert port.refreshes >= 2  # undebounced polls
+    assert set(port.report_stream_requests) == {60_000}
+    assert conn._last_state is not None and conn._last_state.activity is MowerActivity.DOCKED
+    port.set_mode(WorkMode.MODE_WORKING)
+    await port.emit()  # first active state: the stream window is renewed at once
+    seen = len(port.report_stream_requests)
+    await asyncio.sleep(0.1)
+    assert len(port.report_stream_requests) == seen + 1
+    refreshes = port.refreshes
+    await asyncio.sleep(0.1)
+    assert port.refreshes == refreshes  # active: no more fast polls
+    await conn.disconnect()
+
+
+async def test_mammotion_boost_ends_and_is_inert_without_a_refresh_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mammotion_base, "BOOST_POLL_S", 0.01)
+    monkeypatch.setattr(mammotion_base, "BOOST_MIN_S", 0.1)
+    port = FakeMammotionPort()
+    conn = MammotionBase(port, config(), refresh_interval_s=30.0)  # stream off
+    await conn.connect()
+    conn.boost_refresh()
+    await asyncio.sleep(0.3)
+    polls = port.refreshes
+    assert polls >= 3 and port.report_stream_requests == []
+    await asyncio.sleep(0.2)
+    assert port.refreshes == polls  # the boost ended
+    await conn.disconnect()
+    off = MammotionBase(FakeMammotionPort(), config())
+    await off.connect()
+    off.boost_refresh()
+    await asyncio.sleep(0.05)
+    assert off.port.refreshes == 0  # type: ignore[attr-defined]
+    await off.disconnect()
+
+
 async def test_mammotion_state_mapping_errors_are_logged_not_raised(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -390,6 +519,26 @@ async def test_mammotion_runs_the_native_job_of_a_spot_plan() -> None:
     outcome = await conn.execute(StartMow(spot_plan=_spot(native)))
     assert outcome.status is CommandStatus.EXECUTED
     assert port.names()[-2:] == ["generate_route_information", "start_job"]
+
+
+@pytest.mark.parametrize("mode", [WorkMode.MODE_PAUSE, WorkMode.MODE_WORKING])
+async def test_mammotion_return_with_end_job_cancels_the_job_first(mode: WorkMode) -> None:
+    conn, port = cloud()
+    await conn.connect()
+    port.set_mode(mode)
+    outcome = await conn.execute(ReturnToDock(end_job=True))
+    assert outcome.status is CommandStatus.EXECUTED
+    assert port.names() == ["cancel_job", "return_to_dock"]
+    assert all(c.priority is Priority.USER and c.via == "send" for c in port.sent)
+    assert port.device().report_data.dev.sys_status == int(WorkMode.MODE_RETURNING)
+
+
+async def test_mammotion_return_without_end_job_keeps_the_job() -> None:
+    conn, port = cloud()
+    await conn.connect()
+    port.set_mode(WorkMode.MODE_PAUSE)
+    await conn.execute(ReturnToDock())
+    assert port.names() == ["return_to_dock"]
 
 
 async def test_mammotion_start_mow_while_mowing_is_rejected() -> None:

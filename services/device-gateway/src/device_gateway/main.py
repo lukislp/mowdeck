@@ -8,7 +8,7 @@ Principals: with ``MOWDECK_AUTH_JWKS_URL`` set, bearer access tokens issued by I
 verified locally against its JWKS (``mowdeck-auth``); without it every request is 401.
 
 Start-up order: registry events, bootstrap mowers, command consumer, camera session requests,
-cloud discovery requests, Fleet sync (background).
+path preview requests, cloud discovery requests, Fleet sync (background).
 Shutdown order: stop the command consumer, answer in-flight commands, close every connection
 (publishing ``mower.disconnected``), stop the shared cloud sessions; the kit then drains and
 closes the bus.
@@ -32,6 +32,7 @@ from device_gateway.adapters.api.routes import router
 from device_gateway.adapters.bus.camera import subscribe_camera_requests
 from device_gateway.adapters.bus.cloud import DiscoveryMetrics, subscribe_cloud_discovery
 from device_gateway.adapters.bus.fleet import BusCredentialSource, BusFleetDirectory
+from device_gateway.adapters.bus.path_preview import subscribe_path_previews
 from device_gateway.adapters.bus.publisher import BusPublisher
 from device_gateway.adapters.bus.subscriptions import (
     CommandSubscription,
@@ -115,6 +116,7 @@ def build_app(
                 reconnect_initial_seconds=settings.reconnect_initial_seconds,
                 reconnect_max_seconds=settings.reconnect_max_seconds,
                 connection_check_seconds=settings.connection_check_seconds,
+                path_progress_seconds=settings.path_progress_seconds,
             ),
             credentials=BusCredentialSource(
                 active_bus, timeout_seconds=settings.fleet_request_timeout_seconds
@@ -144,6 +146,9 @@ def build_app(
         add_readiness_check(app, ReadinessCheck(name="commands", check=command_consumer))
         app.state.camera_requests = await subscribe_camera_requests(
             active_bus, gateway, registry=app.state.metrics_registry
+        )
+        app.state.path_previews = await subscribe_path_previews(
+            active_bus, gateway, timeout_seconds=settings.path_preview_timeout_seconds
         )
         app.state.cloud_discovery = await subscribe_cloud_discovery(
             active_bus,
@@ -178,6 +183,9 @@ def build_app(
         camera_requests: Subscription | None = getattr(app.state, "camera_requests", None)
         if camera_requests is not None:
             await camera_requests.unsubscribe()
+        path_previews: Subscription | None = getattr(app.state, "path_previews", None)
+        if path_previews is not None:
+            await path_previews.unsubscribe()
         cloud_discovery: Subscription | None = getattr(app.state, "cloud_discovery", None)
         if cloud_discovery is not None:
             await cloud_discovery.unsubscribe()

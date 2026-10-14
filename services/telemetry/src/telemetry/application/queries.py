@@ -187,6 +187,15 @@ class Queries:
             raise NoSnapshotYetError(msg, kind)
         return row
 
+    async def mow_path(self, account_id: UUID, mower_id: UUID) -> SnapshotRow:
+        """The mow path of the running job; raises :class:`NoSnapshotYetError` (kind ``path``)
+        without one or once the gateway cleared it (the job ended)."""
+        row = await self._store.snapshot_of(account_id, mower_id, "path")
+        if row is None or not row.body:
+            msg = "the mower has no planned path right now"
+            raise NoSnapshotYetError(msg, "path")
+        return row
+
     async def heatmap(
         self,
         account_id: UUID,

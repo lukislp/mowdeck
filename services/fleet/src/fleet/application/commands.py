@@ -99,7 +99,19 @@ def view(record: CommandRecord) -> CommandView:
         origin=record.origin,
         schedule_id=record.schedule_id,
         plan_hash=record.plan_hash,
+        end_job=bool(record.command.get("end_job", False))
+        if record.kind == "return_to_dock"
+        else None,
+        pattern=_start_pattern(record),
     )
+
+
+def _start_pattern(record: CommandRecord) -> dict[str, Any] | None:
+    """The pattern settings of a ``start_mow`` on map areas (the history shows them)."""
+    if record.kind != "start_mow" or record.command.get("spot_plan") is not None:
+        return None
+    pattern = record.command.get("pattern")
+    return dict(pattern) if isinstance(pattern, dict) else None
 
 
 def audit_form(command: ContractModel) -> tuple[dict[str, Any], str | None]:

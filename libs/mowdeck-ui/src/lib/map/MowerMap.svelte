@@ -18,6 +18,10 @@
   (`layers.ts`); this component only maps descriptors to Leaflet layers. Leaflet is loaded
   lazily; `onfail` reports a failed load so the page can fall back to a schematic plan.
 
+  The mower's planned mow path (`path`, see `mow-path.ts`): a thin line in the accent colour,
+  the part already mowed (up to `progress.index`) solid and the part ahead dimmed, in its own
+  pane below the driven route, with a legend entry; `pathPreview` captions it as a preview.
+
   Texts arrive translated in `labels`; area selection is reported with `onselectionchange`.
   With `onarealabel` each area label gets a small edit button (rename an area from the map).
 -->
@@ -60,6 +64,12 @@
     selectArea: (name: string) => string;
     /** Accessible name of the edit button beside an area label, given the area's name. */
     renameArea?: (name: string) => string;
+    /** Legend of the planned mow path: its title, the mowed part, the part ahead, and the
+     * caption of a preview (a route planned without a start). */
+    path?: string;
+    pathDone?: string;
+    pathAhead?: string;
+    pathPreview?: string;
   }
 
   /** An optional raster tile layer (from the installation's runtime config). */
@@ -89,6 +99,7 @@
   import { createProjection, type MapCoord } from './projection';
   import { RTK_CELL_SIZES, binRtk, cellRing, type RtkAggregate, type RtkCellSize } from './rtk';
   import { gapOutlines, heatCells, heatRing, type HeatGap, type HeatLayerData } from './heat';
+  import { pathLayers, type MapMowPath } from './mow-path';
   import { scaleFor } from './scale';
 
   type LeafletModule = typeof import('leaflet');
@@ -104,6 +115,10 @@
     heat?: HeatLayerData | null;
     /** One missed spot (local metres) to outline strongly and bring into view. */
     highlightGap?: HeatGap | null;
+    /** The mower's planned mow path (local metres) with its progress, or null for none. */
+    path?: MapMowPath | null;
+    /** The path is a preview (planned without a start): the legend says so. */
+    pathPreview?: boolean;
     /**
      * Points of the RTK signal map (defaults to `route`), e.g. a longer time range.
      * @deprecated Use `heat` with the `rtk` layer of the heatmap endpoint.
@@ -145,6 +160,8 @@
     route = [],
     heat = undefined,
     highlightGap = null,
+    path = null,
+    pathPreview = false,
     rtkPoints = null,
     showRtk = $bindable(false),
     rtkCellSize = $bindable(1),
@@ -180,7 +197,7 @@
   // Leaflet objects are not reactive state: effects own them.
   let lmap: Leaflet.Map | null = null;
   let groups: Record<
-    'heat' | 'gaps' | 'rtk' | 'areas' | 'zones' | 'paths' | 'route' | 'labels' | 'dock',
+    'heat' | 'gaps' | 'rtk' | 'areas' | 'zones' | 'paths' | 'mowpath' | 'route' | 'labels' | 'dock',
     Leaflet.LayerGroup
   > | null = null;
   let areaPolygons = new Map<string, Leaflet.Polygon>();
@@ -209,6 +226,8 @@
   const highlighted = $derived(
     highlightGap ? (gapOutlines([highlightGap], projection)[0] ?? null) : null,
   );
+  const pathPieces = $derived(pathLayers(path, projection));
+  const pathHasProgress = $derived(!!path?.progress && pathPieces.some((piece) => piece.done));
 
   // --- Leaflet loading and the map instance -------------------------------------------------
 
@@ -256,6 +275,7 @@
       ['md-heat', 380],
       ['md-rtk', 390],
       ['md-gap', 440],
+      ['md-mowpath', 445],
       ['md-route', 450],
       ['md-mower', 650],
     ] as const) {
@@ -294,6 +314,7 @@
       areas: lib.layerGroup().addTo(instance),
       zones: lib.layerGroup().addTo(instance),
       paths: lib.layerGroup().addTo(instance),
+      mowpath: lib.layerGroup().addTo(instance),
       route: lib.layerGroup().addTo(instance),
       labels: lib.layerGroup().addTo(instance),
       dock: lib.layerGroup().addTo(instance),
@@ -500,6 +521,7 @@
     for (const segment of model.segments) {
       const classes = ['md-route', `md-route--age-${segment.age}`];
       if (segment.rtk) classes.push(`md-route--rtk-${segment.rtk}`);
+      if (segment.inexact) classes.push('md-route--inexact');
       lib
         .polyline(segment.points, {
           pane: 'md-route',
@@ -507,6 +529,32 @@
           className: classes.join(' '),
         })
         .addTo(g.route);
+    }
+  });
+
+  // --- planned mow path: the part ahead dimmed, the mowed part solid on top -----------------
+
+  $effect(() => {
+    void generation;
+    const lib = L;
+    const g = groups;
+    const pieces = pathPieces;
+    if (!lib || !g) return;
+    g.mowpath.clearLayers();
+    // Ahead first, so the mowed part is drawn over the shared point.
+    for (const piece of [...pieces].sort((a, b) => Number(a.done) - Number(b.done))) {
+      const classes = [
+        'md-mowpath',
+        piece.done ? 'md-mowpath--done' : 'md-mowpath--ahead',
+        `md-mowpath--${piece.kind}`,
+      ];
+      lib
+        .polyline(piece.points, {
+          pane: 'md-mowpath',
+          interactive: false,
+          className: classes.join(' '),
+        })
+        .addTo(g.mowpath);
     }
   });
 
@@ -761,6 +809,9 @@
   data-heat-cells={heat ? heatRects.length : undefined}
   data-heat-kind={heat?.legend.kind}
   data-heat-gap={highlighted ? highlighted.index : undefined}
+  data-path-points={path ? path.points_total : undefined}
+  data-path-done={path?.progress ? path.progress.index : undefined}
+  data-path-preview={path && pathPreview ? 'true' : undefined}
 >
   <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
     <defs>
@@ -790,6 +841,22 @@
       </span>
     {/if}
   </div>
+
+  {#if path && pathPieces.length && labels.path}
+    <ul
+      class="legend legend--path"
+      class:legend--below={showRtk || (rtkTint && showRoute)}
+      data-testid="mow-path-legend"
+    >
+      <li class="legend-title">
+        {labels.path}{#if pathPreview && labels.pathPreview}<span class="legend-caption"
+            >{labels.pathPreview}</span
+          >{/if}
+      </li>
+      {#if pathHasProgress && labels.pathDone}<li data-path="done">{labels.pathDone}</li>{/if}
+      {#if labels.pathAhead}<li data-path="ahead">{labels.pathAhead}</li>{/if}
+    </ul>
+  {/if}
 
   {#if showRtk}
     <ul class="legend legend--cells" data-testid="map-rtk-legend">
@@ -1110,6 +1177,11 @@
     stroke-opacity: 1;
   }
 
+  /* Driven without an RTK fix: the line is a guess, so it is dashed. */
+  .md-map :global(path.md-route--inexact) {
+    stroke-dasharray: 5 5;
+  }
+
   .md-map :global(path.md-route--rtk-fixed) {
     stroke: var(--md-rtk-fixed);
   }
@@ -1124,6 +1196,30 @@
 
   .md-map :global(path.md-route--rtk-unknown) {
     stroke: var(--md-state-unknown);
+    stroke-dasharray: 2 4;
+  }
+
+  /* --- planned mow path: accent colour, the mowed part solid, the part ahead dimmed ---------- */
+
+  .md-map :global(path.md-mowpath) {
+    fill: none;
+    stroke: var(--md-color-focus);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .md-map :global(path.md-mowpath--ahead) {
+    stroke-width: 1.25;
+    stroke-opacity: 0.38;
+  }
+
+  .md-map :global(path.md-mowpath--done) {
+    stroke-width: 2;
+    stroke-opacity: 1;
+  }
+
+  /* Driving between areas with the blades off: dotted, like the transfer paths of the map. */
+  .md-map :global(path.md-mowpath--transfer) {
     stroke-dasharray: 2 4;
   }
 
@@ -1490,6 +1586,42 @@
 
   .legend [data-rtk='unknown'] {
     --md-legend: var(--md-state-unknown);
+  }
+
+  .legend--path {
+    gap: var(--md-space-1);
+  }
+
+  .legend--path.legend--below {
+    top: auto;
+    bottom: calc(var(--md-space-3) + 48px);
+  }
+
+  .legend--path [data-path='done'] {
+    --md-legend: var(--md-color-focus);
+  }
+
+  .legend--path [data-path='ahead'] {
+    --md-legend: color-mix(in srgb, var(--md-color-focus) 38%, var(--md-color-surface));
+  }
+
+  .legend--path .legend-title {
+    display: flex;
+    align-items: center;
+    gap: var(--md-space-2);
+  }
+
+  .legend--path .legend-title::before {
+    display: none;
+  }
+
+  .legend-caption {
+    padding: 0 var(--md-space-1);
+    border: var(--md-hairline) solid var(--md-color-focus);
+    color: var(--md-color-focus);
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-11);
+    letter-spacing: 0;
   }
 
   .legend--cells li::before {

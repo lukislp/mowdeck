@@ -74,6 +74,12 @@
             "title": "End",
             "type": "string"
           },
+          "past": {
+            "default": false,
+            "description": "The hour ended before the decision time.",
+            "title": "Past",
+            "type": "boolean"
+          },
           "precipitation_mm": {
             "anyOf": [
               {
@@ -397,6 +403,19 @@
             ],
             "title": "Longitude"
           },
+          "pause_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When a `hold` ends, by the Scheduler's rule; null when not holding or when the forecast does not reach that time.",
+            "title": "Pause Until"
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
@@ -404,6 +423,32 @@
           "reason": {
             "title": "Reason",
             "type": "string"
+          },
+          "recent_mm_24h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Mm 24H"
+          },
+          "recent_mm_6h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Mm 6H"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/RainPause",
+            "description": "The rain pause settings the decision applied (the schedule's, or the query parameters and defaults)."
           },
           "verdict": {
             "enum": [
@@ -416,6 +461,25 @@
             ],
             "title": "Verdict",
             "type": "string"
+          },
+          "wet": {
+            "default": false,
+            "description": "The lawn is still wet from earlier rain.",
+            "title": "Wet",
+            "type": "boolean"
+          },
+          "wet_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimated dry time.",
+            "title": "Wet Until"
           }
         },
         "required": [
@@ -426,7 +490,8 @@
           "location_source",
           "latitude",
           "longitude",
-          "hours"
+          "hours",
+          "settings"
         ],
         "title": "RainDecisionOut",
         "type": "object"

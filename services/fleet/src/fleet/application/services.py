@@ -10,6 +10,8 @@ from mowdeck_contracts.v1 import (
     CameraSessionRequest,
     CloudDiscoverReply,
     CloudDiscoverRequest,
+    PathPreviewGatewayRequest,
+    PathPreviewReply,
 )
 from mowdeck_service_kit.entitlements import Entitlements
 
@@ -23,12 +25,14 @@ from fleet.application.drive import DriveService
 from fleet.application.groups import GroupService
 from fleet.application.linked_accounts import CredentialVault, LinkedAccountService
 from fleet.application.mowers import MowerService
+from fleet.application.path_preview import PathPreviewService
 from fleet.application.ports import (
     CameraGateway,
     Clock,
     CloudDiscovery,
     CommandPublisher,
     EventPublisher,
+    PathPreviewGateway,
     SecretCipher,
     Store,
 )
@@ -48,6 +52,7 @@ class Services:
     commands: CommandService
     drive: DriveService
     camera: CameraService
+    path_preview: PathPreviewService
     linked_accounts: LinkedAccountService
     access: Access
     writer: TupleWriter
@@ -65,6 +70,7 @@ def build_services(
     caches: Sequence[SupportsInvalidate] = (),
     entitlements: Entitlements | None = None,
     camera_gateway: CameraGateway | None = None,
+    path_preview_gateway: PathPreviewGateway | None = None,
     cloud_discovery: CloudDiscovery | None = None,
     cipher: SecretCipher | None = None,
 ) -> Services:
@@ -82,6 +88,9 @@ def build_services(
         commands=CommandService(store, access, commands, config, clock, entitlements),
         drive=DriveService(store, access, clock),
         camera=CameraService(store, camera_gateway or _NoCameraGateway(), clock, entitlements),
+        path_preview=PathPreviewService(
+            store, path_preview_gateway or _NoPathPreviewGateway(), entitlements
+        ),
         linked_accounts=LinkedAccountService(
             uow,
             store,
@@ -100,6 +109,14 @@ class _NoCameraGateway:
     """Without a bus no gateway can answer (tests and NATS-less runs): every request fails."""
 
     async def request(self, request: CameraSessionRequest) -> CameraSessionReply:
+        msg = "no device gateway is reachable (no event bus)"
+        raise ConnectionError(msg)
+
+
+class _NoPathPreviewGateway:
+    """Without a bus no gateway can plan a route: every request fails."""
+
+    async def request(self, request: PathPreviewGatewayRequest) -> PathPreviewReply:
         msg = "no device gateway is reachable (no event bus)"
         raise ConnectionError(msg)
 

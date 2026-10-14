@@ -60,6 +60,15 @@ class Settings(ServiceSettings):
     including a frame of the capture worker (stream token, the mower starting to publish, the
     first decoded frame). Keep it below Vision's ``VISION_PHOTO_TIMEOUT_SECONDS``."""
 
+    path_preview_timeout_seconds: float = Field(default=75.0, gt=0, le=120)
+    """Longest wait for a route the mower plans for a preview (``gateway.mower.<id>.path.preview``):
+    the mower plans, then PyMammotion fetches the line list and the cover path frames. Keep it
+    below Fleet's ``MOWDECK_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS``, so Fleet gets the ``timeout``
+    reply."""
+
+    path_progress_seconds: float = Field(default=5.0, gt=0, le=600)
+    """A mow path snapshot whose only change is the progress is republished at most this often."""
+
     capture_url: str | None = None
     """Base URL of the capture worker (``http://vision-capture:8000``, ADR 0035). When set,
     mowers whose adapter offers a live camera but cannot take photos (the Mammotion cloud

@@ -30,7 +30,25 @@ export interface MapMowerState {
   activity: string;
   position?: { lat: number; lon: number; heading?: number | null } | null;
   rtk_fix?: string;
+  /** Where the position comes from; `dock` is the known dock pose, not a measurement. */
+  position_source?: string;
   observed_at?: string;
+}
+
+/**
+ * The position is a plain GNSS guess: no RTK fix (`none`) and not the dock pose, which the
+ * mower reports without a fix on purpose.
+ */
+export function isPositionInexact(
+  state:
+    | {
+        rtk_fix?: string;
+        position_source?: string;
+      }
+    | null
+    | undefined,
+): boolean {
+  return state?.rtk_fix === 'none' && state.position_source !== 'dock';
 }
 
 /** One point of the driven route (`PositionOut` of Telemetry, or a live state's position). */
@@ -110,8 +128,10 @@ export interface MowerLayer {
   /** Screen rotation of the chevron, or null when the heading is unknown (drawn as a dot). */
   rotation: number | null;
   tone: Exclude<Activity, 'idle'>;
-  /** Stale or offline: drawn hollow and dashed. */
+  /** Stale, offline or without an RTK fix: drawn hollow and dashed. */
   hollow: boolean;
+  /** No RTK fix and not the dock pose (`isPositionInexact`). */
+  inexact: boolean;
 }
 
 export interface RouteSegment {
@@ -119,6 +139,8 @@ export interface RouteSegment {
   age: RouteAge;
   /** RTK class of the segment when the RTK tint is on, otherwise null. */
   rtk: RtkClass | null;
+  /** Driven without an RTK fix (`none`): drawn dashed, with or without the tint. */
+  inexact: boolean;
 }
 
 export interface GridLine {
@@ -229,11 +251,12 @@ export function routeSegments(
     const coord = projection.fromWgs84(p.lat, p.lon);
     const age = ageOf(t);
     const rtk = options.rtkTint ? rtkClass(p.rtk_fix) : null;
+    const inexact = p.rtk_fix === 'none';
     if (previous && t - previous.t > gapMs) {
       current = null; // a gap: the next point starts a new line
     } else if (previous) {
-      if (!current || current.age !== age || current.rtk !== rtk) {
-        current = { points: [previous.coord], age, rtk };
+      if (!current || current.age !== age || current.rtk !== rtk || current.inexact !== inexact) {
+        current = { points: [previous.coord], age, rtk, inexact };
         segments.push(current);
       }
       current.points.push(coord);
@@ -276,6 +299,7 @@ export function buildLayers(input: LayerInput): MapLayers {
   const position = state?.position;
   if (state && position && Number.isFinite(position.lat) && Number.isFinite(position.lon)) {
     const activity: Activity = isActivity(state.activity) ? state.activity : 'unknown';
+    const inexact = isPositionInexact(state);
     mower = {
       at: projection.fromWgs84(position.lat, position.lon),
       rotation:
@@ -283,7 +307,8 @@ export function buildLayers(input: LayerInput): MapLayers {
           ? null
           : projection.headingToScreen(position.heading),
       tone: activityTone(activity),
-      hollow: !!input.stale || activity === 'offline',
+      hollow: !!input.stale || activity === 'offline' || inexact,
+      inexact,
     };
   }
 

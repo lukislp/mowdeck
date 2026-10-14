@@ -40,6 +40,9 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerMap,
     MowerState,
+    MowPath,
+    MowPathKind,
+    MowPathProgress,
     PositionSource,
     RtkFixStatus,
     RtkSource,
@@ -54,6 +57,7 @@ from mowdeck_control_mammotion.port import (
     DeviceType,
     FrameList,
     MowerDevice,
+    MowPathPacket,
     OperationSettings,
     PathAngleSetting,
     RTKStatus,
@@ -327,6 +331,12 @@ def raw_of(
         raw["blade_used_s"] = int(blade.blade_used_time)
     if blade.blade_used_warn_time > 0:
         raw["blade_used_warn_s"] = int(blade.blade_used_warn_time)
+    work = rd.work
+    if work.cutter_offset > 0:
+        raw["cutter_offset_m"] = float(work.cutter_offset)
+    if work.cutter_width > 0:
+        raw["cutter_width_m"] = float(work.cutter_width)
+    raw["pos_type"] = int(device.location.position_type)
     return raw
 
 
@@ -422,7 +432,7 @@ def state_of(
 def has_light(device_name: str, product_key: str = "") -> bool:
     """True for models with the camera's headlamp ("fill light"): PyMammotion's
     ``DeviceType.is_support_fill_light`` (the app's own gate for the manual and night light
-    rows; true for the Luba VP of the owner, ``Luba-VPNRXLU2``, the Luba 2 VA/LD/MN/HM and the
+    rows; true for the LUBA 2 AWD X (``Luba-VP…``), the Luba 2 VA/LD/MN/HM and the
     Yuka minis; false for the Luba 1 and the big Yuka). ``product_key`` is unused: the helper
     decides by the device name only. The side LEDs (``read_and_set_sidelight``) are a different
     light and not switched here."""
@@ -486,6 +496,13 @@ _CUTTING_WIDTH_MM: Final[Mapping[DeviceType, int]] = {
 (``path_spacing`` is the spacing of the mowing lines, not the swath), so these are the
 manufacturer's figures: Luba 1, LUBA 2 AWD (``Luba-VS``) and LUBA 2 AWD X (``Luba-VP``) 400 mm,
 Yuka 320 mm. Other families (minis, newer models) stay unknown."""
+
+
+def reported_cutting_width_mm(device: MowerDevice) -> int | None:
+    """The device's own cutting width (``report_data.work.cutter_width``, assumed metres,
+    unverified) in millimetres, None until it reported one (> 0)."""
+    width = device.report_data.work.cutter_width
+    return round(width * 1000) if width > 0 else None
 
 
 def cutting_width_of(device_name: str, product_key: str = "") -> int | None:
@@ -563,13 +580,15 @@ def capabilities_of(
     (:func:`port.model_config_of`): the entry of ``mower_state.sub_model_id`` (the exact model,
     sent in answer to ``get_device_product_model``), else of the product key. The speed range is
     the mowing speed (``cutting_speed_min/max``; ``working_speed_min/max`` is the faster travel
-    speed and only used when the entry has no cutting speed). Without an entry the limits stay
+    speed and only used when the entry has no cutting speed); the path spacing range comes from
+    the same entry (:func:`path_spacing_of`, centimetres there). Without an entry the limits stay
     unset (the controller then rejects the commands): PyMammotion's own fallback for a Luba VP
     is the Yuka table, which is wrong for it.
     """
     profile = model_profile(device_name, product_key)
     with_camera = camera and has_camera(device_name, product_key)
     blade, speed = model_limits(device, product_key)
+    spacing = path_spacing_of(device, product_key)
     return MowerCapabilities(
         light=has_light(device_name, product_key),
         model=model[:64] if model else model_name(device_name, product_key, device),
@@ -580,7 +599,9 @@ def capabilities_of(
         camera=CameraAccess.CLOUD if with_camera else CameraAccess.NONE,
         rtk_sources=profile.rtk_sources,
         blade_height_range_mm=blade,
-        cutting_width_mm=cutting_width_of(device_name, product_key),
+        path_spacing_range_mm=(spacing[0] * 10, spacing[1] * 10) if spacing else None,
+        cutting_width_mm=reported_cutting_width_mm(device)
+        or cutting_width_of(device_name, product_key),
         min_speed_mps=speed[0] if speed else None,
         max_speed_mps=speed[1] if speed else None,
         connection_kinds=CONNECTION_KINDS,
@@ -804,6 +825,125 @@ def area_summary(mower_map: MowerMap) -> list[dict[str, Any]]:
             }
         )
     return summary
+
+
+# --- Mow path ---------------------------------------------------------------------------------
+
+_PATH_KINDS: Final[Mapping[int, MowPathKind]] = {0: "mow", 2: "edge"}
+"""``cover_path_packet_t.path_type``: 0 the fill stripes, 2 the border laps (PyMammotion's
+``generate_geojson.py``, ``MOW_STRIPE_STYLE`` and ``BORDER_PASS_STYLE``); others are unknown."""
+_PATH_JOB_MODES: Final = frozenset(
+    int(m)
+    for m in (
+        WorkMode.MODE_WORKING,
+        WorkMode.MODE_PAUSE,
+        WorkMode.MODE_RETURNING,
+        WorkMode.MODE_CHARGING_PAUSE,
+        WorkMode.MODE_CORRIDOR_PAUSE,
+    )
+)
+"""Work modes in which a job (and so its route) is in progress, returning included."""
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedPath:
+    """A :class:`MowPath` plus the vendor's line hash of every polyline (same order), which the
+    progress of the report refers to."""
+
+    path: MowPath
+    line_hashes: tuple[int, ...]
+
+
+def path_job_running(device: MowerDevice) -> bool:
+    """True while the work mode is one of a job in progress (mowing, paused, returning)."""
+    return device.report_data.dev.sys_status in _PATH_JOB_MODES
+
+
+def mow_path_of(
+    device: MowerDevice, *, planned_at: datetime, complete_only: bool = True
+) -> PlannedPath | None:
+    """The route PyMammotion's ``MowPathSaga`` collected, in local metres (the map's frame).
+
+    The route is the line hash list (``HashList.line_root_hashlist``, sub_cmd 3, in driving
+    order) and per line its cover path packets in ``HashList.current_mow_path``
+    (``[transaction][frame].path_packets``, ordered by ``path_cur``), exactly as PyMammotion's
+    ``generate_mow_progress_geojson`` assembles them. Transactions with missing frames are
+    skipped, packets of lines outside the current list (an older route) are ignored. With
+    ``complete_only`` a route with a missing line is None (the progress would be off);
+    otherwise the lines that arrived are returned. The id is ``HashList.computed_path_hash``
+    (equal to the report's ``work.path_hash`` when the list is current), as text.
+    """
+    hash_list = device.map
+    lines = list(dict.fromkeys(h for h in hash_list.line_root_hashlist if h))
+    if not lines:
+        return None
+    wanted = set(lines)
+    incomplete = hash_list.find_missing_mow_path_frames()
+    packets: dict[int, dict[int, MowPathPacket]] = {}
+    for transaction_id in sorted(hash_list.current_mow_path):
+        if transaction_id in incomplete:
+            continue
+        frames = hash_list.current_mow_path[transaction_id]
+        for frame_index in sorted(frames):
+            for packet in frames[frame_index].path_packets:
+                if packet.path_hash in wanted:
+                    packets.setdefault(packet.path_hash, {})[packet.path_cur] = packet
+    polylines: list[list[LocalPoint]] = []
+    kinds: list[MowPathKind] = []
+    zones: list[str] = []
+    hashes: list[int] = []
+    for line in lines:
+        by_cur = packets.get(line)
+        points = (
+            [(float(p.x), float(p.y)) for cur in sorted(by_cur) for p in by_cur[cur].data_couple]
+            if by_cur
+            else []
+        )
+        if not points:
+            if complete_only:
+                return None
+            continue
+        first = by_cur[min(by_cur)] if by_cur else None
+        polylines.append(points)
+        kinds.append(_PATH_KINDS.get(first.path_type, "other") if first else "other")
+        if first is not None and first.zone_hash and str(first.zone_hash) not in zones:
+            zones.append(str(first.zone_hash))
+        hashes.append(line)
+    if not polylines:
+        return None
+    path = MowPath(
+        path_hash=str(hash_list.computed_path_hash),
+        polylines=polylines,
+        kinds=kinds,
+        points_total=sum(len(line) for line in polylines),
+        area_ids=zones,
+        planned_at=planned_at,
+    )
+    return PlannedPath(path=path, line_hashes=tuple(hashes))
+
+
+def path_progress_of(device: MowerDevice, planned: PlannedPath) -> MowPathProgress | None:
+    """Where the running job is on ``planned``, from the report's ``work``; None when the report
+    belongs to another route or names a line the path does not hold.
+
+    ``ub_path_hash`` is the line being driven and ``now_index`` (``real_path_num`` bits 8 to 23)
+    the point index within it; the lines before it in the route are done (PyMammotion's
+    ``generate_mow_progress_geojson``). The progress counts points over all polylines.
+    """
+    work = device.report_data.work
+    if not path_job_running(device) or str(work.path_hash) != planned.path.path_hash:
+        return None
+    lines = planned.line_hashes
+    if work.ub_path_hash in lines:
+        active = lines.index(work.ub_path_hash)
+    elif work.ub_path_hash == 0 and len(lines) == 1:
+        active = 0
+    else:
+        return None
+    polylines = planned.path.polylines
+    done = sum(len(line) for line in polylines[:active])
+    done += min(max(work.now_index, 0), len(polylines[active]))
+    return MowPathProgress(index=done, direction=work.path_direction & 0xFF)
 
 
 # --- Commands ---------------------------------------------------------------------------------

@@ -244,12 +244,20 @@ async def test_scheduler_api_preview_and_weather() -> None:
     assert body["items"][0]["window_end"] == "2026-10-09T10:30:00Z"
     assert body["weather"]["verdict"] == "run" and body["weather"]["location_source"] == "map"
     assert body["weather_mower_id"] == str(mower_id)
-    assert len(body["weather"]["hours"]) == 6  # 2 h back, 3 h ahead, partial hours included
+    hours = body["weather"]["hours"]
+    assert len(hours) == 16  # 12 h back (the readout), 3 h ahead, partial hours included
+    assert any(h["past"] for h in hours) and not all(h["past"] for h in hours)
+    assert "wet" in body["weather"] and "recent_mm_24h" in body["weather"]
     decision = weather.json()["decision"]
     assert decision["verdict"] == "hold" and decision["holds"] is True
     assert decision["provider"] == "static" and decision["attribution"] is None
     assert (decision["latitude"], decision["longitude"]) == (48.137154, 11.576124)
+    # the web shows what the Scheduler decides: the hold's end and the settings used come back
+    assert decision["pause_until"] is None  # static rain lasts past the forecast
+    assert decision["settings"]["probability_threshold"] == 60
     assert lenient.json()["decision"]["verdict"] == "run"
+    assert lenient.json()["decision"]["settings"]["probability_threshold"] == 95
+    assert body["weather"]["pause_until"] is None and body["weather"]["settings"]["enabled"]
     assert unknown_mower.status_code == 404
     assert too_many.status_code == 422
 

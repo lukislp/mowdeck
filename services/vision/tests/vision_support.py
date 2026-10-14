@@ -72,6 +72,7 @@ from mowdeck_service_kit.testing import FakeEntitlements, lifespan_client
 from vision.adapters.memory import MemoryStore
 from vision.application.assist import VisionService
 from vision.application.ports import VisionProvider
+from vision.domain.calibration import Correspondences, CorrespondencesOut, FrameSize
 from vision.domain.context import SceneContext
 from vision.domain.errors import ProviderFailed
 from vision.domain.models import (
@@ -139,6 +140,21 @@ class StaticProvider:
             Usage(input_tokens=1200, output_tokens=150, cost_usd=0.0039, latency_ms=12),
         )
 
+    async def correspond(
+        self, left: Image, right: Image, left_size: FrameSize, right_size: FrameSize
+    ) -> Correspondences:
+        self.factory.correspondence_calls.append((self.config, left_size, right_size))
+        if self.factory.delay:
+            await asyncio.sleep(self.factory.delay)
+        if self.factory.fail:
+            raise ProviderFailed(self.factory.fail)
+        return Correspondences(
+            self.factory.correspondences,
+            self.config.model,
+            self.config.family,
+            Usage(input_tokens=2400, output_tokens=300, cost_usd=0.0072, latency_ms=20),
+        )
+
 
 @dataclass
 class StaticFactory:
@@ -149,6 +165,10 @@ class StaticFactory:
     fail: str | None = None
     delay: float = 0.0
     calls: list[tuple[ProviderConfig, int, SceneContext, VisionTask]] = field(default_factory=list)
+    correspondences: CorrespondencesOut = field(default_factory=CorrespondencesOut)
+    correspondence_calls: list[tuple[ProviderConfig, FrameSize, FrameSize]] = field(
+        default_factory=list
+    )
 
     def create(self, config: ProviderConfig) -> VisionProvider:
         return StaticProvider(config, self)

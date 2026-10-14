@@ -19,6 +19,7 @@
     fit: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5M10 10h4v4h-4z',
     crosshair: 'M12 2v5M12 17v5M2 12h5M17 12h5M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
     layers: 'M12 3l9 5-9 5-9-5 9-5ZM3 12.5l9 5 9-5M3 17l9 5 9-5',
+    route: 'M4 20V5h5v14h5V5h6v15',
     expand: 'M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5',
     collapse: 'M20 10h-6V4M4 14h6v6M14 10l6.5-6.5M10 14l-6.5 6.5',
     close: 'M5 5l14 14M19 5L5 19',

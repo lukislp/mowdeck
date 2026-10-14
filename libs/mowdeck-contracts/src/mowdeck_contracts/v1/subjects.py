@@ -9,6 +9,7 @@ Subject scheme:
 ``event.<domain>.<name>``             domain events, e.g. ``event.mower.registered``
 ``device.mower.<mower_id>.map``       map snapshot of one mower (stream ``DEVICE``)
 ``device.mower.<mower_id>.capabilities``  capability snapshot (stream ``DEVICE``)
+``device.mower.<mower_id>.path``      mow path of the running job (stream ``DEVICE``)
 ``fleet.mowers.list``                 core NATS request: mower registrations of a shard
 ``fleet.mowers.credentials``          core NATS request: the withheld secrets of one mower
 ``fleet.commands.issue``              core NATS request: a command on behalf of a subject
@@ -19,6 +20,7 @@ Subject scheme:
 ``entitlements.plan.set``             core NATS request: Billing sets the plan of an account
 ``tracks.positions.query``            core NATS request: the position track of a mower (Telemetry)
 ``gateway.mower.<id>.camera.session``  core NATS request: a live camera session (Device-Gateway)
+``gateway.mower.<id>.path.preview``   core NATS request: plan a route without starting (Gateway)
 ``gateway.mower.<mower_id>.photo``    core NATS request: a still image of one mower (Vision)
 ``gateway.cloud.discover``            core NATS request: devices of a vendor cloud account
 ====================================  ============================================
@@ -43,7 +45,7 @@ COMMAND_RESULT_PREFIX = "command.result.mower"
 TELEMETRY_PREFIX = "telemetry.mower"
 EVENT_PREFIX = "event"
 DEVICE_PREFIX = "device.mower"
-DEVICE_SNAPSHOT_KINDS = ("map", "capabilities")
+DEVICE_SNAPSHOT_KINDS = ("map", "capabilities", "path")
 """The snapshot kinds below ``device.mower.<id>``."""
 
 FLEET_MOWERS_LIST = "fleet.mowers.list"
@@ -124,8 +126,13 @@ def telemetry_subject(mower_id: UUID) -> str:
     return f"{TELEMETRY_PREFIX}.{mower_id}"
 
 
-def device_subject(mower_id: UUID, kind: Literal["map", "capabilities"]) -> str:
-    """Subject of a device snapshot: ``device.mower.<id>.map`` or ``.capabilities``."""
+DeviceSnapshotKind = Literal["map", "capabilities", "path"]
+"""A snapshot kind below ``device.mower.<id>``."""
+
+
+def device_subject(mower_id: UUID, kind: DeviceSnapshotKind) -> str:
+    """Subject of a device snapshot: ``device.mower.<id>.map``, ``.capabilities`` or
+    ``.path``."""
     if kind not in DEVICE_SNAPSHOT_KINDS:
         msg = f"invalid device snapshot kind {kind!r}"
         raise ValueError(msg)
@@ -170,6 +177,24 @@ def parse_camera_session_subject(subject: str) -> UUID:
     return UUID(parts[2])
 
 
+def path_preview_subject(mower_id: UUID) -> str:
+    """Core NATS request subject of a path preview: ``gateway.mower.<id>.path.preview``.
+
+    ``PathPreviewGatewayRequest`` in, ``PathPreviewReply`` out; answered by the gateway instance
+    that holds the mower (other shards stay silent).
+    """
+    return f"{GATEWAY_PREFIX}.{mower_id}.path.preview"
+
+
+def parse_path_preview_subject(subject: str) -> UUID:
+    """The mower id of a ``gateway.mower.<id>.path.preview`` subject."""
+    parts = subject.split(".")
+    if len(parts) != 5 or ".".join(parts[:2]) != GATEWAY_PREFIX or parts[3:] != ["path", "preview"]:
+        msg = f"not a path preview subject: {subject!r}"
+        raise ValueError(msg)
+    return UUID(parts[2])
+
+
 def event_subject(domain: str, name: str) -> str:
     """Subject for a domain event: ``event.<domain>.<name>``.
 
@@ -202,6 +227,8 @@ ALL_DEVICE_SNAPSHOTS = f"{DEVICE_PREFIX}.>"
 """Wildcard for every device snapshot of any mower."""
 ALL_CAMERA_SESSIONS = f"{GATEWAY_PREFIX}.*.camera.session"
 """Wildcard the Device-Gateway subscribes to for camera session requests (core NATS)."""
+ALL_PATH_PREVIEWS = f"{GATEWAY_PREFIX}.*.path.preview"
+"""Wildcard the Device-Gateway subscribes to for path preview requests (core NATS)."""
 
 
 def event_wildcard(domain: str | None = None) -> str:

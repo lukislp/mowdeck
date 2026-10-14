@@ -50,8 +50,10 @@ async def test_scheduler_fires_and_starts_the_mower_through_fleet() -> None:
     assert record["issued_by"]["subject"] == str(owner.principal.subject)
     first, second = h.commands
     assert first.command.kind == "start_mow"
-    assert first.command.model_dump()["pattern"] == {"spacing_cm": 20, "angle": 0}
-    assert second.command.model_dump()["pattern"] == {"spacing_cm": 20, "angle": 90}
+    # MowPattern-shaped: stripes with one border lap, the rotation's angle as angle_deg.
+    base = {"name": "stripes", "border_laps": 1, "spacing_cm": 20}
+    assert first.command.model_dump()["pattern"] == {**base, "angle_deg": 0.0}
+    assert second.command.model_dump()["pattern"] == {**base, "angle_deg": 90.0}
     assert schedule["rotation_index"] == 2
     assert schedule["next_run_at"] == "2026-10-11T08:30:00Z"
     assert schedule["last_run_at"] is not None
@@ -194,7 +196,7 @@ async def test_scheduler_group_schedule_mows_all_areas_of_each_visible_mower() -
         h.clock.set(FIRST)
         await h.tick()
         runs = {UUID(r["mower_id"]): r for r in await h.runs(owner, created["id"])}
-    assert runs[first]["outcome"] == "started" and runs[first]["details"] == "areas a, b"
+    assert runs[first]["outcome"] == "started" and runs[first]["details"] == "areas a, b, angle 0"
     assert runs[second]["outcome"] == "failed" and "no areas" in runs[second]["details"]
     assert [c.mower_id for c in h.commands] == [first]
 
@@ -389,3 +391,34 @@ async def test_scheduler_follows_the_site_time_zone() -> None:
     assert pinned["timezone"] == "Asia/Tokyo" and pinned["next_run_at"] == "2026-10-10T01:30:00Z"
     assert schedule["timezone"] == "Europe/Berlin"  # followed the site at the firing
     assert schedule["next_run_at"] == "2026-10-10T08:30:00Z"
+
+
+async def test_scheduler_starts_from_the_mowers_saved_defaults() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.register(owner)
+        saved = await h.fleet_client.put(
+            f"/api/v1/fleet/mowers/{mower_id}/mow-defaults",
+            headers=owner.headers,
+            json={"pattern": {"name": "checkerboard", "angle_deg": 30, "border_laps": 3}},
+        )
+        assert saved.status_code == 200, saved.text
+        await h.schedule(
+            owner,
+            target_type="mower",
+            target_id=str(mower_id),
+            pattern={"angle": 100},
+            rotation_angles=[45, 225],
+        )
+        h.clock.set(FIRST + timedelta(seconds=10))
+        await h.tick()
+        h.clock.set(FIRST + timedelta(days=1, seconds=5))
+        await h.tick()
+    first, second = h.commands
+    # The saved defaults stay; only the angle is the schedule's (normalised to 0..180).
+    assert first.command.model_dump()["pattern"] == {
+        "name": "checkerboard",
+        "angle_deg": 45.0,
+        "border_laps": 3,
+    }
+    assert second.command.model_dump()["pattern"]["angle_deg"] == 45.0

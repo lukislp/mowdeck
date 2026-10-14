@@ -108,6 +108,19 @@
       "title": "Correlation Id",
       "type": "string"
     },
+    "end_job": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For a `return_to_dock`: whether it also ended the job; None for other kinds.",
+      "title": "End Job"
+    },
     "expires_at": {
       "format": "date-time",
       "title": "Expires At",
@@ -145,6 +158,20 @@
       "default": null,
       "description": "Service that issued the command on behalf of `issued_by` (e.g. `scheduler`); None for commands sent through the API.",
       "title": "Origin"
+    },
+    "pattern": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For a `start_mow` on map areas: the pattern settings it was sent with (`StartMow.pattern`, mostly `MowPattern` keys); None otherwise or when it had none.",
+      "title": "Pattern"
     },
     "plan_hash": {
       "anyOf": [

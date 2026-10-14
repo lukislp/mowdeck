@@ -39,9 +39,11 @@ Payload models live in `mowdeck_contracts.v1` (JSON Schemas in `libs/mowdeck-con
 | produced | `command.result.mower.<id>` | JetStream `COMMANDS` | `CommandResult` | msg id `<command_id>:<status>`, so a result is stored once |
 | produced | `telemetry.mower.<id>` | JetStream `TELEMETRY` | `MowerState` | on every significant change (anything except `observed_at` and `raw`) and as a heartbeat every `MOWDECK_TELEMETRY_HEARTBEAT_SECONDS` |
 | produced | `device.mower.<id>.capabilities`, `device.mower.<id>.map` | JetStream `DEVICE` (newest per subject) | `MowerCapabilitiesSnapshot`, `MowerMapSnapshot` | after every connect, and the map again after a job ends; only when the content changed. Msg id `<mower_id>:capabilities|map:<sha256 prefix>` |
+| produced | `device.mower.<id>.path` | JetStream `DEVICE` (newest per subject) | `MowerPathSnapshot` | the mow path of the running job (adapters with `MowPathSource`): at connect (also `path: null`, so a stale value goes), at once for a new route or a cleared one (the job ended), progress-only changes at most every `MOWDECK_PATH_PROGRESS_SECONDS`. Msg id `<mower_id>:path:<sha256 prefix of the snapshot>`; see [Mow path](#mow-path) |
 | produced | `event.mower.connected`, `event.mower.disconnected` | JetStream `EVENTS` | `EventEnvelope[MowerConnectionEvent]` | `mower_id`, `account_id`, `connection_kind`, `at`, `reason` (disconnect only) |
 | consumed | `event.mower.registered`, `event.mower.updated`, `event.mower.removed` | JetStream `EVENTS`, ephemeral per instance | `EventEnvelope[MowerRegistration]` | from Fleet; add, update (reconnect if the link changed) or close a mower |
 | reply | `gateway.mower.<id>.camera.session` | core NATS request/reply, every instance (no queue group) | `CameraSessionRequest` / `CameraSessionReply` | only the instance whose shard holds the mower answers; see [Camera sessions](#camera-sessions) |
+| reply | `gateway.mower.<id>.path.preview` | core NATS request/reply, every instance (no queue group) | `PathPreviewGatewayRequest` / `PathPreviewReply` | only the instance whose shard holds the mower answers, each request in its own task; see [Mow path](#mow-path) |
 | reply | `gateway.cloud.discover` | core NATS request/reply, queue group `device-gateway` (any instance answers) | `CloudDiscoverRequest` / `CloudDiscoverReply` | see [Cloud accounts](#cloud-accounts) |
 | request | `fleet.mowers.credentials` | core NATS request/reply | `MowerCredentialsRequest` / `MowerCredentialsReply` | before every connect of a mower whose registration says `credentials: "fleet"`; see [Credentials](#credentials) |
 | request | `fleet.mowers.list` | core NATS request/reply | `MowerListRequest` / `MowerListReply` | on start; retried with backoff (1 s doubling up to `MOWDECK_FLEET_RETRY_MAX_SECONDS`) while Fleet does not answer |
@@ -49,6 +51,21 @@ Payload models live in `mowdeck_contracts.v1` (JSON Schemas in `libs/mowdeck-con
 ### Map and capabilities snapshots
 
 After every (re)connect the mower's session reads `capabilities()` and the map from the controller and publishes each as a snapshot (`mowdeck_contracts.v1.device`) when its content fingerprint (SHA-256 of the JSON) differs from the one it published last; the fingerprint prefix is also the msg id, so JetStream de-duplicates repeats. When the activity changes from mowing, paused or returning to docked, charging or idle, a job has ended and zones may have changed in the vendor app, so the map is read again (with refresh) in the background. A failed read or publish is logged as a warning and never drops the connection: the snapshots serve clients, the mower works without them. Telemetry stores the snapshots and serves them at `/api/v1/telemetry/mowers/{id}/map` and `.../capabilities`.
+
+### Mow path
+
+The route a mower planned for its job (`MowPath` in `mowdeck_contracts.v1.mow_path`: polylines in the map's local metres, `kinds`, `points_total`, the vendor's `path_hash` as text, `progress {index, direction}`). On every state (and heartbeat) the session reads `MowerController.current_path()` (no traffic: the adapter holds the route, see the adapter READMEs) and publishes a `MowerPathSnapshot` when it is due: the first check of a connection always (also without a path, so a value left on the stream outlives no job), a new route or a cleared path (`path: null`, the job ended) at once, a change of the progress only at most every `MOWDECK_PATH_PROGRESS_SECONDS` (default 5 s), so a mowing mower publishes the few kilobytes of its route about every 5 s and not with every report. A failed read or publish is logged and never drops the connection. Telemetry stores the newest one and serves it at `/api/v1/telemetry/mowers/{id}/path`.
+
+Path previews: Fleet sends `PathPreviewGatewayRequest{mower_id, account_id, area_ids, pattern, requested_by}` on `gateway.mower.<id>.path.preview`; the gateway lets the mower plan the start's route without starting (`MowerController.preview_path`, adapters with `PathPreviewCapable`) and answers `PathPreviewReply` with the `path` or an error, bounded by `MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS` (default 75 s, below Fleet's own wait):
+
+| Case | Answer |
+| --- | --- |
+| unknown mower in this shard / the request's account does not own the mower | `not_found` / `forbidden` (logged) |
+| the connection cannot plan without starting (no `PathPreviewCapable`) | `unsupported` |
+| a job runs, a start awaits its confirmation, a drive session is open, unknown areas, a pattern the mower cannot run | `rejected` (the reason in `detail`) |
+| mower not connected | `unavailable` |
+| no route in time (the adapter's or the gateway's limit) | `timeout` |
+| the mower answered without a route, any other failure | `failed` |
 
 ### Command handling
 
@@ -111,6 +128,8 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_CLOUD_DISCOVERY_CONCURRENCY` | `2` | Vendor logins of discoveries that may run at once on this instance |
 | `MOWDECK_CLOUD_SESSION_CACHE_DIR` | unset | Directory for the credential caches of the shared cloud sessions, one file per account (private, writable volume) |
 | `MOWDECK_PHOTO_TIMEOUT_SECONDS` | `30` | Longest time for a photo (`gateway.mower.<id>.photo`), a camera frame of the capture worker included; keep it below Vision's `MOWDECK_VISION_PHOTO_TIMEOUT_SECONDS` |
+| `MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS` | `75` | Longest wait for a route the mower plans for a preview (`gateway.mower.<id>.path.preview`); keep it below Fleet's `MOWDECK_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS` |
+| `MOWDECK_PATH_PROGRESS_SECONDS` | `5` | A mow path snapshot whose only change is the progress is republished at most this often |
 | `MOWDECK_CAPTURE_URL` | unset | Base URL of the capture worker (`http://vision-capture:8000`, ADR 0035); unset: camera-capable adapters without an own photo answer `unsupported` |
 | `MOWDECK_CAPTURE_TOKEN` (`_FILE`) | unset | Shared secret sent to the worker |
 | `MOWDECK_CAPTURE_TIMEOUT_SECONDS` | `20` | How long the worker may wait for the first decoded frame |

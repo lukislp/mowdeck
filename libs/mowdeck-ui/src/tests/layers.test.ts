@@ -5,6 +5,7 @@ import {
   buildLayers,
   centroid,
   dockOutline,
+  isPositionInexact,
   localExtent,
   routeSegments,
   rtkClass,
@@ -156,6 +157,32 @@ describe('buildLayers', () => {
     expect(layers.mower?.hollow).toBe(false);
   });
 
+  it('draws a mower without an RTK fix hollow, except at the dock', () => {
+    const position = { lat: 48.137154, lon: 11.576124 };
+    const draw = (state: object) =>
+      buildLayers({
+        map: MAP,
+        projection: local,
+        areaName,
+        state: { activity: 'mowing', position, ...state },
+      }).mower;
+    expect(draw({ rtk_fix: 'none', position_source: 'gnss' })).toMatchObject({
+      hollow: true,
+      inexact: true,
+    });
+    expect(draw({ rtk_fix: 'fixed', position_source: 'rtk' })).toMatchObject({
+      hollow: false,
+      inexact: false,
+    });
+    expect(draw({ rtk_fix: 'none', position_source: 'dock' })).toMatchObject({
+      hollow: false,
+      inexact: false,
+    });
+    expect(draw({})).toMatchObject({ hollow: false, inexact: false });
+    expect(isPositionInexact({ rtk_fix: 'none' })).toBe(true);
+    expect(isPositionInexact(null)).toBe(false);
+  });
+
   it('draws a stale or offline mower hollow, an unknown heading as a dot', () => {
     const state = { activity: 'idle', position: { lat: 48.137154, lon: 11.576124 } };
     const stale = buildLayers({ map: MAP, projection: local, areaName, state, stale: true });
@@ -232,6 +259,28 @@ describe('routeSegments', () => {
       const xs = segment.points.map((p) => Math.round(p[1]));
       expect(xs.includes(2) && xs.includes(5)).toBe(false);
     }
+  });
+
+  it('splits the route where the fix drops to none and marks those segments inexact', () => {
+    const route = [
+      at(0, 0, 0, 'fixed'),
+      at(1, 0, 1, 'fixed'),
+      at(2, 0, 2, 'none'),
+      at(3, 0, 3, 'none'),
+      at(4, 0, 4, 'fixed'),
+    ];
+    const { segments } = routeSegments(route, local); // no tint: the dash does not need it
+    // The segment ending at x = 2 and x = 3 is dashed, the fixed ones are not (age buckets may
+    // split a run further).
+    const dashed = segments.filter((s) => s.inexact);
+    expect(dashed.length).toBeGreaterThan(0);
+    for (const segment of dashed) {
+      const xs = segment.points.map((p) => Math.round(p[1]));
+      expect(Math.max(...xs)).toBeGreaterThanOrEqual(2);
+      expect(Math.max(...xs)).toBeLessThanOrEqual(3);
+    }
+    expect(segments.some((s) => !s.inexact)).toBe(true);
+    expect(segments.every((s) => s.rtk === null)).toBe(true);
   });
 
   it('tints by RTK quality when asked', () => {

@@ -16,13 +16,17 @@ from mowdeck_contracts.v1 import (
     CommandResult,
     CommandStatus,
     MowerRegistration,
+    PathPreviewError,
+    PathPreviewErrorCode,
+    PathPreviewGatewayRequest,
+    PathPreviewReply,
     PhotoError,
     PhotoErrorCode,
     PhotoReply,
     PhotoRequest,
     utc_now,
 )
-from mowdeck_control import NotConnected
+from mowdeck_control import CommandRejected, NotConnected, PathUnavailable
 from mowdeck_service_kit import get_logger
 
 from device_gateway.application.ports import (
@@ -34,8 +38,19 @@ from device_gateway.application.ports import (
     GatewayPublisher,
     SnapshotFailed,
 )
-from device_gateway.application.session import MowerSession, PhotoUnsupported, SessionTiming
-from device_gateway.domain.rules import Shard, backoff, camera_rejection, command_rejection
+from device_gateway.application.session import (
+    MowerSession,
+    PathPreviewUnsupported,
+    PhotoUnsupported,
+    SessionTiming,
+)
+from device_gateway.domain.rules import (
+    Shard,
+    backoff,
+    camera_rejection,
+    command_rejection,
+    preview_rejection,
+)
 
 _log = get_logger(__name__)
 
@@ -259,6 +274,59 @@ class DeviceGateway:
             )
         return CameraSessionReply(session=camera)
 
+    # --- mow path preview ---------------------------------------------------------------------
+
+    async def path_preview(
+        self, request: PathPreviewGatewayRequest, *, timeout_seconds: float = 75.0
+    ) -> PathPreviewReply | None:
+        """Answer a path preview request; None when the mower belongs to another shard.
+
+        The account of the request must own the mower (like commands). The mower plans the
+        route of the areas and pattern without starting; the wait ends after
+        ``timeout_seconds`` with ``timeout``.
+        """
+        if not self.shard.owns(request.mower_id):
+            return None
+        session = self._sessions.get(request.mower_id)
+        refusal = preview_rejection(session.registration if session else None, request)
+        if refusal is not None or session is None:
+            code, detail = refusal or (PathPreviewErrorCode.NOT_FOUND, "unknown mower")
+            _log.warning(
+                "path preview refused",
+                mower_id=str(request.mower_id),
+                account_id=str(request.account_id),
+                reason=detail,
+            )
+            return _preview_error(code, detail)
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                path = await session.preview_path(request.area_ids, request.pattern)
+        except NotConnected as exc:
+            return _preview_error(PathPreviewErrorCode.UNAVAILABLE, str(exc))
+        except PathPreviewUnsupported as exc:
+            return _preview_error(PathPreviewErrorCode.UNSUPPORTED, str(exc))
+        except CommandRejected as exc:
+            return _preview_error(PathPreviewErrorCode.REJECTED, exc.reason)
+        except PathUnavailable as exc:
+            code = PathPreviewErrorCode.TIMEOUT if exc.timed_out else PathPreviewErrorCode.FAILED
+            return _preview_error(code, exc.reason)
+        except TimeoutError:
+            return _preview_error(
+                PathPreviewErrorCode.TIMEOUT, "the mower did not hand back its route in time"
+            )
+        except Exception as exc:
+            _log.warning("path preview failed", mower_id=str(request.mower_id), error=repr(exc))
+            return _preview_error(
+                PathPreviewErrorCode.FAILED, f"planning the route failed: {type(exc).__name__}"
+            )
+        _log.info(
+            "path preview answered",
+            mower_id=str(request.mower_id),
+            lines=len(path.polylines),
+            points=path.points_total,
+        )
+        return PathPreviewReply(path=path)
+
     # --- photos -------------------------------------------------------------------------------
 
     async def photo(
@@ -338,6 +406,10 @@ class DeviceGateway:
 
 def _camera_error(code: CameraSessionErrorCode, detail: str) -> CameraSessionReply:
     return CameraSessionReply(error=CameraSessionError(code=code, detail=detail[:500]))
+
+
+def _preview_error(code: PathPreviewErrorCode, detail: str) -> PathPreviewReply:
+    return PathPreviewReply(error=PathPreviewError(code=code, detail=detail[:500]))
 
 
 def _photo_error(code: PhotoErrorCode, detail: str) -> PhotoReply:

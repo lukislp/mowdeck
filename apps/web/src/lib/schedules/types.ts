@@ -10,7 +10,8 @@ export type Preview = S['PreviewOut'];
 export type PreviewItem = S['PreviewItemOut'];
 export type RainDecision = S['RainDecisionOut'];
 export type RainPause = S['RainPause'];
-export type ForecastHour = S['HourOut'];
+/** An hour of the forecast; `past` is optional for fixtures (the API always sends it). */
+export type ForecastHour = Omit<S['HourOut'], 'past'> & { past?: boolean };
 export type Run = S['RunOut'];
 export type RunOutcome = S['ScheduleRunOutcome'];
 export type Verdict = RainDecision['verdict'];

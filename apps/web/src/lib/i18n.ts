@@ -6,6 +6,7 @@
 import type { Activity, RtkFix } from '@mowdeck/ui';
 
 import type { ApiProblem } from '$lib/api/problem';
+import { angleApplies, minLaps, type MowPattern, type PatternName } from '$lib/mower/mow-pattern';
 import { m } from '$lib/paraglide/messages';
 import { planProblemText } from '$lib/plan/problems';
 import { getLocale } from '$lib/paraglide/runtime';
@@ -103,16 +104,55 @@ export function connectionLabel(kind: string): string {
   }
 }
 
-export function commandLabel(kind: CommandKind | 'manual_drive'): string {
+export function patternLabel(name: PatternName): string {
+  switch (name) {
+    case 'stripes':
+      return m.pattern_stripes();
+    case 'diagonal':
+      return m.pattern_diagonal();
+    case 'checkerboard':
+      return m.pattern_checkerboard();
+    case 'edge_only':
+      return m.pattern_edge_only();
+    case 'random_angle':
+      return m.pattern_random_angle();
+  }
+}
+
+function lapsLabel(laps: number): string {
+  if (laps <= 0) return m.start_laps_none();
+  if (laps === 1) return m.start_laps_one();
+  return m.start_laps_many({ count: laps });
+}
+
+/** "Streifen 45° · 1 Randrunde" (plus the spacing when one was chosen). */
+export function patternSummary(pattern: MowPattern): string {
+  const head = angleApplies(pattern.name)
+    ? `${patternLabel(pattern.name)} ${formatNumber(pattern.angle_deg)}°`
+    : patternLabel(pattern.name);
+  const parts = [head, lapsLabel(Math.max(pattern.border_laps, minLaps(pattern.name)))];
+  if (pattern.spacing_m != null) {
+    parts.push(m.start_summary_spacing({ cm: formatNumber(pattern.spacing_m * 100) }));
+  }
+  return parts.join(' · ');
+}
+
+export function commandLabel(
+  kind: CommandKind | 'manual_drive',
+  endJob?: boolean | null,
+  pattern?: MowPattern | null,
+): string {
   switch (kind) {
     case 'start_mow':
-      return m.command_start_mow();
+      return pattern
+        ? `${m.command_start_mow()} · ${patternSummary(pattern)}`
+        : m.command_start_mow();
     case 'pause_mow':
       return m.command_pause_mow();
     case 'resume_mow':
       return m.command_resume_mow();
     case 'return_to_dock':
-      return m.command_return_to_dock();
+      return endJob ? m.command_return_to_dock_end() : m.command_return_to_dock();
     case 'emergency_stop':
       return m.command_emergency_stop();
     case 'set_blade_height':
@@ -212,6 +252,13 @@ export function formatDate(value: string | number | Date): string {
 
 export function formatTime(value: string | number | Date): string {
   return new Intl.DateTimeFormat(getLocale(), { timeStyle: 'medium' }).format(new Date(value));
+}
+
+/** The time of day as "HH:MM" (no seconds), e.g. the hour a rain warning names. */
+export function formatClock(value: string | number | Date, locale: string = getLocale()): string {
+  return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(
+    new Date(value),
+  );
 }
 
 /** "vor 12 s" from an ISO time and the current time. */

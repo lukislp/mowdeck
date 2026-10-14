@@ -884,6 +884,18 @@ async def test_return_or_emergency_stop_supersede_a_waiting_start(
     await s.controller.close()
 
 
+async def test_return_to_dock_with_end_job_passes_and_supersedes_like_a_plain_return() -> None:
+    s = SlowStart()
+    await s.controller.start()
+    start = await s.start()
+    s.clock.advance(7)
+    result = await asyncio.wait_for(s.send(ReturnToDock(end_job=True), ttl=10), 1.0)
+    assert result.status is CommandStatus.EXECUTED
+    started = await asyncio.wait_for(start, 1.0)
+    assert started.reason == "start_mow sent; confirmation interrupted by return_to_dock"
+    await s.controller.close()
+
+
 async def test_a_waiting_confirmation_lets_later_commands_run_before_they_expire() -> None:
     s = SlowStart(start_delay_s=5)
     await s.controller.start()

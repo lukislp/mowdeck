@@ -13,7 +13,7 @@ Status of a record (:class:`CommandState`): ``pending`` (published, no result ye
 """
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -105,6 +105,15 @@ class CommandView(ContractModel):
         default=None,
         max_length=64,
         description="Hash of the spot plan of a `start_mow` with `spot_plan`, if any.",
+    )
+    end_job: bool | None = Field(
+        default=None,
+        description="For a `return_to_dock`: whether it also ended the job; None for other kinds.",
+    )
+    pattern: dict[str, Any] | None = Field(
+        default=None,
+        description="For a `start_mow` on map areas: the pattern settings it was sent with "
+        "(`StartMow.pattern`, mostly `MowPattern` keys); None otherwise or when it had none.",
     )
 
 

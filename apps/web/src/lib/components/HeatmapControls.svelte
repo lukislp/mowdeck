@@ -1,8 +1,9 @@
 <!--
   The heat layer strip under the mower map: the layer switcher (off, coverage, RTK, WLAN,
   mobile), the period, the cell size, "refresh", the legend of the active scale and the state
-  of the last load (loading, empty, no map yet, error, samples). The page owns the choice and the
-  data; this strip only shows them and reports changes.
+  of the last load (loading, empty, no map yet, error, samples). With `pathShown` it also holds
+  the "Mähpfad" toggle (the mower's planned route on the map) and a line about the path. The
+  page owns the choice and the data; this strip only shows them and reports changes.
 -->
 <script lang="ts" module>
   export type HeatStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'no-map' | 'error';
@@ -40,6 +41,11 @@
     onperiod: (period: HeatPeriod) => void;
     oncell: (cell: HeatCellSize) => void;
     onrefresh: () => void;
+    /** The planned mow path is drawn (the toggle is hidden when undefined). */
+    pathShown?: boolean;
+    /** A line about the path (progress, or that it follows), already translated. */
+    pathNote?: string | null;
+    onpath?: (shown: boolean) => void;
   }
 
   let {
@@ -56,6 +62,9 @@
     onperiod,
     oncell,
     onrefresh,
+    pathShown = undefined,
+    pathNote = null,
+    onpath,
   }: Props = $props();
 
   const uid = $props.id();
@@ -115,6 +124,23 @@
 </script>
 
 <div class="heat" data-testid="heatmap-controls" data-layer={layer}>
+  {#if pathShown !== undefined}
+    <div class="path">
+      <button
+        type="button"
+        class="path-toggle"
+        aria-pressed={pathShown}
+        title={m.path_toggle_hint()}
+        data-testid="mow-path-toggle"
+        onclick={() => onpath?.(!pathShown)}
+      >
+        <span class="path-swatch" aria-hidden="true"></span>{m.path_toggle()}
+      </button>
+      {#if pathShown && pathNote}
+        <span class="path-note mono" data-testid="mow-path-note">{pathNote}</span>
+      {/if}
+    </div>
+  {/if}
   <div
     class="layers"
     role="radiogroup"
@@ -238,6 +264,61 @@
     padding: var(--md-space-2) var(--md-space-3) var(--md-space-3);
     border-top: var(--md-hairline) solid var(--md-color-line);
     background: var(--md-color-surface);
+  }
+
+  .path {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--md-space-2) var(--md-space-3);
+  }
+
+  .path-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--md-space-2);
+    min-height: var(--md-target);
+    padding: 0 var(--md-space-3);
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+    border-radius: var(--md-radius-0);
+    background: var(--md-color-surface);
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  /* The swatch is the path itself: a thin accent line, dimmed while the path is hidden. */
+  .path-swatch {
+    width: 20px;
+    height: 2px;
+    background: var(--md-color-line-strong);
+  }
+
+  .path-toggle[aria-pressed='true'] {
+    border-color: var(--md-color-focus);
+    color: var(--md-color-ink);
+  }
+
+  .path-toggle[aria-pressed='true'] .path-swatch {
+    background: linear-gradient(
+      90deg,
+      var(--md-color-focus) 55%,
+      color-mix(in srgb, var(--md-color-focus) 38%, var(--md-color-surface)) 55%
+    );
+  }
+
+  .path-toggle:focus-visible {
+    outline: 2px solid var(--md-color-focus);
+    outline-offset: -2px;
+  }
+
+  .path-note {
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+    font-variant-numeric: tabular-nums;
   }
 
   .layers {
