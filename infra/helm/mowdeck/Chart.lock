@@ -1,0 +1,9 @@
+dependencies:
+- name: nats
+  repository: https://nats-io.github.io/k8s/helm/charts/
+  version: 2.15.0
+- name: openfga
+  repository: https://openfga.github.io/helm-charts
+  version: 0.3.16
+digest: sha256:c8e3a00a8f8bb3077c525e7d97edef08eeca4eb1708e3cdf734d7a6fab8cb2d6
+generated: "2026-10-10T04:55:01.2519032+02:00"

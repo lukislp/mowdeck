@@ -1,0 +1,290 @@
+name: release
+
+# Publishes a MowDeck release (docs/ops/release.md):
+#   * every image for linux/amd64 and linux/arm64 (QEMU, GitHub Actions cache) to
+#     ghcr.io/<owner>/mowdeck/<image>:<version>, :v<version> and, for a final release, :latest,
+#     each with an SBOM and provenance attestation and an SPDX SBOM file
+#   * the Helm chart as an OCI artifact ghcr.io/<owner>/charts/mowdeck:<version>
+#     (appVersion = version, so image.tag defaults to the released images)
+#   * the Android app as mowdeck-<version>.apk (apps/mobile, docs/ops/mobile-apps.md), signed with
+#     the repository's release keystore; skipped with a warning while the secret is not set
+#   * a GitHub release with notes generated from the commits since the previous tag
+# Runs only for a pushed tag v* or by hand (minute budget: never on pull requests). By hand it
+# builds a test version (for example 0.1.0-rc.1) and creates the GitHub release only when asked.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the v (e.g. 0.1.0-rc.1)"
+        required: true
+      publish-release:
+        description: "Create the GitHub release (and move :latest for a final version)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck-mirror
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      publish: ${{ steps.version.outputs.publish }}
+      latest: ${{ steps.version.outputs.latest }}
+      owner: ${{ steps.version.outputs.owner }}
+    steps:
+      - id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PUBLISH: ${{ inputs.publish-release }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$EVENT" = push ]; then
+            version="${REF_NAME#v}"
+            publish=true
+          else
+            version="$INPUT_VERSION"
+            publish="$INPUT_PUBLISH"
+          fi
+          if ! echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$version' is not a semantic version (tag v1.2.3 or v1.2.3-rc.1)"
+            exit 1
+          fi
+          case "$version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          latest=false
+          [ "$publish" = true ] && [ "$prerelease" = false ] && latest=true
+          {
+            echo "version=$version"
+            echo "prerelease=$prerelease"
+            echo "publish=$publish"
+            echo "latest=$latest"
+            echo "owner=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  images:
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {image: identity, context: ., file: services/identity/Dockerfile, kind: python}
+          - {image: fleet, context: ., file: services/fleet/Dockerfile, kind: python}
+          - {image: device-gateway, context: ., file: services/device-gateway/Dockerfile, kind: python}
+          - {image: telemetry, context: ., file: services/telemetry/Dockerfile, kind: python}
+          - {image: realtime, context: ., file: services/realtime/Dockerfile, kind: python}
+          - {image: notifications, context: ., file: services/notifications/Dockerfile, kind: python}
+          - {image: scheduler, context: ., file: services/scheduler/Dockerfile, kind: python}
+          - {image: entitlements, context: ., file: services/entitlements/Dockerfile, kind: python}
+          - {image: billing, context: ., file: services/billing/Dockerfile, kind: python}
+          - {image: planner, context: ., file: services/planner/Dockerfile, kind: python}
+          - {image: vision, context: ., file: services/vision/Dockerfile, kind: python}
+          - {image: web, context: ., file: apps/web/Dockerfile, kind: web}
+          - {image: authz-bootstrap, context: infra/openfga, file: infra/openfga/bootstrap/Dockerfile, kind: bootstrap}
+    env:
+      IMAGE: ghcr.io/${{ needs.version.outputs.owner }}/mowdeck/${{ matrix.image }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Base images from the GHCR mirror of infra/images.txt (all architectures were copied).
+      - name: Use the image mirror
+        run: sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" | tee -a "$GITHUB_ENV"
+      - name: Build arguments and tags
+        id: args
+        env:
+          KIND: ${{ matrix.kind }}
+          LATEST: ${{ needs.version.outputs.latest }}
+        run: |
+          case "$KIND" in
+            python) args="PYTHON_IMAGE=$PYTHON_IMAGE
+          UV_IMAGE=$UV_IMAGE" ;;
+            web) args="NODE_IMAGE=$NODE_IMAGE
+          NGINX_IMAGE=$NGINX_IMAGE" ;;
+            bootstrap) args="FGA_CLI_IMAGE=$FGA_CLI_IMAGE
+          JQ_IMAGE=$JQ_IMAGE
+          BUSYBOX_IMAGE=$BUSYBOX_IMAGE" ;;
+          esac
+          tags="$IMAGE:$VERSION
+          $IMAGE:v$VERSION"
+          [ "$LATEST" = true ] && tags="$tags
+          $IMAGE:latest"
+          {
+            printf 'build-args<<EOF\n%s\nEOF\n' "$args"
+            printf 'tags<<EOF\n%s\nEOF\n' "$tags"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4.4.1
+      - name: Build and push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: ${{ steps.args.outputs.build-args }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.args.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=mowdeck-${{ matrix.image }}
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+          # SBOM and provenance attestations attached to the image index (buildx --sbom).
+          sbom: true
+          provenance: mode=max
+          # The amd64 layers of the CI docker job (same scope) seed the cache.
+          cache-from: |
+            type=gha,scope=${{ matrix.image }}
+            type=gha,scope=${{ matrix.image }}-release
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-release
+      # SPDX SBOM file of the pushed image for the GitHub release.
+      - uses: anchore/sbom-action@v0.24.3
+        with:
+          image: ${{ env.IMAGE }}:${{ env.VERSION }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          format: spdx-json
+          output-file: sbom-${{ matrix.image }}.spdx.json
+          artifact-name: sbom-${{ matrix.image }}.spdx.json
+          upload-release-assets: false
+
+  chart:
+    needs: [version, images]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      CHARTS: oci://ghcr.io/${{ needs.version.outputs.owner }}/charts
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: azure/setup-helm@v5.0.1
+        with:
+          version: v4.3.0
+      - name: Package the chart (version and appVersion = release version)
+        run: |
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+          helm repo add openfga https://openfga.github.io/helm-charts
+          helm dependency build infra/helm/mowdeck
+          helm package infra/helm/mowdeck --version "$VERSION" --app-version "$VERSION" -d dist
+      - name: Push to GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          helm push "dist/mowdeck-$VERSION.tgz" "$CHARTS"
+          echo "- chart \`$CHARTS/mowdeck:$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: chart
+          path: dist/mowdeck-${{ needs.version.outputs.version }}.tgz
+
+  # The Android app shell (Capacitor). No Firebase, no Play Store: the APK is attached to the
+  # GitHub release. Secrets: ANDROID_KEYSTORE_BASE64 (the .jks as base64), ANDROID_KEYSTORE_PASSWORD,
+  # ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (optional, defaults to the keystore password). The
+  # iOS app is built and installed on the owner's Mac (apps/mobile/scripts), never in CI.
+  android:
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      MOWDECK_VERSION: ${{ needs.version.outputs.version }}
+      MOWDECK_ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      MOWDECK_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      MOWDECK_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      MOWDECK_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - name: Release keystore configured?
+        id: keystore
+        run: |
+          if [ -z "$MOWDECK_ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: no APK in this release (docs/ops/mobile-apps.md)"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.keystore.outputs.present == 'true'
+        uses: actions/checkout@v7.0.1
+      - if: steps.keystore.outputs.present == 'true'
+        uses: pnpm/action-setup@v6.1.0
+      - if: steps.keystore.outputs.present == 'true'
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - if: steps.keystore.outputs.present == 'true'
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      # The runner image ships the Android SDK (ANDROID_HOME); Gradle fetches a missing platform.
+      - if: steps.keystore.outputs.present == 'true'
+        name: Build the APK
+        run: bash apps/mobile/scripts/build-android.sh
+      - if: steps.keystore.outputs.present == 'true'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: android-apk
+          path: apps/mobile/build/mowdeck-${{ needs.version.outputs.version }}.apk
+          if-no-files-found: error
+
+  release:
+    needs: [version, images, chart, android]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          path: assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3.0.3
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: MowDeck ${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          append_body: true
+          body: |
+            ## Install
+
+            ```bash
+            helm install mowdeck oci://ghcr.io/${{ needs.version.outputs.owner }}/charts/mowdeck \
+              --version ${{ needs.version.outputs.version }} -n mowdeck --create-namespace -f my-values.yaml
+            ```
+
+            Images: `ghcr.io/${{ needs.version.outputs.owner }}/mowdeck/<image>:${{ needs.version.outputs.version }}`
+            (linux/amd64, linux/arm64). Operations manual: docs/ops/helm.md, release notes below.
+
+            Android app: `mowdeck-${{ needs.version.outputs.version }}.apk` below (if attached); iPhone app:
+            built and installed from the Mac (docs/ops/mobile-apps.md).
+          files: assets/*

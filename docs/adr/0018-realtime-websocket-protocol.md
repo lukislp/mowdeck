@@ -1,0 +1,36 @@
+# ADR 0018: Realtime WebSocket protocol
+
+## Status
+
+Accepted (2026-10-09)
+
+## Context
+
+The Phase 1 gate ([phases](../phases.md)) asks that a user "sees live status over WebSocket". The Device-Gateway publishes every mower state on `telemetry.mower.<id>` (on change and as a heartbeat every 10 s) and every command result on `command.result.mower.<id>` ([ADR 0013](0013-device-gateway-registry-and-sharding.md)); Fleet and Telemetry consume them with durable queue consumers. A browser needs both pushed over one long-lived connection, filtered to the mowers its principal may view ([ADR 0014](0014-authorization-model-and-tuple-ownership.md)), authenticated with Identity's short-lived access tokens ([ADR 0015](0015-tokens-sessions-and-key-rotation.md)). Browsers cannot set an `Authorization` header on a WebSocket; Realtime owns no data (project plan: "Realtime ... eigene Daten: keine"); it must scale by adding replicas behind Traefik and must never let one slow client stall the others.
+
+The design ([Design: fleet, telemetry, realtime](../dev/design-fleet-telemetry-realtime.md), section 3) proposed the protocol; this ADR records the decisions as built (Task 9).
+
+## Decision
+
+**The token travels in the first message.** The client connects to `GET /api/v1/realtime/ws` and sends `{"type": "auth", "token": "<access token>"}` within `MOWDECK_REALTIME_AUTH_TIMEOUT_SECONDS` (5). A query parameter would end up in access logs and browser history, the `Sec-WebSocket-Protocol` trick abuses a header with the same logging problem; a message stays inside the frame stream. The token is verified locally with `mowdeck-auth` (`JwtVerifier.verify_token`, which also returns `exp`; the kit's resolvers only know HTTP requests). No `auth` in time, an invalid token, a service principal or a principal without account closes the socket with **4401**. `ready` confirms the principal and the expiry; at `exp` the socket closes with 4401 unless a fresh `auth` with the same subject and account arrived (a different principal also closes with 4401). The protocol is a discriminated union in `mowdeck_contracts.v1.realtime` with JSON Schemas (`RealtimeClientMessage`, `RealtimeServerMessage`).
+
+**Every subscription is an object check, re-checked.** `subscribe` asks `check_many(can_view, mower:<id>)` for all ids in one batch; allowed ids are subscribed and immediately get the newest known state from a per-instance last-value cache, denied ids are reported in `subscribed.denied` and never subscribed. A foreign mower and a non-existent one look the same, and the client learns nothing beyond the id it sent itself. Subscriptions are re-checked on `identity.grants.changed` for the connection's subject (after dropping the cached decisions of that subject, so the re-check never reads a stale answer), every `MOWDECK_REALTIME_RECHECK_SECONDS` (60) as a safety net for lost events and hierarchy changes (Fleet publishes no invalidation of its own), and after every token refresh. A mower no longer visible is reported in `revoked` and its unsent state is discarded. While OpenFGA is unavailable the re-checks are skipped instead of revoking everything (a failed check answers false), new subscriptions are denied (fail closed). As a third check without I/O, a state is only handed to sessions of the state's own account; Realtime has no database to filter by.
+
+**Fan-out per instance, no queue group.** Each instance subscribes once to `telemetry.mower.*` and once to `command.result.mower.*` without durable name and without queue group; the kit turns that into an ephemeral JetStream push consumer with deliver policy *new*. Every instance therefore receives every message and any instance can serve any client: no sticky sessions, no shared state, horizontal scaling by replicas. The cost is that every instance decodes the whole telemetry stream, acceptable for Phase 1; the scale-out path is one core subscription per mower with local subscribers. Readiness is the bus plus both subscriptions; OpenFGA is not part of it, so open sockets keep their updates during an OpenFGA outage.
+
+**The bus never waits for a client.** The hub encodes each message once and hands it to the subscribed sessions' outboxes without awaiting. `state` messages are snapshots: one slot per mower, a newer state replaces an unsent older one (counted as `coalesced`). Everything else (`command_result`, `subscribed`, `error`, ...) goes through a bounded FIFO queue (`MOWDECK_REALTIME_QUEUE_SIZE`, 256) that the writer empties before it sends states, so an answer is never overtaken by the state that follows it. A full queue, or a single send that takes longer than `MOWDECK_REALTIME_SEND_TIMEOUT_SECONDS` (10), closes the socket with **4430** (slow consumer); the client reconnects and gets the current state from the cache at once.
+
+**Limits per instance.** `MOWDECK_REALTIME_MAX_CONNECTIONS_PER_ACCOUNT` (50), `..._PER_USER` (10) and `MOWDECK_REALTIME_MAX_SUBSCRIPTIONS` (200 per socket): exceeding one sends `error` `limit_exceeded` and closes with **4429**. A global limit would need shared state (NATS KV) and is left for later.
+
+**Heartbeat with protocol pings.** Uvicorn sends a WebSocket ping every `MOWDECK_REALTIME_PING_SECONDS` (20) and closes the socket when the pong does not arrive within the same time; browsers answer automatically. The pings keep idle sockets open through Traefik (the acceptance test holds one idle for 90 s). JavaScript cannot see protocol pings, so the protocol also has `ping`/`pong` messages for clients that want to detect a half-open link themselves.
+
+**Shutdown with 1001.** Uvicorn closes open WebSockets with 1012 before the lifespan shutdown runs; Realtime's server subclass (`RealtimeServer`, passed to the kit's `run(server_class=...)`) first marks the app as draining and closes every session with **1001** (going away), so clients reconnect to another instance.
+
+## Consequences
+
+- Tokens never appear in URLs or proxy logs; a web client must send `auth` first and again before `exp` (the refresh it does for HTTP anyway).
+- Revocation reaches an open socket within one cache TTL (5 s) when Identity's event arrives, at the latest after one re-check interval (60 s) otherwise.
+- A slow client sees fewer intermediate states but never stalls others; command results are not coalesced, so a client that cannot keep up with them is disconnected and must re-subscribe.
+- Every instance processes the full telemetry stream; per-instance limits allow a user `n` times the limit with `n` replicas.
+- Ephemeral consumers do not survive a NATS server restart that outlasts their inactivity threshold; the instance must be restarted (readiness stays green because the bus reconnects). A kit option to recreate them, or core subscriptions for stream subjects, is follow-up work.
+- The close codes (1001, 1009, 4400, 4401, 4429, 4430) are part of the contract (`RealtimeCloseCode`).

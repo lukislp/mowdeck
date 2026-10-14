@@ -1,0 +1,44 @@
+{
+  "$defs": {
+    "AccountKind": {
+      "description": "What an account is.",
+      "enum": [
+        "household",
+        "business"
+      ],
+      "title": "AccountKind",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``identity.account.created``.\n\nFleet creates the hidden default site of the account when it receives this event.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/AccountKind"
+    },
+    "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "owner_user_id": {
+      "format": "uuid",
+      "title": "Owner User Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "account_id",
+    "name",
+    "kind",
+    "owner_user_id"
+  ],
+  "title": "AccountCreated",
+  "type": "object"
+}

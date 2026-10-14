@@ -1,0 +1,11 @@
+# Changes here will be overwritten by Copier; do not edit by hand.
+_src_path: templates/service
+description: Holds the connections to mowers, executes commands and reports their
+    state.
+http_port: 8000
+needs_db: false
+package_name: device_gateway
+permissions:
+    device_gateway.view: View the mowers held by the Device-Gateway and their connection
+        status
+service_name: device-gateway

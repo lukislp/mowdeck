@@ -1,0 +1,907 @@
+{
+  "$defs": {
+    "CommandResult": {
+      "description": "The outcome of a command, published by the Device-Gateway.",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Correlation id of the command, if known.",
+          "title": "Correlation Id"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "status": {
+          "$ref": "#/$defs/CommandStatus"
+        }
+      },
+      "required": [
+        "command_id",
+        "mower_id",
+        "status"
+      ],
+      "title": "CommandResult",
+      "type": "object"
+    },
+    "CommandResultMessage": {
+      "description": "A command result of a subscribed mower.",
+      "properties": {
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/CommandResult"
+        },
+        "type": {
+          "const": "command_result",
+          "default": "command_result",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mower_id",
+        "result"
+      ],
+      "title": "CommandResultMessage",
+      "type": "object"
+    },
+    "CommandStatus": {
+      "description": "Outcome of a command.",
+      "enum": [
+        "accepted",
+        "rejected",
+        "executed",
+        "expired",
+        "failed"
+      ],
+      "title": "CommandStatus",
+      "type": "string"
+    },
+    "ConnectionKind": {
+      "description": "How the Device-Gateway is connected to the mower.",
+      "enum": [
+        "ble_bridge",
+        "wifi",
+        "cloud",
+        "simulated"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "DriveCapabilities": {
+      "description": "What the mower offers for manual driving.",
+      "properties": {
+        "manual_drive": {
+          "title": "Manual Drive",
+          "type": "boolean"
+        },
+        "manual_drive_blades": {
+          "title": "Manual Drive Blades",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "manual_drive",
+        "manual_drive_blades"
+      ],
+      "title": "DriveCapabilities",
+      "type": "object"
+    },
+    "DriveEndReason": {
+      "description": "Why a drive session ended.",
+      "enum": [
+        "client_stop",
+        "socket_closed",
+        "revoked",
+        "token_expired",
+        "max_duration",
+        "mower_refused",
+        "mower_busy",
+        "replaced",
+        "expired",
+        "completed",
+        "aborted"
+      ],
+      "title": "DriveEndReason",
+      "type": "string"
+    },
+    "DriveEndedMessage": {
+      "description": "A drive session ended; the mower stops (dead-man timer at the latest).",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/DriveEndReason"
+        },
+        "session_id": {
+          "format": "uuid",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "drive_ended",
+          "default": "drive_ended",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "mower_id",
+        "reason"
+      ],
+      "title": "DriveEndedMessage",
+      "type": "object"
+    },
+    "DriveFrameAckMessage": {
+      "description": "A frame with ``seq`` was published to the mower (not yet executed).",
+      "properties": {
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "session_id": {
+          "format": "uuid",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "drive_frame_ack",
+          "default": "drive_frame_ack",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "seq"
+      ],
+      "title": "DriveFrameAckMessage",
+      "type": "object"
+    },
+    "DriveStartedMessage": {
+      "description": "Answer to ``drive_start``: the session is open.",
+      "properties": {
+        "blade_on_allowed": {
+          "description": "Frames may switch the blades on.",
+          "title": "Blade On Allowed",
+          "type": "boolean"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/DriveCapabilities"
+        },
+        "max_rate_hz": {
+          "description": "Frames above this rate are dropped.",
+          "title": "Max Rate Hz",
+          "type": "integer"
+        },
+        "max_seconds": {
+          "description": "The session ends after this many seconds.",
+          "title": "Max Seconds",
+          "type": "integer"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "session_id": {
+          "format": "uuid",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "ttl_ms": {
+          "description": "Dead-man timeout of every frame in milliseconds.",
+          "title": "Ttl Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "drive_started",
+          "default": "drive_started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "mower_id",
+        "max_rate_hz",
+        "ttl_ms",
+        "max_seconds",
+        "blade_on_allowed",
+        "capabilities"
+      ],
+      "title": "DriveStartedMessage",
+      "type": "object"
+    },
+    "ErrorMessage": {
+      "description": "A request failed.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/RealtimeErrorCode"
+        },
+        "message": {
+          "maxLength": 500,
+          "title": "Message",
+          "type": "string"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ErrorMessage",
+      "type": "object"
+    },
+    "GeoPosition": {
+      "description": "A WGS84 position.",
+      "properties": {
+        "alt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Altitude in metres, if known.",
+          "title": "Alt"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 360,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Heading in degrees, 0 = north, clockwise.",
+          "title": "Heading"
+        },
+        "lat": {
+          "description": "Latitude in degrees.",
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lon": {
+          "description": "Longitude in degrees.",
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Lon",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lat",
+        "lon"
+      ],
+      "title": "GeoPosition",
+      "type": "object"
+    },
+    "MowerActivity": {
+      "description": "What the mower is doing right now.",
+      "enum": [
+        "idle",
+        "mowing",
+        "paused",
+        "returning",
+        "docked",
+        "charging",
+        "error",
+        "offline",
+        "unknown"
+      ],
+      "title": "MowerActivity",
+      "type": "string"
+    },
+    "MowerState": {
+      "description": "A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.",
+      "properties": {
+        "account_id": {
+          "format": "uuid",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "activity": {
+          "$ref": "#/$defs/MowerActivity"
+        },
+        "battery_percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Battery Percent",
+          "type": "integer"
+        },
+        "blade_height_mm": {
+          "anyOf": [
+            {
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Blade Height Mm"
+        },
+        "charging": {
+          "default": false,
+          "title": "Charging",
+          "type": "boolean"
+        },
+        "connection": {
+          "$ref": "#/$defs/ConnectionKind"
+        },
+        "drive_recoverable": {
+          "default": false,
+          "description": "With activity `error`: the error is not a safety sensor stop, so manual driving may free the mower (stuck, wheel slip). Lift, tilt and collision stops are never drive recoverable; the controller refuses drive frames for them.",
+          "title": "Drive Recoverable",
+          "type": "boolean"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "error_message": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Message"
+        },
+        "firmware": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Firmware"
+        },
+        "light_on": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).",
+          "title": "Light On"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "observed_at": {
+          "description": "When the device reported this state (UTC).",
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GeoPosition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "position_source": {
+          "$ref": "#/$defs/PositionSource",
+          "default": "unknown",
+          "description": "Where `position` comes from; `unknown` whenever `position` is null."
+        },
+        "raw": {
+          "additionalProperties": true,
+          "description": "Adapter specific extras. Consumers must not rely on its structure.",
+          "title": "Raw",
+          "type": "object"
+        },
+        "rtk_fix": {
+          "$ref": "#/$defs/RtkFixStatus",
+          "default": "unknown"
+        },
+        "rtk_source": {
+          "$ref": "#/$defs/RtkSource",
+          "default": "unknown"
+        },
+        "speed_mps": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speed Mps"
+        }
+      },
+      "required": [
+        "mower_id",
+        "account_id",
+        "observed_at",
+        "activity",
+        "battery_percent",
+        "connection"
+      ],
+      "title": "MowerState",
+      "type": "object"
+    },
+    "PongMessage": {
+      "description": "Answer to ``ping``.",
+      "properties": {
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "pong",
+          "default": "pong",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "PongMessage",
+      "type": "object"
+    },
+    "PositionSource": {
+      "description": "Where :attr:`MowerState.position` comes from, so consumers can judge it.\n\n``rtk`` is the mower's own positioning with an RTK fix (fixed or float), ``gnss`` the same\npositioning without an RTK fix (single point, metres of scatter), ``dock`` the known pose of\nthe charging station while the mower stands in it (the adapter reports the dock instead of\nthe scattering raw position), ``unknown`` when there is no position or its quality is not\nknown.",
+      "enum": [
+        "rtk",
+        "gnss",
+        "dock",
+        "unknown"
+      ],
+      "title": "PositionSource",
+      "type": "string"
+    },
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalSummary": {
+      "description": "Who the connection acts for (from the verified token).",
+      "properties": {
+        "account_id": {
+          "format": "uuid",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind"
+        },
+        "subject": {
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "account_id",
+        "kind"
+      ],
+      "title": "PrincipalSummary",
+      "type": "object"
+    },
+    "ReadyMessage": {
+      "description": "The token was accepted; sent after every ``auth``.",
+      "properties": {
+        "connection_id": {
+          "format": "uuid",
+          "title": "Connection Id",
+          "type": "string"
+        },
+        "principal": {
+          "$ref": "#/$defs/PrincipalSummary"
+        },
+        "server_time": {
+          "format": "date-time",
+          "title": "Server Time",
+          "type": "string"
+        },
+        "token_expires_at": {
+          "description": "The socket closes with 4401 at this time unless a fresh `auth` arrives.",
+          "format": "date-time",
+          "title": "Token Expires At",
+          "type": "string"
+        },
+        "type": {
+          "const": "ready",
+          "default": "ready",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "connection_id",
+        "principal",
+        "token_expires_at",
+        "server_time"
+      ],
+      "title": "ReadyMessage",
+      "type": "object"
+    },
+    "RealtimeErrorCode": {
+      "description": "Codes of ``error`` messages.",
+      "enum": [
+        "invalid_message",
+        "unauthorized",
+        "limit_exceeded",
+        "internal",
+        "drive_not_allowed",
+        "drive_unsupported",
+        "drive_busy",
+        "drive_unavailable",
+        "drive_not_active"
+      ],
+      "title": "RealtimeErrorCode",
+      "type": "string"
+    },
+    "RevokeReason": {
+      "description": "Why subscriptions ended without an ``unsubscribe``.",
+      "enum": [
+        "access_revoked"
+      ],
+      "title": "RevokeReason",
+      "type": "string"
+    },
+    "RevokedMessage": {
+      "description": "The subscriptions of these mowers ended; no further updates follow for them.",
+      "properties": {
+        "mower_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Mower Ids",
+          "type": "array"
+        },
+        "reason": {
+          "$ref": "#/$defs/RevokeReason"
+        },
+        "type": {
+          "const": "revoked",
+          "default": "revoked",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mower_ids",
+        "reason"
+      ],
+      "title": "RevokedMessage",
+      "type": "object"
+    },
+    "RtkFixStatus": {
+      "description": "Quality of the RTK position fix.",
+      "enum": [
+        "none",
+        "float",
+        "fixed",
+        "unknown"
+      ],
+      "title": "RtkFixStatus",
+      "type": "string"
+    },
+    "RtkSource": {
+      "description": "Where RTK correction data comes from.",
+      "enum": [
+        "base_station",
+        "network",
+        "unknown"
+      ],
+      "title": "RtkSource",
+      "type": "string"
+    },
+    "StateMessage": {
+      "description": "The newest state of a subscribed mower (older unsent states are replaced).",
+      "properties": {
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/MowerState"
+        },
+        "type": {
+          "const": "state",
+          "default": "state",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mower_id",
+        "state"
+      ],
+      "title": "StateMessage",
+      "type": "object"
+    },
+    "SubscribedMessage": {
+      "description": "Answer to ``subscribe``: ``mower_ids`` are subscribed, ``denied`` are not.\n\nA denied id is either unknown or not visible to the caller; both look the same.",
+      "properties": {
+        "denied": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Denied",
+          "type": "array"
+        },
+        "mower_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Mower Ids",
+          "type": "array"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "subscribed",
+          "default": "subscribed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "SubscribedMessage",
+      "type": "object"
+    },
+    "UnsubscribedMessage": {
+      "description": "Answer to ``unsubscribe``.",
+      "properties": {
+        "mower_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Mower Ids",
+          "type": "array"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "unsubscribed",
+          "default": "unsubscribed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "UnsubscribedMessage",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Parses (and documents) one server message: ``RealtimeServerMessage.model_validate_json``.",
+  "discriminator": {
+    "mapping": {
+      "command_result": "#/$defs/CommandResultMessage",
+      "drive_ended": "#/$defs/DriveEndedMessage",
+      "drive_frame_ack": "#/$defs/DriveFrameAckMessage",
+      "drive_started": "#/$defs/DriveStartedMessage",
+      "error": "#/$defs/ErrorMessage",
+      "pong": "#/$defs/PongMessage",
+      "ready": "#/$defs/ReadyMessage",
+      "revoked": "#/$defs/RevokedMessage",
+      "state": "#/$defs/StateMessage",
+      "subscribed": "#/$defs/SubscribedMessage",
+      "unsubscribed": "#/$defs/UnsubscribedMessage"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ReadyMessage"
+    },
+    {
+      "$ref": "#/$defs/SubscribedMessage"
+    },
+    {
+      "$ref": "#/$defs/UnsubscribedMessage"
+    },
+    {
+      "$ref": "#/$defs/StateMessage"
+    },
+    {
+      "$ref": "#/$defs/CommandResultMessage"
+    },
+    {
+      "$ref": "#/$defs/RevokedMessage"
+    },
+    {
+      "$ref": "#/$defs/ErrorMessage"
+    },
+    {
+      "$ref": "#/$defs/PongMessage"
+    },
+    {
+      "$ref": "#/$defs/DriveStartedMessage"
+    },
+    {
+      "$ref": "#/$defs/DriveFrameAckMessage"
+    },
+    {
+      "$ref": "#/$defs/DriveEndedMessage"
+    }
+  ],
+  "title": "RealtimeServerMessage"
+}

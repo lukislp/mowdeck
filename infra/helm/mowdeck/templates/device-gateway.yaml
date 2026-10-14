@@ -1,0 +1,26 @@
+{{- /* Device-Gateway: holds the mower connections, executes commands, publishes telemetry
+(Compose service device-gateway). A StatefulSet: one shard per replica, the shard index is the
+pod index (label apps.kubernetes.io/pod-index), the shard count the replica count (ADR 0013).
+With services.visionCapture enabled, photos of real cameras go through the capture worker
+(ADR 0035; MOWDECK_CAPTURE_URL, the shared token secrets.CAPTURE_TOKEN). */ -}}
+{{- $c := .Values.config }}
+{{- $v := .Values.services.deviceGateway }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_SHARD_COUNT" (toString $v.replicas)
+  "MOWDECK_SIM_TIME_SCALE" $c.MOWDECK_SIM_TIME_SCALE
+  "MOWDECK_TELEMETRY_HEARTBEAT_SECONDS" $c.MOWDECK_TELEMETRY_HEARTBEAT_SECONDS
+  "MOWDECK_FAKE_MAMMOTION_CLOUD" (toString $c.GATEWAY_FAKE_MAMMOTION_CLOUD)
+  "MOWDECK_PHOTO_TIMEOUT_SECONDS" (toString $c.GATEWAY_PHOTO_TIMEOUT_SECONDS)) }}
+{{- $secretFiles := list }}
+{{- $_ := set $env "MOWDECK_CAPTURE_TIMEOUT_SECONDS" (toString $c.CAPTURE_TIMEOUT_SECONDS) }}
+{{- if .Values.services.visionCapture.enabled }}
+{{- $_ := set $env "MOWDECK_CAPTURE_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "vision-capture")) }}
+{{- $secretFiles = list (dict "key" "capture-token" "file" "capture-token" "env" "MOWDECK_CAPTURE_TOKEN_FILE") }}
+{{- else }}
+{{- /* No worker: photos of camera-capable adapters answer "unsupported". */ -}}
+{{- $_ := set $env "MOWDECK_CAPTURE_URL" "" }}
+{{- $_ := set $env "MOWDECK_CAPTURE_TOKEN" "" }}
+{{- end }}
+{{- $shardIndex := dict "name" "MOWDECK_SHARD_INDEX" "valueFrom" (dict "fieldRef" (dict "fieldPath" "metadata.labels['apps.kubernetes.io/pod-index']")) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "device-gateway" "key" "deviceGateway" "image" "device-gateway"
+  "kind" "StatefulSet" "env" $env "podEnv" (list $shardIndex) "secretFiles" $secretFiles) }}

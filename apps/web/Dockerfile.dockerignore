@@ -1,0 +1,16 @@
+# Build context of apps/web/Dockerfile is the repository root: send only the frontend sources.
+**
+!pnpm-workspace.yaml
+!package.json
+!pnpm-lock.yaml
+!.npmrc
+!apps/web/**
+!libs/mowdeck-ui/**
+!tools/ts-codegen/package.json
+!tests/e2e-web/package.json
+**/node_modules
+**/.svelte-kit
+**/build
+**/coverage
+apps/web/src/lib/paraglide
+apps/web/screenshots

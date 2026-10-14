@@ -1,0 +1,149 @@
+"""What one mower model can do over one connection.
+
+Capabilities are explicit data, reported by the device adapter through
+``MowerConnection.capabilities()``. Clients and the controller decide with them instead of
+guessing from the model name: for example whether joystick driving is offered, which mowing
+patterns run natively on the mower, and which blade heights are valid.
+"""
+
+from enum import StrEnum
+from typing import Annotated, Self
+
+from pydantic import Field, PlainSerializer, model_validator
+
+from mowdeck_contracts.v1._base import ContractModel
+from mowdeck_contracts.v1.mower import ConnectionKind, RtkSource
+
+
+class CameraAccess(StrEnum):
+    """How a camera stream can be reached, if there is one."""
+
+    NONE = "none"
+    """The mower has no camera, or the adapter cannot reach it."""
+    CLOUD = "cloud"
+    """Only through the vendor cloud (for example Agora for Mammotion)."""
+    LOCAL = "local"
+    """Directly on the local network."""
+
+
+def _sorted_strings(values: frozenset[str]) -> list[str]:
+    return sorted(values)
+
+
+def _sorted_sources(values: frozenset[RtkSource]) -> list[RtkSource]:
+    return sorted(values)
+
+
+def _sorted_kinds(values: frozenset[ConnectionKind]) -> list[ConnectionKind]:
+    return sorted(values)
+
+
+PatternNames = Annotated[
+    frozenset[str], PlainSerializer(_sorted_strings, return_type=list[str], when_used="always")
+]
+"""A set of pattern names, serialised as a sorted list so dumps are deterministic."""
+
+RtkSources = Annotated[
+    frozenset[RtkSource],
+    PlainSerializer(_sorted_sources, return_type=list[RtkSource], when_used="always"),
+]
+
+ConnectionKinds = Annotated[
+    frozenset[ConnectionKind],
+    PlainSerializer(_sorted_kinds, return_type=list[ConnectionKind], when_used="always"),
+]
+
+
+class MowerCapabilities(ContractModel):
+    """Feature flags and limits of one mower behind one connection.
+
+    All fields default to "not supported", so an adapter only declares what it really offers.
+    """
+
+    model: str | None = Field(default=None, max_length=64, description="Mower model, if known.")
+    native_patterns: PatternNames = Field(
+        default_factory=frozenset,
+        description=(
+            "Mowing pattern names the mower runs natively on its own map areas, for example "
+            "`stripes`, `diagonal`, `checkerboard`, `edge_only`."
+        ),
+    )
+    manual_drive: bool = Field(default=False, description="Joystick driving is supported.")
+    manual_drive_blades: bool = Field(
+        default=False,
+        description="Blades may run during manual driving when a frame explicitly asks for it.",
+    )
+    custom_paths: bool = Field(
+        default=False,
+        description="The mower can follow an arbitrary path or boundary (False for LUBA today).",
+    )
+    camera: CameraAccess = CameraAccess.NONE
+    light: bool = Field(
+        default=False,
+        description="The mower's light (the camera's headlamp on Mammotion mowers) can be "
+        "switched with `set_light`.",
+    )
+    rtk_sources: RtkSources = Field(
+        default_factory=frozenset, description="RTK correction sources the mower can report."
+    )
+    blade_height_range_mm: tuple[int, int] | None = Field(
+        default=None, description="Inclusive (min, max) blade height in millimetres, if settable."
+    )
+    cutting_width_mm: int | None = Field(
+        default=None,
+        gt=0,
+        le=2000,
+        description="Width of the cut swath in millimetres, if known (coverage heatmaps).",
+    )
+    min_speed_mps: float | None = Field(
+        default=None,
+        gt=0,
+        le=5,
+        description="Lowest settable driving speed while mowing, if the model has one.",
+    )
+    max_speed_mps: float | None = Field(
+        default=None, gt=0, le=5, description="Highest settable driving speed while mowing."
+    )
+    connection_kinds: ConnectionKinds = Field(
+        default_factory=frozenset, description="Connection kinds this mower can use."
+    )
+
+    @model_validator(mode="after")
+    def _check_ranges(self) -> Self:
+        if self.blade_height_range_mm is not None:
+            low, high = self.blade_height_range_mm
+            if not 0 <= low <= high:
+                msg = "blade_height_range_mm must be (min, max) with 0 <= min <= max"
+                raise ValueError(msg)
+        if (
+            self.min_speed_mps is not None
+            and self.max_speed_mps is not None
+            and self.min_speed_mps > self.max_speed_mps
+        ):
+            msg = "min_speed_mps must not exceed max_speed_mps"
+            raise ValueError(msg)
+        return self
+
+    def supports_pattern(self, name: str) -> bool:
+        """Return True if ``name`` is a native pattern of this mower."""
+        return name in self.native_patterns
+
+    def blade_height_allowed(self, mm: int) -> bool:
+        """Return True if ``mm`` lies within :attr:`blade_height_range_mm`.
+
+        A mower without a settable blade height allows nothing.
+        """
+        if self.blade_height_range_mm is None:
+            return False
+        low, high = self.blade_height_range_mm
+        return low <= mm <= high
+
+    def speed_allowed(self, mps: float) -> bool:
+        """Return True if ``mps`` lies within :attr:`min_speed_mps` (if set, else just above 0)
+        and :attr:`max_speed_mps`.
+
+        A mower without a settable speed allows nothing.
+        """
+        if self.max_speed_mps is None or not 0 < mps <= self.max_speed_mps:
+            return False
+        return self.min_speed_mps is None or mps >= self.min_speed_mps

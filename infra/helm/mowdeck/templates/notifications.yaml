@@ -1,0 +1,52 @@
+{{- /* Notifications: rules over mower states, inbox, Web Push / APNs / ntfy / log delivery
+(Compose services notifications and notifications-migrate). */ -}}
+{{- $c := .Values.config }}
+{{- $s := .Values.secrets }}
+{{- $v := .Values.services.notifications }}
+{{- $hasVapid := ternary $s.existingSecretHasVapidKey (ne $s.NOTIFICATIONS_VAPID_PRIVATE_KEY "") (ne $s.existingSecret "") }}
+{{- if and $v.enabled (not $hasVapid) (or (gt (int $v.replicas) 1) $v.autoscaling.enabled) }}
+{{- fail "services.notifications runs more than one replica: set secrets.NOTIFICATIONS_VAPID_PRIVATE_KEY (or secrets.existingSecretHasVapidKey with existingSecret), otherwise every pod creates its own development VAPID key" }}
+{{- end }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_NOTIFICATIONS_CHANNELS" $c.NOTIFICATIONS_CHANNELS
+  "MOWDECK_NOTIFICATIONS_VAPID_SUBJECT" $c.NOTIFICATIONS_VAPID_SUBJECT
+  "MOWDECK_NOTIFICATIONS_VAPID_KEY_PATH" "/var/lib/notifications/vapid_private_key"
+  "MOWDECK_NOTIFICATIONS_NTFY_ALLOWED_SERVERS" $c.NOTIFICATIONS_NTFY_ALLOWED_SERVERS
+  "MOWDECK_NOTIFICATIONS_OFFLINE_AFTER_SECONDS" $c.NOTIFICATIONS_OFFLINE_AFTER_SECONDS
+  "MOWDECK_NOTIFICATIONS_BATTERY_LOW_PERCENT" $c.NOTIFICATIONS_BATTERY_LOW_PERCENT
+  "MOWDECK_NOTIFICATIONS_MOWING_MIN_SECONDS" $c.NOTIFICATIONS_MOWING_MIN_SECONDS
+  "MOWDECK_NOTIFICATIONS_GEOFENCE_MARGIN_METERS" $c.NOTIFICATIONS_GEOFENCE_MARGIN_METERS
+  "MOWDECK_NOTIFICATIONS_ACK_SILENCE_SECONDS" $c.NOTIFICATIONS_ACK_SILENCE_SECONDS) }}
+{{- /* APNs: the settings are always rendered (empty means "not set"), the key file only when
+enabled, from its own Secret. */ -}}
+{{- $apns := $v.apns }}
+{{- $_ := set $env "MOWDECK_APNS_KEY_ID" ($apns.enabled | ternary $apns.keyId "") }}
+{{- $_ := set $env "MOWDECK_APNS_TEAM_ID" ($apns.enabled | ternary $apns.teamId "") }}
+{{- $_ := set $env "MOWDECK_APNS_BUNDLE_ID" $apns.bundleId }}
+{{- $_ := set $env "MOWDECK_APNS_ENVIRONMENT" $apns.environment }}
+{{- $_ := set $env "MOWDECK_APNS_KEY_FILE" "" }}
+{{- $apnsVolumes := list }}
+{{- $apnsMounts := list }}
+{{- if and $v.enabled $apns.enabled }}
+{{- $secret := required "services.notifications.apns.existingSecret is required when apns.enabled (a Secret with the AuthKey_<KEY_ID>.p8 key)" $apns.existingSecret }}
+{{- if not (and $apns.keyId $apns.teamId) }}
+{{- fail "services.notifications.apns.keyId and teamId are required when apns.enabled" }}
+{{- end }}
+{{- $_ := set $env "MOWDECK_APNS_KEY_FILE" (printf "/run/secrets/apns/%s" $apns.secretKey) }}
+{{- $apnsVolumes = list (dict "name" "apns-key" "secret" (dict "secretName" $secret "defaultMode" 288 "items" (list (dict "key" $apns.secretKey "path" $apns.secretKey)))) }}
+{{- $apnsMounts = list (dict "name" "apns-key" "mountPath" "/run/secrets/apns" "readOnly" true) }}
+{{- end }}
+{{- with $c.NOTIFICATIONS_VAPID_PUBLIC_KEY }}{{ $_ := set $env "MOWDECK_NOTIFICATIONS_VAPID_PUBLIC_KEY" . }}{{ end }}
+{{- with (default (include "mowdeck.publicOrigin" .) $c.NOTIFICATIONS_APP_URL) }}{{ $_ := set $env "MOWDECK_NOTIFICATIONS_APP_URL" . }}{{ end }}
+{{- $files := list
+    (dict "key" "database-url-notifications" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE") }}
+{{- if $hasVapid }}
+{{- $files = append $files (dict "key" "notifications-vapid-private-key" "file" "vapid-private-key" "env" "MOWDECK_NOTIFICATIONS_VAPID_PRIVATE_KEY_FILE") }}
+{{- end }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "notifications" "key" "notifications" "image" "notifications" "module" "notifications.adapters.db.migrate" "weight" 4) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "notifications" "key" "notifications" "image" "notifications"
+  "env" $env "db" "notifications" "migrateModule" "notifications.adapters.db.migrate" "authz" true
+  "secretFiles" $files
+  "volumes" $apnsVolumes "volumeMounts" $apnsMounts
+  "writableDirs" (list (dict "name" "vapid" "mountPath" "/var/lib/notifications"))) }}

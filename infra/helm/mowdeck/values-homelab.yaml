@@ -1,0 +1,112 @@
+# Homelab overlay: one node (k3s, kind, a mini PC or a Raspberry Pi 5 with 4 GB), one replica per
+# service, small requests, the in-cluster PostgreSQL (CloudNativePG, one instance) and a single
+# NATS server with JetStream.
+#
+#   helm install mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version <version> \
+#     -n mowdeck --create-namespace -f values-homelab.yaml -f my-secrets.yaml
+#
+# Remote access: keep the Ingress on the LAN and reach it through Tailscale. With the Tailscale
+# Kubernetes operator set ingress.className: tailscale and ingress.host to the machine name; the
+# operator provisions the HTTPS certificate of <name>.<tailnet>.ts.net
+# (https://tailscale.com/kb/1439/kubernetes-operator-cluster-ingress). Installing the PWA and Web
+# Push need HTTPS.
+
+config:
+  # Smaller Argon2 parameters for small nodes (19 MiB per login instead of 64 MiB).
+  IDENTITY_ARGON2_PROFILE: owasp_min
+
+ingress:
+  # k3s ships Traefik as the default IngressClass; with the Tailscale operator use "tailscale".
+  className: ""
+  host: ""
+
+postgresql:
+  cloudnativepg:
+    instances: 1
+    storage:
+      size: 5Gi
+    resources:
+      requests: {cpu: 50m, memory: 192Mi}
+      limits: {memory: 512Mi}
+
+nats:
+  config:
+    cluster:
+      enabled: false
+    jetstream:
+      fileStore:
+        pvc:
+          # At least 3Gi: the MowDeck streams reserve 2 GiB (see values.yaml).
+          size: 3Gi
+  container:
+    resources:
+      requests: {cpu: 20m, memory: 32Mi}
+      limits: {memory: 256Mi}
+  podDisruptionBudget:
+    enabled: false
+
+openfga:
+  replicaCount: 1
+  resources:
+    requests: {cpu: 20m, memory: 48Mi}
+    limits: {memory: 256Mi}
+
+services:
+  identity:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 128Mi}
+      limits: {memory: 256Mi}
+  fleet:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+  deviceGateway:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 128Mi}
+      limits: {memory: 384Mi}
+  telemetry:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+  realtime:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+  notifications:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+  scheduler:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+  entitlements:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+  # Billing stays off at home (enabled: false in values.yaml); small requests if enabled.
+  vision:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 160Mi}
+      limits: {memory: 512Mi}
+  billing:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+  planner:
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 128Mi}
+      limits: {memory: 384Mi}
+  web:
+    replicas: 1

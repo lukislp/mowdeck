@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "CloudProvider": {
+      "description": "Vendor clouds a linked account can belong to.",
+      "enum": [
+        "mammotion"
+      ],
+      "title": "CloudProvider",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``gateway.cloud.discover`` (internal, Fleet to Device-Gateway).",
+  "properties": {
+    "account_id": {
+      "description": "The MowDeck account that links the vendor account.",
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "email": {
+      "maxLength": 254,
+      "minLength": 3,
+      "title": "Email",
+      "type": "string"
+    },
+    "linked_account_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Set for a re-read of a stored linked account; null on create.",
+      "title": "Linked Account Id"
+    },
+    "password": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Password",
+      "type": "string"
+    },
+    "provider": {
+      "$ref": "#/$defs/CloudProvider",
+      "default": "mammotion"
+    }
+  },
+  "required": [
+    "account_id",
+    "email",
+    "password"
+  ],
+  "title": "CloudDiscoverRequest",
+  "type": "object"
+}

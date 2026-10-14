@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Stop blades and wheels immediately. Always sent with ``priority = emergency``.",
+  "properties": {
+    "kind": {
+      "const": "emergency_stop",
+      "default": "emergency_stop",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "EmergencyStop",
+  "type": "object"
+}

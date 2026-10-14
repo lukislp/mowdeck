@@ -1,0 +1,71 @@
+# Compose block for fleet: paste the entries below "services:" into
+# infra/compose/docker-compose.yml. Build context is the repository root.
+# (Already pasted; keep both in sync.)
+services:
+  fleet-migrate:
+    image: mowdeck/fleet:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/fleet/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "fleet.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://fleet:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/fleet
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Sites, groups and mowers, their place in the hierarchy (OpenFGA tuples),
+  # the mower registry of the Device-Gateway (fleet.mowers.list, mower.* events)
+  # and every command: checked per command kind, recorded, published.
+  fleet:
+    image: mowdeck/fleet:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/fleet/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://fleet:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/fleet
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ALLOWED_CONNECTION_KINDS: ${FLEET_ALLOWED_CONNECTION_KINDS:-simulated}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.fleet.rule=PathPrefix(`/api/v1/fleet`)
+      - traefik.http.routers.fleet.entrypoints=web
+      - traefik.http.services.fleet.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      fleet-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]

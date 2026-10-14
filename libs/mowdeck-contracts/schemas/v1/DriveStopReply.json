@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`DriveStopRequest`; ``found`` is False for an unknown or closed session.",
+  "properties": {
+    "found": {
+      "title": "Found",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "found"
+  ],
+  "title": "DriveStopReply",
+  "type": "object"
+}

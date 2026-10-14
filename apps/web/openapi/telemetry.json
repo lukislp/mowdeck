@@ -1,0 +1,3024 @@
+{
+  "components": {
+    "schemas": {
+      "BatteryPointOut": {
+        "description": "One bin (or one row) of the battery series.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "battery_max": {
+            "title": "Battery Max",
+            "type": "integer"
+          },
+          "battery_min": {
+            "title": "Battery Min",
+            "type": "integer"
+          },
+          "battery_percent": {
+            "title": "Battery Percent",
+            "type": "integer"
+          },
+          "charging": {
+            "title": "Charging",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "at",
+          "battery_percent",
+          "battery_min",
+          "battery_max",
+          "charging"
+        ],
+        "title": "BatteryPointOut",
+        "type": "object"
+      },
+      "BatterySeries": {
+        "description": "Battery percentage of a mower in a time range.",
+        "properties": {
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/BatteryPointOut"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "step_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bin width, null for raw rows.",
+            "title": "Step Seconds"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mower_id",
+          "from",
+          "to",
+          "step_seconds",
+          "points",
+          "truncated"
+        ],
+        "title": "BatterySeries",
+        "type": "object"
+      },
+      "BladeChangeList": {
+        "description": "Recorded blade changes of a mower, newest first.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BladeChangeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "items"
+        ],
+        "title": "BladeChangeList",
+        "type": "object"
+      },
+      "BladeChangeOut": {
+        "description": "A recorded blade change.",
+        "properties": {
+          "changed_at": {
+            "format": "date-time",
+            "title": "Changed At",
+            "type": "string"
+          },
+          "changed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Subject of the principal who recorded it.",
+            "title": "Changed By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "id",
+          "changed_at",
+          "note",
+          "changed_by"
+        ],
+        "title": "BladeChangeOut",
+        "type": "object"
+      },
+      "BladeResetIn": {
+        "description": "Body of the blade reset.",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Free text, optional.",
+            "title": "Note"
+          }
+        },
+        "title": "BladeResetIn",
+        "type": "object"
+      },
+      "CameraAccess": {
+        "description": "How a camera stream can be reached, if there is one.",
+        "enum": [
+          "none",
+          "cloud",
+          "local"
+        ],
+        "title": "CameraAccess",
+        "type": "string"
+      },
+      "CommandEventOut": {
+        "description": "One status transition of a command.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "command_id": {
+            "format": "uuid",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "status",
+          "reason",
+          "at"
+        ],
+        "title": "CommandEventOut",
+        "type": "object"
+      },
+      "CommandTimeline": {
+        "description": "The newest command transitions of a mower, newest first.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommandEventOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "items"
+        ],
+        "title": "CommandTimeline",
+        "type": "object"
+      },
+      "ConnectionKind": {
+        "description": "How the Device-Gateway is connected to the mower.",
+        "enum": [
+          "ble_bridge",
+          "wifi",
+          "cloud",
+          "simulated"
+        ],
+        "title": "ConnectionKind",
+        "type": "string"
+      },
+      "DockPose": {
+        "description": "Position and orientation of the charging station in the local frame.",
+        "properties": {
+          "heading_deg": {
+            "default": 0.0,
+            "description": "Local frame, counter-clockwise from +x.",
+            "exclusiveMaximum": 360.0,
+            "minimum": 0.0,
+            "title": "Heading Deg",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "DockPose",
+        "type": "object"
+      },
+      "EventDef": {
+        "description": "An event type a module publishes.",
+        "properties": {
+          "schema_ref": {
+            "description": "Reference to the payload JSON Schema (URI or package path).",
+            "minLength": 1,
+            "title": "Schema Ref",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "schema_ref"
+        ],
+        "title": "EventDef",
+        "type": "object"
+      },
+      "FeatureDef": {
+        "description": "A plan feature a module offers, e.g. ``reports``.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "FeatureDef",
+        "type": "object"
+      },
+      "GeoPosition": {
+        "description": "A WGS84 position.",
+        "properties": {
+          "alt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Altitude in metres, if known.",
+            "title": "Alt"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 360.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Heading in degrees, 0 = north, clockwise.",
+            "title": "Heading"
+          },
+          "lat": {
+            "description": "Latitude in degrees.",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "description": "Longitude in degrees.",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "GeoPosition",
+        "type": "object"
+      },
+      "GeoReference": {
+        "description": "Anchors the local frame on the earth.\n\nThe local point ``(0, 0)`` is at ``(origin_lat, origin_lon)``. The local axes are the east\nand north axes rotated counter-clockwise by ``rotation_deg``: a local point ``(x, y)`` lies\n``east = x cos(r) - y sin(r)`` and ``north = x sin(r) + y cos(r)`` metres from the origin.",
+        "properties": {
+          "origin_lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Origin Lat",
+            "type": "number"
+          },
+          "origin_lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Origin Lon",
+            "type": "number"
+          },
+          "rotation_deg": {
+            "default": 0.0,
+            "maximum": 360.0,
+            "minimum": -360.0,
+            "title": "Rotation Deg",
+            "type": "number"
+          }
+        },
+        "required": [
+          "origin_lat",
+          "origin_lon"
+        ],
+        "title": "GeoReference",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthDaily": {
+        "description": "Day totals of an inclusive range of UTC days, oldest first (days without data absent).",
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/HealthDayOut"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "from": {
+            "format": "date",
+            "title": "From",
+            "type": "string"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "to": {
+            "format": "date",
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "from",
+          "to",
+          "days"
+        ],
+        "title": "HealthDaily",
+        "type": "object"
+      },
+      "HealthDayOut": {
+        "description": "Totals of one UTC day.",
+        "properties": {
+          "battery_cycles": {
+            "title": "Battery Cycles",
+            "type": "integer"
+          },
+          "blade_hours": {
+            "title": "Blade Hours",
+            "type": "number"
+          },
+          "charge_sessions": {
+            "title": "Charge Sessions",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "distance_m": {
+            "title": "Distance M",
+            "type": "number"
+          },
+          "errors": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Errors",
+            "type": "object"
+          },
+          "jobs": {
+            "default": 0,
+            "description": "Jobs started: transitions into mowing (not from paused).",
+            "title": "Jobs",
+            "type": "integer"
+          },
+          "mowing_hours": {
+            "title": "Mowing Hours",
+            "type": "number"
+          },
+          "online_hours": {
+            "default": 0.0,
+            "description": "Time with states arriving and the mower not offline.",
+            "title": "Online Hours",
+            "type": "number"
+          }
+        },
+        "required": [
+          "day",
+          "blade_hours",
+          "mowing_hours",
+          "distance_m",
+          "battery_cycles",
+          "charge_sessions",
+          "errors"
+        ],
+        "title": "HealthDayOut",
+        "type": "object"
+      },
+      "HeatmapCellOut": {
+        "description": "One cell of a heatmap: integer indexes in the map's local frame (``floor(metres /\ncell_m)``), the value and the number of samples in it.",
+        "properties": {
+          "n": {
+            "description": "Samples located in the cell.",
+            "title": "N",
+            "type": "integer"
+          },
+          "value": {
+            "description": "Cut share or fixed share (0..1), or median dBm.",
+            "title": "Value",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "title": "Y",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "value",
+          "n"
+        ],
+        "title": "HeatmapCellOut",
+        "type": "object"
+      },
+      "HeatmapGapOut": {
+        "description": "A piece of the map's areas the blades missed (local metres, implicit closing edge).",
+        "properties": {
+          "area_m2": {
+            "title": "Area M2",
+            "type": "number"
+          },
+          "polygon": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Polygon",
+            "type": "array"
+          }
+        },
+        "required": [
+          "polygon",
+          "area_m2"
+        ],
+        "title": "HeatmapGapOut",
+        "type": "object"
+      },
+      "HeatmapLegendOut": {
+        "description": "How to colour the values: ``ratio`` and ``fix`` span 0..1, ``dbm`` the response's range\n(null without cells).",
+        "properties": {
+          "kind": {
+            "enum": [
+              "ratio",
+              "fix",
+              "dbm"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          }
+        },
+        "required": [
+          "kind",
+          "min",
+          "max"
+        ],
+        "title": "HeatmapLegendOut",
+        "type": "object"
+      },
+      "HistoryPointOut": {
+        "description": "One bin (or one row) of the history.",
+        "properties": {
+          "activity": {
+            "title": "Activity",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "battery_max": {
+            "title": "Battery Max",
+            "type": "integer"
+          },
+          "battery_min": {
+            "title": "Battery Min",
+            "type": "integer"
+          },
+          "battery_percent": {
+            "title": "Battery Percent",
+            "type": "integer"
+          },
+          "charging": {
+            "title": "Charging",
+            "type": "boolean"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon"
+          },
+          "rtk_fix": {
+            "title": "Rtk Fix",
+            "type": "string"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "at",
+          "activity",
+          "battery_percent",
+          "battery_min",
+          "battery_max",
+          "charging",
+          "rtk_fix",
+          "error_code",
+          "samples",
+          "lat",
+          "lon"
+        ],
+        "title": "HistoryPointOut",
+        "type": "object"
+      },
+      "Layer": {
+        "description": "What a heatmap shows.",
+        "enum": [
+          "coverage",
+          "rtk",
+          "wifi",
+          "mnet"
+        ],
+        "title": "Layer",
+        "type": "string"
+      },
+      "MapArea": {
+        "description": "A mowable area (a \"zone\" in the Mammotion app).",
+        "properties": {
+          "boundary": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "minItems": 3,
+            "title": "Boundary",
+            "type": "array"
+          },
+          "id": {
+            "description": "Stable id; for Mammotion the zone hash.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "boundary"
+        ],
+        "title": "MapArea",
+        "type": "object"
+      },
+      "MapPath": {
+        "description": "A transfer path between areas (driven with blades off).",
+        "properties": {
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "minItems": 2,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "points"
+        ],
+        "title": "MapPath",
+        "type": "object"
+      },
+      "MapZone": {
+        "description": "A polygon the mower must stay out of: a no-go zone or an obstacle.",
+        "properties": {
+          "boundary": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "minItems": 3,
+            "title": "Boundary",
+            "type": "array"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "boundary"
+        ],
+        "title": "MapZone",
+        "type": "object"
+      },
+      "ModuleDescriptor": {
+        "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventDef"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureDef"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9\\-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionDef"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "ui_areas": {
+            "items": {
+              "$ref": "#/components/schemas/UiAreaDef"
+            },
+            "title": "Ui Areas",
+            "type": "array"
+          },
+          "version": {
+            "maxLength": 64,
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.\\-+]+)?$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "ModuleDescriptor",
+        "type": "object"
+      },
+      "MowerActivity": {
+        "description": "What the mower is doing right now.",
+        "enum": [
+          "idle",
+          "mowing",
+          "paused",
+          "returning",
+          "docked",
+          "charging",
+          "error",
+          "offline",
+          "unknown"
+        ],
+        "title": "MowerActivity",
+        "type": "string"
+      },
+      "MowerCapabilities": {
+        "description": "Feature flags and limits of one mower behind one connection.\n\nAll fields default to \"not supported\", so an adapter only declares what it really offers.",
+        "properties": {
+          "blade_height_range_mm": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive (min, max) blade height in millimetres, if settable.",
+            "title": "Blade Height Range Mm"
+          },
+          "camera": {
+            "$ref": "#/components/schemas/CameraAccess",
+            "default": "none"
+          },
+          "connection_kinds": {
+            "description": "Connection kinds this mower can use.",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionKind"
+            },
+            "title": "Connection Kinds",
+            "type": "array"
+          },
+          "custom_paths": {
+            "default": false,
+            "description": "The mower can follow an arbitrary path or boundary (False for LUBA today).",
+            "title": "Custom Paths",
+            "type": "boolean"
+          },
+          "cutting_width_mm": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 2000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Width of the cut swath in millimetres, if known (coverage heatmaps).",
+            "title": "Cutting Width Mm"
+          },
+          "light": {
+            "default": false,
+            "description": "The mower's light (the camera's headlamp on Mammotion mowers) can be switched with `set_light`.",
+            "title": "Light",
+            "type": "boolean"
+          },
+          "manual_drive": {
+            "default": false,
+            "description": "Joystick driving is supported.",
+            "title": "Manual Drive",
+            "type": "boolean"
+          },
+          "manual_drive_blades": {
+            "default": false,
+            "description": "Blades may run during manual driving when a frame explicitly asks for it.",
+            "title": "Manual Drive Blades",
+            "type": "boolean"
+          },
+          "max_speed_mps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 5.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Highest settable driving speed while mowing.",
+            "title": "Max Speed Mps"
+          },
+          "min_speed_mps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 5.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lowest settable driving speed while mowing, if the model has one.",
+            "title": "Min Speed Mps"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mower model, if known.",
+            "title": "Model"
+          },
+          "native_patterns": {
+            "description": "Mowing pattern names the mower runs natively on its own map areas, for example `stripes`, `diagonal`, `checkerboard`, `edge_only`.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Native Patterns",
+            "type": "array"
+          },
+          "rtk_sources": {
+            "description": "RTK correction sources the mower can report.",
+            "items": {
+              "$ref": "#/components/schemas/RtkSource"
+            },
+            "title": "Rtk Sources",
+            "type": "array"
+          }
+        },
+        "title": "MowerCapabilities",
+        "type": "object"
+      },
+      "MowerCapabilitiesList": {
+        "description": "Stored capabilities of every mower the caller can view (those that reported any).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MowerCapabilitiesOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "truncated": {
+            "description": "True when more mowers exist than the configured limit.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "title": "MowerCapabilitiesList",
+        "type": "object"
+      },
+      "MowerCapabilitiesOut": {
+        "description": "What the mower can do over its current connection (blade height range, speed, ...).",
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/MowerCapabilities"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "When the gateway read the capabilities (UTC).",
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "received_at": {
+            "description": "When Telemetry stored them (UTC).",
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "observed_at",
+          "received_at",
+          "capabilities"
+        ],
+        "title": "MowerCapabilitiesOut",
+        "type": "object"
+      },
+      "MowerHealthOut": {
+        "description": "Running health totals of a mower (since the first state Telemetry received).",
+        "properties": {
+          "battery_cycles": {
+            "description": "Discharges below 20 % followed by a charge above 80 %.",
+            "title": "Battery Cycles",
+            "type": "integer"
+          },
+          "blade_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last recorded blade change.",
+            "title": "Blade Changed At"
+          },
+          "blade_hours": {
+            "description": "Hours with running blades (heuristic, see README).",
+            "title": "Blade Hours",
+            "type": "number"
+          },
+          "blade_hours_since_change": {
+            "title": "Blade Hours Since Change",
+            "type": "number"
+          },
+          "blade_hours_threshold": {
+            "description": "Hours after which a reminder is sent.",
+            "title": "Blade Hours Threshold",
+            "type": "number"
+          },
+          "blade_source": {
+            "description": "Which blade counter to show as hours since the blade change: the mower's own (device) or MowDeck's (telemetry, blade_hours_since_change).",
+            "enum": [
+              "device",
+              "telemetry"
+            ],
+            "title": "Blade Source",
+            "type": "string"
+          },
+          "charge_sessions": {
+            "title": "Charge Sessions",
+            "type": "integer"
+          },
+          "device_blade_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mower's own blade counter in hours (reset in the vendor app), as the vendor app shows it; null when the mower does not report one.",
+            "title": "Device Blade Hours"
+          },
+          "device_blade_warn_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mower's own blade warning threshold in hours; null when not reported.",
+            "title": "Device Blade Warn Hours"
+          },
+          "distance_m": {
+            "title": "Distance M",
+            "type": "number"
+          },
+          "errors": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Error count per error code (unknown: none).",
+            "title": "Errors",
+            "type": "object"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "mowing_hours": {
+            "title": "Mowing Hours",
+            "type": "number"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "observed_at of the first state counted; null after a blade reset before any telemetry.",
+            "title": "Since"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "since",
+          "blade_hours",
+          "blade_hours_since_change",
+          "blade_changed_at",
+          "blade_hours_threshold",
+          "device_blade_hours",
+          "device_blade_warn_hours",
+          "blade_source",
+          "mowing_hours",
+          "distance_m",
+          "battery_cycles",
+          "charge_sessions",
+          "errors",
+          "updated_at"
+        ],
+        "title": "MowerHealthOut",
+        "type": "object"
+      },
+      "MowerHeatmap": {
+        "description": "A heatmap layer of a mower over its map's local frame.",
+        "properties": {
+          "cell_m": {
+            "description": "Cell size in metres; larger than requested when the cells were coarsened to stay within 20 000.",
+            "title": "Cell M",
+            "type": "number"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/HeatmapCellOut"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "gaps": {
+            "description": "Missed map areas (coverage only).",
+            "items": {
+              "$ref": "#/components/schemas/HeatmapGapOut"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "layer": {
+            "enum": [
+              "coverage",
+              "rtk",
+              "wifi",
+              "mnet"
+            ],
+            "title": "Layer",
+            "type": "string"
+          },
+          "legend": {
+            "$ref": "#/components/schemas/HeatmapLegendOut"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/GeoReference",
+            "description": "Geo reference of the map's local frame."
+          },
+          "samples": {
+            "description": "Track rows that contributed to the layer.",
+            "title": "Samples",
+            "type": "integer"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "True when the row limit cut off older positions.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mower_id",
+          "layer",
+          "cell_m",
+          "from",
+          "to",
+          "reference",
+          "cells",
+          "legend",
+          "gaps",
+          "samples",
+          "truncated"
+        ],
+        "title": "MowerHeatmap",
+        "type": "object"
+      },
+      "MowerMap": {
+        "description": "The map of one mower: areas, no-go zones, obstacles, paths and the dock.",
+        "properties": {
+          "areas": {
+            "items": {
+              "$ref": "#/components/schemas/MapArea"
+            },
+            "title": "Areas",
+            "type": "array"
+          },
+          "dock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DockPose"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "no_go_zones": {
+            "items": {
+              "$ref": "#/components/schemas/MapZone"
+            },
+            "title": "No Go Zones",
+            "type": "array"
+          },
+          "obstacles": {
+            "items": {
+              "$ref": "#/components/schemas/MapZone"
+            },
+            "title": "Obstacles",
+            "type": "array"
+          },
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/MapPath"
+            },
+            "title": "Paths",
+            "type": "array"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/GeoReference"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Map version; for Mammotion the map hash.",
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "reference"
+        ],
+        "title": "MowerMap",
+        "type": "object"
+      },
+      "MowerMapOut": {
+        "description": "The map of a mower as the Device-Gateway last read it (local metres plus reference).",
+        "properties": {
+          "map": {
+            "$ref": "#/components/schemas/MowerMap"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "When the gateway read the map (UTC).",
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "received_at": {
+            "description": "When Telemetry stored it (UTC).",
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Map revision or content hash; also the ETag.",
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "revision",
+          "observed_at",
+          "received_at",
+          "map"
+        ],
+        "title": "MowerMapOut",
+        "type": "object"
+      },
+      "MowerState": {
+        "description": "A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "activity": {
+            "$ref": "#/components/schemas/MowerActivity"
+          },
+          "battery_percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Battery Percent",
+            "type": "integer"
+          },
+          "blade_height_mm": {
+            "anyOf": [
+              {
+                "maximum": 200.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blade Height Mm"
+          },
+          "charging": {
+            "default": false,
+            "title": "Charging",
+            "type": "boolean"
+          },
+          "connection": {
+            "$ref": "#/components/schemas/ConnectionKind"
+          },
+          "drive_recoverable": {
+            "default": false,
+            "description": "With activity `error`: the error is not a safety sensor stop, so manual driving may free the mower (stuck, wheel slip). Lift, tilt and collision stops are never drive recoverable; the controller refuses drive frames for them.",
+            "title": "Drive Recoverable",
+            "type": "boolean"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "firmware": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firmware"
+          },
+          "light_on": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).",
+            "title": "Light On"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "When the device reported this state (UTC).",
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeoPosition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position_source": {
+            "$ref": "#/components/schemas/PositionSource",
+            "default": "unknown",
+            "description": "Where `position` comes from; `unknown` whenever `position` is null."
+          },
+          "raw": {
+            "additionalProperties": true,
+            "description": "Adapter specific extras. Consumers must not rely on its structure.",
+            "title": "Raw",
+            "type": "object"
+          },
+          "rtk_fix": {
+            "$ref": "#/components/schemas/RtkFixStatus",
+            "default": "unknown"
+          },
+          "rtk_source": {
+            "$ref": "#/components/schemas/RtkSource",
+            "default": "unknown"
+          },
+          "speed_mps": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed Mps"
+          }
+        },
+        "required": [
+          "mower_id",
+          "account_id",
+          "observed_at",
+          "activity",
+          "battery_percent",
+          "connection"
+        ],
+        "title": "MowerState",
+        "type": "object"
+      },
+      "MowerStateList": {
+        "description": "Latest states of every mower the caller can view.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MowerStateSnapshot"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "truncated": {
+            "description": "True when more mowers exist than the configured limit.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "title": "MowerStateList",
+        "type": "object"
+      },
+      "MowerStateSnapshot": {
+        "description": "The latest state of a mower.",
+        "properties": {
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "received_at": {
+            "description": "When Telemetry stored this state (UTC).",
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "stale": {
+            "description": "True when the state is older than the stale threshold.",
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/MowerState"
+          }
+        },
+        "required": [
+          "mower_id",
+          "state",
+          "received_at",
+          "stale"
+        ],
+        "title": "MowerStateSnapshot",
+        "type": "object"
+      },
+      "PermissionDef": {
+        "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "implied_by": {
+            "description": "Keys that imply this one when held on the whole account (e.g. `device_gateway.view` implied by `mower.view`).",
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+              "type": "string"
+            },
+            "title": "Implied By",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "PermissionDef",
+        "type": "object"
+      },
+      "PositionOut": {
+        "description": "One point of the position track.",
+        "properties": {
+          "alt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "rtk_fix": {
+            "title": "Rtk Fix",
+            "type": "string"
+          },
+          "rtk_source": {
+            "title": "Rtk Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observed_at",
+          "lat",
+          "lon",
+          "alt",
+          "heading",
+          "rtk_fix",
+          "rtk_source"
+        ],
+        "title": "PositionOut",
+        "type": "object"
+      },
+      "PositionSource": {
+        "description": "Where :attr:`MowerState.position` comes from, so consumers can judge it.\n\n``rtk`` is the mower's own positioning with an RTK fix (fixed or float), ``gnss`` the same\npositioning without an RTK fix (single point, metres of scatter), ``dock`` the known pose of\nthe charging station while the mower stands in it (the adapter reports the dock instead of\nthe scattering raw position), ``unknown`` when there is no position or its quality is not\nknown.",
+        "enum": [
+          "rtk",
+          "gnss",
+          "dock",
+          "unknown"
+        ],
+        "title": "PositionSource",
+        "type": "string"
+      },
+      "PositionTrack": {
+        "description": "Position track of a mower in a time range, oldest first.",
+        "properties": {
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/PositionOut"
+            },
+            "title": "Positions",
+            "type": "array"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mower_id",
+          "from",
+          "to",
+          "positions",
+          "truncated"
+        ],
+        "title": "PositionTrack",
+        "type": "object"
+      },
+      "ReportMowerOut": {
+        "description": "The day totals of one mower in a report (days without data are absent).",
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/HealthDayOut"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "days"
+        ],
+        "title": "ReportMowerOut",
+        "type": "object"
+      },
+      "ReportSummary": {
+        "description": "``GET /reports/summary``: day totals of every visible mower with data in the range.",
+        "properties": {
+          "from": {
+            "format": "date",
+            "title": "From",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportMowerOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "to": {
+            "format": "date",
+            "title": "To",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "More rows than one report returns; narrow the range.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "items",
+          "truncated"
+        ],
+        "title": "ReportSummary",
+        "type": "object"
+      },
+      "RtkFixStatus": {
+        "description": "Quality of the RTK position fix.",
+        "enum": [
+          "none",
+          "float",
+          "fixed",
+          "unknown"
+        ],
+        "title": "RtkFixStatus",
+        "type": "string"
+      },
+      "RtkSource": {
+        "description": "Where RTK correction data comes from.",
+        "enum": [
+          "base_station",
+          "network",
+          "unknown"
+        ],
+        "title": "RtkSource",
+        "type": "string"
+      },
+      "StateHistory": {
+        "description": "History of a mower in a time range.",
+        "properties": {
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryPointOut"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "step_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bin width, null for raw rows.",
+            "title": "Step Seconds"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mower_id",
+          "from",
+          "to",
+          "step_seconds",
+          "points",
+          "truncated"
+        ],
+        "title": "StateHistory",
+        "type": "object"
+      },
+      "UiAreaDef": {
+        "description": "An area the module occupies in the web app shell.",
+        "properties": {
+          "labels": {
+            "description": "Translated menu labels by language tag (e.g. `de`); `menu_label` is the English fallback.",
+            "patternProperties": {
+              "^[a-z]{2}(-[A-Z]{2})?$": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "menu_label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Menu Label",
+            "type": "string"
+          },
+          "required_permission": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Required Permission",
+            "type": "string"
+          },
+          "route": {
+            "maxLength": 200,
+            "pattern": "^/[A-Za-z0-9/_\\-:\\[\\]]*$",
+            "title": "Route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "menu_label",
+          "required_permission"
+        ],
+        "title": "UiAreaDef",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "telemetry",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/.well-known/mowdeck-module": {
+      "get": {
+        "operationId": "module_descriptor__well_known_mowdeck_module_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleDescriptor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Module Descriptor",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/telemetry/accounts/me/mowers/capabilities": {
+      "get": {
+        "description": "Capabilities of every mower of the caller's account that the caller may view and whose\ngateway has reported them (same bound as the states list).",
+        "operationId": "list_capabilities_api_v1_telemetry_accounts_me_mowers_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerCapabilitiesList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Capabilities",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/accounts/me/mowers/states": {
+      "get": {
+        "description": "Latest state of every mower of the caller's account that the caller may view.",
+        "operationId": "list_states_api_v1_telemetry_accounts_me_mowers_states_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerStateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List States",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/battery": {
+      "get": {
+        "description": "Battery percentage over time; with ``step`` one point per bin (mean, min, max, charging\nif any). Same ranges and limits as the history.",
+        "operationId": "get_battery_api_v1_telemetry_mowers__mower_id__battery_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Start of the range (inclusive).",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start of the range (inclusive).",
+              "title": "From"
+            }
+          },
+          {
+            "description": "End of the range (exclusive).",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "End of the range (exclusive).",
+              "title": "To"
+            }
+          },
+          {
+            "description": "Bin width such as 5s, 1m, 1h or 1d (date_bin); raw rows without.",
+            "in": "query",
+            "name": "step",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bin width such as 5s, 1m, 1h or 1d (date_bin); raw rows without.",
+              "title": "Step"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatterySeries"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Battery",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/capabilities": {
+      "get": {
+        "description": "What the mower can do over its connection; 404 ``no-capabilities-yet`` before the\ngateway reported it.",
+        "operationId": "get_capabilities_api_v1_telemetry_mowers__mower_id__capabilities_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerCapabilitiesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Capabilities",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/commands": {
+      "get": {
+        "description": "Status transitions of the mower's commands (accepted, executed, ...), newest first.",
+        "operationId": "get_commands_api_v1_telemetry_mowers__mower_id__commands_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandTimeline"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Commands",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/health": {
+      "get": {
+        "description": "Health totals: blade and mowing hours, distance, battery cycles, charge sessions and\nerrors since the first state; 404 ``no-telemetry-yet`` when nothing was recorded.",
+        "operationId": "get_health_api_v1_telemetry_mowers__mower_id__health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerHealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Health",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/health/blade-changes": {
+      "get": {
+        "description": "Recorded blade changes, newest first (at most 100).",
+        "operationId": "get_blade_changes_api_v1_telemetry_mowers__mower_id__health_blade_changes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BladeChangeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Blade Changes",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/health/blade-reset": {
+      "post": {
+        "description": "Record a blade change: the blade hours since the change restart at zero and the\nthreshold reminder is armed again. Works before the first telemetry, too.",
+        "operationId": "reset_blade_api_v1_telemetry_mowers__mower_id__health_blade_reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BladeResetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerHealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Blade",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/health/daily": {
+      "get": {
+        "description": "Health totals per UTC day (default: the last 30 days, at most 366).",
+        "operationId": "get_health_daily_api_v1_telemetry_mowers__mower_id__health_daily_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "First UTC day (inclusive, YYYY-MM-DD).",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First UTC day (inclusive, YYYY-MM-DD).",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Last UTC day (inclusive).",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last UTC day (inclusive).",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthDaily"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Health Daily",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/heatmap": {
+      "get": {
+        "description": "A raster layer over the mower's map frame for a time range (default: the last 7 days):\ncut share and missed areas (``coverage``), share of fixed RTK samples (``rtk``) or median\nsignal in dBm (``wifi``, ``mnet``). 404 ``no-map-yet`` before the gateway published a map.",
+        "operationId": "get_heatmap_api_v1_telemetry_mowers__mower_id__heatmap_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "coverage, rtk, wifi or mnet.",
+            "in": "query",
+            "name": "layer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Layer",
+              "description": "coverage, rtk, wifi or mnet."
+            }
+          },
+          {
+            "description": "Start of the range (inclusive).",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start of the range (inclusive).",
+              "title": "From"
+            }
+          },
+          {
+            "description": "End of the range (exclusive).",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "End of the range (exclusive).",
+              "title": "To"
+            }
+          },
+          {
+            "description": "Cell size in metres: 0.5, 1 or 2.",
+            "in": "query",
+            "name": "cell",
+            "required": false,
+            "schema": {
+              "default": 1.0,
+              "description": "Cell size in metres: 0.5, 1 or 2.",
+              "enum": [
+                0.5,
+                1,
+                2
+              ],
+              "title": "Cell",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerHeatmap"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Heatmap",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/history": {
+      "get": {
+        "description": "State history; with ``step`` one point per bin (last activity and RTK fix, battery mean\nand range, charging if any, last position).",
+        "operationId": "get_history_api_v1_telemetry_mowers__mower_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Start of the range (inclusive).",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start of the range (inclusive).",
+              "title": "From"
+            }
+          },
+          {
+            "description": "End of the range (exclusive).",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "End of the range (exclusive).",
+              "title": "To"
+            }
+          },
+          {
+            "description": "Bin width such as 5s, 1m, 1h or 1d (date_bin); raw rows without.",
+            "in": "query",
+            "name": "step",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bin width such as 5s, 1m, 1h or 1d (date_bin); raw rows without.",
+              "title": "Step"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get History",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/map": {
+      "get": {
+        "description": "The mower's map as the Device-Gateway last read it; 404 ``no-map-yet`` before that.\n\nThe ETag is the map revision, so a client can revalidate with ``If-None-Match``.",
+        "operationId": "get_map_api_v1_telemetry_mowers__mower_id__map_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerMapOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "304": {
+            "description": "Not modified (``If-None-Match`` equals the ETag)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Map",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/positions": {
+      "get": {
+        "description": "The newest ``limit`` positions of the range, oldest first.",
+        "operationId": "get_positions_api_v1_telemetry_mowers__mower_id__positions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Start of the range (inclusive).",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start of the range (inclusive).",
+              "title": "From"
+            }
+          },
+          {
+            "description": "End of the range (exclusive).",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "End of the range (exclusive).",
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "maximum": 100000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionTrack"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Positions",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/state": {
+      "get": {
+        "description": "Latest state of a mower; 404 \"no telemetry yet\" before the first state arrived.",
+        "operationId": "get_state_api_v1_telemetry_mowers__mower_id__state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerStateSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get State",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/reports/summary": {
+      "get": {
+        "description": "Day totals (UTC days, default the last 30, at most 366) of every mower of the caller's\naccount that the caller may view, in one call: blade and mowing hours, distance, jobs,\nonline hours, battery cycles, charge sessions and errors by code. Mowers without data in\nthe range are absent; Telemetry does not know sites, so clients filter by Fleet's\n``site_id`` (or pass ``mower_id``).",
+        "operationId": "get_report_summary_api_v1_telemetry_reports_summary_get",
+        "parameters": [
+          {
+            "description": "First UTC day (inclusive, YYYY-MM-DD).",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First UTC day (inclusive, YYYY-MM-DD).",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Last UTC day (inclusive).",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last UTC day (inclusive).",
+              "title": "To"
+            }
+          },
+          {
+            "description": "Only these mowers (repeatable); invisible ones are left out silently.",
+            "in": "query",
+            "name": "mower_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these mowers (repeatable); invisible ones are left out silently.",
+              "title": "Mower Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Summary",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    }
+  }
+}

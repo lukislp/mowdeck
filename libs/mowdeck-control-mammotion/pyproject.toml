@@ -1,0 +1,45 @@
+[project]
+name = "mowdeck-control-mammotion"
+version = "0.1.0"
+description = "Mammotion LUBA adapter for mowdeck-control on top of PyMammotion (cloud MQTT and BLE via an ESPHome proxy)."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "mowdeck-contracts",
+  "mowdeck-control",
+  # PyMammotion changes fast: exact pin, upgraded deliberately (ADR 0019).
+  "pymammotion==0.10.9",
+  # Imported by pymammotion 0.10.9 (transport/cloud.py) but not declared by it (spike R4).
+  "packaging>=24.0",
+]
+
+[project.optional-dependencies]
+# BLE through an ESPHome Bluetooth Proxy (versions of PyMammotion's lock file).
+esphome = [
+  "aioesphomeapi==45.0.3",
+  "bleak-esphome==3.7.5",
+  "habluetooth==6.1.0",
+  "bluetooth-adapters==2.1.1",
+]
+
+[project.entry-points."mowdeck.connections"]
+cloud = "mowdeck_control_mammotion:create_cloud_connection"
+ble_bridge = "mowdeck_control_mammotion:create_ble_bridge_connection"
+
+[tool.uv.sources]
+mowdeck-contracts = { workspace = true }
+mowdeck-control = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mowdeck_control_mammotion"]

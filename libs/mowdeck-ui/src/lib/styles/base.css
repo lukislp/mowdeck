@@ -1,0 +1,98 @@
+/* Reset and typography of the instrument panel. Load after tokens.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--md-color-bg);
+  color: var(--md-color-ink);
+  font-family: var(--md-font-sans);
+  font-size: var(--md-font-size-16);
+  line-height: var(--md-line-24);
+  font-weight: var(--md-weight-regular);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+h1 {
+  font-size: var(--md-font-size-20);
+  line-height: var(--md-line-28);
+  font-weight: var(--md-weight-semibold);
+}
+
+h2 {
+  font-size: var(--md-font-size-12);
+  line-height: var(--md-line-16);
+  font-weight: var(--md-weight-semibold);
+  letter-spacing: var(--md-label-tracking);
+  text-transform: uppercase;
+  color: var(--md-color-ink-muted);
+}
+
+@media (min-width: 1024px) {
+  h1 {
+    font-size: var(--md-font-size-24);
+    line-height: var(--md-line-32);
+  }
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--md-color-focus);
+  outline-offset: 2px;
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-13);
+}
+
+.md-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

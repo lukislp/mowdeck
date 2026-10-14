@@ -1,0 +1,33 @@
+{
+  "name": "mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MowDeck native app shells (iOS, Android) with Capacitor around the web app served by the owner's MowDeck server.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "sync": "pnpm build && cap sync",
+    "assets": "npx --yes @capacitor/assets@3.0.5 generate --ios --android --assetPath resources --iconBackgroundColor \"#111412\" --iconBackgroundColorDark \"#111412\" --splashBackgroundColor \"#f4f5f2\" --splashBackgroundColorDark \"#0e1011\"",
+    "lint": "eslint . && prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/local-notifications": "8.3.1",
+    "@capacitor/push-notifications": "8.1.2",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capawesome/capacitor-badge": "8.0.3",
+    "@mowdeck/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  }
+}

@@ -1,0 +1,38 @@
+"""Startup and shutdown of {{ service_name }} with an in-memory bus."""
+
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from mowdeck_service_kit.bus import InMemoryBus
+from mowdeck_service_kit.testing import lifespan_client
+
+from {{ package_name }}.application.ping import PingService
+from {{ package_name }}.main import build_app
+from {{ package_name }}.settings import Settings
+
+
+def _settings() -> Settings:
+    return Settings.model_validate({"environment": "test", "log_format": "console"})
+
+
+def test_settings_defaults() -> None:
+    settings = _settings()
+    assert settings.service_name == "{{ service_name }}"
+    assert settings.http_port == {{ http_port }}
+
+
+async def test_startup_and_shutdown_with_in_memory_bus() -> None:
+    bus = InMemoryBus()
+    app = build_app(_settings(), bus=bus)
+    async with lifespan_client(app) as client:
+        assert (await client.get("/readyz")).status_code == 200
+        assert isinstance(app.state.ping_service, PingService)
+    assert app.state.draining is True
+    assert not bus.is_connected  # the kit closes the bus on shutdown
+
+
+def test_ping_use_case_uses_the_clock() -> None:
+    at = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+    account_id = uuid4()
+    pong = PingService("{{ service_name }}", clock=lambda: at).ping(account_id)
+    assert (pong.service, pong.at, pong.account_id) == ("{{ service_name }}", at, account_id)

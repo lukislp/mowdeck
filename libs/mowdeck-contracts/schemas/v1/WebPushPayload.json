@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "NotificationKind": {
+      "description": "What a notification is about.",
+      "enum": [
+        "mowing_finished",
+        "mower_stuck",
+        "battery_low",
+        "mower_offline",
+        "mower_online",
+        "job_started",
+        "mower_lifted",
+        "mower_left_dock_unexpectedly",
+        "geofence_exit",
+        "blade_maintenance",
+        "vision_proposal",
+        "vision_auto_proposal",
+        "test"
+      ],
+      "title": "NotificationKind",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The decrypted body of a Web Push message for the app's service worker.",
+  "properties": {
+    "body": {
+      "maxLength": 1000,
+      "title": "Body",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/NotificationKind"
+    },
+    "mower_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mower Id"
+    },
+    "notification_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notification Id"
+    },
+    "tag": {
+      "description": "Replaces an earlier notification with the same tag.",
+      "maxLength": 200,
+      "title": "Tag",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 200,
+      "title": "Title",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Page to open on click.",
+      "title": "Url"
+    }
+  },
+  "required": [
+    "title",
+    "body",
+    "tag",
+    "kind"
+  ],
+  "title": "WebPushPayload",
+  "type": "object"
+}

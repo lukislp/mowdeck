@@ -1,0 +1,73 @@
+{{- /*
+Ingress with the path routes of the Compose Traefik labels:
+  /api/v1/<service>       each API service (Prefix)
+  /.well-known/jwks.json  Identity (Exact)
+  /                       the web app (Prefix; the longest matching path wins, so it comes last)
+plus a second Ingress for the login, registration, token and refresh paths of Identity (and the
+Stripe webhook of Billing when it is enabled), so a rate limit can be attached to them alone
+(ingress.auth.annotations).
+*/ -}}
+{{- if .Values.ingress.enabled }}
+{{- $ing := .Values.ingress }}
+{{- $routes := list }}
+{{- range $component, $key := dict "identity" "identity" "fleet" "fleet" "device-gateway" "deviceGateway" "telemetry" "telemetry" "realtime" "realtime" "notifications" "notifications" "scheduler" "scheduler" "entitlements" "entitlements" "billing" "billing" "planner" "planner" "vision" "vision" }}
+{{- if (index $.Values.services $key).enabled }}
+{{- $routes = append $routes (dict "path" (printf "/api/v1/%s" $component) "type" "Prefix" "component" $component "port" 8000) }}
+{{- end }}
+{{- end }}
+{{- if .Values.services.identity.enabled }}
+{{- $routes = append $routes (dict "path" "/.well-known/jwks.json" "type" "Exact" "component" "identity" "port" 8000) }}
+{{- end }}
+{{- if .Values.services.web.enabled }}
+{{- $routes = append $routes (dict "path" "/" "type" "Prefix" "component" "web" "port" 8080) }}
+{{- end }}
+{{- $ingresses := list (dict "suffix" "" "annotations" $ing.annotations "routes" $routes) }}
+{{- if and $ing.auth.enabled .Values.services.identity.enabled }}
+{{- $auth := list }}
+{{- range list "/api/v1/identity/session" "/api/v1/identity/register" "/api/v1/identity/token" }}
+{{- $auth = append $auth (dict "path" . "type" "Exact" "component" "identity" "port" 8000) }}
+{{- end }}
+{{- $auth = append $auth (dict "path" "/api/v1/identity/session/" "type" "Prefix" "component" "identity" "port" 8000) }}
+{{- if .Values.services.billing.enabled }}
+{{- /* Stripe webhooks carry no token: rate limited like the login routes. */ -}}
+{{- $auth = append $auth (dict "path" "/api/v1/billing/webhooks/stripe" "type" "Exact" "component" "billing" "port" 8000) }}
+{{- end }}
+{{- $ingresses = append $ingresses (dict "suffix" "-auth" "annotations" (merge (dict) $ing.auth.annotations $ing.annotations) "routes" $auth) }}
+{{- end }}
+{{- range $ingresses }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "mowdeck.fullname" $ }}{{ .suffix }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" $ "component" "ingress") | nindent 4 }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $ing.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with $ing.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - {{- with $ing.host }}
+      host: {{ . | quote }}
+      {{- end }}
+      http:
+        paths:
+          {{- range .routes }}
+          - path: {{ .path }}
+            pathType: {{ .type }}
+            backend:
+              service:
+                name: {{ include "mowdeck.serviceName" (dict "ctx" $ "component" .component) }}
+                port:
+                  name: http
+          {{- end }}
+{{- end }}
+{{- end }}

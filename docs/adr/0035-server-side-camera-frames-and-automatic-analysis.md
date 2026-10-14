@@ -1,0 +1,53 @@
+# ADR 0035: Server-side camera frames and automatic AI analysis on errors
+
+## Status
+
+Accepted (2026-10-11). Amends [ADR 0033](0033-vision-assisted-recovery-with-approval.md) (images of a real mower, the trigger of an analysis) and [ADR 0032](0032-live-camera-over-agora.md) (a second Agora viewer besides the browser).
+
+## Context
+
+AI assist ([ADR 0033](0033-vision-assisted-recovery-with-approval.md)) sees the mower's surroundings in two ways: the web app sends a frame of its open camera panel, or Vision asks the Device-Gateway (`gateway.mower.<id>.photo`), which calls the adapter's optional `PhotoCapture.capture_photo()`. Only the simulator implements it. On the owner's LUBA 2 AWD X the camera is reachable only as a live Agora channel the browser joins ([ADR 0032](0032-live-camera-over-agora.md)), so without an open browser Vision has no picture. The owner now wants the analysis to start by itself when a mower gets stuck (the plan's "Automatic AI analysis on mower errors", so far "not for now"), and that needs a picture without a browser.
+
+Research of PyMammotion 0.10.9 (the pinned version) for a native still image:
+
+- No protobuf message takes or returns a picture. `luba_mul.proto` has `MulSetVideo {position, vi_switch}` (switch a camera's stream on or off) and `MulSetVideoAck` (an error code); `mctrl_nav.proto` has `vision_ctrl_msg {type, cmd}` without any documented snapshot command; `mctrl_sys.proto` carries vision point clouds and brightness statistics, no image.
+- The HTTP API (`pymammotion/http/http.py`) has `get_stream_subscription` (the Agora token, which also makes the mower publish) and `get_video_resource` (the 4G video budget), nothing that returns an image; no other module mentions photo, snapshot, picture, capture or screenshot.
+- The vendor app's "take photo" therefore works on the decoded live stream on the phone.
+
+## Decision
+
+**A capture worker joins the camera's Agora channel in a headless browser and returns one frame; the Device-Gateway uses it for adapters that offer a live camera but no photo. Vision starts an analysis by itself when a mower enters a recoverable error and a user of the account opted in; the approval stays with a human.**
+
+### Capture worker (`vision-capture`)
+
+1. **Where.** A separate process in the Vision image, `python -m vision.capture` (package `vision.capture`), built with `--build-arg WITH_CAPTURE=true`: the extra `capture` (Playwright 1.63.0), Playwright's Chromium headless shell with its system libraries, and the Agora Web SDK `agora-rtc-sdk-ng` 4.24.8 (the version the web app pins, downloaded from npm and checked against the lock file's sha512) at `/opt/agora`. The default Vision image stays without a browser; Compose starts the worker only with the profile `capture`, Helm with `services.visionCapture.enabled`.
+2. **How.** `POST /api/v1/capture` with a `CameraSnapshotRequest` (contracts: the `CameraSession` including its secret token, the camera's Agora uid, `timeout_seconds`, `max_bytes`, `max_width`) answers `image/jpeg`. A new browser context per request serves a page from the reserved origin `https://capture.mowdeck.invalid` through request interception (a secure context, the SDK from the local file), joins with the session's token and uid (`rtc` profile, codec `vp8`, the session's encryption like the web app), waits for the requested publisher, subscribes, waits for the first decoded frame plus 400 ms for a complete key frame, draws it into a canvas scaled to `max_width` and encodes JPEG (quality 0.8, lowered twice if the frame is above `max_bytes`), then leaves the channel.
+3. **Limits.** At most `MOWDECK_CAPTURE_MAX_CONCURRENCY` (2) captures at once, a request waits `CAPTURE_QUEUE_SECONDS` (10) for a slot and then gets 503; the frame wait is capped at 30 s (504), a camera that does not publish or a browser error is 502 with a short reason (`no-publisher`, `no-frame`, `agora:<code>`). A shared token (`MOWDECK_CAPTURE_TOKEN`) protects the internal endpoint; the session token and the image are never logged.
+4. **Gateway.** `MowerSession.capture_photo()` uses the adapter's own `PhotoCapture` when there is one (the simulator), else, when `MOWDECK_CAPTURE_URL` is set and the connection is `CameraCapable` (the Mammotion cloud connection), it requests a fresh camera session from the adapter and asks the worker for a frame of the first camera with a publisher uid (front left, uid 1), one capture per mower at a time (`HttpCameraSnapshotter`, port `CameraSnapshotter`). Timeouts: worker frame wait `MOWDECK_CAPTURE_TIMEOUT_SECONDS` 20 s, the whole photo `MOWDECK_PHOTO_TIMEOUT_SECONDS` 30 s, Vision's photo request `MOWDECK_VISION_PHOTO_TIMEOUT_SECONDS` 35 s. The worker is called from the gateway, not from the GPL adapter, so every camera-capable adapter benefits and `mowdeck-control-mammotion` needs no client of it.
+
+### Automatic analysis on errors
+
+5. **Opt-in.** Per user, default off: `user_preferences.auto_analysis` (with the principal kind the analysis acts as), `GET`/`PUT /api/v1/vision/me/preferences`; enabling needs the plan feature `ai_recover`. The web app shows the switch "Automatische KI-Analyse bei Fehlern" on the AI provider page with the installation's limits. `MOWDECK_VISION_AUTO_ENABLED=false` switches the feature off for the installation.
+6. **Which errors.** Activity `error`, not lifted (`raw.lifted`), and the error code (trimmed, lower case, a leading minus dropped) in `MOWDECK_VISION_AUTO_ERROR_CODES`, or a state marked `drive_recoverable`. Default set from PyMammotion's error table and the simulator: stuck or trapped (`stuck`, 1201 robot stuck, 1421 stuck during recharge, 11112 trapped, 2000701 front wheels may be stuck), blocked by an obstacle (1206, 11113 channel blocked, 11121 obstacle ahead, 11122 channel to the area blocked), outside the work area (1100, 1145, 1411, 1422) and wheel slip (1032, 1218, 11132, 11134). Never: lift and tilt stops (1004, 1030, 2502, 2801, 11131, 11133), low battery (1005 to 1007), blade jams (1202), motor faults.
+7. **Trigger.** A durable consumer `vision-auto` (queue group) on `telemetry.mower.*` hands each state to `AutoAnalysis.on_state`. A shared watch (`auto_watch`, one row per mower, swapped in a row-locked transaction) remembers the current recoverable code, so only entering an error (or changing to another recoverable code) counts. Then, in a background task: states older than `MOWDECK_VISION_AUTO_MAX_STATE_AGE_SECONDS` (120) are ignored; no analysis when any proposal of the mower was created within `MOWDECK_VISION_AUTO_COOLDOWN_MINUTES` (10) or one is open; at most `MOWDECK_VISION_AUTO_DAILY_PER_MOWER` (20) automatic analyses per mower and UTC day; the account's plan needs `ai_recover`. The users who opted in are asked in the order they opted in: the first who holds `can_drive` on the mower (OpenFGA), has a usable provider (own, or the installation's with `ai_recover_hosted`) and daily quota left (`MOWDECK_VISION_USER_DAILY_REQUESTS`) becomes the requester. Without a photo from the gateway nothing is analysed.
+8. **Proposal.** The analysis is a normal round 1 (the dark-frame light handling included) recorded with `trigger = error` and `trigger_error_code`; `VisionProposalCreated` carries `trigger` and `error_code`; Notifications sends it as the new kind `vision_auto_proposal` ("KI-Vorschlag für <Mäher>", deep link to the proposal, `can_drive` recipients; preferences that had `vision_proposal` get the new kind by data migration). Nothing moves until a user approves; the proposal page says "Automatisch ausgelöst durch Fehler <code>".
+
+### Timing
+
+Typical, after the state arrives: watch and limits a few ms; stream token about 1 s; the mower starts publishing and the worker gets the first frame in about 3 to 10 s (unverified on hardware, at most 30 s); a dark frame adds the light (up to 10 s) and a second frame; the model 5 to 30 s; the push about 1 s. So a proposal usually reaches the phone 15 to 45 s after the mower got stuck.
+
+## Alternatives
+
+- **A native snapshot command.** None exists in PyMammotion 0.10.9 (see Context); reverse engineering an undocumented `vision_ctrl_msg` command would risk the mower's state and still not return pixels over MQTT.
+- **Decode the stream in Python** (`agora-python-server-sdk` or a native Agora SDK). The server SDK is a large closed binary per architecture (no arm64 wheel for every target), with its own licence; its token and encryption handling would differ from the web app's, which already works on the owner's mower.
+- **Ask the open browser.** Works only while someone looks at the camera, which is exactly what the automatic analysis must not need.
+- **Headless browser in the gateway image.** Would put Chromium next to every mower connection and couple browser crashes to the safety-critical gateway; the separate worker keeps the gateway small and can be scaled or left out.
+
+## Consequences
+
+- The capture image is about 0.5 GB larger than the Vision image (Chromium headless shell and its libraries about 300 MB, Playwright's driver about 40 MB, fonts and codecs); the default images do not change. Each capture briefly runs a browser page with a video decoder (about 150 to 250 MB of memory, a second of CPU).
+- Every capture asks the Mammotion cloud for a stream token and makes the mower publish video, which uses the 4G video budget (`quota` of the camera session) and Agora minutes, like opening the camera panel for a few seconds.
+- The worker joins with the viewer uid of the token it gets. If the cloud hands out the same uid as to an open browser, one of the two viewers is dropped (Agora UID conflict); the stream request asks only for the front left camera (`cameraStates` 1,0,0), which may switch off the second camera of a stereo view that is open at the same moment. Both are unverified on hardware.
+- Chromium's open-source build may not decode every codec; when the mower's stream needs H.264 and the headless shell cannot decode it, `CAPTURE_BROWSER_CHANNEL=chrome` with an image that contains Google Chrome is the fallback (not built by default).
+- Automatic analyses cost money per error (bounded by the cooldown, the per-mower daily limit and the per-user cap) and send images to the user's provider like manual ones.
+- Execution of a proposal on a real Mammotion mower still needs manual driving (only over the BLE bridge) and `drive_recoverable` from the adapter, which it does not set yet; until then automatic proposals on the cloud connection can be reviewed but an approval aborts at the controller.

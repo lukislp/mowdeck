@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Pause the current job.",
+  "properties": {
+    "kind": {
+      "const": "pause_mow",
+      "default": "pause_mow",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "PauseMow",
+  "type": "object"
+}

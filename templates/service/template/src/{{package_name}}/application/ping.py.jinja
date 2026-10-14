@@ -1,0 +1,20 @@
+"""Example use case."""
+
+from uuid import UUID
+
+from mowdeck_contracts.v1 import utc_now
+
+from {{ package_name }}.application.ports import Clock
+from {{ package_name }}.domain.ping import Pong
+
+
+class PingService:
+    """Answers pings with the service name and the current time."""
+
+    def __init__(self, service: str, clock: Clock = utc_now) -> None:
+        self._service = service
+        self._clock = clock
+
+    def ping(self, account_id: UUID | None) -> Pong:
+        """Answer a ping of a caller acting for ``account_id``."""
+        return Pong(service=self._service, at=self._clock(), account_id=account_id)

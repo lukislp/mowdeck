@@ -1,0 +1,19 @@
+{
+  "name": "e2e-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phase 2 gate: Playwright suite against the Compose stack (web app at /).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test --project=phone --project=desktop",
+    "screens": "playwright test --project=screens",
+    "lint": "eslint . && prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "22.20.5",
+    "typescript": "6.0.3"
+  }
+}

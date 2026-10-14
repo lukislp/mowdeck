@@ -1,0 +1,74 @@
+apply plugin: 'com.android.application'
+
+// Release version and signing come from the environment (apps/mobile/scripts/build-android.sh,
+// the android job of .github/workflows/release.yml):
+//   MOWDECK_VERSION                 semantic version, e.g. 1.2.3 or 1.2.3-rc.1 (default 0.0.0-dev)
+//   MOWDECK_ANDROID_KEYSTORE        path to the release keystore (.jks); unset: debug-signed APK
+//   MOWDECK_ANDROID_KEYSTORE_PASSWORD, MOWDECK_ANDROID_KEY_ALIAS, MOWDECK_ANDROID_KEY_PASSWORD
+def mowdeckVersion = System.getenv('MOWDECK_VERSION') ?: '0.0.0-dev'
+def versionParts = (mowdeckVersion =~ /^(\d+)\.(\d+)\.(\d+)/)
+// 1.2.3 -> 10203 (monotonic for releases; pre-releases share the code of their final version)
+def mowdeckVersionCode = versionParts.find()
+    ? versionParts.group(1).toInteger() * 10000 + versionParts.group(2).toInteger() * 100 + versionParts.group(3).toInteger()
+    : 1
+def releaseKeystore = System.getenv('MOWDECK_ANDROID_KEYSTORE')
+
+android {
+    namespace = "app.mowdeck.mobile"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "app.mowdeck.mobile"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode Math.max(mowdeckVersionCode, 1)
+        versionName mowdeckVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (releaseKeystore) {
+            release {
+                storeFile file(releaseKeystore)
+                storePassword System.getenv('MOWDECK_ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('MOWDECK_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('MOWDECK_ANDROID_KEY_PASSWORD') ?: System.getenv('MOWDECK_ANDROID_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Without a keystore the release APK is signed with the debug key (local testing
+            // only: an APK signed with another key cannot update it).
+            signingConfig releaseKeystore ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+// No Firebase: Android background notifications use ntfy (docs/ops/mobile-apps.md), so the
+// google-services plugin of the Capacitor template is not applied.

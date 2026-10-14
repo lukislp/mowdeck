@@ -1,0 +1,166 @@
+[project]
+name = "mowdeck-workspace"
+version = "0.0.0"
+description = "MowDeck monorepo workspace root (not published)."
+requires-python = ">=3.13,<3.14"
+readme = "README.md"
+license = { text = "AGPL-3.0-only" }
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["libs/*/", "services/*/", "tools/*/"]
+# pnpm packages of the web frontend (pnpm-workspace.yaml), not Python packages.
+exclude = ["libs/mowdeck-ui", "tools/ts-codegen"]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.8.4",
+  "mypy>=1.13.0",
+  "pytest>=8.3.4",
+  "pytest-asyncio>=0.25.0",
+  "pytest-cov>=6.0.0",
+  "poethepoet>=0.31.1",
+  "pyyaml>=6.0.2",
+  "types-pyyaml>=6.0.12",
+  "types-shapely>=2.1.0.20250512",
+  "mkdocs-material>=9.5.49",
+  "copier>=9.18.2",
+  # Phase 1 acceptance test (tests/e2e): HTTP and WebSocket clients.
+  "httpx>=0.28.1",
+  "websockets>=17.2",
+  # Workspace libraries, installed editable so their tests and type checks run from the root.
+  "mowdeck-auth",
+  "mowdeck-authz[fastapi]",
+  "mowdeck-contracts",
+  "mowdeck-control",
+  "mowdeck-control-mammotion[esphome]",
+  "mowdeck-patterns",
+  "mowdeck-service-kit[db,otel,testing]",
+  "mowdeck-wiki-sync",
+  # Services, installed editable for their tests and type checks.
+  "billing",
+  "device-gateway",
+  "entitlements",
+  "fleet",
+  "identity",
+  "notifications",
+  "planner",
+  "realtime",
+  "scheduler",
+  "telemetry",
+  "vision",
+]
+
+[tool.uv.sources]
+mowdeck-auth = { workspace = true }
+mowdeck-authz = { workspace = true }
+mowdeck-contracts = { workspace = true }
+mowdeck-control = { workspace = true }
+mowdeck-control-mammotion = { workspace = true }
+mowdeck-patterns = { workspace = true }
+mowdeck-service-kit = { workspace = true }
+mowdeck-wiki-sync = { workspace = true }
+billing = { workspace = true }
+device-gateway = { workspace = true }
+entitlements = { workspace = true }
+fleet = { workspace = true }
+identity = { workspace = true }
+notifications = { workspace = true }
+planner = { workspace = true }
+realtime = { workspace = true }
+scheduler = { workspace = true }
+telemetry = { workspace = true }
+vision = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# templates/service/template holds Jinja sources; the generated services are linted instead.
+extend-exclude = ["site", "templates/service/template"]
+# Service packages are first-party everywhere (their tests and scripts import them).
+src = [".", "services/*/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "S", "C4", "SIM", "RUF", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]
+"**/test_*.py" = ["S101"]
+# Alembic revision files are named after their revision id.
+"**/migrations/versions/*.py" = ["N999"]
+
+[tool.mypy]
+strict = true
+python_version = "3.13"
+files = [
+  "tools",
+  "libs/mowdeck-auth",
+  "libs/mowdeck-authz",
+  "libs/mowdeck-contracts",
+  "libs/mowdeck-control",
+  "libs/mowdeck-control-mammotion",
+  "libs/mowdeck-patterns",
+  "libs/mowdeck-service-kit",
+  "services",
+  "tests/e2e",
+]
+# Alembic environments and revisions are scripts, not importable modules.
+exclude = ["/migrations/"]
+
+# PyMammotion (GPL, used only by libs/mowdeck-control-mammotion) ships py.typed but parts of it
+# are unannotated; missing stubs never fail the build. Our own code stays strict.
+[[tool.mypy.overrides]]
+module = ["pymammotion.*"]
+ignore_missing_imports = true
+
+# Playwright drives the headless browser of the Vision capture worker (optional extra
+# vision[capture], ADR 0035); it is not installed in the default environment.
+[[tool.mypy.overrides]]
+module = ["playwright.*"]
+ignore_missing_imports = true
+
+# pywebpush and py-vapid (Web Push in services/notifications) ship no type information.
+[[tool.mypy.overrides]]
+module = ["pywebpush.*", "py_vapid.*", "http_ece.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tools", "libs", "services"]
+# The Phase 1 acceptance test (tests/e2e, marker e2e) needs the Compose stack: `poe e2e`.
+addopts = "-ra -m 'not e2e'"
+markers = [
+  "e2e: acceptance tests against a running Compose stack (uv run poe e2e)",
+  "slow: long-running e2e checks such as the idle WebSocket through Traefik",
+]
+
+[tool.coverage.run]
+branch = true
+
+[tool.poe.tasks]
+lint-ruff = "ruff check ."
+lint-format = "ruff format --check ."
+lint-mypy = "mypy"
+fmt = ["_fmt-fix", "_fmt-format"]
+_fmt-fix = "ruff check --fix ."
+_fmt-format = "ruff format ."
+test = "pytest --cov --cov-report=term-missing"
+# Phase 1 acceptance test against `docker compose up -d --wait` (base URL MOWDECK_E2E_BASE_URL).
+e2e = "pytest tests/e2e -m e2e -p no:cacheprovider"
+docs = "mkdocs build --strict"
+wiki = "wiki-sync build --docs docs --mkdocs mkdocs.yml --out build/wiki"
+# OpenAPI documents of the services for the web app's generated types (apps/web/openapi).
+openapi = "python tools/repo-checks/scripts/export_openapi.py"
+openapi-check = "python tools/repo-checks/scripts/export_openapi.py --check"
+compose-check = "docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env.example config -q"
+# OpenFGA model tests with the pinned CLI image (same as the openfga-model CI job).
+fga-test = "docker run --rm -v ${POE_ROOT}/infra/openfga:/w -w /w openfga/cli:v0.8.1 model test --tests model.fga.yaml"
+# Regenerate the JSON form of the model packaged in mowdeck-authz (after editing model.fga).
+fga-json = "python infra/openfga/sync_model_json.py --write"
+
+[tool.poe.tasks.lint]
+sequence = ["lint-ruff", "lint-format", "lint-mypy"]
+help = "Ruff check, ruff format check and mypy (strict)"

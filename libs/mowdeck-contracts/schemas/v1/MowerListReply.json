@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "ConnectionKind": {
+      "description": "How the Device-Gateway is connected to the mower.",
+      "enum": [
+        "ble_bridge",
+        "wifi",
+        "cloud",
+        "simulated"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "MowerRegistration": {
+      "description": "What the Device-Gateway needs to know to connect to one mower.\n\n``connection_options`` are adapter specific (for the simulator: ``SimulationConfig``\nfields such as ``time_scale``). They never carry secrets (ADR 0034): Fleet withholds\n``password``, ``noise_psk`` and the vendor ``account`` and marks the registration with\n``credentials: \"fleet\"`` (:attr:`needs_credentials`); the Device-Gateway fetches them with\n:class:`MowerCredentialsRequest` when it connects. References (``credential_ref``) stay in\nthe options and are resolved by the gateway. ``repr`` masks secret keys anyway.",
+      "properties": {
+        "account_id": {
+          "description": "Owning account; commands of other accounts are refused.",
+          "format": "uuid",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "connection_kind": {
+          "$ref": "#/$defs/ConnectionKind"
+        },
+        "connection_options": {
+          "additionalProperties": true,
+          "title": "Connection Options",
+          "type": "object"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mower_id",
+        "account_id",
+        "name",
+        "connection_kind"
+      ],
+      "title": "MowerRegistration",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`MowerListRequest`.",
+  "properties": {
+    "mowers": {
+      "items": {
+        "$ref": "#/$defs/MowerRegistration"
+      },
+      "title": "Mowers",
+      "type": "array"
+    }
+  },
+  "title": "MowerListReply",
+  "type": "object"
+}

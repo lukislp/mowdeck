@@ -1,0 +1,163 @@
+name: MowDeck authorization model, Phase 1
+model_file: ./model.fga
+
+tuples:
+  # Account A (household of Lukas); hierarchy tuples are written by Fleet
+  - {user: "user:lukas", relation: owner, object: "account:A"}
+  - {user: "platform:main", relation: platform, object: "account:A"}
+  - {user: "account:A", relation: account, object: "site:A_home"}
+  - {user: "account:A", relation: account, object: "group:A_north"}
+  - {user: "site:A_home", relation: parent, object: "group:A_north"}
+  - {user: "account:A", relation: account, object: "group:A_south"}
+  - {user: "site:A_home", relation: parent, object: "group:A_south"}
+  - {user: "account:A", relation: account, object: "mower:m1"}
+  - {user: "site:A_home", relation: parent, object: "mower:m1"}
+  - {user: "group:A_north", relation: parent, object: "mower:m1"}
+  - {user: "account:A", relation: account, object: "mower:m2"}
+  - {user: "site:A_home", relation: parent, object: "mower:m2"}
+  - {user: "group:A_south", relation: parent, object: "mower:m2"}
+  # Sub-user Anna: member of A, role Operator at group North (expanded by Identity)
+  - {user: "user:anna", relation: member, object: "account:A"}
+  - {user: "user:anna", relation: grant_mower_view, object: "group:A_north"}
+  - {user: "user:anna", relation: grant_mower_control, object: "group:A_north"}
+  - {user: "user:anna", relation: grant_mower_drive, object: "group:A_north"}
+  # Home Assistant API token of account A: view at site level, control only m1
+  - {user: "api_token:ha", relation: member, object: "account:A"}
+  - {user: "api_token:ha", relation: grant_mower_view, object: "site:A_home"}
+  - {user: "api_token:ha", relation: grant_mower_control, object: "mower:m1"}
+  # Account B (foreign household of Eve)
+  - {user: "user:eve", relation: owner, object: "account:B"}
+  - {user: "account:B", relation: account, object: "site:B_home"}
+  - {user: "account:B", relation: account, object: "mower:m9"}
+  - {user: "site:B_home", relation: parent, object: "mower:m9"}
+  # Operator admin Olga at platform level
+  - {user: "user:olga", relation: operator_admin, object: "platform:main"}
+  # Time-limited support access for Sam, approved by account A
+  - user: "user:sam"
+    relation: support
+    object: "account:A"
+    condition:
+      name: not_expired
+      context:
+        expires_at: "2026-10-09T12:00:00Z"
+
+tests:
+  - name: owner has full rights in own account
+    check:
+      - user: "user:lukas"
+        object: "mower:m1"
+        assertions: {can_view: true, can_control: true, can_drive: true, can_manage_mowers: true}
+      - user: "user:lukas"
+        object: "account:A"
+        assertions: {can_manage_users: true, can_manage_billing: true, can_manage_account: true}
+
+  - name: operator sub-user at group level
+    check:
+      - user: "user:anna"
+        object: "mower:m1"
+        assertions: {can_view: true, can_control: true, can_drive: true, can_edit_schedule: false, can_manage_mowers: false, can_emergency_stop: true}
+      - user: "user:anna"
+        object: "mower:m2"
+        assertions: {can_view: false, can_control: false}
+      - user: "user:anna"
+        object: "group:A_north"
+        assertions: {can_view: true, can_bulk_command: false}
+      - user: "user:anna"
+        object: "account:A"
+        assertions: {can_view: false, can_manage_users: false, can_manage_billing: false}
+    list_objects:
+      - user: "user:anna"
+        type: mower
+        assertions:
+          can_control: ["mower:m1"]
+
+  - name: foreign account owner is rejected everywhere in account A
+    check:
+      - user: "user:eve"
+        object: "mower:m1"
+        assertions: {can_view: false, can_control: false, can_drive: false, can_emergency_stop: false}
+      - user: "user:eve"
+        object: "site:A_home"
+        assertions: {can_view: false, can_manage_mowers: false}
+      - user: "user:eve"
+        object: "account:A"
+        assertions: {member: false, can_view: false, can_manage_users: false}
+      - user: "user:lukas"
+        object: "mower:m9"
+        assertions: {can_view: false, can_control: false}
+      - user: "user:anna"
+        object: "mower:m9"
+        assertions: {can_view: false}
+    list_objects:
+      - user: "user:eve"
+        type: mower
+        assertions:
+          can_view: ["mower:m9"]
+
+  - name: a wrongly written cross-account grant does not leak
+    tuples:
+      - {user: "user:eve", relation: grant_mower_control, object: "group:A_north"}
+      - {user: "user:eve", relation: grant_mower_view, object: "account:A"}
+    check:
+      - user: "user:eve"
+        object: "mower:m1"
+        assertions: {can_view: false, can_control: false}
+      - user: "user:eve"
+        object: "account:A"
+        assertions: {can_view: false}
+
+  - name: a mower wired under a foreign group stays in its own account
+    tuples:
+      - {user: "group:A_north", relation: parent, object: "mower:m9"}
+    check:
+      - user: "user:lukas"
+        object: "mower:m9"
+        assertions: {can_view: false, can_control: false}
+      - user: "user:anna"
+        object: "mower:m9"
+        assertions: {can_control: false}
+      - user: "user:eve"
+        object: "mower:m9"
+        assertions: {can_view: true}
+
+  - name: api token has only its explicit grants
+    check:
+      - user: "api_token:ha"
+        object: "mower:m2"
+        assertions: {can_view: true, can_control: false, can_drive: false}
+      - user: "api_token:ha"
+        object: "mower:m1"
+        assertions: {can_view: true, can_control: true, can_drive: false}
+      - user: "api_token:ha"
+        object: "account:A"
+        assertions: {can_manage_users: false, can_view: false}
+      - user: "api_token:ha"
+        object: "mower:m9"
+        assertions: {can_view: false}
+
+  - name: operator admin manages accounts but sees no mower data
+    check:
+      - user: "user:olga"
+        object: "account:A"
+        assertions: {can_operator_manage: true, can_view: false, can_manage_users: false}
+      - user: "user:olga"
+        object: "mower:m1"
+        assertions: {can_view: false, can_control: false}
+      - user: "user:lukas"
+        object: "account:A"
+        assertions: {can_operator_manage: false}
+
+  - name: support access is view only and expires
+    check:
+      - user: "user:sam"
+        object: "mower:m1"
+        context: {current_time: "2026-10-09T11:59:00Z"}
+        assertions: {can_view: true, can_control: false}
+      - user: "user:sam"
+        object: "mower:m1"
+        context: {current_time: "2026-10-09T12:00:01Z"}
+        assertions: {can_view: false}
+      - user: "user:sam"
+        object: "mower:m9"
+        context: {current_time: "2026-10-09T11:59:00Z"}
+        assertions: {can_view: false}

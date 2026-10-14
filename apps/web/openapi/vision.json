@@ -1,0 +1,2218 @@
+{
+  "components": {
+    "schemas": {
+      "AssessmentOut": {
+        "description": "What the model thinks (without the steps, which are listed separately).",
+        "properties": {
+          "abort_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Abort Reasons",
+            "type": "array"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "risk": {
+            "items": {
+              "$ref": "#/components/schemas/RiskFlag"
+            },
+            "title": "Risk",
+            "type": "array"
+          },
+          "situation": {
+            "title": "Situation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "situation",
+          "confidence",
+          "rationale",
+          "risk",
+          "abort_reasons"
+        ],
+        "title": "AssessmentOut",
+        "type": "object"
+      },
+      "Body_recover_upload_api_v1_vision_mowers__mower_id__recover_upload_post": {
+        "properties": {
+          "images": {
+            "anyOf": [
+              {
+                "items": {
+                  "contentMediaType": "application/octet-stream",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Images"
+          },
+          "task": {
+            "$ref": "#/components/schemas/VisionTask",
+            "default": "recover"
+          }
+        },
+        "title": "Body_recover_upload_api_v1_vision_mowers__mower_id__recover_upload_post",
+        "type": "object"
+      },
+      "EventDef": {
+        "description": "An event type a module publishes.",
+        "properties": {
+          "schema_ref": {
+            "description": "Reference to the payload JSON Schema (URI or package path).",
+            "minLength": 1,
+            "title": "Schema Ref",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "schema_ref"
+        ],
+        "title": "EventDef",
+        "type": "object"
+      },
+      "FamilyOut": {
+        "description": "A model family the settings page offers.",
+        "properties": {
+          "default_api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Api Base"
+          },
+          "examples": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Examples",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "key_env": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Variable LiteLLM reads for the operator's key.",
+            "title": "Key Env"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "local": {
+            "description": "Runs on own hardware: images stay local.",
+            "title": "Local",
+            "type": "boolean"
+          },
+          "needs_api_base": {
+            "title": "Needs Api Base",
+            "type": "boolean"
+          },
+          "needs_key": {
+            "title": "Needs Key",
+            "type": "boolean"
+          },
+          "prefix": {
+            "description": "Model strings look like `<prefix>/<model>`.",
+            "title": "Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "prefix",
+          "examples",
+          "key_env",
+          "needs_key",
+          "needs_api_base",
+          "default_api_base",
+          "local"
+        ],
+        "title": "FamilyOut",
+        "type": "object"
+      },
+      "FeatureDef": {
+        "description": "A plan feature a module offers, e.g. ``reports``.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "FeatureDef",
+        "type": "object"
+      },
+      "FrameOut": {
+        "description": "What one image of the proposal was (fetch it from ``images/{index}``).",
+        "properties": {
+          "camera": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "side": {
+            "anyOf": [
+              {
+                "enum": [
+                  "left",
+                  "right"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Side"
+          },
+          "source": {
+            "description": "`upload`: sent by the app; `mower`: the mower's own photo.",
+            "enum": [
+              "upload",
+              "mower"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "source"
+        ],
+        "title": "FrameOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ImageIn": {
+        "description": "A camera snapshot, base64 encoded (JPEG or PNG), optionally with the camera that took\nit. Two frames with ``side`` ``left`` and ``right`` captured at most\n``MOWDECK_VISION_STEREO_MAX_SKEW_MS`` apart form a stereo pair.",
+        "properties": {
+          "camera": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The camera's display name, e.g. `Front left`.",
+            "title": "Camera"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the frame was grabbed (with a time zone).",
+            "title": "Captured At"
+          },
+          "data": {
+            "description": "Base64 (standard) of the image bytes.",
+            "maxLength": 14000000,
+            "title": "Data",
+            "type": "string"
+          },
+          "media_type": {
+            "enum": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Media Type",
+            "type": "string"
+          },
+          "side": {
+            "anyOf": [
+              {
+                "enum": [
+                  "left",
+                  "right"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`left` or `right`: the frame is one of the two front cameras (stereo).",
+            "title": "Side"
+          }
+        },
+        "required": [
+          "media_type",
+          "data"
+        ],
+        "title": "ImageIn",
+        "type": "object"
+      },
+      "LastTestOut": {
+        "description": "The outcome of the last provider test.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          }
+        },
+        "required": [
+          "at",
+          "ok"
+        ],
+        "title": "LastTestOut",
+        "type": "object"
+      },
+      "ModuleDescriptor": {
+        "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventDef"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureDef"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9\\-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionDef"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "ui_areas": {
+            "items": {
+              "$ref": "#/components/schemas/UiAreaDef"
+            },
+            "title": "Ui Areas",
+            "type": "array"
+          },
+          "version": {
+            "maxLength": 64,
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.\\-+]+)?$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "ModuleDescriptor",
+        "type": "object"
+      },
+      "PermissionDef": {
+        "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "implied_by": {
+            "description": "Keys that imply this one when held on the whole account (e.g. `device_gateway.view` implied by `mower.view`).",
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+              "type": "string"
+            },
+            "title": "Implied By",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "PermissionDef",
+        "type": "object"
+      },
+      "PreferencesIn": {
+        "description": "``PUT /me/preferences``: a field left out (null) keeps its value.",
+        "properties": {
+          "auto_analysis": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opt in to (or out of) automatic AI analysis on errors.",
+            "title": "Auto Analysis"
+          },
+          "stereo_frames": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Send both front camera frames when both views are live.",
+            "title": "Stereo Frames"
+          }
+        },
+        "title": "PreferencesIn",
+        "type": "object"
+      },
+      "PreferencesOut": {
+        "description": "``GET /me/preferences``: the caller's AI assist preferences and the installation's limits\nof automatic analyses.",
+        "properties": {
+          "auto_analysis": {
+            "description": "Automatic AI analysis on errors for the caller (opt-in, default off).",
+            "title": "Auto Analysis",
+            "type": "boolean"
+          },
+          "auto_analysis_available": {
+            "description": "False when the installation switched automatic analyses off.",
+            "title": "Auto Analysis Available",
+            "type": "boolean"
+          },
+          "auto_cooldown_minutes": {
+            "description": "No automatic analysis for a mower within this time after the previous one.",
+            "title": "Auto Cooldown Minutes",
+            "type": "integer"
+          },
+          "auto_daily_per_mower": {
+            "description": "Automatic analyses per mower and UTC day.",
+            "title": "Auto Daily Per Mower",
+            "type": "integer"
+          },
+          "stereo_frames": {
+            "description": "Send both front camera frames when both views are live (a stereo pair: two images, about twice the image share of the cost).",
+            "title": "Stereo Frames",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null while the defaults apply.",
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "stereo_frames",
+          "updated_at",
+          "auto_analysis",
+          "auto_analysis_available",
+          "auto_cooldown_minutes",
+          "auto_daily_per_mower"
+        ],
+        "title": "PreferencesOut",
+        "type": "object"
+      },
+      "PrincipalKind": {
+        "description": "What kind of subject a principal is.",
+        "enum": [
+          "user",
+          "subuser",
+          "api_token",
+          "service"
+        ],
+        "title": "PrincipalKind",
+        "type": "string"
+      },
+      "PrincipalRef": {
+        "description": "A compact reference to a principal, embedded in commands and audit records.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PrincipalKind",
+            "description": "Kind of subject."
+          },
+          "subject": {
+            "description": "Stable subject id (JWT `sub`).",
+            "format": "uuid",
+            "title": "Subject",
+            "type": "string"
+          },
+          "token_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Token id (JWT `jti`), if known.",
+            "title": "Token Id"
+          }
+        },
+        "required": [
+          "subject",
+          "kind"
+        ],
+        "title": "PrincipalRef",
+        "type": "object"
+      },
+      "ProposalOut": {
+        "description": "A proposal of AI assist (poll it while ``final`` is false).",
+        "properties": {
+          "analysed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysed At"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrincipalRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssessmentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "can_retry": {
+            "title": "Can Retry",
+            "type": "boolean"
+          },
+          "chain_id": {
+            "format": "uuid",
+            "title": "Chain Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrincipalRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who rejected or cancelled it."
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it was rejected, failed or how it ended.",
+            "title": "Detail"
+          },
+          "drive_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive Session Id"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Approval is refused after this time.",
+            "title": "Expires At"
+          },
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "frames": {
+            "description": "What each image was, in the order the model saw them (left first in stereo).",
+            "items": {
+              "$ref": "#/components/schemas/FrameOut"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "hosted": {
+            "title": "Hosted",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "image_count": {
+            "title": "Image Count",
+            "type": "integer"
+          },
+          "light_used": {
+            "description": "The photo was taken with the mower's light switched on (it was too dark).",
+            "title": "Light Used",
+            "type": "boolean"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "provider_family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Family"
+          },
+          "provider_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Model"
+          },
+          "requested_by": {
+            "$ref": "#/components/schemas/PrincipalRef"
+          },
+          "return_command_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Command Id"
+          },
+          "round": {
+            "title": "Round",
+            "type": "integer"
+          },
+          "rounds_left": {
+            "title": "Rounds Left",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ProposalState"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "stereo": {
+            "description": "The model saw a stereo pair: the left and right front camera, same moment.",
+            "title": "Stereo",
+            "type": "boolean"
+          },
+          "task": {
+            "$ref": "#/components/schemas/VisionTask"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/VisionTrigger",
+            "default": "manual",
+            "description": "`manual` (a user asked) or `error` (started automatically when the mower entered a recoverable error; the requester is the user who opted in)."
+          },
+          "trigger_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With trigger `error`: the error code that started it.",
+            "title": "Trigger Error Code"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "chain_id",
+          "round",
+          "mower_id",
+          "task",
+          "state",
+          "final",
+          "requested_by",
+          "created_at",
+          "updated_at",
+          "provider_model",
+          "provider_family",
+          "hosted",
+          "assessment",
+          "steps",
+          "image_count",
+          "light_used",
+          "stereo",
+          "frames",
+          "detail",
+          "analysed_at",
+          "expires_at",
+          "approved_by",
+          "approved_at",
+          "decided_by",
+          "decided_at",
+          "started_at",
+          "finished_at",
+          "drive_session_id",
+          "return_command_id",
+          "can_retry",
+          "rounds_left"
+        ],
+        "title": "ProposalOut",
+        "type": "object"
+      },
+      "ProposalPageOut": {
+        "description": "``GET /mowers/{id}/proposals``: newest first; pass ``next_before`` as ``before``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "items",
+          "next_before"
+        ],
+        "title": "ProposalPageOut",
+        "type": "object"
+      },
+      "ProposalState": {
+        "description": "Lifecycle of a proposal.",
+        "enum": [
+          "analysing",
+          "proposed",
+          "rejected_by_ai",
+          "failed",
+          "rejected",
+          "expired",
+          "executing",
+          "verifying",
+          "recovered",
+          "not_recovered",
+          "aborted"
+        ],
+        "title": "ProposalState",
+        "type": "string"
+      },
+      "ProviderIn": {
+        "description": "``PUT /me/provider``. ``api_key`` and ``headers`` are write-only: omit them to keep the\nstored values, send an empty string (or object) to delete them.",
+        "properties": {
+          "api_base": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headers"
+          },
+          "model": {
+            "examples": [
+              "anthropic/claude-sonnet-5-5"
+            ],
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "ProviderIn",
+        "type": "object"
+      },
+      "ProviderOut": {
+        "description": "``GET /me/provider``: the caller's provider (never the key) and the effective choice.",
+        "properties": {
+          "api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base"
+          },
+          "api_key_set": {
+            "title": "Api Key Set",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "effective": {
+            "description": "Which provider a request would use now.",
+            "enum": [
+              "own",
+              "hosted",
+              "none"
+            ],
+            "title": "Effective",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "header_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Header Names",
+            "type": "array"
+          },
+          "hosted_available": {
+            "title": "Hosted Available",
+            "type": "boolean"
+          },
+          "hosted_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hosted Model"
+          },
+          "last_test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastTestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "secrets_available": {
+            "title": "Secrets Available",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "configured",
+          "enabled",
+          "model",
+          "family",
+          "api_base",
+          "api_key_set",
+          "header_names",
+          "last_test",
+          "updated_at",
+          "hosted_available",
+          "hosted_model",
+          "effective",
+          "secrets_available"
+        ],
+        "title": "ProviderOut",
+        "type": "object"
+      },
+      "ProviderTestOut": {
+        "description": "``POST /me/provider/test``: one minimal vision call with a tiny generated image.",
+        "properties": {
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "LiteLLM's estimate; null when unknown.",
+            "title": "Cost Usd"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          }
+        },
+        "required": [
+          "ok",
+          "model",
+          "family",
+          "latency_ms",
+          "input_tokens",
+          "output_tokens",
+          "cost_usd",
+          "detail"
+        ],
+        "title": "ProviderTestOut",
+        "type": "object"
+      },
+      "ProvidersOut": {
+        "description": "``GET /providers``: families, and whether the installation's model may be used.",
+        "properties": {
+          "families": {
+            "items": {
+              "$ref": "#/components/schemas/FamilyOut"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "hosted_available": {
+            "title": "Hosted Available",
+            "type": "boolean"
+          },
+          "hosted_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hosted Model"
+          },
+          "secrets_available": {
+            "description": "Whether API keys can be stored here.",
+            "title": "Secrets Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "families",
+          "hosted_available",
+          "hosted_model",
+          "secrets_available"
+        ],
+        "title": "ProvidersOut",
+        "type": "object"
+      },
+      "RecoverIn": {
+        "description": "``POST /mowers/{id}/recover`` as JSON. Without images the service asks the mower's\ngateway for one (``capture_photo``) and otherwise analyses the context alone.",
+        "properties": {
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/ImageIn"
+            },
+            "maxItems": 8,
+            "title": "Images",
+            "type": "array"
+          },
+          "task": {
+            "$ref": "#/components/schemas/VisionTask",
+            "default": "recover"
+          }
+        },
+        "title": "RecoverIn",
+        "type": "object"
+      },
+      "RetryIn": {
+        "description": "``POST /proposals/{id}/retry``: optional fresh snapshots.",
+        "properties": {
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/ImageIn"
+            },
+            "maxItems": 8,
+            "title": "Images",
+            "type": "array"
+          }
+        },
+        "title": "RetryIn",
+        "type": "object"
+      },
+      "RiskFlag": {
+        "description": "Hazards the model saw; any flag means the maneuver is never executed.",
+        "enum": [
+          "people_visible",
+          "animals_visible",
+          "drop_off",
+          "water",
+          "road"
+        ],
+        "title": "RiskFlag",
+        "type": "string"
+      },
+      "StatusOut": {
+        "description": "``GET /status``: what the operator configured (never a key).",
+        "properties": {
+          "allow_fake_provider": {
+            "title": "Allow Fake Provider",
+            "type": "boolean"
+          },
+          "hosted_default_enabled": {
+            "title": "Hosted Default Enabled",
+            "type": "boolean"
+          },
+          "hosted_default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only when the default is enabled.",
+            "title": "Hosted Default Model"
+          },
+          "secrets_available": {
+            "title": "Secrets Available",
+            "type": "boolean"
+          },
+          "user_api_base_policy": {
+            "title": "User Api Base Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hosted_default_enabled",
+          "hosted_default_model",
+          "secrets_available",
+          "allow_fake_provider",
+          "user_api_base_policy"
+        ],
+        "title": "StatusOut",
+        "type": "object"
+      },
+      "StepOut": {
+        "description": "One drive step (blades are always off).",
+        "properties": {
+          "angular": {
+            "description": "Turn right (-1) to left (1).",
+            "title": "Angular",
+            "type": "number"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "frames": {
+            "default": 0,
+            "title": "Frames",
+            "type": "integer"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "linear": {
+            "description": "Backward (-1) to forward (1).",
+            "title": "Linear",
+            "type": "number"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/StepOutcome"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "index",
+          "linear",
+          "angular",
+          "seconds",
+          "outcome"
+        ],
+        "title": "StepOut",
+        "type": "object"
+      },
+      "StepOutcome": {
+        "description": "What happened to one drive step.",
+        "enum": [
+          "pending",
+          "done",
+          "aborted",
+          "skipped"
+        ],
+        "title": "StepOutcome",
+        "type": "string"
+      },
+      "UiAreaDef": {
+        "description": "An area the module occupies in the web app shell.",
+        "properties": {
+          "labels": {
+            "description": "Translated menu labels by language tag (e.g. `de`); `menu_label` is the English fallback.",
+            "patternProperties": {
+              "^[a-z]{2}(-[A-Z]{2})?$": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "menu_label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Menu Label",
+            "type": "string"
+          },
+          "required_permission": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Required Permission",
+            "type": "string"
+          },
+          "route": {
+            "maxLength": 200,
+            "pattern": "^/[A-Za-z0-9/_\\-:\\[\\]]*$",
+            "title": "Route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "menu_label",
+          "required_permission"
+        ],
+        "title": "UiAreaDef",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VisionTask": {
+        "description": "What AI assist is asked to do.",
+        "enum": [
+          "recover",
+          "find_dock"
+        ],
+        "title": "VisionTask",
+        "type": "string"
+      },
+      "VisionTrigger": {
+        "description": "Who started an analysis.",
+        "enum": [
+          "manual",
+          "error"
+        ],
+        "title": "VisionTrigger",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "title": "vision",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/.well-known/mowdeck-module": {
+      "get": {
+        "operationId": "module_descriptor__well_known_mowdeck_module_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleDescriptor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Module Descriptor",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/vision/me/preferences": {
+      "get": {
+        "description": "The caller's AI assist preferences (the defaults until saved): ``stereo_frames`` and the\nopt-in to automatic AI analyses on errors (off until saved) with the installation's limits\n(cooldown per mower, analyses per mower and day).",
+        "operationId": "my_preferences_api_v1_vision_me_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Preferences",
+        "tags": [
+          "vision"
+        ]
+      },
+      "put": {
+        "description": "Change the caller's AI assist preferences; a field left out keeps its value.\n\n``auto_analysis``: when a mower of the account enters a recoverable error (stuck, blocked,\noutside the work area, wheel slip), the service takes a photo, analyses it with the caller's\nprovider (or the installation's) and asks for approval like a manual request; nothing is\nexecuted automatically. Enabling needs the plan feature ``ai_recover`` (403\n``feature-not-in-plan``; nothing is saved then).",
+        "operationId": "put_my_preferences_api_v1_vision_me_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put My Preferences",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/me/provider": {
+      "delete": {
+        "description": "Delete the caller's provider (404 when there is none).",
+        "operationId": "delete_my_provider_api_v1_vision_me_provider_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete My Provider",
+        "tags": [
+          "vision"
+        ]
+      },
+      "get": {
+        "description": "The caller's own provider (the key only as ``api_key_set``) and the provider a request\nwould use now (``effective``).",
+        "operationId": "my_provider_api_v1_vision_me_provider_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Provider",
+        "tags": [
+          "vision"
+        ]
+      },
+      "put": {
+        "description": "Save the caller's provider. 422 for an unknown family, a refused base URL or bad\nheaders; 409 ``vision-secrets-unavailable`` when a key is sent but cannot be stored.",
+        "operationId": "put_my_provider_api_v1_vision_me_provider_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put My Provider",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/me/provider/test": {
+      "post": {
+        "description": "One minimal vision call with a tiny generated image: model, latency, tokens and the\nestimated cost. 429 ``vision-quota`` beyond the hourly limit.",
+        "operationId": "test_my_provider_api_v1_vision_me_provider_test_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Test My Provider",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/mowers/{mower_id}/proposals": {
+      "get": {
+        "description": "Proposals of the mower, newest first.",
+        "operationId": "mower_proposals_api_v1_vision_mowers__mower_id__proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mower Proposals",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/mowers/{mower_id}/recover": {
+      "post": {
+        "description": "Start AI assist for the mower: ``task`` ``recover`` or ``find_dock``, optional camera\nsnapshots (base64, each optionally with ``camera``, ``side`` and ``captured_at``; a\n``left`` and a ``right`` frame of the same moment are analysed as a stereo pair when the\ncaller's preference ``stereo_frames`` is on, else only the left one). The analysis runs in\nthe background; poll ``GET /proposals/{id}``. Without images the mower's gateway is asked\nfor one. 403 ``feature-not-in-plan`` without ``ai_recover``, 409 ``vision-provider-missing``\nwithout a usable provider, 409 when a proposal for the mower is open, 429 ``vision-quota``\nbeyond the daily cap.",
+        "operationId": "recover_api_v1_vision_mowers__mower_id__recover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoverIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recover",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/mowers/{mower_id}/recover/upload": {
+      "post": {
+        "description": "``recover`` with the snapshots as ``multipart/form-data`` files (field ``images``).",
+        "operationId": "recover_upload_api_v1_vision_mowers__mower_id__recover_upload_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_recover_upload_api_v1_vision_mowers__mower_id__recover_upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recover Upload",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/proposals/{proposal_id}": {
+      "get": {
+        "description": "One proposal with its step audit; poll while ``final`` is false.",
+        "operationId": "get_proposal_api_v1_vision_proposals__proposal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Proposal",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/proposals/{proposal_id}/approve": {
+      "post": {
+        "description": "Approve: the steps are driven on the caller's behalf (blades off, dead-man 1 s). One\napproval per proposal; 409 ``vision-proposal-expired`` after ``expires_at``.",
+        "operationId": "approve_api_v1_vision_proposals__proposal_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/proposals/{proposal_id}/images/{index}": {
+      "get": {
+        "description": "An image the model saw; 404 once it was purged (after the proposal TTL).",
+        "operationId": "proposal_image_api_v1_vision_proposals__proposal_id__images__index__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "maximum": 7,
+              "minimum": 0,
+              "title": "Index",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Proposal Image",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/proposals/{proposal_id}/reject": {
+      "post": {
+        "description": "Reject a waiting proposal, or stop a running execution at once.",
+        "operationId": "reject_api_v1_vision_proposals__proposal_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/proposals/{proposal_id}/retry": {
+      "post": {
+        "description": "Another round after one that did not help (``can_retry``), with fresh snapshots.",
+        "operationId": "retry_api_v1_vision_proposals__proposal_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/providers": {
+      "get": {
+        "description": "The model families users can configure and whether the installation's model may be\nused by the caller's account.",
+        "operationId": "providers_api_v1_vision_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvidersOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Providers",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
+    "/api/v1/vision/status": {
+      "get": {
+        "description": "What the operator configured: whether a hosted default exists and its model string\n(never a key), whether users can store keys, the base URL policy.",
+        "operationId": "vision_status_api_v1_vision_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Vision Status",
+        "tags": [
+          "vision"
+        ]
+      }
+    }
+  }
+}

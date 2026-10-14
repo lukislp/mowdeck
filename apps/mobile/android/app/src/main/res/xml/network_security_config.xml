@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The MowDeck server is usually internal: trust user-installed CAs (a private CA for the
+     server's certificate) and allow plain HTTP in the LAN. Login itself needs HTTPS because the
+     refresh cookie is Secure. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

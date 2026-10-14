@@ -1,0 +1,149 @@
+{
+  "$defs": {
+    "CloudDiscoverError": {
+      "description": "The error of a :class:`CloudDiscoverReply`; ``detail`` never echoes the credentials.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/CloudDiscoverErrorCode"
+        },
+        "detail": {
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "CloudDiscoverError",
+      "type": "object"
+    },
+    "CloudDiscoverErrorCode": {
+      "description": "Why no device list was given.",
+      "enum": [
+        "login_failed",
+        "unavailable",
+        "unsupported"
+      ],
+      "title": "CloudDiscoverErrorCode",
+      "type": "string"
+    },
+    "DiscoveredDevice": {
+      "description": "One device of a vendor cloud account as the discovery saw it.",
+      "properties": {
+        "device_name": {
+          "description": "The device name the vendor app shows, e.g. `Luba-VP12345678`; the key a mower registration selects the device by.",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Device Name",
+          "type": "string"
+        },
+        "iot_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vendor IoT id.",
+          "title": "Iot Id"
+        },
+        "is_mower": {
+          "description": "False for RTK base stations, pool cleaners and other non-mowers, which cannot be registered.",
+          "title": "Is Mower",
+          "type": "boolean"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Model name as far as known at login (PyMammotion's `extMod`, else the device type), e.g. `Luba VP` or `LUBA 2 AWD 5000X`.",
+          "title": "Model"
+        },
+        "online": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Online flag the cloud reported at login; null when unknown.",
+          "title": "Online"
+        },
+        "product_key": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Product Key"
+        }
+      },
+      "required": [
+        "device_name",
+        "is_mower"
+      ],
+      "title": "DiscoveredDevice",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`CloudDiscoverRequest`: exactly one of ``devices`` or ``error``.",
+  "properties": {
+    "devices": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/DiscoveredDevice"
+          },
+          "maxItems": 200,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Devices"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CloudDiscoverError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "reused_session": {
+      "default": false,
+      "description": "True when the gateway answered from a cloud session that was already open for these credentials instead of logging in again.",
+      "title": "Reused Session",
+      "type": "boolean"
+    }
+  },
+  "title": "CloudDiscoverReply",
+  "type": "object"
+}

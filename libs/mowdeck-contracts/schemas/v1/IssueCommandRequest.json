@@ -1,0 +1,529 @@
+{
+  "$defs": {
+    "CommandRequest": {
+      "description": "Body of ``POST .../commands`` for a mower, a group or a site.\n\n``ttl_seconds`` shortens or extends the expiry within the service's limit; Fleet ignores it\nfor ``manual_drive`` and ``emergency_stop``, which always use their own short expiry.",
+      "properties": {
+        "command": {
+          "discriminator": {
+            "mapping": {
+              "emergency_stop": "#/$defs/EmergencyStop",
+              "manual_drive": "#/$defs/ManualDrive",
+              "pause_mow": "#/$defs/PauseMow",
+              "resume_mow": "#/$defs/ResumeMow",
+              "return_to_dock": "#/$defs/ReturnToDock",
+              "set_blade_height": "#/$defs/SetBladeHeight",
+              "set_light": "#/$defs/SetLight",
+              "set_speed": "#/$defs/SetSpeed",
+              "start_mow": "#/$defs/StartMow"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/StartMow"
+            },
+            {
+              "$ref": "#/$defs/PauseMow"
+            },
+            {
+              "$ref": "#/$defs/ResumeMow"
+            },
+            {
+              "$ref": "#/$defs/ReturnToDock"
+            },
+            {
+              "$ref": "#/$defs/EmergencyStop"
+            },
+            {
+              "$ref": "#/$defs/SetBladeHeight"
+            },
+            {
+              "$ref": "#/$defs/SetSpeed"
+            },
+            {
+              "$ref": "#/$defs/SetLight"
+            },
+            {
+              "$ref": "#/$defs/ManualDrive"
+            }
+          ],
+          "title": "Command"
+        },
+        "ttl_seconds": {
+          "anyOf": [
+            {
+              "maximum": 3600,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ttl Seconds"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "CommandRequest",
+      "type": "object"
+    },
+    "EmergencyStop": {
+      "description": "Stop blades and wheels immediately. Always sent with ``priority = emergency``.",
+      "properties": {
+        "kind": {
+          "const": "emergency_stop",
+          "default": "emergency_stop",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "EmergencyStop",
+      "type": "object"
+    },
+    "ManualDrive": {
+      "description": "One joystick sample. The mower stops when no new sample arrives within ``ttl_ms``.\n\nThis is the dead-man switch: clients resend samples continuously while the stick is held.",
+      "properties": {
+        "angular": {
+          "description": "Turn left (+) / right (-), normalised.",
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Angular",
+          "type": "number"
+        },
+        "blade_on": {
+          "default": false,
+          "title": "Blade On",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "manual_drive",
+          "default": "manual_drive",
+          "title": "Kind",
+          "type": "string"
+        },
+        "linear": {
+          "description": "Forward (+) / backward (-), normalised.",
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Linear",
+          "type": "number"
+        },
+        "ttl_ms": {
+          "default": 1000,
+          "description": "Dead-man timeout in milliseconds.",
+          "maximum": 2000,
+          "minimum": 100,
+          "title": "Ttl Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "linear",
+        "angular"
+      ],
+      "title": "ManualDrive",
+      "type": "object"
+    },
+    "PauseMow": {
+      "description": "Pause the current job.",
+      "properties": {
+        "kind": {
+          "const": "pause_mow",
+          "default": "pause_mow",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "PauseMow",
+      "type": "object"
+    },
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    },
+    "ResumeMow": {
+      "description": "Resume a paused job.",
+      "properties": {
+        "kind": {
+          "const": "resume_mow",
+          "default": "resume_mow",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ResumeMow",
+      "type": "object"
+    },
+    "ReturnToDock": {
+      "description": "Stop the job and drive back to the charging station.",
+      "properties": {
+        "kind": {
+          "const": "return_to_dock",
+          "default": "return_to_dock",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ReturnToDock",
+      "type": "object"
+    },
+    "SetBladeHeight": {
+      "description": "Set the cutting height.",
+      "properties": {
+        "kind": {
+          "const": "set_blade_height",
+          "default": "set_blade_height",
+          "title": "Kind",
+          "type": "string"
+        },
+        "mm": {
+          "description": "Blade height in millimetres.",
+          "maximum": 120,
+          "minimum": 10,
+          "title": "Mm",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mm"
+      ],
+      "title": "SetBladeHeight",
+      "type": "object"
+    },
+    "SetLight": {
+      "description": "Switch the mower's light (the camera's headlamp on Mammotion mowers) on or off.\n\nNeeds ``MowerCapabilities.light``. Allowed in every activity, also during an error: the light\nis harmless and AI assist switches it on to photograph a stuck mower at night.",
+      "properties": {
+        "kind": {
+          "const": "set_light",
+          "default": "set_light",
+          "title": "Kind",
+          "type": "string"
+        },
+        "on": {
+          "description": "True switches the light on, False off.",
+          "title": "On",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "title": "SetLight",
+      "type": "object"
+    },
+    "SetSpeed": {
+      "description": "Set the driving speed while mowing.",
+      "properties": {
+        "kind": {
+          "const": "set_speed",
+          "default": "set_speed",
+          "title": "Kind",
+          "type": "string"
+        },
+        "mps": {
+          "description": "Speed in metres per second.",
+          "exclusiveMinimum": 0,
+          "maximum": 2,
+          "title": "Mps",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mps"
+      ],
+      "title": "SetSpeed",
+      "type": "object"
+    },
+    "SpotMowPlan": {
+      "description": "A computed mowing route for ``StartMow.spot_plan``.",
+      "properties": {
+        "covered_area_m2": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Covered Area M2",
+          "type": "number"
+        },
+        "estimated_duration_s": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Estimated Duration S",
+          "type": "number"
+        },
+        "native": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpotNativeJob"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "pattern_chain": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Pattern Chain",
+          "type": "array"
+        },
+        "plan_hash": {
+          "description": "SHA-256 of the chain and the segments (`spot_plan_hash`); must match.",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Hash",
+          "type": "string"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/SpotSegment"
+          },
+          "maxItems": 10000,
+          "minItems": 1,
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "plan_hash",
+        "pattern_chain",
+        "segments"
+      ],
+      "title": "SpotMowPlan",
+      "type": "object"
+    },
+    "SpotNativeJob": {
+      "description": "The plan expressed as a native job of the mower: whole map areas and one pattern.\n\nPresent only when the chain is exactly one pattern the mower may run by itself (``stripes``,\n``diagonal``, ``checkerboard``, ``edge_only``, or ``border_fill`` with one of them) on map\nareas, so a mower without ``custom_paths`` can still execute it as an ordinary\n``StartMow(area_ids, pattern)``.",
+      "properties": {
+        "area_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Area Ids",
+          "type": "array"
+        },
+        "pattern": {
+          "additionalProperties": true,
+          "description": "Settings in the form of `StartMow.pattern` (`name`, `angle_deg`, `spacing_m`, `border_laps`, `order`).",
+          "title": "Pattern",
+          "type": "object"
+        }
+      },
+      "required": [
+        "area_ids",
+        "pattern"
+      ],
+      "title": "SpotNativeJob",
+      "type": "object"
+    },
+    "SpotSegment": {
+      "description": "One part of a spot plan: drive along ``path`` with the blades on or off.",
+      "properties": {
+        "blades_on": {
+          "title": "Blades On",
+          "type": "boolean"
+        },
+        "kind": {
+          "default": "mow",
+          "enum": [
+            "mow",
+            "turn",
+            "transfer"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "description": "Encoded polyline of local metres (x, y), centimetre precision (`encode_polyline`), at least two points.",
+          "maxLength": 200000,
+          "minLength": 4,
+          "title": "Path",
+          "type": "string"
+        },
+        "speed_mps": {
+          "exclusiveMinimum": 0,
+          "maximum": 2.0,
+          "title": "Speed Mps",
+          "type": "number"
+        }
+      },
+      "required": [
+        "blades_on",
+        "speed_mps",
+        "path"
+      ],
+      "title": "SpotSegment",
+      "type": "object"
+    },
+    "StartMow": {
+      "description": "Start mowing the given areas, a stored plan or an inline spot plan (exactly one).",
+      "properties": {
+        "area_ids": {
+          "description": "Map area ids to mow, in order.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Area Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "start_mow",
+          "default": "start_mow",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pattern settings (validated by the pattern's own JSON Schema).",
+          "title": "Pattern"
+        },
+        "plan_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reference to a stored mowing plan.",
+          "title": "Plan Ref"
+        },
+        "spot_plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpotMowPlan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A route computed by the Planner (spot mowing). Runs only on mowers with `custom_paths`, or natively when the plan carries a `native` job."
+        }
+      },
+      "title": "StartMow",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``fleet.commands.issue``: send a command on behalf of a subject.\n\n``account_id`` must be the mower's account (otherwise the answer is ``not_found``).\nService principals never hold object rights, so ``on_behalf_of.kind = service`` is refused.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "command": {
+      "$ref": "#/$defs/CommandRequest"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "on_behalf_of": {
+      "$ref": "#/$defs/PrincipalRef"
+    },
+    "origin": {
+      "default": "scheduler",
+      "enum": [
+        "scheduler",
+        "vision"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "schedule_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Schedule Id"
+    }
+  },
+  "required": [
+    "on_behalf_of",
+    "account_id",
+    "mower_id",
+    "command"
+  ],
+  "title": "IssueCommandRequest",
+  "type": "object"
+}

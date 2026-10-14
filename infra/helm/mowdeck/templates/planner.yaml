@@ -1,0 +1,13 @@
+{{- /* Planner: mowing patterns and spot mowing (ADR 0030); computes, validates and previews
+routes, coverage and gaps, and keeps the pattern templates (Compose services planner and
+planner-migrate). CPU-bound: scale it on CPU. */ -}}
+{{- $c := .Values.config }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_PLANNER_CUTTING_WIDTH_M" $c.PLANNER_CUTTING_WIDTH_M
+  "MOWDECK_PLANNER_MAX_PARALLEL" $c.PLANNER_MAX_PARALLEL) }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "planner" "key" "planner" "image" "planner" "module" "planner.adapters.db.migrate" "weight" 8) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "planner" "key" "planner" "image" "planner"
+  "env" $env "db" "planner" "migrateModule" "planner.adapters.db.migrate" "authz" true
+  "secretFiles" (list
+    (dict "key" "database-url-planner" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE"))) }}

@@ -1,0 +1,20 @@
+"""Settings of the {{ service_name }} service.
+
+Every field is read from ``MOWDECK_<NAME>`` or from the file named by ``MOWDECK_<NAME>_FILE``.
+The field docstrings are the configuration reference (README settings table).
+"""
+
+from mowdeck_service_kit import ServiceSettings
+from pydantic import Field
+
+
+class Settings(ServiceSettings):
+    """Settings of {{ service_name }}: the kit settings plus service defaults."""
+
+    service_name: str = Field(
+        default="{{ service_name }}", min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9\-]*$"
+    )
+    """Name of the service in logs, metrics and traces."""
+
+    http_port: int = Field(default={{ http_port }}, ge=1, le=65535)
+    """Port the HTTP server listens on."""

@@ -1,0 +1,1661 @@
+{
+  "conditions": {
+    "not_expired": {
+      "expression": "current_time < expires_at",
+      "name": "not_expired",
+      "parameters": {
+        "current_time": {
+          "type_name": "TYPE_NAME_TIMESTAMP"
+        },
+        "expires_at": {
+          "type_name": "TYPE_NAME_TIMESTAMP"
+        }
+      }
+    }
+  },
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "user"
+    },
+    {
+      "type": "api_token"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_manage_accounts": {},
+          "can_manage_plans": {},
+          "can_view_system_health": {},
+          "operator_admin": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "can_manage_accounts": {
+          "computedUserset": {
+            "relation": "operator_admin"
+          }
+        },
+        "can_manage_plans": {
+          "computedUserset": {
+            "relation": "operator_admin"
+          }
+        },
+        "can_view_system_health": {
+          "computedUserset": {
+            "relation": "operator_admin"
+          }
+        },
+        "operator_admin": {
+          "this": {}
+        }
+      },
+      "type": "platform"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "admin": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "can_bulk_command": {},
+          "can_control": {},
+          "can_drive": {},
+          "can_edit_schedule": {},
+          "can_emergency_stop": {},
+          "can_manage_account": {},
+          "can_manage_billing": {},
+          "can_manage_mowers": {},
+          "can_manage_users": {},
+          "can_operator_manage": {},
+          "can_view": {},
+          "can_view_audit": {},
+          "grant_audit_view": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "grant_billing_manage": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "grant_fleet_bulk_command": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_fleet_manage": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_control": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_drive": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_view": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_schedule_edit": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_users_manage": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "member": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "owner": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "platform": {
+            "directly_related_user_types": [
+              {
+                "type": "platform"
+              }
+            ]
+          },
+          "support": {
+            "directly_related_user_types": [
+              {
+                "condition": "not_expired",
+                "type": "user"
+              }
+            ]
+          },
+          "tenant": {}
+        }
+      },
+      "relations": {
+        "admin": {
+          "this": {}
+        },
+        "can_bulk_command": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_fleet_bulk_command"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "can_control": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_control"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "can_drive": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_drive"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "can_edit_schedule": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_schedule_edit"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "can_emergency_stop": {
+          "computedUserset": {
+            "relation": "can_view"
+          }
+        },
+        "can_manage_account": {
+          "computedUserset": {
+            "relation": "owner"
+          }
+        },
+        "can_manage_billing": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_billing_manage"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "can_manage_mowers": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_fleet_manage"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "can_manage_users": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_users_manage"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "can_operator_manage": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "can_manage_accounts"
+            },
+            "tupleset": {
+              "relation": "platform"
+            }
+          }
+        },
+        "can_view": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "support"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_view"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "can_view_audit": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "intersection": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_audit_view"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "member"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "grant_audit_view": {
+          "this": {}
+        },
+        "grant_billing_manage": {
+          "this": {}
+        },
+        "grant_fleet_bulk_command": {
+          "this": {}
+        },
+        "grant_fleet_manage": {
+          "this": {}
+        },
+        "grant_mower_control": {
+          "this": {}
+        },
+        "grant_mower_drive": {
+          "this": {}
+        },
+        "grant_mower_view": {
+          "this": {}
+        },
+        "grant_schedule_edit": {
+          "this": {}
+        },
+        "grant_users_manage": {
+          "this": {}
+        },
+        "member": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              }
+            ]
+          }
+        },
+        "owner": {
+          "this": {}
+        },
+        "platform": {
+          "this": {}
+        },
+        "support": {
+          "this": {}
+        },
+        "tenant": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "member"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "support"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "type": "account"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "account": {
+            "directly_related_user_types": [
+              {
+                "type": "account"
+              }
+            ]
+          },
+          "can_bulk_command": {},
+          "can_control": {},
+          "can_drive": {},
+          "can_edit_schedule": {},
+          "can_emergency_stop": {},
+          "can_manage_mowers": {},
+          "can_view": {},
+          "grant_fleet_bulk_command": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_fleet_manage": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_control": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_drive": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_view": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_schedule_edit": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "account": {
+          "this": {}
+        },
+        "can_bulk_command": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_fleet_bulk_command"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_bulk_command"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_control": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_control"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_control"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_drive": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_drive"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_drive"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_edit_schedule": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_schedule_edit"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_edit_schedule"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_emergency_stop": {
+          "computedUserset": {
+            "relation": "can_view"
+          }
+        },
+        "can_manage_mowers": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_fleet_manage"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_manage_mowers"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_view": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_view"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_view"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grant_fleet_bulk_command": {
+          "this": {}
+        },
+        "grant_fleet_manage": {
+          "this": {}
+        },
+        "grant_mower_control": {
+          "this": {}
+        },
+        "grant_mower_drive": {
+          "this": {}
+        },
+        "grant_mower_view": {
+          "this": {}
+        },
+        "grant_schedule_edit": {
+          "this": {}
+        }
+      },
+      "type": "site"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "account": {
+            "directly_related_user_types": [
+              {
+                "type": "account"
+              }
+            ]
+          },
+          "can_bulk_command": {},
+          "can_control": {},
+          "can_drive": {},
+          "can_edit_schedule": {},
+          "can_emergency_stop": {},
+          "can_manage_mowers": {},
+          "can_view": {},
+          "grant_fleet_bulk_command": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_fleet_manage": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_control": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_drive": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_view": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_schedule_edit": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "parent": {
+            "directly_related_user_types": [
+              {
+                "type": "site"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "account": {
+          "this": {}
+        },
+        "can_bulk_command": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_fleet_bulk_command"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_bulk_command"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_bulk_command"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_control": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_control"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_control"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_control"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_drive": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_drive"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_drive"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_drive"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_edit_schedule": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_schedule_edit"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_edit_schedule"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_edit_schedule"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_emergency_stop": {
+          "computedUserset": {
+            "relation": "can_view"
+          }
+        },
+        "can_manage_mowers": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_fleet_manage"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_manage_mowers"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_manage_mowers"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_view": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_view"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_view"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_view"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grant_fleet_bulk_command": {
+          "this": {}
+        },
+        "grant_fleet_manage": {
+          "this": {}
+        },
+        "grant_mower_control": {
+          "this": {}
+        },
+        "grant_mower_drive": {
+          "this": {}
+        },
+        "grant_mower_view": {
+          "this": {}
+        },
+        "grant_schedule_edit": {
+          "this": {}
+        },
+        "parent": {
+          "this": {}
+        }
+      },
+      "type": "group"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "account": {
+            "directly_related_user_types": [
+              {
+                "type": "account"
+              }
+            ]
+          },
+          "can_control": {},
+          "can_drive": {},
+          "can_edit_schedule": {},
+          "can_emergency_stop": {},
+          "can_manage_mowers": {},
+          "can_view": {},
+          "grant_fleet_manage": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_control": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_drive": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_mower_view": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "grant_schedule_edit": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              },
+              {
+                "type": "api_token"
+              }
+            ]
+          },
+          "parent": {
+            "directly_related_user_types": [
+              {
+                "type": "site"
+              },
+              {
+                "type": "group"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "account": {
+          "this": {}
+        },
+        "can_control": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_control"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_control"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_control"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_drive": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_drive"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_drive"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_drive"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_edit_schedule": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_schedule_edit"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_edit_schedule"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_edit_schedule"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_emergency_stop": {
+          "computedUserset": {
+            "relation": "can_view"
+          }
+        },
+        "can_manage_mowers": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_fleet_manage"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_manage_mowers"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_manage_mowers"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_view": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "grant_mower_view"
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_view"
+                        },
+                        "tupleset": {
+                          "relation": "parent"
+                        }
+                      }
+                    },
+                    {
+                      "tupleToUserset": {
+                        "computedUserset": {
+                          "relation": "can_view"
+                        },
+                        "tupleset": {
+                          "relation": "account"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "tenant"
+                  },
+                  "tupleset": {
+                    "relation": "account"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "grant_fleet_manage": {
+          "this": {}
+        },
+        "grant_mower_control": {
+          "this": {}
+        },
+        "grant_mower_drive": {
+          "this": {}
+        },
+        "grant_mower_view": {
+          "this": {}
+        },
+        "grant_schedule_edit": {
+          "this": {}
+        },
+        "parent": {
+          "this": {}
+        }
+      },
+      "type": "mower"
+    }
+  ]
+}

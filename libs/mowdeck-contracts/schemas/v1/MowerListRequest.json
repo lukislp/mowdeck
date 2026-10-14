@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``fleet.mowers.list``: the registrations of one Device-Gateway shard.\n\nA mower belongs to shard ``i`` of ``n`` when ``mower_id.int % n == i``. The defaults ask\nfor every mower.",
+  "properties": {
+    "shard_count": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Shard Count",
+      "type": "integer"
+    },
+    "shard_index": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Shard Index",
+      "type": "integer"
+    }
+  },
+  "title": "MowerListRequest",
+  "type": "object"
+}

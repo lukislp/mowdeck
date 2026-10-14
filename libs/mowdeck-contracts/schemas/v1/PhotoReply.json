@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "PhotoError": {
+      "description": "The error of a :class:`PhotoReply`.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/PhotoErrorCode"
+        },
+        "detail": {
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "PhotoError",
+      "type": "object"
+    },
+    "PhotoErrorCode": {
+      "description": "Why a gateway could not deliver a photo.",
+      "enum": [
+        "not_found",
+        "not_connected",
+        "unsupported",
+        "too_large",
+        "failed"
+      ],
+      "title": "PhotoErrorCode",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`PhotoRequest`: exactly one of ``image_base64`` or ``error``.",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PhotoError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "image_base64": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The image, base64 (standard).",
+      "title": "Image Base64"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "enum": [
+            "image/jpeg",
+            "image/png"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Media Type"
+    },
+    "taken_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Taken At"
+    }
+  },
+  "title": "PhotoReply",
+  "type": "object"
+}

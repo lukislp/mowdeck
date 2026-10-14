@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Set the driving speed while mowing.",
+  "properties": {
+    "kind": {
+      "const": "set_speed",
+      "default": "set_speed",
+      "title": "Kind",
+      "type": "string"
+    },
+    "mps": {
+      "description": "Speed in metres per second.",
+      "exclusiveMinimum": 0,
+      "maximum": 2,
+      "title": "Mps",
+      "type": "number"
+    }
+  },
+  "required": [
+    "mps"
+  ],
+  "title": "SetSpeed",
+  "type": "object"
+}

@@ -1,0 +1,1934 @@
+{
+  "components": {
+    "schemas": {
+      "EventDef": {
+        "description": "An event type a module publishes.",
+        "properties": {
+          "schema_ref": {
+            "description": "Reference to the payload JSON Schema (URI or package path).",
+            "minLength": 1,
+            "title": "Schema Ref",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "schema_ref"
+        ],
+        "title": "EventDef",
+        "type": "object"
+      },
+      "FeatureDef": {
+        "description": "A plan feature a module offers, e.g. ``reports``.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "FeatureDef",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HourOut": {
+        "description": "One forecast hour (values cover the hour ending at ``end``).",
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "precipitation_mm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precipitation Mm"
+          },
+          "probability_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probability Percent"
+          },
+          "rain_mm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rain Mm"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "precipitation_mm",
+          "probability_percent",
+          "rain_mm"
+        ],
+        "title": "HourOut",
+        "type": "object"
+      },
+      "ModuleDescriptor": {
+        "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventDef"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureDef"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9\\-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionDef"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "ui_areas": {
+            "items": {
+              "$ref": "#/components/schemas/UiAreaDef"
+            },
+            "title": "Ui Areas",
+            "type": "array"
+          },
+          "version": {
+            "maxLength": 64,
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.\\-+]+)?$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "ModuleDescriptor",
+        "type": "object"
+      },
+      "PermissionDef": {
+        "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "implied_by": {
+            "description": "Keys that imply this one when held on the whole account (e.g. `device_gateway.view` implied by `mower.view`).",
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+              "type": "string"
+            },
+            "title": "Implied By",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "PermissionDef",
+        "type": "object"
+      },
+      "PreviewItemOut": {
+        "description": "One upcoming firing.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "skipped": {
+            "description": "Skipped by `skip-next`.",
+            "title": "Skipped",
+            "type": "boolean"
+          },
+          "window_end": {
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "window_end",
+          "skipped"
+        ],
+        "title": "PreviewItemOut",
+        "type": "object"
+      },
+      "PreviewOut": {
+        "description": "``GET /schedules/{id}/preview``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "weather": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RainDecisionOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The rain decision for the first firing that is not skipped, with today's forecast (null without a target mower)."
+          },
+          "weather_mower_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather Mower Id"
+          }
+        },
+        "required": [
+          "items",
+          "weather",
+          "weather_mower_id"
+        ],
+        "title": "PreviewOut",
+        "type": "object"
+      },
+      "PrincipalKind": {
+        "description": "What kind of subject a principal is.",
+        "enum": [
+          "user",
+          "subuser",
+          "api_token",
+          "service"
+        ],
+        "title": "PrincipalKind",
+        "type": "string"
+      },
+      "PrincipalRef": {
+        "description": "A compact reference to a principal, embedded in commands and audit records.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PrincipalKind",
+            "description": "Kind of subject."
+          },
+          "subject": {
+            "description": "Stable subject id (JWT `sub`).",
+            "format": "uuid",
+            "title": "Subject",
+            "type": "string"
+          },
+          "token_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Token id (JWT `jti`), if known.",
+            "title": "Token Id"
+          }
+        },
+        "required": [
+          "subject",
+          "kind"
+        ],
+        "title": "PrincipalRef",
+        "type": "object"
+      },
+      "RainDecisionOut": {
+        "description": "A rain decision with what it was based on.",
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "holds": {
+            "title": "Holds",
+            "type": "boolean"
+          },
+          "hours": {
+            "description": "The forecast hours the decision looked at.",
+            "items": {
+              "$ref": "#/components/schemas/HourOut"
+            },
+            "title": "Hours",
+            "type": "array"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "location_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "site",
+                  "map",
+                  "position"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Source"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "run",
+              "hold",
+              "unknown_run",
+              "unknown_hold",
+              "no_location",
+              "disabled"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "holds",
+          "reason",
+          "provider",
+          "location_source",
+          "latitude",
+          "longitude",
+          "hours"
+        ],
+        "title": "RainDecisionOut",
+        "type": "object"
+      },
+      "RainPause": {
+        "additionalProperties": false,
+        "description": "Rain pause settings of a schedule.",
+        "properties": {
+          "cooldown_hours": {
+            "default": 2,
+            "description": "Hold while rain fell within this many hours.",
+            "maximum": 24.0,
+            "minimum": 0.0,
+            "title": "Cooldown Hours",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "lookahead_hours": {
+            "default": 3,
+            "maximum": 24.0,
+            "minimum": 0.0,
+            "title": "Lookahead Hours",
+            "type": "integer"
+          },
+          "precipitation_mm_threshold": {
+            "default": 0.5,
+            "description": "Millimetres per hour; at or above holds the run.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Precipitation Mm Threshold",
+            "type": "number"
+          },
+          "probability_threshold": {
+            "default": 60,
+            "description": "Percent; a forecast hour at or above holds the run.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Probability Threshold",
+            "type": "integer"
+          },
+          "run_when_unknown": {
+            "default": true,
+            "description": "Without a forecast (provider down): run (true) or hold.",
+            "title": "Run When Unknown",
+            "type": "boolean"
+          }
+        },
+        "title": "RainPause",
+        "type": "object"
+      },
+      "RunList": {
+        "description": "``GET /schedules/{id}/runs`` (newest first) and ``POST .../run-now``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "RunList",
+        "type": "object"
+      },
+      "RunOut": {
+        "description": "One run of a schedule for one mower.",
+        "properties": {
+          "command_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command Id"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "followup": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "After a start: `rain_dock`, `window_dock`, `finished`, `closed` or null while the job is followed.",
+            "title": "Followup"
+          },
+          "followup_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followup At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mower_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mower Id"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ScheduleRunOutcome"
+          },
+          "schedule_id": {
+            "format": "uuid",
+            "title": "Schedule Id",
+            "type": "string"
+          },
+          "scheduled_for": {
+            "format": "date-time",
+            "title": "Scheduled For",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "schedule",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          },
+          "window_end_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End At"
+          }
+        },
+        "required": [
+          "id",
+          "schedule_id",
+          "mower_id",
+          "trigger",
+          "outcome",
+          "details",
+          "command_id",
+          "scheduled_for",
+          "started_at",
+          "window_end_at",
+          "followup",
+          "followup_at"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "ScheduleIn": {
+        "additionalProperties": false,
+        "description": "``POST /schedules``.\n\n``kind=weekly`` needs ``days_of_week``; ``kind=every_n_days`` needs ``anchor_date`` (the first\nday it fires) and ``interval_days``. ``start_time`` is wall-clock time in the schedule's time\nzone (the target's site, or ``timezone``). ``area_ids`` empty means every area of the\nmower's map; a group target always mows every area of each mower.",
+        "properties": {
+          "anchor_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Date"
+          },
+          "area_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "days_of_week": {
+            "items": {
+              "enum": [
+                "mon",
+                "tue",
+                "wed",
+                "thu",
+                "fri",
+                "sat",
+                "sun"
+              ],
+              "type": "string"
+            },
+            "maxItems": 7,
+            "title": "Days Of Week",
+            "type": "array"
+          },
+          "duration_minutes": {
+            "default": 120,
+            "description": "The window: no start after it closed.",
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Days"
+          },
+          "kind": {
+            "enum": [
+              "weekly",
+              "every_n_days"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Native pattern settings passed to `StartMow.pattern`.",
+            "title": "Pattern"
+          },
+          "pause_running_jobs_on_rain": {
+            "default": true,
+            "description": "Send a running scheduled job back to the dock when it rains.",
+            "title": "Pause Running Jobs On Rain",
+            "type": "boolean"
+          },
+          "rain_pause": {
+            "$ref": "#/components/schemas/RainPause"
+          },
+          "return_to_dock_at_window_end": {
+            "default": false,
+            "title": "Return To Dock At Window End",
+            "type": "boolean"
+          },
+          "rotation_angles": {
+            "description": "Angles used round robin, one per run (sets `pattern.angle`).",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 24,
+            "title": "Rotation Angles",
+            "type": "array"
+          },
+          "start_time": {
+            "format": "time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "enum": [
+              "mower",
+              "group"
+            ],
+            "title": "Target Type",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "IANA name overriding the site's time zone.",
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "name",
+          "target_type",
+          "target_id",
+          "kind",
+          "start_time"
+        ],
+        "title": "ScheduleIn",
+        "type": "object"
+      },
+      "ScheduleList": {
+        "description": "``GET /schedules``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ScheduleList",
+        "type": "object"
+      },
+      "ScheduleOut": {
+        "description": "A schedule.",
+        "properties": {
+          "anchor_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Date"
+          },
+          "area_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "days_of_week": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Days Of Week",
+            "type": "array"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Reason"
+          },
+          "duration_minutes": {
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "interval_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Days"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/PrincipalRef",
+            "description": "The subject the schedule runs on behalf of."
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "pause_running_jobs_on_rain": {
+            "title": "Pause Running Jobs On Rain",
+            "type": "boolean"
+          },
+          "permission_skips": {
+            "title": "Permission Skips",
+            "type": "integer"
+          },
+          "rain_pause": {
+            "$ref": "#/components/schemas/RainPause"
+          },
+          "return_to_dock_at_window_end": {
+            "title": "Return To Dock At Window End",
+            "type": "boolean"
+          },
+          "rotation_angles": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Rotation Angles",
+            "type": "array"
+          },
+          "rotation_index": {
+            "title": "Rotation Index",
+            "type": "integer"
+          },
+          "skip_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip Until"
+          },
+          "start_time": {
+            "format": "time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          },
+          "timezone": {
+            "description": "The effective time zone (override or the site's).",
+            "title": "Timezone",
+            "type": "string"
+          },
+          "timezone_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone Override"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "target_type",
+          "target_id",
+          "kind",
+          "days_of_week",
+          "anchor_date",
+          "interval_days",
+          "start_time",
+          "duration_minutes",
+          "timezone",
+          "timezone_override",
+          "area_ids",
+          "pattern",
+          "rotation_angles",
+          "rotation_index",
+          "rain_pause",
+          "pause_running_jobs_on_rain",
+          "return_to_dock_at_window_end",
+          "enabled",
+          "disabled_reason",
+          "permission_skips",
+          "skip_until",
+          "last_run_at",
+          "next_run_at",
+          "owner",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ScheduleOut",
+        "type": "object"
+      },
+      "SchedulePatch": {
+        "additionalProperties": false,
+        "description": "``PATCH /schedules/{id}``: only the given fields change; the caller becomes the owner.",
+        "properties": {
+          "anchor_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Date"
+          },
+          "area_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Ids"
+          },
+          "days_of_week": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "mon",
+                    "tue",
+                    "wed",
+                    "thu",
+                    "fri",
+                    "sat",
+                    "sun"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 7,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Of Week"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "maximum": 1440.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "interval_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Days"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "weekly",
+                  "every_n_days"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "pause_running_jobs_on_rain": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Running Jobs On Rain"
+          },
+          "rain_pause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RainPause"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "return_to_dock_at_window_end": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return To Dock At Window End"
+          },
+          "rotation_angles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 24,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rotation Angles"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "format": "time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mower",
+                  "group"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: the site's",
+            "title": "Timezone"
+          }
+        },
+        "title": "SchedulePatch",
+        "type": "object"
+      },
+      "ScheduleRunOutcome": {
+        "description": "What one run of a schedule did for one mower.",
+        "enum": [
+          "started",
+          "skipped_rain",
+          "skipped_permission",
+          "skipped_window",
+          "skipped_mower_busy",
+          "skipped_manual",
+          "failed"
+        ],
+        "title": "ScheduleRunOutcome",
+        "type": "string"
+      },
+      "UiAreaDef": {
+        "description": "An area the module occupies in the web app shell.",
+        "properties": {
+          "labels": {
+            "description": "Translated menu labels by language tag (e.g. `de`); `menu_label` is the English fallback.",
+            "patternProperties": {
+              "^[a-z]{2}(-[A-Z]{2})?$": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "menu_label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Menu Label",
+            "type": "string"
+          },
+          "required_permission": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Required Permission",
+            "type": "string"
+          },
+          "route": {
+            "maxLength": 200,
+            "pattern": "^/[A-Za-z0-9/_\\-:\\[\\]]*$",
+            "title": "Route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "menu_label",
+          "required_permission"
+        ],
+        "title": "UiAreaDef",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WeatherOut": {
+        "description": "``GET /weather/{mower_id}``: the rain decision now, with the default settings unless\nquery parameters change them.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/RainDecisionOut"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "at",
+          "decision"
+        ],
+        "title": "WeatherOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "scheduler",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/.well-known/mowdeck-module": {
+      "get": {
+        "operationId": "module_descriptor__well_known_mowdeck_module_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleDescriptor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Module Descriptor",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/scheduler/schedules": {
+      "get": {
+        "description": "Schedules of the caller's account whose target (mower or group) the caller may view.",
+        "operationId": "list_schedules_api_v1_scheduler_schedules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Schedules",
+        "tags": [
+          "schedules"
+        ]
+      },
+      "post": {
+        "description": "A new schedule: ``can_edit_schedule`` and ``can_control`` on the target (403 when the\ntarget is visible, 404 otherwise, also for a target of another account). The caller becomes\nthe owner; every firing re-checks the owner's ``can_control``.",
+        "operationId": "create_schedule_api_v1_scheduler_schedules_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Schedule",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/api/v1/scheduler/schedules/{schedule_id}": {
+      "delete": {
+        "description": "Delete a schedule and its runs (``can_edit_schedule`` on the target).",
+        "operationId": "delete_schedule_api_v1_scheduler_schedules__schedule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Schedule",
+        "tags": [
+          "schedules"
+        ]
+      },
+      "get": {
+        "description": "One schedule (``can_view`` on its target, 404 otherwise).",
+        "operationId": "get_schedule_api_v1_scheduler_schedules__schedule_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Schedule",
+        "tags": [
+          "schedules"
+        ]
+      },
+      "patch": {
+        "description": "Change a schedule (``can_edit_schedule`` and ``can_control`` on the old and a new\ntarget); the caller becomes the owner and the next run is recomputed.",
+        "operationId": "update_schedule_api_v1_scheduler_schedules__schedule_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Schedule",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/api/v1/scheduler/schedules/{schedule_id}/preview": {
+      "get": {
+        "description": "The next firings and the rain decision for the first one (``can_view``).",
+        "operationId": "preview_api_v1_scheduler_schedules__schedule_id__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "count",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Count",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/api/v1/scheduler/schedules/{schedule_id}/run-now": {
+      "post": {
+        "description": "Start the schedule now on behalf of the caller (``can_control`` on the target, checked\nagain per mower by Fleet). ``respect_rain=true`` applies the rain pause. The next firing\nstays as it is.",
+        "operationId": "run_now_api_v1_scheduler_schedules__schedule_id__run_now_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "respect_rain",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Respect Rain",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Now",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/api/v1/scheduler/schedules/{schedule_id}/runs": {
+      "get": {
+        "description": "Run records of the schedule, newest first (``can_view`` on the target); pass\n``next_before`` as ``before`` for the next page.",
+        "operationId": "list_runs_api_v1_scheduler_schedules__schedule_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/api/v1/scheduler/schedules/{schedule_id}/skip-next": {
+      "post": {
+        "description": "Skip the next firing (recorded as ``skipped_manual``); 409 without a next run.",
+        "operationId": "skip_next_api_v1_scheduler_schedules__schedule_id__skip_next_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Skip Next",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/api/v1/scheduler/weather/{mower_id}": {
+      "get": {
+        "description": "The rain decision for the mower now and the forecast hours it used (``can_view``).",
+        "operationId": "weather_api_v1_scheduler_weather__mower_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "probability_threshold",
+            "required": false,
+            "schema": {
+              "default": 60,
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Probability Threshold",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "precipitation_mm_threshold",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Precipitation Mm Threshold",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lookahead_hours",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "maximum": 24,
+              "minimum": 0,
+              "title": "Lookahead Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cooldown_hours",
+            "required": false,
+            "schema": {
+              "default": 2,
+              "maximum": 24,
+              "minimum": 0,
+              "title": "Cooldown Hours",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Weather",
+        "tags": [
+          "schedules"
+        ]
+      }
+    }
+  }
+}

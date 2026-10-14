@@ -1,0 +1,13 @@
+{{- /* Fleet: sites, groups, mowers, linked Mammotion accounts (passwords encrypted with
+secrets.FLEET_CREDENTIAL_ENCRYPTION_KEY), the Device-Gateway registry and every command
+(Compose services fleet and fleet-migrate). */ -}}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_ALLOWED_CONNECTION_KINDS" .Values.config.FLEET_ALLOWED_CONNECTION_KINDS) }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "fleet" "key" "fleet" "image" "fleet" "module" "fleet.adapters.db.migrate" "weight" 2) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "fleet" "key" "fleet" "image" "fleet"
+  "env" $env "db" "fleet" "migrateModule" "fleet.adapters.db.migrate" "authz" true
+  "secretFiles" (list
+    (dict "key" "database-url-fleet" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE")
+    (dict "key" "fleet-credential-encryption-key" "file" "fleet-credential-encryption-key" "env" "MOWDECK_CREDENTIAL_ENCRYPTION_KEY_FILE")
+    (dict "key" "fleet-credential-encryption-key-previous" "file" "fleet-credential-encryption-key-previous" "env" "MOWDECK_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS_FILE"))) }}

@@ -1,0 +1,271 @@
+{
+  "$defs": {
+    "DockPose": {
+      "description": "Position and orientation of the charging station in the local frame.",
+      "properties": {
+        "heading_deg": {
+          "default": 0.0,
+          "description": "Local frame, counter-clockwise from +x.",
+          "exclusiveMaximum": 360,
+          "minimum": 0,
+          "title": "Heading Deg",
+          "type": "number"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "DockPose",
+      "type": "object"
+    },
+    "GeoReference": {
+      "description": "Anchors the local frame on the earth.\n\nThe local point ``(0, 0)`` is at ``(origin_lat, origin_lon)``. The local axes are the east\nand north axes rotated counter-clockwise by ``rotation_deg``: a local point ``(x, y)`` lies\n``east = x cos(r) - y sin(r)`` and ``north = x sin(r) + y cos(r)`` metres from the origin.",
+      "properties": {
+        "origin_lat": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Origin Lat",
+          "type": "number"
+        },
+        "origin_lon": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Origin Lon",
+          "type": "number"
+        },
+        "rotation_deg": {
+          "default": 0.0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Rotation Deg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "origin_lat",
+        "origin_lon"
+      ],
+      "title": "GeoReference",
+      "type": "object"
+    },
+    "MapArea": {
+      "description": "A mowable area (a \"zone\" in the Mammotion app).",
+      "properties": {
+        "boundary": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 3,
+          "title": "Boundary",
+          "type": "array"
+        },
+        "id": {
+          "description": "Stable id; for Mammotion the zone hash.",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "id",
+        "boundary"
+      ],
+      "title": "MapArea",
+      "type": "object"
+    },
+    "MapPath": {
+      "description": "A transfer path between areas (driven with blades off).",
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "points": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 2,
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "points"
+      ],
+      "title": "MapPath",
+      "type": "object"
+    },
+    "MapZone": {
+      "description": "A polygon the mower must stay out of: a no-go zone or an obstacle.",
+      "properties": {
+        "boundary": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 3,
+          "title": "Boundary",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "id",
+        "boundary"
+      ],
+      "title": "MapZone",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The map of one mower: areas, no-go zones, obstacles, paths and the dock.",
+  "properties": {
+    "areas": {
+      "items": {
+        "$ref": "#/$defs/MapArea"
+      },
+      "title": "Areas",
+      "type": "array"
+    },
+    "dock": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DockPose"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "no_go_zones": {
+      "items": {
+        "$ref": "#/$defs/MapZone"
+      },
+      "title": "No Go Zones",
+      "type": "array"
+    },
+    "obstacles": {
+      "items": {
+        "$ref": "#/$defs/MapZone"
+      },
+      "title": "Obstacles",
+      "type": "array"
+    },
+    "paths": {
+      "items": {
+        "$ref": "#/$defs/MapPath"
+      },
+      "title": "Paths",
+      "type": "array"
+    },
+    "reference": {
+      "$ref": "#/$defs/GeoReference"
+    },
+    "revision": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Map version; for Mammotion the map hash.",
+      "title": "Revision"
+    }
+  },
+  "required": [
+    "reference"
+  ],
+  "title": "MowerMap",
+  "type": "object"
+}

@@ -1,0 +1,186 @@
+/*
+ * MowDeck design tokens: the "instrument panel" direction.
+ *
+ * The only file in the repository allowed to contain raw colours, font stacks and radii
+ * (enforced by the Stylelint rule mowdeck/use-tokens). Light is the outdoor theme with the
+ * highest contrast; dark follows the system or data-theme="dark". The contrast of every
+ * ink/surface and state/surface pair is checked by `pnpm --filter @mowdeck/ui tokens:check`.
+ *
+ * Palettes: "Graphite" (neutrals), "Field signals" (mower state), "Signal stop" (the
+ * emergency stop, reserved for it alone).
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Graphite */
+  --md-color-bg: #f4f5f2;
+  --md-color-surface: #fff;
+  --md-color-surface-sunken: #e9ebe6;
+  --md-color-line: #c9cdc4;
+  --md-color-line-strong: #8c928a;
+  --md-color-ink: #111412;
+  --md-color-ink-muted: #4a514b;
+  --md-color-ink-inverse: #fff;
+  --md-color-focus: #0057d9;
+
+  /* Field signals */
+  --md-state-mowing: #1f7a35;
+  --md-state-mowing-bg: #e3f1e6;
+  --md-state-returning: #0f6e7a;
+  --md-state-returning-bg: #e0f0f2;
+  --md-state-charging: #2f55b8;
+  --md-state-charging-bg: #e5ebf8;
+  --md-state-docked: #4a514b;
+  --md-state-docked-bg: #e9ebe6;
+  --md-state-paused: #8a5200;
+  --md-state-paused-bg: #f7ecd9;
+  --md-state-error: #b3261e;
+  --md-state-error-bg: #f8e3e1;
+  --md-state-offline: #5f655f;
+  --md-state-offline-bg: #eceee9;
+  --md-state-unknown: #5f655f;
+  --md-state-unknown-bg: #eceee9;
+  --md-rtk-fixed: var(--md-state-mowing);
+  --md-rtk-float: var(--md-state-paused);
+  --md-rtk-none: var(--md-state-error);
+
+  /* Signal stop */
+  --md-stop-fill: #d0201a;
+  --md-stop-fill-pressed: #a51812;
+  --md-stop-ink: #fff;
+  --md-stop-ring: #f5c400;
+  --md-stop-ring-ink: #111412;
+
+  /* Typography */
+  --md-font-sans: 'IBM Plex Sans Variable', 'IBM Plex Sans', system-ui, sans-serif;
+  --md-font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', menlo, consolas, monospace;
+  --md-font-size-11: 0.6875rem;
+  --md-font-size-12: 0.75rem;
+  --md-font-size-13: 0.8125rem;
+  --md-font-size-14: 0.875rem;
+  --md-font-size-16: 1rem;
+  --md-font-size-20: 1.25rem;
+  --md-font-size-24: 1.5rem;
+  --md-font-size-28: 1.75rem;
+  --md-font-size-32: 2rem;
+  --md-line-16: 1rem;
+  --md-line-20: 1.25rem;
+  --md-line-24: 1.5rem;
+  --md-line-28: 1.75rem;
+  --md-line-32: 2rem;
+  --md-weight-regular: 400;
+  --md-weight-medium: 500;
+  --md-weight-semibold: 600;
+  --md-label-tracking: 0.06em;
+
+  /* Spacing (4 px grid) */
+  --md-space-0_5: 2px;
+  --md-space-1: 4px;
+  --md-space-2: 8px;
+  --md-space-3: 12px;
+  --md-space-4: 16px;
+  --md-space-6: 24px;
+  --md-space-8: 32px;
+  --md-space-12: 48px;
+  --md-gutter: 16px;
+
+  /* Radius: square by default, no pills */
+  --md-radius-0: 0;
+  --md-radius-1: 2px;
+  --md-radius-2: 4px;
+  --md-radius-3: 8px;
+  --md-radius-round: 50%;
+
+  /* Lines and elevation: hairlines separate, one shadow for floating layers */
+  --md-hairline: 1px;
+  --md-border-control: 1.5px;
+  --md-shadow-float: 0 8px 24px rgb(0 0 0 / 18%);
+  --md-scrim: rgb(17 20 18 / 40%);
+
+  /* Targets */
+  --md-target: 48px;
+  --md-target-command: 56px;
+  --md-target-stop: 64px;
+  --md-instrument-column: 360px;
+
+  /* Motion */
+  --md-motion-fast: 120ms;
+  --md-motion-base: 200ms;
+  --md-motion-flash: 300ms;
+  --md-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --md-gutter: 24px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --md-color-bg: #0e1011;
+    --md-color-surface: #16191b;
+    --md-color-surface-sunken: #0a0c0d;
+    --md-color-line: #2a2f33;
+    --md-color-line-strong: #6a7279;
+    --md-color-ink: #ecefea;
+    --md-color-ink-muted: #a7aea8;
+    --md-color-ink-inverse: #0e1011;
+    --md-color-focus: #7fb0ff;
+    --md-state-mowing: #56d37a;
+    --md-state-mowing-bg: #12301c;
+    --md-state-returning: #4fc9d6;
+    --md-state-returning-bg: #0f2c30;
+    --md-state-charging: #86a6f2;
+    --md-state-charging-bg: #1a2440;
+    --md-state-docked: #a7aea8;
+    --md-state-docked-bg: #1f2326;
+    --md-state-paused: #f2b24a;
+    --md-state-paused-bg: #33270f;
+    --md-state-error: #ff7a70;
+    --md-state-error-bg: #3a1714;
+    --md-state-offline: #8d948e;
+    --md-state-offline-bg: #1c1f21;
+    --md-state-unknown: #8d948e;
+    --md-state-unknown-bg: #1c1f21;
+    --md-stop-fill: #d0201a;
+    --md-stop-fill-pressed: #a51812;
+    --md-shadow-float: 0 8px 24px rgb(0 0 0 / 50%);
+    --md-scrim: rgb(0 0 0 / 55%);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --md-color-bg: #0e1011;
+  --md-color-surface: #16191b;
+  --md-color-surface-sunken: #0a0c0d;
+  --md-color-line: #2a2f33;
+  --md-color-line-strong: #6a7279;
+  --md-color-ink: #ecefea;
+  --md-color-ink-muted: #a7aea8;
+  --md-color-ink-inverse: #0e1011;
+  --md-color-focus: #7fb0ff;
+  --md-state-mowing: #56d37a;
+  --md-state-mowing-bg: #12301c;
+  --md-state-returning: #4fc9d6;
+  --md-state-returning-bg: #0f2c30;
+  --md-state-charging: #86a6f2;
+  --md-state-charging-bg: #1a2440;
+  --md-state-docked: #a7aea8;
+  --md-state-docked-bg: #1f2326;
+  --md-state-paused: #f2b24a;
+  --md-state-paused-bg: #33270f;
+  --md-state-error: #ff7a70;
+  --md-state-error-bg: #3a1714;
+  --md-state-offline: #8d948e;
+  --md-state-offline-bg: #1c1f21;
+  --md-state-unknown: #8d948e;
+  --md-state-unknown-bg: #1c1f21;
+  --md-stop-fill: #d0201a;
+  --md-stop-fill-pressed: #a51812;
+  --md-shadow-float: 0 8px 24px rgb(0 0 0 / 50%);
+  --md-scrim: rgb(0 0 0 / 55%);
+}

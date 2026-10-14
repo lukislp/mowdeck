@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Stop the job and drive back to the charging station.",
+  "properties": {
+    "kind": {
+      "const": "return_to_dock",
+      "default": "return_to_dock",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "ReturnToDock",
+  "type": "object"
+}

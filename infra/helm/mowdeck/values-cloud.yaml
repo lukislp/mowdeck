@@ -1,0 +1,121 @@
+# Cloud overlay: several nodes, a public domain with TLS, two replicas of every stateless service
+# with PodDisruptionBudgets, autoscaling by CPU, a three node NATS cluster, three OpenFGA replicas
+# and PostgreSQL either as a three instance CloudNativePG Cluster (below) or managed by your
+# provider (postgresql.external, see docs/ops/helm.md).
+#
+#   helm install mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version <version> \
+#     -n mowdeck --create-namespace -f values-cloud.yaml -f my-cloud.yaml
+#
+# my-cloud.yaml sets at least ingress.host, the TLS secret and the secrets (or existingSecret);
+# more than one Notifications replica needs secrets.NOTIFICATIONS_VAPID_PRIVATE_KEY.
+
+config:
+  # Invitations only: the first account registers, further owners are created by the operator.
+  IDENTITY_REGISTRATION: closed
+
+ingress:
+  className: traefik
+  host: mowdeck.example.org
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  tls:
+    - secretName: mowdeck-tls
+      hosts: [mowdeck.example.org]
+  auth:
+    # Rate limit of the login paths (Traefik Middleware, see docs/ops/helm.md).
+    annotations:
+      traefik.ingress.kubernetes.io/router.middlewares: mowdeck-identity-ratelimit@kubernetescrd
+
+postgresql:
+  cloudnativepg:
+    instances: 3
+    storage:
+      size: 20Gi
+    resources:
+      requests: {cpu: 250m, memory: 512Mi}
+      limits: {memory: 2Gi}
+
+nats:
+  config:
+    cluster:
+      enabled: true
+      replicas: 3
+    jetstream:
+      fileStore:
+        pvc:
+          size: 10Gi
+
+openfga:
+  replicaCount: 3
+
+# Spread the replicas of each service over the nodes.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+
+services:
+  identity:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 6, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: true, minAvailable: 1}
+  fleet:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 6, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: true, minAvailable: 1}
+  # The gateway is sharded (one shard per replica, the count is fixed per rollout). Autoscale it
+  # only once the connections metric and the hand-over exist (docs/ops/helm.md, "Scaling"); the
+  # placeholder below shows the intended HorizontalPodAutoscaler on open mower connections per pod
+  # (served through the Prometheus Adapter as a Pods metric).
+  deviceGateway:
+    replicas: 2
+    pdb: {enabled: true, minAvailable: 1}
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 8
+      metrics:
+        - type: Pods
+          pods:
+            metric:
+              name: mowdeck_device_gateway_connections
+            target:
+              type: AverageValue
+              averageValue: "500"
+  telemetry:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 6, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: true, minAvailable: 1}
+  realtime:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 10, targetCPUUtilizationPercentage: 70}
+    pdb: {enabled: true, minAvailable: 1}
+  notifications:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: true, minAvailable: 1}
+  scheduler:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: true, minAvailable: 1}
+  entitlements:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: true, minAvailable: 1}
+  vision:
+    replicas: 2
+    pdb: {enabled: true, minAvailable: 1}
+  # Billing (still services.billing.enabled: false here; set it to true to sell plans). Scales by
+  # webhooks: two replicas share the exactly-once ledger in PostgreSQL.
+  billing:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: true, minAvailable: 1}
+  planner:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 6, targetCPUUtilizationPercentage: 70}
+    pdb: {enabled: true, minAvailable: 1}
+  web:
+    replicas: 2
+    autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: true, minAvailable: 1}

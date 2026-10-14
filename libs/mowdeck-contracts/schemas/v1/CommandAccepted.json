@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "CommandPriority": {
+      "description": "Delivery priority of a command. Only :class:`EmergencyStop` uses ``emergency``.",
+      "enum": [
+        "normal",
+        "emergency"
+      ],
+      "title": "CommandPriority",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Answer (202) to a command for one mower: Fleet published it; results follow.",
+  "properties": {
+    "command_id": {
+      "format": "uuid",
+      "title": "Command Id",
+      "type": "string"
+    },
+    "correlation_id": {
+      "pattern": "^[A-Za-z0-9._:\\-]{1,128}$",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "issued_at": {
+      "format": "date-time",
+      "title": "Issued At",
+      "type": "string"
+    },
+    "kind": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Kind",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "priority": {
+      "$ref": "#/$defs/CommandPriority"
+    },
+    "status": {
+      "const": "accepted",
+      "default": "accepted",
+      "title": "Status",
+      "type": "string"
+    },
+    "status_url": {
+      "description": "Where to read the command record, e.g. `/api/v1/fleet/commands/<id>`.",
+      "title": "Status Url",
+      "type": "string"
+    }
+  },
+  "required": [
+    "command_id",
+    "mower_id",
+    "kind",
+    "priority",
+    "issued_at",
+    "expires_at",
+    "correlation_id",
+    "status_url"
+  ],
+  "title": "CommandAccepted",
+  "type": "object"
+}

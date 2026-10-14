@@ -1,0 +1,243 @@
+# Operating MowDeck on Kubernetes (Helm)
+
+The chart `infra/helm/mowdeck` runs the same images as the Compose stack ([Compose operations](compose.md)) on Kubernetes: every MowDeck service, the web app, the migration and authorization bootstrap jobs and an Ingress, plus NATS, OpenFGA and an in-cluster PostgreSQL when you want them. The decisions behind it are in [ADR 0029](../adr/0029-helm-chart-and-release-pipeline.md); how releases are built and published is in [Releases](release.md).
+
+## Prerequisites
+
+| Tool | Version | Notes |
+| --- | --- | --- |
+| Kubernetes | 1.29 or newer (tested with 1.37) | the Device-Gateway reads its shard from the pod index label ([StatefulSet pod index label](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#pod-index-label)) |
+| Helm | 3.8 or newer, or 4 (CI uses [4.3.0](https://github.com/helm/helm/releases/tag/v4.3.0)) | OCI charts need 3.8+ ([Helm registries](https://helm.sh/docs/topics/registries/)) |
+| Ingress controller | any; examples for [Traefik](https://github.com/traefik/traefik-helm-chart) (default in k3s) | the chart renders standard `networking.k8s.io/v1` Ingress resources |
+| [CloudNativePG](https://cloudnative-pg.io/documentation/current/) operator | chart 0.29.1 (operator 1.30.1) | only for the in-cluster PostgreSQL (the default) |
+| A default StorageClass | | NATS JetStream and PostgreSQL use PersistentVolumeClaims |
+
+The images are `ghcr.io/lukislp/mowdeck/<service>:<version>` for linux/amd64 and linux/arm64, so a Raspberry Pi 5 runs the same chart. The packages are private like the repository: either make them public ([Releases](release.md#making-the-packages-public)) or create a pull secret and set `imagePullSecrets`:
+
+```bash
+kubectl -n mowdeck create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io --docker-username=<user> --docker-password=<token with read:packages>
+# values: imagePullSecrets: [{name: ghcr-pull}]
+```
+
+## What the chart deploys
+
+| Compose service | Kubernetes | Notes |
+| --- | --- | --- |
+| traefik | your Ingress controller, two Ingress resources | path routes identical to the Traefik labels |
+| nats | [NATS chart](https://github.com/nats-io/k8s/tree/main/helm/charts/nats) 2.15.0 (`nats.enabled`) | JetStream with file storage on a PVC, `nats://mowdeck-nats:4222` |
+| postgres | CloudNativePG `Cluster` + one `Database` per service, or an external PostgreSQL | see [PostgreSQL](#postgresql) |
+| openfga, openfga-migrate | [OpenFGA chart](https://github.com/openfga/helm-charts) 0.3.16 (`openfga.enabled`) | postgres datastore, migration as an init container, `http://mowdeck-openfga:8080` |
+| authz-bootstrap | Job `mowdeck-authz-bootstrap-r<revision>` | writes the model when it changed (idempotent) |
+| `<service>-migrate` | Job per service (hook or per revision, see [Upgrades](#upgrades-and-migrations)) | `python -m <package>.adapters.db.migrate` |
+| identity, fleet, telemetry, realtime, notifications, scheduler, entitlements, planner, vision | Deployment + Service + ConfigMap | probes on `/healthz` (startup, liveness) and `/readyz` (readiness) |
+| device-gateway | StatefulSet + Service + headless Service | one shard per replica ([ADR 0013](../adr/0013-device-gateway-registry-and-sharding.md)) |
+| web | Deployment (nginx, uid 101, port 8080) | `/healthz`, runtime config from `WEB_MAP_*` |
+
+Every MowDeck pod runs as a non-root user with a read-only root file system, `allowPrivilegeEscalation: false`, all capabilities dropped, the `RuntimeDefault` seccomp profile, a memory-backed `/tmp` and no service account token. Settings come from a ConfigMap per service; secrets are mounted as files under `/run/secrets/mowdeck` and passed as the services' `MOWDECK_<NAME>_FILE` settings (database URL, OpenFGA token, Identity's key encryption key, the VAPID private key), so they never appear in the environment. Database services wait in an init container (`wait-for-schema`) until their database carries the newest migration of their image; services using OpenFGA wait (`wait-for-model`) until the store's latest model is the one of their release.
+
+## Configuration
+
+The Entitlements plan file is a ConfigMap built from `infra/helm/mowdeck/files/plans.yaml`, an identical copy of `infra/entitlements/plans.yaml` (a repository test fails when they differ); change plans there and in the copy, then upgrade the release. Billing ([ADR 0031](../adr/0031-billing-with-stripe-adapter.md)) is off by default (`services.billing.enabled: false`: nothing of it is rendered); enabled, it gets its database URL and the Stripe keys (`secrets.BILLING_STRIPE_SECRET_KEY`, required with `config.BILLING_PROVIDER=stripe`, and `secrets.BILLING_STRIPE_WEBHOOK_SECRET`, or the keys `billing-stripe-secret-key` and `billing-stripe-webhook-secret` of an `existingSecret`) as files, its price file as a ConfigMap built from `files/prices.yaml` (an identical copy of `infra/billing/prices.yaml`), and the Stripe webhook path joins the rate limited `-auth` Ingress; see [Billing operations](billing.md). The CI render (`ci/test-values.yaml`) enables it. Vision ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)) is on by default; it gets `secrets.VISION_SECRETS_KEY` (encrypts the users' provider keys) and `secrets.VISION_DEFAULT_API_KEY` (the installation model, `config.VISION_DEFAULT_*`) as files, both may stay empty ([Compose operations, AI assist](compose.md#ai-assist-vision)). Fleet gets `secrets.FLEET_CREDENTIAL_ENCRYPTION_KEY` (the passwords of linked Mammotion accounts, [ADR 0034](../adr/0034-linked-cloud-accounts-and-device-discovery.md)) as a file; empty means no linked accounts, and an `existingSecret` must hold the keys `fleet-credential-encryption-key` and `fleet-credential-encryption-key-previous` (both may be empty; the second holds earlier keys during a rotation). Keep a backup of it like `IDENTITY_KEY_ENCRYPTION_KEY`. `values.yaml` is fully commented. `config` and `secrets` use the variable names of `infra/compose/.env.example`, so a Compose `.env` translates line by line; a repository test (`tools/repo-checks/tests/test_helm.py`) fails when a variable exists on one side only, when a Compose service has no chart template, or when a Compose service receives a `MOWDECK_*` setting the chart does not pass. The chart's defaults are production defaults (`MOWDECK_ENVIRONMENT=prod`, `MOWDECK_SIM_TIME_SCALE=1`, `NOTIFICATIONS_MOWING_MIN_SECONDS=120`, `IDENTITY_REFRESH_COOKIE_SECURE=true`); the Compose example file carries development values.
+
+| Key | Purpose |
+| --- | --- |
+| `image.registry`, `image.tag` | MowDeck images; the tag defaults to the chart's `appVersion` (Compose: `MOWDECK_VERSION`) |
+| `config.*` | plain settings (`IDENTITY_REGISTRATION`, `FLEET_ALLOWED_CONNECTION_KINDS`, `REALTIME_*`, `NOTIFICATIONS_*`, `SCHEDULER_*`, `ENTITLEMENTS_*`, `WEB_MAP_*`, ...) |
+| `secrets.*`, `secrets.existingSecret` | see [Secrets](#secrets) |
+| `postgresql.*` | in-cluster CloudNativePG or `external` |
+| `ingress.*` | class, host, TLS, annotations; `ingress.auth` for the login paths |
+| `services.<name>` | `enabled`, `replicas`, `resources`, `autoscaling`, `pdb`, `extraEnv`, `extraVolumes`, scheduling |
+| `migrations.*`, `authzBootstrap.*` | job mode, retries, the wait init containers |
+| `metrics.*` | scrape annotations, ServiceMonitor |
+| `nats.*`, `openfga.*` | values of the subcharts |
+
+Two overlays ship with the chart: `values-homelab.yaml` (one replica each, small requests, `owasp_min` Argon2, one PostgreSQL instance, one NATS server) and `values-cloud.yaml` (two replicas of every stateless service with a PodDisruptionBudget and a CPU autoscaler, topology spread, a three node NATS cluster, three OpenFGA replicas, a three instance PostgreSQL cluster, closed registration, TLS through cert-manager and a rate-limit middleware on the login paths).
+
+## Secrets
+
+Nothing secret has a default. A render without the required values fails with a message naming the key:
+
+```text
+Error: execution error at (mowdeck/templates/secrets.yaml): secrets.IDENTITY_KEY_ENCRYPTION_KEY is required: generate one (docs/ops/helm.md) and give it with --set, or name an existing Secret in secrets.existingSecret
+```
+
+| Value | Required | Generate |
+| --- | --- | --- |
+| `secrets.OPENFGA_AUTHN_PRESHARED_KEYS` | yes (also for the OpenFGA subchart) | `openssl rand -hex 32` |
+| `secrets.OPENFGA_API_TOKEN` | only with several pre-shared keys | one of the keys |
+| `secrets.IDENTITY_KEY_ENCRYPTION_KEY` | yes | `python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"` |
+| `secrets.SERVICE_DB_PASSWORD` or `secrets.databasePasswords.<role>` | yes, unless every database URL comes from `existingSecret` | `openssl rand -hex 24` (one per role in production) |
+| `secrets.NOTIFICATIONS_VAPID_PRIVATE_KEY` | for more than one Notifications replica (the chart refuses otherwise) | `python -m notifications.cli generate-vapid-keys`; put the public key into `config.NOTIFICATIONS_VAPID_PUBLIC_KEY` |
+
+Keep them in a values file outside the repository (or encrypted with [SOPS](https://github.com/getsops/sops)) and pass it with `-f`. Alternatively create the Secrets yourself (for example with External Secrets or Sealed Secrets) and reference them:
+
+```yaml
+secrets:
+  existingSecret: mowdeck-app          # keys: openfga-api-token, identity-key-encryption-key,
+  existingSecretHasVapidKey: true      #   database-url-<identity|fleet|telemetry|notifications|scheduler|entitlements|planner>,
+                                       #   notifications-vapid-private-key
+openfgaSecret:
+  create: false                        # Secret "mowdeck-openfga" with the keys "keys" and "uri"
+postgresql:
+  cloudnativepg:
+    createRoleSecrets: false           # basic-auth Secrets mowdeck-db-<role> (username, password)
+```
+
+The OpenFGA subchart reads its Secret by a fixed name (`openfgaSecret.name`, default `mowdeck-openfga`, which `openfga.authn.preshared.keysSecret` and `openfga.datastore.uriSecret` must repeat), and NATS and OpenFGA have fixed service names (`fullnameOverride`), so install one MowDeck release per namespace.
+
+## PostgreSQL
+
+One database and one login role per service (identity, fleet, telemetry, notifications, scheduler, entitlements, billing, planner, vision, openfga), as in the Compose stack.
+
+**In-cluster with CloudNativePG (default).** Install the operator once per cluster, then the chart renders a `Cluster` (`mowdeck-pg`, `postgresql.cloudnativepg.*`: instances, storage, resources, `extraSpec` for backups and parameters), the roles as [managed roles](https://cloudnative-pg.io/documentation/current/declarative_role_management/) with passwords from basic-auth Secrets, and one [`Database` resource](https://cloudnative-pg.io/documentation/current/declarative_database_management/) per service with `databaseReclaimPolicy: retain`. Services connect to `mowdeck-pg-rw:5432`.
+
+```bash
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm upgrade --install cnpg cnpg/cloudnative-pg --version 0.29.1 -n cnpg-system --create-namespace --wait
+```
+
+The superuser is disabled (`enableSuperuserAccess: false`); the services never need it. Unlike the Compose init script, CloudNativePG does not revoke `CONNECT` from `PUBLIC` on the databases; every database is owned by its role and no role has privileges on another service's tables. Use separate clusters (install the chart's Cluster settings per service via `extraSpec`, or an external PostgreSQL per service) if you need strict isolation.
+
+**External or managed PostgreSQL** (a cloud provider's database, or a self-run cluster):
+
+```yaml
+postgresql:
+  external:
+    enabled: true
+    host: db.example.org
+    port: 5432
+    serviceUrlParams: ssl=require      # asyncpg query parameters of the service URLs
+  openfgaUriParams: sslmode=require    # pgx parameters of the OpenFGA URI
+```
+
+Create the databases and roles first, like `infra/compose/init/01-databases.sql`. With an external database the migrations run as `pre-install`/`pre-upgrade` hooks before any pod changes.
+
+## NATS and OpenFGA
+
+NATS runs as a StatefulSet with JetStream on a PVC (`nats.config.jetstream.fileStore.pvc.size`); `values-cloud.yaml` enables a three node cluster (`nats.config.cluster`), which JetStream needs for replicated streams. The config reloader and nats-box are disabled. To use an existing NATS cluster with JetStream set `nats.enabled: false` and `natsUrl`.
+
+OpenFGA uses the postgres datastore in the `openfga` database; its migration runs as an init container of the OpenFGA pods (`openfga.datastore.migrationType: initContainer`), which retries until the database exists and needs neither the chart's default `k8s-wait-for` image nor extra RBAC. The playground is off and the pods run read-only as uid 65532. For an external OpenFGA set `openfga.enabled: false` and `config.OPENFGA_API_URL`.
+
+The bootstrap Job (`mowdeck-authz-bootstrap-r<revision>`) waits for OpenFGA, creates the store `config.OPENFGA_STORE_NAME` and writes `infra/openfga/model.fga` when it differs from the latest model, exactly like the Compose job ([ADR 0014](../adr/0014-authorization-model-and-tuple-ownership.md)).
+
+## Install at home (k3s or kind)
+
+[k3s](https://docs.k3s.io/) is a good single-node choice (Traefik and a local-path StorageClass are built in):
+
+```bash
+curl -sfL https://get.k3s.io | sh -
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+helm upgrade --install cnpg cnpg/cloudnative-pg --version 0.29.1 -n cnpg-system --create-namespace --wait
+helm install mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version <version> \
+  -n mowdeck --create-namespace -f values-homelab.yaml -f my-secrets.yaml --wait --timeout 15m
+```
+
+`values-homelab.yaml` comes from the chart (`helm pull oci://ghcr.io/lukislp/charts/mowdeck --version <version> --untar`). The first install takes a few minutes: the PostgreSQL cluster starts, the migration Jobs and the bootstrap run, and the services wait in their init containers until the schema and the model are there. `kubectl -n mowdeck get cluster,database,jobs,pods` shows the progress.
+
+[kind](https://kind.sigs.k8s.io) on Docker Desktop or Docker Engine is the quickest way to try the chart from the repository: `infra/helm/kind-test.sh` creates a cluster, loads the images, installs the CloudNativePG operator, Traefik and the chart (homelab overlay plus `ci/kind-values.yaml`), upgrades once and optionally runs the Phase 1 acceptance test through Traefik:
+
+```bash
+docker compose -f infra/compose/docker-compose.yml build      # images mowdeck/<service>:dev
+docker build -t mowdeck/authz-bootstrap:dev -f infra/openfga/bootstrap/Dockerfile infra/openfga
+SOURCE_TAG=dev E2E=1 KEEP=1 sh infra/helm/kind-test.sh        # KEEP: leave the cluster running
+kind delete cluster --name mowdeck-test
+```
+
+The CI workflow `helm-kind.yml` runs the same script (by hand and for release tags).
+
+## Install in the cloud
+
+```bash
+helm install mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version <version> \
+  -n mowdeck --create-namespace -f values-cloud.yaml -f my-cloud.yaml --wait --timeout 15m
+```
+
+`my-cloud.yaml` sets at least `ingress.host` and its TLS entry, the secrets (or `existingSecret`), `config.NOTIFICATIONS_VAPID_PUBLIC_KEY`, and either the CloudNativePG sizing or `postgresql.external`. Registration is `closed` in the overlay: the first account registers, further owners are created with `kubectl -n mowdeck exec deploy/mowdeck-identity -- python -m identity.cli create-user`.
+
+**Scaling.** Identity, Fleet, Telemetry, Realtime, Notifications, Scheduler, Entitlements, the Planner (CPU-bound: scale it on CPU) and the web app are stateless and scale horizontally (`autoscaling` renders a `autoscaling/v2` HorizontalPodAutoscaler, by CPU unless `metrics` is given). Realtime needs no sticky sessions; Notifications and the Scheduler coordinate through the database (`SKIP LOCKED`). The Device-Gateway is sharded: `MOWDECK_SHARD_COUNT` is its replica count and fixed per rollout, so changing `services.deviceGateway.replicas` moves mowers between pods (they reconnect on their new owner, [ADR 0013](../adr/0013-device-gateway-registry-and-sharding.md)). An autoscaler would change the replica count without updating the shard count, so `values-cloud.yaml` keeps the gateway's HPA disabled and only shows the intended one: a Pods metric `mowdeck_device_gateway_connections` (open mower connections per pod, served by the [Prometheus Adapter](https://github.com/kubernetes-sigs/prometheus-adapter)). The service does not export that metric yet and the shard hand-over is planned; until then scale the gateway by changing `replicas`.
+
+## Ingress, TLS and WebSockets
+
+The main Ingress routes `/api/v1/<service>` (Prefix) to each API service, `/.well-known/jwks.json` (Exact) to Identity and `/` to the web app; Kubernetes picks the longest matching path, which gives the same precedence as the Traefik priorities of the Compose stack. The second Ingress (`mowdeck-auth`, `ingress.auth`) carries `/api/v1/identity/session`, `/register`, `/token` (Exact) and `/api/v1/identity/session/` (Prefix), so a rate limit can be attached to these paths alone. With Traefik, create the middlewares and reference them ([Traefik RateLimit](https://doc.traefik.io/traefik/middlewares/http/ratelimit/), [Kubernetes Ingress provider](https://doc.traefik.io/traefik/providers/kubernetes-ingress/)):
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: identity-ratelimit
+  namespace: mowdeck
+spec:
+  rateLimit:
+    average: 10        # per period, as in the Compose stack (identity-ratelimit)
+    period: 1m
+    burst: 20
+# values: ingress.auth.annotations:
+#   traefik.ingress.kubernetes.io/router.middlewares: mowdeck-identity-ratelimit@kubernetescrd
+```
+
+The Compose stack uses a looser limit for the refresh path (`identity-session-ratelimit`, 60/min); with Traefik, split it into its own Ingress through `ingress.auth.annotations` per path if you need the difference. Identity trusts `X-Forwarded-For` (`MOWDECK_IDENTITY_TRUST_FORWARDED_FOR=true`), so only the ingress controller may reach it; do not expose the Services otherwise.
+
+**WebSockets.** The Realtime socket `/api/v1/realtime/ws` needs no annotation with Traefik. Controllers with short idle timeouts need a read timeout above `REALTIME_PING_SECONDS` (20 s); for example HAProxy or nginx-based controllers default to 60 s, which is enough. (The community ingress-nginx controller is retired; see the [Kubernetes announcement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/).)
+
+**TLS.** With [cert-manager](https://cert-manager.io/docs/usage/ingress/) add `cert-manager.io/cluster-issuer: <issuer>` to `ingress.annotations` and a `tls` entry; cert-manager fills the Secret. Behind HTTPS keep `IDENTITY_REFRESH_COOKIE_SECURE=true`; `REALTIME_ALLOWED_ORIGINS` and `NOTIFICATIONS_APP_URL` default to `https://<ingress.host>`.
+
+**Tailscale at home.** With the [Tailscale Kubernetes operator](https://tailscale.com/kb/1236/kubernetes-operator) set `ingress.className: tailscale` and `ingress.host` to the machine name; the operator exposes the Ingress in the tailnet with a certificate for `<name>.<tailnet>.ts.net` ([cluster ingress](https://tailscale.com/kb/1439/kubernetes-operator-cluster-ingress)). Check the operator's documentation for what its Ingress class supports; the alternative is to keep your normal controller for the path routes and expose that controller's Service in the tailnet (annotation `tailscale.com/expose: "true"`, [exposing a Service](https://tailscale.com/kb/1439/kubernetes-operator-cluster-ingress)).
+
+## Upgrades and migrations
+
+```bash
+helm upgrade mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version <new> -n mowdeck \
+  -f values-homelab.yaml -f my-secrets.yaml --wait --timeout 15m
+```
+
+Migrations never run inside a service process. How they run depends on where the database comes from (`migrations.mode: auto`):
+
+- **External PostgreSQL (hook mode):** every service's migration Job is a `pre-install,pre-upgrade` hook ordered by `helm.sh/hook-weight` (identity 1, fleet 2, telemetry 3, notifications 4, scheduler 5, entitlements 6, billing 7, planner 8, vision 9; their database URLs come from a hook Secret with weight -10). Helm waits for all of them before it changes any Deployment, and a failed migration stops the upgrade.
+- **In-cluster CloudNativePG (job mode):** the database is created by the release itself and does not exist yet when `pre-install` hooks run, so the migrations are ordinary Jobs named per revision (`mowdeck-<service>-migrate-r<revision>`; Helm removes them with the next upgrade, Kubernetes after `migrations.ttlSecondsAfterFinished`). The new pods wait in `wait-for-schema` until their Job has migrated the database, the old pods keep serving meanwhile.
+
+Migrations are backward compatible (the template's rule), so old pods run against a migrated database during the rolling update, and `wait-for-schema` lets an older image start against a newer schema. Configuration changes roll the pods (checksum annotations). The authorization model follows the same pattern: the bootstrap Job of the new revision writes the model, and the new pods start only once the latest model equals the one in their release (`wait-for-model`), so no pod pins an older model. Rolling back: [Releases](release.md#rolling-back).
+
+## Backups
+
+**PostgreSQL.** One logical dump per service database is the simplest and portable backup (also the way to move between Compose and Kubernetes):
+
+```bash
+for db in identity fleet telemetry notifications scheduler entitlements billing planner openfga; do
+  kubectl -n mowdeck exec mowdeck-pg-1 -c postgres -- pg_dump -Fc -d "$db" > "$db.dump"
+done
+# restore into an empty database of the same name:
+kubectl -n mowdeck exec -i mowdeck-pg-1 -c postgres -- pg_restore -d identity --clean --if-exists < identity.dump
+```
+
+For point-in-time recovery use CloudNativePG's continuous backup to object storage (S3, GCS, Azure Blob) with WAL archiving and `ScheduledBackup`, configured through `postgresql.cloudnativepg.extraSpec` and the Barman Cloud plugin ([CloudNativePG backup](https://cloudnative-pg.io/documentation/current/backup/)); managed databases use the provider's backups.
+
+**NATS JetStream.** The streams hold in-flight commands and events, not the system of record (that is PostgreSQL), so a lost JetStream volume costs only undelivered messages. To keep them across a migration, back up the streams with the NATS CLI (`nats stream backup <stream> <dir>` / `nats stream restore`, [JetStream disaster recovery](https://docs.nats.io/running-a-nats-service/nats_admin/jetstream_admin/disaster_recovery)) or snapshot the `mowdeck-nats-js-*` PVCs with your storage's VolumeSnapshots.
+
+**Secrets.** Back up the values file with the secrets (or the Secret objects) separately; without `IDENTITY_KEY_ENCRYPTION_KEY` the stored signing keys cannot be decrypted.
+
+## Monitoring
+
+Every service serves Prometheus metrics at `/metrics` on port 8000 (HTTP requests, bus messages, authorization checks, service specific counters). The pods carry `prometheus.io/scrape`, `prometheus.io/port` and `prometheus.io/path` annotations (`metrics.podAnnotations`) for annotation based scraping; with the Prometheus Operator set `metrics.serviceMonitor.enabled: true` (one ServiceMonitor per service, `metrics.serviceMonitor.labels` for the operator's selector). OpenFGA exports metrics on port 2112 (annotated by its chart), NATS on its monitoring port 8222 (`nats.promExporter` adds an exporter), CloudNativePG through `postgresql.cloudnativepg.enablePodMonitor`. Logs are JSON on stdout. Useful alerts: pods not ready, restarts, migration or bootstrap Jobs failed, `/readyz` failures, PVC usage of NATS and PostgreSQL.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `helm install` fails with `... is required` | a required secret is missing: see [Secrets](#secrets) |
+| `no matches for kind "Cluster" in version "postgresql.cnpg.io/v1"` | the CloudNativePG operator is not installed, or use `postgresql.external` |
+| pods stay in `Init:0/2`, log `wait-for-schema: database not reachable yet` | PostgreSQL still starting (`kubectl get cluster`), wrong external host or password; check the migration Job's logs |
+| `wait-for-schema: database at [...], waiting for [...]` | the migration Job failed or is still running: `kubectl logs job/mowdeck-<service>-migrate-r<revision>` |
+| `wait-for-model: waiting for the authorization model` | the bootstrap Job has not finished: `kubectl logs job/mowdeck-authz-bootstrap-r<revision>`; OpenFGA not ready (`kubectl get pods -l app.kubernetes.io/name=openfga`) |
+| OpenFGA pod in `Init:CrashLoopBackOff` | its migration waits for the `openfga` database or has a wrong URI (`mowdeck-openfga` Secret, key `uri`) |
+| `ImagePullBackOff` on `ghcr.io/lukislp/mowdeck/...` | private packages: create a pull secret or make the packages public |
+| 401 from every service | Identity unreachable for JWKS (`MOWDECK_AUTH_JWKS_URL`) or clocks out of sync |
+| login works but the session is lost on reload | plain HTTP with `IDENTITY_REFRESH_COOKIE_SECURE=true`: use HTTPS (or set it to `"false"` for tests) |
+| WebSocket closes with 4403 or the handshake is refused | `REALTIME_ALLOWED_ORIGINS` does not contain the origin you open the app with |
+| several Notifications replicas, push fails | `NOTIFICATIONS_VAPID_PRIVATE_KEY` not set (the chart refuses this unless the key is given) |
+
+`kubectl -n mowdeck get pods,jobs`, `kubectl -n mowdeck describe pod <pod>` and `kubectl -n mowdeck logs <pod> -c <container>` (containers `wait-for-schema`, `wait-for-model`, the service) answer most questions.
+
+## Checks in CI
+
+`sh infra/helm/check.sh` (CI job `helm`, about a minute) runs `helm dependency build`, `helm lint --strict` and `helm template` for the default values and both overlays, each also with an external PostgreSQL, validates every rendered manifest with [kubeconform](https://github.com/yannh/kubeconform) `-strict` against the Kubernetes 1.37 schemas and the CloudNativePG and Prometheus Operator schemas of the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog), checks that missing secrets fail with their message, and runs the drift test. Locally it needs `helm` and `kubeconform` on the `PATH`. The kind install test (`helm-kind.yml`, [helm/kind-action](https://github.com/helm/kind-action)) runs only by hand and for release tags.

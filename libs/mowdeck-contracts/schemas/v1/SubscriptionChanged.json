@@ -1,0 +1,136 @@
+{
+  "$defs": {
+    "PlanStatus": {
+      "description": "Status of an account's plan.",
+      "enum": [
+        "active",
+        "trial",
+        "grace",
+        "expired"
+      ],
+      "title": "PlanStatus",
+      "type": "string"
+    },
+    "SubscriptionStatus": {
+      "description": "Status of a subscription at the payment provider (Stripe's values).",
+      "enum": [
+        "incomplete",
+        "incomplete_expired",
+        "trialing",
+        "active",
+        "past_due",
+        "canceled",
+        "unpaid",
+        "paused"
+      ],
+      "title": "SubscriptionStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``billing.subscription.changed``.\n\n``status`` is the provider's status, ``plan_status`` what Billing set in Entitlements (None\nwhen the change did not touch the plan, e.g. ``incomplete`` or ``trial_will_end``).\n``event_type`` names the provider event that caused it (``customer.subscription.updated``).",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "cancel_at_period_end": {
+      "default": false,
+      "title": "Cancel At Period End",
+      "type": "boolean"
+    },
+    "current_period_end": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Current Period End"
+    },
+    "event_type": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Event Type"
+    },
+    "grace_until": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Grace Until"
+    },
+    "plan": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Plan"
+    },
+    "plan_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PlanStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "provider": {
+      "maxLength": 32,
+      "minLength": 1,
+      "title": "Provider",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/SubscriptionStatus"
+    },
+    "trial_end": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trial End"
+    }
+  },
+  "required": [
+    "account_id",
+    "provider",
+    "status"
+  ],
+  "title": "SubscriptionChanged",
+  "type": "object"
+}

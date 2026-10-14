@@ -1,0 +1,279 @@
+{
+  "$defs": {
+    "ConnectionKind": {
+      "description": "How the Device-Gateway is connected to the mower.",
+      "enum": [
+        "ble_bridge",
+        "wifi",
+        "cloud",
+        "simulated"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "GeoPosition": {
+      "description": "A WGS84 position.",
+      "properties": {
+        "alt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Altitude in metres, if known.",
+          "title": "Alt"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 360,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Heading in degrees, 0 = north, clockwise.",
+          "title": "Heading"
+        },
+        "lat": {
+          "description": "Latitude in degrees.",
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lon": {
+          "description": "Longitude in degrees.",
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Lon",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lat",
+        "lon"
+      ],
+      "title": "GeoPosition",
+      "type": "object"
+    },
+    "MowerActivity": {
+      "description": "What the mower is doing right now.",
+      "enum": [
+        "idle",
+        "mowing",
+        "paused",
+        "returning",
+        "docked",
+        "charging",
+        "error",
+        "offline",
+        "unknown"
+      ],
+      "title": "MowerActivity",
+      "type": "string"
+    },
+    "PositionSource": {
+      "description": "Where :attr:`MowerState.position` comes from, so consumers can judge it.\n\n``rtk`` is the mower's own positioning with an RTK fix (fixed or float), ``gnss`` the same\npositioning without an RTK fix (single point, metres of scatter), ``dock`` the known pose of\nthe charging station while the mower stands in it (the adapter reports the dock instead of\nthe scattering raw position), ``unknown`` when there is no position or its quality is not\nknown.",
+      "enum": [
+        "rtk",
+        "gnss",
+        "dock",
+        "unknown"
+      ],
+      "title": "PositionSource",
+      "type": "string"
+    },
+    "RtkFixStatus": {
+      "description": "Quality of the RTK position fix.",
+      "enum": [
+        "none",
+        "float",
+        "fixed",
+        "unknown"
+      ],
+      "title": "RtkFixStatus",
+      "type": "string"
+    },
+    "RtkSource": {
+      "description": "Where RTK correction data comes from.",
+      "enum": [
+        "base_station",
+        "network",
+        "unknown"
+      ],
+      "title": "RtkSource",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "activity": {
+      "$ref": "#/$defs/MowerActivity"
+    },
+    "battery_percent": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Battery Percent",
+      "type": "integer"
+    },
+    "blade_height_mm": {
+      "anyOf": [
+        {
+          "maximum": 200,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Blade Height Mm"
+    },
+    "charging": {
+      "default": false,
+      "title": "Charging",
+      "type": "boolean"
+    },
+    "connection": {
+      "$ref": "#/$defs/ConnectionKind"
+    },
+    "drive_recoverable": {
+      "default": false,
+      "description": "With activity `error`: the error is not a safety sensor stop, so manual driving may free the mower (stuck, wheel slip). Lift, tilt and collision stops are never drive recoverable; the controller refuses drive frames for them.",
+      "title": "Drive Recoverable",
+      "type": "boolean"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "error_message": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Message"
+    },
+    "firmware": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Firmware"
+    },
+    "light_on": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).",
+      "title": "Light On"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "observed_at": {
+      "description": "When the device reported this state (UTC).",
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "position": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GeoPosition"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "position_source": {
+      "$ref": "#/$defs/PositionSource",
+      "default": "unknown",
+      "description": "Where `position` comes from; `unknown` whenever `position` is null."
+    },
+    "raw": {
+      "additionalProperties": true,
+      "description": "Adapter specific extras. Consumers must not rely on its structure.",
+      "title": "Raw",
+      "type": "object"
+    },
+    "rtk_fix": {
+      "$ref": "#/$defs/RtkFixStatus",
+      "default": "unknown"
+    },
+    "rtk_source": {
+      "$ref": "#/$defs/RtkSource",
+      "default": "unknown"
+    },
+    "speed_mps": {
+      "anyOf": [
+        {
+          "maximum": 5,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Speed Mps"
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id",
+    "observed_at",
+    "activity",
+    "battery_percent",
+    "connection"
+  ],
+  "title": "MowerState",
+  "type": "object"
+}

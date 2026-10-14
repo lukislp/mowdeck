@@ -1,0 +1,4598 @@
+{
+  "components": {
+    "schemas": {
+      "Address": {
+        "additionalProperties": false,
+        "description": "Postal address of a site (all optional).",
+        "properties": {
+          "city": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "maxLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO 3166-1 alpha-2",
+            "title": "Country"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code"
+          },
+          "street": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Street"
+          }
+        },
+        "title": "Address",
+        "type": "object"
+      },
+      "AreaNameIn": {
+        "additionalProperties": false,
+        "description": "``PUT /mowers/{id}/area-names/{area_id}``: the custom name; ``null`` or blank drops it.\nSurrounding blanks are trimmed; at most 60 characters remain (422 otherwise).",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AreaNameIn",
+        "type": "object"
+      },
+      "AreaNamesOut": {
+        "description": "The custom area names of a mower, by area id (areas without one are absent).",
+        "properties": {
+          "names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "object"
+          }
+        },
+        "required": [
+          "names"
+        ],
+        "title": "AreaNamesOut",
+        "type": "object"
+      },
+      "BulkCommandAccepted": {
+        "description": "Answer (202) to a command for every mower of a site or group.",
+        "properties": {
+          "bulk_id": {
+            "format": "uuid",
+            "title": "Bulk Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BulkCommandItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "enum": [
+              "site",
+              "group"
+            ],
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bulk_id",
+          "target_type",
+          "target_id",
+          "kind"
+        ],
+        "title": "BulkCommandAccepted",
+        "type": "object"
+      },
+      "BulkCommandItem": {
+        "description": "One mower of a bulk command. Mowers the caller cannot see are omitted.",
+        "properties": {
+          "command_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command Id"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/BulkCommandOutcome"
+          }
+        },
+        "required": [
+          "mower_id",
+          "outcome"
+        ],
+        "title": "BulkCommandItem",
+        "type": "object"
+      },
+      "BulkCommandOutcome": {
+        "description": "What happened to one mower of a bulk command.",
+        "enum": [
+          "accepted",
+          "forbidden",
+          "not_published"
+        ],
+        "title": "BulkCommandOutcome",
+        "type": "string"
+      },
+      "CameraEncryption": {
+        "description": "Channel encryption the client must configure before joining (Agora\n``setEncryptionConfig``).",
+        "properties": {
+          "key": {
+            "description": "The secret, used verbatim.",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "mode": {
+            "description": "Agora encryption mode, for Mammotion `aes-256-gcm2`.",
+            "maxLength": 32,
+            "title": "Mode",
+            "type": "string"
+          },
+          "salt": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Base64 salt (32 bytes decoded) for the `gcm2` modes; null when not sent.",
+            "title": "Salt"
+          }
+        },
+        "required": [
+          "mode",
+          "key"
+        ],
+        "title": "CameraEncryption",
+        "type": "object"
+      },
+      "CameraInfo": {
+        "description": "One camera of the mower.",
+        "properties": {
+          "id": {
+            "description": "Camera id as the vendor names it.",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "A short display name, e.g. `Front left`.",
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CameraPlacement"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the camera sits, if known. A `front_left` and a `front_right` camera form a stereo pair the client may show side by side."
+          },
+          "uid": {
+            "anyOf": [
+              {
+                "maximum": 4294967295.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Agora uid the mower publishes this camera under, if known. Clients fall back to the first remote user that publishes video.",
+            "title": "Uid"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "CameraInfo",
+        "type": "object"
+      },
+      "CameraPlacement": {
+        "description": "Where a camera sits on the mower. Clients pair ``front_left`` and ``front_right`` for the\nside-by-side view and stereo frames (both front cameras of a LUBA 2 AWD X).",
+        "enum": [
+          "front_left",
+          "front_right",
+          "front",
+          "rear"
+        ],
+        "title": "CameraPlacement",
+        "type": "string"
+      },
+      "CameraProvider": {
+        "description": "Who delivers the video.",
+        "enum": [
+          "agora",
+          "fake"
+        ],
+        "title": "CameraProvider",
+        "type": "string"
+      },
+      "CameraQuota": {
+        "description": "The vendor's video budget (Mammotion meters video over 4G only).",
+        "properties": {
+          "total_minutes": {
+            "minimum": 0.0,
+            "title": "Total Minutes",
+            "type": "number"
+          },
+          "used_minutes": {
+            "minimum": 0.0,
+            "title": "Used Minutes",
+            "type": "number"
+          }
+        },
+        "required": [
+          "used_minutes",
+          "total_minutes"
+        ],
+        "title": "CameraQuota",
+        "type": "object"
+      },
+      "CameraSession": {
+        "description": "Credentials for one viewer to join the live video of one mower.",
+        "properties": {
+          "app_id": {
+            "description": "Agora app id (empty for `fake`).",
+            "maxLength": 128,
+            "title": "App Id",
+            "type": "string"
+          },
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/CameraInfo"
+            },
+            "maxItems": 8,
+            "title": "Cameras",
+            "type": "array"
+          },
+          "channel": {
+            "description": "Agora channel name (64 bytes at most).",
+            "maxLength": 64,
+            "title": "Channel",
+            "type": "string"
+          },
+          "encryption": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CameraEncryption"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when the channel is encrypted."
+          },
+          "expires_at": {
+            "description": "When the token stops working; clients request a new session before.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/CameraProvider"
+          },
+          "quota": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CameraQuota"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The video budget, when the vendor reports one."
+          },
+          "token": {
+            "description": "Short-lived Agora token. Never log it.",
+            "maxLength": 2048,
+            "title": "Token",
+            "type": "string"
+          },
+          "uid": {
+            "description": "The viewer's Agora uid (bound to the token).",
+            "maximum": 4294967295.0,
+            "minimum": 0.0,
+            "title": "Uid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "provider",
+          "app_id",
+          "channel",
+          "token",
+          "uid",
+          "expires_at"
+        ],
+        "title": "CameraSession",
+        "type": "object"
+      },
+      "CommandAccepted": {
+        "description": "Answer (202) to a command for one mower: Fleet published it; results follow.",
+        "properties": {
+          "command_id": {
+            "format": "uuid",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "pattern": "^[A-Za-z0-9._:\\-]{1,128}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "issued_at": {
+            "format": "date-time",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/CommandPriority"
+          },
+          "status": {
+            "const": "accepted",
+            "default": "accepted",
+            "title": "Status",
+            "type": "string"
+          },
+          "status_url": {
+            "description": "Where to read the command record, e.g. `/api/v1/fleet/commands/<id>`.",
+            "title": "Status Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "mower_id",
+          "kind",
+          "priority",
+          "issued_at",
+          "expires_at",
+          "correlation_id",
+          "status_url"
+        ],
+        "title": "CommandAccepted",
+        "type": "object"
+      },
+      "CommandPageOut": {
+        "description": "``GET /mowers/{id}/commands``: newest first; pass ``next_before`` as ``before``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommandView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "items",
+          "next_before"
+        ],
+        "title": "CommandPageOut",
+        "type": "object"
+      },
+      "CommandPriority": {
+        "description": "Delivery priority of a command. Only :class:`EmergencyStop` uses ``emergency``.",
+        "enum": [
+          "normal",
+          "emergency"
+        ],
+        "title": "CommandPriority",
+        "type": "string"
+      },
+      "CommandRequest": {
+        "description": "Body of ``POST .../commands`` for a mower, a group or a site.\n\n``ttl_seconds`` shortens or extends the expiry within the service's limit; Fleet ignores it\nfor ``manual_drive`` and ``emergency_stop``, which always use their own short expiry.",
+        "properties": {
+          "command": {
+            "discriminator": {
+              "mapping": {
+                "emergency_stop": "#/components/schemas/EmergencyStop",
+                "manual_drive": "#/components/schemas/ManualDrive",
+                "pause_mow": "#/components/schemas/PauseMow",
+                "resume_mow": "#/components/schemas/ResumeMow",
+                "return_to_dock": "#/components/schemas/ReturnToDock",
+                "set_blade_height": "#/components/schemas/SetBladeHeight",
+                "set_light": "#/components/schemas/SetLight",
+                "set_speed": "#/components/schemas/SetSpeed",
+                "start_mow": "#/components/schemas/StartMow"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StartMow"
+              },
+              {
+                "$ref": "#/components/schemas/PauseMow"
+              },
+              {
+                "$ref": "#/components/schemas/ResumeMow"
+              },
+              {
+                "$ref": "#/components/schemas/ReturnToDock"
+              },
+              {
+                "$ref": "#/components/schemas/EmergencyStop"
+              },
+              {
+                "$ref": "#/components/schemas/SetBladeHeight"
+              },
+              {
+                "$ref": "#/components/schemas/SetSpeed"
+              },
+              {
+                "$ref": "#/components/schemas/SetLight"
+              },
+              {
+                "$ref": "#/components/schemas/ManualDrive"
+              }
+            ],
+            "title": "Command"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "CommandRequest",
+        "type": "object"
+      },
+      "CommandState": {
+        "description": "Status of a command record in Fleet.",
+        "enum": [
+          "pending",
+          "accepted",
+          "rejected",
+          "executed",
+          "expired",
+          "failed"
+        ],
+        "title": "CommandState",
+        "type": "string"
+      },
+      "CommandView": {
+        "description": "A command record as clients read it (``GET /commands/{id}``).",
+        "properties": {
+          "bulk_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bulk Id"
+          },
+          "command_id": {
+            "format": "uuid",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "pattern": "^[A-Za-z0-9._:\\-]{1,128}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "issued_at": {
+            "format": "date-time",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "issued_by": {
+            "$ref": "#/components/schemas/PrincipalRef"
+          },
+          "kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Service that issued the command on behalf of `issued_by` (e.g. `scheduler`); None for commands sent through the API.",
+            "title": "Origin"
+          },
+          "plan_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hash of the spot plan of a `start_mow` with `spot_plan`, if any.",
+            "title": "Plan Hash"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/CommandPriority"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "result_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Time of the latest result applied to the record.",
+            "title": "Result At"
+          },
+          "schedule_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The schedule that issued the command, if any.",
+            "title": "Schedule Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CommandState"
+          }
+        },
+        "required": [
+          "command_id",
+          "mower_id",
+          "kind",
+          "priority",
+          "status",
+          "issued_by",
+          "issued_at",
+          "expires_at",
+          "correlation_id"
+        ],
+        "title": "CommandView",
+        "type": "object"
+      },
+      "ConnectionGroupOut": {
+        "description": "A set of alternative options (e.g. password or credential reference).",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "ConnectionGroupOut",
+        "type": "object"
+      },
+      "ConnectionKind": {
+        "description": "How the Device-Gateway is connected to the mower.",
+        "enum": [
+          "ble_bridge",
+          "wifi",
+          "cloud",
+          "simulated"
+        ],
+        "title": "ConnectionKind",
+        "type": "string"
+      },
+      "ConnectionKindList": {
+        "description": "``GET /connection-kinds``: the kinds accepted here, in the order the app offers them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionKindOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ConnectionKindList",
+        "type": "object"
+      },
+      "ConnectionKindOut": {
+        "description": "A connection kind this installation accepts, with its option schema.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "extra_options": {
+            "description": "Keys outside `options` are accepted and kept (adapter specific).",
+            "title": "Extra Options",
+            "type": "boolean"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "linked_account": {
+            "default": false,
+            "description": "Mowers of this kind come from a linked vendor account (`/linked-accounts`): register them with `linked_account_id` and `device_name`.",
+            "title": "Linked Account",
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionOptionOut"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "description",
+          "options",
+          "groups",
+          "extra_options"
+        ],
+        "title": "ConnectionKindOut",
+        "type": "object"
+      },
+      "ConnectionOptionOut": {
+        "description": "One option of a connection kind (the web app builds its form from these).",
+        "properties": {
+          "advanced": {
+            "title": "Advanced",
+            "type": "boolean"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "examples": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Examples",
+            "type": "array"
+          },
+          "format_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format Hint"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Options with the same group are alternatives: one of them is required.",
+            "title": "Group"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "managed": {
+            "default": false,
+            "description": "Set by Fleet from the linked account's device list: shown, not editable.",
+            "title": "Managed",
+            "type": "boolean"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Regular expression a string value must match.",
+            "title": "Pattern"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "secret": {
+            "description": "Write-only: answered as `***`; sending `***` back keeps the stored value.",
+            "title": "Secret",
+            "type": "boolean"
+          },
+          "title": {
+            "description": "English label; the app translates the options it knows.",
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "string",
+              "integer",
+              "number",
+              "boolean"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "title",
+          "description",
+          "required",
+          "secret",
+          "group",
+          "advanced",
+          "pattern",
+          "format_hint",
+          "minimum",
+          "maximum",
+          "default",
+          "examples"
+        ],
+        "title": "ConnectionOptionOut",
+        "type": "object"
+      },
+      "DriveEndReason": {
+        "description": "Why a drive session ended.",
+        "enum": [
+          "client_stop",
+          "socket_closed",
+          "revoked",
+          "token_expired",
+          "max_duration",
+          "mower_refused",
+          "mower_busy",
+          "replaced",
+          "expired",
+          "completed",
+          "aborted"
+        ],
+        "title": "DriveEndReason",
+        "type": "string"
+      },
+      "DriveSessionPageOut": {
+        "description": "``GET /mowers/{id}/drive-sessions``: newest first; pass ``next_before`` as ``before``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DriveSessionView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          }
+        },
+        "required": [
+          "items",
+          "next_before"
+        ],
+        "title": "DriveSessionPageOut",
+        "type": "object"
+      },
+      "DriveSessionView": {
+        "description": "A drive session as the audit API shows it (``GET /mowers/{id}/drive-sessions``).",
+        "properties": {
+          "blade_on_allowed": {
+            "title": "Blade On Allowed",
+            "type": "boolean"
+          },
+          "end_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveEndReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "frames": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frames"
+          },
+          "frames_dropped": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frames Dropped"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Service that drove on behalf of `started_by` (e.g. `vision`); None for the joystick.",
+            "title": "Origin"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "started_by": {
+            "$ref": "#/components/schemas/PrincipalRef"
+          }
+        },
+        "required": [
+          "session_id",
+          "mower_id",
+          "started_by",
+          "started_at",
+          "expires_at",
+          "blade_on_allowed"
+        ],
+        "title": "DriveSessionView",
+        "type": "object"
+      },
+      "EmergencyStop": {
+        "description": "Stop blades and wheels immediately. Always sent with ``priority = emergency``.",
+        "properties": {
+          "kind": {
+            "const": "emergency_stop",
+            "default": "emergency_stop",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "EmergencyStop",
+        "type": "object"
+      },
+      "EventDef": {
+        "description": "An event type a module publishes.",
+        "properties": {
+          "schema_ref": {
+            "description": "Reference to the payload JSON Schema (URI or package path).",
+            "minLength": 1,
+            "title": "Schema Ref",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "schema_ref"
+        ],
+        "title": "EventDef",
+        "type": "object"
+      },
+      "FeatureDef": {
+        "description": "A plan feature a module offers, e.g. ``reports``.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "FeatureDef",
+        "type": "object"
+      },
+      "GroupIn": {
+        "additionalProperties": false,
+        "description": "``POST /groups``: ``site_id`` null or missing makes a cross-site group.",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "GroupIn",
+        "type": "object"
+      },
+      "GroupList": {
+        "description": "``GET /groups``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GroupOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "GroupList",
+        "type": "object"
+      },
+      "GroupOut": {
+        "description": "A group; ``mower_ids`` lists only the mowers the caller may view.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mower_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mower Ids"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "site_id",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GroupOut",
+        "type": "object"
+      },
+      "GroupPatch": {
+        "additionalProperties": false,
+        "description": "``PATCH /groups/{id}``: ``site_id: null`` makes it a cross-site group.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          }
+        },
+        "title": "GroupPatch",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LinkedAccountDetail": {
+        "description": "A linked account with its devices (answer of create and sync).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_count": {
+            "title": "Device Count",
+            "type": "integer"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedDeviceOut"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last re-read failed, if it did.",
+            "title": "Last Sync Error"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the device list was last read successfully.",
+            "title": "Last Synced At"
+          },
+          "mower_count": {
+            "description": "Mowers of this account that connect through it.",
+            "title": "Mower Count",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "email",
+          "created_at",
+          "updated_at",
+          "last_synced_at",
+          "last_sync_error",
+          "device_count",
+          "mower_count",
+          "devices"
+        ],
+        "title": "LinkedAccountDetail",
+        "type": "object"
+      },
+      "LinkedAccountIn": {
+        "additionalProperties": false,
+        "description": "``POST /linked-accounts``: the Mammotion account to link (the only provider so far).\nThe password is write-only.",
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LinkedAccountIn",
+        "type": "object"
+      },
+      "LinkedAccountList": {
+        "description": "``GET /linked-accounts``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedAccountOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LinkedAccountList",
+        "type": "object"
+      },
+      "LinkedAccountOut": {
+        "description": "A linked account; the password is never returned.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_count": {
+            "title": "Device Count",
+            "type": "integer"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last re-read failed, if it did.",
+            "title": "Last Sync Error"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the device list was last read successfully.",
+            "title": "Last Synced At"
+          },
+          "mower_count": {
+            "description": "Mowers of this account that connect through it.",
+            "title": "Mower Count",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "email",
+          "created_at",
+          "updated_at",
+          "last_synced_at",
+          "last_sync_error",
+          "device_count",
+          "mower_count"
+        ],
+        "title": "LinkedAccountOut",
+        "type": "object"
+      },
+      "LinkedAccountSyncIn": {
+        "additionalProperties": false,
+        "description": "``POST /linked-accounts/{id}/sync``: optionally a new password (write-only).",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "writeOnly": true
+          }
+        },
+        "title": "LinkedAccountSyncIn",
+        "type": "object"
+      },
+      "LinkedDeviceList": {
+        "description": "``GET /linked-accounts/{id}/devices``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedDeviceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          }
+        },
+        "required": [
+          "items",
+          "last_synced_at"
+        ],
+        "title": "LinkedDeviceList",
+        "type": "object"
+      },
+      "LinkedDeviceOut": {
+        "description": "A device of a linked account as its last device list showed it.",
+        "properties": {
+          "device_name": {
+            "title": "Device Name",
+            "type": "string"
+          },
+          "iot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iot Id"
+          },
+          "is_mower": {
+            "description": "False for RTK base stations and other non-mowers.",
+            "title": "Is Mower",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "mower_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That mower, when `registered`.",
+            "title": "Mower Id"
+          },
+          "online": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Online"
+          },
+          "product_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Key"
+          },
+          "registered": {
+            "description": "Registered as a mower of this account.",
+            "title": "Registered",
+            "type": "boolean"
+          },
+          "registered_elsewhere": {
+            "description": "Registered in another MowDeck account (which one is not revealed); it cannot be added here.",
+            "title": "Registered Elsewhere",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "device_name",
+          "model",
+          "iot_id",
+          "product_key",
+          "online",
+          "is_mower",
+          "registered",
+          "mower_id",
+          "registered_elsewhere"
+        ],
+        "title": "LinkedDeviceOut",
+        "type": "object"
+      },
+      "LinkedMowerFailure": {
+        "description": "A device that could not be registered, with the problem it would have answered.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "device_name": {
+            "title": "Device Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_name",
+          "status",
+          "type",
+          "detail"
+        ],
+        "title": "LinkedMowerFailure",
+        "type": "object"
+      },
+      "LinkedMowerIn": {
+        "additionalProperties": false,
+        "description": "One mower of ``POST /linked-accounts/{id}/mowers``.",
+        "properties": {
+          "device_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Device Name",
+            "type": "string"
+          },
+          "group_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Group Ids",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          }
+        },
+        "required": [
+          "device_name"
+        ],
+        "title": "LinkedMowerIn",
+        "type": "object"
+      },
+      "LinkedMowersIn": {
+        "additionalProperties": false,
+        "description": "``POST /linked-accounts/{id}/mowers``: several devices of the account at once.",
+        "properties": {
+          "mowers": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedMowerIn"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Mowers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mowers"
+        ],
+        "title": "LinkedMowersIn",
+        "type": "object"
+      },
+      "LinkedMowersOut": {
+        "description": "Answer of the bulk registration: created mowers and failures per device.",
+        "properties": {
+          "created": {
+            "items": {
+              "$ref": "#/components/schemas/MowerOut"
+            },
+            "title": "Created",
+            "type": "array"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedMowerFailure"
+            },
+            "title": "Failed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "created",
+          "failed"
+        ],
+        "title": "LinkedMowersOut",
+        "type": "object"
+      },
+      "ManualDrive": {
+        "description": "One joystick sample. The mower stops when no new sample arrives within ``ttl_ms``.\n\nThis is the dead-man switch: clients resend samples continuously while the stick is held.",
+        "properties": {
+          "angular": {
+            "description": "Turn left (+) / right (-), normalised.",
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Angular",
+            "type": "number"
+          },
+          "blade_on": {
+            "default": false,
+            "title": "Blade On",
+            "type": "boolean"
+          },
+          "kind": {
+            "const": "manual_drive",
+            "default": "manual_drive",
+            "title": "Kind",
+            "type": "string"
+          },
+          "linear": {
+            "description": "Forward (+) / backward (-), normalised.",
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Linear",
+            "type": "number"
+          },
+          "ttl_ms": {
+            "default": 1000,
+            "description": "Dead-man timeout in milliseconds.",
+            "maximum": 2000.0,
+            "minimum": 100.0,
+            "title": "Ttl Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "linear",
+          "angular"
+        ],
+        "title": "ManualDrive",
+        "type": "object"
+      },
+      "ModuleDescriptor": {
+        "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventDef"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureDef"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9\\-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionDef"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "ui_areas": {
+            "items": {
+              "$ref": "#/components/schemas/UiAreaDef"
+            },
+            "title": "Ui Areas",
+            "type": "array"
+          },
+          "version": {
+            "maxLength": 64,
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.\\-+]+)?$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "ModuleDescriptor",
+        "type": "object"
+      },
+      "MowerGroupsIn": {
+        "additionalProperties": false,
+        "description": "``PUT /mowers/{id}/groups``: the complete set of groups.",
+        "properties": {
+          "group_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Group Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "group_ids"
+        ],
+        "title": "MowerGroupsIn",
+        "type": "object"
+      },
+      "MowerIn": {
+        "additionalProperties": false,
+        "description": "``POST /mowers``: without ``site_id`` the mower goes to the account's default site.\n\nA ``cloud`` mower comes from a linked Mammotion account: ``linked_account_id`` and the\n``device_name`` of its device list (``connection_options`` then hold only adapter extras\nsuch as ``refresh_seconds``); ``name`` defaults to the device name and ``model`` to the\nlisted model.",
+        "properties": {
+          "connection_kind": {
+            "$ref": "#/components/schemas/ConnectionKind"
+          },
+          "connection_options": {
+            "additionalProperties": true,
+            "description": "Adapter specific (simulator: `time_scale`, `battery_percent`; cloud: `account`, `device_name` or `iot_id`, `credential_ref` or `password`; ble_bridge: `host`, `port`, `noise_psk`, `ble_address`). Secret values (`password`, `noise_psk`) are never returned: responses show `***`, and sending `***` back keeps the stored value.",
+            "title": "Connection Options",
+            "type": "object"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Name"
+          },
+          "group_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Group Ids",
+            "type": "array"
+          },
+          "linked_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Account Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          }
+        },
+        "required": [
+          "connection_kind"
+        ],
+        "title": "MowerIn",
+        "type": "object"
+      },
+      "MowerList": {
+        "description": "``GET /mowers``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MowerOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MowerList",
+        "type": "object"
+      },
+      "MowerOut": {
+        "description": "A mower.",
+        "properties": {
+          "area_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Custom names of map areas by area id (`MowerMap.areas[].id`); areas without one show the mower's own name, else `Area N` in map order.",
+            "title": "Area Names",
+            "type": "object"
+          },
+          "connection_kind": {
+            "title": "Connection Kind",
+            "type": "string"
+          },
+          "connection_options": {
+            "additionalProperties": true,
+            "title": "Connection Options",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "group_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Group Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "iot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The vendor's device id (unique across MowDeck accounts).",
+            "title": "Iot Id"
+          },
+          "linked_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The linked account a `cloud` mower connects through.",
+            "title": "Linked Account Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "site_id": {
+            "format": "uuid",
+            "title": "Site Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "model",
+          "serial",
+          "connection_kind",
+          "connection_options",
+          "site_id",
+          "group_ids",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MowerOut",
+        "type": "object"
+      },
+      "MowerPatch": {
+        "additionalProperties": false,
+        "description": "``PATCH /mowers/{id}``: only the given fields change.",
+        "properties": {
+          "connection_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "connection_options": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Options"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          }
+        },
+        "title": "MowerPatch",
+        "type": "object"
+      },
+      "PauseMow": {
+        "description": "Pause the current job.",
+        "properties": {
+          "kind": {
+            "const": "pause_mow",
+            "default": "pause_mow",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "PauseMow",
+        "type": "object"
+      },
+      "PermissionDef": {
+        "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "implied_by": {
+            "description": "Keys that imply this one when held on the whole account (e.g. `device_gateway.view` implied by `mower.view`).",
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+              "type": "string"
+            },
+            "title": "Implied By",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "PermissionDef",
+        "type": "object"
+      },
+      "PrincipalKind": {
+        "description": "What kind of subject a principal is.",
+        "enum": [
+          "user",
+          "subuser",
+          "api_token",
+          "service"
+        ],
+        "title": "PrincipalKind",
+        "type": "string"
+      },
+      "PrincipalRef": {
+        "description": "A compact reference to a principal, embedded in commands and audit records.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PrincipalKind",
+            "description": "Kind of subject."
+          },
+          "subject": {
+            "description": "Stable subject id (JWT `sub`).",
+            "format": "uuid",
+            "title": "Subject",
+            "type": "string"
+          },
+          "token_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Token id (JWT `jti`), if known.",
+            "title": "Token Id"
+          }
+        },
+        "required": [
+          "subject",
+          "kind"
+        ],
+        "title": "PrincipalRef",
+        "type": "object"
+      },
+      "ResumeMow": {
+        "description": "Resume a paused job.",
+        "properties": {
+          "kind": {
+            "const": "resume_mow",
+            "default": "resume_mow",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "ResumeMow",
+        "type": "object"
+      },
+      "ReturnToDock": {
+        "description": "Stop the job and drive back to the charging station.",
+        "properties": {
+          "kind": {
+            "const": "return_to_dock",
+            "default": "return_to_dock",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "ReturnToDock",
+        "type": "object"
+      },
+      "SetBladeHeight": {
+        "description": "Set the cutting height.",
+        "properties": {
+          "kind": {
+            "const": "set_blade_height",
+            "default": "set_blade_height",
+            "title": "Kind",
+            "type": "string"
+          },
+          "mm": {
+            "description": "Blade height in millimetres.",
+            "maximum": 120.0,
+            "minimum": 10.0,
+            "title": "Mm",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mm"
+        ],
+        "title": "SetBladeHeight",
+        "type": "object"
+      },
+      "SetLight": {
+        "description": "Switch the mower's light (the camera's headlamp on Mammotion mowers) on or off.\n\nNeeds ``MowerCapabilities.light``. Allowed in every activity, also during an error: the light\nis harmless and AI assist switches it on to photograph a stuck mower at night.",
+        "properties": {
+          "kind": {
+            "const": "set_light",
+            "default": "set_light",
+            "title": "Kind",
+            "type": "string"
+          },
+          "on": {
+            "description": "True switches the light on, False off.",
+            "title": "On",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "title": "SetLight",
+        "type": "object"
+      },
+      "SetSpeed": {
+        "description": "Set the driving speed while mowing.",
+        "properties": {
+          "kind": {
+            "const": "set_speed",
+            "default": "set_speed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "mps": {
+            "description": "Speed in metres per second.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 2.0,
+            "title": "Mps",
+            "type": "number"
+          }
+        },
+        "required": [
+          "mps"
+        ],
+        "title": "SetSpeed",
+        "type": "object"
+      },
+      "SiteIn": {
+        "additionalProperties": false,
+        "description": "``POST /sites``. ``latitude`` and ``longitude`` (both or none) locate the site for the\nScheduler's rain pause.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "WGS84 latitude in degrees",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "WGS84 longitude in degrees",
+            "title": "Longitude"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "IANA name",
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SiteIn",
+        "type": "object"
+      },
+      "SiteList": {
+        "description": "``GET /sites``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SiteOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SiteList",
+        "type": "object"
+      },
+      "SiteOut": {
+        "description": "A site.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "timezone",
+          "is_default",
+          "address",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SiteOut",
+        "type": "object"
+      },
+      "SitePatch": {
+        "additionalProperties": false,
+        "description": "``PATCH /sites/{id}``: only the given fields change (``address: null`` clears it).",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "WGS84 latitude in degrees",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "WGS84 longitude in degrees",
+            "title": "Longitude"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "SitePatch",
+        "type": "object"
+      },
+      "SpotMowPlan": {
+        "description": "A computed mowing route for ``StartMow.spot_plan``.",
+        "properties": {
+          "covered_area_m2": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Covered Area M2",
+            "type": "number"
+          },
+          "estimated_duration_s": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Estimated Duration S",
+            "type": "number"
+          },
+          "native": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpotNativeJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pattern_chain": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Pattern Chain",
+            "type": "array"
+          },
+          "plan_hash": {
+            "description": "SHA-256 of the chain and the segments (`spot_plan_hash`); must match.",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/SpotSegment"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "plan_hash",
+          "pattern_chain",
+          "segments"
+        ],
+        "title": "SpotMowPlan",
+        "type": "object"
+      },
+      "SpotNativeJob": {
+        "description": "The plan expressed as a native job of the mower: whole map areas and one pattern.\n\nPresent only when the chain is exactly one pattern the mower may run by itself (``stripes``,\n``diagonal``, ``checkerboard``, ``edge_only``, or ``border_fill`` with one of them) on map\nareas, so a mower without ``custom_paths`` can still execute it as an ordinary\n``StartMow(area_ids, pattern)``.",
+        "properties": {
+          "area_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "pattern": {
+            "additionalProperties": true,
+            "description": "Settings in the form of `StartMow.pattern` (`name`, `angle_deg`, `spacing_m`, `border_laps`, `order`).",
+            "title": "Pattern",
+            "type": "object"
+          }
+        },
+        "required": [
+          "area_ids",
+          "pattern"
+        ],
+        "title": "SpotNativeJob",
+        "type": "object"
+      },
+      "SpotSegment": {
+        "description": "One part of a spot plan: drive along ``path`` with the blades on or off.",
+        "properties": {
+          "blades_on": {
+            "title": "Blades On",
+            "type": "boolean"
+          },
+          "kind": {
+            "default": "mow",
+            "enum": [
+              "mow",
+              "turn",
+              "transfer"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "description": "Encoded polyline of local metres (x, y), centimetre precision (`encode_polyline`), at least two points.",
+            "maxLength": 200000,
+            "minLength": 4,
+            "title": "Path",
+            "type": "string"
+          },
+          "speed_mps": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 2.0,
+            "title": "Speed Mps",
+            "type": "number"
+          }
+        },
+        "required": [
+          "blades_on",
+          "speed_mps",
+          "path"
+        ],
+        "title": "SpotSegment",
+        "type": "object"
+      },
+      "StartMow": {
+        "description": "Start mowing the given areas, a stored plan or an inline spot plan (exactly one).",
+        "properties": {
+          "area_ids": {
+            "description": "Map area ids to mow, in order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "kind": {
+            "const": "start_mow",
+            "default": "start_mow",
+            "title": "Kind",
+            "type": "string"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pattern settings (validated by the pattern's own JSON Schema).",
+            "title": "Pattern"
+          },
+          "plan_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Reference to a stored mowing plan.",
+            "title": "Plan Ref"
+          },
+          "spot_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpotMowPlan"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A route computed by the Planner (spot mowing). Runs only on mowers with `custom_paths`, or natively when the plan carries a `native` job."
+          }
+        },
+        "title": "StartMow",
+        "type": "object"
+      },
+      "UiAreaDef": {
+        "description": "An area the module occupies in the web app shell.",
+        "properties": {
+          "labels": {
+            "description": "Translated menu labels by language tag (e.g. `de`); `menu_label` is the English fallback.",
+            "patternProperties": {
+              "^[a-z]{2}(-[A-Z]{2})?$": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "menu_label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Menu Label",
+            "type": "string"
+          },
+          "required_permission": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Required Permission",
+            "type": "string"
+          },
+          "route": {
+            "maxLength": 200,
+            "pattern": "^/[A-Za-z0-9/_\\-:\\[\\]]*$",
+            "title": "Route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "menu_label",
+          "required_permission"
+        ],
+        "title": "UiAreaDef",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "fleet",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/.well-known/mowdeck-module": {
+      "get": {
+        "operationId": "module_descriptor__well_known_mowdeck_module_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleDescriptor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Module Descriptor",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/fleet/commands/{command_id}": {
+      "get": {
+        "description": "One command record of the caller's account whose mower the caller may view (404\notherwise).",
+        "operationId": "get_command_api_v1_fleet_commands__command_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Command Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Command",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/connection-kinds": {
+      "get": {
+        "description": "The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with\nthe option schema of each: required, optional, secret and alternative options. The web app\ngenerates its connection forms from it, so a new adapter kind needs no UI change.",
+        "operationId": "list_connection_kinds_api_v1_fleet_connection_kinds_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionKindList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Connection Kinds",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/groups": {
+      "get": {
+        "description": "Groups of the caller's account that the caller may view, optionally of one site.",
+        "operationId": "list_groups_api_v1_fleet_groups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "site_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Site Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Groups",
+        "tags": [
+          "sites and groups"
+        ]
+      },
+      "post": {
+        "description": "A new group (``can_manage_mowers`` on the parent site, or the account if cross-site).",
+        "operationId": "create_group_api_v1_fleet_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Group",
+        "tags": [
+          "sites and groups"
+        ]
+      }
+    },
+    "/api/v1/fleet/groups/{group_id}": {
+      "delete": {
+        "description": "Delete an empty group (409 while it has mowers).",
+        "operationId": "delete_group_api_v1_fleet_groups__group_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Group",
+        "tags": [
+          "sites and groups"
+        ]
+      },
+      "get": {
+        "description": "One group with the mowers the caller may view (``can_view``, hidden otherwise).",
+        "operationId": "get_group_api_v1_fleet_groups__group_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Group",
+        "tags": [
+          "sites and groups"
+        ]
+      },
+      "patch": {
+        "description": "Rename or move to another site (``can_manage_mowers`` on the group and the new site).",
+        "operationId": "update_group_api_v1_fleet_groups__group_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Group",
+        "tags": [
+          "sites and groups"
+        ]
+      }
+    },
+    "/api/v1/fleet/groups/{group_id}/commands": {
+      "post": {
+        "description": "The command for every mower of the group, checked per mower (see the site variant).",
+        "operationId": "bulk_group_command_api_v1_fleet_groups__group_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkCommandAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Group Command",
+        "tags": [
+          "sites and groups"
+        ]
+      }
+    },
+    "/api/v1/fleet/linked-accounts": {
+      "get": {
+        "description": "The linked Mammotion accounts of the caller's account (no passwords).",
+        "operationId": "list_linked_accounts_api_v1_fleet_linked_accounts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedAccountList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller lacks `can_manage_mowers` on the account."
+          },
+          "404": {
+            "description": "No such linked account in the caller's account."
+          }
+        },
+        "summary": "List Linked Accounts",
+        "tags": [
+          "linked-accounts"
+        ]
+      },
+      "post": {
+        "description": "Link a Mammotion account: Fleet asks the Device-Gateway to log in and list the devices\n(``gateway.cloud.discover``) and stores the account with its password encrypted. Use a\nsecond Mammotion account the mowers are shared with: a login with the main account logs\nthe phone app out.",
+        "operationId": "create_linked_account_api_v1_fleet_linked_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkedAccountIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedAccountDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller lacks `can_manage_mowers` on the account."
+          },
+          "404": {
+            "description": "No such linked account in the caller's account."
+          },
+          "409": {
+            "description": "Linked."
+          },
+          "422": {
+            "description": "`linked-account-login-failed`: the cloud refused the credentials."
+          },
+          "429": {
+            "description": "Too many failed logins for this e-mail (`Retry-After`)."
+          },
+          "503": {
+            "description": "No credential encryption key, or no Device-Gateway or vendor cloud answered."
+          }
+        },
+        "summary": "Create Linked Account",
+        "tags": [
+          "linked-accounts"
+        ]
+      }
+    },
+    "/api/v1/fleet/linked-accounts/{linked_account_id}": {
+      "delete": {
+        "description": "Remove the link. Refused (409, the mowers in ``errors``) while mowers use it.",
+        "operationId": "delete_linked_account_api_v1_fleet_linked_accounts__linked_account_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "linked_account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Linked Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller lacks `can_manage_mowers` on the account."
+          },
+          "404": {
+            "description": "No such linked account in the caller's account."
+          },
+          "409": {
+            "description": "`linked-account-in-use`: mowers still connect through it."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Linked Account",
+        "tags": [
+          "linked-accounts"
+        ]
+      },
+      "get": {
+        "description": "One linked account.",
+        "operationId": "get_linked_account_api_v1_fleet_linked_accounts__linked_account_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "linked_account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Linked Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedAccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller lacks `can_manage_mowers` on the account."
+          },
+          "404": {
+            "description": "No such linked account in the caller's account."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Linked Account",
+        "tags": [
+          "linked-accounts"
+        ]
+      }
+    },
+    "/api/v1/fleet/linked-accounts/{linked_account_id}/devices": {
+      "get": {
+        "description": "The devices of the last device list: name, model, IoT id, online flag, whether it is a\nmower and whether it is registered here or in another MowDeck account.",
+        "operationId": "list_linked_devices_api_v1_fleet_linked_accounts__linked_account_id__devices_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "linked_account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Linked Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedDeviceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller lacks `can_manage_mowers` on the account."
+          },
+          "404": {
+            "description": "No such linked account in the caller's account."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Linked Devices",
+        "tags": [
+          "linked-accounts"
+        ]
+      }
+    },
+    "/api/v1/fleet/linked-accounts/{linked_account_id}/mowers": {
+      "post": {
+        "description": "Register several mowers of the linked account at once. Each one is an ordinary\nregistration (target site and groups checked, tuples, ``mower.registered``); devices that\nfail are listed in ``failed`` with the problem they would have answered. When none could be\nadded the first problem is the answer.",
+        "operationId": "register_linked_mowers_api_v1_fleet_linked_accounts__linked_account_id__mowers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "linked_account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Linked Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkedMowersIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedMowersOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller lacks `can_manage_mowers` on the account."
+          },
+          "404": {
+            "description": "No such linked account in the caller's account."
+          },
+          "409": {
+            "description": "`mower-already-registered` (when no device could be added)."
+          },
+          "422": {
+            "description": "Unknown device, not a mower, or a device given twice."
+          }
+        },
+        "summary": "Register Linked Mowers",
+        "tags": [
+          "linked-accounts"
+        ]
+      }
+    },
+    "/api/v1/fleet/linked-accounts/{linked_account_id}/sync": {
+      "post": {
+        "description": "Read the device list again (\"Konto neu einlesen\"), optionally with a new password. The\ngateway answers from the session the account's connected mowers share when there is one\n(a second login would log them out). A failure is kept in ``last_sync_error``.",
+        "operationId": "sync_linked_account_api_v1_fleet_linked_accounts__linked_account_id__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "linked_account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Linked Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkedAccountSyncIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkedAccountDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller lacks `can_manage_mowers` on the account."
+          },
+          "404": {
+            "description": "No such linked account in the caller's account."
+          },
+          "422": {
+            "description": "`linked-account-login-failed`: the cloud refused the credentials."
+          },
+          "429": {
+            "description": "Too many failed logins for this e-mail (`Retry-After`)."
+          },
+          "503": {
+            "description": "No credential encryption key, or no Device-Gateway or vendor cloud answered."
+          }
+        },
+        "summary": "Sync Linked Account",
+        "tags": [
+          "linked-accounts"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers": {
+      "get": {
+        "description": "Mowers of the caller's account that the caller may view (``can_view`` per mower).",
+        "operationId": "list_mowers_api_v1_fleet_mowers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "site_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Site Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mowers",
+        "tags": [
+          "mowers"
+        ]
+      },
+      "post": {
+        "description": "Register a mower: ``can_manage_mowers`` on the target site (the account for the default\nsite) and on each group. Publishes ``mower.registered`` after the commit. A ``cloud`` mower\nnames a linked account and its device; 409 ``mower-already-registered`` when that physical\nmower is registered already (in this or another account, which is not named).",
+        "operationId": "register_mower_api_v1_fleet_mowers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MowerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Mower",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}": {
+      "delete": {
+        "description": "Remove the mower and its tuples; publishes ``mower.removed``.",
+        "operationId": "delete_mower_api_v1_fleet_mowers__mower_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Mower",
+        "tags": [
+          "mowers"
+        ]
+      },
+      "get": {
+        "description": "One mower (``can_view``, hidden otherwise).",
+        "operationId": "get_mower_api_v1_fleet_mowers__mower_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Mower",
+        "tags": [
+          "mowers"
+        ]
+      },
+      "patch": {
+        "description": "Change name, model, serial, connection or site (``can_manage_mowers``; a new site needs\nit too). Publishes ``mower.updated`` when name, connection or site changed.",
+        "operationId": "update_mower_api_v1_fleet_mowers__mower_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MowerPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Mower",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/area-names": {
+      "get": {
+        "description": "The custom names of the mower's map areas (``can_view``, hidden otherwise). The same\nnames come with the mower (``MowerOut.area_names``).",
+        "operationId": "get_area_names_api_v1_fleet_mowers__mower_id__area_names_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AreaNamesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Area Names",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/area-names/{area_id}": {
+      "put": {
+        "description": "Name one map area in MowDeck (``can_control``; 403 when the mower is visible, else 404).\n``null`` or a blank name drops the custom name. The mower keeps its own names: nothing is\nsent to the mower. Publishes ``fleet.mower.area_names_changed`` after a change; answers all\ncustom names of the mower.",
+        "operationId": "set_area_name_api_v1_fleet_mowers__mower_id__area_names__area_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`MowerMap.areas[].id`",
+            "in": "path",
+            "name": "area_id",
+            "required": true,
+            "schema": {
+              "description": "`MowerMap.areas[].id`",
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Area Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AreaNameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AreaNamesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_control`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "422": {
+            "description": "The name has more than 60 characters after trimming."
+          }
+        },
+        "summary": "Set Area Name",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/camera/session": {
+      "post": {
+        "description": "A short-lived live camera session (ADR 0032): ``can_view`` on the mower (hidden\notherwise) and the plan feature ``camera``. Fleet relays the request to the Device-Gateway\nthat holds the mower and audits it (``mower.camera_opened``). The browser joins the video\nitself (``provider`` ``agora``: Agora Web SDK; ``fake``: a test pattern); no media passes\nthrough MowDeck. The token is a secret: the response is never cached; ask again before\n``expires_at``.",
+        "operationId": "open_camera_session_api_v1_fleet_mowers__mower_id__camera_session_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The plan does not include the feature `camera`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "`camera-unsupported`: the mower's connection has no camera."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The Device-Gateway or the vendor cloud did not answer."
+          }
+        },
+        "summary": "Open Camera Session",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/commands": {
+      "get": {
+        "description": "Command records of the mower (``can_view``, hidden otherwise).",
+        "operationId": "list_mower_commands_api_v1_fleet_mowers__mower_id__commands_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mower Commands",
+        "tags": [
+          "mowers"
+        ]
+      },
+      "post": {
+        "description": "Send a command. The relation depends on the kind: ``can_control`` (start, pause,\nresume, dock, blade height, speed), ``can_drive`` (manual drive), ``can_emergency_stop``\n(emergency stop, equals ``can_view``). Checked before any database or bus access: 403 when\nthe mower is visible, 404 when not.",
+        "operationId": "send_command_api_v1_fleet_mowers__mower_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Command",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/drive-sessions": {
+      "get": {
+        "description": "Manual drive sessions of the mower (the joystick audit: who, when, how it ended, frame\ncounts; ``can_view``, hidden otherwise). Frames themselves are not stored.",
+        "operationId": "list_drive_sessions_api_v1_fleet_mowers__mower_id__drive_sessions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveSessionPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Drive Sessions",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/groups": {
+      "put": {
+        "description": "Make the mower a member of exactly these groups (``can_manage_mowers`` on the mower and\non every added or removed group).",
+        "operationId": "set_mower_groups_api_v1_fleet_mowers__mower_id__groups_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MowerGroupsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Mower Groups",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/sites": {
+      "get": {
+        "description": "Sites of the caller's account that the caller may view (``can_view`` per site).",
+        "operationId": "list_sites_api_v1_fleet_sites_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_default",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Default",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sites",
+        "tags": [
+          "sites and groups"
+        ]
+      },
+      "post": {
+        "description": "A new site (``can_manage_mowers`` on the account, else 403).",
+        "operationId": "create_site_api_v1_fleet_sites_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Site",
+        "tags": [
+          "sites and groups"
+        ]
+      }
+    },
+    "/api/v1/fleet/sites/{site_id}": {
+      "delete": {
+        "description": "Delete an empty site (409 for the default site or while mowers or groups use it).",
+        "operationId": "delete_site_api_v1_fleet_sites__site_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Site",
+        "tags": [
+          "sites and groups"
+        ]
+      },
+      "get": {
+        "description": "One site (``can_view``, hidden otherwise).",
+        "operationId": "get_site_api_v1_fleet_sites__site_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Site",
+        "tags": [
+          "sites and groups"
+        ]
+      },
+      "patch": {
+        "description": "Change name, timezone, address or coordinates (``can_manage_mowers``; the default site\nkeeps its name).",
+        "operationId": "update_site_api_v1_fleet_sites__site_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SitePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Site",
+        "tags": [
+          "sites and groups"
+        ]
+      }
+    },
+    "/api/v1/fleet/sites/{site_id}/commands": {
+      "post": {
+        "description": "The command for every mower of the site, checked per mower.\n\nGate: ``can_bulk_command`` on the site (``can_emergency_stop``, i.e. view, for an\nemergency stop). Per mower: the relation of the command kind; invisible mowers are omitted.",
+        "operationId": "bulk_site_command_api_v1_fleet_sites__site_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkCommandAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Site Command",
+        "tags": [
+          "sites and groups"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# Prices of the plans for the Billing service (ADR 0031). Plans themselves (limits, features,
+# trial days) are data in infra/entitlements/plans.yaml; this file only says at which price of
+# the payment provider a plan is sold.
+#
+# currency: display currency of the web app (the amounts come from the provider).
+# prices:   plan key -> Stripe price id (a recurring price, e.g. monthly). Empty: not sold.
+#
+# The ids belong to the operator's Stripe account, so they are usually given at runtime instead:
+#   MOWDECK_BILLING_PRICE_IDS=home=price_123,fleet=price_456   (Compose: BILLING_PRICE_IDS)
+# The image ships this file at /etc/mowdeck/billing/prices.yaml (MOWDECK_BILLING_PRICES_FILE).
+currency: eur
+prices:
+  home: ""
+  fleet: ""

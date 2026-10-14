@@ -1,0 +1,75 @@
+{{- /*
+In-cluster PostgreSQL through the CloudNativePG operator (https://cloudnative-pg.io), which must
+be installed beforehand: one Cluster, one login role per service (managed roles with passwords
+from basic-auth Secrets) and one Database resource per service owned by its role, like
+infra/compose/init/01-databases.sql. Not rendered with postgresql.external.enabled.
+*/ -}}
+{{- if not .Values.postgresql.external.enabled }}
+{{- $pg := .Values.postgresql.cloudnativepg }}
+{{- $cluster := include "mowdeck.pg.clusterName" . }}
+{{- $roles := list }}
+{{- range $key, $db := .Values.postgresql.databases }}
+{{- $enabled := true }}
+{{- if eq $key "openfga" }}{{ $enabled = $.Values.openfga.enabled }}{{ else }}{{ $enabled = (index $.Values.services $key).enabled }}{{ end }}
+{{- if $enabled }}
+{{- $roles = append $roles (dict "key" $key "db" $db) }}
+{{- end }}
+{{- end }}
+{{- if $pg.createRoleSecrets }}
+{{- range $roles }}
+{{- if not (or (index ($.Values.secrets.databasePasswords | default dict) .key) $.Values.secrets.SERVICE_DB_PASSWORD) }}
+{{- fail (printf "postgresql.cloudnativepg.createRoleSecrets needs secrets.SERVICE_DB_PASSWORD (or secrets.databasePasswords.%s); with secrets.existingSecret create the basic-auth Secrets %s-db-<role> (keys username, password) yourself and set createRoleSecrets=false" .key (include "mowdeck.fullname" $)) }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "mowdeck.fullname" $ }}-db-{{ .db.user }}
+  labels:
+    {{- include "mowdeck.labels" $ | nindent 4 }}
+    cnpg.io/reload: "true"
+type: kubernetes.io/basic-auth
+stringData:
+  username: {{ .db.user | quote }}
+  password: {{ include "mowdeck.pg.password" (dict "ctx" $ "db" .key) | quote }}
+{{- end }}
+{{- end }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $cluster }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "postgresql") | nindent 4 }}
+spec:
+  {{- $spec := dict
+    "instances" (int $pg.instances)
+    "storage" (dict "size" $pg.storage.size)
+    "resources" $pg.resources
+    "enableSuperuserAccess" false
+    "monitoring" (dict "enablePodMonitor" $pg.enablePodMonitor) }}
+  {{- with $pg.storage.storageClass }}{{ $_ := set $spec.storage "storageClass" . }}{{ end }}
+  {{- with $pg.imageName }}{{ $_ := set $spec "imageName" . }}{{ end }}
+  {{- $managed := list }}
+  {{- range $roles }}
+  {{- $managed = append $managed (dict "name" .db.user "ensure" "present" "login" true "inherit" true "passwordSecret" (dict "name" (printf "%s-db-%s" (include "mowdeck.fullname" $) .db.user))) }}
+  {{- end }}
+  {{- $_ := set $spec "managed" (dict "roles" $managed) }}
+  {{- toYaml (mergeOverwrite $spec ($pg.extraSpec | default dict)) | nindent 2 }}
+{{- range $roles }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: {{ $cluster }}-{{ .db.name | replace "_" "-" }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" $ "component" "postgresql") | nindent 4 }}
+spec:
+  cluster:
+    name: {{ $cluster }}
+  name: {{ .db.name }}
+  owner: {{ .db.user }}
+  ensure: present
+  databaseReclaimPolicy: retain
+{{- end }}
+{{- end }}

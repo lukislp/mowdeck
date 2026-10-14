@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>MowDeck</title>
+  </head>
+  <body>
+    <main class="page">
+      <header class="band" aria-hidden="true">
+        <svg class="mark" viewBox="0 0 100 100" focusable="false">
+          <polygon points="50,22 78,76 50,62 22,76" />
+        </svg>
+      </header>
+      <section class="panel">
+        <p class="overline">MowDeck · Server</p>
+        <h1 data-t="title">Connect MowDeck</h1>
+        <p class="lead" data-t="lead"></p>
+        <form id="connect" novalidate>
+          <label class="field">
+            <span class="label" data-t="label">Server address</span>
+            <input
+              id="server"
+              name="server"
+              type="url"
+              inputmode="url"
+              autocomplete="url"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
+              enterkeyhint="go"
+              aria-describedby="hint message"
+              data-t-placeholder="hint"
+            />
+            <span id="hint" class="hint" data-t="hint"></span>
+          </label>
+          <p id="message" class="message" role="alert" hidden></p>
+          <div class="actions">
+            <button id="submit" class="primary" type="submit" data-t="connect">Connect</button>
+            <button id="anyway" class="secondary" type="button" data-t="useAnyway" hidden>
+              Use anyway
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="./src/launcher.ts"></script>
+  </body>
+</html>

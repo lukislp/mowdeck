@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``telemetry.positions.query``: the positions of one mower in a time range.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "end": {
+      "format": "date-time",
+      "title": "End",
+      "type": "string"
+    },
+    "limit": {
+      "default": 20000,
+      "maximum": 50000,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "start": {
+      "format": "date-time",
+      "title": "Start",
+      "type": "string"
+    }
+  },
+  "required": [
+    "account_id",
+    "mower_id",
+    "start",
+    "end"
+  ],
+  "title": "PositionTrackRequest",
+  "type": "object"
+}

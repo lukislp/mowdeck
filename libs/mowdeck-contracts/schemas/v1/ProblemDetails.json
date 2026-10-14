@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "ProblemFieldError": {
+      "description": "One validation error inside :attr:`ProblemDetails.errors`.",
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Machine readable error code.",
+          "title": "Code"
+        },
+        "detail": {
+          "description": "Human readable message.",
+          "title": "Detail",
+          "type": "string"
+        },
+        "parameter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the offending query, path, header or cookie parameter.",
+          "title": "Parameter"
+        },
+        "pointer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "JSON Pointer (RFC 6901) into the request body, e.g. `#/name`.",
+          "title": "Pointer"
+        }
+      },
+      "required": [
+        "detail"
+      ],
+      "title": "ProblemFieldError",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "An RFC 9457 problem document with MowDeck extensions ``correlation_id`` and ``errors``.",
+  "properties": {
+    "correlation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Correlation id of the request, for support and log search.",
+      "title": "Correlation Id"
+    },
+    "detail": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Explanation of this occurrence.",
+      "title": "Detail"
+    },
+    "errors": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/ProblemFieldError"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Individual validation errors, if any.",
+      "title": "Errors"
+    },
+    "instance": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "URI reference of this occurrence.",
+      "title": "Instance"
+    },
+    "status": {
+      "description": "HTTP status code.",
+      "maximum": 599,
+      "minimum": 100,
+      "title": "Status",
+      "type": "integer"
+    },
+    "title": {
+      "description": "Short, human readable summary of the problem type.",
+      "title": "Title",
+      "type": "string"
+    },
+    "type": {
+      "default": "about:blank",
+      "description": "URI reference identifying the type.",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "status"
+  ],
+  "title": "ProblemDetails",
+  "type": "object"
+}

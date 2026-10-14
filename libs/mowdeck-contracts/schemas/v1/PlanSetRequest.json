@@ -1,0 +1,100 @@
+{
+  "$defs": {
+    "PlanStatus": {
+      "description": "Status of an account's plan.",
+      "enum": [
+        "active",
+        "trial",
+        "grace",
+        "expired"
+      ],
+      "title": "PlanStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``entitlements.plan.set`` (core NATS, internal): the Billing service sets the\nplan of an account (``source=billing``).\n\nCore NATS is reachable by services only (clients come through Traefik), so the request\ncarries no principal. A ``trial`` without ``trial_until`` lasts the plan's trial days, a\n``grace`` without ``grace_until`` lasts ``MOWDECK_ENTITLEMENTS_GRACE_DAYS``. Repeating the\nsame request changes nothing (no history row, no event).",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "account_name": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Account Name"
+    },
+    "grace_until": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Grace Until"
+    },
+    "plan": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Plan",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "reference": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Provider reference for the history, e.g. the subscription id.",
+      "title": "Reference"
+    },
+    "status": {
+      "$ref": "#/$defs/PlanStatus"
+    },
+    "trial_until": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trial Until"
+    }
+  },
+  "required": [
+    "account_id",
+    "plan",
+    "status",
+    "reason"
+  ],
+  "title": "PlanSetRequest",
+  "type": "object"
+}

@@ -1,0 +1,35 @@
+[project]
+name = "mowdeck-authz"
+version = "0.1.0"
+description = "Authorization for MowDeck services: one question (may who do what on which object) answered by OpenFGA."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "mowdeck-contracts",
+  "openfga-sdk>=0.10.5",
+  "prometheus-client>=0.26.0",
+]
+
+[project.optional-dependencies]
+fastapi = [
+  "fastapi>=0.143.0",
+  "mowdeck-service-kit",
+]
+
+[tool.uv.sources]
+mowdeck-contracts = { workspace = true }
+mowdeck-service-kit = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mowdeck_authz"]

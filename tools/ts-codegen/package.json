@@ -1,0 +1,19 @@
+{
+  "name": "ts-codegen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generates the web app's TypeScript API types from the committed OpenAPI documents and contracts JSON Schemas.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "gen": "node gen.mjs",
+    "check": "node gen.mjs --check",
+    "lint": "eslint . && prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
+    "test": "node gen.mjs --check"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "16.0.0",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

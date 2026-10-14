@@ -1,0 +1,100 @@
+# Compose block for notifications: paste the entries below "services:" into
+# infra/compose/docker-compose.yml (and add the volume notifications-data).
+# Build context is the repository root. (Already pasted; keep both in sync.)
+services:
+  # One-shot job: Alembic migrations of the notifications database (idempotent).
+  notifications-migrate:
+    image: mowdeck/notifications:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/notifications/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "notifications.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://notifications:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/notifications
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Derives notifications (mowing finished, stuck, battery low, offline) from
+  # telemetry.mower.* and the mower.* events, keeps each user's inbox and
+  # delivers by Web Push, APNs (iOS app), ntfy or the log (outbox worker on
+  # every replica).
+  # Without NOTIFICATIONS_VAPID_PRIVATE_KEY a development key pair is created in
+  # the notifications-data volume on first start and its public key is logged;
+  # production sets the keys explicitly (python -m notifications.cli
+  # generate-vapid-keys). APNs: put AuthKey_<KEY_ID>.p8 into
+  # infra/compose/secrets/apns/ (git-ignored) and set APNS_KEY_FILE,
+  # APNS_KEY_ID and APNS_TEAM_ID; without them the apns channel stays off.
+  notifications:
+    image: mowdeck/notifications:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/notifications/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - notifications-data:/var/lib/notifications
+      - ./secrets/apns:/run/secrets/apns:ro
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://notifications:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/notifications
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_NOTIFICATIONS_CHANNELS: ${NOTIFICATIONS_CHANNELS:-webpush,ntfy,apns,log}
+      MOWDECK_NOTIFICATIONS_VAPID_PRIVATE_KEY: ${NOTIFICATIONS_VAPID_PRIVATE_KEY:-}
+      MOWDECK_NOTIFICATIONS_VAPID_PUBLIC_KEY: ${NOTIFICATIONS_VAPID_PUBLIC_KEY:-}
+      MOWDECK_NOTIFICATIONS_VAPID_SUBJECT: ${NOTIFICATIONS_VAPID_SUBJECT:-mailto:admin@localhost.localdomain}
+      MOWDECK_NOTIFICATIONS_VAPID_KEY_PATH: /var/lib/notifications/vapid_private_key
+      MOWDECK_NOTIFICATIONS_NTFY_ALLOWED_SERVERS: ${NOTIFICATIONS_NTFY_ALLOWED_SERVERS:-https://ntfy.sh}
+      MOWDECK_NOTIFICATIONS_APP_URL: ${NOTIFICATIONS_APP_URL:-}
+      # Empty values mean "not set" (the apns channel is skipped).
+      MOWDECK_APNS_KEY_FILE: ${APNS_KEY_FILE:-}
+      MOWDECK_APNS_KEY_ID: ${APNS_KEY_ID:-}
+      MOWDECK_APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      MOWDECK_APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-app.mowdeck.mobile}
+      MOWDECK_APNS_ENVIRONMENT: ${APNS_ENVIRONMENT:-development}
+      MOWDECK_NOTIFICATIONS_OFFLINE_AFTER_SECONDS: ${NOTIFICATIONS_OFFLINE_AFTER_SECONDS:-120}
+      MOWDECK_NOTIFICATIONS_BATTERY_LOW_PERCENT: ${NOTIFICATIONS_BATTERY_LOW_PERCENT:-20}
+      MOWDECK_NOTIFICATIONS_MOWING_MIN_SECONDS: ${NOTIFICATIONS_MOWING_MIN_SECONDS:-120}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.notifications.rule=PathPrefix(`/api/v1/notifications`)
+      - traefik.http.routers.notifications.entrypoints=web
+      - traefik.http.services.notifications.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      notifications-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+volumes:
+  notifications-data:

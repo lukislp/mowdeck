@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``telemetry.blade_hours.threshold``.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "blade_changed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The last recorded blade change, None when none was recorded.",
+      "title": "Blade Changed At"
+    },
+    "blade_hours_since_change": {
+      "minimum": 0,
+      "title": "Blade Hours Since Change",
+      "type": "number"
+    },
+    "crossed_at": {
+      "description": "observed_at of the state that crossed it.",
+      "format": "date-time",
+      "title": "Crossed At",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "threshold_hours": {
+      "exclusiveMinimum": 0,
+      "title": "Threshold Hours",
+      "type": "number"
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id",
+    "blade_hours_since_change",
+    "threshold_hours",
+    "crossed_at"
+  ],
+  "title": "BladeHoursThreshold",
+  "type": "object"
+}

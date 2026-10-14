@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Anchors the local frame on the earth.\n\nThe local point ``(0, 0)`` is at ``(origin_lat, origin_lon)``. The local axes are the east\nand north axes rotated counter-clockwise by ``rotation_deg``: a local point ``(x, y)`` lies\n``east = x cos(r) - y sin(r)`` and ``north = x sin(r) + y cos(r)`` metres from the origin.",
+  "properties": {
+    "origin_lat": {
+      "maximum": 90,
+      "minimum": -90,
+      "title": "Origin Lat",
+      "type": "number"
+    },
+    "origin_lon": {
+      "maximum": 180,
+      "minimum": -180,
+      "title": "Origin Lon",
+      "type": "number"
+    },
+    "rotation_deg": {
+      "default": 0.0,
+      "maximum": 360,
+      "minimum": -360,
+      "title": "Rotation Deg",
+      "type": "number"
+    }
+  },
+  "required": [
+    "origin_lat",
+    "origin_lon"
+  ],
+  "title": "GeoReference",
+  "type": "object"
+}

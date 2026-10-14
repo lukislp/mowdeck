@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MowDeck</string>
+    <string name="title_activity_main">MowDeck</string>
+    <string name="package_name">app.mowdeck.mobile</string>
+    <string name="custom_url_scheme">app.mowdeck.mobile</string>
+</resources>

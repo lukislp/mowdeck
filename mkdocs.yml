@@ -1,0 +1,103 @@
+site_name: MowDeck
+site_description: Self-hosted multi-tenant platform for Mammotion mowers
+repo_url: https://github.com/lukislp/mowdeck
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+exclude_docs: |
+  adr/template.md
+
+nav:
+  - Home: index.md
+  - Phases: phases.md
+  - Architecture:
+      - architecture/01-introduction-and-goals.md
+      - architecture/02-constraints.md
+      - architecture/03-context-and-scope.md
+      - architecture/04-solution-strategy.md
+      - architecture/05-building-blocks.md
+      - architecture/06-runtime-view.md
+      - architecture/07-deployment-view.md
+      - architecture/08-crosscutting-concepts.md
+      - architecture/09-architecture-decisions.md
+      - architecture/10-quality-requirements.md
+      - architecture/11-risks-and-technical-debt.md
+      - architecture/12-glossary.md
+  - Decisions (ADR):
+      - adr/README.md
+      - adr/0001-openfga-for-authorization.md
+      - adr/0002-self-built-identity-service.md
+      - adr/0003-sveltekit-for-the-web-app.md
+      - adr/0004-monorepo-with-uv-workspace.md
+      - adr/0005-licensing.md
+      - adr/0006-postgresql-for-all-persistence.md
+      - adr/0007-nats-jetstream-event-bus.md
+      - adr/0008-traefik-as-gateway.md
+      - adr/0009-command-and-event-envelopes.md
+      - adr/0010-python-3-13.md
+      - adr/0011-gpl-package-for-pymammotion-adapter.md
+      - adr/0012-mower-control-interface-and-safety-rules.md
+      - adr/0013-device-gateway-registry-and-sharding.md
+      - adr/0014-authorization-model-and-tuple-ownership.md
+      - adr/0015-tokens-sessions-and-key-rotation.md
+      - adr/0016-fleet-commands-and-authorization-per-command-kind.md
+      - adr/0017-telemetry-storage-and-retention.md
+      - adr/0018-realtime-websocket-protocol.md
+      - adr/0019-mammotion-adapter-transports.md
+      - adr/0020-web-app-architecture.md
+      - adr/0021-browser-auth-flow.md
+      - adr/0022-notifications-rules-and-delivery.md
+      - adr/0023-map-rendering-and-projection.md
+      - adr/0024-scheduler-recurrence-rain-pause-and-command-issuing.md
+      - adr/0025-home-assistant-integration-as-api-client.md
+      - adr/0026-manual-drive-channel.md
+      - adr/0027-health-history-and-theft-alarm.md
+      - adr/0028-entitlements-plans-and-enforcement.md
+      - adr/0029-helm-chart-and-release-pipeline.md
+      - adr/0030-mowing-patterns-and-planner.md
+      - adr/0031-billing-with-stripe-adapter.md
+      - adr/0032-live-camera-over-agora.md
+      - adr/0033-vision-assisted-recovery-with-approval.md
+      - adr/0034-linked-cloud-accounts-and-device-discovery.md
+      - adr/0035-server-side-camera-frames-and-automatic-analysis.md
+      - adr/0036-native-app-shells-with-capacitor.md
+  - Development:
+      - dev/getting-started.md
+      - dev/service-template.md
+      - dev/libraries.md
+      - "Design: identity and authorization": dev/design-identity-authz.md
+      - "Design: fleet, telemetry, realtime": dev/design-fleet-telemetry-realtime.md
+      - "Design: web app": dev/design-web-app.md
+      - dev/web-app.md
+      - dev/home-assistant.md
+      - dev/wiki.md
+  - Operations:
+      - ops/compose.md
+      - ops/helm.md
+      - ops/ble-bridge-esphome.md
+      - ops/release.md
+      - ops/billing.md
+      - ops/mobile-apps.md
+  - Spikes:
+      - spikes/index.md
+      - spikes/0001-ble-bridge-and-pymammotion.md
+  - Guides:
+      - guides/index.md
+      - guides/esp32-bridge-purchase-and-setup.md
+  - Original plan (German): plan/project-plan.de.md

@@ -1,0 +1,227 @@
+/**
+ * Translations of enum values and problems, and locale aware formatting. Every enum maps through
+ * one exhaustive switch, so a new contract value fails the type check until it is translated.
+ * Units are not translated (mm, m/s, %); numbers use the active locale (decimal comma in German).
+ */
+import type { Activity, RtkFix } from '@mowdeck/ui';
+
+import type { ApiProblem } from '$lib/api/problem';
+import { m } from '$lib/paraglide/messages';
+import { planProblemText } from '$lib/plan/problems';
+import { getLocale } from '$lib/paraglide/runtime';
+import type { CommandKind, CommandOutcome } from '$lib/stores/commands.svelte';
+
+export function activityLabel(activity: Activity): string {
+  switch (activity) {
+    case 'idle':
+      return m.activity_idle();
+    case 'mowing':
+      return m.activity_mowing();
+    case 'paused':
+      return m.activity_paused();
+    case 'returning':
+      return m.activity_returning();
+    case 'docked':
+      return m.activity_docked();
+    case 'charging':
+      return m.activity_charging();
+    case 'error':
+      return m.activity_error();
+    case 'offline':
+      return m.activity_offline();
+    case 'unknown':
+      return m.activity_unknown();
+  }
+}
+
+export function rtkLabel(fix: RtkFix): string {
+  switch (fix) {
+    case 'fixed':
+      return m.rtk_fixed();
+    case 'float':
+      return m.rtk_float();
+    case 'none':
+      return m.rtk_none();
+    case 'unknown':
+      return m.rtk_unknown();
+  }
+}
+
+export type RtkSource = 'base_station' | 'network' | 'unknown';
+
+export function rtkSourceLabel(source: RtkSource): string {
+  switch (source) {
+    case 'base_station':
+      return m.rtk_source_base_station();
+    case 'network':
+      return m.rtk_source_network();
+    case 'unknown':
+      return m.rtk_source_unknown();
+  }
+}
+
+/** The fix quality alone ("Fix"), for a readout that names the source next to it. */
+export function rtkFixShort(fix: RtkFix): string {
+  switch (fix) {
+    case 'fixed':
+      return m.map_rtk_fixed();
+    case 'float':
+      return m.map_rtk_float();
+    case 'none':
+      return m.map_rtk_none();
+    case 'unknown':
+      return m.map_rtk_unknown();
+  }
+}
+
+/** The correction source in one word ("Netz", "Basis"); undefined when unknown. */
+export function rtkSourceShort(source: RtkSource): string | undefined {
+  switch (source) {
+    case 'base_station':
+      return m.rtk_source_short_base_station();
+    case 'network':
+      return m.rtk_source_short_network();
+    case 'unknown':
+      return undefined;
+  }
+}
+
+export type ConnectionKind = 'ble_bridge' | 'wifi' | 'cloud' | 'simulated';
+
+export function connectionLabel(kind: string): string {
+  switch (kind as ConnectionKind) {
+    case 'ble_bridge':
+      return m.connection_ble_bridge();
+    case 'wifi':
+      return m.connection_wifi();
+    case 'cloud':
+      return m.connection_cloud();
+    case 'simulated':
+      return m.connection_simulated();
+    default:
+      return kind;
+  }
+}
+
+export function commandLabel(kind: CommandKind | 'manual_drive'): string {
+  switch (kind) {
+    case 'start_mow':
+      return m.command_start_mow();
+    case 'pause_mow':
+      return m.command_pause_mow();
+    case 'resume_mow':
+      return m.command_resume_mow();
+    case 'return_to_dock':
+      return m.command_return_to_dock();
+    case 'emergency_stop':
+      return m.command_emergency_stop();
+    case 'set_blade_height':
+      return m.command_set_blade_height();
+    case 'set_speed':
+      return m.command_set_speed();
+    case 'set_light':
+      return m.command_set_light();
+    case 'manual_drive':
+      return m.command_manual_drive();
+  }
+}
+
+export function outcomeLabel(outcome: CommandOutcome): string {
+  switch (outcome) {
+    case 'pending':
+      return m.result_pending();
+    case 'accepted':
+      return m.result_accepted();
+    case 'executed':
+      return m.result_executed();
+    case 'rejected':
+      return m.result_rejected();
+    case 'failed':
+      return m.result_failed();
+    case 'expired':
+      return m.result_expired();
+  }
+}
+
+export function roleLabel(key: string, fallback: string): string {
+  switch (key) {
+    case 'owner':
+      return m.role_owner();
+    case 'admin':
+      return m.role_admin();
+    case 'manager':
+      return m.role_manager();
+    case 'operator':
+      return m.role_operator();
+    case 'viewer':
+      return m.role_viewer();
+    default:
+      return fallback;
+  }
+}
+
+/** The translated message of a problem, chosen by its type, then by its status. */
+export function problemMessage(problem: ApiProblem): string {
+  switch (problem.slug) {
+    case 'not-found':
+      return m.problem_not_found();
+    case 'forbidden':
+      return m.problem_forbidden();
+    case 'unauthorized':
+      return m.problem_unauthorized();
+    case 'validation-failed':
+    case 'bad-request':
+      return m.problem_validation();
+    case 'conflict':
+      return m.problem_conflict();
+    case 'unavailable':
+      return m.problem_unavailable();
+    case 'network':
+      return m.problem_network();
+    case 'plan-limit':
+    case 'feature-not-in-plan':
+      return planProblemText(problem)?.title ?? m.problem_generic();
+    default:
+      break;
+  }
+  if (problem.status === 429) return m.problem_rate_limited();
+  if (problem.status === 404) return m.problem_not_found();
+  if (problem.status === 403) return m.problem_forbidden();
+  if (problem.status === 422 || problem.status === 400) return m.problem_validation();
+  if (problem.status === 503 || problem.status === 502) return m.problem_unavailable();
+  return m.problem_generic();
+}
+
+export function formatNumber(value: number, digits = 0): string {
+  return new Intl.NumberFormat(getLocale(), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+export function formatDateTime(value: string | number | Date): string {
+  return new Intl.DateTimeFormat(getLocale(), {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  }).format(new Date(value));
+}
+
+export function formatDate(value: string | number | Date): string {
+  return new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium' }).format(new Date(value));
+}
+
+export function formatTime(value: string | number | Date): string {
+  return new Intl.DateTimeFormat(getLocale(), { timeStyle: 'medium' }).format(new Date(value));
+}
+
+/** "vor 12 s" from an ISO time and the current time. */
+export function formatAge(at: string | number, now: number): string {
+  const seconds = Math.max(0, Math.round((now - new Date(at).getTime()) / 1000));
+  if (seconds < 3) return m.age_now();
+  if (seconds < 60) return m.age_seconds({ count: seconds });
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return m.age_minutes({ count: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return m.age_hours({ count: hours });
+  return m.age_days({ count: Math.floor(hours / 24) });
+}

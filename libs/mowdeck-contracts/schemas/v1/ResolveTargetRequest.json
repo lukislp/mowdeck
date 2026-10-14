@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``fleet.targets.resolve``: the mowers of a schedule target.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "target_id": {
+      "format": "uuid",
+      "title": "Target Id",
+      "type": "string"
+    },
+    "target_type": {
+      "enum": [
+        "mower",
+        "group"
+      ],
+      "title": "Target Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "account_id",
+    "target_type",
+    "target_id"
+  ],
+  "title": "ResolveTargetRequest",
+  "type": "object"
+}

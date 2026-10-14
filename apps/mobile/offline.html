@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>MowDeck</title>
+  </head>
+  <body>
+    <main class="page">
+      <header class="band band-offline" aria-hidden="true">
+        <svg class="mark" viewBox="0 0 100 100" focusable="false">
+          <polygon points="50,22 78,76 50,62 22,76" />
+        </svg>
+      </header>
+      <section class="panel">
+        <p class="overline">MowDeck · Offline</p>
+        <h1 data-t="offlineTitle">Server not reachable</h1>
+        <p class="lead" data-t="offlineLead"></p>
+        <p class="server"><code id="server"></code></p>
+        <div class="actions">
+          <button id="retry" class="primary" type="button" data-t="retry">Try again</button>
+          <button id="change" class="secondary" type="button" data-t="change">
+            Choose another server
+          </button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./src/offline.ts"></script>
+  </body>
+</html>

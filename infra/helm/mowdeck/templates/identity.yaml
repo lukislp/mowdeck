@@ -1,0 +1,20 @@
+{{- /* Identity: accounts, users, roles, sessions, API tokens; issues the access tokens and
+publishes /.well-known/jwks.json (Compose services identity and identity-migrate). */ -}}
+{{- $c := .Values.config }}
+{{- $modules := list }}
+{{- range list "device-gateway" "fleet" "telemetry" "realtime" "notifications" "scheduler" "entitlements" "planner" "vision" }}
+{{- $modules = append $modules (include "mowdeck.serviceUrl" (dict "ctx" $ "component" .)) }}
+{{- end }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (dict
+  "MOWDECK_IDENTITY_REGISTRATION" $c.IDENTITY_REGISTRATION
+  "MOWDECK_IDENTITY_ARGON2_PROFILE" $c.IDENTITY_ARGON2_PROFILE
+  "MOWDECK_IDENTITY_MODULE_URLS" (join "," $modules)
+  "MOWDECK_IDENTITY_TRUST_FORWARDED_FOR" "true"
+  "MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE" $c.IDENTITY_REFRESH_COOKIE_SECURE) }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "identity" "key" "identity" "image" "identity" "module" "identity.adapters.db.migrate" "weight" 1) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "identity" "key" "identity" "image" "identity"
+  "env" $env "db" "identity" "migrateModule" "identity.adapters.db.migrate" "authz" true
+  "secretFiles" (list
+    (dict "key" "database-url-identity" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE")
+    (dict "key" "identity-key-encryption-key" "file" "identity-key-encryption-key" "env" "MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY_FILE"))) }}

@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "EntitlementLimitQuery": {
+      "description": "A hard limit question: may the account have one more, given ``current`` exist now?",
+      "properties": {
+        "current": {
+          "description": "How many the account has now (before creating).",
+          "minimum": 0,
+          "title": "Current",
+          "type": "integer"
+        },
+        "key": {
+          "enum": [
+            "max_mowers",
+            "max_users",
+            "max_sites",
+            "max_groups",
+            "max_schedules",
+            "history_days"
+          ],
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "current"
+      ],
+      "title": "EntitlementLimitQuery",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``entitlements.check`` (core NATS, internal).\n\nAsk either a ``feature`` or a ``limit``; with neither the reply only names the plan (Identity\nuses that for the token's ``plan`` claim).",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "feature": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Feature"
+    },
+    "limit": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EntitlementLimitQuery"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "account_id"
+  ],
+  "title": "EntitlementCheckRequest",
+  "type": "object"
+}

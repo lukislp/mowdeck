@@ -1,0 +1,37 @@
+{{- /* Billing: subscriptions and payments with the Stripe adapter (ADR 0031); sets the account
+plan in Entitlements (Compose services billing and billing-migrate, profile "billing").
+Off by default (services.billing.enabled=false): then nothing of it is rendered, which is what
+billing.enabled=false means. The price file is the ConfigMap <fullname>-billing-prices, built
+from files/prices.yaml (an identical copy of infra/billing/prices.yaml, checked by
+tools/repo-checks/tests/test_helm.py); config.BILLING_PRICE_IDS overrides it. */ -}}
+{{- $c := .Values.config }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_BILLING_PROVIDER" $c.BILLING_PROVIDER
+  "MOWDECK_BILLING_STRIPE_API_BASE" $c.BILLING_STRIPE_API_BASE
+  "MOWDECK_BILLING_AUTOMATIC_TAX" (toString $c.BILLING_AUTOMATIC_TAX)
+  "MOWDECK_BILLING_PRICE_IDS" $c.BILLING_PRICE_IDS
+  "MOWDECK_BILLING_GRACE_DAYS" (toString $c.BILLING_GRACE_DAYS)
+  "MOWDECK_BILLING_APP_URL" (default (include "mowdeck.publicOrigin" .) $c.BILLING_APP_URL)
+  "MOWDECK_BILLING_ENTITLEMENTS_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "entitlements"))) }}
+{{- if .Values.services.billing.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mowdeck.fullname" . }}-billing-prices
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "billing") | nindent 4 }}
+data:
+  prices.yaml: |
+    {{- .Files.Get "files/prices.yaml" | nindent 4 }}
+{{- end }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "billing" "key" "billing" "image" "billing" "module" "billing.adapters.db.migrate" "weight" 7) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "billing" "key" "billing" "image" "billing"
+  "env" $env "db" "billing" "migrateModule" "billing.adapters.db.migrate" "authz" true
+  "secretFiles" (list
+    (dict "key" "database-url-billing" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE")
+    (dict "key" "billing-stripe-secret-key" "file" "billing-stripe-secret-key" "env" "MOWDECK_BILLING_STRIPE_SECRET_KEY_FILE")
+    (dict "key" "billing-stripe-webhook-secret" "file" "billing-stripe-webhook-secret" "env" "MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET_FILE"))
+  "volumes" (list (dict "name" "prices" "configMap" (dict "name" (printf "%s-billing-prices" (include "mowdeck.fullname" .)))))
+  "volumeMounts" (list (dict "name" "prices" "mountPath" "/etc/mowdeck/billing" "readOnly" true))) }}

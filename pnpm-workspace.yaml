@@ -1,0 +1,6 @@
+# pnpm workspace of the web frontend. The Python packages are a separate uv workspace.
+packages:
+  - apps/*
+  - libs/mowdeck-ui
+  - tests/e2e-web
+  - tools/ts-codegen

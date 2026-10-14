@@ -1,0 +1,170 @@
+name: helm-kind
+
+# Install test of the Helm chart in a kind cluster (infra/helm/kind-test.sh): CloudNativePG
+# operator, Traefik, the chart with values-homelab.yaml and the in-cluster PostgreSQL, an upgrade,
+# then the Phase 1 acceptance test (uv run poe e2e) through Traefik. About 15 minutes, so it runs
+# only by hand (gh workflow run helm-kind.yml) and for release tags, never on pull requests; the
+# cheap chart checks are the "helm" job of ci.yml.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: helm-kind-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck-mirror
+
+jobs:
+  kind:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # NATS_IMAGE, OPENFGA_IMAGE, TRAEFIK_IMAGE and the base images from the GHCR mirror; the
+      # test script pulls them on the runner and loads them into the kind node.
+      - name: Use the image mirror
+        run: sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" | tee -a "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - run: uv sync
+      - uses: azure/setup-helm@v5.0.1
+        with:
+          version: v4.3.0
+      - uses: docker/setup-buildx-action@v4.4.1
+      # amd64 images with the GitHub Actions cache of the CI docker job (same scopes).
+      - name: Build identity
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/identity/Dockerfile
+          build-args: &python-build-args |
+            PYTHON_IMAGE=${{ env.PYTHON_IMAGE }}
+            UV_IMAGE=${{ env.UV_IMAGE }}
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/identity:kind
+          cache-from: type=gha,scope=identity
+      - name: Build fleet
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/fleet/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/fleet:kind
+          cache-from: type=gha,scope=fleet
+      - name: Build device-gateway
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/device-gateway/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/device-gateway:kind
+          cache-from: type=gha,scope=device-gateway
+      - name: Build telemetry
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/telemetry/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/telemetry:kind
+          cache-from: type=gha,scope=telemetry
+      - name: Build realtime
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/realtime/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/realtime:kind
+          cache-from: type=gha,scope=realtime
+      - name: Build notifications
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/notifications/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/notifications:kind
+          cache-from: type=gha,scope=notifications
+      - name: Build scheduler
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/scheduler/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/scheduler:kind
+          cache-from: type=gha,scope=scheduler
+      - name: Build entitlements
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/entitlements/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/entitlements:kind
+          cache-from: type=gha,scope=entitlements
+      - name: Build planner
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/planner/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/planner:kind
+          cache-from: type=gha,scope=planner
+      - name: Build vision
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/vision/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/vision:kind
+          cache-from: type=gha,scope=vision
+      - name: Build web
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          build-args: |
+            NODE_IMAGE=${{ env.NODE_IMAGE }}
+            NGINX_IMAGE=${{ env.NGINX_IMAGE }}
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/web:kind
+          cache-from: type=gha,scope=web
+      - name: Build authz-bootstrap
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: infra/openfga
+          file: infra/openfga/bootstrap/Dockerfile
+          build-args: |
+            FGA_CLI_IMAGE=${{ env.FGA_CLI_IMAGE }}
+            JQ_IMAGE=${{ env.JQ_IMAGE }}
+            BUSYBOX_IMAGE=${{ env.BUSYBOX_IMAGE }}
+          load: true
+          tags: ghcr.io/lukislp/mowdeck/authz-bootstrap:kind
+      - uses: helm/kind-action@v1.15.1
+        with:
+          install_only: true
+      - name: Install the chart in kind and run the acceptance test
+        env:
+          E2E: "1"
+          KEEP: "1"
+        run: sh infra/helm/kind-test.sh

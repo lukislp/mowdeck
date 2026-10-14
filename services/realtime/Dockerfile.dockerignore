@@ -1,0 +1,14 @@
+# Used by BuildKit for services/realtime/Dockerfile (build context: repository root).
+# Allow list: only what the image needs.
+*
+!pyproject.toml
+!uv.lock
+!libs/
+!services/realtime/
+**/__pycache__
+**/*.pyc
+**/tests/
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+libs/*/schemas/

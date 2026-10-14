@@ -1,0 +1,574 @@
+name: ci
+
+# Minute budget: private repository, limited Actions minutes. Pull requests run the full
+# pipeline once (no duplicate push run); pushes to main run only the fast checks, because the
+# merged content was already verified in the pull request. Superseded runs are cancelled.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # Third-party images come from the repository's GHCR mirror (infra/images.txt, filled by
+  # .github/workflows/mirror-images.yml), pulled with GITHUB_TOKEN instead of the shared,
+  # rate limited anonymous quota of Docker Hub and ECR Public.
+  packages: read
+
+env:
+  MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck-mirror
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        # Same tag as the postgres line of infra/images.txt (checked by repo-checks).
+        image: ghcr.io/${{ github.repository_owner }}/mowdeck-mirror/postgres:17.11-alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      # Log in to GHCR and export NAME_IMAGE=<mirror>/<alias>:<tag> for every image of
+      # infra/images.txt (PYTHON_IMAGE, NATS_IMAGE, ...) to the following steps.
+      - &ghcr-login
+        name: Log in to the GHCR image mirror
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - &mirror-env
+        name: Use the image mirror
+        run: sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" | tee -a "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - run: uv sync
+      - run: uv run poe lint
+      # The web app's committed OpenAPI documents match the services (also a repo-checks test).
+      - run: uv run poe openapi-check
+      # Service containers cannot pass command arguments, so JetStream is started by hand.
+      - name: Start NATS with JetStream
+        run: |
+          docker run -d --name nats -p 4222:4222 -p 8222:8222 "$NATS_IMAGE" -js -m 8222
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8222/healthz && exit 0
+            sleep 1
+          done
+          docker logs nats
+          exit 1
+      # In-memory OpenFGA for the mowdeck-authz integration tests (needs the "run" argument).
+      - name: Start OpenFGA
+        run: |
+          docker run -d --name openfga -p 18080:8080 "$OPENFGA_IMAGE" run             --datastore-engine memory --authn-method preshared --authn-preshared-keys ci-key
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:18080/healthz && exit 0
+            sleep 1
+          done
+          docker logs openfga
+          exit 1
+      # ntfy for the notifications channel integration test (needs the "serve" argument).
+      - name: Start ntfy
+        run: |
+          docker run -d --name ntfy -p 8091:80 "$NTFY_IMAGE" serve
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8091/v1/health && exit 0
+            sleep 1
+          done
+          docker logs ntfy
+          exit 1
+      # stripe-mock for the Billing integration tests (stateless Stripe API, no webhooks).
+      - name: Start stripe-mock
+        run: |
+          docker run -d --name stripe-mock -p 12111:12111 "$STRIPE_MOCK_IMAGE"
+          for _ in $(seq 1 30); do
+            curl -sf -o /dev/null -H "Authorization: Bearer sk_test_123" http://127.0.0.1:12111/v1/customers && exit 0
+            sleep 1
+          done
+          docker logs stripe-mock
+          exit 1
+      - run: uv run poe test
+        env:
+          MOWDECK_TEST_STRIPE_MOCK_URL: http://127.0.0.1:12111
+          MOWDECK_TEST_NTFY_URL: http://127.0.0.1:8091
+          MOWDECK_TEST_NATS_URL: nats://127.0.0.1:4222
+          MOWDECK_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5433/postgres
+          MOWDECK_TEST_OPENFGA_URL: http://127.0.0.1:18080
+          MOWDECK_TEST_OPENFGA_TOKEN: ci-key
+
+  # The authorization model: CLI model tests, freshness of the packaged JSON, and the
+  # idempotent bootstrap job of the Compose stack (second run must not write a model).
+  openfga-model:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - *ghcr-login
+      - *mirror-env
+      - name: fga model test
+        run: docker run --rm -v "$PWD/infra/openfga:/w" -w /w "$FGA_CLI_IMAGE" model test --tests model.fga.yaml
+      # sync_model_json.py runs the CLI image named by FGA_CLI_IMAGE (the mirror here).
+      - name: Packaged model.json matches model.fga
+        run: python3 infra/openfga/sync_model_json.py --check
+      - name: Bootstrap job is idempotent
+        run: |
+          docker network create fga
+          docker run -d --name openfga --network fga "$OPENFGA_IMAGE" run             --datastore-engine memory --authn-method preshared --authn-preshared-keys ci-key
+          docker build -t mowdeck/authz-bootstrap:ci -f infra/openfga/bootstrap/Dockerfile --build-arg FGA_CLI_IMAGE --build-arg JQ_IMAGE --build-arg BUSYBOX_IMAGE infra/openfga
+          run_job() {
+            docker run --rm --network fga -e FGA_API_URL=http://openfga:8080               -e FGA_API_TOKEN=ci-key mowdeck/authz-bootstrap:ci
+          }
+          for _ in $(seq 1 30); do run_job > first.log 2>&1 && break; sleep 1; done
+          cat first.log
+          grep -q "wrote model" first.log
+          run_job | tee second.log
+          grep -q "model unchanged" second.log
+
+  docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - run: uv sync
+      - run: uv run poe docs
+
+  # The web frontend (pnpm workspace): lint (ESLint, Prettier, Stylelint, i18n), svelte-check,
+  # unit tests with coverage, generated types up to date, production build with CSP hashes.
+  # apps/mobile is part of the workspace, so its lint, `tsc` check and tests run here too; the
+  # native builds do not (Android: release.yml on v* tags, iOS: the owner's Mac).
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r lint
+      - run: pnpm -r check
+      # The Playwright suite (tests/e2e-web) needs the stack: it runs in the e2e-web job.
+      - run: pnpm -r --filter '!e2e-web' test
+      - run: pnpm --filter ts-codegen check
+      - run: pnpm --filter web build
+
+  compose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env.example config -q
+
+  # The Helm chart without a cluster (about a minute): lint, template with the default values and
+  # both overlays, kubeconform -strict, the required-secret checks and the Compose drift test
+  # (infra/helm/check.sh). The kind install test is .github/workflows/helm-kind.yml (manual, tags).
+  helm:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    env:
+      KUBECONFORM_VERSION: v0.8.0
+      # sha256 of kubeconform-linux-amd64.tar.gz from the release's CHECKSUMS
+      KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: azure/setup-helm@v5.0.1
+        with:
+          version: v4.3.0
+      - name: Install kubeconform
+        run: |
+          curl -fsSL -o kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf kubeconform.tar.gz -C "$RUNNER_TEMP/bin" kubeconform
+          rm kubeconform.tar.gz
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - run: uv sync
+      - run: sh infra/helm/check.sh
+
+  docker:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - *ghcr-login
+      - *mirror-env
+      - uses: docker/setup-buildx-action@v4.4.1
+      # amd64 only for now; the images have no architecture specific steps, an arm64
+      # build (QEMU or a native arm runner) follows with the release workflow.
+      - name: Build device-gateway image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/device-gateway/Dockerfile
+          build-args: &python-build-args |
+            PYTHON_IMAGE=${{ env.PYTHON_IMAGE }}
+            UV_IMAGE=${{ env.UV_IMAGE }}
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/device-gateway:ci
+          cache-from: type=gha,scope=device-gateway
+          cache-to: type=gha,mode=max,scope=device-gateway
+      - name: Build identity image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/identity/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/identity:ci
+          cache-from: type=gha,scope=identity
+          cache-to: type=gha,mode=max,scope=identity
+      - name: Build fleet image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/fleet/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/fleet:ci
+          cache-from: type=gha,scope=fleet
+          cache-to: type=gha,mode=max,scope=fleet
+      - name: Build telemetry image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/telemetry/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/telemetry:ci
+          cache-from: type=gha,scope=telemetry
+          cache-to: type=gha,mode=max,scope=telemetry
+      - name: Build realtime image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/realtime/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/realtime:ci
+          cache-from: type=gha,scope=realtime
+          cache-to: type=gha,mode=max,scope=realtime
+      - name: Build notifications image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/notifications/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/notifications:ci
+          cache-from: type=gha,scope=notifications
+          cache-to: type=gha,mode=max,scope=notifications
+      - name: Build scheduler image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/scheduler/Dockerfile
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/scheduler:ci
+          cache-from: type=gha,scope=scheduler
+          cache-to: type=gha,mode=max,scope=scheduler
+      - name: Build entitlements image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/entitlements/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/entitlements:ci
+          cache-from: type=gha,scope=entitlements
+          cache-to: type=gha,mode=max,scope=entitlements
+      - name: Build planner image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/planner/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/planner:ci
+          cache-from: type=gha,scope=planner
+          cache-to: type=gha,mode=max,scope=planner
+      - name: Build vision image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/vision/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/vision:ci
+          cache-from: type=gha,scope=vision
+          cache-to: type=gha,mode=max,scope=vision
+      - name: Build web image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          build-args: &web-build-args |
+            NODE_IMAGE=${{ env.NODE_IMAGE }}
+            NGINX_IMAGE=${{ env.NGINX_IMAGE }}
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/web:ci
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  # Phase 1 acceptance test (docs/phases.md) against the full Compose stack.
+  # The service images are built first with the GitHub Actions cache of the docker
+  # job (same scopes); `compose up --build` then finds every layer in the builder.
+  e2e:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    needs: [python, docker]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - run: uv sync
+      - *ghcr-login
+      - *mirror-env
+      - uses: docker/setup-buildx-action@v4.4.1
+      - name: Build service images (cached)
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/identity/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/identity:dev
+          cache-from: type=gha,scope=identity
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/fleet/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/fleet:dev
+          cache-from: type=gha,scope=fleet
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/telemetry/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/telemetry:dev
+          cache-from: type=gha,scope=telemetry
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/device-gateway/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/device-gateway:dev
+          cache-from: type=gha,scope=device-gateway
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/realtime/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/realtime:dev
+          cache-from: type=gha,scope=realtime
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/notifications/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/notifications:dev
+          cache-from: type=gha,scope=notifications
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/scheduler/Dockerfile
+          load: true
+          tags: mowdeck/scheduler:dev
+          cache-from: type=gha,scope=scheduler
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/entitlements/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/entitlements:dev
+          cache-from: type=gha,scope=entitlements
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/planner/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/planner:dev
+          cache-from: type=gha,scope=planner
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/vision/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/vision:dev
+          cache-from: type=gha,scope=vision
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          build-args: *web-build-args
+          load: true
+          tags: mowdeck/web:dev
+          cache-from: type=gha,scope=web
+      # .env.example with every *_IMAGE line replaced by the mirror (exported above).
+      - name: Configure the stack
+        run: |
+          sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" > mirror.env
+          awk -F= 'NR == FNR { skip[$1] = 1; next } !($1 in skip)' mirror.env infra/compose/.env.example > infra/compose/.env
+          cat mirror.env >> infra/compose/.env
+      - name: Start the stack
+        run: docker compose -f infra/compose/docker-compose.yml up -d --build --wait --wait-timeout 600
+      - name: Acceptance test (including the slow idle WebSocket check)
+        run: uv run poe e2e
+        env:
+          MOWDECK_E2E_BASE_URL: http://localhost
+      - name: Collect logs on failure
+        if: failure()
+        run: docker compose -f infra/compose/docker-compose.yml logs --no-color --timestamps > e2e-logs.txt
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: e2e-logs
+          path: e2e-logs.txt
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml down -v
+
+  # Phase 2 gate (docs/phases.md): the Playwright suite tests/e2e-web against the full Compose
+  # stack including the web app at /, on a phone (gate) and a desktop viewport.
+  e2e-web:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    needs: [web, docker]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter e2e-web
+      - run: pnpm --filter e2e-web exec playwright install --with-deps chromium
+      - *ghcr-login
+      - *mirror-env
+      - uses: docker/setup-buildx-action@v4.4.1
+      - name: Build images (cached)
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/identity/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/identity:dev
+          cache-from: type=gha,scope=identity
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/fleet/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/fleet:dev
+          cache-from: type=gha,scope=fleet
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/telemetry/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/telemetry:dev
+          cache-from: type=gha,scope=telemetry
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/device-gateway/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/device-gateway:dev
+          cache-from: type=gha,scope=device-gateway
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/realtime/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/realtime:dev
+          cache-from: type=gha,scope=realtime
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          build-args: *web-build-args
+          load: true
+          tags: mowdeck/web:dev
+          cache-from: type=gha,scope=web
+      # .env.example with every *_IMAGE line replaced by the mirror (exported above) and the
+      # suite's overrides (tests/e2e-web/stack.env: static weather with the dev endpoint).
+      - name: Configure the stack
+        run: |
+          sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" > mirror.env
+          grep '^[A-Z_]*=' tests/e2e-web/stack.env >> mirror.env
+          awk -F= 'NR == FNR { skip[$1] = 1; next } !($1 in skip)' mirror.env infra/compose/.env.example > infra/compose/.env
+          cat mirror.env >> infra/compose/.env
+      - name: Start the stack
+        run: docker compose -f infra/compose/docker-compose.yml up -d --build --wait --wait-timeout 600
+      - name: Phase 2 gate (Playwright)
+        run: pnpm --filter e2e-web test
+        env:
+          MOWDECK_E2E_BASE_URL: http://localhost
+      - name: Collect logs on failure
+        if: failure()
+        run: docker compose -f infra/compose/docker-compose.yml logs --no-color --timestamps > e2e-web-logs.txt
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: e2e-web-report
+          path: |
+            tests/e2e-web/playwright-report
+            tests/e2e-web/test-results
+            e2e-web-logs.txt
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml down -v

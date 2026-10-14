@@ -1,0 +1,36 @@
+# ADR 0017: Telemetry storage and retention
+
+## Status
+
+Accepted (2026-10-09)
+
+## Context
+
+Telemetry (Task 8 of Phase 1) turns the Device-Gateway's stream of mower states into something a client can ask for: the latest state, a history for charts, a position track and the timeline of command results. The Device-Gateway republishes an unchanged state every 10 s as a heartbeat ([ADR 0013](0013-device-gateway-registry-and-sharding.md)), so a naive "store every message" approach writes 8 640 near-identical rows per mower and day. The TELEMETRY stream keeps only an hour ([ADR 0007](0007-nats-jetstream-event-bus.md), `subjects.TELEMETRY`); anything longer lives here. All persistence is PostgreSQL ([ADR 0006](0006-postgresql-for-all-persistence.md)). Command results carry no account id, but every table must be tenant scoped ([ADR 0014](0014-authorization-model-and-tuple-ownership.md)).
+
+The design ([Design: fleet, telemetry, realtime](../dev/design-fleet-telemetry-realtime.md), section 2) proposed the tables and rules; this ADR records the decisions and the corrections found while building it.
+
+## Decision
+
+**Plain PostgreSQL tables now, TimescaleDB later.** `mower_latest` (one row per mower), `mower_history` (changes of state), `mower_positions` (the track) and `command_timeline` (one row per command status transition), plus `mower_directory`. History and positions are append-only with the primary key `(mower_id, observed_at)` and indexes on `(mower_id, observed_at desc)` and `(account_id, observed_at desc)`; a BRIN index on the time column serves the retention scan. Downsampling is a `date_bin` query with a fixed origin (2000-01-01 UTC), whose bin arithmetic is mirrored by a pure helper used by the in-memory store, so a test pins both to the same bins. Moving the two big tables to TimescaleDB hypertables later changes the migration and replaces `date_bin` by `time_bucket`; the port, the API and the other tables stay.
+
+**The latest row is guarded by `observed_at`.** The upsert is `ON CONFLICT (mower_id) DO UPDATE ... WHERE observed_at <= excluded.observed_at`, after the row was read `FOR UPDATE` inside the transaction. An older message never overwrites a newer one, not even when two replicas of the same queue group race; a redelivery is a no-op.
+
+**Unchanged heartbeats are not written to history.** Per message the significant fields (activity, battery, charging, RTK fix and source, connection, blade height, speed, error code) are compared with the fingerprint stored on the latest row. A change is always stored; an unchanged state is stored at most once per `MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS` (default 300), so a gap in the history means the mower was silent, not that nothing changed. A position is appended to the track when it differs from the last stored one (about a centimetre) or the RTK fix changed. The latest row remembers the last history time and both fingerprints, so no extra read is needed. This replaces the design's `MOWDECK_HISTORY_MIN_INTERVAL_SECONDS` (60) and `MOWDECK_POSITION_MIN_DISTANCE_M` rules with simpler, deterministic ones; the interval default is 300 s because history is a chart, not an audit.
+
+**Downsampled history is computed in the database.** `GET .../history?step=5s` returns one point per bin: the last activity, RTK fix and error code, the rounded mean and the extremes of the battery, charging if any sample charged, the sample count and the last position of the bin (joined from the track). The range is limited (`MOWDECK_TELEMETRY_QUERY_MAX_RANGE_DAYS`, 31), a `step` that would need more bins than `MOWDECK_TELEMETRY_QUERY_MAX_ROWS` (5000) is refused with 422, and raw queries are cut at that many rows with `truncated: true`.
+
+**Retention runs under an advisory lock on one replica.** Every `MOWDECK_TELEMETRY_RETENTION_INTERVAL_SECONDS` (3600) each replica tries `pg_try_advisory_lock` on a dedicated autocommit connection; the one that gets it deletes in batches of 5 000 rows (`ctid` in a sub-select) and releases the lock, the others skip the round. Defaults: history 30 days, positions 90, command timeline 30, each configurable. `mower.removed` purges everything stored about that mower immediately. The in-memory store has no lock.
+
+**The mower directory comes from Fleet.** A `CommandResult` has no account id, so Telemetry keeps `mower_directory (mower_id, account_id)` filled by Fleet's `mower.registered|updated|removed` events (durable queue consumer) and seeded at startup by one `fleet.mowers.list` request (`shard_count=1`) with retries; events win over the seed. Fleet being absent at startup is not fatal: the events fill the directory in the meantime. A result for an unknown mower is redelivered (the event may be a moment behind) and dropped with a warning after `MOWDECK_TELEMETRY_UNKNOWN_MOWER_ATTEMPTS` deliveries (3). A state whose `account_id` differs from the directory or from the stored row is dropped with a warning. Malformed payloads, and payloads whose subject names another mower, are dropped immediately (`DropMessage`), never redelivered. The account of every row comes from the message or the directory, never from a request.
+
+**Reads are scoped three times.** The mower route needs `can_view` on `mower:<id>` (`require_or_not_found`: 404 for a foreign mower), the query filters by the token's account, and the list of the account's states intersects `list_objects(can_view, mower)` with the account's rows (or takes all of them when the caller may view the whole account). The answer for a visible mower that has not reported yet is a 404 with its own problem type (`no-telemetry-yet`), so a client can tell it from a mower it may not see. `telemetry.view` is declared as an account key implied by `mower.view`, for the permission catalogue and the UI; the routes do not read it from the token, because a viewer of one group must see exactly that group's mowers.
+
+## Consequences
+
+- Storage per mower grows with the number of state changes, not with the heartbeat rate; a mowing mower writes a row per changed battery percent or position, an idle one a row every five minutes.
+- Charts of the last month are served by one indexed query; a year of history needs the TimescaleDB step (compression, continuous aggregates), which is prepared by keeping the access behind the store port.
+- The latest state can be up to one heartbeat behind the mower; the response says `stale` when it is older than `MOWDECK_TELEMETRY_STALE_AFTER_SECONDS`.
+- History rows of one mower may arrive twice or slightly out of order when replicas race; the primary key makes duplicates harmless and an extra unchanged row is acceptable.
+- A mower removed in Fleet is purged by its event; a state published after the removal can recreate a latest row, which no one can read (the tuples are gone) and which the operator can delete with the database. Purging an account on deletion is follow-up work (Identity publishes no account deletion event in Phase 1).
+- A Telemetry deployed before Fleet knows no mower until Fleet answers the seed or sends events; command results for such mowers are dropped after three deliveries.

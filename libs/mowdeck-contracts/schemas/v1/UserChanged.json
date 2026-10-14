@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``identity.user.created``, ``identity.user.disabled`` and ``.deleted``.\n\n``account_id`` is the account in which the change happened (None only for platform level\nchanges). ``subuser`` is True for users owned by the account.",
+  "properties": {
+    "account_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Account Id"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "subuser": {
+      "default": false,
+      "title": "Subuser",
+      "type": "boolean"
+    },
+    "user_id": {
+      "format": "uuid",
+      "title": "User Id",
+      "type": "string"
+    },
+    "username": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Username",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "username"
+  ],
+  "title": "UserChanged",
+  "type": "object"
+}

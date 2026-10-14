@@ -1,0 +1,14 @@
+{{- /* Scheduler: mowing schedules with a rain pause; fires through Fleet
+(Compose services scheduler and scheduler-migrate). */ -}}
+{{- $c := .Values.config }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_SCHEDULER_WEATHER_PROVIDER" $c.SCHEDULER_WEATHER_PROVIDER
+  "MOWDECK_SCHEDULER_STATIC_WEATHER" $c.SCHEDULER_STATIC_WEATHER
+  "MOWDECK_SCHEDULER_TICK_SECONDS" $c.SCHEDULER_TICK_SECONDS
+  "MOWDECK_SCHEDULER_DEV_ENDPOINTS" $c.SCHEDULER_DEV_ENDPOINTS) }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "scheduler" "key" "scheduler" "image" "scheduler" "module" "scheduler.adapters.db.migrate" "weight" 5) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "scheduler" "key" "scheduler" "image" "scheduler"
+  "env" $env "db" "scheduler" "migrateModule" "scheduler.adapters.db.migrate" "authz" true
+  "secretFiles" (list
+    (dict "key" "database-url-scheduler" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE"))) }}

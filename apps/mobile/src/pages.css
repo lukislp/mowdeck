@@ -1,0 +1,160 @@
+/* The two bundled pages of the shell, in the instrument panel style of @mowdeck/ui. */
+
+html,
+body {
+  min-height: 100%;
+  background: var(--md-color-bg);
+  color: var(--md-color-ink);
+}
+
+.page {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100dvh;
+}
+
+/* Mowing lanes: the stripes of the app icon, the mark sitting on them. */
+.band {
+  display: grid;
+  place-items: center;
+  height: 168px;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--md-color-surface-sunken) 0 32px,
+    var(--md-color-bg) 32px 64px
+  );
+  border-bottom: var(--md-hairline) solid var(--md-color-line);
+}
+
+.mark {
+  width: 72px;
+  height: 72px;
+  fill: var(--md-state-mowing);
+}
+
+.band-offline .mark {
+  fill: var(--md-state-offline);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-4);
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--md-space-8) var(--md-gutter)
+    calc(var(--md-space-8) + env(safe-area-inset-bottom, 0px));
+}
+
+.overline,
+.label {
+  margin: 0;
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-12);
+  letter-spacing: var(--md-label-tracking);
+  text-transform: uppercase;
+  color: var(--md-color-ink-muted);
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--md-font-size-28);
+  line-height: var(--md-line-32);
+  font-weight: var(--md-weight-semibold);
+}
+
+.lead {
+  margin: 0;
+  color: var(--md-color-ink-muted);
+  line-height: var(--md-line-24);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-2);
+}
+
+input {
+  min-height: var(--md-target);
+  padding: 0 var(--md-space-3);
+  border: var(--md-border-control) solid var(--md-color-line-strong);
+  border-radius: var(--md-radius-1);
+  background: var(--md-color-surface);
+  color: var(--md-color-ink);
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-16);
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--md-color-focus);
+  outline-offset: 2px;
+}
+
+input[aria-invalid='true'] {
+  border-color: var(--md-state-error);
+}
+
+.hint {
+  font-size: var(--md-font-size-13);
+  color: var(--md-color-ink-muted);
+}
+
+.message {
+  margin: 0;
+  padding: var(--md-space-3);
+  border-left: 3px solid var(--md-state-error);
+  background: var(--md-state-error-bg);
+  font-size: var(--md-font-size-14);
+  line-height: var(--md-line-20);
+}
+
+.message[data-tone='warning'] {
+  border-left-color: var(--md-state-paused);
+  background: var(--md-state-paused-bg);
+}
+
+.server code {
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-14);
+  word-break: break-all;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-2);
+}
+
+button {
+  min-height: var(--md-target-command);
+  border-radius: var(--md-radius-2);
+  font: inherit;
+  font-weight: var(--md-weight-semibold);
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--md-color-ink);
+  color: var(--md-color-ink-inverse);
+}
+
+.primary:disabled {
+  opacity: 0.6;
+}
+
+.secondary {
+  border: var(--md-border-control) solid var(--md-color-line-strong);
+  background: transparent;
+  color: var(--md-color-ink);
+}

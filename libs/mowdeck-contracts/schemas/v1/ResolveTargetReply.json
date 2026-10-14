@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "TargetMower": {
+      "description": "One mower of a resolved target with the place of its site.",
+      "properties": {
+        "latitude": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latitude"
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Longitude"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "site_id": {
+          "format": "uuid",
+          "title": "Site Id",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "IANA name of the site.",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Timezone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mower_id",
+        "name",
+        "site_id",
+        "timezone"
+      ],
+      "title": "TargetMower",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`ResolveTargetRequest`.\n\n``found`` is False when the target does not exist in the account. ``timezone`` is the\ntarget's own time zone: the mower's site, the group's site, or for a cross-site group the\naccount's default site.",
+  "properties": {
+    "found": {
+      "title": "Found",
+      "type": "boolean"
+    },
+    "mowers": {
+      "items": {
+        "$ref": "#/$defs/TargetMower"
+      },
+      "title": "Mowers",
+      "type": "array"
+    },
+    "timezone": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timezone"
+    }
+  },
+  "required": [
+    "found"
+  ],
+  "title": "ResolveTargetReply",
+  "type": "object"
+}

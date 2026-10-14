@@ -1,0 +1,12 @@
+# Changes here will be overwritten by Copier; do not edit by hand.
+_src_path: templates/service
+description: 'Accounts, users, roles, sessions and tokens: who is who and who may
+    do what.'
+http_port: 8000
+needs_db: true
+package_name: identity
+permissions:
+    audit.view: View the audit log of the account
+    billing.manage: Manage the subscription and payment of the account
+    users.manage: Manage users, roles and API tokens of the account
+service_name: identity

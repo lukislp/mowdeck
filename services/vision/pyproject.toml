@@ -1,0 +1,54 @@
+[project]
+name = "vision"
+version = "0.1.0"
+description = "AI assist for stuck mowers: camera image and map context to a vision model, a proposed maneuver that a user approves, executed through the drive channel."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "AGPL-3.0-only"
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "mowdeck-auth",
+  "mowdeck-authz[fastapi]",
+  "mowdeck-contracts",
+  # Geometry (local frame, polygons), the tiny test image and Pillow (extra photo) for the
+  # brightness of camera frames (dark frame: switch the mower's light on).
+  "mowdeck-control[photo]",
+  "mowdeck-service-kit[db]",
+  "alembic>=1.16.0",
+  # AES-GCM for the users' provider keys at rest.
+  "cryptography>=44.0.0",
+  # One client for every vision model family (Anthropic, OpenAI, Gemini, Mistral, Ollama,
+  # OpenAI-compatible endpoints). Imported lazily: the fake provider and the tests need it not.
+  "litellm>=1.100.0,<2",
+  # multipart/form-data uploads of camera snapshots.
+  "python-multipart>=0.0.20",
+]
+
+[project.optional-dependencies]
+# The capture worker (python -m vision.capture, ADR 0035): headless Chromium with the Agora Web
+# SDK for still frames of a live camera. Only the image built with WITH_CAPTURE=true has it.
+capture = ["playwright==1.63.0"]
+
+[project.scripts]
+vision = "vision.main:main"
+vision-capture = "vision.capture.app:main"
+vision-migrate = "vision.adapters.db.migrate:main"
+
+[tool.uv.sources]
+mowdeck-auth = { workspace = true }
+mowdeck-authz = { workspace = true }
+mowdeck-contracts = { workspace = true }
+mowdeck-control = { workspace = true }
+mowdeck-service-kit = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vision"]

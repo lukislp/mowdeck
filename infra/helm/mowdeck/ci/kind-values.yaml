@@ -1,0 +1,30 @@
+# Values of the kind install test (infra/helm/kind-test.sh, .github/workflows/helm-kind.yml), on
+# top of values-homelab.yaml: placeholder secrets, plain HTTP through a port-forward and the
+# development settings the Phase 1 acceptance test expects from the Compose example file.
+# Not usable for any real installation.
+secrets:
+  OPENFGA_AUTHN_PRESHARED_KEYS: kind-placeholder-openfga-key
+  IDENTITY_KEY_ENCRYPTION_KEY: a2luZC1wbGFjZWhvbGRlci1rZXktbm90LXNlY3JldDA=
+  SERVICE_DB_PASSWORD: kind-placeholder-db-password
+config:
+  MOWDECK_ENVIRONMENT: dev
+  IDENTITY_REFRESH_COOKIE_SECURE: "false"
+  MOWDECK_SIM_TIME_SCALE: "30"
+  NOTIFICATIONS_MOWING_MIN_SECONDS: "10"
+  SCHEDULER_WEATHER_PROVIDER: static
+ingress:
+  className: traefik
+  host: ""
+image:
+  # Images built locally and loaded into the kind node (never pulled).
+  pullPolicy: Never
+postgresql:
+  cloudnativepg:
+    storage:
+      size: 1Gi
+nats:
+  config:
+    jetstream:
+      fileStore:
+        pvc:
+          size: 3Gi

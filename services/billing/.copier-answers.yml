@@ -1,0 +1,10 @@
+# Changes here will be overwritten by Copier; do not edit by hand.
+_src_path: templates/service
+description: 'Subscriptions and payments: checkout, customer portal and provider webhooks
+    that set the account plan in Entitlements.'
+http_port: 8000
+needs_db: true
+package_name: billing
+permissions:
+    billing.view: View the subscription of the account
+service_name: billing

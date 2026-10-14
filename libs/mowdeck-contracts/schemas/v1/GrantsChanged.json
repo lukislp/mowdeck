@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``identity.grants.changed``: drop cached decisions of these subjects.\n\n``all_subjects`` asks consumers to drop their whole cache (for example after a reconcile\nthat touched many subjects).",
+  "properties": {
+    "account_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Account Id"
+    },
+    "all_subjects": {
+      "default": false,
+      "title": "All Subjects",
+      "type": "boolean"
+    },
+    "subjects": {
+      "items": {
+        "maxLength": 64,
+        "pattern": "^(user|api_token):[0-9a-fA-F-]{36}$",
+        "type": "string"
+      },
+      "maxItems": 1000,
+      "title": "Subjects",
+      "type": "array"
+    }
+  },
+  "title": "GrantsChanged",
+  "type": "object"
+}

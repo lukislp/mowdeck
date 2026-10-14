@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "PlanStatus": {
+      "description": "Status of an account's plan.",
+      "enum": [
+        "active",
+        "trial",
+        "grace",
+        "expired"
+      ],
+      "title": "PlanStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``entitlements.plan.changed``: drop cached snapshots.\n\n``account_id`` names one account (manual assignment); ``all_accounts`` asks consumers to drop\nevery snapshot (a plan definition changed, or Entitlements restarted with other settings).",
+  "properties": {
+    "account_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Account Id"
+    },
+    "all_accounts": {
+      "default": false,
+      "title": "All Accounts",
+      "type": "boolean"
+    },
+    "plan": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Plan"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PlanStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "PlanChanged",
+  "type": "object"
+}

@@ -1,0 +1,103 @@
+{
+  "$defs": {
+    "DriveError": {
+      "description": "The error of a :class:`DriveStartReply`.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/DriveErrorCode"
+        },
+        "detail": {
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "DriveError",
+      "type": "object"
+    },
+    "DriveErrorCode": {
+      "description": "Why Fleet refused to start a drive session.",
+      "enum": [
+        "not_found",
+        "forbidden",
+        "busy",
+        "invalid"
+      ],
+      "title": "DriveErrorCode",
+      "type": "string"
+    },
+    "DriveSessionStarted": {
+      "description": "A drive session Fleet recorded.",
+      "properties": {
+        "account_id": {
+          "description": "The mower's account (the envelopes' account_id).",
+          "format": "uuid",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "expires_at": {
+          "description": "started_at plus max_seconds.",
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "session_id": {
+          "format": "uuid",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "mower_id",
+        "account_id",
+        "started_at",
+        "expires_at"
+      ],
+      "title": "DriveSessionStarted",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`DriveStartRequest`: exactly one of ``started`` or ``error``.",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DriveError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "started": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DriveSessionStarted"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "DriveStartReply",
+  "type": "object"
+}

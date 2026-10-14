@@ -1,0 +1,39 @@
+[project]
+name = "{{ service_name }}"
+version = "0.1.0"
+description = {{ description | tojson }}
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "AGPL-3.0-only"
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "mowdeck-contracts",
+{%- if needs_db %}
+  "mowdeck-service-kit[db]",
+  "alembic>=1.16.0",
+{%- else %}
+  "mowdeck-service-kit",
+{%- endif %}
+]
+
+[project.scripts]
+{{ service_name }} = "{{ package_name }}.main:main"
+{%- if needs_db %}
+{{ service_name }}-migrate = "{{ package_name }}.adapters.db.migrate:main"
+{%- endif %}
+
+[tool.uv.sources]
+mowdeck-contracts = { workspace = true }
+mowdeck-service-kit = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{{ package_name }}"]

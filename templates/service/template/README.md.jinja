@@ -1,0 +1,99 @@
+# {{ service_name }}
+
+{{ description }}
+
+Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates/service`; the layer rules and the definition of done are in `docs/dev/service-template.md`.
+
+## Purpose
+
+Describe what this service is responsible for, which data it owns and what it scales with.
+
+## Interfaces
+
+All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Traefik routes `/api/v1/{{ service_name }}` to this service.
+
+| Method | Path | Permission | Description |
+| --- | --- | --- | --- |
+| GET | `/api/v1/{{ service_name }}/ping` | `{{ first_permission }}` | Example endpoint: returns the service name, the time and the caller's account |
+| GET | `/healthz` | none | Liveness |
+| GET | `/readyz` | none | Readiness (bus{% if needs_db %}, database{% endif %}); 503 while shutting down |
+| GET | `/metrics` | none | Prometheus metrics |
+| GET | `/.well-known/mowdeck-module` | none | Module descriptor (permissions, events, UI areas) |
+
+Permissions defined by this service (module descriptor):
+
+| Permission | Description |
+| --- | --- |
+{%- for key, text in permission_map.items() %}
+| `{{ key }}` | {{ text }} |
+{%- endfor %}
+
+## Events
+
+| Direction | Subject | Payload |
+| --- | --- | --- |
+| consumed | none yet | add subscriptions in `adapters/bus/subscriptions.py` |
+| produced | none yet | publish with `publish_event` from `mowdeck_service_kit.bus` |
+
+## Settings
+
+All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `MOWDECK_<NAME>_FILE`). Service specific settings and changed defaults:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MOWDECK_SERVICE_NAME` | `{{ service_name }}` | Service name in logs, metrics and traces |
+| `MOWDECK_HTTP_PORT` | `{{ http_port }}` | HTTP port |
+{%- if needs_db %}
+| `MOWDECK_DATABASE_URL` | unset | PostgreSQL URL (usually `MOWDECK_DATABASE_URL_FILE`); the database is not used when unset |
+{%- endif %}
+
+## Layers
+
+| Package | Content | Rule |
+| --- | --- | --- |
+| `domain/` | models and rules | pure Python, no I/O, no framework imports |
+| `application/` | use cases and ports (`Protocol`s) | depends on `domain` and ports only |
+| `adapters/api/` | FastAPI routers | translate HTTP to use cases, check permissions |
+| `adapters/bus/` | NATS subscriptions and publishers | translate messages to use cases |
+{%- if needs_db %}
+| `adapters/db/` | SQLAlchemy engine, Alembic migrations | implement repository ports |
+{%- endif %}
+| `main.py` | wiring (`build_app`) and `main()` | the only place that knows every layer |
+
+## Local start
+
+```bash
+uv sync
+docker compose -f infra/compose/docker-compose.yml up -d --wait nats{% if needs_db %} postgres{% endif %}
+{%- if needs_db %}
+MOWDECK_DATABASE_URL=postgresql://{{ package_name }}:<password>@127.0.0.1:5432/{{ package_name }} \
+  uv run python -m {{ package_name }}.adapters.db.migrate
+{%- endif %}
+MOWDECK_ENVIRONMENT=dev uv run python -m {{ package_name }}.main
+curl http://127.0.0.1:{{ http_port }}/readyz
+```
+
+Container image (build context is the repository root):
+
+```bash
+docker build -f services/{{ service_name }}/Dockerfile -t mowdeck/{{ service_name }}:dev .
+```
+
+The Compose block is in `compose.snippet.yml`; for Kubernetes add a template to the umbrella chart `infra/helm/mowdeck` (see `docs/ops/helm.md`).
+{%- if needs_db %}
+
+## Migrations
+
+Migrations run as a separate step before the service starts (Compose: `{{ service_name }}-migrate`, Helm: a Job), never inside the service process. They must stay backward compatible for rolling updates.
+
+```bash
+uv run alembic -c services/{{ service_name }}/alembic.ini revision -m "add table"   # new revision
+uv run python -m {{ package_name }}.adapters.db.migrate                            # upgrade head
+```
+{%- endif %}
+
+## Tests
+
+```bash
+uv run pytest services/{{ service_name }} --cov={{ package_name }}
+```

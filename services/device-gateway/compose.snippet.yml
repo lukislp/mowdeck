@@ -1,0 +1,46 @@
+# Compose block for device-gateway, as used in infra/compose/docker-compose.yml.
+# Generated from templates/service and extended with the gateway settings.
+services:
+  device-gateway:
+    image: mowdeck/device-gateway:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/device-gateway/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_SHARD_INDEX: "0"
+      MOWDECK_SHARD_COUNT: "1"
+      # Development only: seeds the registry until Fleet exists (see .env.example).
+      MOWDECK_BOOTSTRAP_MOWERS: ${MOWDECK_BOOTSTRAP_MOWERS:-[]}
+      MOWDECK_SIM_TIME_SCALE: ${MOWDECK_SIM_TIME_SCALE:-1}
+      MOWDECK_TELEMETRY_HEARTBEAT_SECONDS: ${MOWDECK_TELEMETRY_HEARTBEAT_SECONDS:-10}
+      # Photos of real cameras through the capture worker (ADR 0035; empty: off).
+      MOWDECK_CAPTURE_URL: ${GATEWAY_CAPTURE_URL:-}
+      MOWDECK_CAPTURE_TOKEN: ${CAPTURE_TOKEN:-}
+      MOWDECK_CAPTURE_TIMEOUT_SECONDS: ${CAPTURE_TIMEOUT_SECONDS:-20}
+      MOWDECK_PHOTO_TIMEOUT_SECONDS: ${GATEWAY_PHOTO_TIMEOUT_SECONDS:-30}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.device-gateway.rule=PathPrefix(`/api/v1/device-gateway`)
+      - traefik.http.routers.device-gateway.entrypoints=web
+      - traefik.http.services.device-gateway.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks: [mowdeck]

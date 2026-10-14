@@ -1,0 +1,261 @@
+# Shared libraries
+
+The libraries under `libs/` are independent Python packages in the uv workspace, Apache-2.0 except `mowdeck-control-mammotion` (GPL-3.0, [ADR 0011](../adr/0011-gpl-package-for-pymammotion-adapter.md)). Services depend on them with `{ workspace = true }` sources. Each library has its own README with the full reference; this page is the overview.
+
+| Library | Status | Purpose |
+| --- | --- | --- |
+| `mowdeck-contracts` | 0.1.0 | API and event formats as Pydantic v2 models, NATS subjects, stream definitions, JSON Schemas |
+| `mowdeck-service-kit` | 0.1.0 | Service skeleton: settings, logging, correlation ids, problem+json errors, health, metrics, module descriptor, event bus, tenancy, test utilities |
+| `mowdeck-control` | 0.1.0 | Mower control without the platform: `MowerConnection` adapter interface, `MowerController` with the safety rules, simulated mower, native job translation, demo CLI |
+| `mowdeck-authz` | 0.1.0 | Authorization: one question answered by OpenFGA, fail closed, decision cache, tuple writer for Identity and Fleet, in-memory fake that evaluates the real model, FastAPI dependencies |
+| `mowdeck-auth` | 0.1.0 | Access tokens: EdDSA JWT verification against Identity's cached JWKS, the kit's principal resolver, token issuing, test keys and a fake JWKS endpoint |
+| `mowdeck-control-mammotion` (GPL-3.0) | 0.1.0 | Mammotion adapter on PyMammotion 0.10.9: `cloud` and `ble_bridge` connections, owner test script |
+| `mowdeck-ui` | 0.1.0 | Design system of the web app, a pnpm package (`@mowdeck/ui`) rather than a uv package: design tokens, Svelte 5 components, the frontend lint rules and the contrast check; reference in `libs/mowdeck-ui/README.md` and [Web app](web-app.md) |
+| `mowdeck-patterns` | 0.1.0 | Mowing patterns as plug-ins (entry point group `mowdeck.patterns`), the validation chain, chains, coverage and gaps, preview; pure computation on Shapely, reference in `libs/mowdeck-patterns/README.md` ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)) |
+
+## mowdeck-contracts
+
+No I/O, only `pydantic`. Everything is versioned under `mowdeck_contracts.v1`:
+
+- `envelopes`: `CommandEnvelope` (command id, expiry, priority), `CommandResult`, `EventEnvelope[Payload]`.
+- `mower`: `MowerState` telemetry (its `position_source` says where the position comes from: `rtk`, `gnss` without an RTK fix, `dock` for the charging station while docked, `unknown`) and the commands `StartMow`, `PauseMow`, `ResumeMow`, `ReturnToDock`, `EmergencyStop`, `SetBladeHeight`, `SetSpeed`, `ManualDrive`.
+- `capabilities`: `MowerCapabilities` (native patterns, manual drive, blades while driving, custom paths, camera access, RTK sources, blade height range, minimum and maximum speed, connection kinds).
+- `maps`: `MowerMap` with areas, no-go zones, obstacles, paths and dock in local metres plus a `GeoReference` for WGS84.
+- `fleet`: `MowerRegistration` (mower, account, name, connection kind and options), `MowerListRequest` / `MowerListReply` for `fleet.mowers.list`, `MowerConnectionEvent` for `mower.connected` and `mower.disconnected`.
+- `commands`: Fleet's command API, `CommandRequest`, `CommandAccepted`, `CommandView` with `CommandState`, `BulkCommandAccepted` with one `BulkCommandItem` per visible mower.
+- `notifications`: `NotificationSent` (payload of `notifications.sent`), `NotificationKind`, `NotificationSeverity` and `WebPushPayload`, the JSON a service worker receives ([ADR 0022](../adr/0022-notifications-rules-and-delivery.md)).
+- `principal`: `Principal` mirrors the claims of the Identity access token.
+- `module`: `ModuleDescriptor`, served by every service at `/.well-known/mowdeck-module`.
+- `problem`: RFC 9457 `ProblemDetails`.
+- `spot`: `SpotMowPlan` (segments as encoded polylines, SHA-256 `plan_hash`, optional `native` job) for `StartMow.spot_plan`, `encode_polyline` / `decode_polyline` ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)).
+- `positions`: `PositionTrackRequest` / `PositionTrackReply` for the track query `tracks.positions.query` (Telemetry).
+- `subjects`: `command_subject(id)`, `telemetry_subject(id)`, `event_subject(domain, name)`, wildcards, the request subject `FLEET_MOWERS_LIST` and the streams `COMMANDS`, `TELEMETRY`, `EVENTS`.
+
+```python
+from uuid import uuid4
+from mowdeck_contracts.v1 import CommandEnvelope, EmergencyStop, PrincipalKind, PrincipalRef
+from mowdeck_contracts.v1.subjects import command_subject
+
+stop = CommandEnvelope.create(
+    mower_id=uuid4(),
+    account_id=uuid4(),
+    issued_by=PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER),
+    command=EmergencyStop(),
+)
+assert stop.priority == "emergency"
+subject = command_subject(stop.mower_id)  # "command.mower.<id>"
+```
+
+After changing a model, regenerate the committed JSON Schemas (a test fails otherwise):
+
+```bash
+uv run python -m mowdeck_contracts.schemas libs/mowdeck-contracts/schemas
+```
+
+The envelope, subject and versioning rules are recorded in [ADR 0009](../adr/0009-command-and-event-envelopes.md).
+
+## mowdeck-patterns
+
+Mowing patterns as plug-ins and the route validation chain, pure computation on Shapely (no network, no database). A pattern is a class with `key`, `name`, `settings_schema()` and `compute(area, mower, settings)`, registered through the entry point group `mowdeck.patterns`; `plan()` computes a chain and runs the validation chain (inside the area minus the safety margin, no blades on through zones or holes, blades off on transfers, turning radius):
+
+```python
+from mowdeck_patterns import Area, MowerSpec, plan, preview
+
+area = Area.of(
+    [(0, 0), (12, 0), (12, 8), (0, 8)], no_go_zones=[[(9, 5.5), (12, 5.5), (12, 8), (9, 8)]]
+)
+result = plan(area, MowerSpec(cutting_width_m=0.4), [("edge_only", {"laps": 2}), "diagonal"])
+spot = result.to_spot_plan()  # StartMow(spot_plan=spot)
+```
+
+Built-in patterns, coverage and gaps, and how to add a pattern: `libs/mowdeck-patterns/README.md`. The Planner service (`services/planner`) serves it over HTTP ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)).
+
+## mowdeck-service-kit
+
+A service is one `create_app` call:
+
+```python
+from fastapi import APIRouter
+from mowdeck_contracts.v1 import ModuleDescriptor, PermissionDef
+from mowdeck_service_kit import CurrentAccountId, ServiceSettings, create_app, run
+
+router = APIRouter()
+
+
+@router.get("/whoami")
+async def whoami(account_id: CurrentAccountId) -> dict[str, str]:
+    return {"account_id": str(account_id)}
+
+
+settings = ServiceSettings.from_env()  # MOWDECK_* variables, *_FILE secrets
+descriptor = ModuleDescriptor(
+    name=settings.service_name,
+    version="0.1.0",
+    permissions=[PermissionDef(key="mower.view", description="View mowers")],
+)
+app = create_app(settings, descriptor, routers=[router])
+run(app, settings)
+```
+
+What every service gets from it:
+
+| Concern | Provided by the kit |
+| --- | --- |
+| Configuration | `ServiceSettings` from `MOWDECK_*` variables, any value also from `MOWDECK_<NAME>_FILE` |
+| Logging | structlog JSON lines on stdout (console in `dev`) with service, level, timestamp, correlation id |
+| Correlation | `X-Correlation-ID` (or `X-Request-ID`) read, generated if missing, echoed, logged, sent on bus messages |
+| Errors | `ServiceError` hierarchy and handlers rendering `application/problem+json`; generic 500 without internals |
+| Operations | `/healthz`, `/readyz` (registered checks, 503 on failure or while draining), `/metrics`, `/.well-known/mowdeck-module` |
+| API | routers mounted under `/api/v1` (HTTP and WebSocket routes; the middlewares pass WebSocket scopes through), OpenAPI at `/api/v1/openapi.json` |
+| Event bus | `JetStreamBus` (streams ensured on connect, `Nats-Msg-Id` de-duplication, ack/nak/term), `InMemoryBus` for tests |
+| Tenancy | `CurrentPrincipal`, `CurrentAccountId`, `require_permission(...)` (delegates to a `PermissionChecker` on `app.state` when `mowdeck-authz` installs one); account id only from the verified principal |
+| Tracing | OpenTelemetry via OTLP/HTTP when `MOWDECK_OTEL_EXPORTER_OTLP_ENDPOINT` is set (extra `otel`) |
+| Database | async SQLAlchemy engine, readiness check and session dependency (extra `db`) |
+| Shutdown | readiness turns 503, `on_shutdown` hooks within the grace period, bus drained and closed |
+| Serving | `run(app, settings)` with uvicorn; extra uvicorn options (`ws_ping_interval`, `ws_max_size`, ...) and `server_class=` for a `uvicorn.Server` subclass that must act before uvicorn closes the connections (Realtime) |
+
+Tests use `mowdeck_service_kit.testing`: `make_test_app`, `make_principal`, `StaticPrincipalResolver` and `lifespan_client`. Every endpoint that touches account data needs a cross-tenant test; the kit README shows the pattern.
+
+Integration tests against a real NATS server run when `MOWDECK_TEST_NATS_URL` is set:
+
+```bash
+docker run -d --name mowdeck-test-nats -p 4222:4222 public.ecr.aws/docker/library/nats:2.15.0-alpine -js
+MOWDECK_TEST_NATS_URL=nats://127.0.0.1:4222 uv run pytest libs/mowdeck-service-kit
+docker rm -f mowdeck-test-nats
+```
+
+## mowdeck-control
+
+Mower control without the platform, usable from scripts and other projects. Depends only on `mowdeck-contracts`; never imports PyMammotion (that adapter lives in the GPL-3.0 package `mowdeck-control-mammotion`, see [ADR 0011](../adr/0011-gpl-package-for-pymammotion-adapter.md)). The design is recorded in [ADR 0012](../adr/0012-mower-control-interface-and-safety-rules.md).
+
+```mermaid
+flowchart LR
+    gw["Device-Gateway / script"] -->|CommandEnvelope| ctl["MowerController"]
+    ctl -->|CommandResult, MowerState| gw
+    ctl --> conn{{"MowerConnection"}}
+    conn --> sim["SimulatedMower"]
+    conn --> mam["mowdeck-control-mammotion (GPL-3.0)"]
+```
+
+| Part | Purpose |
+| --- | --- |
+| `MowerConnection`, `DriveSession` | adapter protocol: connect, capabilities, state and state stream, map, `execute` for job commands, drive sessions for the joystick |
+| `MowerController` | per mower: expiry, de-duplication by `command_id`, emergency stop before everything (also queued commands and drive sessions), serialized sends (a confirmation wait runs outside the queue and is superseded by the next job command, reported `accepted`), dead-man timer per `ManualDrive`, blade rules, capability and map checks, state forwarding |
+| `SimulatedMower` | deterministic simulator (`tick(dt)`, `run(interval)`): default map, stripe paths that avoid no-go zones, battery, charging, RTK hook, error injection, lift sensor |
+| registry | `register_connection`, `create_connection`; adapters from other packages via the entry point group `mowdeck.connections` |
+| `plan_to_native_job` | neutral request (areas, pattern, angle, spacing, border laps) to a native job, `UnsupportedPattern` otherwise |
+| `geo` | local metres to WGS84 and back, point in polygon |
+| `testing` | `ManualClock` and `ManualTimers` to test timing without sleeping |
+
+```python
+from mowdeck_control import MowerController, SimulatedMower
+
+mower = SimulatedMower()
+async with MowerController(mower, mower_id=mower.mower_id, on_state=publish) as controller:
+    result = await controller.handle(envelope)  # CommandEnvelope -> CommandResult
+```
+
+Try it from the command line:
+
+```bash
+uv run python -m mowdeck_control.demo --seconds 3 --interval 0.5 --time-scale 60
+```
+
+The library README covers the safety rules in detail, the simulator hooks and the checklist for writing a new adapter.
+
+## mowdeck-control-mammotion
+
+The real adapter for Mammotion mowers, **GPL-3.0-only** because it imports PyMammotion ([ADR 0011](../adr/0011-gpl-package-for-pymammotion-adapter.md)); transports, manual drive, secrets and pins are decided in [ADR 0019](../adr/0019-mammotion-adapter-transports.md). It registers two connection kinds through the entry point group `mowdeck.connections`, so the Device-Gateway uses them without code changes:
+
+| Kind | Class | Link | Manual drive |
+| --- | --- | --- | --- |
+| `cloud` | `MammotionCloudConnection` | Mammotion cloud (PyMammotion `MQTTTransport`), account login, mower by `device_name` or `iot_id` | no (cloud remote drive unverified) |
+| `ble_bridge` | `MammotionBleProxyConnection` (extra `esphome`) | ESPHome Bluetooth Proxy (`host`, `port`, `noise_psk`, `ble_address`), PyMammotion BLE only device | yes, `send_movement`; blades only with `allow_manual_blades` |
+
+Only `port.py` imports `pymammotion`; everything else uses the small `MammotionPort` protocol, and the tests use `FakeMammotionPort`, built from the real PyMammotion data classes. Pins: `pymammotion==0.10.9` exactly plus `packaging`; the `esphome` extra pins `aioesphomeapi`, `bleak-esphome`, `habluetooth` and `bluetooth-adapters` to PyMammotion's lock file.
+
+```python
+from mowdeck_contracts.v1 import ConnectionKind
+from mowdeck_control import ConnectionConfig, MowerController, create_connection
+
+connection = create_connection(
+    ConnectionKind.CLOUD,
+    ConnectionConfig(
+        mower_id=mower_id,
+        account_id=account_id,
+        options={
+            "account": "second@example.com",
+            "credential_ref": "env:MAMMOTION_PASSWORD",
+            "device_name": "Luba-VP...",
+        },
+    ),
+)
+async with MowerController(connection, mower_id=mower_id) as controller:
+    result = await controller.handle(envelope)
+```
+
+The owner script `libs/mowdeck-control-mammotion/scripts/try_real_mower.py` runs the adapter against the real mower (or `--dry-run` against the fake); see "Testing with a real mower" in `libs/mowdeck-control-mammotion/README.md`.
+
+## mowdeck-authz
+
+Services ask one question: may this subject do this on that object. The model is `infra/openfga/model.fga`; its design and the reasons are in [ADR 0014](../adr/0014-authorization-model-and-tuple-ownership.md) and the [design document](design-identity-authz.md).
+
+```python
+from mowdeck_authz import OpenFgaAuthorizer, Relation, mower, principal_subject
+
+authz = OpenFgaAuthorizer.from_env(registry=app.state.metrics_registry)  # MOWDECK_OPENFGA_*
+allowed = await authz.check(principal_subject(principal), Relation.CAN_CONTROL, mower(mower_id))
+```
+
+| Part | Purpose |
+| --- | --- |
+| `Subject`, `ObjectRef`, `user()`, `api_token()`, `account()`, `site()`, `group()`, `mower()` | OpenFGA string forms; `principal_subject(principal)` maps users and sub-users to `user:`, API tokens to `api_token:`; service principals have no object rights |
+| `Authorizer` | `check`, `check_many`, `list_objects`; every implementation answers `False` when it cannot decide |
+| `OpenFgaAuthorizer` | store found by name, latest model pinned at connect (lazy), `BatchCheck` for `check_many`, `current_time` in every context, 5 s decision cache with `invalidate()` and `invalidate_subject()`, Prometheus counters, `ping()` for readiness |
+| `TupleWriter` | for Identity and Fleet only: ownership guard, idempotent writes (`on_duplicate`/`on_missing: ignore`), `replace_subject_grants` writes the diff, audit hook, cache invalidation |
+| `bootstrap_model()` | create the store and write the model only when it changed (also `python -m mowdeck_authz bootstrap`) |
+| `testing` | `InMemoryAuthorizer` (evaluates the packaged model, validates tuples, is also a tuple backend), `AllowAll`, `DenyAll`, `ManualClock` |
+| `fastapi` | `require(relation, resolver)` (403), `require_or_not_found(...)` (404 unless visible), `authorize(request, relation, obj)` (same answers for a relation chosen at runtime, e.g. per command kind), `install_authz(app, authorizer, token_prefilter=...)`, `path_object()`, `principal_account()` |
+| `events` | `subscribe_cache_invalidation(bus, authorizer)`: drop cached decisions on `identity.grants.changed` |
+
+```python
+from mowdeck_authz import Relation
+from mowdeck_authz.fastapi import install_authz, path_object, require_or_not_found
+
+CanControl = Annotated[
+    Principal, Depends(require_or_not_found(Relation.CAN_CONTROL, path_object("mower", "mower_id")))
+]
+install_authz(app, authz)  # also makes the kit's require_permission() ask OpenFGA
+```
+
+Integration tests against a real OpenFGA run when `MOWDECK_TEST_OPENFGA_URL` is set:
+
+```bash
+docker run -d --name mowdeck-test-openfga -p 18080:8080 ghcr.io/openfga/openfga:v1.22.0 run   --datastore-engine memory --authn-method preshared --authn-preshared-keys test-key
+MOWDECK_TEST_OPENFGA_URL=http://127.0.0.1:18080 MOWDECK_TEST_OPENFGA_TOKEN=test-key   uv run pytest libs/mowdeck-authz
+docker rm -f mowdeck-test-openfga
+```
+
+Model tests: `uv run poe fga-test`. After editing `model.fga`, regenerate the packaged JSON with `uv run poe fga-json`.
+
+## mowdeck-auth
+
+Every service verifies Identity's access tokens locally; nothing calls Identity per request ([ADR 0015](../adr/0015-tokens-sessions-and-key-rotation.md)).
+
+```python
+from mowdeck_auth import principal_resolver_from_env
+
+app = create_app(
+    settings, DESCRIPTOR, routers=[router], principal_resolver=principal_resolver_from_env()
+)
+```
+
+| Part | Purpose |
+| --- | --- |
+| `JwtVerifier` | allow list `EdDSA` only (no `none`, no HMAC), `typ: at+jwt`, known `kid` with an Ed25519 key, `iss`, `aud`, `exp`, `nbf`, `iat` with 30 s leeway, claims to `Principal`; `verify_token()` also returns `exp` (`VerifiedToken`) for long-lived connections such as Realtime's WebSockets |
+| `JwksCache` | async JWKS fetch, 5 minute cache, one refresh on an unknown `kid`, at most one fetch per 30 s, stale keys for at most an hour while Identity is down |
+| `JwtPrincipalResolver` | the kit's resolver: bearer token to principal, 401 problem details with one generic message (the reason is logged) |
+| `TokenIssuer`, `SigningKey` | signing with Ed25519, `kid` = RFC 7638 thumbprint (Identity and tests) |
+| `testing.TestKeys` | a key, `mint(principal)`, a fake JWKS endpoint on `httpx.MockTransport`, ready verifiers and resolvers |
+
+Settings: `MOWDECK_AUTH_JWKS_URL` (Compose: `http://identity:8000/.well-known/jwks.json`), `MOWDECK_AUTH_ISSUER`, `MOWDECK_AUTH_AUDIENCE`, `MOWDECK_AUTH_LEEWAY_SECONDS`, `MOWDECK_AUTH_JWKS_CACHE_SECONDS`, `MOWDECK_AUTH_JWKS_REFRESH_COOLDOWN_SECONDS`. Full reference: `libs/mowdeck-auth/README.md`.

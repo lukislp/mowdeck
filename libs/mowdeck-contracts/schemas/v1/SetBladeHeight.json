@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Set the cutting height.",
+  "properties": {
+    "kind": {
+      "const": "set_blade_height",
+      "default": "set_blade_height",
+      "title": "Kind",
+      "type": "string"
+    },
+    "mm": {
+      "description": "Blade height in millimetres.",
+      "maximum": 120,
+      "minimum": 10,
+      "title": "Mm",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "mm"
+  ],
+  "title": "SetBladeHeight",
+  "type": "object"
+}

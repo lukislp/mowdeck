@@ -1,0 +1,22 @@
+"""Module descriptor of {{ service_name }}, served at ``/.well-known/mowdeck-module``.
+
+Identity, Entitlements and the web app read it at startup: permissions declared here appear in
+role management without changes elsewhere.
+"""
+
+from mowdeck_contracts.v1 import ModuleDescriptor, PermissionDef
+
+from {{ package_name }} import __version__
+
+VIEW_PERMISSION = "{{ first_permission }}"
+"""Permission that protects the example endpoint."""
+
+DESCRIPTOR = ModuleDescriptor(
+    name="{{ service_name }}",
+    version=__version__,
+    permissions=[
+{%- for key, text in permission_map.items() %}
+        PermissionDef(key="{{ key }}", description={{ text | tojson }}),
+{%- endfor %}
+    ],
+)

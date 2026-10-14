@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A WGS84 position.",
+  "properties": {
+    "alt": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Altitude in metres, if known.",
+      "title": "Alt"
+    },
+    "heading": {
+      "anyOf": [
+        {
+          "exclusiveMaximum": 360,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Heading in degrees, 0 = north, clockwise.",
+      "title": "Heading"
+    },
+    "lat": {
+      "description": "Latitude in degrees.",
+      "maximum": 90,
+      "minimum": -90,
+      "title": "Lat",
+      "type": "number"
+    },
+    "lon": {
+      "description": "Longitude in degrees.",
+      "maximum": 180,
+      "minimum": -180,
+      "title": "Lon",
+      "type": "number"
+    }
+  },
+  "required": [
+    "lat",
+    "lon"
+  ],
+  "title": "GeoPosition",
+  "type": "object"
+}

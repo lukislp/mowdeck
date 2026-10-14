@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "PlanLimits": {
+      "description": "The limits of a plan; ``None`` means unlimited.",
+      "properties": {
+        "history_days": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "History Days"
+        },
+        "max_groups": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Groups"
+        },
+        "max_mowers": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Mowers"
+        },
+        "max_schedules": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Schedules"
+        },
+        "max_sites": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Sites"
+        },
+        "max_users": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Users"
+        }
+      },
+      "title": "PlanLimits",
+      "type": "object"
+    },
+    "PlanStatus": {
+      "description": "Status of an account's plan.",
+      "enum": [
+        "active",
+        "trial",
+        "grace",
+        "expired"
+      ],
+      "title": "PlanStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The resolved plan of one account at one moment: everything a decision needs.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "billing_enabled": {
+      "default": false,
+      "title": "Billing Enabled",
+      "type": "boolean"
+    },
+    "features": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 500,
+      "title": "Features",
+      "type": "array"
+    },
+    "limits": {
+      "$ref": "#/$defs/PlanLimits"
+    },
+    "plan": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Plan",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/PlanStatus",
+      "default": "active"
+    }
+  },
+  "required": [
+    "account_id",
+    "plan"
+  ],
+  "title": "EntitlementSnapshot",
+  "type": "object"
+}

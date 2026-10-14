@@ -1,0 +1,55 @@
+"""HTTP API of {{ service_name }}: operational endpoints and the permission check."""
+
+from mowdeck_contracts.v1 import MODULE_DESCRIPTOR_PATH
+from mowdeck_service_kit.bus import InMemoryBus
+from mowdeck_service_kit.testing import StaticPrincipalResolver, lifespan_client, make_principal
+
+from {{ package_name }}.main import build_app
+from {{ package_name }}.module import DESCRIPTOR, VIEW_PERMISSION
+from {{ package_name }}.settings import Settings
+
+PING = "/api/v1/{{ service_name }}/ping"
+
+
+def _settings() -> Settings:
+    # model_validate ignores the environment, so the test behaves the same everywhere.
+    return Settings.model_validate({"environment": "test", "log_format": "console"})
+
+
+async def test_health_and_module_descriptor() -> None:
+    app = build_app(_settings(), bus=InMemoryBus())
+    async with lifespan_client(app) as client:
+        assert (await client.get("/healthz")).json() == {"status": "ok"}
+        assert (await client.get("/readyz")).status_code == 200
+        descriptor = (await client.get(MODULE_DESCRIPTOR_PATH)).json()
+    assert descriptor["name"] == "{{ service_name }}"
+    assert VIEW_PERMISSION in {p["key"] for p in descriptor["permissions"]}
+    assert descriptor == DESCRIPTOR.model_dump(mode="json")
+
+
+async def test_ping_requires_a_principal() -> None:
+    app = build_app(_settings(), bus=InMemoryBus())  # default resolver denies everything
+    async with lifespan_client(app) as client:
+        response = await client.get(PING)
+    assert response.status_code == 401
+    assert response.headers["content-type"].startswith("application/problem+json")
+
+
+async def test_ping_requires_the_permission() -> None:
+    resolver = StaticPrincipalResolver(make_principal(permissions=[]))
+    app = build_app(_settings(), bus=InMemoryBus(), principal_resolver=resolver)
+    async with lifespan_client(app) as client:
+        assert (await client.get(PING)).status_code == 403
+
+
+async def test_ping_answers_for_the_callers_account() -> None:
+    principal = make_principal(permissions=[VIEW_PERMISSION])
+    app = build_app(
+        _settings(), bus=InMemoryBus(), principal_resolver=StaticPrincipalResolver(principal)
+    )
+    async with lifespan_client(app) as client:
+        response = await client.get(PING)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["service"] == "{{ service_name }}"
+    assert body["account_id"] == str(principal.account_id)

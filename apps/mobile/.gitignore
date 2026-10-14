@@ -1,0 +1,11 @@
+# Built first-launch and offline pages (pnpm --filter mobile build), copied into the platforms
+# by `cap sync`.
+www/
+# Signing material never enters the repository.
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+# Build outputs of the scripts
+build/

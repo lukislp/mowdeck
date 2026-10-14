@@ -1,0 +1,202 @@
+# telemetry
+
+Latest state, history, position track and command timeline of every mower. Telemetry consumes what the Device-Gateway publishes, keeps it in PostgreSQL and serves it to clients; it never talks to a mower.
+
+Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates/service`; layer rules in `docs/dev/service-template.md`. Design: [Design: fleet, telemetry, realtime](../../docs/dev/design-fleet-telemetry-realtime.md), section 2. Decision: [ADR 0017](../../docs/adr/0017-telemetry-storage-and-retention.md) (plain tables now, heartbeat de-duplication, retention under an advisory lock, directory from Fleet).
+
+## Purpose
+
+- **Latest state** per mower (the full `MowerState`), guarded so an older `observed_at` never overwrites a newer one.
+- **History** of state changes for charts. The Device-Gateway republishes an unchanged state every 10 s; an unchanged heartbeat is stored at most once per `MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS` (default 300), a change always. Downsampling with `date_bin` on request.
+- **Position track** (with RTK fix and source, Wi-Fi and mobile signal, blade state), one row per distinct position.
+- **Heatmaps** over the mower's map: cut share and missed areas, RTK fix quality, Wi-Fi and mobile signal per cell (see [Heatmaps](#heatmaps)).
+- **Command timeline**: every status transition from `command.result.mower.*` (Fleet stays the authority for the command record).
+- **Map and capabilities** of every mower as the Device-Gateway last read them (snapshots from the stream `DEVICE`), for the web app's area picker and setpoint ranges.
+- **Mower directory** (`mower_id` to `account_id`) from Fleet's events and a startup request, because command results carry no account id.
+- **Health history**: blade hours (since the last blade change, too), mowing hours, distance, battery cycles, charge sessions and error counts per mower, as running totals and per UTC day, plus a reminder event when the blade hours cross a threshold (see [Health history](#health-history)).
+- **Retention** of history, positions and the timeline.
+
+## Interfaces
+
+All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`); Traefik routes `/api/v1/telemetry` to this service. The account is always the verified token's `acc`; every row is read with that account filter. Mower routes answer 404 for a mower the caller cannot see (other accounts, unknown ids), so existence never leaks.
+
+| Method | Path | Required relation | Notes |
+| --- | --- | --- | --- |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/state` | `can_view` on the mower (hide) | latest `MowerState` with `received_at` and `stale`; 404 problem `no-telemetry-yet` ("no telemetry yet") when the mower is visible but silent |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/history` | `can_view` (hide) | `?from=&to=&step=`; without `step` the stored rows, with `step` (`5s`, `1m`, `1h`, `1d`) one point per bin: last activity and RTK fix, battery mean, min and max, charging, samples, last position |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/positions` | `can_view` (hide) | `?from=&to=&limit=` the newest `limit` positions, oldest first |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/commands` | `can_view` (hide) | `?limit=` newest first: `command_id`, `status`, `reason`, `at` |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/map` | `can_view` (hide) | the stored `MowerMap` (local metres plus geo reference) with `observed_at` and `received_at`; `ETag` is the map revision plus a short content hash (the mower's revision does not change when the dock or the geo reference arrive) or, without a revision, the content hash alone; `If-None-Match` with it answers 304; 404 problem `no-map-yet` before the gateway published a map |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/capabilities` | `can_view` (hide) | the stored `MowerCapabilities` (blade height range, maximum speed, ...); 404 problem `no-capabilities-yet` before the first report |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/heatmap` | `can_view` (hide) | `?layer=coverage|rtk|wifi|mnet&from=&to=&cell=` (`cell` 0.5, 1 or 2 metres, default 1; default range the last 7 days, same range limit as the history): `mower_id`, `layer`, `cell_m` (larger than asked when coarsened), `from`, `to`, `reference` (the map's geo reference), `cells` (`x`, `y` cell indexes in the map's local frame, `value`, `n`), `legend` (`kind` `ratio`, `fix` or `dbm`, `min`, `max`), `gaps` (`polygon` in local metres, `area_m2`; coverage only), `samples`, `truncated`; 404 problem `no-map-yet` without a map, 422 for another `cell` or `layer` (see [Heatmaps](#heatmaps)) |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/health` | `can_view` (hide) | running totals: `since`, `blade_hours`, `blade_hours_since_change`, `blade_changed_at`, `blade_hours_threshold`, `device_blade_hours` and `device_blade_warn_hours` (the mower's own counter and threshold, null when it never sent them), `blade_source` (`device` when the mower's counter is known, else `telemetry`), `mowing_hours`, `distance_m`, `battery_cycles`, `charge_sessions`, `errors` (count per code), `updated_at`; 404 problem `no-telemetry-yet` when nothing was recorded |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/health/daily` | `can_view` (hide) | `?from=YYYY-MM-DD&to=YYYY-MM-DD` inclusive UTC days (default: the last 30 days ending today, at most 366, else 422); days without data are absent |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/battery` | `can_view` (hide) | `?from=&to=&step=` battery series from the history (same ranges, bins and limits): `at`, `battery_percent`, `battery_min`, `battery_max`, `charging` |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/health/blade-changes` | `can_view` (hide) | recorded blade changes, newest first (at most 100): `id`, `changed_at`, `note`, `changed_by` |
+| POST | `/api/v1/telemetry/mowers/{mower_id}/health/blade-reset` | `can_manage_mowers` on the mower (403 when only visible, 404 when hidden) | body `{"note": str or null (max 500)}`; records a blade change, restarts the blade hours since the change, re-arms the reminder; answers the new totals. Works before the first telemetry (the totals row is created with `since: null`) |
+| GET | `/api/v1/telemetry/accounts/me/mowers/states` | `can_view` per mower (`list_objects`, or the whole account) | latest state of every viewable mower of the caller's account, bounded by `MOWDECK_TELEMETRY_STATES_LIMIT` (`truncated`) |
+| GET | `/api/v1/telemetry/accounts/me/mowers/capabilities` | `can_view` per mower (`list_objects`, or the whole account) | stored capabilities of every viewable mower that reported them, bounded by `MOWDECK_TELEMETRY_STATES_LIMIT` (`truncated`) |
+| GET | `/api/v1/telemetry/reports/summary` | `can_view` per mower (`list_objects`, or the whole account) | `?from=YYYY-MM-DD&to=YYYY-MM-DD` (same UTC day rules as `/health/daily`) and optional repeated `mower_id` (invisible ids are left out silently): day totals of every viewable mower with data in the range in one call, grouped per mower (`items[].days[]` like `/health/daily` plus `jobs` and `online_hours`); at most 50 000 day rows (`truncated`). Telemetry does not know sites: the web app's reports page filters by Fleet's `site_id` |
+| GET | `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` | none | Operations (kit); readiness covers the bus, the subscriptions, the database and OpenFGA |
+
+`from` and `to` are ISO 8601 with a time zone (default: the last 24 hours). A range longer than `MOWDECK_TELEMETRY_QUERY_MAX_RANGE_DAYS`, a `from` after `to`, a malformed `step` or a `step` that needs more than `MOWDECK_TELEMETRY_QUERY_MAX_ROWS` bins answers 422; raw history and positions are cut at that many rows (`truncated: true`).
+
+Permission defined by this service (module descriptor): `telemetry.view`, an account key implied by `mower.view` (`implied_by`), so it appears in Identity's catalogue. The descriptor announces the web app's `ui_area` `/reports` (required permission `mower.view`). The routes check the computed `can_view` on the mower, not the token's `perms`, so a viewer of one group sees exactly that group's mowers.
+
+## Events and subjects
+
+| Direction | Subject | Consumer | Purpose |
+| --- | --- | --- | --- |
+| consumed | `telemetry.mower.*` (`MowerState`, stream `TELEMETRY`) | durable and queue group `telemetry-states` | latest, history, positions |
+| consumed | `command.result.mower.*` (`CommandResult`, stream `COMMANDS`) | durable and queue group `telemetry-results` | command timeline (account from the directory) |
+| consumed | `device.mower.>` (`MowerMapSnapshot`, `MowerCapabilitiesSnapshot`, stream `DEVICE`) | durable and queue group `telemetry-device` | newest map and capabilities per mower |
+| consumed | `event.mower.*` (`mower.registered|updated|removed`, stream `EVENTS`) | durable and queue group `telemetry-mowers` | mower directory; removal purges the mower's rows |
+| request | `fleet.mowers.list` (core NATS) | at startup, retried with backoff | seeds the directory |
+| answered | `tracks.positions.query` (core NATS, `PositionTrackRequest` / `PositionTrackReply`) | queue group `telemetry-track` | the position track of one mower of one account for a time range (at most 50 000 points, the range limit of the HTTP queries) as an encoded polyline, for the Planner's coverage and gaps ([ADR 0030](../../docs/adr/0030-mowing-patterns-and-planner.md)); an invalid range is answered with `error` |
+| produced | `event.telemetry.blade_hours.threshold` (`telemetry.blade_hours.threshold`, `BladeHoursThreshold`, stream `EVENTS`) | Notifications | the blade hours since the last blade change crossed `MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD`; published once per blade change, after the commit (a failed publish is logged, not retried) |
+
+Handler rules: malformed payloads, payloads whose subject names another mower and states of a foreign account are dropped with a warning (never redelivered). A command result for a mower missing from the directory is redelivered and dropped with a warning on the `MOWDECK_TELEMETRY_UNKNOWN_MOWER_ATTEMPTS`-th delivery. A snapshot whose account differs from the directory entry of its mower is dropped with a warning; an older snapshot never replaces a newer one. Manual drive frames (ten per second) produce command results whose correlation id starts with `drive:`; their `accepted` results are not stored, so they do not flood the timeline (rejected, failed and expired ones are).
+
+## Tables (PostgreSQL, Alembic)
+
+Every table carries `account_id`, taken from the message or the directory, never from a request.
+
+| Table | Key | Content |
+| --- | --- | --- |
+| `mower_directory` | `mower_id` | owning account (Fleet's events, startup seed) |
+| `mower_latest` | `mower_id` | the full state as JSONB, `observed_at`, `received_at`, history and position fingerprints |
+| `mower_history` | `(mower_id, observed_at)` | activity, battery, charging, RTK fix, connection, blade height, speed, error code; indexes `(mower_id, observed_at desc)`, `(account_id, observed_at desc)`, BRIN on `observed_at` |
+| `mower_positions` | `(mower_id, observed_at)` | lat, lon, alt, heading, RTK fix and source; `wifi_rssi` and `mnet_rssi` (dBm from `raw.wifi_rssi` / `raw.mnet_rssi`, null when not reported or not in `[-150, -1]`) and `blades_on` (`raw.blade_on` when reported, else activity `mowing`), all three nullable and null in rows from before migration `0007`; same indexes A standing mower (typically in its dock) still gets a row when its WLAN or mobile signal moves to another 5 dBm bucket or with each history heartbeat, so the signal heatmap has dock samples |
+| `command_timeline` | `(command_id, status)` | mower, status, reason, `at`; indexes `(mower_id, at desc)`, `(account_id, at desc)`, BRIN on `at` |
+| `mower_health` | `mower_id` | running health totals (`since`, blade and mowing seconds, distance, battery cycles, charge sessions, `errors` JSONB), blade seconds since the last change, `blade_changed_at`, `blade_threshold_notified`, the newest device blade counter (`device_blade_seconds`, `device_blade_warn_seconds`, nullable, migration `0006`), and the incremental cursor (`last_observed_at`, last activity, charging, blade flag, position, error code, `battery_armed`); index on `account_id`; migration `0004` |
+| `mower_health_daily` | `(mower_id, day)` | the same totals per UTC day, plus `jobs` (transitions into mowing, not from paused) and `online_seconds` (intervals whose start state was not offline); migrations `0004` and `0005` (the two report columns, 0 for older days) |
+| `blade_changes` | `id` | `mower_id`, `account_id`, `changed_at`, `note`, `changed_by` (subject); index `(mower_id, changed_at desc)`; migration `0004` |
+| `mower_snapshots` | `(mower_id, kind)` | `kind` `map` or `capabilities`, `account_id`, `observed_at`, `received_at`, `revision` (ETag), `body` JSONB; index on `account_id`; migration `0003`. One table for both kinds (the design proposed two); deleted with the mower |
+
+## Health history
+
+The state consumer advances the health totals in the same transaction as the latest row (no batch recompute). Rules (module `telemetry.domain.health`):
+
+- **Intervals**: the time between two consecutive states of a mower, `[previous.observed_at, current.observed_at)`, counts for the condition of the previous state. A gap longer than `MOWDECK_TELEMETRY_HEALTH_MAX_GAP_SECONDS` (default 120 s; the heartbeat is 10 s) counts nothing: the mower was silent.
+- **Blade hours** (heuristic): when the previous state's `raw` has a boolean `blade_on` (the simulator reports it), blades ran iff it was true; otherwise blades are assumed to run while the activity is `mowing`. Adapters without the flag therefore count transfer drives (activity `mowing`, blades off) as blade time.
+- **Mowing hours**: intervals whose previous state had activity `mowing`.
+- **Distance**: haversine metres between consecutive positions; a step longer than `MOWDECK_TELEMETRY_HEALTH_MAX_STEP_METERS` (default 25 m, RTK jumps) or across a gap longer than the maximum gap is left out.
+- **Battery cycles**: a drop below 20 % arms the counter, a rise above 80 % while armed counts one cycle (constants).
+- **Charge sessions**: transitions into charging (`charging` true or activity `charging`); a mower's first state counts as a transition when it charges.
+- **Errors**: one count per `error_code` (`unknown` without one) when the activity becomes `error` or the code changes while in `error`.
+- **Jobs** (for reports): a transition into `mowing` from anything but `mowing` or `paused` (a resume continues the job); a mower's first state counts when it mows.
+- **Online time** (availability in reports): intervals whose previous state was not `offline`; a gap longer than the maximum gap counts nothing.
+- **Days are UTC days**: Telemetry does not know the site's time zone. An interval crossing midnight UTC belongs wholly to the day it started; cycles, sessions and errors to the day of the state that shows them.
+- **Idempotent**: a state whose `observed_at` is not after the stored cursor (`last_observed_at`) changes nothing, so redeliveries and late states are not counted twice.
+- **Device blade counter**: mowers that count blade time themselves (Mammotion: `report_data.maintenance.blade_used_time`, reset in the Mammotion app) send it as `raw.blade_used_s` and the warning threshold as `raw.blade_used_warn_s`. The newest positive values are stored on the totals and answered as `device_blade_hours` / `device_blade_warn_hours` with `blade_source: "device"`; the web app then shows them for "blades since change" (as the vendor app does) and keeps MowDeck's own counter as a secondary readout. A blade reset in MowDeck does not reset the device counter. The simulator sends none (`blade_source: "telemetry"`). The reminder event still uses MowDeck's own counter.
+- **Blade reminder**: when the blade hours since the last blade change reach `MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD` (default 50 h) the totals are marked notified and `telemetry.blade_hours.threshold` is published once; a blade reset re-arms it.
+
+## Heatmaps
+
+`GET /mowers/{id}/heatmap` (module `telemetry.application.heatmap`, pure) reads the position track of the range in one query (`ix_mower_positions_mower_time`, newest first, streamed in chunks of 5 000 rows, at most `MOWDECK_TELEMETRY_HEATMAP_MAX_ROWS`; with more the oldest are left out and `truncated` is true) and converts every position to the map's local metres with the stored map's geo reference (`mowdeck_control.geo.from_wgs84`). Cell indexes are `floor(metres / cell_m)` per axis, so negative coordinates give negative indexes. A response holds at most 20 000 cells: with more the cell size doubles until they fit (`cell_m` says which size was used, it can exceed 2 m).
+
+| Layer | `value` | `n` | Legend |
+| --- | --- | --- | --- |
+| `coverage` | share of the cell the blades cut, 0..1 | blades-on positions in the cell | `ratio`, 0..1 |
+| `rtk` | share of fixed samples (float counts 0.5, none 0; `unknown` left out) | samples | `fix`, 0..1 |
+| `wifi`, `mnet` | median signal in dBm; cells without a reading are absent | readings | `dbm`, min and max over the cells |
+
+Coverage: only rows with `blades_on` true count (older rows without the column count as not cut). Each is a disc of the cutting width; consecutive blades-on positions at most `MOWDECK_TELEMETRY_HEATMAP_JOIN_SECONDS` (30 s) and at most `MOWDECK_TELEMETRY_HEATMAP_JOIN_METRES` (10 m) apart, both limits, are joined by a straight swath (the cloud reports a mowing LUBA only every 1 to 20 s); farther apart they stay separate discs. The cutting width is `cutting_width_mm` of the stored capabilities, 400 mm without it. The ground is rasterised into pixels of at most a quarter of the cutting width (0.1 m for 400 mm); a pixel is cut when its centre lies within half the cutting width of the swath, a cell's share is its cut pixels over its pixels. `gaps` are the map's areas minus no-go zones and obstacles minus the cut pixels (`mowdeck_patterns.coverage.gaps`: slivers narrower than 5 cm and pieces below 0.25 m² dropped, at most 500, largest first), outlines simplified to about 7.5 cm, in local metres without the closing point. Telemetry depends on `mowdeck-patterns` and `mowdeck-control` for this (both Apache-2.0).
+
+Example (`layer=wifi&cell=1`, two cells):
+
+```json
+{"mower_id": "5f0c…", "layer": "wifi", "cell_m": 1.0,
+ "from": "2026-10-04T12:00:00Z", "to": "2026-10-11T12:00:00Z",
+ "reference": {"origin_lat": 48.1, "origin_lon": 11.5, "rotation_deg": 30.0},
+ "cells": [{"x": 0, "y": 0, "value": -60.0, "n": 3}, {"x": 5, "y": 0, "value": -80.5, "n": 2}],
+ "legend": {"kind": "dbm", "min": -80.5, "max": -60.0},
+ "gaps": [], "samples": 5, "truncated": false}
+```
+
+Cost on a laptop (synthetic week, 200 000 positions on a 40 m by 30 m lawn): signal and RTK layers about 0.2 s (around 1 million rows per second), coverage 1.2 to 2 s (100 000 to 170 000 rows per second) plus the database read; the computation runs in a worker thread.
+
+## Retention
+
+Every `MOWDECK_TELEMETRY_RETENTION_INTERVAL_SECONDS` each replica tries `pg_try_advisory_lock`; only the one that gets it deletes (batches of 5 000 rows) and releases the lock afterwards. The in-memory store ignores the lock. Defaults: history 30 days, positions 90 days, command timeline 30 days. The health totals, the day totals (one small row per mower and day) and the blade changes are kept; they are deleted only with the mower.
+
+## Settings
+
+All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `MOWDECK_<NAME>_FILE`); OpenFGA is configured with the `MOWDECK_OPENFGA_*` variables of `mowdeck-authz` and token verification with `MOWDECK_AUTH_JWKS_URL` (and the other `MOWDECK_AUTH_*` variables) of `mowdeck-auth`. Service specific settings:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MOWDECK_SERVICE_NAME` | `telemetry` | Service name in logs, metrics and traces |
+| `MOWDECK_HTTP_PORT` | `8000` | HTTP port |
+| `MOWDECK_DATABASE_URL` | required | PostgreSQL URL (usually `MOWDECK_DATABASE_URL_FILE`) |
+| `MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS` | `300` | An unchanged state is stored in the history at most once per this many seconds; a change is always stored |
+| `MOWDECK_TELEMETRY_RETENTION_HISTORY_DAYS` | `30` | History older than this is deleted |
+| `MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS` | `90` | Position track older than this is deleted |
+| `MOWDECK_TELEMETRY_RETENTION_COMMANDS_DAYS` | `30` | Command timeline older than this is deleted |
+| `MOWDECK_TELEMETRY_RETENTION_INTERVAL_SECONDS` | `3600` | How often the retention job runs (one replica at a time) |
+| `MOWDECK_TELEMETRY_QUERY_MAX_RANGE_DAYS` | `31` | Longest time range of a history or position query |
+| `MOWDECK_TELEMETRY_QUERY_MAX_ROWS` | `5000` | Most points a query returns; a `step` needing more bins is refused |
+| `MOWDECK_TELEMETRY_STATES_LIMIT` | `200` | Most mowers in the account state list |
+| `MOWDECK_TELEMETRY_STALE_AFTER_SECONDS` | `60` | A state older than this is reported `stale` (six missed heartbeats) |
+| `MOWDECK_TELEMETRY_UNKNOWN_MOWER_ATTEMPTS` | `3` | Deliveries of a result for an unknown mower before it is dropped |
+| `MOWDECK_TELEMETRY_FLEET_TIMEOUT_SECONDS` | `5` | Timeout of the `fleet.mowers.list` seed request |
+| `MOWDECK_TELEMETRY_FLEET_RETRY_MAX_SECONDS` | `30` | Upper bound of the backoff between seed attempts |
+| `MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD` | `50` | Blade hours since the last blade change after which `telemetry.blade_hours.threshold` is published once (again after the next blade reset) |
+| `MOWDECK_TELEMETRY_HEALTH_MAX_GAP_SECONDS` | `120` | A gap between two states longer than this counts no blade or mowing hours and no distance (the mower was silent) |
+| `MOWDECK_TELEMETRY_HEATMAP_MAX_ROWS` | `200000` | Most position rows one heatmap reads, newest first; more: `truncated` |
+| `MOWDECK_TELEMETRY_HEATMAP_JOIN_SECONDS` | `30` | Coverage heatmap: consecutive blades-on positions at most this many seconds apart are joined by a straight swath |
+| `MOWDECK_TELEMETRY_HEATMAP_JOIN_METRES` | `10` | ... and at most this many metres apart (both limits must hold); farther positions stay separate discs |
+| `MOWDECK_TELEMETRY_HEALTH_MAX_STEP_METERS` | `25` | A step between two consecutive positions longer than this is left out of the distance (RTK jumps) |
+
+## Layers
+
+| Package | Content | Rule |
+| --- | --- | --- |
+| `domain/` | rows, write rules (`decide`), fingerprints, bin arithmetic, downsampling, health accounting (`health.py`) | pure Python, no I/O |
+| `application/` | `Ingest`, `Queries`, `Health`, `Retention`, the heatmap binning (`heatmap.py`, pure, Shapely and numpy), the `Store` and `HealthEvents` ports | depends on `domain` and ports only |
+| `adapters/api/` | FastAPI routes, schemas, the object gate, error mapping | translate HTTP to use cases |
+| `adapters/bus/` | the consumers, the Fleet seed and the health event publisher | translate messages to use cases |
+| `adapters/db/` | SQLAlchemy tables, `SqlStore` (`date_bin`, advisory lock), Alembic migrations | implement the `Store` port |
+| `adapters/memory.py` | in-memory store with the same semantics | tests |
+| `main.py` | wiring (`build_app`), background tasks, `main()` | the only place that knows every layer |
+
+## Local start
+
+```bash
+uv sync
+docker compose -f infra/compose/docker-compose.yml up -d --wait nats postgres openfga authz-bootstrap
+MOWDECK_DATABASE_URL=postgresql://telemetry:<password>@127.0.0.1:5432/telemetry \
+  uv run python -m telemetry.adapters.db.migrate
+MOWDECK_ENVIRONMENT=dev MOWDECK_DATABASE_URL=postgresql://telemetry:<password>@127.0.0.1:5432/telemetry \
+  MOWDECK_OPENFGA_API_URL=http://127.0.0.1:8080 MOWDECK_OPENFGA_API_TOKEN=<key> \
+  MOWDECK_AUTH_JWKS_URL=http://127.0.0.1/.well-known/jwks.json \
+  uv run python -m telemetry.main
+curl http://127.0.0.1:8000/readyz
+```
+
+Container image (build context is the repository root):
+
+```bash
+docker build -f services/telemetry/Dockerfile -t mowdeck/telemetry:dev .
+```
+
+The Compose block is in `compose.snippet.yml` (already pasted into `infra/compose/docker-compose.yml`), Kubernetes uses the umbrella chart `infra/helm/mowdeck`.
+
+## Migrations
+
+Migrations run as a separate step before the service starts (Compose: `telemetry-migrate`, Helm: a Job), never inside the service process. They must stay backward compatible for rolling updates.
+
+```bash
+# create a revision (the database URL comes from MOWDECK_DATABASE_URL)
+uv run alembic -c services/telemetry/alembic.ini revision -m "add column"
+```
+
+A test compares the migrations with the table definitions against a real PostgreSQL (`test_telemetry_db.py`).
+
+## Tests
+
+```bash
+uv run pytest services/telemetry --cov=telemetry
+```
+
+The PostgreSQL, NATS and OpenFGA tests run when `MOWDECK_TEST_DATABASE_URL`, `MOWDECK_TEST_NATS_URL` and `MOWDECK_TEST_OPENFGA_URL` (with `MOWDECK_TEST_OPENFGA_TOKEN`) are set (CI sets all of them); the module docstrings of `test_telemetry_db.py`, `test_telemetry_nats.py` and `test_telemetry_openfga.py` show the docker commands. Cross-account cases (a foreign owner gets 404 on every mower route) are in `test_telemetry_api.py`; the store contract runs against both the memory store and PostgreSQL.

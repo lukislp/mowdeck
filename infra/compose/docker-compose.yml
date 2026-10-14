@@ -1,0 +1,1125 @@
+# MowDeck foundation stack (self-hosted mode).
+#
+# Start:  docker compose -f infra/compose/docker-compose.yml up -d --wait
+# Config: copy .env.example to .env in this directory first. The password
+#         variables are required; everything else has a default.
+#
+# Every MowDeck service joins the "mowdeck" network, gets a Traefik router via
+# labels under /api/v1/<name> and, when it stores data, uses its own database
+# and role created by init/01-databases.sql.
+
+name: mowdeck
+
+services:
+  traefik:
+    image: ${TRAEFIK_IMAGE:-public.ecr.aws/docker/library/traefik:v3.7.14}
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=${MOWDECK_NETWORK:-mowdeck}
+      # Only containers of this Compose project: a second stack on the same host must not be
+      # routed by this Traefik (router names collide). Set MOWDECK_TRAEFIK_PROJECT=<-p name>.
+      - --providers.docker.constraints=Label(`com.docker.compose.project`,`${MOWDECK_TRAEFIK_PROJECT:-mowdeck}`)
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --api.dashboard=false
+      - --ping=true
+      - --log.level=INFO
+    ports:
+      - "${GATEWAY_HTTP_PORT:-80}:80"
+      - "${GATEWAY_HTTPS_PORT:-443}:443"
+    volumes:
+      # Read-only socket for service discovery. In production, front the socket
+      # with a restricted proxy or use the file/Kubernetes providers instead.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    # API traffic is admitted once Identity, Fleet, Telemetry, Realtime, Notifications, Scheduler,
+    # Entitlements, Planner, Vision and the web app are ready (they need their migrated databases,
+    # the authorization model and NATS). They depend on the one-shot jobs identity-migrate,
+    # fleet-migrate, telemetry-migrate, notifications-migrate, scheduler-migrate,
+    # entitlements-migrate, planner-migrate, vision-migrate and authz-bootstrap, so `up --wait` accepts them (an
+    # exited job counts as done only when another service depends on it).
+    depends_on:
+      identity:
+        condition: service_healthy
+      fleet:
+        condition: service_healthy
+      telemetry:
+        condition: service_healthy
+      realtime:
+        condition: service_healthy
+      notifications:
+        condition: service_healthy
+      scheduler:
+        condition: service_healthy
+      entitlements:
+        condition: service_healthy
+      planner:
+        condition: service_healthy
+      vision:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks: [mowdeck]
+
+  # Placeholder for routing: proves that label-based /api/v1 routing works.
+  # Real services replace it with their own labels. Only started with
+  # `--profile demo`; try `curl http://localhost/api/v1/whoami`.
+  whoami:
+    image: ${WHOAMI_IMAGE:-ghcr.io/traefik/whoami:v1.10.3}
+    profiles: [demo]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.whoami.rule=PathPrefix(`/api/v1/whoami`)
+      - traefik.http.routers.whoami.entrypoints=web
+      - traefik.http.routers.whoami.middlewares=whoami-strip
+      - traefik.http.middlewares.whoami-strip.stripprefix.prefixes=/api/v1/whoami
+      - traefik.http.services.whoami.loadbalancer.server.port=80
+    networks: [mowdeck]
+
+  nats:
+    image: ${NATS_IMAGE:-public.ecr.aws/docker/library/nats:2.15.0-alpine}
+    restart: unless-stopped
+    command: ["-js", "-m", "8222", "-sd", "/data"]
+    ports:
+      - "127.0.0.1:${NATS_CLIENT_PORT:-4222}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    networks: [mowdeck]
+
+  postgres:
+    image: ${POSTGRES_IMAGE:-public.ecr.aws/docker/library/postgres:17.11-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/compose/.env}
+      SERVICE_DB_PASSWORD: ${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD in infra/compose/.env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+    networks: [mowdeck]
+
+  openfga-migrate:
+    image: ${OPENFGA_IMAGE:-ghcr.io/openfga/openfga:v1.22.0}
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://openfga:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/openfga?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  openfga:
+    image: ${OPENFGA_IMAGE:-ghcr.io/openfga/openfga:v1.22.0}
+    command: run
+    restart: unless-stopped
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://openfga:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/openfga?sslmode=disable
+      OPENFGA_HTTP_ADDR: 0.0.0.0:8080
+      OPENFGA_GRPC_ADDR: 0.0.0.0:8081
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${OPENFGA_HTTP_PORT:-8080}:8080"
+      - "127.0.0.1:${OPENFGA_GRPC_PORT:-8081}:8081"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=localhost:8081"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks: [mowdeck]
+
+  # One-shot job: creates the OpenFGA store "mowdeck" if it is missing and
+  # writes infra/openfga/model.fga only when it differs from the latest model
+  # (idempotent, safe on every `up`). Services find the store by name and pin
+  # the latest model at startup (mowdeck-authz), so no ids need copying.
+  # Identity, Fleet and Telemetry depend on it with service_completed_successfully.
+  authz-bootstrap:
+    image: mowdeck/authz-bootstrap:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../openfga
+      dockerfile: bootstrap/Dockerfile
+      args:
+        FGA_CLI_IMAGE: ${FGA_CLI_IMAGE:-openfga/cli:v0.8.1}
+        JQ_IMAGE: ${JQ_IMAGE:-ghcr.io/jqlang/jq:1.8.1}
+        BUSYBOX_IMAGE: ${BUSYBOX_IMAGE:-public.ecr.aws/docker/library/busybox:1.37.0}
+    environment:
+      FGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      FGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      FGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+    depends_on:
+      openfga:
+        condition: service_healthy
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [mowdeck]
+
+  # One-shot job: Alembic migrations of the identity database (idempotent).
+  identity-migrate:
+    image: mowdeck/identity:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/identity/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "identity.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://identity:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/identity
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Accounts, users, roles, sessions, API tokens; issues the access tokens
+  # (EdDSA JWT) and publishes the public keys at /.well-known/jwks.json.
+  # Services verify tokens locally with mowdeck-auth against
+  # http://identity:8000/.well-known/jwks.json (inside the compose network).
+  identity:
+    image: mowdeck/identity:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/identity/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://identity:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/identity
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY: ${IDENTITY_KEY_ENCRYPTION_KEY:?set IDENTITY_KEY_ENCRYPTION_KEY in infra/compose/.env}
+      MOWDECK_IDENTITY_REGISTRATION: ${IDENTITY_REGISTRATION:-open}
+      MOWDECK_IDENTITY_ARGON2_PROFILE: ${IDENTITY_ARGON2_PROFILE:-rfc9106_low}
+      MOWDECK_IDENTITY_MODULE_URLS: http://device-gateway:8000,http://fleet:8000,http://telemetry:8000,http://realtime:8000,http://notifications:8000,http://scheduler:8000,http://entitlements:8000,http://planner:8000,http://vision:8000
+      # Plans (ADR 0028): the token's plan claim comes from Entitlements; this switch only
+      # decides the fallback while Entitlements does not answer.
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      # Only Traefik reaches the service, so its X-Forwarded-For is trusted.
+      MOWDECK_IDENTITY_TRUST_FORWARDED_FOR: "true"
+      # Plain HTTP in development; set to true behind HTTPS.
+      MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE: ${IDENTITY_REFRESH_COOKIE_SECURE:-false}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.identity.rule=PathPrefix(`/api/v1/identity`)
+      - traefik.http.routers.identity.entrypoints=web
+      - traefik.http.routers.identity.service=identity
+      # Login, registration and token exchange: rate limited per client IP.
+      - traefik.http.routers.identity-auth.rule=Path(`/api/v1/identity/session`) || Path(`/api/v1/identity/register`) || Path(`/api/v1/identity/token`)
+      - traefik.http.routers.identity-auth.entrypoints=web
+      - traefik.http.routers.identity-auth.priority=100
+      - traefik.http.routers.identity-auth.middlewares=identity-ratelimit
+      - traefik.http.routers.identity-auth.service=identity
+      - traefik.http.middlewares.identity-ratelimit.ratelimit.average=10
+      - traefik.http.middlewares.identity-ratelimit.ratelimit.period=1m
+      - traefik.http.middlewares.identity-ratelimit.ratelimit.burst=20
+      # Refresh and logout need a valid refresh cookie anyway; their own, looser limit keeps
+      # several devices of a household behind one address (Tailscale, a proxy) logged in.
+      - traefik.http.routers.identity-session.rule=PathPrefix(`/api/v1/identity/session/`)
+      - traefik.http.routers.identity-session.entrypoints=web
+      - traefik.http.routers.identity-session.priority=100
+      - traefik.http.routers.identity-session.middlewares=identity-session-ratelimit
+      - traefik.http.routers.identity-session.service=identity
+      - traefik.http.middlewares.identity-session-ratelimit.ratelimit.average=60
+      - traefik.http.middlewares.identity-session-ratelimit.ratelimit.period=1m
+      - traefik.http.middlewares.identity-session-ratelimit.ratelimit.burst=30
+      - traefik.http.routers.identity-jwks.rule=Path(`/.well-known/jwks.json`)
+      - traefik.http.routers.identity-jwks.entrypoints=web
+      - traefik.http.routers.identity-jwks.service=identity
+      - traefik.http.services.identity.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      identity-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # One-shot job: Alembic migrations of the fleet database (idempotent).
+  fleet-migrate:
+    image: mowdeck/fleet:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/fleet/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "fleet.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://fleet:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/fleet
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Sites, groups and mowers, their place in the hierarchy (OpenFGA tuples),
+  # the mower registry of the Device-Gateway (fleet.mowers.list, mower.* events)
+  # and every command: checked per command kind, recorded, published.
+  fleet:
+    image: mowdeck/fleet:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/fleet/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://fleet:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/fleet
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_ALLOWED_CONNECTION_KINDS: ${FLEET_ALLOWED_CONNECTION_KINDS:-simulated}
+      # Encrypts the passwords of linked Mammotion accounts (empty: no linked accounts).
+      MOWDECK_CREDENTIAL_ENCRYPTION_KEY: ${FLEET_CREDENTIAL_ENCRYPTION_KEY:-}
+      MOWDECK_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS: ${FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS:-}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.fleet.rule=PathPrefix(`/api/v1/fleet`)
+      - traefik.http.routers.fleet.entrypoints=web
+      - traefik.http.services.fleet.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      fleet-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # Holds the mower connections (simulated in Phase 1), executes commands from
+  # command.mower.<id> and publishes telemetry. Built from the repository root.
+  device-gateway:
+    image: mowdeck/device-gateway:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/device-gateway/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_SHARD_INDEX: "0"
+      MOWDECK_SHARD_COUNT: "1"
+      # The registry comes from Fleet (fleet.mowers.list on start, then the
+      # mower.registered/updated/removed events); no mower is seeded here.
+      MOWDECK_SIM_TIME_SCALE: ${MOWDECK_SIM_TIME_SCALE:-1}
+      MOWDECK_TELEMETRY_HEARTBEAT_SECONDS: ${MOWDECK_TELEMETRY_HEARTBEAT_SECONDS:-10}
+      # Development only: the fake Mammotion cloud for linked accounts and cloud mowers.
+      MOWDECK_FAKE_MAMMOTION_CLOUD: ${GATEWAY_FAKE_MAMMOTION_CLOUD:-false}
+      # Photos of real cameras (ADR 0035): the capture worker of the `capture` profile
+      # (http://vision-capture:8000). Empty: mowers without an own photo function answer
+      # photo requests with "unsupported" (AI assist then needs the camera panel's frame).
+      MOWDECK_CAPTURE_URL: ${GATEWAY_CAPTURE_URL:-}
+      MOWDECK_CAPTURE_TOKEN: ${CAPTURE_TOKEN:-}
+      MOWDECK_CAPTURE_TIMEOUT_SECONDS: ${CAPTURE_TIMEOUT_SECONDS:-20}
+      MOWDECK_PHOTO_TIMEOUT_SECONDS: ${GATEWAY_PHOTO_TIMEOUT_SECONDS:-30}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.device-gateway.rule=PathPrefix(`/api/v1/device-gateway`)
+      - traefik.http.routers.device-gateway.entrypoints=web
+      - traefik.http.services.device-gateway.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks: [mowdeck]
+
+  telemetry-migrate:
+    image: mowdeck/telemetry:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/telemetry/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "telemetry.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://telemetry:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/telemetry
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Latest state, de-duplicated history, position track and command timeline of
+  # every mower, filled from telemetry.mower.*, command.result.mower.* and the
+  # mower.* events of Fleet; retention under an advisory lock.
+  telemetry:
+    image: mowdeck/telemetry:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/telemetry/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://telemetry:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/telemetry
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS: ${TELEMETRY_HEARTBEAT_HISTORY_SECONDS:-300}
+      MOWDECK_TELEMETRY_RETENTION_HISTORY_DAYS: ${TELEMETRY_RETENTION_HISTORY_DAYS:-30}
+      MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS: ${TELEMETRY_RETENTION_POSITIONS_DAYS:-90}
+      MOWDECK_TELEMETRY_RETENTION_COMMANDS_DAYS: ${TELEMETRY_RETENTION_COMMANDS_DAYS:-30}
+      MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD: ${TELEMETRY_BLADE_HOURS_THRESHOLD:-50}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.telemetry.rule=PathPrefix(`/api/v1/telemetry`)
+      - traefik.http.routers.telemetry.entrypoints=web
+      - traefik.http.services.telemetry.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      telemetry-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # Live mower state and command results over WebSocket (/api/v1/realtime/ws).
+  # The access token travels in the first message, never in the URL. Every
+  # instance subscribes to telemetry.mower.* and command.result.mower.* without a
+  # queue group, so replicas need no sticky sessions. Traefik passes the
+  # WebSocket upgrade through without extra configuration; uvicorn's protocol
+  # pings (MOWDECK_REALTIME_PING_SECONDS) keep idle sockets open through it.
+  realtime:
+    image: mowdeck/realtime:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/realtime/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_REALTIME_PING_SECONDS: ${REALTIME_PING_SECONDS:-20}
+      MOWDECK_REALTIME_MAX_CONNECTIONS_PER_ACCOUNT: ${REALTIME_MAX_CONNECTIONS_PER_ACCOUNT:-50}
+      MOWDECK_REALTIME_MAX_CONNECTIONS_PER_USER: ${REALTIME_MAX_CONNECTIONS_PER_USER:-10}
+      # The web app is served from the same origin (service web); other origins are refused.
+      MOWDECK_REALTIME_ALLOWED_ORIGINS: ${REALTIME_ALLOWED_ORIGINS:-http://localhost}
+      MOWDECK_REALTIME_DRIVE_MAX_SECONDS: ${REALTIME_DRIVE_MAX_SECONDS:-600}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.realtime.rule=PathPrefix(`/api/v1/realtime`)
+      - traefik.http.routers.realtime.entrypoints=web
+      - traefik.http.services.realtime.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # One-shot job: Alembic migrations of the notifications database (idempotent).
+  notifications-migrate:
+    image: mowdeck/notifications:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/notifications/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "notifications.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://notifications:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/notifications
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Derives notifications (mowing finished, stuck, battery low, offline) from
+  # telemetry.mower.* and the mower.* events, keeps each user's inbox and
+  # delivers by Web Push, APNs (iOS app), ntfy or the log (outbox worker on
+  # every replica).
+  # Without NOTIFICATIONS_VAPID_PRIVATE_KEY a development key pair is created in
+  # the notifications-data volume on first start and its public key is logged;
+  # production sets the keys explicitly (python -m notifications.cli
+  # generate-vapid-keys). APNs: put AuthKey_<KEY_ID>.p8 into
+  # infra/compose/secrets/apns/ (git-ignored) and set APNS_KEY_FILE,
+  # APNS_KEY_ID and APNS_TEAM_ID; without them the apns channel stays off.
+  notifications:
+    image: mowdeck/notifications:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/notifications/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - notifications-data:/var/lib/notifications
+      - ./secrets/apns:/run/secrets/apns:ro
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://notifications:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/notifications
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_NOTIFICATIONS_CHANNELS: ${NOTIFICATIONS_CHANNELS:-webpush,ntfy,apns,log}
+      MOWDECK_NOTIFICATIONS_VAPID_PRIVATE_KEY: ${NOTIFICATIONS_VAPID_PRIVATE_KEY:-}
+      MOWDECK_NOTIFICATIONS_VAPID_PUBLIC_KEY: ${NOTIFICATIONS_VAPID_PUBLIC_KEY:-}
+      MOWDECK_NOTIFICATIONS_VAPID_SUBJECT: ${NOTIFICATIONS_VAPID_SUBJECT:-mailto:admin@localhost.localdomain}
+      MOWDECK_NOTIFICATIONS_VAPID_KEY_PATH: /var/lib/notifications/vapid_private_key
+      MOWDECK_NOTIFICATIONS_NTFY_ALLOWED_SERVERS: ${NOTIFICATIONS_NTFY_ALLOWED_SERVERS:-https://ntfy.sh}
+      MOWDECK_NOTIFICATIONS_APP_URL: ${NOTIFICATIONS_APP_URL:-}
+      # Empty values mean "not set" (the apns channel is skipped).
+      MOWDECK_APNS_KEY_FILE: ${APNS_KEY_FILE:-}
+      MOWDECK_APNS_KEY_ID: ${APNS_KEY_ID:-}
+      MOWDECK_APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      MOWDECK_APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-app.mowdeck.mobile}
+      MOWDECK_APNS_ENVIRONMENT: ${APNS_ENVIRONMENT:-development}
+      MOWDECK_NOTIFICATIONS_OFFLINE_AFTER_SECONDS: ${NOTIFICATIONS_OFFLINE_AFTER_SECONDS:-120}
+      MOWDECK_NOTIFICATIONS_BATTERY_LOW_PERCENT: ${NOTIFICATIONS_BATTERY_LOW_PERCENT:-20}
+      MOWDECK_NOTIFICATIONS_MOWING_MIN_SECONDS: ${NOTIFICATIONS_MOWING_MIN_SECONDS:-120}
+      MOWDECK_NOTIFICATIONS_GEOFENCE_MARGIN_METERS: ${NOTIFICATIONS_GEOFENCE_MARGIN_METERS:-5}
+      MOWDECK_NOTIFICATIONS_ACK_SILENCE_SECONDS: ${NOTIFICATIONS_ACK_SILENCE_SECONDS:-3600}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.notifications.rule=PathPrefix(`/api/v1/notifications`)
+      - traefik.http.routers.notifications.entrypoints=web
+      - traefik.http.services.notifications.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      notifications-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # One-shot job: Alembic migrations of the scheduler database (idempotent).
+  scheduler-migrate:
+    image: mowdeck/scheduler:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/scheduler/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "scheduler.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://scheduler:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Mowing schedules (weekly or every N days) with a rain pause. Every replica ticks
+  # (row locks, SKIP LOCKED); starts and returns to the dock go through Fleet
+  # (fleet.commands.issue) on behalf of the schedule's owner. The rain pause asks
+  # Open-Meteo (internet access to api.open-meteo.com); set
+  # SCHEDULER_WEATHER_PROVIDER=static for offline installations.
+  scheduler:
+    image: mowdeck/scheduler:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/scheduler/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://scheduler:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/scheduler
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_SCHEDULER_WEATHER_PROVIDER: ${SCHEDULER_WEATHER_PROVIDER:-open_meteo}
+      MOWDECK_SCHEDULER_STATIC_WEATHER: ${SCHEDULER_STATIC_WEATHER:-dry}
+      MOWDECK_SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-30}
+      MOWDECK_SCHEDULER_DEV_ENDPOINTS: ${SCHEDULER_DEV_ENDPOINTS:-false}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.scheduler.rule=PathPrefix(`/api/v1/scheduler`)
+      - traefik.http.routers.scheduler.entrypoints=web
+      - traefik.http.services.scheduler.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      scheduler-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # One-shot job: Alembic migrations of the entitlements database (idempotent).
+  entitlements-migrate:
+    image: mowdeck/entitlements:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/entitlements/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "entitlements.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://entitlements:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/entitlements
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Plans, limits and feature gates (ADR 0028): answers entitlements.check for the other
+  # services. With ENTITLEMENTS_BILLING_ENABLED=false (the default) every account has the
+  # plan "unlimited". The plan file is infra/entitlements/plans.yaml (mounted read-only).
+  entitlements:
+    image: mowdeck/entitlements:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/entitlements/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - ../entitlements/plans.yaml:/etc/mowdeck/entitlements/plans.yaml:ro
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://entitlements:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/entitlements
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_ENTITLEMENTS_DEFAULT_PLAN: ${ENTITLEMENTS_DEFAULT_PLAN:-home}
+      MOWDECK_ENTITLEMENTS_MODULE_URLS: http://fleet:8000,http://realtime:8000,http://scheduler:8000,http://notifications:8000,http://identity:8000,http://telemetry:8000,http://device-gateway:8000,http://planner:8000,http://vision:8000
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.entitlements.rule=PathPrefix(`/api/v1/entitlements`)
+      - traefik.http.routers.entitlements.entrypoints=web
+      - traefik.http.services.entitlements.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      entitlements-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # One-shot job: Alembic migrations of the vision database (idempotent).
+  vision-migrate:
+    image: mowdeck/vision:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/vision/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "vision.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://vision:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/vision
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # AI assist (ADR 0033): camera snapshot and map context to a vision model (any family through
+  # LiteLLM), a proposed maneuver a user approves, driven through fleet.drive.* with blades off.
+  # Users configure their own provider in the web app; VISION_DEFAULT_* offers the
+  # installation's model (off by default). VISION_DEFAULT_MODEL=fake/recover is the offline demo.
+  vision:
+    image: mowdeck/vision:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/vision/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://vision:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/vision
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_VISION_DEFAULT_ENABLED: ${VISION_DEFAULT_ENABLED:-false}
+      MOWDECK_VISION_DEFAULT_MODEL: ${VISION_DEFAULT_MODEL:-anthropic/claude-sonnet-5-5}
+      MOWDECK_VISION_DEFAULT_API_BASE: ${VISION_DEFAULT_API_BASE:-}
+      MOWDECK_VISION_DEFAULT_API_KEY: ${VISION_DEFAULT_API_KEY:-}
+      MOWDECK_VISION_SECRETS_KEY: ${VISION_SECRETS_KEY:-}
+      MOWDECK_VISION_ALLOW_FAKE_PROVIDER: ${VISION_ALLOW_FAKE_PROVIDER:-false}
+      MOWDECK_VISION_USER_API_BASE_POLICY: ${VISION_USER_API_BASE_POLICY:-any}
+      MOWDECK_VISION_PROPOSAL_TTL_SECONDS: ${VISION_PROPOSAL_TTL_SECONDS:-300}
+      MOWDECK_VISION_MAX_ROUNDS: ${VISION_MAX_ROUNDS:-3}
+      MOWDECK_VISION_USER_DAILY_REQUESTS: ${VISION_USER_DAILY_REQUESTS:-20}
+      MOWDECK_VISION_HOSTED_ACCOUNT_DAILY_REQUESTS: ${VISION_HOSTED_ACCOUNT_DAILY_REQUESTS:-50}
+      MOWDECK_VISION_KEEP_IMAGES_DAYS: ${VISION_KEEP_IMAGES_DAYS:-0}
+      # Automatic AI analysis on errors (ADR 0035, opt-in per user in the web app).
+      MOWDECK_VISION_AUTO_ENABLED: ${VISION_AUTO_ENABLED:-true}
+      MOWDECK_VISION_AUTO_COOLDOWN_MINUTES: ${VISION_AUTO_COOLDOWN_MINUTES:-10}
+      MOWDECK_VISION_AUTO_DAILY_PER_MOWER: ${VISION_AUTO_DAILY_PER_MOWER:-20}
+      MOWDECK_VISION_PHOTO_TIMEOUT_SECONDS: ${VISION_PHOTO_TIMEOUT_SECONDS:-35}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.vision.rule=PathPrefix(`/api/v1/vision`)
+      - traefik.http.routers.vision.entrypoints=web
+      - traefik.http.services.vision.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      vision-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # Still frames of live cameras without an open browser (ADR 0035): headless Chromium with the
+  # Agora Web SDK, only with `--profile capture` (COMPOSE_PROFILES=capture) and
+  # GATEWAY_CAPTURE_URL=http://vision-capture:8000. The Vision image built with
+  # WITH_CAPTURE=true (Playwright and Chromium, about 0.5 GB more); internal only, no route.
+  vision-capture:
+    image: mowdeck/vision-capture:${MOWDECK_VERSION:-dev}
+    profiles: [capture]
+    build:
+      context: ../..
+      dockerfile: services/vision/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+        WITH_CAPTURE: "true"
+    command: ["python", "-m", "vision.capture"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      # Chromium writes its profile and caches below HOME (the root file system is read-only).
+      HOME: /tmp
+      MOWDECK_CAPTURE_TOKEN: ${CAPTURE_TOKEN:-}
+      MOWDECK_CAPTURE_MAX_CONCURRENCY: ${CAPTURE_MAX_CONCURRENCY:-2}
+      MOWDECK_CAPTURE_BROWSER_CHANNEL: ${CAPTURE_BROWSER_CHANNEL:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    stop_grace_period: 20s
+    networks: [mowdeck]
+
+  # --- Billing (ADR 0031): only with `--profile billing` -----------------------------------
+  # billing.enabled=false (the default) means these two services are not started at all: no
+  # route, the web app's probe of /api/v1/billing/status gets 404 and shows nothing. Enable it
+  # with COMPOSE_PROFILES=billing (or --profile billing) together with
+  # ENTITLEMENTS_BILLING_ENABLED=true, and set the BILLING_* variables (docs/ops/billing.md).
+  # One-shot job: Alembic migrations of the billing database (idempotent).
+  billing-migrate:
+    image: mowdeck/billing:${MOWDECK_VERSION:-dev}
+    profiles: [billing]
+    build:
+      context: ../..
+      dockerfile: services/billing/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "billing.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://billing:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/billing
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Subscriptions and payments: Stripe Checkout and customer portal, webhooks that set the
+  # account plan in Entitlements (entitlements.plan.set). No card data passes through MowDeck.
+  # The price file is infra/billing/prices.yaml (mounted read-only); BILLING_PRICE_IDS
+  # overrides it with the ids of the operator's Stripe account.
+  billing:
+    image: mowdeck/billing:${MOWDECK_VERSION:-dev}
+    profiles: [billing]
+    build:
+      context: ../..
+      dockerfile: services/billing/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - ../billing/prices.yaml:/etc/mowdeck/billing/prices.yaml:ro
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://billing:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/billing
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_BILLING_PROVIDER: ${BILLING_PROVIDER:-stripe}
+      MOWDECK_BILLING_STRIPE_SECRET_KEY: ${BILLING_STRIPE_SECRET_KEY:-}
+      MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET: ${BILLING_STRIPE_WEBHOOK_SECRET:-}
+      MOWDECK_BILLING_STRIPE_API_BASE: ${BILLING_STRIPE_API_BASE:-}
+      MOWDECK_BILLING_AUTOMATIC_TAX: ${BILLING_AUTOMATIC_TAX:-false}
+      MOWDECK_BILLING_PRICE_IDS: ${BILLING_PRICE_IDS:-}
+      MOWDECK_BILLING_GRACE_DAYS: ${BILLING_GRACE_DAYS:-14}
+      MOWDECK_BILLING_APP_URL: ${BILLING_APP_URL:-}
+      MOWDECK_BILLING_ENTITLEMENTS_URL: http://entitlements:8000
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.billing.rule=PathPrefix(`/api/v1/billing`)
+      - traefik.http.routers.billing.entrypoints=web
+      - traefik.http.routers.billing.service=billing
+      # Stripe webhooks need no token (only the signature counts): rate limited per client IP
+      # like the login routes, with room for Stripe's bursts (Stripe retries a 429 later).
+      - traefik.http.routers.billing-webhook.rule=Path(`/api/v1/billing/webhooks/stripe`)
+      - traefik.http.routers.billing-webhook.entrypoints=web
+      - traefik.http.routers.billing-webhook.priority=100
+      - traefik.http.routers.billing-webhook.middlewares=billing-webhook-ratelimit
+      - traefik.http.routers.billing-webhook.service=billing
+      - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.average=120
+      - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.period=1m
+      - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.burst=60
+      - traefik.http.services.billing.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      entitlements:
+        condition: service_healthy
+      billing-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # One-shot job: Alembic migrations of the planner database (idempotent).
+  planner-migrate:
+    image: mowdeck/planner:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/planner/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "planner.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://planner:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/planner
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Mowing patterns and spot mowing (ADR 0030): computes, validates and previews routes from
+  # the map snapshots on the DEVICE stream, the coverage from Telemetry's position track
+  # (tracks.positions.query), and keeps the pattern templates of every account.
+  planner:
+    image: mowdeck/planner:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/planner/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://planner:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/planner
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_PLANNER_CUTTING_WIDTH_M: ${PLANNER_CUTTING_WIDTH_M:-0.4}
+      MOWDECK_PLANNER_MAX_PARALLEL: ${PLANNER_MAX_PARALLEL:-2}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.planner.rule=PathPrefix(`/api/v1/planner`)
+      - traefik.http.routers.planner.entrypoints=web
+      - traefik.http.services.planner.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      planner-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]
+
+  # The web app (apps/web): a static SvelteKit PWA served by an unprivileged, read-only
+  # nginx at / on the same origin as the API, so no CORS is needed and the refresh cookie
+  # (SameSite=Strict) works as is. Priority 1 keeps every /api/v1 route ahead of it.
+  web:
+    image: mowdeck/web:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-public.ecr.aws/docker/library/node:22.23.3-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      # Optional raster tiles under the map (empty: metric grid, no third party). Rendered into
+      # /config.json and the CSP img-src at container start.
+      MOWDECK_WEB_MAP_TILES: ${WEB_MAP_TILES:-}
+      MOWDECK_WEB_MAP_ATTRIBUTION: ${WEB_MAP_ATTRIBUTION:-}
+      MOWDECK_WEB_MAP_MAX_ZOOM: ${WEB_MAP_MAX_ZOOM:-19}
+      # Links to the legal pages on the login page (placeholders until the operator fills them).
+      MOWDECK_WEB_LEGAL_ENABLED: ${WEB_LEGAL_ENABLED:-false}
+      # Live camera through Agora (ADR 0032): adds the Agora domains to the CSP.
+      MOWDECK_WEB_CAMERA_ENABLED: ${WEB_CAMERA_ENABLED:-false}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.web.rule=PathPrefix(`/`)
+      - traefik.http.routers.web.entrypoints=web
+      - traefik.http.routers.web.priority=1
+      - traefik.http.services.web.loadbalancer.server.port=8080
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    networks: [mowdeck]
+
+networks:
+  mowdeck:
+    # Another name lets a second stack run next to this one (isolated test runs).
+    name: ${MOWDECK_NETWORK:-mowdeck}
+
+volumes:
+  nats-data:
+  postgres-data:
+  notifications-data:

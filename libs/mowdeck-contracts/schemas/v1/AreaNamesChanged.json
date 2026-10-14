@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``fleet.mower.area_names_changed``: all custom names of the mower after the\nchange (area id to name; an area without an override is absent).",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "names": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Names",
+      "type": "object"
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id"
+  ],
+  "title": "AreaNamesChanged",
+  "type": "object"
+}

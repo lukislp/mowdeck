@@ -1,0 +1,70 @@
+<script lang="ts">
+  import '@mowdeck/ui/styles/fonts.css';
+  import '@mowdeck/ui/styles/tokens.css';
+  import '@mowdeck/ui/styles/base.css';
+
+  import { ToastRegion } from '@mowdeck/ui';
+  import { onMount, type Snippet } from 'svelte';
+
+  import { goto } from '$app/navigation';
+
+  import { session } from '$lib/auth/session.svelte';
+  import { startLive } from '$lib/live.svelte';
+  import { nativeShell } from '$lib/native/runtime';
+  import { m } from '$lib/paraglide/messages';
+  import { getLocale } from '$lib/paraglide/runtime';
+  import { appUpdate, install, toasts } from '$lib/stores/ui.svelte';
+
+  let { children }: { children: Snippet } = $props();
+
+  onMount(() => {
+    document.documentElement.lang = getLocale();
+    install.init();
+    startLive();
+    void appUpdate.register();
+    if (session.status === 'unknown') void session.restore().catch(() => undefined);
+    // Inside the iOS/Android app shell: deep links and notification taps (inert in a browser).
+    return nativeShell.start((path) => void goto(path));
+  });
+</script>
+
+{#if appUpdate.waiting}
+  <div class="update" role="status">
+    <span>{m.update_available()}</span>
+    <button type="button" onclick={() => appUpdate.apply()}>{m.update_reload()}</button>
+  </div>
+{/if}
+
+{@render children()}
+
+<ToastRegion
+  toasts={toasts.items}
+  dismissLabel={m.dismiss()}
+  ondismiss={(id) => toasts.dismiss(id)}
+/>
+
+<style>
+  .update {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--md-space-3);
+    padding: var(--md-space-1) var(--md-gutter);
+    background: var(--md-color-ink);
+    color: var(--md-color-ink-inverse);
+    font-size: var(--md-font-size-14);
+  }
+
+  .update button {
+    min-height: 40px;
+    border: var(--md-hairline) solid var(--md-color-ink-inverse);
+    border-radius: var(--md-radius-2);
+    background: none;
+    color: inherit;
+    font-weight: var(--md-weight-semibold);
+    cursor: pointer;
+  }
+</style>

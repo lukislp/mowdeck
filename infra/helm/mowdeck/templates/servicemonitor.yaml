@@ -1,0 +1,25 @@
+{{- /* Prometheus Operator: scrape /metrics of every MowDeck service (needs the operator's CRDs). */ -}}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+{{- range $component, $key := dict "identity" "identity" "fleet" "fleet" "device-gateway" "deviceGateway" "telemetry" "telemetry" "realtime" "realtime" "notifications" "notifications" "scheduler" "scheduler" "entitlements" "entitlements" "billing" "billing" "planner" "planner" "vision" "vision" }}
+{{- if (index $.Values.services $key).enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "mowdeck.serviceName" (dict "ctx" $ "component" $component) }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" $ "component" $component) | nindent 4 }}
+    {{- with $.Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "mowdeck.selectorLabels" (dict "ctx" $ "component" $component) | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ $.Values.metrics.serviceMonitor.interval }}
+{{- end }}
+{{- end }}
+{{- end }}

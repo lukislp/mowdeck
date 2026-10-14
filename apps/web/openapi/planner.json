@@ -1,0 +1,1879 @@
+{
+  "components": {
+    "schemas": {
+      "AreaIn": {
+        "additionalProperties": false,
+        "description": "Where to mow. ``area_id`` alone is a whole map area; a polygon (local metres or WGS84\n``[lat, lon]``) is a spot, inside ``area_id`` when given, else inside the mapped areas.",
+        "properties": {
+          "area_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Id"
+          },
+          "holes": {
+            "items": {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "maxItems": 5000,
+              "minItems": 3,
+              "type": "array"
+            },
+            "maxItems": 50,
+            "title": "Holes",
+            "type": "array"
+          },
+          "polygon": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "maxItems": 5000,
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Polygon"
+          },
+          "polygon_wgs84": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "maxItems": 5000,
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`[lat, lon]` pairs.",
+            "title": "Polygon Wgs84"
+          }
+        },
+        "title": "AreaIn",
+        "type": "object"
+      },
+      "ChainStepIn": {
+        "additionalProperties": false,
+        "description": "One pattern of a chain with its settings (validated by the pattern's schema).",
+        "properties": {
+          "pattern": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Pattern",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "title": "ChainStepIn",
+        "type": "object"
+      },
+      "DockPose": {
+        "description": "Position and orientation of the charging station in the local frame.",
+        "properties": {
+          "heading_deg": {
+            "default": 0.0,
+            "description": "Local frame, counter-clockwise from +x.",
+            "exclusiveMaximum": 360.0,
+            "minimum": 0.0,
+            "title": "Heading Deg",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "DockPose",
+        "type": "object"
+      },
+      "EventDef": {
+        "description": "An event type a module publishes.",
+        "properties": {
+          "schema_ref": {
+            "description": "Reference to the payload JSON Schema (URI or package path).",
+            "minLength": 1,
+            "title": "Schema Ref",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "schema_ref"
+        ],
+        "title": "EventDef",
+        "type": "object"
+      },
+      "ExecutionOut": {
+        "description": "How the mower can run the plan.",
+        "properties": {
+          "mode": {
+            "description": "`custom_paths`: the mower follows the route; `native`: it runs `native_job` on the map area; `unsupported`: it cannot run this plan; `unknown`: no capabilities (a raw map).",
+            "enum": [
+              "custom_paths",
+              "native",
+              "unsupported",
+              "unknown"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "native_job": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`StartMow.pattern` settings of the native form, if any.",
+            "title": "Native Job"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "reason"
+        ],
+        "title": "ExecutionOut",
+        "type": "object"
+      },
+      "FeatureDef": {
+        "description": "A plan feature a module offers, e.g. ``reports``.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "FeatureDef",
+        "type": "object"
+      },
+      "GapsOut": {
+        "description": "Covered ground and gaps; ``remow`` is a ready chain step for the gaps.",
+        "properties": {
+          "area_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Id"
+          },
+          "area_m2": {
+            "title": "Area M2",
+            "type": "number"
+          },
+          "coverage_ratio": {
+            "title": "Coverage Ratio",
+            "type": "number"
+          },
+          "covered_area_m2": {
+            "title": "Covered Area M2",
+            "type": "number"
+          },
+          "gap_area_m2": {
+            "title": "Gap Area M2",
+            "type": "number"
+          },
+          "gaps": {
+            "description": "Gap polygons in local metres.",
+            "items": {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "gaps_wgs84": {
+            "description": "The same as `[lat, lon]`.",
+            "items": {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "title": "Gaps Wgs84",
+            "type": "array"
+          },
+          "remow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChainStepIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A `remow` step over the gaps (None without gaps)."
+          },
+          "track_points": {
+            "title": "Track Points",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "area_id",
+          "area_m2",
+          "covered_area_m2",
+          "coverage_ratio",
+          "track_points",
+          "truncated",
+          "gap_area_m2",
+          "gaps",
+          "gaps_wgs84"
+        ],
+        "title": "GapsOut",
+        "type": "object"
+      },
+      "GapsRequestIn": {
+        "additionalProperties": false,
+        "description": "Which parts of an area did the mower miss between ``start`` and ``end``?",
+        "properties": {
+          "area": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AreaIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default: the map area with the most track points."
+          },
+          "cutting_width_m": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutting Width M"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "min_gap_m2": {
+            "default": 0.05,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Gap M2",
+            "type": "number"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "start",
+          "end"
+        ],
+        "title": "GapsRequestIn",
+        "type": "object"
+      },
+      "GeoReference": {
+        "description": "Anchors the local frame on the earth.\n\nThe local point ``(0, 0)`` is at ``(origin_lat, origin_lon)``. The local axes are the east\nand north axes rotated counter-clockwise by ``rotation_deg``: a local point ``(x, y)`` lies\n``east = x cos(r) - y sin(r)`` and ``north = x sin(r) + y cos(r)`` metres from the origin.",
+        "properties": {
+          "origin_lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Origin Lat",
+            "type": "number"
+          },
+          "origin_lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Origin Lon",
+            "type": "number"
+          },
+          "rotation_deg": {
+            "default": 0.0,
+            "maximum": 360.0,
+            "minimum": -360.0,
+            "title": "Rotation Deg",
+            "type": "number"
+          }
+        },
+        "required": [
+          "origin_lat",
+          "origin_lon"
+        ],
+        "title": "GeoReference",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MapArea": {
+        "description": "A mowable area (a \"zone\" in the Mammotion app).",
+        "properties": {
+          "boundary": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "minItems": 3,
+            "title": "Boundary",
+            "type": "array"
+          },
+          "id": {
+            "description": "Stable id; for Mammotion the zone hash.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "boundary"
+        ],
+        "title": "MapArea",
+        "type": "object"
+      },
+      "MapPath": {
+        "description": "A transfer path between areas (driven with blades off).",
+        "properties": {
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "minItems": 2,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "points"
+        ],
+        "title": "MapPath",
+        "type": "object"
+      },
+      "MapZone": {
+        "description": "A polygon the mower must stay out of: a no-go zone or an obstacle.",
+        "properties": {
+          "boundary": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "minItems": 3,
+            "title": "Boundary",
+            "type": "array"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "boundary"
+        ],
+        "title": "MapZone",
+        "type": "object"
+      },
+      "ModuleDescriptor": {
+        "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventDef"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureDef"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9\\-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionDef"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "ui_areas": {
+            "items": {
+              "$ref": "#/components/schemas/UiAreaDef"
+            },
+            "title": "Ui Areas",
+            "type": "array"
+          },
+          "version": {
+            "maxLength": 64,
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.\\-+]+)?$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "ModuleDescriptor",
+        "type": "object"
+      },
+      "MowerMap": {
+        "description": "The map of one mower: areas, no-go zones, obstacles, paths and the dock.",
+        "properties": {
+          "areas": {
+            "items": {
+              "$ref": "#/components/schemas/MapArea"
+            },
+            "title": "Areas",
+            "type": "array"
+          },
+          "dock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DockPose"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "no_go_zones": {
+            "items": {
+              "$ref": "#/components/schemas/MapZone"
+            },
+            "title": "No Go Zones",
+            "type": "array"
+          },
+          "obstacles": {
+            "items": {
+              "$ref": "#/components/schemas/MapZone"
+            },
+            "title": "Obstacles",
+            "type": "array"
+          },
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/MapPath"
+            },
+            "title": "Paths",
+            "type": "array"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/GeoReference"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Map version; for Mammotion the map hash.",
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "reference"
+        ],
+        "title": "MowerMap",
+        "type": "object"
+      },
+      "MowerSpecIn": {
+        "additionalProperties": false,
+        "description": "Overrides of the mower data (defaults: the Planner's settings and the mower's speed).",
+        "properties": {
+          "cutting_width_m": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutting Width M"
+          },
+          "max_speed_mps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Speed Mps"
+          },
+          "overlap_m": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overlap M"
+          },
+          "safety_margin_m": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safety Margin M"
+          },
+          "transfer_speed_mps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transfer Speed Mps"
+          },
+          "turning_radius_m": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turning Radius M"
+          }
+        },
+        "title": "MowerSpecIn",
+        "type": "object"
+      },
+      "MowerSpecOut": {
+        "description": "The mower data a plan was computed with.",
+        "properties": {
+          "cutting_width_m": {
+            "title": "Cutting Width M",
+            "type": "number"
+          },
+          "max_speed_mps": {
+            "title": "Max Speed Mps",
+            "type": "number"
+          },
+          "overlap_m": {
+            "title": "Overlap M",
+            "type": "number"
+          },
+          "safety_margin_m": {
+            "title": "Safety Margin M",
+            "type": "number"
+          },
+          "spacing_m": {
+            "title": "Spacing M",
+            "type": "number"
+          },
+          "transfer_speed_mps": {
+            "title": "Transfer Speed Mps",
+            "type": "number"
+          },
+          "turning_radius_m": {
+            "title": "Turning Radius M",
+            "type": "number"
+          }
+        },
+        "required": [
+          "cutting_width_m",
+          "overlap_m",
+          "spacing_m",
+          "turning_radius_m",
+          "max_speed_mps",
+          "transfer_speed_mps",
+          "safety_margin_m"
+        ],
+        "title": "MowerSpecOut",
+        "type": "object"
+      },
+      "PatternList": {
+        "description": "Every registered pattern, by key.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PatternOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PatternList",
+        "type": "object"
+      },
+      "PatternOut": {
+        "description": "A registered pattern: the app builds the settings form from ``settings_schema``.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "native": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Name of the native pattern a mower may run instead (on a whole map area); whether a mower supports it is in its capabilities (`native_patterns`).",
+            "title": "Native"
+          },
+          "settings_schema": {
+            "additionalProperties": true,
+            "description": "JSON Schema (draft 2020-12).",
+            "title": "Settings Schema",
+            "type": "object"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "settings_schema"
+        ],
+        "title": "PatternOut",
+        "type": "object"
+      },
+      "PermissionDef": {
+        "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "implied_by": {
+            "description": "Keys that imply this one when held on the whole account (e.g. `device_gateway.view` implied by `mower.view`).",
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+              "type": "string"
+            },
+            "title": "Implied By",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "PermissionDef",
+        "type": "object"
+      },
+      "PlanOut": {
+        "description": "A plan ready to start: send ``command`` to Fleet\n(``POST /api/v1/fleet/mowers/{mower_id}/commands`` with ``{\"command\": ...}``).",
+        "properties": {
+          "area_m2": {
+            "title": "Area M2",
+            "type": "number"
+          },
+          "command": {
+            "$ref": "#/components/schemas/StartMow"
+          },
+          "coverage_ratio": {
+            "title": "Coverage Ratio",
+            "type": "number"
+          },
+          "covered_area_m2": {
+            "title": "Covered Area M2",
+            "type": "number"
+          },
+          "estimated_duration_s": {
+            "title": "Estimated Duration S",
+            "type": "number"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionOut"
+          },
+          "mow_length_m": {
+            "title": "Mow Length M",
+            "type": "number"
+          },
+          "mower": {
+            "$ref": "#/components/schemas/MowerSpecOut"
+          },
+          "pattern_chain": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pattern Chain",
+            "type": "array"
+          },
+          "plan_bytes": {
+            "title": "Plan Bytes",
+            "type": "integer"
+          },
+          "plan_hash": {
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "preview": {
+            "additionalProperties": true,
+            "description": "FeatureCollection: one LineString per segment with `kind`, `blades_on`, `speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`.",
+            "title": "Preview",
+            "type": "object"
+          },
+          "segment_count": {
+            "title": "Segment Count",
+            "type": "integer"
+          },
+          "spot_plan": {
+            "$ref": "#/components/schemas/SpotMowPlan"
+          },
+          "transfer_length_m": {
+            "title": "Transfer Length M",
+            "type": "number"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pattern_chain",
+          "plan_hash",
+          "estimated_duration_s",
+          "covered_area_m2",
+          "area_m2",
+          "coverage_ratio",
+          "mow_length_m",
+          "transfer_length_m",
+          "segment_count",
+          "plan_bytes",
+          "warnings",
+          "execution",
+          "mower",
+          "preview",
+          "spot_plan",
+          "command"
+        ],
+        "title": "PlanOut",
+        "type": "object"
+      },
+      "PlanRequestIn": {
+        "additionalProperties": false,
+        "description": "A plan for a mower (``mower_id``: its map and capabilities) or for a raw ``map``.",
+        "properties": {
+          "area": {
+            "$ref": "#/components/schemas/AreaIn"
+          },
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/ChainStepIn"
+            },
+            "maxItems": 8,
+            "title": "Chain",
+            "type": "array"
+          },
+          "map": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MowerMap"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A map instead of a mower's."
+          },
+          "mower": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MowerSpecIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mower_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mower Id"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[^/\\x00-\\x1f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Use the chain of a saved template instead of `chain`.",
+            "title": "Template"
+          },
+          "wgs84": {
+            "default": false,
+            "description": "Preview coordinates as `[lon, lat]`.",
+            "title": "Wgs84",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "area"
+        ],
+        "title": "PlanRequestIn",
+        "type": "object"
+      },
+      "PreviewOut": {
+        "description": "A validated plan: totals, how it runs, and the segments as a GeoJSON-like collection.",
+        "properties": {
+          "area_m2": {
+            "title": "Area M2",
+            "type": "number"
+          },
+          "coverage_ratio": {
+            "title": "Coverage Ratio",
+            "type": "number"
+          },
+          "covered_area_m2": {
+            "title": "Covered Area M2",
+            "type": "number"
+          },
+          "estimated_duration_s": {
+            "title": "Estimated Duration S",
+            "type": "number"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionOut"
+          },
+          "mow_length_m": {
+            "title": "Mow Length M",
+            "type": "number"
+          },
+          "mower": {
+            "$ref": "#/components/schemas/MowerSpecOut"
+          },
+          "pattern_chain": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pattern Chain",
+            "type": "array"
+          },
+          "plan_bytes": {
+            "title": "Plan Bytes",
+            "type": "integer"
+          },
+          "plan_hash": {
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "preview": {
+            "additionalProperties": true,
+            "description": "FeatureCollection: one LineString per segment with `kind`, `blades_on`, `speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`.",
+            "title": "Preview",
+            "type": "object"
+          },
+          "segment_count": {
+            "title": "Segment Count",
+            "type": "integer"
+          },
+          "transfer_length_m": {
+            "title": "Transfer Length M",
+            "type": "number"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pattern_chain",
+          "plan_hash",
+          "estimated_duration_s",
+          "covered_area_m2",
+          "area_m2",
+          "coverage_ratio",
+          "mow_length_m",
+          "transfer_length_m",
+          "segment_count",
+          "plan_bytes",
+          "warnings",
+          "execution",
+          "mower",
+          "preview"
+        ],
+        "title": "PreviewOut",
+        "type": "object"
+      },
+      "SpotMowPlan": {
+        "description": "A computed mowing route for ``StartMow.spot_plan``.",
+        "properties": {
+          "covered_area_m2": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Covered Area M2",
+            "type": "number"
+          },
+          "estimated_duration_s": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Estimated Duration S",
+            "type": "number"
+          },
+          "native": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpotNativeJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pattern_chain": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Pattern Chain",
+            "type": "array"
+          },
+          "plan_hash": {
+            "description": "SHA-256 of the chain and the segments (`spot_plan_hash`); must match.",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Plan Hash",
+            "type": "string"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/SpotSegment"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "plan_hash",
+          "pattern_chain",
+          "segments"
+        ],
+        "title": "SpotMowPlan",
+        "type": "object"
+      },
+      "SpotNativeJob": {
+        "description": "The plan expressed as a native job of the mower: whole map areas and one pattern.\n\nPresent only when the chain is exactly one pattern the mower may run by itself (``stripes``,\n``diagonal``, ``checkerboard``, ``edge_only``, or ``border_fill`` with one of them) on map\nareas, so a mower without ``custom_paths`` can still execute it as an ordinary\n``StartMow(area_ids, pattern)``.",
+        "properties": {
+          "area_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "pattern": {
+            "additionalProperties": true,
+            "description": "Settings in the form of `StartMow.pattern` (`name`, `angle_deg`, `spacing_m`, `border_laps`, `order`).",
+            "title": "Pattern",
+            "type": "object"
+          }
+        },
+        "required": [
+          "area_ids",
+          "pattern"
+        ],
+        "title": "SpotNativeJob",
+        "type": "object"
+      },
+      "SpotSegment": {
+        "description": "One part of a spot plan: drive along ``path`` with the blades on or off.",
+        "properties": {
+          "blades_on": {
+            "title": "Blades On",
+            "type": "boolean"
+          },
+          "kind": {
+            "default": "mow",
+            "enum": [
+              "mow",
+              "turn",
+              "transfer"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "description": "Encoded polyline of local metres (x, y), centimetre precision (`encode_polyline`), at least two points.",
+            "maxLength": 200000,
+            "minLength": 4,
+            "title": "Path",
+            "type": "string"
+          },
+          "speed_mps": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 2.0,
+            "title": "Speed Mps",
+            "type": "number"
+          }
+        },
+        "required": [
+          "blades_on",
+          "speed_mps",
+          "path"
+        ],
+        "title": "SpotSegment",
+        "type": "object"
+      },
+      "StartMow": {
+        "description": "Start mowing the given areas, a stored plan or an inline spot plan (exactly one).",
+        "properties": {
+          "area_ids": {
+            "description": "Map area ids to mow, in order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Area Ids",
+            "type": "array"
+          },
+          "kind": {
+            "const": "start_mow",
+            "default": "start_mow",
+            "title": "Kind",
+            "type": "string"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pattern settings (validated by the pattern's own JSON Schema).",
+            "title": "Pattern"
+          },
+          "plan_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Reference to a stored mowing plan.",
+            "title": "Plan Ref"
+          },
+          "spot_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpotMowPlan"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A route computed by the Planner (spot mowing). Runs only on mowers with `custom_paths`, or natively when the plan carries a `native` job."
+          }
+        },
+        "title": "StartMow",
+        "type": "object"
+      },
+      "TemplateIn": {
+        "additionalProperties": false,
+        "description": "A saved chain.",
+        "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/ChainStepIn"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Chain",
+            "type": "array"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "required": [
+          "chain"
+        ],
+        "title": "TemplateIn",
+        "type": "object"
+      },
+      "TemplateList": {
+        "description": "Templates of the account, by name.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TemplateList",
+        "type": "object"
+      },
+      "TemplateOut": {
+        "description": "A saved chain of the account.",
+        "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/ChainStepIn"
+            },
+            "title": "Chain",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "chain",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TemplateOut",
+        "type": "object"
+      },
+      "UiAreaDef": {
+        "description": "An area the module occupies in the web app shell.",
+        "properties": {
+          "labels": {
+            "description": "Translated menu labels by language tag (e.g. `de`); `menu_label` is the English fallback.",
+            "patternProperties": {
+              "^[a-z]{2}(-[A-Z]{2})?$": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "menu_label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Menu Label",
+            "type": "string"
+          },
+          "required_permission": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Required Permission",
+            "type": "string"
+          },
+          "route": {
+            "maxLength": 200,
+            "pattern": "^/[A-Za-z0-9/_\\-:\\[\\]]*$",
+            "title": "Route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "menu_label",
+          "required_permission"
+        ],
+        "title": "UiAreaDef",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "planner",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/.well-known/mowdeck-module": {
+      "get": {
+        "operationId": "module_descriptor__well_known_mowdeck_module_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleDescriptor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Module Descriptor",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/planner/coverage/gaps": {
+      "post": {
+        "description": "Covered ground and the gaps of an area from the mower's position track (Telemetry)\nbetween ``start`` and ``end``, with a ``remow`` step for them.",
+        "operationId": "coverage_gaps_api_v1_planner_coverage_gaps_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GapsRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Coverage Gaps",
+        "tags": [
+          "planner"
+        ]
+      }
+    },
+    "/api/v1/planner/patterns": {
+      "get": {
+        "description": "Every registered pattern with its settings schema (plug-ins included).",
+        "operationId": "list_patterns_api_v1_planner_patterns_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatternList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Patterns",
+        "tags": [
+          "planner"
+        ]
+      }
+    },
+    "/api/v1/planner/plans": {
+      "post": {
+        "description": "The plan ready to start: the ``SpotMowPlan`` with its hash and the ``start_mow``\ncommand for Fleet. Nothing is stored; the same request gives the same hash. Needs\n``can_control`` on the mower (Fleet checks it again when the command arrives).",
+        "operationId": "create_plan_api_v1_planner_plans_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Plan",
+        "tags": [
+          "planner"
+        ]
+      }
+    },
+    "/api/v1/planner/plans/preview": {
+      "post": {
+        "description": "Compute and validate a plan and show it: segments, duration, area, warnings, and how\nthe mower can run it. Needs ``can_view`` on the mower (404 when invisible).",
+        "operationId": "preview_plan_api_v1_planner_plans_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Plan",
+        "tags": [
+          "planner"
+        ]
+      }
+    },
+    "/api/v1/planner/templates": {
+      "get": {
+        "description": "Saved chains of the caller's account.",
+        "operationId": "list_templates_api_v1_planner_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Templates",
+        "tags": [
+          "planner"
+        ]
+      }
+    },
+    "/api/v1/planner/templates/{name}": {
+      "delete": {
+        "description": "Delete a saved chain; needs ``can_control`` on the account.",
+        "operationId": "delete_template_api_v1_planner_templates__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Template",
+        "tags": [
+          "planner"
+        ]
+      },
+      "get": {
+        "description": "One saved chain.",
+        "operationId": "get_template_api_v1_planner_templates__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Template",
+        "tags": [
+          "planner"
+        ]
+      },
+      "put": {
+        "description": "Create (201) or replace (200) a saved chain; needs ``can_control`` on the account.",
+        "operationId": "put_template_api_v1_planner_templates__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Template",
+        "tags": [
+          "planner"
+        ]
+      }
+    }
+  }
+}

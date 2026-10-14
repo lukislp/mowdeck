@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "CommandStatus": {
+      "description": "Outcome of a command.",
+      "enum": [
+        "accepted",
+        "rejected",
+        "executed",
+        "expired",
+        "failed"
+      ],
+      "title": "CommandStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The outcome of a command, published by the Device-Gateway.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "command_id": {
+      "format": "uuid",
+      "title": "Command Id",
+      "type": "string"
+    },
+    "correlation_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9._:\\-]{1,128}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Correlation id of the command, if known.",
+      "title": "Correlation Id"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "status": {
+      "$ref": "#/$defs/CommandStatus"
+    }
+  },
+  "required": [
+    "command_id",
+    "mower_id",
+    "status"
+  ],
+  "title": "CommandResult",
+  "type": "object"
+}

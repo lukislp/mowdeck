@@ -1,0 +1,21 @@
+{
+  "id": "chatcmpl-vision-fixture",
+  "object": "chat.completion",
+  "created": 1760083200,
+  "model": "my-vision-model",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"situation\": \"stuck_on_obstacle\", \"confidence\": 0.82, \"proposal\": [{\"linear\": -0.6, \"angular\": 0.0, \"seconds\": 1.0}, {\"linear\": 0.0, \"angular\": 0.5, \"seconds\": 1.0}, {\"linear\": 0.5, \"angular\": 0.0, \"seconds\": 1.0}], \"rationale\": \"The front wheels press against the edge of the flower bed. Back off, turn left and continue.\", \"risk\": [], \"abort_reasons\": []}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 905,
+    "completion_tokens": 118,
+    "total_tokens": 1023
+  }
+}

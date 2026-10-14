@@ -1,0 +1,39 @@
+[project]
+name = "mowdeck-patterns"
+version = "0.1.0"
+description = "Mowing patterns as plug-ins and route checks: a pure computation library on Shapely."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = ["mowdeck-contracts", "shapely>=2.1"]
+
+# Built-in patterns. Another package adds a pattern with an entry point in this group; the name
+# is the pattern key and the object a class (or factory) without arguments.
+[project.entry-points."mowdeck.patterns"]
+stripes = "mowdeck_patterns.patterns.stripes:StripesPattern"
+diagonal = "mowdeck_patterns.patterns.stripes:DiagonalPattern"
+checkerboard = "mowdeck_patterns.patterns.stripes:CheckerboardPattern"
+auto_aligned = "mowdeck_patterns.patterns.stripes:AutoAlignedPattern"
+alternating = "mowdeck_patterns.patterns.stripes:AlternatingPattern"
+spiral = "mowdeck_patterns.patterns.rings:SpiralPattern"
+contour = "mowdeck_patterns.patterns.rings:ContourPattern"
+edge_only = "mowdeck_patterns.patterns.rings:EdgeOnlyPattern"
+border_fill = "mowdeck_patterns.patterns.rings:BorderFillPattern"
+cells = "mowdeck_patterns.patterns.cells:CellsPattern"
+remow = "mowdeck_patterns.patterns.remow:RemowPattern"
+
+[tool.uv.sources]
+mowdeck-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mowdeck_patterns"]

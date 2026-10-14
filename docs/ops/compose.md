@@ -1,0 +1,154 @@
+# Operating the Compose stack
+
+The stack lives in `infra/compose/` and runs the foundation infrastructure on one machine.
+
+## Start, check, reset
+
+```bash
+cd infra/compose
+cp .env.example .env            # set the passwords
+docker compose up -d --build --wait   # build the MowDeck services, wait until all are healthy
+docker compose ps
+docker compose down -v          # reset, deletes all data
+```
+
+## Services and ports
+
+| Service | Image | Host port |
+| --- | --- | --- |
+| traefik | `public.ecr.aws/docker/library/traefik:v3.7.14` | 80, 443 |
+| nats | `public.ecr.aws/docker/library/nats:2.15.0-alpine` | 127.0.0.1:4222 (client), 127.0.0.1:8222 (monitoring, `/healthz`) |
+| postgres | `public.ecr.aws/docker/library/postgres:17.11-alpine` | 127.0.0.1:5432 |
+| openfga-migrate | `ghcr.io/openfga/openfga:v1.22.0` | one-shot, no port |
+| openfga | `ghcr.io/openfga/openfga:v1.22.0` | 127.0.0.1:8080 (HTTP), 127.0.0.1:8081 (gRPC) |
+| authz-bootstrap | `mowdeck/authz-bootstrap:dev`, built from `infra/openfga/bootstrap` | one-shot, no port |
+| whoami (profile `demo`) | `ghcr.io/traefik/whoami:v1.10.3` | via Traefik at `/api/v1/whoami` |
+| identity-migrate | `mowdeck/identity:dev`, built from the repository | one-shot, no port |
+| identity | `mowdeck/identity:dev`, built from the repository | via Traefik at `/api/v1/identity` and `/.well-known/jwks.json` |
+| fleet-migrate | `mowdeck/fleet:dev`, built from the repository | one-shot, no port |
+| fleet | `mowdeck/fleet:dev`, built from the repository | via Traefik at `/api/v1/fleet` |
+| telemetry-migrate | `mowdeck/telemetry:dev`, built from the repository | one-shot, no port |
+| telemetry | `mowdeck/telemetry:dev`, built from the repository | via Traefik at `/api/v1/telemetry` |
+| device-gateway | `mowdeck/device-gateway:dev`, built from the repository | via Traefik at `/api/v1/device-gateway` |
+| realtime | `mowdeck/realtime:dev`, built from the repository | via Traefik at `/api/v1/realtime` (WebSocket `/api/v1/realtime/ws`) |
+| notifications-migrate | `mowdeck/notifications:dev`, built from the repository | one-shot, no port |
+| notifications | `mowdeck/notifications:dev`, built from the repository | via Traefik at `/api/v1/notifications` |
+| scheduler-migrate | `mowdeck/scheduler:dev`, built from the repository | one-shot, no port |
+| scheduler | `mowdeck/scheduler:dev`, built from the repository | via Traefik at `/api/v1/scheduler` |
+| vision-migrate | `mowdeck/vision:dev`, built from the repository | one-shot, no port |
+| vision | `mowdeck/vision:dev`, built from the repository | via Traefik at `/api/v1/vision` |
+| web | `mowdeck/web:dev`, built from `apps/web/Dockerfile` | via Traefik at `/` (the web app; router priority 1, behind every `/api/v1` route) |
+
+PostgreSQL creates the databases `identity`, `fleet`, `telemetry`, `scheduler`, `notifications`, `entitlements`, `billing`, `vision`, `openfga`, each with a role of the same name.
+
+The complete operating notes are in the repository file `infra/compose/README.md`.
+
+## Image sources
+
+All third-party images are pinned in `infra/images.txt` and chosen in `.env` by the variables under "Image sources": `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images of the MowDeck builds. The defaults are public registries that need no login (ECR Public, `ghcr.io`, Docker Hub for the OpenFGA CLI).
+
+To use another registry at home (a pull-through cache or a mirror on the NAS), copy the images there with the same tags and append the variables to `.env`: `sh infra/mirror-env.sh registry.example.org/mowdeck-mirror >> infra/compose/.env` prints one `NAME_IMAGE=<prefix>/<alias>:<tag>` line per image. Log in to that registry first if it needs credentials.
+
+CI pulls every image from the repository's own mirror `ghcr.io/<owner>/mowdeck-mirror/<alias>:<tag>` with `GITHUB_TOKEN`, so the shared anonymous rate limits of Docker Hub and ECR Public cannot break a run. The workflow `mirror-images` fills it with `crane copy` (all architectures) when the list changes on `main` or in a pull request, or when started by hand. The mirror packages are private; make them public in the package settings on GitHub if a home installation should pull them without a login. Details: `infra/compose/README.md`.
+
+## Authorization bootstrap
+
+`authz-bootstrap` creates the OpenFGA store `mowdeck` if it is missing and writes `infra/openfga/model.fga` only when it differs from the latest model in the store, then exits. It is idempotent and runs on every `up`; its log shows `created store` and `wrote model` on the first run and `found store` and `model unchanged` afterwards (`docker compose logs authz-bootstrap`). Services find the store by name and pin the latest model when they start, so no store or model id needs to be configured. After a model change, run `docker compose up -d --build --wait` and restart the services that use authorization so they pin the new model. See [ADR 0014](../adr/0014-authorization-model-and-tuple-ownership.md).
+
+## Identity
+
+Identity issues the access tokens (EdDSA, 10 minutes) and publishes its public keys at `/.well-known/jwks.json`; the other services verify tokens against `http://identity:8000/.well-known/jwks.json` inside the network. `identity-migrate` runs the database migrations first. Set `IDENTITY_KEY_ENCRYPTION_KEY` in `.env` (the value in `.env.example` is a marked development default: generate your own and keep a backup, it encrypts the signing keys). `IDENTITY_REGISTRATION=open` lets anybody register; `closed` accepts only the first account. Login, registration and token exchange are rate limited by Traefik (router `identity-auth`: 10 per minute per client IP, burst 20) and by Identity itself; refresh and logout (`/api/v1/identity/session/...`) have their own, looser limit (router `identity-session`: 60 per minute, burst 30), so several devices of a household behind one address stay logged in. A refresh token presented again within `MOWDECK_IDENTITY_REFRESH_REUSE_GRACE_SECONDS` (10) after a lost response does not end the session.
+
+Operator commands run in the container:
+
+```bash
+docker compose exec identity python -m identity.cli list-keys
+docker compose exec identity python -m identity.cli rotate-keys          # announce a next key
+docker compose exec identity python -m identity.cli reconcile            # repair OpenFGA from the database
+docker compose exec -e MOWDECK_IDENTITY_CLI_PASSWORD=... identity python -m identity.cli create-user anna --account-name "Anna home"
+```
+
+Details: `services/identity/README.md` and [ADR 0015](../adr/0015-tokens-sessions-and-key-rotation.md).
+
+## Fleet
+
+Fleet owns sites, groups and mowers, writes their place in the hierarchy to OpenFGA and sends every command to the Device-Gateway after checking the right the command kind needs (`can_control`, `can_drive`, or `can_emergency_stop` for an emergency stop). `fleet-migrate` runs the database migrations first. Register a simulated mower with `POST /api/v1/fleet/mowers` (`{"name": "Front lawn", "connection_kind": "simulated"}`), start it with `POST /api/v1/fleet/mowers/<id>/commands` (`{"command": {"kind": "start_mow", "area_ids": ["front"]}}`) and follow the command at `GET /api/v1/fleet/commands/<command_id>`. `FLEET_ALLOWED_CONNECTION_KINDS` in `.env` lists the accepted connection kinds (the example enables `simulated,cloud,ble_bridge`; the web app offers exactly these, from `GET /api/v1/fleet/connection-kinds`). Cloud mowers come from a linked Mammotion account ([ADR 0034](../adr/0034-linked-cloud-accounts-and-device-discovery.md)): link it once in the web app (add mower, or Settings, Linked accounts), then pick its mowers; the password is stored encrypted with `FLEET_CREDENTIAL_ENCRYPTION_KEY` (the example value is a marked development key: generate your own and keep a backup). `GATEWAY_FAKE_MAMMOTION_CLOUD=true` (development only) replaces the Mammotion cloud with a fake one (`*@fake.mowdeck.test`, password `fake-cloud-password`). Details: `services/fleet/README.md` and [ADR 0016](../adr/0016-fleet-commands-and-authorization-per-command-kind.md).
+
+## Telemetry
+
+Telemetry stores what the Device-Gateway publishes: the latest state of every mower, a history in which unchanged heartbeats are kept only once per `TELEMETRY_HEARTBEAT_HISTORY_SECONDS`, the position track and the timeline of command results. Read it with `GET /api/v1/telemetry/mowers/<id>/state`, `.../history?step=5s`, `.../positions` and `.../commands`, or the states of all visible mowers with `GET /api/v1/telemetry/accounts/me/mowers/states`; a mower you cannot see answers 404 like an unknown one, and a visible mower that has not reported yet answers 404 "no telemetry yet". The mower's map and capabilities, as the Device-Gateway last read them, are at `.../map` (with an ETag) and `.../capabilities` (404 "no map yet" or "no capabilities yet" before the first report). A retention job (history 30 days, positions 90, command timeline 30; `TELEMETRY_RETENTION_*_DAYS` in `.env`) deletes older rows, on one replica at a time. Details: `services/telemetry/README.md` and [ADR 0017](../adr/0017-telemetry-storage-and-retention.md).
+
+## Realtime
+
+Realtime pushes the live state and the command results of the mowers a client may view over a WebSocket at `ws://<host>/api/v1/realtime/ws`. The client sends its access token in the first message (`{"type": "auth", "token": "..."}`), then subscribes to mower ids; every id is checked in OpenFGA and checked again when Identity changes grants, every minute and on every token refresh. Traefik needs no extra configuration for the upgrade; protocol pings every `REALTIME_PING_SECONDS` (20) keep idle sockets open. Limits per instance: `REALTIME_MAX_CONNECTIONS_PER_ACCOUNT` (50) and `REALTIME_MAX_CONNECTIONS_PER_USER` (10). `REALTIME_ALLOWED_ORIGINS` (default `http://localhost`) lists the origins allowed to open a socket: add the address you open the web app with when it is not `http://localhost`. Restarting the service closes every socket with 1001; clients reconnect. Realtime is ready when NATS and its two subscriptions are active; an OpenFGA outage keeps open sockets running but denies new subscriptions. Details: `services/realtime/README.md` and [ADR 0018](../adr/0018-realtime-websocket-protocol.md).
+
+## Web app
+
+The service `web` serves the web app (a static SvelteKit PWA in an unprivileged, read-only nginx, port 8080 inside the network) at `/`: open `http://localhost`, register and add a simulated mower. It runs on the same origin as the API, so no CORS is needed. nginx sends a strict Content Security Policy and the other security headers; `/healthz` is its healthcheck, and Traefik waits for it. After a change to the app, `docker compose up -d --build web`; for development use the Vite dev server instead (`pnpm dev`, see `apps/web/README.md`).
+
+**Map background.** By default the map draws a metric grid in the mower's own frame and sends nothing to third parties. `WEB_MAP_TILES` (empty by default) sets a raster tile URL template with `{z}`, `{x}`, `{y}` (and optionally `{s}`), `WEB_MAP_ATTRIBUTION` the attribution text the provider requires (filled in automatically for `openstreetmap.org` URLs), `WEB_MAP_MAX_ZOOM` the highest zoom it delivers (default 19). The `web` container renders them into `/config.json` and adds the tile host to the CSP `img-src` at start (`docker compose up -d web` applies a change); an invalid template is logged and ignored. **Privacy:** with tiles, every map view tells the tile server which tiles are shown, that is where the garden is, together with the viewer's IP address. Respect the provider's usage policy (the public OpenStreetMap tile servers are not meant for apps: https://operations.osmfoundation.org/policies/tiles/); an API key in the template is visible to every user of the app.
+
+**Live camera.** `WEB_CAMERA_ENABLED=false` by default. With `true` the browser may join the live video of cloud mowers on Agora's servers: the `web` container adds `*.agora.io` and `*.sd-rtn.com` (on any port) to the CSP `connect-src` (and `blob:` to `media-src` and `worker-src`) and sets `cameraEnabled` in `/config.json` at start ([ADR 0032](../adr/0032-live-camera-over-agora.md)). The live video needs HTTPS (or `localhost`). **Privacy:** the video of the garden and the viewer's IP address go to Agora and Mammotion; over 4G the stream counts against the mower's video allowance. The simulated mower's test pattern works without the switch.
+
+**HTTPS.** Installing the PWA reliably and Web Push (Task 12) need HTTPS. At home the intended path is Tailscale with its HTTPS certificates (for example `https://mowdeck.<tailnet>.ts.net`) or a reverse proxy with a certificate in front of Traefik. Behind HTTPS set `IDENTITY_REFRESH_COOKIE_SECURE=true` (the refresh cookie gets the `Secure` flag) and `REALTIME_ALLOWED_ORIGINS` to the HTTPS origin, then `docker compose up -d`.
+
+## Notifications
+
+Notifications turns the mower states into notifications (mowing finished, stuck, battery low, offline and back online, optionally job started) and delivers them to the users who subscribed in their preferences (`PUT /api/v1/notifications/preferences`), after checking again that they may view the mower. Channels: Web Push to the PWA (`POST /api/v1/notifications/push-subscriptions`), ntfy (`PUT /api/v1/notifications/ntfy`, servers from `NOTIFICATIONS_NTFY_ALLOWED_SERVERS` only) and the service log (`log`, enabled in `.env.example`). `POST /api/v1/notifications/test` sends a test notification; `GET /api/v1/notifications/inbox` lists the newest 200. Without `NOTIFICATIONS_VAPID_PRIVATE_KEY` the service creates a development VAPID key pair in the `notifications-data` volume on first start and logs the public key; production generates a pair once (`docker compose run --rm notifications python -m notifications.cli generate-vapid-keys`) and sets `NOTIFICATIONS_VAPID_PRIVATE_KEY`, `NOTIFICATIONS_VAPID_PUBLIC_KEY` and `NOTIFICATIONS_VAPID_SUBJECT`. Details: `services/notifications/README.md` and [ADR 0022](../adr/0022-notifications-rules-and-delivery.md).
+
+## Scheduler
+
+The Scheduler fires mowing schedules (weekly or every N days, for a mower or a group) in the site's time zone and starts the mowers through Fleet on behalf of the schedule's owner, whose `can_control` is checked again at every firing. The rain pause uses Open-Meteo (internet access from the container; data CC BY 4.0) and the site's coordinates (`latitude`, `longitude` on `PATCH /api/v1/fleet/sites/{id}`), else the mower's map origin or last position; `SCHEDULER_WEATHER_PROVIDER=static` turns it into a fixed answer for offline installations and tests (`SCHEDULER_STATIC_WEATHER=dry|rain|unknown`). Run records: `GET /api/v1/scheduler/schedules/{id}/runs`; Fleet's command records show `origin=scheduler`. Details: `services/scheduler/README.md` and [ADR 0024](../adr/0024-scheduler-recurrence-rain-pause-and-command-issuing.md).
+
+## Acceptance test
+
+`uv run poe e2e` runs the Phase 1 acceptance test (`tests/e2e`) against the running stack through Traefik, about two minutes including a 90 s idle WebSocket. Base URL: `MOWDECK_E2E_BASE_URL` (default `http://localhost`). CI runs it in the job `e2e` and uploads the Compose logs when it fails.
+
+The Phase 2 gate for the web app is a Playwright suite (`tests/e2e-web`): with the stack up, `pnpm install` and `pnpm --filter e2e-web test` (same base URL variable). CI runs it in the job `e2e-web` and uploads the Playwright report and the Compose logs when it fails.
+
+## Device-Gateway
+
+The Device-Gateway holds the mower connections. It loads the mowers from Fleet when it starts and follows Fleet's `mower.registered`, `mower.updated` and `mower.removed` events; the stack seeds no mower. `MOWDECK_SIM_TIME_SCALE` (30 in `.env.example`) speeds up the simulation. `GET /api/v1/device-gateway/mowers` shows the connection status of the account's mowers. After every connect the gateway publishes the mower's capabilities and map to the stream `DEVICE` (only when they changed) and reads the map again after a job ends; Telemetry stores them for the web app.
+
+The service runs as non-root with a read-only root file system (tmpfs at `/tmp`); its healthcheck uses `/readyz`. Details: `services/device-gateway/README.md`.
+
+## Notes
+
+- Never commit `.env`; secrets never go into images.
+- Init scripts run only on an empty data volume.
+- Traefik v3.6.1 or newer is needed with Docker 29.
+
+## AI assist (Vision)
+
+The `vision` service ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)) asks a vision model how to free a stuck mower (or bring it near the dock); a user with `can_drive` approves every maneuver in the web app, and the service drives it with blades off through Fleet's drive sessions. Two ways to provide a model:
+
+- **Every user brings a provider** (Settings, AI provider in the web app): model string, optional base URL, API key. Keys are stored encrypted with `VISION_SECRETS_KEY` (32 bytes, `openssl rand -base64 32`); without it users can only configure keyless providers (Ollama, open endpoints). The plan feature is `ai_recover` (every plan while billing is disabled).
+- **The installation provides one** for users without their own: `VISION_DEFAULT_ENABLED=true`, `VISION_DEFAULT_MODEL`, `VISION_DEFAULT_API_BASE`, `VISION_DEFAULT_API_KEY` (plan feature `ai_recover_hosted`). Without `VISION_DEFAULT_API_KEY` LiteLLM reads the family's usual variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`), which you can add to the `vision` service's environment.
+
+Model strings (LiteLLM):
+
+| Family | Model string | Key | Base URL |
+| --- | --- | --- | --- |
+| Anthropic | `anthropic/claude-sonnet-5-5` (default), `anthropic/claude-opus-5-5`, `anthropic/claude-haiku-5-5` | `ANTHROPIC_API_KEY` | no |
+| OpenAI | `openai/gpt-5-mini`, `openai/gpt-4.1-mini` | `OPENAI_API_KEY` | no |
+| Google Gemini | `gemini/gemini-2.5-flash`, `gemini/gemini-2.5-pro` | `GEMINI_API_KEY` | no |
+| Mistral | `mistral/pixtral-large-latest` | `MISTRAL_API_KEY` | no |
+| Ollama (local) | `ollama/llava`, `ollama/qwen2.5vl` | none | `http://<host>:11434` |
+| OpenAI-compatible (vLLM, LM Studio, LocalAI, a proxy) | `openai/<model name of the endpoint>` | optional | `http://<host>:<port>/v1` |
+| Fake (offline demo, development) | `fake/recover`, `fake/people`, `fake/low_confidence`, `fake/fail` | none | no |
+
+**Local models.** Run Ollama next to the stack (`docker run -d --name ollama --network mowdeck -v ollama:/root/.ollama ollama/ollama`, then `docker exec ollama ollama pull llava`) and use `ollama/llava` with the base URL `http://ollama:11434`; images then never leave the installation. Small local models answer less reliably: answers that do not match the schema are retried once and otherwise fail, low confidence is never proposed.
+
+**Costs.** One analysis sends one or two images (about 1,000 to 1,600 input tokens each for Claude) and the scene context (about 1,000 tokens) and gets a few hundred output tokens back (plus thinking tokens on current Claude models). With `anthropic/claude-sonnet-5-5` ($2 input and $10 output per million tokens) that is about 1 to 4 US cents per analysis; every request is recorded with its tokens and LiteLLM's estimate (`provider_requests`). Caps: `VISION_USER_DAILY_REQUESTS` per user and day, `VISION_HOSTED_ACCOUNT_DAILY_REQUESTS` per account and day on the installation model.
+
+**Privacy.** With a cloud model the snapshots and the map excerpt around the mower go to that provider. Images are deleted with the proposal after `VISION_PROPOSAL_TTL_SECONDS` (default 300) unless `VISION_KEEP_IMAGES_DAYS` is set; they are never logged.
+
+**Offline demo with the simulator.** Set `VISION_DEFAULT_ENABLED=true` and `VISION_DEFAULT_MODEL=fake/recover`, register a simulated mower with the connection option `{"stuck_after_seconds": 20}` (development only: the mower gets stuck after 20 s of mowing), start mowing, and use AI assist on the mower page when it reports the error. `VISION_ALLOW_FAKE_PROVIDER=true` also offers the fake to users on the settings page (e2e stack).
+
+**A second stack next to this one.** `MOWDECK_NETWORK` names the Docker network (default `mowdeck`). Every Traefik with the Docker provider sees the labels of all containers on the host, so a second stack (own project name with `docker compose -p`, own network, no host ports besides its gateway) must not carry the same router labels: remove them in an override file (`labels: !reset []`) and route with a Traefik file provider, or pin each Traefik to its own project.
+
+### Photos of a real camera and automatic analyses
+
+A Mammotion mower has no photo command, so without an open browser Vision has no picture of it ([ADR 0035](../adr/0035-server-side-camera-frames-and-automatic-analysis.md)). The capture worker fixes that: set `COMPOSE_PROFILES=capture` (or add `--profile capture`), `GATEWAY_CAPTURE_URL=http://vision-capture:8000` and a shared `CAPTURE_TOKEN` in `infra/compose/.env`, then `docker compose up -d --build vision-capture device-gateway`. The worker image is the Vision image with Chromium (about 0.5 GB more; the build downloads Playwright's Chromium headless shell and the Agora Web SDK). Every photo makes the mower publish video for a few seconds (4G budget).
+
+Users switch on "Automatische KI-Analyse bei Fehlern" on the AI provider page; when a mower gets stuck, blocked, leaves its area or its wheels slip, Vision takes a photo, asks the user's model and sends "KI-Vorschlag für <Mäher>" as a notification. Limits: `VISION_AUTO_COOLDOWN_MINUTES` (10) per mower, `VISION_AUTO_DAILY_PER_MOWER` (20); `VISION_AUTO_ENABLED=false` switches it off. Nothing moves without an approval.

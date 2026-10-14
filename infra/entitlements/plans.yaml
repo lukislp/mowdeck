@@ -1,0 +1,83 @@
+# Plans of the Entitlements service (ADR 0028). Seeded at every start, upserted by key.
+#
+# * A plan is (re)written when it is new or its entry here changed since the last start; an
+#   operator's edit through PUT /api/v1/entitlements/plans/{key} survives restarts until the
+#   entry here changes. Plans are never deleted: set active: false to stop offering one
+#   (accounts that hold it keep it).
+# * limits: omitted (or null) means unlimited. Keys: max_mowers, max_users, max_sites,
+#   max_groups, max_schedules, history_days.
+# * features: feature keys declared by the modules (GET /api/v1/entitlements/features).
+#   Keys are hierarchical ("notifications" grants "notifications.push"); "*" grants all.
+#   Keys no deployed module declares yet are kept and only logged, so this file may lead a
+#   deployment (for example "reports" before the Reports service exists).
+# * view and emergency_stop are never taken away: in "grace" and "expired" an account keeps
+#   exactly these, and no plan change ever stops a mower.
+# * trial_days: new accounts on the default plan start a trial of that many days.
+# * is_default: the plan of accounts without an assignment when
+#   MOWDECK_ENTITLEMENTS_DEFAULT_PLAN names no existing plan (at most one plan).
+#
+# While MOWDECK_ENTITLEMENTS_BILLING_ENABLED is false (the default) every account has the plan
+# "unlimited", whatever is assigned.
+
+plans:
+  - key: unlimited
+    name: Unlimited
+    description: No limits and every feature. Every account has it while billing is disabled.
+    trial_days: 0
+    limits: {}
+    features: ["*"]
+
+  - key: home
+    name: Home
+    description: One garden with up to four mowers.
+    is_default: true
+    trial_days: 30
+    limits:
+      max_mowers: 4
+      max_users: 5
+      max_sites: 1
+      max_groups: 2
+      max_schedules: 10
+      history_days: 90
+    features:
+      - view
+      - control
+      - emergency_stop
+      - schedules
+      - notifications
+      - manual_drive
+      - home_assistant
+      - map
+      - health
+      - spot_mowing
+      - camera
+      # AI assist with the user's own vision provider (ADR 0033). The installation's own model
+      # is a separate key; add it here to include it in Home:
+      # - ai_recover_hosted
+      - ai_recover
+
+  - key: fleet
+    name: Fleet
+    description: Any number of mowers, sites, groups and staff, with bulk commands and reports.
+    trial_days: 14
+    limits: {}
+    features:
+      - view
+      - control
+      - emergency_stop
+      - schedules
+      - notifications
+      - manual_drive
+      - home_assistant
+      - map
+      - health
+      - camera
+      - fleet.sites
+      - fleet.groups
+      - fleet.bulk_commands
+      - reports
+      - api_tokens.scoped
+      - spot_mowing
+      # AI assist with an own provider and with the installation's model (ADR 0033).
+      - ai_recover
+      - ai_recover_hosted

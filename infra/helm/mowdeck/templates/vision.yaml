@@ -1,0 +1,30 @@
+{{- /* Vision: AI assist for stuck mowers with human approval (ADR 0033); camera snapshot and map
+context to a vision model (any family through LiteLLM), drives approved maneuvers through
+fleet.drive.* (Compose services vision and vision-migrate). The users' provider keys are
+encrypted with secrets.VISION_SECRETS_KEY; config.VISION_DEFAULT_* offers the installation's
+model (off by default), its key is secrets.VISION_DEFAULT_API_KEY. Automatic analyses on errors
+(ADR 0035): config.VISION_AUTO_*. */ -}}
+{{- $c := .Values.config }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (dict
+  "MOWDECK_VISION_DEFAULT_ENABLED" (toString $c.VISION_DEFAULT_ENABLED)
+  "MOWDECK_VISION_DEFAULT_MODEL" $c.VISION_DEFAULT_MODEL
+  "MOWDECK_VISION_DEFAULT_API_BASE" $c.VISION_DEFAULT_API_BASE
+  "MOWDECK_VISION_ALLOW_FAKE_PROVIDER" (toString $c.VISION_ALLOW_FAKE_PROVIDER)
+  "MOWDECK_VISION_USER_API_BASE_POLICY" $c.VISION_USER_API_BASE_POLICY
+  "MOWDECK_VISION_PROPOSAL_TTL_SECONDS" (toString $c.VISION_PROPOSAL_TTL_SECONDS)
+  "MOWDECK_VISION_MAX_ROUNDS" (toString $c.VISION_MAX_ROUNDS)
+  "MOWDECK_VISION_USER_DAILY_REQUESTS" (toString $c.VISION_USER_DAILY_REQUESTS)
+  "MOWDECK_VISION_HOSTED_ACCOUNT_DAILY_REQUESTS" (toString $c.VISION_HOSTED_ACCOUNT_DAILY_REQUESTS)
+  "MOWDECK_VISION_KEEP_IMAGES_DAYS" (toString $c.VISION_KEEP_IMAGES_DAYS)
+  "MOWDECK_VISION_AUTO_ENABLED" (toString $c.VISION_AUTO_ENABLED)
+  "MOWDECK_VISION_AUTO_COOLDOWN_MINUTES" (toString $c.VISION_AUTO_COOLDOWN_MINUTES)
+  "MOWDECK_VISION_AUTO_DAILY_PER_MOWER" (toString $c.VISION_AUTO_DAILY_PER_MOWER)
+  "MOWDECK_VISION_PHOTO_TIMEOUT_SECONDS" (toString $c.VISION_PHOTO_TIMEOUT_SECONDS)) }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "vision" "key" "vision" "image" "vision" "module" "vision.adapters.db.migrate" "weight" 9) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "vision" "key" "vision" "image" "vision"
+  "env" $env "db" "vision" "migrateModule" "vision.adapters.db.migrate" "authz" true
+  "secretFiles" (list
+    (dict "key" "database-url-vision" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE")
+    (dict "key" "vision-secrets-key" "file" "vision-secrets-key" "env" "MOWDECK_VISION_SECRETS_KEY_FILE")
+    (dict "key" "vision-default-api-key" "file" "vision-default-api-key" "env" "MOWDECK_VISION_DEFAULT_API_KEY_FILE"))) }}

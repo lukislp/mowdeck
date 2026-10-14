@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``scheduler.schedule.disabled``.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "disabled_at": {
+      "format": "date-time",
+      "title": "Disabled At",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 100,
+      "title": "Name",
+      "type": "string"
+    },
+    "owner": {
+      "$ref": "#/$defs/PrincipalRef"
+    },
+    "reason": {
+      "maxLength": 500,
+      "title": "Reason",
+      "type": "string"
+    },
+    "schedule_id": {
+      "format": "uuid",
+      "title": "Schedule Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schedule_id",
+    "account_id",
+    "name",
+    "reason",
+    "owner",
+    "disabled_at"
+  ],
+  "title": "ScheduleDisabled",
+  "type": "object"
+}

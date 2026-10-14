@@ -1,0 +1,52 @@
+name: wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "tools/wiki-sync/**"
+      - ".github/workflows/wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - run: uv sync
+      - run: uv run wiki-sync build --docs docs --mkdocs mkdocs.yml --out build/wiki --commit ${{ github.sha }}
+      - name: Publish to the wiki repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.wiki.git" wiki; then
+            echo "::error::Wiki repository not initialised. Create the first page once at https://github.com/${REPO}/wiki, then re-run this workflow."
+            exit 1
+          fi
+          git -C wiki ls-files -z | xargs -0 -r git -C wiki rm -q -f --
+          cp build/wiki/*.md wiki/
+          git -C wiki add -A
+          if git -C wiki diff --cached --quiet; then
+            echo "Wiki is already up to date."
+            exit 0
+          fi
+          git -C wiki -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "docs: sync wiki from ${SHA}"
+          git -C wiki push

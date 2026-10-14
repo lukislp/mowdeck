@@ -1,0 +1,70 @@
+{{- /*
+Authorization bootstrap (Compose service authz-bootstrap): creates the OpenFGA store and writes
+infra/openfga/model.fga only when it differs from the latest model (idempotent). An ordinary Job
+per release revision (Jobs are immutable), not a hook: OpenFGA is part of this release and must be
+running first, which the init container waits for. Service pods wait until the latest model is the
+one of this release (init container wait-for-model), so they never pin an older model.
+*/ -}}
+{{- if .Values.authzBootstrap.enabled }}
+{{- $b := .Values.authzBootstrap }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-authz-bootstrap-r%d" (include "mowdeck.fullname" .) (int .Release.Revision) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "authz-bootstrap") | nindent 4 }}
+spec:
+  backoffLimit: {{ $b.backoffLimit }}
+  ttlSecondsAfterFinished: {{ $b.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "mowdeck.selectorLabels" (dict "ctx" . "component" "authz-bootstrap") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "mowdeck.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- include "mowdeck.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml (merge (dict "runAsUser" 65534 "runAsGroup" 65534 "fsGroup" 65534) .Values.podSecurityContext) | nindent 8 }}
+      {{- include "mowdeck.scheduling" (dict "ctx" . "values" dict "component" "authz-bootstrap") | nindent 6 }}
+      initContainers:
+        # Waits until OpenFGA answers (the bootstrap itself would fail and be retried otherwise).
+        - name: wait-for-openfga
+          image: {{ include "mowdeck.image" (dict "ctx" . "image" "authz-bootstrap") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "/opt/mowdeck/scripts/wait-for-openfga.sh"]
+          env:
+            {{- include "mowdeck.fgaEnv" . | nindent 12 }}
+            - name: WAIT_TIMEOUT_SECONDS
+              value: {{ .Values.migrations.waitTimeoutSeconds | quote }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml $b.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: scripts, mountPath: /opt/mowdeck/scripts, readOnly: true}
+      containers:
+        - name: authz-bootstrap
+          image: {{ include "mowdeck.image" (dict "ctx" . "image" "authz-bootstrap") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- include "mowdeck.fgaEnv" . | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml $b.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        - name: scripts
+          configMap:
+            name: {{ include "mowdeck.fullname" . }}-scripts
+            defaultMode: 0555
+{{- end }}

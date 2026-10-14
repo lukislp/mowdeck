@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "BulkCommandItem": {
+      "description": "One mower of a bulk command. Mowers the caller cannot see are omitted.",
+      "properties": {
+        "command_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command Id"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/BulkCommandOutcome"
+        }
+      },
+      "required": [
+        "mower_id",
+        "outcome"
+      ],
+      "title": "BulkCommandItem",
+      "type": "object"
+    },
+    "BulkCommandOutcome": {
+      "description": "What happened to one mower of a bulk command.",
+      "enum": [
+        "accepted",
+        "forbidden",
+        "not_published"
+      ],
+      "title": "BulkCommandOutcome",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Answer (202) to a command for every mower of a site or group.",
+  "properties": {
+    "bulk_id": {
+      "format": "uuid",
+      "title": "Bulk Id",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/BulkCommandItem"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "kind": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Kind",
+      "type": "string"
+    },
+    "target_id": {
+      "format": "uuid",
+      "title": "Target Id",
+      "type": "string"
+    },
+    "target_type": {
+      "enum": [
+        "site",
+        "group"
+      ],
+      "title": "Target Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "bulk_id",
+    "target_type",
+    "target_id",
+    "kind"
+  ],
+  "title": "BulkCommandAccepted",
+  "type": "object"
+}

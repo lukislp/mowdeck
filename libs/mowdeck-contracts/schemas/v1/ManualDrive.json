@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One joystick sample. The mower stops when no new sample arrives within ``ttl_ms``.\n\nThis is the dead-man switch: clients resend samples continuously while the stick is held.",
+  "properties": {
+    "angular": {
+      "description": "Turn left (+) / right (-), normalised.",
+      "maximum": 1,
+      "minimum": -1,
+      "title": "Angular",
+      "type": "number"
+    },
+    "blade_on": {
+      "default": false,
+      "title": "Blade On",
+      "type": "boolean"
+    },
+    "kind": {
+      "const": "manual_drive",
+      "default": "manual_drive",
+      "title": "Kind",
+      "type": "string"
+    },
+    "linear": {
+      "description": "Forward (+) / backward (-), normalised.",
+      "maximum": 1,
+      "minimum": -1,
+      "title": "Linear",
+      "type": "number"
+    },
+    "ttl_ms": {
+      "default": 1000,
+      "description": "Dead-man timeout in milliseconds.",
+      "maximum": 2000,
+      "minimum": 100,
+      "title": "Ttl Ms",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "linear",
+    "angular"
+  ],
+  "title": "ManualDrive",
+  "type": "object"
+}

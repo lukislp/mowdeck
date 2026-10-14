@@ -1,0 +1,90 @@
+{
+  "$defs": {
+    "PlanSetError": {
+      "description": "Why ``entitlements.plan.set`` refused.",
+      "enum": [
+        "unknown_plan",
+        "invalid_request"
+      ],
+      "title": "PlanSetError",
+      "type": "string"
+    },
+    "PlanStatus": {
+      "description": "Status of an account's plan.",
+      "enum": [
+        "active",
+        "trial",
+        "grace",
+        "expired"
+      ],
+      "title": "PlanStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply on ``entitlements.plan.set``: ``ok`` with the plan and its effective status, or an\n``error`` (not retried by Billing).",
+  "properties": {
+    "changed": {
+      "default": false,
+      "title": "Changed",
+      "type": "boolean"
+    },
+    "detail": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PlanSetError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "plan": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Plan"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PlanStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "title": "PlanSetReply",
+  "type": "object"
+}

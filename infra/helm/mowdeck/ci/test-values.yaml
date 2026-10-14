@@ -1,0 +1,22 @@
+# Placeholder secrets for `helm lint`, `helm template` and kubeconform in CI (infra/helm/check.sh).
+# Not secret and not usable anywhere: never copy them into an installation.
+secrets:
+  OPENFGA_AUTHN_PRESHARED_KEYS: ci-placeholder-openfga-key
+  IDENTITY_KEY_ENCRYPTION_KEY: Y2ktcGxhY2Vob2xkZXIta2V5LW5vdC1hLXNlY3JldDA=
+  SERVICE_DB_PASSWORD: ci-placeholder-db-password
+  NOTIFICATIONS_VAPID_PRIVATE_KEY: ci-placeholder-vapid-key
+  BILLING_STRIPE_SECRET_KEY: sk_test_ci_placeholder
+  BILLING_STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+  CAPTURE_TOKEN: ci-placeholder-capture-token
+# Billing and the capture worker are off by default; the CI render enables them so their
+# templates are linted and checked.
+services:
+  billing:
+    enabled: true
+  visionCapture:
+    enabled: true
+ingress:
+  host: mowdeck.example.org
+  tls:
+    - secretName: mowdeck-tls
+      hosts: [mowdeck.example.org]

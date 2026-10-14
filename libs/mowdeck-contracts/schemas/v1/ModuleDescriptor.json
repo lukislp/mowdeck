@@ -1,0 +1,181 @@
+{
+  "$defs": {
+    "EventDef": {
+      "description": "An event type a module publishes.",
+      "properties": {
+        "schema_ref": {
+          "description": "Reference to the payload JSON Schema (URI or package path).",
+          "minLength": 1,
+          "title": "Schema Ref",
+          "type": "string"
+        },
+        "type": {
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "title": "Type",
+          "type": "string"
+        },
+        "version": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "schema_ref"
+      ],
+      "title": "EventDef",
+      "type": "object"
+    },
+    "FeatureDef": {
+      "description": "A plan feature a module offers, e.g. ``reports``.",
+      "properties": {
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "key": {
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "description"
+      ],
+      "title": "FeatureDef",
+      "type": "object"
+    },
+    "PermissionDef": {
+      "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
+      "properties": {
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "implied_by": {
+          "description": "Keys that imply this one when held on the whole account (e.g. `device_gateway.view` implied by `mower.view`).",
+          "items": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "type": "string"
+          },
+          "title": "Implied By",
+          "type": "array"
+        },
+        "key": {
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "description"
+      ],
+      "title": "PermissionDef",
+      "type": "object"
+    },
+    "UiAreaDef": {
+      "description": "An area the module occupies in the web app shell.",
+      "properties": {
+        "labels": {
+          "description": "Translated menu labels by language tag (e.g. `de`); `menu_label` is the English fallback.",
+          "patternProperties": {
+            "^[a-z]{2}(-[A-Z]{2})?$": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "title": "Labels",
+          "type": "object"
+        },
+        "menu_label": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Menu Label",
+          "type": "string"
+        },
+        "required_permission": {
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "title": "Required Permission",
+          "type": "string"
+        },
+        "route": {
+          "maxLength": 200,
+          "pattern": "^/[A-Za-z0-9/_\\-:\\[\\]]*$",
+          "title": "Route",
+          "type": "string"
+        }
+      },
+      "required": [
+        "route",
+        "menu_label",
+        "required_permission"
+      ],
+      "title": "UiAreaDef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
+  "properties": {
+    "events": {
+      "items": {
+        "$ref": "#/$defs/EventDef"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "features": {
+      "items": {
+        "$ref": "#/$defs/FeatureDef"
+      },
+      "title": "Features",
+      "type": "array"
+    },
+    "name": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9\\-]*$",
+      "title": "Name",
+      "type": "string"
+    },
+    "permissions": {
+      "items": {
+        "$ref": "#/$defs/PermissionDef"
+      },
+      "title": "Permissions",
+      "type": "array"
+    },
+    "ui_areas": {
+      "items": {
+        "$ref": "#/$defs/UiAreaDef"
+      },
+      "title": "Ui Areas",
+      "type": "array"
+    },
+    "version": {
+      "maxLength": 64,
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.\\-+]+)?$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "version"
+  ],
+  "title": "ModuleDescriptor",
+  "type": "object"
+}

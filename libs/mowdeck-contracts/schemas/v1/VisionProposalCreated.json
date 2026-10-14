@@ -1,0 +1,183 @@
+{
+  "$defs": {
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    },
+    "VisionTask": {
+      "description": "What AI assist is asked to do.",
+      "enum": [
+        "recover",
+        "find_dock"
+      ],
+      "title": "VisionTask",
+      "type": "string"
+    },
+    "VisionTrigger": {
+      "description": "Who started an analysis.",
+      "enum": [
+        "manual",
+        "error"
+      ],
+      "title": "VisionTrigger",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``vision.proposal.created``: a maneuver waits for a user's approval.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "With trigger `error`: the mower's error code that started the analysis.",
+      "title": "Error Code"
+    },
+    "expires_at": {
+      "description": "Approval is refused after this time.",
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "link": {
+      "description": "App path of the proposal, e.g. `/mowers/<id>?assist=<id>`.",
+      "maxLength": 300,
+      "title": "Link",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "proposal_id": {
+      "format": "uuid",
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "requested_by": {
+      "$ref": "#/$defs/PrincipalRef"
+    },
+    "round": {
+      "description": "Attempt within one assist session.",
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Round",
+      "type": "integer"
+    },
+    "situation": {
+      "maxLength": 64,
+      "title": "Situation",
+      "type": "string"
+    },
+    "steps": {
+      "description": "Number of proposed drive steps.",
+      "maximum": 6,
+      "minimum": 1,
+      "title": "Steps",
+      "type": "integer"
+    },
+    "task": {
+      "$ref": "#/$defs/VisionTask"
+    },
+    "trigger": {
+      "$ref": "#/$defs/VisionTrigger",
+      "default": "manual",
+      "description": "`manual` (a user asked) or `error` (started automatically by the error)."
+    }
+  },
+  "required": [
+    "proposal_id",
+    "mower_id",
+    "account_id",
+    "task",
+    "round",
+    "requested_by",
+    "situation",
+    "confidence",
+    "steps",
+    "expires_at",
+    "link",
+    "created_at"
+  ],
+  "title": "VisionProposalCreated",
+  "type": "object"
+}

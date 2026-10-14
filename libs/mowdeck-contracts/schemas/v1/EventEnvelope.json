@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "account_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Owning account; None only for platform level events.",
+      "title": "Account Id"
+    },
+    "causation_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Id of the event or command that caused this event.",
+      "title": "Causation Id"
+    },
+    "correlation_id": {
+      "pattern": "^[A-Za-z0-9._:\\-]{1,128}$",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "id": {
+      "description": "Unique event id; JetStream msg id.",
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "producer": {
+      "description": "Name of the producing service.",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Producer",
+      "type": "string"
+    },
+    "type": {
+      "description": "Event type `<domain>.<name>`, e.g. `mower.registered`.",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "title": "Type",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "description": "Payload schema version of this type.",
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "type",
+    "producer",
+    "payload"
+  ],
+  "title": "EventEnvelope",
+  "type": "object"
+}

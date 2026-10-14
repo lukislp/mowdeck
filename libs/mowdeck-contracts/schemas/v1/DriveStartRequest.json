@@ -1,0 +1,129 @@
+{
+  "$defs": {
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``fleet.drive.start``: open a drive session on behalf of a subject.\n\n``account_id`` is the account of the subject's token; it must own the mower (otherwise the\nanswer is ``not_found``). Service principals hold no object rights and are refused.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "blade_on_allowed": {
+      "default": false,
+      "description": "The client asked to run the blades during this session.",
+      "title": "Blade On Allowed",
+      "type": "boolean"
+    },
+    "connection_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The Realtime connection that drives (for the audit).",
+      "title": "Connection Id"
+    },
+    "max_seconds": {
+      "description": "Longest duration of the session.",
+      "maximum": 3600,
+      "minimum": 1,
+      "title": "Max Seconds",
+      "type": "integer"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "on_behalf_of": {
+      "$ref": "#/$defs/PrincipalRef"
+    },
+    "origin": {
+      "anyOf": [
+        {
+          "const": "vision",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Service that drives on behalf of the subject (e.g. `vision`, ADR 0033); None for the joystick over Realtime.",
+      "title": "Origin"
+    }
+  },
+  "required": [
+    "on_behalf_of",
+    "account_id",
+    "mower_id",
+    "max_seconds"
+  ],
+  "title": "DriveStartRequest",
+  "type": "object"
+}

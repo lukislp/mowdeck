@@ -1,0 +1,1058 @@
+{
+ "features": [
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      0.211
+     ],
+     [
+      11.79,
+      0.211
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 0,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      0.211
+     ],
+     [
+      11.79,
+      0.555
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 1,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      0.555
+     ],
+     [
+      0.21,
+      0.555
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 2,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      0.555
+     ],
+     [
+      0.21,
+      0.9
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 3,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      0.9
+     ],
+     [
+      11.79,
+      0.9
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 4,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      0.9
+     ],
+     [
+      11.79,
+      1.244
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 5,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      1.244
+     ],
+     [
+      0.21,
+      1.244
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 6,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      1.244
+     ],
+     [
+      0.21,
+      1.589
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 7,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      1.589
+     ],
+     [
+      11.79,
+      1.589
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 8,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      1.589
+     ],
+     [
+      11.79,
+      1.933
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 9,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      1.933
+     ],
+     [
+      0.21,
+      1.933
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 10,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      1.933
+     ],
+     [
+      0.21,
+      2.278
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 11,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      2.278
+     ],
+     [
+      11.79,
+      2.278
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 12,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      2.278
+     ],
+     [
+      11.79,
+      2.622
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 13,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      2.622
+     ],
+     [
+      0.21,
+      2.622
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 14,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      2.622
+     ],
+     [
+      0.21,
+      2.967
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 15,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      2.967
+     ],
+     [
+      11.79,
+      2.967
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 16,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      2.967
+     ],
+     [
+      11.79,
+      3.311
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 17,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      3.311
+     ],
+     [
+      0.21,
+      3.311
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 18,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      3.311
+     ],
+     [
+      0.21,
+      3.656
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 19,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      3.656
+     ],
+     [
+      11.79,
+      3.656
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 20,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      3.656
+     ],
+     [
+      11.79,
+      4.0
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 21,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      4.0
+     ],
+     [
+      0.21,
+      4.0
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 22,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      4.0
+     ],
+     [
+      0.21,
+      4.344
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 23,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      4.344
+     ],
+     [
+      11.79,
+      4.344
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 24,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      4.344
+     ],
+     [
+      11.79,
+      4.689
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 25,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      4.689
+     ],
+     [
+      0.21,
+      4.689
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 26,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      4.689
+     ],
+     [
+      0.21,
+      5.033
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 27,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      5.033
+     ],
+     [
+      11.79,
+      5.033
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 28,
+    "kind": "mow",
+    "length_m": 11.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      11.79,
+      5.033
+     ],
+     [
+      8.83,
+      5.33
+     ],
+     [
+      8.79,
+      5.378
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": false,
+    "index": 29,
+    "kind": "transfer",
+    "length_m": 3.037,
+    "speed_mps": 0.6
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      8.79,
+      5.378
+     ],
+     [
+      0.21,
+      5.378
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 30,
+    "kind": "mow",
+    "length_m": 8.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      5.378
+     ],
+     [
+      0.21,
+      5.722
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 31,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      5.722
+     ],
+     [
+      8.79,
+      5.722
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 32,
+    "kind": "mow",
+    "length_m": 8.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      8.79,
+      5.722
+     ],
+     [
+      8.79,
+      6.067
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 33,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      8.79,
+      6.067
+     ],
+     [
+      0.21,
+      6.067
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 34,
+    "kind": "mow",
+    "length_m": 8.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      6.067
+     ],
+     [
+      0.21,
+      6.411
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 35,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      6.411
+     ],
+     [
+      8.79,
+      6.411
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 36,
+    "kind": "mow",
+    "length_m": 8.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      8.79,
+      6.411
+     ],
+     [
+      8.79,
+      6.756
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 37,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      8.79,
+      6.756
+     ],
+     [
+      0.21,
+      6.756
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 38,
+    "kind": "mow",
+    "length_m": 8.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      6.756
+     ],
+     [
+      0.21,
+      7.1
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 39,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      7.1
+     ],
+     [
+      8.79,
+      7.1
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 40,
+    "kind": "mow",
+    "length_m": 8.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      8.79,
+      7.1
+     ],
+     [
+      8.79,
+      7.445
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 41,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      8.79,
+      7.445
+     ],
+     [
+      0.21,
+      7.445
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 42,
+    "kind": "mow",
+    "length_m": 8.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      7.445
+     ],
+     [
+      0.21,
+      7.789
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 43,
+    "kind": "turn",
+    "length_m": 0.344,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      0.21,
+      7.789
+     ],
+     [
+      8.79,
+      7.789
+     ]
+    ],
+    "type": "LineString"
+   },
+   "properties": {
+    "blades_on": true,
+    "index": 44,
+    "kind": "mow",
+    "length_m": 8.58,
+    "speed_mps": 0.4
+   },
+   "type": "Feature"
+  }
+ ],
+ "properties": {
+  "area_m2": 88.5,
+  "coverage_ratio": 0.9833,
+  "covered_area_m2": 87.02,
+  "crs": "local",
+  "estimated_duration_s": 715.0,
+  "mow_length_m": 249.57,
+  "pattern_chain": [
+   "stripes"
+  ],
+  "segment_count": 45,
+  "transfer_length_m": 3.04,
+  "warnings": []
+ },
+ "type": "FeatureCollection"
+}

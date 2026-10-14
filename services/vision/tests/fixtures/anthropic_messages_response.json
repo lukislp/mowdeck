@@ -1,0 +1,25 @@
+{
+  "id": "msg_01VisionFixture",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-5-5",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "",
+      "signature": "EqQBCkYIBxgCKkDfixture"
+    },
+    {
+      "type": "text",
+      "text": "{\"situation\": \"stuck_on_obstacle\", \"confidence\": 0.82, \"proposal\": [{\"linear\": -0.6, \"angular\": 0.0, \"seconds\": 1.0}, {\"linear\": 0.0, \"angular\": 0.5, \"seconds\": 1.0}, {\"linear\": 0.5, \"angular\": 0.0, \"seconds\": 1.0}], \"rationale\": \"The front wheels press against the edge of the flower bed. Back off, turn left and continue.\", \"risk\": [], \"abort_reasons\": []}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 1834,
+    "output_tokens": 212,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  }
+}

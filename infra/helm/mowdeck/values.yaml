@@ -1,0 +1,699 @@
+# Values of the MowDeck chart. Operations manual: docs/ops/helm.md.
+#
+# The settings mirror the Compose configuration infra/compose/.env.example: `config` and `secrets`
+# use the same variable names, so a value moves from one to the other unchanged. Every variable of
+# .env.example appears in this file, either as a key or in a comment that says what replaces it in
+# Kubernetes (tools/repo-checks/tests/test_helm.py keeps the two files in sync).
+#
+# Defaults are production defaults (MOWDECK_ENVIRONMENT=prod, real time simulation); the Compose
+# example file carries development defaults. Overlays: values-homelab.yaml (one replica, small
+# requests) and values-cloud.yaml (two replicas, PodDisruptionBudgets, autoscaling).
+
+# -- Override the name of the chart (default "mowdeck").
+nameOverride: ""
+# -- Override the full name prefix of every resource (default: the release name when it contains
+# "mowdeck", otherwise "<release>-mowdeck").
+fullnameOverride: ""
+
+# --- Images ---
+# MowDeck images are ghcr.io/<owner>/mowdeck/<service>:<tag>, built for linux/amd64 and
+# linux/arm64 by .github/workflows/release.yml (docs/ops/release.md). The packages are private
+# like the repository until they are made public; then set imagePullSecrets for a private copy.
+image:
+  # -- Registry and path prefix; the service name is appended (<registry>/identity, ...).
+  registry: ghcr.io/lukislp/mowdeck
+  # -- Image tag of every MowDeck image (Compose: MOWDECK_VERSION). Empty: the chart's appVersion,
+  # which the release workflow sets to the released version.
+  tag: ""
+  pullPolicy: IfNotPresent
+# -- Pull secrets for private registries, e.g. [{name: ghcr-pull}].
+imagePullSecrets: []
+# Base images of the MowDeck images are build arguments, not deployment settings: PYTHON_IMAGE,
+# UV_IMAGE, NODE_IMAGE, NGINX_IMAGE, BUSYBOX_IMAGE, FGA_CLI_IMAGE and JQ_IMAGE are set by the release
+# workflow from infra/images.txt. TRAEFIK_IMAGE and WHOAMI_IMAGE have no counterpart: the cluster's
+# ingress controller replaces Traefik (see `ingress`) and the whoami demo route is Compose only.
+
+# --- Plain configuration (ConfigMaps) ---
+# Same names as infra/compose/.env.example; the chart passes them to the services as the
+# MOWDECK_* variables documented in each service README.
+config:
+  # Deployment environment (dev, test, prod) and log level of every service.
+  MOWDECK_ENVIRONMENT: prod
+  MOWDECK_LOG_LEVEL: INFO
+
+  # --- OpenFGA ---
+  # URL under which services and the bootstrap job reach OpenFGA. Empty: the OpenFGA of this
+  # chart (http://<openfga.fullnameOverride>:8080). Set it when openfga.enabled=false.
+  OPENFGA_API_URL: ""
+  # Store the bootstrap job creates and services resolve by name.
+  OPENFGA_STORE_NAME: mowdeck
+
+  # --- Identity ---
+  # open: anybody may register; closed: only the first account, then 403 (more owners:
+  # kubectl exec ... python -m identity.cli create-user). Cloud installations with invitations
+  # only use closed.
+  IDENTITY_REGISTRATION: open
+  # rfc9106_low (64 MiB, t=3, p=4) or owasp_min (19 MiB, t=2, p=1) for small nodes.
+  IDENTITY_ARGON2_PROFILE: rfc9106_low
+  # The refresh cookie is sent over HTTPS only. Keep true behind TLS (the normal case);
+  # false only for plain HTTP tests (kind with a port-forward).
+  IDENTITY_REFRESH_COOKIE_SECURE: "true"
+
+  # --- Fleet ---
+  # Connection kinds accepted when a mower is registered (simulated, cloud, ble_bridge).
+  FLEET_ALLOWED_CONNECTION_KINDS: simulated,cloud,ble_bridge
+
+  # --- Device-Gateway ---
+  # Development only: the fake Mammotion cloud (refused with MOWDECK_ENVIRONMENT=prod).
+  GATEWAY_FAKE_MAMMOTION_CLOUD: "false"
+
+  # --- Telemetry ---
+  TELEMETRY_HEARTBEAT_HISTORY_SECONDS: "300"
+  TELEMETRY_RETENTION_HISTORY_DAYS: "30"
+  TELEMETRY_RETENTION_POSITIONS_DAYS: "90"
+  TELEMETRY_RETENTION_COMMANDS_DAYS: "30"
+  TELEMETRY_BLADE_HOURS_THRESHOLD: "50"
+
+  # --- Realtime ---
+  REALTIME_PING_SECONDS: "20"
+  REALTIME_MAX_CONNECTIONS_PER_ACCOUNT: "50"
+  REALTIME_MAX_CONNECTIONS_PER_USER: "10"
+  # Comma separated Origin values allowed to open a socket. Empty: https://<ingress.host> when a
+  # host is set, otherwise any origin.
+  REALTIME_ALLOWED_ORIGINS: ""
+  REALTIME_DRIVE_MAX_SECONDS: "600"
+
+  # --- Web app ---
+  # Optional raster tiles under the map ({z}, {x}, {y}); empty keeps the metric grid and sends
+  # nothing to third parties. Respect the provider's usage policy and attribution.
+  WEB_MAP_TILES: ""
+  WEB_MAP_ATTRIBUTION: ""
+  WEB_MAP_MAX_ZOOM: "19"
+  # Links to the legal pages (/legal/imprint, terms, privacy) on the login page. The shipped
+  # pages are placeholders the operator replaces (docs/ops/billing.md).
+  WEB_LEGAL_ENABLED: "false"
+  # Live camera through Agora (ADR 0032): "true" adds *.agora.io and *.sd-rtn.com to the CSP;
+  # the video then goes through Agora's and Mammotion's servers.
+  WEB_CAMERA_ENABLED: "false"
+
+  # --- Device-Gateway ---
+  # Simulated seconds per real second (1 in production; the Compose example uses 30).
+  MOWDECK_SIM_TIME_SCALE: "1"
+  MOWDECK_TELEMETRY_HEARTBEAT_SECONDS: "10"
+
+  # --- Notifications ---
+  NOTIFICATIONS_CHANNELS: webpush,ntfy,apns,log
+  # Public half of the VAPID pair (optional, checked against the private key in `secrets`).
+  NOTIFICATIONS_VAPID_PUBLIC_KEY: ""
+  # Contact of the operator for push services (mailto: or https:).
+  NOTIFICATIONS_VAPID_SUBJECT: mailto:admin@localhost.localdomain
+  NOTIFICATIONS_NTFY_ALLOWED_SERVERS: https://ntfy.sh
+  # Public URL of the web app for links in notifications. Empty: https://<ingress.host> when a host
+  # is set, otherwise relative links.
+  NOTIFICATIONS_APP_URL: ""
+  NOTIFICATIONS_OFFLINE_AFTER_SECONDS: "120"
+  NOTIFICATIONS_BATTERY_LOW_PERCENT: "20"
+  # Service default 120 s (the Compose example uses 10 s for the fast simulator).
+  NOTIFICATIONS_MOWING_MIN_SECONDS: "120"
+  NOTIFICATIONS_GEOFENCE_MARGIN_METERS: "5"
+  NOTIFICATIONS_ACK_SILENCE_SECONDS: "3600"
+
+  # --- Scheduler ---
+  # open_meteo (needs internet access to api.open-meteo.com) or static (offline).
+  SCHEDULER_WEATHER_PROVIDER: open_meteo
+  SCHEDULER_STATIC_WEATHER: dry
+  SCHEDULER_TICK_SECONDS: "30"
+  # Development only: PUT /api/v1/scheduler/dev/weather switches the static provider.
+  SCHEDULER_DEV_ENDPOINTS: "false"
+
+  # --- Entitlements (plans, limits and feature gates, ADR 0028) ---
+  # false: every account has the plan "unlimited" and nothing is limited or gated (self-hosted
+  # installations). true: accounts get the limits and features of their plan
+  # (infra/entitlements/plans.yaml, copied to files/plans.yaml of this chart).
+  ENTITLEMENTS_BILLING_ENABLED: "false"
+  # Plan of accounts without an assignment (a key in the plan file).
+  ENTITLEMENTS_DEFAULT_PLAN: home
+
+  # --- Billing (subscriptions and payments, ADR 0031, docs/ops/billing.md) ---
+  # Billing runs only with services.billing.enabled=true (Compose: COMPOSE_PROFILES=billing);
+  # enable it together with ENTITLEMENTS_BILLING_ENABLED. The Stripe keys are secrets below.
+  # stripe, or fake (nothing charged; demos with signed fixture webhooks).
+  BILLING_PROVIDER: stripe
+  # Other Stripe API base (stripe-mock in tests); empty: Stripe.
+  BILLING_STRIPE_API_BASE: ""
+  # Stripe Tax: VAT calculated in Checkout (needs Stripe Tax and the registrations, e.g. OSS).
+  BILLING_AUTOMATIC_TAX: "false"
+  # Stripe price id per plan, overriding files/prices.yaml: home=price_...,fleet=price_...
+  BILLING_PRICE_IDS: ""
+  # Days after the last paid period before a payment problem ends the plan (status grace).
+  BILLING_GRACE_DAYS: "14"
+  # Public URL of the web app for the return links of Checkout and the portal. Empty:
+  # https://<ingress.host> when a host is set, otherwise the request's origin.
+  BILLING_APP_URL: ""
+
+  # --- Planner (mowing patterns and spot mowing, ADR 0030) ---
+  # Cutting width of the mowers in metres (LUBA 2: 0.4); runs are spaced by it minus 0.05 m.
+  PLANNER_CUTTING_WIDTH_M: "0.4"
+  # Plans computed at the same time per pod (CPU-bound worker threads).
+  PLANNER_MAX_PARALLEL: "2"
+
+  # --- Vision: AI assist with human approval (ADR 0033, docs/ops/compose.md) ---
+  # Users configure their own vision model in the web app; the installation may offer its own
+  # (plan feature ai_recover_hosted). Any LiteLLM model string: anthropic/claude-sonnet-5-5,
+  # openai/gpt-5-mini, gemini/gemini-2.5-flash, mistral/pixtral-large-latest, ollama/llava (with
+  # VISION_DEFAULT_API_BASE), openai/<model> with a base URL, fake/recover (offline demo).
+  VISION_DEFAULT_ENABLED: "false"
+  VISION_DEFAULT_MODEL: anthropic/claude-sonnet-5-5
+  VISION_DEFAULT_API_BASE: ""
+  # Development only: users may pick the fake provider.
+  VISION_ALLOW_FAKE_PROVIDER: "false"
+  # Base URLs users may set: any (home network), public (hosted installations), none.
+  VISION_USER_API_BASE_POLICY: any
+  VISION_PROPOSAL_TTL_SECONDS: "300"
+  VISION_MAX_ROUNDS: "3"
+  VISION_USER_DAILY_REQUESTS: "20"
+  VISION_HOSTED_ACCOUNT_DAILY_REQUESTS: "50"
+  VISION_KEEP_IMAGES_DAYS: "0"
+  # Automatic AI analysis on errors (ADR 0035): users opt in in the web app; a mower entering a
+  # recoverable error gets a proposal that still needs an approval. "false": off for everyone.
+  VISION_AUTO_ENABLED: "true"
+  # No automatic analysis for a mower within this many minutes after the previous analysis.
+  VISION_AUTO_COOLDOWN_MINUTES: "10"
+  # Automatic analyses per mower and UTC day.
+  VISION_AUTO_DAILY_PER_MOWER: "20"
+  # How long Vision waits for the gateway's photo (above GATEWAY_PHOTO_TIMEOUT_SECONDS).
+  VISION_PHOTO_TIMEOUT_SECONDS: "35"
+  # Longest time the Device-Gateway takes for a photo (a camera frame needs 5 to 15 s).
+  GATEWAY_PHOTO_TIMEOUT_SECONDS: "30"
+  # --- Capture worker (services.visionCapture, ADR 0035) ---
+  # Compose sets GATEWAY_CAPTURE_URL by hand; here services.visionCapture.enabled points the
+  # Device-Gateway at the worker's in-cluster Service.
+  # How long the worker waits for the first decoded camera frame.
+  CAPTURE_TIMEOUT_SECONDS: "20"
+  # Captures at the same time per pod (each a browser page with a video decoder).
+  CAPTURE_MAX_CONCURRENCY: "2"
+  # Empty: Playwright's Chromium headless shell; "chrome" needs an image with Google Chrome.
+  CAPTURE_BROWSER_CHANNEL: ""
+
+# Host ports of the Compose stack have no counterpart: services are reached through the Ingress
+# (GATEWAY_HTTP_PORT, GATEWAY_HTTPS_PORT) and cluster-internal Services (POSTGRES_PORT,
+# NATS_CLIENT_PORT, NATS_MONITOR_PORT, OPENFGA_HTTP_PORT, OPENFGA_GRPC_PORT, MOWDECK_NETWORK for the Compose network name, MOWDECK_TRAEFIK_PROJECT for the Compose project its Traefik routes); use
+# `kubectl port-forward` for local access.
+
+# --- Secrets ---
+# Never commit real values. Either give them at install time (--set-file / --set, or a values file
+# kept outside the repository, e.g. encrypted with SOPS) or create the Secret yourself and name it
+# in existingSecret. Required values fail `helm template`/`install` with a message naming the key.
+secrets:
+  # -- Name of an existing Secret with the keys listed below (the chart then creates no Secret
+  # and composes no database URL):
+  #   openfga-api-token            OpenFGA pre-shared key the services and jobs use
+  #   identity-key-encryption-key  IDENTITY_KEY_ENCRYPTION_KEY
+  #   database-url-identity, database-url-fleet, database-url-telemetry,
+  #   database-url-notifications, database-url-scheduler,
+  #   database-url-entitlements, database-url-billing, database-url-planner,
+  #   database-url-vision          postgresql://user:pass@host:5432/db
+  #   billing-stripe-secret-key, billing-stripe-webhook-secret   only with services.billing
+  #   vision-secrets-key, vision-default-api-key   (may be empty)
+  #   capture-token                 only with services.visionCapture (may be empty)
+  #   fleet-credential-encryption-key   FLEET_CREDENTIAL_ENCRYPTION_KEY (may be empty)
+  #   fleet-credential-encryption-key-previous   FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS (may be empty)
+  #   notifications-vapid-private-key   only with existingSecretHasVapidKey: true
+  existingSecret: ""
+  existingSecretHasVapidKey: false
+  # -- Pre-shared key(s) of the OpenFGA API, comma separated (key rotation). Required when the
+  # chart creates the OpenFGA Secret (openfgaSecret.create) or the application Secret.
+  OPENFGA_AUTHN_PRESHARED_KEYS: ""
+  # -- Key the services and jobs use (default: OPENFGA_AUTHN_PRESHARED_KEYS, which must then be a
+  # single key).
+  OPENFGA_API_TOKEN: ""
+  # -- 256-bit key (base64) that encrypts Identity's token signing keys at rest. Required.
+  #   python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+  IDENTITY_KEY_ENCRYPTION_KEY: ""
+  # -- Password of the per-service database roles (identity, fleet, ...). Required unless every
+  # role has its own entry in databasePasswords. Use one password per role in production.
+  SERVICE_DB_PASSWORD: ""
+  # -- Per-role passwords overriding SERVICE_DB_PASSWORD: {identity: "...", openfga: "..."}.
+  databasePasswords: {}
+  # -- Stripe secret key (sk_test_... or a restricted rk_...) of the Billing service. Required
+  # when services.billing.enabled with BILLING_PROVIDER=stripe.
+  BILLING_STRIPE_SECRET_KEY: ""
+  # -- Signing secret of the Stripe webhook endpoint (whsec_...); empty: every webhook is refused.
+  BILLING_STRIPE_WEBHOOK_SECRET: ""
+  # -- 256-bit key (base64) that encrypts the passwords of linked Mammotion accounts in Fleet
+  # (ADR 0034). Empty: no linked accounts, so no new cloud mowers. Keep a backup.
+  FLEET_CREDENTIAL_ENCRYPTION_KEY: ""
+  # -- Earlier credential keys (comma separated) that still decrypt during a rotation.
+  FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS: ""
+  # -- 256-bit key (base64) that encrypts the users' vision provider keys. Empty: users can only
+  # configure keyless providers (Ollama, open endpoints).
+  VISION_SECRETS_KEY: ""
+  # -- Key of the installation's vision model (config.VISION_DEFAULT_MODEL). Empty: the model
+  # family's usual variable (e.g. ANTHROPIC_API_KEY via services.vision.extraEnv) or no key.
+  VISION_DEFAULT_API_KEY: ""
+  # -- Shared secret between the Device-Gateway and the capture worker (services.visionCapture).
+  # Empty: the worker accepts every request from inside the cluster.
+  CAPTURE_TOKEN: ""
+  # -- Web Push private key (VAPID). Empty: each Notifications pod creates a development pair in
+  # an emptyDir on start (lost on restart, and different per replica, so the chart refuses more
+  # than one replica without it). Generate once:
+  #   kubectl run vapid --rm -it --image=<registry>/notifications:<tag> -- python -m notifications.cli generate-vapid-keys
+  NOTIFICATIONS_VAPID_PRIVATE_KEY: ""
+# The PostgreSQL superuser (Compose: POSTGRES_USER, POSTGRES_PASSWORD) is managed by
+# CloudNativePG (secret <cluster>-superuser, disabled by default) or by your database provider;
+# the services never use it.
+
+# Secret read by the OpenFGA subchart (key "keys": the pre-shared keys, key "uri": the datastore
+# URI). Its name is fixed by openfga.authn.preshared.keysSecret and openfga.datastore.uriSecret.
+openfgaSecret:
+  # -- Create it from secrets.OPENFGA_AUTHN_PRESHARED_KEYS and the openfga database settings.
+  # false: create a Secret with the keys "keys" and "uri" yourself.
+  create: true
+  name: mowdeck-openfga
+
+# --- PostgreSQL ---
+# One database and one role per service, like the Compose stack. Two options:
+#   * in-cluster (default): the chart renders a CloudNativePG Cluster plus one Database resource
+#     per service. The CloudNativePG operator must be installed in the cluster beforehand
+#     (docs/ops/helm.md). Migrations then run as ordinary Jobs, because the database is created by
+#     this release and does not exist yet when pre-install hooks run.
+#   * external (external.enabled: true): a managed or self-run PostgreSQL that already has the
+#     databases and roles (see infra/compose/init/01-databases.sql). Migrations run as
+#     pre-install/pre-upgrade hooks.
+postgresql:
+  external:
+    enabled: false
+    # -- Host name and port (Compose: POSTGRES_PORT).
+    host: ""
+    port: 5432
+    # -- Query string appended to the service URLs, e.g. "ssl=require" (asyncpg).
+    serviceUrlParams: ""
+  # -- Query string of the OpenFGA datastore URI (pgx), e.g. sslmode=require.
+  openfgaUriParams: sslmode=prefer
+  cloudnativepg:
+    # -- Name of the Cluster resource (default <fullname>-pg); services connect to <name>-rw.
+    clusterName: ""
+    # -- 1 at home; 2 or 3 for a primary with synchronous-capable replicas.
+    instances: 1
+    # -- Operand image; empty: the operator's default PostgreSQL image. CloudNativePG needs its
+    # own operand images (ghcr.io/cloudnative-pg/postgresql), not the plain POSTGRES_IMAGE of the
+    # Compose stack; keep the major version (17) when moving data between the two.
+    imageName: ""
+    storage:
+      size: 5Gi
+      # -- Empty: the cluster's default StorageClass.
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    # -- Create the basic-auth Secrets (<fullname>-db-<role>) CloudNativePG sets the role passwords
+    # from. Disable when you create them yourself (keys username, password).
+    createRoleSecrets: true
+    # -- PodMonitor for the Prometheus Operator (needs its CRDs).
+    enablePodMonitor: false
+    # -- Extra fields merged into the Cluster spec (backup, affinity, postgresql parameters, ...).
+    extraSpec: {}
+  # Database and role of every service (role name = owner of the database).
+  databases:
+    identity: {name: identity, user: identity}
+    fleet: {name: fleet, user: fleet}
+    telemetry: {name: telemetry, user: telemetry}
+    notifications: {name: notifications, user: notifications}
+    scheduler: {name: scheduler, user: scheduler}
+    entitlements: {name: entitlements, user: entitlements}
+    billing: {name: billing, user: billing}
+    planner: {name: planner, user: planner}
+    vision: {name: vision, user: vision}
+    openfga: {name: openfga, user: openfga}
+
+# --- Ingress ---
+# Path routes identical to the Traefik rules of the Compose stack: /api/v1/<service> per service,
+# /.well-known/jwks.json to Identity and the web app at / (the longest path wins, so every API
+# route takes precedence over /). Works with any Ingress controller; docs/ops/helm.md has the
+# Traefik and WebSocket notes. The Realtime WebSocket (/api/v1/realtime/ws) needs no annotation
+# with Traefik; other controllers may need longer read timeouts (pings every REALTIME_PING_SECONDS).
+ingress:
+  enabled: true
+  # -- IngressClass, e.g. traefik; empty: the cluster default.
+  className: ""
+  # -- Public host name, e.g. mowdeck.example.org (empty: any host).
+  host: ""
+  annotations: {}
+  # -- TLS, e.g. [{secretName: mowdeck-tls, hosts: [mowdeck.example.org]}] (cert-manager fills it).
+  tls: []
+  # Login, registration and token exchange (/api/v1/identity/session, /register, /token) and the
+  # session refresh (/api/v1/identity/session/...) as a second Ingress, so a rate limit can be
+  # attached to them alone, like the Compose middlewares identity-ratelimit (10/min, burst 20)
+  # and identity-session-ratelimit (60/min, burst 30). Traefik example:
+  #   traefik.ingress.kubernetes.io/router.middlewares: mowdeck-identity-ratelimit@kubernetescrd
+  auth:
+    enabled: true
+    annotations: {}
+
+# --- Settings shared by every MowDeck pod ---
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+# -- Longer than MOWDECK_SHUTDOWN_GRACE_SECONDS (default 10) so shutdown hooks can finish.
+terminationGracePeriodSeconds: 30
+probes:
+  startup:
+    httpGet: {path: /healthz, port: http}
+    periodSeconds: 2
+    failureThreshold: 60
+  liveness:
+    httpGet: {path: /healthz, port: http}
+    periodSeconds: 10
+    timeoutSeconds: 3
+  readiness:
+    httpGet: {path: /readyz, port: http}
+    periodSeconds: 5
+    timeoutSeconds: 3
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+serviceAccount:
+  # -- One ServiceAccount for all MowDeck pods; no pod mounts its token.
+  create: true
+  name: ""
+  annotations: {}
+
+# --- Services ---
+# Per service: enabled, replicas, resources, autoscaling (HPA), pdb, extraEnv (more MOWDECK_*
+# settings from the service README, plain values only), extraVolumes and extraVolumeMounts, and
+# nodeSelector/tolerations/affinity overriding the shared ones.
+services:
+  identity:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 160Mi}
+      # Argon2 rfc9106_low needs 64 MiB per concurrent hash.
+      limits: {memory: 512Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 5, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  fleet:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 384Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 5, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  # Runs as a StatefulSet: one shard per replica, MOWDECK_SHARD_INDEX from the pod index,
+  # MOWDECK_SHARD_COUNT = replicas (ADR 0013). Changing replicas moves mowers between pods; they
+  # reconnect on their new owner.
+  deviceGateway:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 160Mi}
+      limits: {memory: 512Mi}
+    # The shard count is fixed per rollout, so autoscaling the gateway needs the planned
+    # connections metric and a hand-over (docs/ops/helm.md). Keep it disabled until then.
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75, metrics: []}
+    pdb: {enabled: false, minAvailable: 1}
+    # Mammotion credentials: reference them as env:NAME or file:/run/secrets/<name> in the
+    # connection options and provide the variables or files here (extraVolumes from a Secret).
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  telemetry:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 384Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 5, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  realtime:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 384Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 5, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  notifications:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 384Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 5, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+    # -- Push to the iOS app over APNs (token based, no Firebase). Compose: APNS_KEY_FILE,
+    # APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID, APNS_ENVIRONMENT. The signing key
+    # (AuthKey_<KEY_ID>.p8) lives in a Secret you create, mounted as a file:
+    #   kubectl create secret generic mowdeck-apns --from-file=AuthKey.p8=AuthKey_ABC123DEFG.p8
+    apns:
+      enabled: false
+      # -- Key ID (10 characters) of the APNs key.
+      keyId: ""
+      # -- Apple Developer Team ID (10 characters).
+      teamId: ""
+      # -- Bundle ID of the iOS app (apns-topic).
+      bundleId: app.mowdeck.mobile
+      # -- development (api.sandbox.push.apple.com, builds from Xcode) or production
+      # (api.push.apple.com, TestFlight and App Store).
+      environment: development
+      # -- Name of the Secret with the .p8 key (required when enabled) and its key in it.
+      existingSecret: ""
+      secretKey: AuthKey.p8
+  scheduler:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 384Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 5, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  entitlements:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 384Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 5, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  # AI assist with human approval (ADR 0033).
+  vision:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 192Mi}
+      limits: {memory: 768Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  # Capture worker (ADR 0035): headless Chromium that takes still frames of live cameras, so
+  # AI assist and the automatic analysis work without an open browser. Off by default; the image
+  # is vision-capture (the Vision image built with WITH_CAPTURE=true, about 0.5 GB larger).
+  visionCapture:
+    enabled: false
+    replicas: 1
+    resources:
+      requests: {cpu: 100m, memory: 384Mi}
+      limits: {memory: 1536Mi}
+    autoscaling: {enabled: false, minReplicas: 1, maxReplicas: 2, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  # Subscriptions and payments (ADR 0031). Off by default: billing.enabled=false means nothing
+  # of it is rendered (Compose: the "billing" profile). Add <fullname>-billing to Identity's
+  # module URLs via services.identity.extraEnv only when enabled (docs/ops/billing.md).
+  billing:
+    enabled: false
+    replicas: 1
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 384Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  # Planner: CPU-bound route computation (one plan per worker thread, PLANNER_MAX_PARALLEL).
+  planner:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 100m, memory: 192Mi}
+      limits: {memory: 512Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 6, targetCPUUtilizationPercentage: 70}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+  # The web app: static PWA served by an unprivileged, read-only nginx (uid 101, port 8080).
+  web:
+    enabled: true
+    replicas: 1
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 128Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+
+# --- Jobs ---
+migrations:
+  # -- When migrations run: auto = pre-install/pre-upgrade hooks with an external PostgreSQL,
+  # ordinary Jobs (one per release revision) with the in-cluster CloudNativePG database.
+  # hook or job force one of them.
+  mode: auto
+  backoffLimit: 10
+  # -- Seconds a finished ordinary Job is kept (job mode).
+  ttlSecondsAfterFinished: 86400
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 384Mi}
+  # -- Init container in every database service that waits until its database is at the newest
+  # migration of the image (or newer), so no pod ever starts against an old schema.
+  waitForSchema: true
+  waitTimeoutSeconds: 900
+
+authzBootstrap:
+  # -- Job (one per release revision) that creates the OpenFGA store and writes the authorization
+  # model when it changed; image <registry>/authz-bootstrap:<tag>.
+  enabled: true
+  backoffLimit: 20
+  ttlSecondsAfterFinished: 86400
+  # -- Init container in every service using OpenFGA that waits until the store's latest model is
+  # the one shipped with this release, so pods never pin an older model.
+  waitForModel: true
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+# --- Monitoring ---
+# Every service serves Prometheus metrics at /metrics on its HTTP port (8000).
+metrics:
+  # -- prometheus.io/scrape annotations on the service pods (for annotation based scraping).
+  podAnnotations: true
+  serviceMonitor:
+    # -- ServiceMonitor for the Prometheus Operator (needs its CRDs).
+    enabled: false
+    interval: 30s
+    labels: {}
+
+# --- NATS (official chart, https://github.com/nats-io/k8s) ---
+# JetStream with file storage on a PersistentVolumeClaim. Set enabled: false and natsUrl to use an
+# existing NATS cluster with JetStream.
+natsUrl: ""
+nats:
+  enabled: true
+  # The services connect to nats://<fullnameOverride>:4222.
+  fullnameOverride: mowdeck-nats
+  container:
+    image:
+      # Same image as NATS_IMAGE in infra/images.txt.
+      fullImageName: public.ecr.aws/docker/library/nats:2.15.0-alpine
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {memory: 512Mi}
+  config:
+    cluster:
+      # -- A three node cluster in the cloud (values-cloud.yaml); JetStream needs at least 2.
+      enabled: false
+      replicas: 3
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        pvc:
+          enabled: true
+          # JetStream's file store is limited to the PVC size, and the MowDeck streams reserve
+          # their maximum sizes up front: COMMANDS 256 MiB, TELEMETRY 512 MiB, EVENTS 1 GiB,
+          # DEVICE 256 MiB (mowdeck_contracts.v1.subjects), 2 GiB in total. Keep at least 3Gi,
+          # otherwise the services fail at start with "insufficient storage resources available".
+          size: 5Gi
+          storageClassName:
+    monitor:
+      enabled: true
+  reloader:
+    enabled: false
+  natsBox:
+    enabled: false
+
+# --- OpenFGA (official chart, https://github.com/openfga/helm-charts) ---
+# postgres datastore in the openfga database; the pre-shared keys and the datastore URI come from
+# the Secret openfgaSecret.name. Set enabled: false and config.OPENFGA_API_URL for an external one.
+openfga:
+  enabled: true
+  # Services reach it at http://<fullnameOverride>:8080.
+  fullnameOverride: mowdeck-openfga
+  replicaCount: 1
+  image:
+    # Same image as OPENFGA_IMAGE in infra/images.txt.
+    repository: ghcr.io/openfga/openfga
+    tag: v1.22.0
+    pullPolicy: IfNotPresent
+  datastore:
+    engine: postgres
+    uriSecret: mowdeck-openfga
+    # The migration runs as an init container of the OpenFGA pods: it retries until the database
+    # exists and needs no extra image or RBAC (the chart's default job waits with k8s-wait-for).
+    migrationType: initContainer
+  authn:
+    method: preshared
+    preshared:
+      keysSecret: mowdeck-openfga
+  playground:
+    enabled: false
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 512Mi}

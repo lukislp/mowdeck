@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Answer: the newest ``limit`` positions of the range, oldest first, or an error.",
+  "properties": {
+    "count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Count",
+      "type": "integer"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Why no track could be read, if so.",
+      "title": "Error"
+    },
+    "first_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First At"
+    },
+    "last_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last At"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "track": {
+      "default": "",
+      "description": "Encoded polyline of (lat, lon) with seven decimals, oldest first.",
+      "title": "Track",
+      "type": "string"
+    },
+    "truncated": {
+      "default": false,
+      "title": "Truncated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "mower_id"
+  ],
+  "title": "PositionTrackReply",
+  "type": "object"
+}

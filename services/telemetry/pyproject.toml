@@ -1,0 +1,43 @@
+[project]
+name = "telemetry"
+version = "0.1.0"
+description = "Latest state, history, position track and command timeline of every mower."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "AGPL-3.0-only"
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "mowdeck-auth",
+  "mowdeck-authz[fastapi]",
+  "mowdeck-contracts",
+  "mowdeck-control",
+  "mowdeck-patterns",
+  "mowdeck-service-kit[db]",
+  "alembic>=1.16.0",
+  # Heatmaps: Shapely (through mowdeck-patterns) and its array library.
+  "numpy>=2.0",
+]
+
+[project.scripts]
+telemetry = "telemetry.main:main"
+telemetry-migrate = "telemetry.adapters.db.migrate:main"
+
+[tool.uv.sources]
+mowdeck-auth = { workspace = true }
+mowdeck-authz = { workspace = true }
+mowdeck-contracts = { workspace = true }
+mowdeck-control = { workspace = true }
+mowdeck-patterns = { workspace = true }
+mowdeck-service-kit = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/telemetry"]

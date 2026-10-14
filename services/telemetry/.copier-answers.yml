@@ -1,0 +1,9 @@
+# Changes here will be overwritten by Copier; do not edit by hand.
+_src_path: templates/service
+description: Latest state, history, position track and command timeline of every mower.
+http_port: 8000
+needs_db: true
+package_name: telemetry
+permissions:
+    telemetry.view: View live state, history and position track of mowers
+service_name: telemetry

@@ -1,0 +1,531 @@
+"""PostgreSQL store on SQLAlchemy Core (async, asyncpg).
+
+Writes run in one transaction per message: the latest row is read ``FOR UPDATE``, history,
+position and timeline inserts are ``ON CONFLICT DO NOTHING`` (redeliveries change nothing), and
+the latest row is upserted with ``WHERE observed_at <= excluded.observed_at`` so an older
+message never overwrites a newer one even when two replicas race. Downsampling is a
+``date_bin`` query with the same origin as :func:`telemetry.domain.rules.bin_start`.
+"""
+
+import dataclasses
+from collections.abc import AsyncGenerator, AsyncIterator, Collection
+from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
+from typing import Any
+from uuid import UUID
+
+import sqlalchemy as sa
+from mowdeck_service_kit import get_logger
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+from telemetry.adapters.db import tables
+from telemetry.application.ports import RetentionScope, RetentionTarget, Tx
+from telemetry.domain.health import BladeChange, DailyRow, HealthRow
+from telemetry.domain.models import (
+    CommandEvent,
+    DirectoryEntry,
+    HistoryPoint,
+    HistoryRow,
+    LatestRow,
+    PositionRow,
+    SnapshotRow,
+)
+
+_log = get_logger("telemetry.db")
+
+RETENTION_LOCK_KEY = 0x4D44_5445_4C45_0001
+"""Key of the session level advisory lock that elects the replica that deletes."""
+
+_TIME_COLUMN = {
+    RetentionTarget.HISTORY: "observed_at",
+    RetentionTarget.POSITIONS: "observed_at",
+    RetentionTarget.COMMANDS: "at",
+}
+
+_BINNED_HISTORY = sa.text(
+    """
+    WITH h AS (
+      SELECT date_bin(:step, observed_at, TIMESTAMPTZ '2000-01-01 00:00:00+00') AS at,
+             (array_agg(activity ORDER BY observed_at DESC))[1] AS activity,
+             round(avg(battery_percent))::int AS battery_percent,
+             min(battery_percent)::int AS battery_min,
+             max(battery_percent)::int AS battery_max,
+             bool_or(charging) AS charging,
+             (array_agg(rtk_fix ORDER BY observed_at DESC))[1] AS rtk_fix,
+             (array_agg(error_code ORDER BY observed_at DESC)
+                FILTER (WHERE error_code IS NOT NULL))[1] AS error_code,
+             count(*)::int AS samples
+        FROM mower_history
+       WHERE account_id = :account_id AND mower_id = :mower_id
+         AND observed_at >= :start AND observed_at < :end
+       GROUP BY 1
+    ), p AS (
+      SELECT date_bin(:step, observed_at, TIMESTAMPTZ '2000-01-01 00:00:00+00') AS at,
+             (array_agg(lat ORDER BY observed_at DESC))[1] AS lat,
+             (array_agg(lon ORDER BY observed_at DESC))[1] AS lon
+        FROM mower_positions
+       WHERE account_id = :account_id AND mower_id = :mower_id
+         AND observed_at >= :start AND observed_at < :end
+       GROUP BY 1
+    )
+    SELECT h.at, h.activity, h.battery_percent, h.battery_min, h.battery_max, h.charging,
+           h.rtk_fix, h.error_code, h.samples, p.lat, p.lon
+      FROM h LEFT JOIN p ON p.at = h.at
+     ORDER BY h.at
+     LIMIT :limit
+    """
+).bindparams(
+    sa.bindparam("step", type_=sa.Interval()),
+    sa.bindparam("account_id", type_=sa.Uuid()),
+    sa.bindparam("mower_id", type_=sa.Uuid()),
+    sa.bindparam("start", type_=sa.DateTime(timezone=True)),
+    sa.bindparam("end", type_=sa.DateTime(timezone=True)),
+    sa.bindparam("limit", type_=sa.Integer()),
+)
+
+
+def _latest(row: Any) -> LatestRow:
+    return LatestRow(**dict(row._mapping))
+
+
+class _SqlTx:
+    def __init__(self, conn: AsyncConnection) -> None:
+        self._conn = conn
+
+    async def latest(self, mower_id: UUID) -> LatestRow | None:
+        result = await self._conn.execute(
+            sa.select(tables.mower_latest)
+            .where(tables.mower_latest.c.mower_id == mower_id)
+            .with_for_update()
+        )
+        row = result.first()
+        return _latest(row) if row else None
+
+    async def put_latest(self, row: LatestRow) -> None:
+        values = {
+            "mower_id": row.mower_id,
+            "account_id": row.account_id,
+            "observed_at": row.observed_at,
+            "received_at": row.received_at,
+            "activity": row.activity,
+            "battery_percent": row.battery_percent,
+            "state": row.state,
+            "history_written_at": row.history_written_at,
+            "history_fingerprint": row.history_fingerprint,
+            "position_fingerprint": row.position_fingerprint,
+        }
+        insert = pg_insert(tables.mower_latest).values(**values)
+        await self._conn.execute(
+            insert.on_conflict_do_update(
+                index_elements=[tables.mower_latest.c.mower_id],
+                set_={k: insert.excluded[k] for k in values if k != "mower_id"},
+                where=tables.mower_latest.c.observed_at <= insert.excluded.observed_at,
+            )
+        )
+
+    async def add_history(self, row: HistoryRow) -> None:
+        await self._conn.execute(
+            pg_insert(tables.mower_history)
+            .values(**_fields(row))
+            .on_conflict_do_nothing(index_elements=["mower_id", "observed_at"])
+        )
+
+    async def add_position(self, row: PositionRow) -> None:
+        await self._conn.execute(
+            pg_insert(tables.mower_positions)
+            .values(**_fields(row))
+            .on_conflict_do_nothing(index_elements=["mower_id", "observed_at"])
+        )
+
+    async def add_command_event(self, event: CommandEvent) -> None:
+        await self._conn.execute(
+            pg_insert(tables.command_timeline)
+            .values(**_fields(event))
+            .on_conflict_do_nothing(index_elements=["command_id", "status"])
+        )
+
+    async def put_snapshot(self, row: SnapshotRow) -> None:
+        values = _fields(row)
+        insert = pg_insert(tables.mower_snapshots).values(**values)
+        await self._conn.execute(
+            insert.on_conflict_do_update(
+                index_elements=["mower_id", "kind"],
+                set_={k: insert.excluded[k] for k in values if k not in ("mower_id", "kind")},
+                where=tables.mower_snapshots.c.observed_at <= insert.excluded.observed_at,
+            )
+        )
+
+    async def directory_account(self, mower_id: UUID) -> UUID | None:
+        result = await self._conn.execute(
+            sa.select(tables.mower_directory.c.account_id).where(
+                tables.mower_directory.c.mower_id == mower_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def put_directory(self, entry: DirectoryEntry, *, replace: bool) -> None:
+        insert = pg_insert(tables.mower_directory).values(**_fields(entry))
+        if replace:
+            statement = insert.on_conflict_do_update(
+                index_elements=["mower_id"],
+                set_={
+                    "account_id": insert.excluded.account_id,
+                    "updated_at": insert.excluded.updated_at,
+                },
+            )
+        else:
+            statement = insert.on_conflict_do_nothing(index_elements=["mower_id"])
+        await self._conn.execute(statement)
+
+    async def drop_mower(self, mower_id: UUID) -> None:
+        for table in (
+            tables.mower_directory,
+            tables.mower_latest,
+            tables.mower_history,
+            tables.mower_positions,
+            tables.command_timeline,
+            tables.mower_snapshots,
+            tables.mower_health,
+            tables.mower_health_daily,
+            tables.blade_changes,
+        ):
+            await self._conn.execute(sa.delete(table).where(table.c.mower_id == mower_id))
+
+    async def health(self, mower_id: UUID) -> HealthRow | None:
+        result = await self._conn.execute(
+            sa.select(tables.mower_health)
+            .where(tables.mower_health.c.mower_id == mower_id)
+            .with_for_update()
+        )
+        row = result.first()
+        return HealthRow(**dict(row._mapping)) if row else None
+
+    async def put_health(self, row: HealthRow) -> None:
+        await _upsert(self._conn, tables.mower_health, _fields(row), ["mower_id"])
+
+    async def daily(self, mower_id: UUID, day: date) -> DailyRow | None:
+        d = tables.mower_health_daily.c
+        result = await self._conn.execute(
+            sa.select(tables.mower_health_daily).where(d.mower_id == mower_id, d.day == day)
+        )
+        row = result.first()
+        return DailyRow(**dict(row._mapping)) if row else None
+
+    async def put_daily(self, row: DailyRow) -> None:
+        await _upsert(self._conn, tables.mower_health_daily, _fields(row), ["mower_id", "day"])
+
+    async def add_blade_change(self, change: BladeChange) -> None:
+        await self._conn.execute(
+            pg_insert(tables.blade_changes)
+            .values(**_fields(change))
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+
+
+async def _upsert(
+    conn: AsyncConnection, table: sa.Table, values: dict[str, Any], keys: list[str]
+) -> None:
+    insert = pg_insert(table).values(**values)
+    await conn.execute(
+        insert.on_conflict_do_update(
+            index_elements=keys,
+            set_={k: insert.excluded[k] for k in values if k not in keys},
+        )
+    )
+
+
+def _fields(row: Any) -> dict[str, Any]:
+    return {f.name: getattr(row, f.name) for f in dataclasses.fields(row)}
+
+
+class _SqlRetention:
+    def __init__(self, conn: AsyncConnection) -> None:
+        self._conn = conn
+
+    async def delete_before(
+        self, target: RetentionTarget, cutoff: datetime, batch_size: int
+    ) -> int:
+        column = _TIME_COLUMN[target]
+        # Names come from the enums above, never from input; the cutoff is a bind parameter.
+        statement = sa.text(
+            f"DELETE FROM {target.value} WHERE ctid = ANY(ARRAY("  # noqa: S608
+            f"SELECT ctid FROM {target.value} WHERE {column} < :cutoff LIMIT :batch))"
+        ).bindparams(
+            sa.bindparam("cutoff", type_=sa.DateTime(timezone=True)),
+            sa.bindparam("batch", type_=sa.Integer()),
+        )
+        total = 0
+        while True:
+            result = await self._conn.execute(statement, {"cutoff": cutoff, "batch": batch_size})
+            total += result.rowcount
+            if result.rowcount < batch_size:
+                return total
+
+
+class SqlStore:
+    """Implements :class:`~telemetry.application.ports.Store` on PostgreSQL."""
+
+    def __init__(self, engine: AsyncEngine) -> None:
+        self.engine = engine
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[Tx]:
+        """``BEGIN`` ... ``COMMIT`` (``ROLLBACK`` on error)."""
+        async with self.engine.begin() as conn:
+            yield _SqlTx(conn)
+
+    async def latest_of(self, account_id: UUID, mower_id: UUID) -> LatestRow | None:
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(tables.mower_latest).where(
+                    tables.mower_latest.c.account_id == account_id,
+                    tables.mower_latest.c.mower_id == mower_id,
+                )
+            )
+            row = result.first()
+        return _latest(row) if row else None
+
+    async def latest_many(
+        self, account_id: UUID, mower_ids: Collection[UUID] | None, limit: int
+    ) -> list[LatestRow]:
+        if mower_ids is not None and not mower_ids:
+            return []
+        statement = (
+            sa.select(tables.mower_latest)
+            .where(tables.mower_latest.c.account_id == account_id)
+            .order_by(tables.mower_latest.c.mower_id)
+            .limit(limit)
+        )
+        if mower_ids is not None:
+            statement = statement.where(tables.mower_latest.c.mower_id.in_(list(mower_ids)))
+        async with self.engine.connect() as conn:
+            result = await conn.execute(statement)
+            return [_latest(row) for row in result.all()]
+
+    async def history(
+        self,
+        account_id: UUID,
+        mower_id: UUID,
+        start: datetime,
+        end: datetime,
+        step: timedelta | None,
+        limit: int,
+    ) -> list[HistoryPoint]:
+        async with self.engine.connect() as conn:
+            if step is not None:
+                result = await conn.execute(
+                    _BINNED_HISTORY,
+                    {
+                        "step": step,
+                        "account_id": account_id,
+                        "mower_id": mower_id,
+                        "start": start,
+                        "end": end,
+                        "limit": limit,
+                    },
+                )
+                return [HistoryPoint(**dict(row._mapping)) for row in result.all()]
+            h = tables.mower_history.c
+            result = await conn.execute(
+                sa.select(tables.mower_history)
+                .where(
+                    h.account_id == account_id,
+                    h.mower_id == mower_id,
+                    h.observed_at >= start,
+                    h.observed_at < end,
+                )
+                .order_by(h.observed_at)
+                .limit(limit)
+            )
+            return [
+                HistoryPoint(
+                    at=r.observed_at,
+                    activity=r.activity,
+                    battery_percent=r.battery_percent,
+                    battery_min=r.battery_percent,
+                    battery_max=r.battery_percent,
+                    charging=r.charging,
+                    rtk_fix=r.rtk_fix,
+                    error_code=r.error_code,
+                    samples=1,
+                )
+                for r in result.all()
+            ]
+
+    async def positions(
+        self, account_id: UUID, mower_id: UUID, start: datetime, end: datetime, limit: int
+    ) -> list[PositionRow]:
+        p = tables.mower_positions.c
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(tables.mower_positions)
+                .where(
+                    p.account_id == account_id,
+                    p.mower_id == mower_id,
+                    p.observed_at >= start,
+                    p.observed_at < end,
+                )
+                .order_by(p.observed_at.desc())
+                .limit(limit)
+            )
+            rows = [PositionRow(**dict(row._mapping)) for row in result.all()]
+        rows.reverse()
+        return rows
+
+    async def position_chunks(
+        self,
+        account_id: UUID,
+        mower_id: UUID,
+        start: datetime,
+        end: datetime,
+        limit: int,
+        chunk_size: int,
+    ) -> AsyncGenerator[list[PositionRow]]:
+        """One query (index ``ix_mower_positions_mower_time``) streamed with a server side
+        cursor, ``chunk_size`` rows at a time."""
+        p = tables.mower_positions.c
+        statement = (
+            sa.select(tables.mower_positions)
+            .where(
+                p.account_id == account_id,
+                p.mower_id == mower_id,
+                p.observed_at >= start,
+                p.observed_at < end,
+            )
+            .order_by(p.observed_at.desc())
+            .limit(limit)
+            .execution_options(yield_per=chunk_size)
+        )
+        async with self.engine.connect() as conn:
+            result = await conn.stream(statement)
+            async for part in result.partitions(chunk_size):
+                yield [PositionRow(**dict(row._mapping)) for row in part]
+
+    async def commands(self, account_id: UUID, mower_id: UUID, limit: int) -> list[CommandEvent]:
+        c = tables.command_timeline.c
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(tables.command_timeline)
+                .where(c.account_id == account_id, c.mower_id == mower_id)
+                .order_by(c.at.desc(), c.command_id.desc())
+                .limit(limit)
+            )
+            return [CommandEvent(**dict(row._mapping)) for row in result.all()]
+
+    async def snapshot_of(self, account_id: UUID, mower_id: UUID, kind: str) -> SnapshotRow | None:
+        s = tables.mower_snapshots.c
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(tables.mower_snapshots).where(
+                    s.account_id == account_id, s.mower_id == mower_id, s.kind == kind
+                )
+            )
+            row = result.first()
+        return SnapshotRow(**dict(row._mapping)) if row else None
+
+    async def snapshots_of_kind(
+        self, account_id: UUID, mower_ids: Collection[UUID] | None, kind: str, limit: int
+    ) -> list[SnapshotRow]:
+        if mower_ids is not None and not mower_ids:
+            return []
+        s = tables.mower_snapshots.c
+        statement = (
+            sa.select(tables.mower_snapshots)
+            .where(s.account_id == account_id, s.kind == kind)
+            .order_by(s.mower_id)
+            .limit(limit)
+        )
+        if mower_ids is not None:
+            statement = statement.where(s.mower_id.in_(list(mower_ids)))
+        async with self.engine.connect() as conn:
+            result = await conn.execute(statement)
+            return [SnapshotRow(**dict(row._mapping)) for row in result.all()]
+
+    async def health_of(self, account_id: UUID, mower_id: UUID) -> HealthRow | None:
+        h = tables.mower_health.c
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(tables.mower_health).where(
+                    h.account_id == account_id, h.mower_id == mower_id
+                )
+            )
+            row = result.first()
+        return HealthRow(**dict(row._mapping)) if row else None
+
+    async def daily_of(
+        self, account_id: UUID, mower_id: UUID, first: date, last: date
+    ) -> list[DailyRow]:
+        d = tables.mower_health_daily.c
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(tables.mower_health_daily)
+                .where(
+                    d.account_id == account_id,
+                    d.mower_id == mower_id,
+                    d.day >= first,
+                    d.day <= last,
+                )
+                .order_by(d.day)
+            )
+            return [DailyRow(**dict(row._mapping)) for row in result.all()]
+
+    async def daily_many(
+        self,
+        account_id: UUID,
+        mower_ids: Collection[UUID] | None,
+        first: date,
+        last: date,
+        limit: int,
+    ) -> list[DailyRow]:
+        if mower_ids is not None and not mower_ids:
+            return []
+        d = tables.mower_health_daily.c
+        statement = (
+            sa.select(tables.mower_health_daily)
+            .where(d.account_id == account_id, d.day >= first, d.day <= last)
+            .order_by(d.mower_id, d.day)
+            .limit(limit)
+        )
+        if mower_ids is not None:
+            statement = statement.where(d.mower_id.in_(list(mower_ids)))
+        async with self.engine.connect() as conn:
+            result = await conn.execute(statement)
+            return [DailyRow(**dict(row._mapping)) for row in result.all()]
+
+    async def blade_changes(
+        self, account_id: UUID, mower_id: UUID, limit: int
+    ) -> list[BladeChange]:
+        b = tables.blade_changes.c
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(tables.blade_changes)
+                .where(b.account_id == account_id, b.mower_id == mower_id)
+                .order_by(b.changed_at.desc(), b.id.desc())
+                .limit(limit)
+            )
+            return [BladeChange(**dict(row._mapping)) for row in result.all()]
+
+    @asynccontextmanager
+    async def retention(self) -> AsyncIterator[RetentionScope | None]:
+        """Session level ``pg_try_advisory_lock`` on a dedicated autocommit connection."""
+        conn = await self.engine.connect()
+        locked = False
+        try:
+            conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+            result = await conn.execute(
+                sa.text("SELECT pg_try_advisory_lock(:key)"), {"key": RETENTION_LOCK_KEY}
+            )
+            locked = bool(result.scalar_one())
+            yield _SqlRetention(conn) if locked else None
+        finally:
+            try:
+                if locked:
+                    await conn.execute(
+                        sa.text("SELECT pg_advisory_unlock(:key)"), {"key": RETENTION_LOCK_KEY}
+                    )
+            except Exception:
+                _log.warning("releasing the retention lock failed, dropping the connection")
+                await conn.invalidate()
+            finally:
+                await conn.close()

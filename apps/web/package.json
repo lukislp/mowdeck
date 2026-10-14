@@ -1,0 +1,40 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MowDeck web app: SvelteKit PWA (SPA) served by the web service at /.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy localStorage preferredLanguage baseLocale",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "dev": "pnpm i18n:compile && vite dev",
+    "build": "pnpm i18n:compile && vite build && node scripts/csp-hashes.mjs build",
+    "preview": "vite preview",
+    "lint": "eslint . && prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore && stylelint \"src/**/*.{css,svelte}\" && node scripts/i18n-check.mjs",
+    "check": "pnpm i18n:compile && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "test": "pnpm i18n:compile && svelte-kit sync && vitest run --coverage"
+  },
+  "dependencies": {
+    "@mowdeck/ui": "workspace:*",
+    "agora-rtc-sdk-ng": "4.24.8",
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "@inlang/paraglide-js": "2.26.0",
+    "@sveltejs/adapter-static": "3.0.10",
+    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/svelte": "5.4.2",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.3",
+    "jsdom": "29.1.1",
+    "svelte": "5.57.2",
+    "svelte-check": "4.7.6",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  }
+}

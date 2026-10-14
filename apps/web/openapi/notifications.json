@@ -1,0 +1,1465 @@
+{
+  "components": {
+    "schemas": {
+      "ApnsDeviceIn": {
+        "description": "The iOS app's APNs device token (from ``didRegisterForRemoteNotificationsWithDeviceToken``,\nhex encoded).",
+        "properties": {
+          "device_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shown in the list.",
+            "examples": [
+              "Lukas' iPhone"
+            ],
+            "title": "Device Name"
+          },
+          "token": {
+            "description": "Device token in hexadecimal (case-insensitive, stored in lower case).",
+            "maxLength": 200,
+            "minLength": 64,
+            "pattern": "^[0-9a-fA-F]+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "ApnsDeviceIn",
+        "type": "object"
+      },
+      "ApnsDeviceList": {
+        "description": "The user's iOS devices, oldest first.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApnsDeviceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ApnsDeviceList",
+        "type": "object"
+      },
+      "ApnsDeviceOut": {
+        "description": "A registered iOS device; the token itself (a capability) is not echoed.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Name"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "token_suffix": {
+            "description": "The last 8 hex characters of the token.",
+            "title": "Token Suffix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_name",
+          "token_suffix",
+          "created_at"
+        ],
+        "title": "ApnsDeviceOut",
+        "type": "object"
+      },
+      "EventDef": {
+        "description": "An event type a module publishes.",
+        "properties": {
+          "schema_ref": {
+            "description": "Reference to the payload JSON Schema (URI or package path).",
+            "minLength": 1,
+            "title": "Schema Ref",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "type",
+          "schema_ref"
+        ],
+        "title": "EventDef",
+        "type": "object"
+      },
+      "FeatureDef": {
+        "description": "A plan feature a module offers, e.g. ``reports``.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "FeatureDef",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Inbox": {
+        "description": "The newest notifications, newest first.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InboxItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "unread"
+        ],
+        "title": "Inbox",
+        "type": "object"
+      },
+      "InboxItemOut": {
+        "description": "One notification of the user.",
+        "properties": {
+          "acked": {
+            "default": false,
+            "description": "Acknowledged by the user (alarms).",
+            "title": "Acked",
+            "type": "boolean"
+          },
+          "acked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acked At"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "mower_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mower Id"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "read": {
+            "title": "Read",
+            "type": "boolean"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read At"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/NotificationSeverity"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "mower_id",
+          "kind",
+          "severity",
+          "title",
+          "body",
+          "url",
+          "occurred_at",
+          "created_at",
+          "read",
+          "read_at"
+        ],
+        "title": "InboxItemOut",
+        "type": "object"
+      },
+      "ModuleDescriptor": {
+        "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventDef"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureDef"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9\\-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionDef"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "ui_areas": {
+            "items": {
+              "$ref": "#/components/schemas/UiAreaDef"
+            },
+            "title": "Ui Areas",
+            "type": "array"
+          },
+          "version": {
+            "maxLength": 64,
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.\\-+]+)?$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "ModuleDescriptor",
+        "type": "object"
+      },
+      "NotificationKind": {
+        "description": "What a notification is about.",
+        "enum": [
+          "mowing_finished",
+          "mower_stuck",
+          "battery_low",
+          "mower_offline",
+          "mower_online",
+          "job_started",
+          "mower_lifted",
+          "mower_left_dock_unexpectedly",
+          "geofence_exit",
+          "blade_maintenance",
+          "vision_proposal",
+          "vision_auto_proposal",
+          "test"
+        ],
+        "title": "NotificationKind",
+        "type": "string"
+      },
+      "NotificationSeverity": {
+        "description": "How urgent a notification is; channels map it to TTL, urgency or priority.",
+        "enum": [
+          "info",
+          "warning",
+          "critical"
+        ],
+        "title": "NotificationSeverity",
+        "type": "string"
+      },
+      "NtfyIn": {
+        "additionalProperties": false,
+        "description": "The user's ntfy target.",
+        "properties": {
+          "server_url": {
+            "examples": [
+              "https://ntfy.sh"
+            ],
+            "maxLength": 300,
+            "title": "Server Url",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Access token (tk_...), stored, never returned. Omitted or null keeps the stored token; an empty string removes it.",
+            "title": "Token"
+          },
+          "topic": {
+            "examples": [
+              "mowdeck-lukas-7f3a"
+            ],
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_url",
+          "topic"
+        ],
+        "title": "NtfyIn",
+        "type": "object"
+      },
+      "NtfyOut": {
+        "description": "The stored ntfy target (without the token).",
+        "properties": {
+          "has_token": {
+            "title": "Has Token",
+            "type": "boolean"
+          },
+          "server_url": {
+            "title": "Server Url",
+            "type": "string"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_url",
+          "topic",
+          "has_token",
+          "updated_at"
+        ],
+        "title": "NtfyOut",
+        "type": "object"
+      },
+      "PermissionDef": {
+        "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
+        "properties": {
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "implied_by": {
+            "description": "Keys that imply this one when held on the whole account (e.g. `device_gateway.view` implied by `mower.view`).",
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+              "type": "string"
+            },
+            "title": "Implied By",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "title": "PermissionDef",
+        "type": "object"
+      },
+      "PreferencesBody": {
+        "additionalProperties": false,
+        "description": "What the user wants to be notified about (``PUT`` replaces everything).",
+        "properties": {
+          "all_mowers": {
+            "default": false,
+            "description": "Follow every mower the user can view, now and later.",
+            "title": "All Mowers",
+            "type": "boolean"
+          },
+          "channels": {
+            "description": "Channels to use when a target is configured (webpush, ntfy, apns, ...).",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Channels",
+            "type": "array"
+          },
+          "enabled_kinds": {
+            "description": "Kinds to notify; job_started is off by default.",
+            "items": {
+              "$ref": "#/components/schemas/NotificationKind"
+            },
+            "maxItems": 20,
+            "title": "Enabled Kinds",
+            "type": "array"
+          },
+          "language": {
+            "default": "en",
+            "examples": [
+              "de"
+            ],
+            "maxLength": 8,
+            "title": "Language",
+            "type": "string"
+          },
+          "mower_ids": {
+            "description": "Followed mowers when all_mowers is false (each must be viewable, else 404).",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Mower Ids",
+            "type": "array"
+          },
+          "quiet_hours": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuietHoursBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timezone": {
+            "default": "UTC",
+            "examples": [
+              "Europe/Berlin"
+            ],
+            "maxLength": 64,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled_kinds"
+        ],
+        "title": "PreferencesBody",
+        "type": "object"
+      },
+      "PreferencesOut": {
+        "description": "Stored preferences (or the defaults) plus what can be chosen.",
+        "properties": {
+          "all_mowers": {
+            "title": "All Mowers",
+            "type": "boolean"
+          },
+          "available_channels": {
+            "description": "Channels configured on this server.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Available Channels",
+            "type": "array"
+          },
+          "available_kinds": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationKind"
+            },
+            "title": "Available Kinds",
+            "type": "array"
+          },
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "enabled_kinds": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationKind"
+            },
+            "title": "Enabled Kinds",
+            "type": "array"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "mower_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Mower Ids",
+            "type": "array"
+          },
+          "quiet_hours": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuietHoursBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stored": {
+            "description": "False until the user saved preferences once.",
+            "title": "Stored",
+            "type": "boolean"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled_kinds",
+          "all_mowers",
+          "mower_ids",
+          "quiet_hours",
+          "timezone",
+          "language",
+          "channels",
+          "stored",
+          "available_kinds",
+          "available_channels",
+          "languages"
+        ],
+        "title": "PreferencesOut",
+        "type": "object"
+      },
+      "PushKeys": {
+        "description": "``PushSubscription.toJSON().keys``.",
+        "properties": {
+          "auth": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Auth",
+            "type": "string"
+          },
+          "p256dh": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "P256Dh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "p256dh",
+          "auth"
+        ],
+        "title": "PushKeys",
+        "type": "object"
+      },
+      "PushSubscriptionIn": {
+        "description": "The browser's ``PushSubscription.toJSON()`` (``expirationTime`` is ignored).",
+        "properties": {
+          "endpoint": {
+            "maxLength": 2000,
+            "minLength": 10,
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "keys": {
+            "$ref": "#/components/schemas/PushKeys"
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
+        ],
+        "title": "PushSubscriptionIn",
+        "type": "object"
+      },
+      "PushSubscriptionList": {
+        "description": "The user's subscriptions.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PushSubscriptionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PushSubscriptionList",
+        "type": "object"
+      },
+      "PushSubscriptionOut": {
+        "description": "A stored subscription; the endpoint itself (a capability URL) is not echoed.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "endpoint_host": {
+            "title": "Endpoint Host",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          }
+        },
+        "required": [
+          "id",
+          "endpoint_host",
+          "user_agent",
+          "created_at"
+        ],
+        "title": "PushSubscriptionOut",
+        "type": "object"
+      },
+      "QuietHoursBody": {
+        "description": "A daily window (local time of ``timezone``) without pushes; may cross midnight.",
+        "properties": {
+          "end": {
+            "examples": [
+              "07:00"
+            ],
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "examples": [
+              "22:00"
+            ],
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "QuietHoursBody",
+        "type": "object"
+      },
+      "TestSent": {
+        "description": "Answer of ``POST /test``.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "channels": {
+            "description": "Channels a delivery was queued for.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "notification_id": {
+            "format": "uuid",
+            "title": "Notification Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notification_id",
+          "channels",
+          "title",
+          "body"
+        ],
+        "title": "TestSent",
+        "type": "object"
+      },
+      "UiAreaDef": {
+        "description": "An area the module occupies in the web app shell.",
+        "properties": {
+          "labels": {
+            "description": "Translated menu labels by language tag (e.g. `de`); `menu_label` is the English fallback.",
+            "patternProperties": {
+              "^[a-z]{2}(-[A-Z]{2})?$": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "menu_label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Menu Label",
+            "type": "string"
+          },
+          "required_permission": {
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+            "title": "Required Permission",
+            "type": "string"
+          },
+          "route": {
+            "maxLength": 200,
+            "pattern": "^/[A-Za-z0-9/_\\-:\\[\\]]*$",
+            "title": "Route",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "menu_label",
+          "required_permission"
+        ],
+        "title": "UiAreaDef",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VapidPublicKey": {
+        "description": "The ``applicationServerKey`` for ``pushManager.subscribe``.",
+        "properties": {
+          "public_key": {
+            "title": "Public Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "public_key"
+        ],
+        "title": "VapidPublicKey",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "notifications",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/.well-known/mowdeck-module": {
+      "get": {
+        "operationId": "module_descriptor__well_known_mowdeck_module_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleDescriptor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Module Descriptor",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/notifications/inbox": {
+      "get": {
+        "description": "The caller's newest notifications, newest first.",
+        "operationId": "get_inbox_api_v1_notifications_inbox_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Only unread notifications.",
+            "in": "query",
+            "name": "unread",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only unread notifications.",
+              "title": "Unread",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Inbox"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Inbox",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/inbox/{notification_id}/ack": {
+      "post": {
+        "description": "Acknowledge one of the caller's notifications: read plus acknowledged (idempotent; 404 for\nany other id). For a theft alarm, repeats of it (same kind and mower) are silenced for the\ncaller for an hour (``NOTIFICATIONS_ACK_SILENCE_SECONDS``).",
+        "operationId": "acknowledge_api_v1_notifications_inbox__notification_id__ack_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Notification Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Acknowledge",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/inbox/{notification_id}/read": {
+      "post": {
+        "description": "Mark one of the caller's notifications read (idempotent; 404 for any other id).",
+        "operationId": "mark_read_api_v1_notifications_inbox__notification_id__read_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Notification Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark Read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/me/push/apns": {
+      "get": {
+        "description": "The caller's iOS devices, oldest first.",
+        "operationId": "list_apns_devices_api_v1_notifications_me_push_apns_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApnsDeviceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Apns Devices",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "post": {
+        "description": "Register the iOS app's APNs device token for the caller (plan feature\n``notifications.push``); the same token again replaces the earlier owner and name.",
+        "operationId": "add_apns_device_api_v1_notifications_me_push_apns_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApnsDeviceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApnsDeviceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Apns Device",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/me/push/apns/{device_id}": {
+      "delete": {
+        "description": "Delete one of the caller's iOS devices (the app calls it on logout; 404 for any other\nid).",
+        "operationId": "delete_apns_device_api_v1_notifications_me_push_apns__device_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Apns Device",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/ntfy": {
+      "delete": {
+        "description": "Remove the caller's ntfy target.",
+        "operationId": "delete_ntfy_api_v1_notifications_ntfy_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete Ntfy",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "get": {
+        "description": "The caller's ntfy target (404 when none is configured).",
+        "operationId": "get_ntfy_api_v1_notifications_ntfy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NtfyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ntfy",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "put": {
+        "description": "Set the caller's ntfy target (the server must be on the allow list).",
+        "operationId": "put_ntfy_api_v1_notifications_ntfy_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NtfyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NtfyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Ntfy",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/preferences": {
+      "get": {
+        "description": "The caller's preferences (defaults until saved: subscribed to nothing).",
+        "operationId": "get_preferences_api_v1_notifications_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Preferences",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "put": {
+        "description": "Replace the caller's preferences; a mower the caller cannot view is 404.",
+        "operationId": "put_preferences_api_v1_notifications_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Preferences",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/push-subscriptions": {
+      "get": {
+        "description": "The caller's browser subscriptions.",
+        "operationId": "list_push_subscriptions_api_v1_notifications_push_subscriptions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscriptionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Push Subscriptions",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "post": {
+        "description": "Store the browser's ``PushSubscription.toJSON()`` for the caller (plan feature\n``notifications.push``).",
+        "operationId": "add_push_subscription_api_v1_notifications_push_subscriptions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User-Agent"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushSubscriptionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscriptionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Push Subscription",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/push-subscriptions/{subscription_id}": {
+      "delete": {
+        "description": "Delete one of the caller's subscriptions (404 for any other id).",
+        "operationId": "delete_push_subscription_api_v1_notifications_push_subscriptions__subscription_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "subscription_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Subscription Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Push Subscription",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/push/vapid-public-key": {
+      "get": {
+        "description": "The ``applicationServerKey`` (public, no token); 404 when Web Push is not configured.",
+        "operationId": "vapid_public_key_api_v1_notifications_push_vapid_public_key_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapidPublicKey"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Vapid Public Key",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/test": {
+      "post": {
+        "description": "Send a test notification over every configured channel of the caller (rate limited).",
+        "operationId": "send_test_api_v1_notifications_test_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Send Test",
+        "tags": [
+          "notifications"
+        ]
+      }
+    }
+  }
+}

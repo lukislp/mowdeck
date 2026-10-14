@@ -1,0 +1,114 @@
+model
+  schema 1.1
+
+# MowDeck authorization model (Phase 1).
+# Hierarchy: account > site > group > mower.
+# grant_* relations are written by Identity (expanded from roles).
+# account and parent relations of site, group and mower are written by Fleet.
+# Every permission below the account level is intersected with
+# "tenant from account", so a wrong tuple can never leak an object
+# into a foreign account (defense in depth).
+
+type user
+
+type api_token
+
+type platform
+  relations
+    define operator_admin: [user]
+    define can_manage_accounts: operator_admin
+    define can_manage_plans: operator_admin
+    define can_view_system_health: operator_admin
+
+type account
+  relations
+    define platform: [platform]
+    define owner: [user]
+    define admin: [user]
+    define member: [user, api_token] or owner or admin
+    define support: [user with not_expired]
+    define tenant: member or support
+
+    define grant_mower_view: [user, api_token]
+    define grant_mower_control: [user, api_token]
+    define grant_mower_drive: [user, api_token]
+    define grant_schedule_edit: [user, api_token]
+    define grant_fleet_bulk_command: [user, api_token]
+    define grant_fleet_manage: [user, api_token]
+    define grant_users_manage: [user]
+    define grant_billing_manage: [user]
+    define grant_audit_view: [user]
+
+    define can_view: owner or admin or support or (grant_mower_view and member)
+    define can_control: owner or admin or (grant_mower_control and member)
+    define can_drive: owner or admin or (grant_mower_drive and member)
+    define can_edit_schedule: owner or admin or (grant_schedule_edit and member)
+    define can_bulk_command: owner or admin or (grant_fleet_bulk_command and member)
+    define can_manage_mowers: owner or admin or (grant_fleet_manage and member)
+    define can_manage_users: owner or admin or (grant_users_manage and member)
+    define can_manage_billing: owner or (grant_billing_manage and member)
+    define can_view_audit: owner or admin or (grant_audit_view and member)
+    define can_manage_account: owner
+    define can_emergency_stop: can_view
+    define can_operator_manage: can_manage_accounts from platform
+
+type site
+  relations
+    define account: [account]
+
+    define grant_mower_view: [user, api_token]
+    define grant_mower_control: [user, api_token]
+    define grant_mower_drive: [user, api_token]
+    define grant_schedule_edit: [user, api_token]
+    define grant_fleet_bulk_command: [user, api_token]
+    define grant_fleet_manage: [user, api_token]
+
+    define can_view: (grant_mower_view or can_view from account) and tenant from account
+    define can_control: (grant_mower_control or can_control from account) and tenant from account
+    define can_drive: (grant_mower_drive or can_drive from account) and tenant from account
+    define can_edit_schedule: (grant_schedule_edit or can_edit_schedule from account) and tenant from account
+    define can_bulk_command: (grant_fleet_bulk_command or can_bulk_command from account) and tenant from account
+    define can_manage_mowers: (grant_fleet_manage or can_manage_mowers from account) and tenant from account
+    define can_emergency_stop: can_view
+
+type group
+  relations
+    define account: [account]
+    define parent: [site]
+
+    define grant_mower_view: [user, api_token]
+    define grant_mower_control: [user, api_token]
+    define grant_mower_drive: [user, api_token]
+    define grant_schedule_edit: [user, api_token]
+    define grant_fleet_bulk_command: [user, api_token]
+    define grant_fleet_manage: [user, api_token]
+
+    define can_view: (grant_mower_view or can_view from parent or can_view from account) and tenant from account
+    define can_control: (grant_mower_control or can_control from parent or can_control from account) and tenant from account
+    define can_drive: (grant_mower_drive or can_drive from parent or can_drive from account) and tenant from account
+    define can_edit_schedule: (grant_schedule_edit or can_edit_schedule from parent or can_edit_schedule from account) and tenant from account
+    define can_bulk_command: (grant_fleet_bulk_command or can_bulk_command from parent or can_bulk_command from account) and tenant from account
+    define can_manage_mowers: (grant_fleet_manage or can_manage_mowers from parent or can_manage_mowers from account) and tenant from account
+    define can_emergency_stop: can_view
+
+type mower
+  relations
+    define account: [account]
+    define parent: [site, group]
+
+    define grant_mower_view: [user, api_token]
+    define grant_mower_control: [user, api_token]
+    define grant_mower_drive: [user, api_token]
+    define grant_schedule_edit: [user, api_token]
+    define grant_fleet_manage: [user, api_token]
+
+    define can_view: (grant_mower_view or can_view from parent or can_view from account) and tenant from account
+    define can_control: (grant_mower_control or can_control from parent or can_control from account) and tenant from account
+    define can_drive: (grant_mower_drive or can_drive from parent or can_drive from account) and tenant from account
+    define can_edit_schedule: (grant_schedule_edit or can_edit_schedule from parent or can_edit_schedule from account) and tenant from account
+    define can_manage_mowers: (grant_fleet_manage or can_manage_mowers from parent or can_manage_mowers from account) and tenant from account
+    define can_emergency_stop: can_view
+
+condition not_expired(current_time: timestamp, expires_at: timestamp) {
+  current_time < expires_at
+}

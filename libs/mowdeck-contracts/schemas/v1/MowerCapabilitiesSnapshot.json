@@ -1,0 +1,210 @@
+{
+  "$defs": {
+    "CameraAccess": {
+      "description": "How a camera stream can be reached, if there is one.",
+      "enum": [
+        "none",
+        "cloud",
+        "local"
+      ],
+      "title": "CameraAccess",
+      "type": "string"
+    },
+    "ConnectionKind": {
+      "description": "How the Device-Gateway is connected to the mower.",
+      "enum": [
+        "ble_bridge",
+        "wifi",
+        "cloud",
+        "simulated"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "MowerCapabilities": {
+      "description": "Feature flags and limits of one mower behind one connection.\n\nAll fields default to \"not supported\", so an adapter only declares what it really offers.",
+      "properties": {
+        "blade_height_range_mm": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Inclusive (min, max) blade height in millimetres, if settable.",
+          "title": "Blade Height Range Mm"
+        },
+        "camera": {
+          "$ref": "#/$defs/CameraAccess",
+          "default": "none"
+        },
+        "connection_kinds": {
+          "description": "Connection kinds this mower can use.",
+          "items": {
+            "$ref": "#/$defs/ConnectionKind"
+          },
+          "title": "Connection Kinds",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "custom_paths": {
+          "default": false,
+          "description": "The mower can follow an arbitrary path or boundary (False for LUBA today).",
+          "title": "Custom Paths",
+          "type": "boolean"
+        },
+        "cutting_width_mm": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 2000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Width of the cut swath in millimetres, if known (coverage heatmaps).",
+          "title": "Cutting Width Mm"
+        },
+        "light": {
+          "default": false,
+          "description": "The mower's light (the camera's headlamp on Mammotion mowers) can be switched with `set_light`.",
+          "title": "Light",
+          "type": "boolean"
+        },
+        "manual_drive": {
+          "default": false,
+          "description": "Joystick driving is supported.",
+          "title": "Manual Drive",
+          "type": "boolean"
+        },
+        "manual_drive_blades": {
+          "default": false,
+          "description": "Blades may run during manual driving when a frame explicitly asks for it.",
+          "title": "Manual Drive Blades",
+          "type": "boolean"
+        },
+        "max_speed_mps": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 5,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Highest settable driving speed while mowing.",
+          "title": "Max Speed Mps"
+        },
+        "min_speed_mps": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 5,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lowest settable driving speed while mowing, if the model has one.",
+          "title": "Min Speed Mps"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mower model, if known.",
+          "title": "Model"
+        },
+        "native_patterns": {
+          "description": "Mowing pattern names the mower runs natively on its own map areas, for example `stripes`, `diagonal`, `checkerboard`, `edge_only`.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Native Patterns",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "rtk_sources": {
+          "description": "RTK correction sources the mower can report.",
+          "items": {
+            "$ref": "#/$defs/RtkSource"
+          },
+          "title": "Rtk Sources",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "title": "MowerCapabilities",
+      "type": "object"
+    },
+    "RtkSource": {
+      "description": "Where RTK correction data comes from.",
+      "enum": [
+        "base_station",
+        "network",
+        "unknown"
+      ],
+      "title": "RtkSource",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The capabilities of one mower, published on ``device.mower.<id>.capabilities``.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/MowerCapabilities"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "observed_at": {
+      "description": "When the gateway read the capabilities (UTC).",
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id",
+    "observed_at",
+    "capabilities"
+  ],
+  "title": "MowerCapabilitiesSnapshot",
+  "type": "object"
+}

@@ -1,0 +1,112 @@
+"""All use cases of Fleet, wired from their ports."""
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from mowdeck_authz import Authorizer, TupleBackend, TupleWriter
+from mowdeck_authz.writer import SupportsInvalidate
+from mowdeck_contracts.v1 import (
+    CameraSessionReply,
+    CameraSessionRequest,
+    CloudDiscoverReply,
+    CloudDiscoverRequest,
+)
+from mowdeck_service_kit.entitlements import Entitlements
+
+from fleet.adapters.crypto import DisabledCipher
+from fleet.application.access import Access
+from fleet.application.area_names import AreaNameService
+from fleet.application.camera import CameraService
+from fleet.application.commands import CommandService
+from fleet.application.context import FleetConfig
+from fleet.application.drive import DriveService
+from fleet.application.groups import GroupService
+from fleet.application.linked_accounts import CredentialVault, LinkedAccountService
+from fleet.application.mowers import MowerService
+from fleet.application.ports import (
+    CameraGateway,
+    Clock,
+    CloudDiscovery,
+    CommandPublisher,
+    EventPublisher,
+    SecretCipher,
+    Store,
+)
+from fleet.application.sites import SiteService
+from fleet.application.throttle import LoginThrottle
+from fleet.application.work import UnitOfWork
+
+
+@dataclass(frozen=True, slots=True)
+class Services:
+    """The use cases, created once at startup."""
+
+    sites: SiteService
+    groups: GroupService
+    mowers: MowerService
+    area_names: AreaNameService
+    commands: CommandService
+    drive: DriveService
+    camera: CameraService
+    linked_accounts: LinkedAccountService
+    access: Access
+    writer: TupleWriter
+
+
+def build_services(
+    *,
+    store: Store,
+    authorizer: Authorizer,
+    tuple_backend: TupleBackend,
+    events: EventPublisher,
+    commands: CommandPublisher,
+    config: FleetConfig,
+    clock: Clock,
+    caches: Sequence[SupportsInvalidate] = (),
+    entitlements: Entitlements | None = None,
+    camera_gateway: CameraGateway | None = None,
+    cloud_discovery: CloudDiscovery | None = None,
+    cipher: SecretCipher | None = None,
+) -> Services:
+    """Wire the use cases. Tuples are written with ``TupleWriter(owner="fleet")``."""
+    writer = TupleWriter(tuple_backend, owner="fleet", caches=caches)
+    uow = UnitOfWork(store, writer, events, clock)
+    access = Access(authorizer)
+    sites = SiteService(uow, store, access, config, clock, entitlements)
+    vault = CredentialVault(cipher or DisabledCipher())
+    return Services(
+        sites=sites,
+        groups=GroupService(uow, store, access, clock, entitlements),
+        mowers=MowerService(uow, store, access, sites, config, clock, entitlements, vault),
+        area_names=AreaNameService(uow, store, clock),
+        commands=CommandService(store, access, commands, config, clock, entitlements),
+        drive=DriveService(store, access, clock),
+        camera=CameraService(store, camera_gateway or _NoCameraGateway(), clock, entitlements),
+        linked_accounts=LinkedAccountService(
+            uow,
+            store,
+            access,
+            vault,
+            cloud_discovery or _NoCloudDiscovery(),
+            clock,
+            LoginThrottle(clock),
+        ),
+        access=access,
+        writer=writer,
+    )
+
+
+class _NoCameraGateway:
+    """Without a bus no gateway can answer (tests and NATS-less runs): every request fails."""
+
+    async def request(self, request: CameraSessionRequest) -> CameraSessionReply:
+        msg = "no device gateway is reachable (no event bus)"
+        raise ConnectionError(msg)
+
+
+class _NoCloudDiscovery:
+    """Without a bus no gateway can log in to a vendor cloud: every request fails."""
+
+    async def discover(self, request: CloudDiscoverRequest) -> CloudDiscoverReply:
+        msg = "no device gateway is reachable (no event bus)"
+        raise ConnectionError(msg)

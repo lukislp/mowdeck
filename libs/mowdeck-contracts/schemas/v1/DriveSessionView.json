@@ -1,0 +1,186 @@
+{
+  "$defs": {
+    "DriveEndReason": {
+      "description": "Why a drive session ended.",
+      "enum": [
+        "client_stop",
+        "socket_closed",
+        "revoked",
+        "token_expired",
+        "max_duration",
+        "mower_refused",
+        "mower_busy",
+        "replaced",
+        "expired",
+        "completed",
+        "aborted"
+      ],
+      "title": "DriveEndReason",
+      "type": "string"
+    },
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A drive session as the audit API shows it (``GET /mowers/{id}/drive-sessions``).",
+  "properties": {
+    "blade_on_allowed": {
+      "title": "Blade On Allowed",
+      "type": "boolean"
+    },
+    "end_reason": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DriveEndReason"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "frames": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Frames"
+    },
+    "frames_dropped": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Frames Dropped"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "origin": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Service that drove on behalf of `started_by` (e.g. `vision`); None for the joystick.",
+      "title": "Origin"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "started_by": {
+      "$ref": "#/$defs/PrincipalRef"
+    }
+  },
+  "required": [
+    "session_id",
+    "mower_id",
+    "started_by",
+    "started_at",
+    "expires_at",
+    "blade_on_allowed"
+  ],
+  "title": "DriveSessionView",
+  "type": "object"
+}

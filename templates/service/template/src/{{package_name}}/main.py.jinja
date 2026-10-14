@@ -1,0 +1,83 @@
+"""Entry point of {{ service_name }}: wires the layers into one FastAPI app.
+
+``python -m {{ package_name }}.main`` (the container command) loads the settings from the
+environment, builds the app and serves it. Tests call :func:`build_app` with their own settings,
+bus and principal resolver.
+"""
+
+from fastapi import FastAPI
+{%- if needs_db %}
+from mowdeck_service_kit import (
+    PrincipalResolver,
+    add_readiness_check,
+    create_app,
+    get_logger,
+    run,
+)
+from mowdeck_service_kit.bus import EventBus
+from mowdeck_service_kit.db import create_engine, readiness_check_db
+{%- else %}
+from mowdeck_service_kit import PrincipalResolver, create_app, run
+from mowdeck_service_kit.bus import EventBus
+{%- endif %}
+
+from {{ package_name }}.adapters.api.routes import router
+from {{ package_name }}.adapters.bus.subscriptions import subscribe_all
+from {{ package_name }}.application.ping import PingService
+from {{ package_name }}.module import DESCRIPTOR
+from {{ package_name }}.settings import Settings
+{%- if needs_db %}
+
+# Named explicitly: under "python -m" the module is called __main__.
+_log = get_logger("{{ package_name }}.main")
+{%- endif %}
+
+
+def build_app(
+    settings: Settings,
+    *,
+    bus: EventBus | None = None,
+    principal_resolver: PrincipalResolver | None = None,
+) -> FastAPI:
+    """Build the app. ``bus`` and ``principal_resolver`` default to the kit's behaviour."""
+
+    async def startup(app: FastAPI) -> None:
+        app.state.ping_service = PingService(settings.service_name)
+{%- if needs_db %}
+        app.state.engine = None
+        if settings.database_url is not None:
+            app.state.engine = create_engine(settings)
+            add_readiness_check(app, readiness_check_db(app.state.engine))
+        else:
+            _log.warning("MOWDECK_DATABASE_URL is not set, running without a database")
+{%- endif %}
+        active_bus: EventBus | None = app.state.bus
+        app.state.subscriptions = await subscribe_all(active_bus) if active_bus else []
+
+    async def shutdown(app: FastAPI) -> None:
+        for subscription in app.state.subscriptions:
+            await subscription.unsubscribe()
+{%- if needs_db %}
+        if app.state.engine is not None:
+            await app.state.engine.dispose()
+{%- endif %}
+
+    return create_app(
+        settings,
+        DESCRIPTOR,
+        routers=[router],
+        on_startup=[startup],
+        on_shutdown=[shutdown],
+        bus=bus,
+        principal_resolver=principal_resolver,
+    )
+
+
+def main() -> None:
+    """Load the settings from the environment and serve the app."""
+    settings = Settings.from_env()
+    run(build_app(settings), settings)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,14 @@
+{{- /* Scripts of the init containers (files/). */ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mowdeck.fullname" . }}-scripts
+  labels:
+    {{- include "mowdeck.labels" . | nindent 4 }}
+data:
+  wait_for_schema.py: |
+    {{- .Files.Get "files/wait_for_schema.py" | nindent 4 }}
+  wait-for-model.sh: |
+    {{- .Files.Get "files/wait-for-model.sh" | nindent 4 }}
+  wait-for-openfga.sh: |
+    {{- .Files.Get "files/wait-for-openfga.sh" | nindent 4 }}

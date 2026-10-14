@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The verified identity behind a request, derived from the access token claims.\n\n``account_id`` is the data boundary. Services must take the account id only from a verified\nprincipal, never from a request body or query string.",
+  "properties": {
+    "account_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Account (household or business) the token is scoped to (JWT `acc`). None for operator or service principals that are not bound to one account.",
+      "title": "Account Id"
+    },
+    "display_name": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Display Name"
+    },
+    "kind": {
+      "$ref": "#/$defs/PrincipalKind"
+    },
+    "permissions": {
+      "description": "Effective permission keys such as `mower.control` (coarse, token level). Object-level checks are answered by the authorization service.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Permissions",
+      "type": "array"
+    },
+    "plan": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Subscription plan key of the account.",
+      "title": "Plan"
+    },
+    "roles": {
+      "description": "Role names granted in the account.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Roles",
+      "type": "array"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Login session (JWT `sid`); None for API tokens and service principals.",
+      "title": "Session Id"
+    },
+    "subject": {
+      "description": "Stable subject id (JWT `sub`).",
+      "format": "uuid",
+      "title": "Subject",
+      "type": "string"
+    },
+    "token_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Token id (JWT `jti`).",
+      "title": "Token Id"
+    }
+  },
+  "required": [
+    "subject",
+    "kind"
+  ],
+  "title": "Principal",
+  "type": "object"
+}

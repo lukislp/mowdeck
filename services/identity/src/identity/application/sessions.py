@@ -1,0 +1,542 @@
+"""Login, refresh with rotation and reuse detection, logout, API token exchange, me, password.
+
+* Access tokens: EdDSA JWT, 10 minutes, claims from the database at issue time.
+* Refresh tokens: opaque, stored as SHA-256, idle 7 days, absolute 30 days. Every refresh
+  rotates; presenting a rotated token again revokes the whole login session (``family_id``)
+  and is audited as ``session.refresh_reuse``. The JWT ``sid`` is the family id.
+* Throttling: per client IP in memory (token bucket) and per username in the database (too
+  many failures in the window answer 429 until the window has passed).
+"""
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from uuid import UUID, uuid4
+
+from mowdeck_auth.issuer import IssuedToken, TokenIssuer
+from mowdeck_contracts.v1 import Principal, PrincipalKind
+
+from identity.application.access import token_principal, user_principal
+from identity.application.authenticators import AuthenticatorRegistry
+from identity.application.context import RequestContext
+from identity.application.deps import Deps
+from identity.application.ports import Ge, Tx
+from identity.application.ratelimit import TokenBucketLimiter
+from identity.domain.credentials import (
+    new_refresh_token,
+    normalize_username,
+    sha256_hex,
+    validate_password,
+)
+from identity.domain.errors import AuthenticationFailed, ForbiddenError, NotFoundError, RateLimited
+from identity.domain.models import (
+    Account,
+    AccountStatus,
+    ApiToken,
+    LoginAttempt,
+    Membership,
+    Session,
+    Status,
+    User,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TokenPair:
+    """An access token and, for logins, the refresh token (shown once)."""
+
+    access: IssuedToken
+    principal: Principal
+    refresh_token: str | None = None
+    refresh_expires_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MembershipView:
+    """A membership as shown by ``GET /me``."""
+
+    account_id: UUID
+    account_name: str
+    account_status: str
+    is_owner: bool
+    is_admin: bool
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
+class MeView:
+    """``GET /me``: the principal, the user (or API token) and the memberships."""
+
+    principal: Principal
+    user: User | None = None
+    token: ApiToken | None = None
+    memberships: list[MembershipView] = field(default_factory=list)
+
+
+def _usable_account(acct: Account | None, membership: Membership) -> bool:
+    if acct is None or membership.status is not Status.ACTIVE:
+        return False
+    return acct.status is AccountStatus.ACTIVE or membership.is_owner
+
+
+class SessionService:
+    """Sessions and tokens."""
+
+    def __init__(
+        self,
+        deps: Deps,
+        issuer: TokenIssuer,
+        authenticators: AuthenticatorRegistry,
+        ip_limiter: TokenBucketLimiter,
+    ) -> None:
+        self.deps = deps
+        self.issuer = issuer
+        self.authenticators = authenticators
+        self.ip_limiter = ip_limiter
+
+    # --- helpers -------------------------------------------------------------------------------
+
+    async def _with_plan(self, principal: Principal, acct: Account) -> Principal:
+        """The principal with the ``plan`` claim from Entitlements (ADR 0028).
+
+        Without a client the stored ``accounts.plan`` stays. The client caches per account and
+        answers ``unlimited`` while billing is disabled (also when Entitlements is down);
+        with billing enabled and no answer the claim is empty.
+        """
+        plans = self.deps.entitlements
+        if plans is None:
+            return principal
+        return principal.model_copy(update={"plan": await plans.plan_of(acct.id)})
+
+    def _limit_ip(self, ctx: RequestContext) -> None:
+        wait = self.ip_limiter.take(ctx.ip or "unknown")
+        if wait > 0:
+            msg = "too many attempts from this address; try again later"
+            raise RateLimited(msg, int(wait) + 1)
+
+    async def _record_failure(
+        self, ctx: RequestContext, username_norm: str | None, reason: str, subject: str | None
+    ) -> None:
+        now = self.deps.clock()
+        async with self.deps.store.transaction() as tx:
+            if username_norm:
+                await tx.login_attempts.add(
+                    LoginAttempt(uuid4(), now, username_norm, False, ctx.ip, reason)
+                )
+            # Failures of a known user or token also land in the audit log of its accounts.
+            accounts: list[UUID | None] = [None]
+            if subject and username_norm:
+                memberships = await tx.memberships.find(user_id=UUID(subject))
+                accounts = [m.account_id for m in memberships] or [None]
+            elif subject:
+                token = await tx.api_tokens.get(id=UUID(subject))
+                accounts = [token.account_id if token else None]
+            for account_id in accounts:
+                entry = ctx.audit_entry(
+                    at=now,
+                    action="session.login_failed" if username_norm else "api_token.exchange_failed",
+                    outcome="failure",
+                    account_id=account_id,
+                    details={"username": username_norm, "reason": reason}
+                    if username_norm
+                    else {"reason": reason},
+                    target_type="user"
+                    if subject and username_norm
+                    else ("api_token" if subject else None),
+                    target_id=subject,
+                )
+                await tx.audit.add(entry)
+
+    async def _pick_membership(
+        self, tx: Tx, found: User, account_id: UUID | None
+    ) -> tuple[Membership, Account]:
+        candidates: list[tuple[Membership, Account]] = []
+        for membership in await tx.memberships.find(user_id=found.id, order_by="created_at"):
+            acct = await tx.accounts.get(id=membership.account_id)
+            if acct is not None and _usable_account(acct, membership):
+                candidates.append((membership, acct))
+        if account_id is not None:
+            candidates = [c for c in candidates if c[1].id == account_id]
+        if not candidates:
+            raise AuthenticationFailed("no usable membership")
+
+        def rank(item: tuple[Membership, Account]) -> tuple[int, int]:
+            membership, acct = item
+            return (0 if acct.id == found.owner_account_id else 1, 0 if membership.is_owner else 1)
+
+        return sorted(candidates, key=rank)[0]
+
+    # --- login, refresh, logout ----------------------------------------------------------------
+
+    async def login(
+        self, username: str, password: str, account_id: UUID | None, ctx: RequestContext
+    ) -> TokenPair:
+        """Password login; returns an access and a refresh token."""
+        self._limit_ip(ctx)
+        norm = normalize_username(username)
+        now = self.deps.clock()
+        config = self.deps.config
+        async with self.deps.store.transaction() as tx:
+            failures = await tx.login_attempts.count(
+                username_norm=norm, success=False, at=Ge(now - config.login_failure_window)
+            )
+        if failures >= config.login_max_failures:
+            async with self.deps.uow() as work:
+                await work.audit(
+                    ctx, "session.login_throttled", outcome="denied", details={"username": norm}
+                )
+            msg = "too many failed logins for this user; try again later"
+            raise RateLimited(msg, int(config.login_failure_window.total_seconds()))
+        authenticator = self.authenticators.get("password")
+        if authenticator is None:
+            msg = "password login is disabled on this installation"
+            raise ForbiddenError(msg)
+        result = await authenticator.authenticate({"username": username, "password": password})
+        if not result.ok or result.subject_id is None:
+            subject = str(result.subject_id) if result.subject_id else None
+            await self._record_failure(ctx, norm, result.reason or "failed", subject)
+            raise AuthenticationFailed(result.reason or "failed")
+        try:
+            pair = await self._start_session(result.subject_id, account_id, ctx)
+        except AuthenticationFailed as exc:
+            await self._record_failure(ctx, norm, exc.reason, str(result.subject_id))
+            raise
+        if result.needs_rehash:
+            await self._rehash(result.subject_id, password)
+        return pair
+
+    async def _start_session(
+        self, user_id: UUID, account_id: UUID | None, ctx: RequestContext
+    ) -> TokenPair:
+        now = self.deps.clock()
+        config = self.deps.config
+        refresh = new_refresh_token()
+        async with self.deps.uow() as work:
+            tx = work.tx
+            found = await tx.users.get(id=user_id)
+            if found is None:
+                raise AuthenticationFailed("user vanished")
+            membership, acct = await self._pick_membership(tx, found, account_id)
+            session = Session(
+                id=uuid4(),
+                family_id=uuid4(),
+                user_id=found.id,
+                account_id=acct.id,
+                refresh_hash=sha256_hex(refresh),
+                created_at=now,
+                idle_expires_at=now + config.refresh_idle,
+                absolute_expires_at=now + config.refresh_absolute,
+                last_used_at=now,
+                user_agent=(ctx.user_agent or "")[:200] or None,
+                ip=ctx.ip,
+            )
+            await tx.sessions.add(session)
+            await tx.login_attempts.add(
+                LoginAttempt(uuid4(), now, found.username_norm, True, ctx.ip)
+            )
+            found.last_login_at = now
+            await tx.users.update(found)
+            catalogue = await self.deps.catalogue.current(tx)
+            principal = await user_principal(
+                tx, found, acct, membership, catalogue, session_id=session.family_id
+            )
+            principal = await self._with_plan(principal, acct)
+            access = self.issuer.issue(principal)
+            entry = ctx.audit_entry(
+                at=now,
+                action="session.login",
+                account_id=acct.id,
+                target_type="user",
+                target_id=str(found.id),
+                details={
+                    "method": "password",
+                    "session": str(session.family_id),
+                    "jti": str(access.token_id),
+                },
+            )
+            entry.actor_subject, entry.actor_kind, entry.actor_name = (
+                f"user:{found.id}",
+                principal.kind.value,
+                found.display_name,
+            )
+            await tx.audit.add(entry)
+        return TokenPair(access, principal, refresh, session.idle_expires_at)
+
+    async def _rehash(self, user_id: UUID, password: str) -> None:
+        new_hash = await self.deps.hasher.hash(password)
+        async with self.deps.store.transaction() as tx:
+            found = await tx.users.get(id=user_id)
+            if found is not None:
+                found.password_hash = new_hash
+                await tx.users.update(found)
+
+    async def _revoke_family(self, tx: Tx, family_id: UUID, reason: str) -> int:
+        now = self.deps.clock()
+        count = 0
+        for session in await tx.sessions.find(family_id=family_id, revoked_at=None):
+            session.revoked_at, session.revoke_reason = now, reason
+            await tx.sessions.update(session)
+            count += 1
+        return count
+
+    async def refresh(self, refresh_token: str, ctx: RequestContext) -> TokenPair:
+        """Rotate the refresh token and issue a new access token with fresh claims.
+
+        A rotated token presented again normally revokes the whole login session. Within
+        ``refresh_reuse_grace`` after its rotation, and only while its successor was never used,
+        it is treated as a lost response instead: the unused successor is rotated in its place
+        (audited as ``session.refresh_grace``), so a dropped mobile connection does not log the
+        user out.
+        """
+        now = self.deps.clock()
+        async with self.deps.store.transaction() as tx:
+            session = await tx.sessions.get(refresh_hash=sha256_hex(refresh_token))
+            successor = None
+            if session is not None and session.replaced_by is not None:
+                successor = await tx.sessions.get(id=session.replaced_by)
+        if session is None:
+            raise AuthenticationFailed("unknown refresh token")
+        if session.replaced_by is not None:
+            if self._within_grace(session, successor, now):
+                assert successor is not None  # noqa: S101 - checked by _within_grace
+                return await self._rotate(successor, ctx, grace_for=session)
+            async with self.deps.uow() as work:
+                await self._revoke_family(work.tx, session.family_id, "refresh token reuse")
+                await work.audit(
+                    ctx,
+                    "session.refresh_reuse",
+                    account_id=session.account_id,
+                    target=("user", session.user_id),
+                    details={"session": str(session.family_id)},
+                    outcome="denied",
+                )
+            raise AuthenticationFailed("refresh token reuse")
+        return await self._rotate(session, ctx)
+
+    def _within_grace(self, session: Session, successor: Session | None, now: datetime) -> bool:
+        grace = self.deps.config.refresh_reuse_grace
+        return (
+            grace.total_seconds() > 0
+            and session.last_used_at is not None
+            and now - session.last_used_at <= grace
+            and successor is not None
+            and successor.replaced_by is None
+            and successor.revoked_at is None
+        )
+
+    async def _rotate(
+        self, session: Session, ctx: RequestContext, *, grace_for: Session | None = None
+    ) -> TokenPair:
+        """Replace ``session`` by a successor and issue an access token for it."""
+        now = self.deps.clock()
+        config = self.deps.config
+        if session.revoked_at is not None:
+            raise AuthenticationFailed("session revoked")
+        if now >= session.idle_expires_at or now >= session.absolute_expires_at:
+            raise AuthenticationFailed("session expired")
+        new_token = new_refresh_token()
+        async with self.deps.uow() as work:
+            tx = work.tx
+            found = await tx.users.get(id=session.user_id)
+            membership = await tx.memberships.get(
+                account_id=session.account_id, user_id=session.user_id
+            )
+            acct = await tx.accounts.get(id=session.account_id)
+            usable = (
+                found is not None
+                and found.status is Status.ACTIVE
+                and membership is not None
+                and _usable_account(acct, membership)
+            )
+            if not usable or found is None or membership is None or acct is None:
+                await self._revoke_family(tx, session.family_id, "user or account no longer usable")
+                failed = True
+            else:
+                failed = False
+                successor = Session(
+                    id=uuid4(),
+                    family_id=session.family_id,
+                    user_id=session.user_id,
+                    account_id=session.account_id,
+                    refresh_hash=sha256_hex(new_token),
+                    created_at=now,
+                    idle_expires_at=min(now + config.refresh_idle, session.absolute_expires_at),
+                    absolute_expires_at=session.absolute_expires_at,
+                    last_used_at=now,
+                    user_agent=(ctx.user_agent or "")[:200] or None,
+                    ip=ctx.ip,
+                )
+                await tx.sessions.add(successor)
+                session.replaced_by, session.last_used_at = successor.id, now
+                await tx.sessions.update(session)
+                catalogue = await self.deps.catalogue.current(tx)
+                principal = await user_principal(
+                    tx, found, acct, membership, catalogue, session_id=session.family_id
+                )
+                principal = await self._with_plan(principal, acct)
+                access = self.issuer.issue(principal)
+                details: dict[str, object] = {
+                    "session": str(session.family_id),
+                    "jti": str(access.token_id),
+                }
+                if grace_for is not None:
+                    details["replaced_unused"] = str(session.id)
+                await work.audit(
+                    ctx,
+                    "session.refresh_grace" if grace_for is not None else "session.refreshed",
+                    account_id=acct.id,
+                    target=("user", found.id),
+                    details=details,
+                )
+        if failed:
+            raise AuthenticationFailed("user or account no longer usable")
+        return TokenPair(access, principal, new_token, successor.idle_expires_at)
+
+    async def logout(self, refresh_token: str, ctx: RequestContext) -> None:
+        """End the login session of ``refresh_token`` (unknown tokens are ignored)."""
+        async with self.deps.uow() as work:
+            session = await work.tx.sessions.get(refresh_hash=sha256_hex(refresh_token))
+            if session is None:
+                return
+            await self._revoke_family(work.tx, session.family_id, "logout")
+            await work.audit(
+                ctx,
+                "session.logout",
+                account_id=session.account_id,
+                target=("user", session.user_id),
+                details={"session": str(session.family_id)},
+            )
+
+    async def logout_all(self, ctx: RequestContext) -> int:
+        """End every session of the calling user."""
+        principal = self._user_principal(ctx)
+        now = self.deps.clock()
+        async with self.deps.uow() as work:
+            sessions = await work.tx.sessions.find(user_id=principal.subject, revoked_at=None)
+            for session in sessions:
+                session.revoked_at, session.revoke_reason = now, "logout all"
+                await work.tx.sessions.update(session)
+            await work.audit(
+                ctx,
+                "session.logout_all",
+                account_id=principal.account_id,
+                target=("user", principal.subject),
+                details={"sessions": len(sessions)},
+            )
+        return len(sessions)
+
+    @staticmethod
+    def _user_principal(ctx: RequestContext) -> Principal:
+        principal = ctx.principal
+        if principal is None or principal.kind not in (PrincipalKind.USER, PrincipalKind.SUBUSER):
+            msg = "only users have sessions"
+            raise ForbiddenError(msg)
+        return principal
+
+    # --- API tokens -----------------------------------------------------------------------------
+
+    async def exchange(self, token: str, ctx: RequestContext) -> TokenPair:
+        """Exchange an API token for a short access token (``kind=api_token``)."""
+        self._limit_ip(ctx)
+        authenticator = self.authenticators.get("api_token")
+        if authenticator is None:
+            msg = "API tokens are disabled on this installation"
+            raise ForbiddenError(msg)
+        result = await authenticator.authenticate({"token": token})
+        if not result.ok or result.subject_id is None:
+            subject = str(result.subject_id) if result.subject_id else None
+            await self._record_failure(ctx, None, result.reason or "failed", subject)
+            raise AuthenticationFailed(result.reason or "failed")
+        now = self.deps.clock()
+        async with self.deps.uow() as work:
+            tx = work.tx
+            api = await tx.api_tokens.get(id=result.subject_id)
+            acct = await tx.accounts.get(id=api.account_id) if api else None
+            if api is None or acct is None:
+                raise AuthenticationFailed("token vanished")
+            if (
+                api.last_used_at is None
+                or now - api.last_used_at >= self.deps.config.api_token_touch_interval
+            ):
+                api.last_used_at = now
+                await tx.api_tokens.update(api)
+            principal = token_principal(api, acct, await self.deps.catalogue.current(tx))
+            principal = await self._with_plan(principal, acct)
+            access = self.issuer.issue(principal)
+            entry = ctx.audit_entry(
+                at=now,
+                action="api_token.exchanged",
+                account_id=acct.id,
+                target_type="api_token",
+                target_id=str(api.id),
+                details={"jti": str(access.token_id)},
+            )
+            entry.actor_subject, entry.actor_kind, entry.actor_name = (
+                f"api_token:{api.id}",
+                "api_token",
+                api.name,
+            )
+            await tx.audit.add(entry)
+        return TokenPair(access, principal)
+
+    # --- me and password ------------------------------------------------------------------------
+
+    async def me(self, principal: Principal) -> MeView:
+        """The caller: user or API token, and the memberships of a user."""
+        async with self.deps.store.transaction() as tx:
+            if principal.kind is PrincipalKind.API_TOKEN:
+                return MeView(principal, token=await tx.api_tokens.get(id=principal.subject))
+            found = await tx.users.get(id=principal.subject)
+            if found is None:
+                msg = "user not found"
+                raise NotFoundError(msg)
+            views = []
+            for membership in await tx.memberships.find(user_id=found.id, order_by="created_at"):
+                acct = await tx.accounts.get(id=membership.account_id)
+                if acct is None:
+                    continue
+                views.append(
+                    MembershipView(
+                        acct.id,
+                        acct.name,
+                        acct.status.value,
+                        membership.is_owner,
+                        membership.is_admin,
+                        membership.status.value,
+                    )
+                )
+        return MeView(principal, user=found, memberships=views)
+
+    async def change_password(self, ctx: RequestContext, current: str, new: str) -> None:
+        """Change the caller's password; other sessions of the caller end."""
+        principal = self._user_principal(ctx)
+        async with self.deps.store.transaction() as tx:
+            found = await tx.users.get(id=principal.subject)
+        if found is None or found.password_hash is None:
+            raise AuthenticationFailed("no password set")
+        if not await self.deps.hasher.verify(found.password_hash, current):
+            await self._record_failure(
+                ctx, found.username_norm, "wrong current password", str(found.id)
+            )
+            raise AuthenticationFailed("wrong current password")
+        validate_password(new, username=found.username)
+        new_hash = await self.deps.hasher.hash(new)
+        now = self.deps.clock()
+        async with self.deps.uow() as work:
+            fresh = await work.tx.users.get(id=found.id)
+            if fresh is None:
+                raise AuthenticationFailed("user vanished")
+            fresh.password_hash, fresh.must_change_password = new_hash, False
+            await work.tx.users.update(fresh)
+            ended = 0
+            for session in await work.tx.sessions.find(user_id=found.id, revoked_at=None):
+                if session.family_id != principal.session_id:
+                    session.revoked_at, session.revoke_reason = now, "password changed"
+                    await work.tx.sessions.update(session)
+                    ended += 1
+            await work.audit(
+                ctx,
+                "user.password_changed",
+                account_id=principal.account_id,
+                target=("user", found.id),
+                details={"sessions_ended": ended},
+            )

@@ -1,0 +1,9 @@
+# Changes here will be overwritten by Copier; do not edit by hand.
+_src_path: templates/service
+description: Live mower state and command results over WebSocket.
+http_port: 8000
+needs_db: false
+package_name: realtime
+permissions:
+    realtime.view: Receive live mower updates
+service_name: realtime

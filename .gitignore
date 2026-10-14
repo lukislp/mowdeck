@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+.svelte-kit/
+coverage/
+playwright-report/
+test-results/
+apps/web/src/lib/paraglide/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Owner script output: JSON lines logs and the PyMammotion credential cache (live tokens)
+out/
+mammotion_session*.json
+
+# Docs
+site/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+apps/web/project.inlang/cache/
+
+# Helm: downloaded chart dependencies and packaged charts (Chart.lock pins the versions)
+infra/helm/mowdeck/charts/
+infra/helm/**/*.tgz

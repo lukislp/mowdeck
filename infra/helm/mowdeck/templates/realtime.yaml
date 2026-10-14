@@ -1,0 +1,13 @@
+{{- /* Realtime: live states, command results and manual driving over the WebSocket
+/api/v1/realtime/ws (Compose service realtime). Replicas need no sticky sessions. */ -}}
+{{- $c := .Values.config }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_REALTIME_PING_SECONDS" $c.REALTIME_PING_SECONDS
+  "MOWDECK_REALTIME_MAX_CONNECTIONS_PER_ACCOUNT" $c.REALTIME_MAX_CONNECTIONS_PER_ACCOUNT
+  "MOWDECK_REALTIME_MAX_CONNECTIONS_PER_USER" $c.REALTIME_MAX_CONNECTIONS_PER_USER
+  "MOWDECK_REALTIME_DRIVE_MAX_SECONDS" $c.REALTIME_DRIVE_MAX_SECONDS) }}
+{{- with (default (include "mowdeck.publicOrigin" .) $c.REALTIME_ALLOWED_ORIGINS) }}{{ $_ := set $env "MOWDECK_REALTIME_ALLOWED_ORIGINS" . }}{{ end }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "realtime" "key" "realtime" "image" "realtime"
+  "env" $env "authz" true
+  "secretFiles" (list
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE"))) }}

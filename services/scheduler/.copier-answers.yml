@@ -1,0 +1,10 @@
+# Changes here will be overwritten by Copier; do not edit by hand.
+_src_path: templates/service
+description: Mowing schedules with rain pause that start mowers through Fleet.
+http_port: 8000
+needs_db: true
+package_name: scheduler
+permissions:
+    schedule.edit: Create, change and delete mowing schedules
+    scheduler.view: See schedules and their runs
+service_name: scheduler

@@ -1,0 +1,40 @@
+"""Routes of {{ service_name }} under ``/api/v1/{{ service_name }}``."""
+
+from datetime import datetime
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Request
+from mowdeck_contracts.v1 import Principal
+from mowdeck_service_kit import require_permission
+from pydantic import BaseModel
+
+from {{ package_name }}.application.ping import PingService
+from {{ package_name }}.module import VIEW_PERMISSION
+
+router = APIRouter(prefix="/{{ service_name }}", tags=["{{ service_name }}"])
+
+CanView = Annotated[Principal, Depends(require_permission(VIEW_PERMISSION))]
+
+
+class PongResponse(BaseModel):
+    """Response of the example endpoint."""
+
+    service: str
+    at: datetime
+    account_id: UUID | None
+
+
+def get_ping_service(request: Request) -> PingService:
+    """Dependency: the use case created at startup."""
+    service: PingService = request.app.state.ping_service
+    return service
+
+
+@router.get("/ping")
+async def ping(
+    principal: CanView, service: Annotated[PingService, Depends(get_ping_service)]
+) -> PongResponse:
+    """Example endpoint protected by ``{{ first_permission }}``."""
+    pong = service.ping(principal.account_id)
+    return PongResponse(service=pong.service, at=pong.at, account_id=pong.account_id)

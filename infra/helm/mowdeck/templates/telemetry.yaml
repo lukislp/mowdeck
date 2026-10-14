@@ -1,0 +1,15 @@
+{{- /* Telemetry: latest state, history, position track, command timeline and health history
+(Compose services telemetry and telemetry-migrate). */ -}}
+{{- $c := .Values.config }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS" $c.TELEMETRY_HEARTBEAT_HISTORY_SECONDS
+  "MOWDECK_TELEMETRY_RETENTION_HISTORY_DAYS" $c.TELEMETRY_RETENTION_HISTORY_DAYS
+  "MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS" $c.TELEMETRY_RETENTION_POSITIONS_DAYS
+  "MOWDECK_TELEMETRY_RETENTION_COMMANDS_DAYS" $c.TELEMETRY_RETENTION_COMMANDS_DAYS
+  "MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD" $c.TELEMETRY_BLADE_HOURS_THRESHOLD) }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "telemetry" "key" "telemetry" "image" "telemetry" "module" "telemetry.adapters.db.migrate" "weight" 3) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "telemetry" "key" "telemetry" "image" "telemetry"
+  "env" $env "db" "telemetry" "migrateModule" "telemetry.adapters.db.migrate" "authz" true
+  "secretFiles" (list
+    (dict "key" "database-url-telemetry" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE"))) }}

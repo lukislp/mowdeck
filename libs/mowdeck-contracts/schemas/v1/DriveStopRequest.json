@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "DriveEndReason": {
+      "description": "Why a drive session ended.",
+      "enum": [
+        "client_stop",
+        "socket_closed",
+        "revoked",
+        "token_expired",
+        "max_duration",
+        "mower_refused",
+        "mower_busy",
+        "replaced",
+        "expired",
+        "completed",
+        "aborted"
+      ],
+      "title": "DriveEndReason",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``fleet.drive.stop``: close the record of a drive session.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "ended_at": {
+      "format": "date-time",
+      "title": "Ended At",
+      "type": "string"
+    },
+    "frames": {
+      "description": "Frames published to the mower.",
+      "minimum": 0,
+      "title": "Frames",
+      "type": "integer"
+    },
+    "frames_dropped": {
+      "description": "Frames dropped by the rate limit.",
+      "minimum": 0,
+      "title": "Frames Dropped",
+      "type": "integer"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "reason": {
+      "$ref": "#/$defs/DriveEndReason"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id",
+    "account_id",
+    "mower_id",
+    "reason",
+    "ended_at",
+    "frames",
+    "frames_dropped"
+  ],
+  "title": "DriveStopRequest",
+  "type": "object"
+}

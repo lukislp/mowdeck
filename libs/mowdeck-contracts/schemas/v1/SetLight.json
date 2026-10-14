@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Switch the mower's light (the camera's headlamp on Mammotion mowers) on or off.\n\nNeeds ``MowerCapabilities.light``. Allowed in every activity, also during an error: the light\nis harmless and AI assist switches it on to photograph a stuck mower at night.",
+  "properties": {
+    "kind": {
+      "const": "set_light",
+      "default": "set_light",
+      "title": "Kind",
+      "type": "string"
+    },
+    "on": {
+      "description": "True switches the light on, False off.",
+      "title": "On",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "on"
+  ],
+  "title": "SetLight",
+  "type": "object"
+}

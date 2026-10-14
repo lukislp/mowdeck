@@ -1,0 +1,73 @@
+# Compose block for planner (as in infra/compose/docker-compose.yml). Build context is the
+# repository root.
+services:
+  # One-shot job: Alembic migrations of the planner database (idempotent).
+  planner-migrate:
+    image: mowdeck/planner:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/planner/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "planner.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://planner:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/planner
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Mowing patterns and spot mowing (ADR 0030): computes, validates and previews routes from
+  # the map snapshots on the DEVICE stream, the coverage from Telemetry's position track
+  # (tracks.positions.query), and keeps the pattern templates of every account.
+  planner:
+    image: mowdeck/planner:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/planner/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://planner:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/planner
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_PLANNER_CUTTING_WIDTH_M: ${PLANNER_CUTTING_WIDTH_M:-0.4}
+      MOWDECK_PLANNER_MAX_PARALLEL: ${PLANNER_MAX_PARALLEL:-2}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.planner.rule=PathPrefix(`/api/v1/planner`)
+      - traefik.http.routers.planner.entrypoints=web
+      - traefik.http.services.planner.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      planner-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]

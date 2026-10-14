@@ -1,0 +1,69 @@
+# Copier template for a MowDeck service.
+#
+#   uv run copier copy --trust templates/service services/<service-name>
+#
+# See templates/README.md and docs/dev/service-template.md.
+
+_min_copier_version: "9.4.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+
+service_name:
+  type: str
+  help: Service name in kebab-case; also the distribution name and the HTTP path segment (e.g. device-gateway)
+  validator: >-
+    {% if not (service_name | regex_search('^[a-z][a-z0-9]*(-[a-z0-9]+)*$')) %}
+    Use kebab-case: lower-case letters and digits, separated by single hyphens.
+    {% endif %}
+
+package_name:
+  type: str
+  help: Python package name (snake_case)
+  default: "{{ service_name | replace('-', '_') }}"
+  validator: >-
+    {% if not (package_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    Use snake_case: lower-case letters, digits and underscores.
+    {% endif %}
+
+description:
+  type: str
+  help: One sentence describing what the service does
+  default: "MowDeck {{ service_name }} service."
+
+needs_db:
+  type: bool
+  help: Does the service own a PostgreSQL database (SQLAlchemy, Alembic migrations)?
+  default: false
+
+http_port:
+  type: int
+  help: HTTP port inside the container
+  default: 8000
+  validator: "{% if http_port < 1024 or http_port > 65535 %}Use a port between 1024 and 65535 (non-root).{% endif %}"
+
+permissions:
+  type: yaml
+  multiline: true
+  help: >-
+    Permissions the service defines, as a YAML mapping of key to description
+    (keys are dotted lower-case, e.g. reports.view). The first one protects the example endpoint.
+  default: "{{ package_name }}.view: View {{ service_name }} data"
+
+# Computed values (not asked, not stored in the answers file).
+permission_map:
+  type: yaml
+  when: false
+  default: >-
+    {% if permissions %}{{ permissions | to_json }}{% else %}{"{{ package_name }}.view": "View {{ service_name }} data"}{% endif %}
+
+first_permission:
+  type: str
+  when: false
+  default: "{{ (permission_map | list)[0] }}"
+
+_message_after_copy: |
+  Service {{ service_name }} created. Next steps (see docs/dev/service-template.md):
+    1. Add "{{ service_name }}" to the dev group and [tool.uv.sources] of the root pyproject.toml.
+    2. uv sync && uv run poe lint && uv run pytest services/{{ service_name }}
+    3. Paste compose.snippet.yml into infra/compose/docker-compose.yml.

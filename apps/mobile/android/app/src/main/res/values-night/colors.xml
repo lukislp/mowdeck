@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- --md-color-bg and inks of @mowdeck/ui (dark) -->
+    <color name="mowdeck_background">#0E1011</color>
+    <color name="colorPrimary">#ECEFEA</color>
+    <color name="colorPrimaryDark">#0E1011</color>
+    <color name="colorAccent">#56D37A</color>
+</resources>

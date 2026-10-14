@@ -1,0 +1,32 @@
+{{- /* Entitlements: plans, limits and feature gates (ADR 0028); answers entitlements.check for the
+other services (Compose services entitlements and entitlements-migrate). The plan file is the
+ConfigMap <fullname>-entitlements-plans, built from files/plans.yaml (an identical copy of
+infra/entitlements/plans.yaml, checked by tools/repo-checks/tests/test_helm.py). */ -}}
+{{- $c := .Values.config }}
+{{- $modules := list }}
+{{- range list "fleet" "realtime" "scheduler" "notifications" "identity" "telemetry" "device-gateway" "planner" "vision" }}
+{{- $modules = append $modules (include "mowdeck.serviceUrl" (dict "ctx" $ "component" .)) }}
+{{- end }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (dict
+  "MOWDECK_ENTITLEMENTS_DEFAULT_PLAN" $c.ENTITLEMENTS_DEFAULT_PLAN
+  "MOWDECK_ENTITLEMENTS_MODULE_URLS" (join "," $modules)) }}
+{{- if .Values.services.entitlements.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mowdeck.fullname" . }}-entitlements-plans
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "entitlements") | nindent 4 }}
+data:
+  plans.yaml: |
+    {{- .Files.Get "files/plans.yaml" | nindent 4 }}
+{{- end }}
+{{- include "mowdeck.migrationJob" (dict "ctx" . "component" "entitlements" "key" "entitlements" "image" "entitlements" "module" "entitlements.adapters.db.migrate" "weight" 6) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "entitlements" "key" "entitlements" "image" "entitlements"
+  "env" $env "db" "entitlements" "migrateModule" "entitlements.adapters.db.migrate" "authz" true
+  "secretFiles" (list
+    (dict "key" "database-url-entitlements" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
+    (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE"))
+  "volumes" (list (dict "name" "plans" "configMap" (dict "name" (printf "%s-entitlements-plans" (include "mowdeck.fullname" .)))))
+  "volumeMounts" (list (dict "name" "plans" "mountPath" "/etc/mowdeck/entitlements" "readOnly" true))) }}

@@ -1,0 +1,75 @@
+# Compose block for entitlements: paste the entries below "services:" into
+# infra/compose/docker-compose.yml. Build context is the repository root.
+services:
+  # One-shot job: Alembic migrations of the entitlements database (idempotent).
+  entitlements-migrate:
+    image: mowdeck/entitlements:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/entitlements/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    command: ["python", "-m", "entitlements.adapters.db.migrate"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_DATABASE_URL: postgresql://entitlements:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/entitlements
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mowdeck]
+
+  # Plans, limits and feature gates (ADR 0028): answers entitlements.check for the other
+  # services. With ENTITLEMENTS_BILLING_ENABLED=false (the default) every account has the
+  # plan "unlimited". The plan file is infra/entitlements/plans.yaml (mounted read-only).
+  entitlements:
+    image: mowdeck/entitlements:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/entitlements/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - ../entitlements/plans.yaml:/etc/mowdeck/entitlements/plans.yaml:ro
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_DATABASE_URL: postgresql://entitlements:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/entitlements
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
+      MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # Access tokens are verified locally against Identity's public keys.
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
+      MOWDECK_ENTITLEMENTS_DEFAULT_PLAN: ${ENTITLEMENTS_DEFAULT_PLAN:-home}
+      MOWDECK_ENTITLEMENTS_MODULE_URLS: http://fleet:8000,http://realtime:8000,http://scheduler:8000,http://notifications:8000,http://identity:8000,http://telemetry:8000,http://device-gateway:8000
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.entitlements.rule=PathPrefix(`/api/v1/entitlements`)
+      - traefik.http.routers.entitlements.entrypoints=web
+      - traefik.http.services.entitlements.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      entitlements-migrate:
+        condition: service_completed_successfully
+      authz-bootstrap:
+        condition: service_completed_successfully
+    networks: [mowdeck]

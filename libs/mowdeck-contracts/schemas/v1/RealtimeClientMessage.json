@@ -1,0 +1,298 @@
+{
+  "$defs": {
+    "AuthMessage": {
+      "description": "The access token; the first message of every connection, later to refresh it.",
+      "properties": {
+        "token": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Token",
+          "type": "string"
+        },
+        "type": {
+          "const": "auth",
+          "default": "auth",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "title": "AuthMessage",
+      "type": "object"
+    },
+    "DriveFrameMessage": {
+      "description": "One joystick sample; send about ten per second while the stick is held.",
+      "properties": {
+        "angular": {
+          "description": "Turn left (+) / right (-), normalised.",
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Angular",
+          "type": "number"
+        },
+        "blade_on": {
+          "default": false,
+          "title": "Blade On",
+          "type": "boolean"
+        },
+        "linear": {
+          "description": "Forward (+) / backward (-), normalised.",
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Linear",
+          "type": "number"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Echoed in `drive_frame_ack` when the frame went out.",
+          "title": "Seq"
+        },
+        "session_id": {
+          "format": "uuid",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "drive_frame",
+          "default": "drive_frame",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "linear",
+        "angular"
+      ],
+      "title": "DriveFrameMessage",
+      "type": "object"
+    },
+    "DriveStartMessage": {
+      "description": "Open a manual drive session (``can_drive`` on the mower, at most one per mower).",
+      "properties": {
+        "blade_on_allowed": {
+          "default": false,
+          "description": "Allow frames with `blade_on` in this session (the mower must support it).",
+          "title": "Blade On Allowed",
+          "type": "boolean"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "drive_start",
+          "default": "drive_start",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mower_id"
+      ],
+      "title": "DriveStartMessage",
+      "type": "object"
+    },
+    "DriveStopMessage": {
+      "description": "End a drive session; a zero frame is sent and the mower stops.",
+      "properties": {
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "session_id": {
+          "format": "uuid",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "drive_stop",
+          "default": "drive_stop",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "title": "DriveStopMessage",
+      "type": "object"
+    },
+    "PingMessage": {
+      "description": "Ask for a ``pong`` (browsers cannot see WebSocket protocol pings).",
+      "properties": {
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "ping",
+          "default": "ping",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "PingMessage",
+      "type": "object"
+    },
+    "SubscribeMessage": {
+      "description": "Subscribe to mowers (each id is checked with ``can_view``).",
+      "properties": {
+        "mower_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 1000,
+          "minItems": 1,
+          "title": "Mower Ids",
+          "type": "array"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "subscribe",
+          "default": "subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mower_ids"
+      ],
+      "title": "SubscribeMessage",
+      "type": "object"
+    },
+    "UnsubscribeMessage": {
+      "description": "Stop the updates of mowers.",
+      "properties": {
+        "mower_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 1000,
+          "minItems": 1,
+          "title": "Mower Ids",
+          "type": "array"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "type": {
+          "const": "unsubscribe",
+          "default": "unsubscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mower_ids"
+      ],
+      "title": "UnsubscribeMessage",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Parses (and documents) one client message: ``RealtimeClientMessage.model_validate_json``.",
+  "discriminator": {
+    "mapping": {
+      "auth": "#/$defs/AuthMessage",
+      "drive_frame": "#/$defs/DriveFrameMessage",
+      "drive_start": "#/$defs/DriveStartMessage",
+      "drive_stop": "#/$defs/DriveStopMessage",
+      "ping": "#/$defs/PingMessage",
+      "subscribe": "#/$defs/SubscribeMessage",
+      "unsubscribe": "#/$defs/UnsubscribeMessage"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AuthMessage"
+    },
+    {
+      "$ref": "#/$defs/SubscribeMessage"
+    },
+    {
+      "$ref": "#/$defs/UnsubscribeMessage"
+    },
+    {
+      "$ref": "#/$defs/PingMessage"
+    },
+    {
+      "$ref": "#/$defs/DriveStartMessage"
+    },
+    {
+      "$ref": "#/$defs/DriveFrameMessage"
+    },
+    {
+      "$ref": "#/$defs/DriveStopMessage"
+    }
+  ],
+  "title": "RealtimeClientMessage"
+}

@@ -1,0 +1,109 @@
+{
+  "$defs": {
+    "ScheduleRunOutcome": {
+      "description": "What one run of a schedule did for one mower.",
+      "enum": [
+        "started",
+        "skipped_rain",
+        "skipped_permission",
+        "skipped_window",
+        "skipped_mower_busy",
+        "skipped_manual",
+        "failed"
+      ],
+      "title": "ScheduleRunOutcome",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``scheduler.run.recorded``.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "command_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Command Id"
+    },
+    "details": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Details"
+    },
+    "mower_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "None when the mowers of the target were not known.",
+      "title": "Mower Id"
+    },
+    "outcome": {
+      "$ref": "#/$defs/ScheduleRunOutcome"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schedule_id": {
+      "format": "uuid",
+      "title": "Schedule Id",
+      "type": "string"
+    },
+    "scheduled_for": {
+      "format": "date-time",
+      "title": "Scheduled For",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "trigger": {
+      "enum": [
+        "schedule",
+        "manual"
+      ],
+      "title": "Trigger",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "schedule_id",
+    "account_id",
+    "trigger",
+    "outcome",
+    "scheduled_for",
+    "started_at"
+  ],
+  "title": "ScheduleRunRecorded",
+  "type": "object"
+}

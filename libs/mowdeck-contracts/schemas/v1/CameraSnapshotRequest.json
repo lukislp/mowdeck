@@ -1,0 +1,261 @@
+{
+  "$defs": {
+    "CameraEncryption": {
+      "description": "Channel encryption the client must configure before joining (Agora\n``setEncryptionConfig``).",
+      "properties": {
+        "key": {
+          "description": "The secret, used verbatim.",
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "mode": {
+          "description": "Agora encryption mode, for Mammotion `aes-256-gcm2`.",
+          "maxLength": 32,
+          "title": "Mode",
+          "type": "string"
+        },
+        "salt": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Base64 salt (32 bytes decoded) for the `gcm2` modes; null when not sent.",
+          "title": "Salt"
+        }
+      },
+      "required": [
+        "mode",
+        "key"
+      ],
+      "title": "CameraEncryption",
+      "type": "object"
+    },
+    "CameraInfo": {
+      "description": "One camera of the mower.",
+      "properties": {
+        "id": {
+          "description": "Camera id as the vendor names it.",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "description": "A short display name, e.g. `Front left`.",
+          "maxLength": 100,
+          "title": "Name",
+          "type": "string"
+        },
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraPlacement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the camera sits, if known. A `front_left` and a `front_right` camera form a stereo pair the client may show side by side."
+        },
+        "uid": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Agora uid the mower publishes this camera under, if known. Clients fall back to the first remote user that publishes video.",
+          "title": "Uid"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "CameraInfo",
+      "type": "object"
+    },
+    "CameraPlacement": {
+      "description": "Where a camera sits on the mower. Clients pair ``front_left`` and ``front_right`` for the\nside-by-side view and stereo frames (both front cameras of a LUBA 2 AWD X).",
+      "enum": [
+        "front_left",
+        "front_right",
+        "front",
+        "rear"
+      ],
+      "title": "CameraPlacement",
+      "type": "string"
+    },
+    "CameraProvider": {
+      "description": "Who delivers the video.",
+      "enum": [
+        "agora",
+        "fake"
+      ],
+      "title": "CameraProvider",
+      "type": "string"
+    },
+    "CameraQuota": {
+      "description": "The vendor's video budget (Mammotion meters video over 4G only).",
+      "properties": {
+        "total_minutes": {
+          "minimum": 0,
+          "title": "Total Minutes",
+          "type": "number"
+        },
+        "used_minutes": {
+          "minimum": 0,
+          "title": "Used Minutes",
+          "type": "number"
+        }
+      },
+      "required": [
+        "used_minutes",
+        "total_minutes"
+      ],
+      "title": "CameraQuota",
+      "type": "object"
+    },
+    "CameraSession": {
+      "description": "Credentials for one viewer to join the live video of one mower.",
+      "properties": {
+        "app_id": {
+          "description": "Agora app id (empty for `fake`).",
+          "maxLength": 128,
+          "title": "App Id",
+          "type": "string"
+        },
+        "cameras": {
+          "items": {
+            "$ref": "#/$defs/CameraInfo"
+          },
+          "maxItems": 8,
+          "title": "Cameras",
+          "type": "array"
+        },
+        "channel": {
+          "description": "Agora channel name (64 bytes at most).",
+          "maxLength": 64,
+          "title": "Channel",
+          "type": "string"
+        },
+        "encryption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraEncryption"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set when the channel is encrypted."
+        },
+        "expires_at": {
+          "description": "When the token stops working; clients request a new session before.",
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/CameraProvider"
+        },
+        "quota": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraQuota"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The video budget, when the vendor reports one."
+        },
+        "token": {
+          "description": "Short-lived Agora token. Never log it.",
+          "maxLength": 2048,
+          "title": "Token",
+          "type": "string"
+        },
+        "uid": {
+          "description": "The viewer's Agora uid (bound to the token).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Uid",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "provider",
+        "app_id",
+        "channel",
+        "token",
+        "uid",
+        "expires_at"
+      ],
+      "title": "CameraSession",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "``POST /capture`` of the capture worker (internal HTTP, ADR 0035): one still frame of the\ncamera ``camera_uid`` (Agora publisher uid; None: the first publisher) in ``session``.\n\nThe session carries the secret token; neither side logs it. The reply is ``image/jpeg``.",
+  "properties": {
+    "camera_uid": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Camera Uid"
+    },
+    "max_bytes": {
+      "default": 524288,
+      "maximum": 524288,
+      "minimum": 1024,
+      "title": "Max Bytes",
+      "type": "integer"
+    },
+    "max_width": {
+      "default": 1280,
+      "maximum": 3840,
+      "minimum": 160,
+      "title": "Max Width",
+      "type": "integer"
+    },
+    "session": {
+      "$ref": "#/$defs/CameraSession"
+    },
+    "timeout_seconds": {
+      "default": 20.0,
+      "exclusiveMinimum": 0,
+      "maximum": 60,
+      "title": "Timeout Seconds",
+      "type": "number"
+    }
+  },
+  "required": [
+    "session"
+  ],
+  "title": "CameraSnapshotRequest",
+  "type": "object"
+}
