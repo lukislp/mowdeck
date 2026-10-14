@@ -64,5 +64,5 @@ async def test_scheduler_nats_run_now_goes_through_fleet() -> None:
             record = await h.fleet_command(owner, run["command_id"])
     finally:
         await gateway.close()
-    assert run["outcome"] == "started" and run["details"] == "areas lawn"
+    assert run["outcome"] == "started" and run["details"] == "areas lawn, angle 0"
     assert record["origin"] == "scheduler" and record["schedule_id"] == created["id"]
