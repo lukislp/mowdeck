@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { m } from '$lib/paraglide/messages';
 
 import { buildSnapshot, EventLog, trackSnapshot, trackSummary } from './diagnostics';
-import { BOTH, cameraLabel, cameraOptions, PANORAMA } from './labels';
+import { BOTH, cameraLabel, cameraOptions } from './labels';
 import {
   effectiveLayout,
   LAYOUT_KEY,
@@ -108,18 +108,10 @@ describe('camera layout', () => {
     expect(slotsOf(null)).toEqual([null]);
   });
 
-  it('blends the pair into a panorama only with a pair, with the same two tiles', () => {
-    expect(effectiveLayout('panorama', pair)).toBe('panorama');
-    expect(effectiveLayout('panorama', null)).toBe('single');
-    expect(showsPair('panorama', pair)).toBe(true);
+  it('shows the pair only with a pair', () => {
+    expect(showsPair('both', pair)).toBe(true);
+    expect(showsPair('both', null)).toBe(false);
     expect(showsPair('single', pair)).toBe(false);
-    expect(layoutChoice('panorama', pair, 2)).toEqual([1, 2]);
-    expect(layoutChoice('panorama', null, 2)).toBe(2);
-    const tiles = tilesOf({ ...base, layout: 'panorama' });
-    expect(tiles.map((t) => [t.uid, t.side, t.status])).toEqual([
-      [1, 'left', 'live'],
-      [2, 'right', 'live'],
-    ]);
   });
 
   it('gives every tile its camera, side and status', () => {
@@ -156,8 +148,6 @@ describe('camera layout', () => {
     saveLayout('both', storage);
     expect(store.get(LAYOUT_KEY)).toBe('both');
     expect(loadLayout(storage)).toBe('both');
-    saveLayout('panorama', storage);
-    expect(loadLayout(storage)).toBe('panorama');
     store.set(LAYOUT_KEY, 'cinema');
     expect(loadLayout(storage)).toBe('single');
     const broken = {
@@ -181,15 +171,10 @@ describe('camera labels and the both option', () => {
     expect(cameraLabel({ id: '2', name: 'x' })).toBe(m.camera_rear());
     expect(cameraLabel({ id: 'odd', name: 'Odd' })).toBe('Odd');
     const options = cameraOptions([LEFT, RIGHT], [1, 2], null, true);
-    expect(options.map((o) => o.value)).toEqual(['1', '2', BOTH, PANORAMA]);
-    expect(options.at(-2)?.label).toBe(m.camera_both());
-    expect(options.at(-1)?.label).toBe(m.camera_panorama());
+    expect(options.map((o) => o.value)).toEqual(['1', '2', BOTH]);
+    expect(options.at(-1)?.label).toBe(m.camera_both());
     // Offered even while the right camera does not publish: its tile says so.
-    expect(cameraOptions([LEFT, RIGHT], [1], null, true).map((o) => o.value)).toEqual([
-      '1',
-      BOTH,
-      PANORAMA,
-    ]);
+    expect(cameraOptions([LEFT, RIGHT], [1], null, true).map((o) => o.value)).toEqual(['1', BOTH]);
     expect(cameraOptions([LEFT, RIGHT], [1, 2], null).map((o) => o.value)).toEqual(['1', '2']);
   });
 });
@@ -425,30 +410,13 @@ describe('viewer with both front cameras', () => {
     expect(layouts).toEqual(['both', 'single']);
   });
 
-  it('shows the panorama with the same two subscriptions and saves the layout', async () => {
-    const { viewer, players, layouts } = viewerHarness();
+  it('ignores the stored side-by-side layout without a pair', async () => {
+    const { viewer, players } = viewerHarness('both');
     await viewer.open('m1');
-    expect(viewer.panorama).toBe(false);
-    await viewer.showPanorama();
-    expect(players[0]?.selected.at(-1)).toEqual([1, 2]);
-    expect(viewer.panorama).toBe(true);
-    // Both tiles stay: they are the panorama's sources (and AI assist's stereo frames).
     expect(viewer.both).toBe(true);
-    expect(viewer.tiles.map((t) => t.status)).toEqual(['live', 'live']);
-    expect(layouts).toEqual(['panorama']);
-    await viewer.showBoth();
-    expect(viewer.panorama).toBe(false);
-    expect(layouts).toEqual(['panorama', 'both']);
-  });
-
-  it('opens in the stored panorama layout, and ignores it without a pair', async () => {
-    const { viewer, players } = viewerHarness('panorama');
-    await viewer.open('m1');
-    expect(players[0]?.started).toEqual([[1, 2]]);
-    expect(viewer.panorama).toBe(true);
     viewer.session = session([LEFT]);
-    expect(viewer.panorama).toBe(false);
-    await viewer.showPanorama();
+    expect(viewer.both).toBe(false);
+    await viewer.showBoth();
     expect(players[0]?.selected).toEqual([]);
   });
 

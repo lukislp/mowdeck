@@ -315,9 +315,8 @@ class StoredImage:
     delete_after: datetime
 
 
-RequestKind = Literal["analysis", "test", "calibration"]
-"""``analysis``: AI assist rounds; ``test``: provider tests; ``calibration``: corresponding points
-for the camera panorama (no proposal)."""
+RequestKind = Literal["analysis", "test"]
+"""``analysis``: AI assist rounds; ``test``: provider tests."""
 
 
 @dataclass(frozen=True, slots=True)

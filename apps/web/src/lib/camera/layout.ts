@@ -1,15 +1,15 @@
 /**
- * The camera panel's layout (stereo cameras): one camera (`single`), both front cameras side
- * by side (`both`, stacked on phones) or both blended into one wide picture (`panorama`, see
- * `panorama.ts`), kept per browser in `localStorage` (`mowdeck.cameraLayout`). The tiles say for every view what it shows: live video, still
+ * The camera panel's layout (stereo cameras): one camera (`single`) or both front cameras side
+ * by side (`both`, stacked on phones), kept per browser in `localStorage` (`mowdeck.cameraLayout`).
+ * The tiles say for every view what it shows: live video, still
  * connecting, a camera that does not publish (`missing`) or one that delivered nothing within
  * {@link NO_DATA_MS} (`no_data`). A tile never shows another camera's picture in its place.
  */
 import { sideOf, type CameraInfo, type StereoPair } from './session';
 
-export type CameraLayout = 'single' | 'both' | 'panorama';
+export type CameraLayout = 'single' | 'both';
 
-const LAYOUTS: readonly CameraLayout[] = ['single', 'both', 'panorama'];
+const LAYOUTS: readonly CameraLayout[] = ['single', 'both'];
 
 export const LAYOUT_KEY = 'mowdeck.cameraLayout';
 
@@ -44,12 +44,12 @@ export interface TileInput {
   stalled: readonly number[];
 }
 
-/** `both` and `panorama` only when the session has a stereo pair, otherwise `single`. */
+/** `both` only when the session has a stereo pair, otherwise `single`. */
 export function effectiveLayout(layout: CameraLayout, pair: StereoPair | null): CameraLayout {
   return layout !== 'single' && pair ? layout : 'single';
 }
 
-/** The layout shows both front cameras (side by side or as one panorama). */
+/** The layout shows both front cameras side by side. */
 export function showsPair(layout: CameraLayout, pair: StereoPair | null): boolean {
   return effectiveLayout(layout, pair) !== 'single';
 }
@@ -80,7 +80,7 @@ function status(
   return 'connecting';
 }
 
-/** The tiles of the panel, left to right (the panorama keeps both tiles as its sources). */
+/** The tiles of the panel, left to right. */
 export function tilesOf(input: TileInput): CameraTile[] {
   const camera = (uid: number | null) =>
     uid === null ? undefined : input.cameras.find((c) => c.uid === uid);

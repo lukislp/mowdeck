@@ -134,24 +134,6 @@ export const fleetSlowApi = createClient<FleetPaths>({
   ),
 });
 
-/**
- * A vision model answering about pictures (the panorama calibration's correspondences) takes
- * well over the normal deadline. Vision bounds the whole call itself
- * (`MOWDECK_VISION_CALIBRATION_TIMEOUT_SECONDS`, default 150 s, all model attempts included)
- * and answers 504 beyond it; the browser's deadline sits a little above that budget, so the
- * normal outcome of a slow model is Vision's verdict, not a dropped connection.
- */
-export const MODEL_REQUEST_TIMEOUT_MS = 180_000;
-
-/** Vision with the model-call deadline, only for the calls that wait for a model's answer. */
-export const visionModelApi = createClient<VisionPaths>({
-  fetch: authFetch(
-    session,
-    (input, init) => globalThis.fetch(input, init),
-    MODEL_REQUEST_TIMEOUT_MS,
-  ),
-});
-
 /** The data of an openapi-fetch result, or the problem as an exception. */
 export async function unwrap<T>(
   call: Promise<{ data?: T; error?: unknown; response: Response }>,
