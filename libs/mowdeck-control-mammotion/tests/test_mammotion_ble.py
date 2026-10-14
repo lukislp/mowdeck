@@ -277,6 +277,9 @@ def test_mammotion_bleak_wrappers_route_pymammotion_through_the_proxy(
     bound = types.ModuleType("pymammotion._bound_for_test")
     bound.BleakClient = usage.ORIGINAL_BLEAK_CLIENT  # type: ignore[attr-defined]
     bound.BleakScanner = usage.ORIGINAL_BLEAK_SCANNER  # type: ignore[attr-defined]
+    bound.BleakClientWithServiceCache = (  # type: ignore[attr-defined]
+        usage.ORIGINAL_BLEAK_RETRY_CONNECTOR_CLIENT_WITH_SERVICE_CACHE
+    )
     monkeypatch.setitem(sys.modules, bound.__name__, bound)
     try:
         install_bleak_wrappers()
@@ -284,5 +287,6 @@ def test_mammotion_bleak_wrappers_route_pymammotion_through_the_proxy(
         assert bleak.BleakClient is habluetooth.HaBleakClientWrapper
         assert bound.BleakClient is habluetooth.HaBleakClientWrapper
         assert bound.BleakScanner is habluetooth.HaBleakScannerWrapper
+        assert bound.BleakClientWithServiceCache is usage.HaBleakClientWithServiceCache
     finally:
         usage.uninstall_multiple_bleak_catcher()

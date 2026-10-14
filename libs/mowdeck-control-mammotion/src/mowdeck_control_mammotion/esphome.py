@@ -77,18 +77,30 @@ def install_bleak_wrappers() -> None:
     from habluetooth import HaBleakClientWrapper, HaBleakScannerWrapper
     from habluetooth.usage import (
         ORIGINAL_BLEAK_CLIENT,
+        ORIGINAL_BLEAK_RETRY_CONNECTOR_CLIENT_WITH_SERVICE_CACHE,
         ORIGINAL_BLEAK_SCANNER,
+        HaBleakClientWithServiceCache,
         install_multiple_bleak_catcher,
     )
 
     install_multiple_bleak_catcher()
+    # Names bound at import time (PyMammotion's transport uses
+    # ``establish_connection(BleakClientWithServiceCache, ...)``): point them at the wrappers.
+    replacements = (
+        ("BleakClient", ORIGINAL_BLEAK_CLIENT, HaBleakClientWrapper),
+        ("BleakScanner", ORIGINAL_BLEAK_SCANNER, HaBleakScannerWrapper),
+        (
+            "BleakClientWithServiceCache",
+            ORIGINAL_BLEAK_RETRY_CONNECTOR_CLIENT_WITH_SERVICE_CACHE,
+            HaBleakClientWithServiceCache,
+        ),
+    )
     for name, module in list(sys.modules.items()):
         if not name.startswith("pymammotion") or module is None:
             continue
-        if getattr(module, "BleakClient", None) is ORIGINAL_BLEAK_CLIENT:
-            setattr(module, "BleakClient", HaBleakClientWrapper)  # noqa: B010
-        if getattr(module, "BleakScanner", None) is ORIGINAL_BLEAK_SCANNER:
-            setattr(module, "BleakScanner", HaBleakScannerWrapper)  # noqa: B010
+        for attribute, original, wrapper in replacements:
+            if getattr(module, attribute, None) is original:
+                setattr(module, attribute, wrapper)  # noqa: B010
 
 
 async def open_proxy(
