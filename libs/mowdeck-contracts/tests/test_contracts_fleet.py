@@ -110,3 +110,53 @@ def test_registration_marks_withheld_credentials_and_masks_secrets_in_repr() -> 
     request = MowerCredentialsRequest(mower_id=registration.mower_id, account_id=uuid4())
     assert request.mower_id == registration.mower_id
     assert FLEET_MOWERS_CREDENTIALS == "fleet.mowers.credentials"
+
+
+def test_registration_links_are_optional_masked_and_mark_withheld_secrets() -> None:
+    from mowdeck_contracts.v1 import (
+        CREDENTIALS_FROM_FLEET,
+        CREDENTIALS_OPTION,
+        CREDENTIALS_REV_OPTION,
+        LINK_BLE_BRIDGE,
+        MowerCredentialsReply,
+    )
+
+    plain = _registration()
+    assert plain.links == {} and plain.links_needing_credentials == frozenset()
+    assert not plain.needs_credentials
+    linked = plain.model_copy(
+        update={
+            "links": {
+                LINK_BLE_BRIDGE: {
+                    "host": "bridge.local",
+                    "port": 6053,
+                    "noise_psk": "leaked-key",
+                    CREDENTIALS_OPTION: CREDENTIALS_FROM_FLEET,
+                    CREDENTIALS_REV_OPTION: 3,
+                }
+            }
+        }
+    )
+    assert linked.links_needing_credentials == frozenset({LINK_BLE_BRIDGE})
+    assert linked.needs_credentials and not linked.connection_needs_credentials
+    text = repr(linked)
+    assert "leaked-key" not in text and "bridge.local" in text
+    decoded = MowerRegistration.model_validate_json(linked.model_dump_json())
+    assert decoded.links[LINK_BLE_BRIDGE][CREDENTIALS_REV_OPTION] == 3
+    # an older producer without ``links`` still parses
+    legacy = MowerRegistration.model_validate(
+        {
+            "mower_id": str(uuid4()),
+            "account_id": str(uuid4()),
+            "name": "x",
+            "connection_kind": "cloud",
+        }
+    )
+    assert legacy.links == {}
+    reply = MowerCredentialsReply(
+        found=True,
+        secret_options={"password": "s3cret"},
+        link_secrets={LINK_BLE_BRIDGE: {"noise_psk": "k3y"}},
+    )
+    assert "k3y" not in repr(reply) and "s3cret" not in repr(reply)
+    assert MowerCredentialsReply(found=True).link_secrets == {}

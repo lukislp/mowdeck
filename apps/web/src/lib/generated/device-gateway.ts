@@ -149,7 +149,7 @@ export type components = {
          * @description What the mower is doing right now.
          * @enum {string}
          */
-        MowerActivity: "idle" | "mowing" | "paused" | "returning" | "docked" | "charging" | "error" | "offline" | "unknown";
+        MowerActivity: "idle" | "mowing" | "paused" | "returning" | "docked" | "charging" | "error" | "offline" | "updating" | "unknown";
         /**
          * PermissionDef
          * @description A permission a module defines, e.g. ``mower.control``.

@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``).",
+  "properties": {
+    "driven_points": {
+      "default": 0,
+      "description": "Points reached so far.",
+      "minimum": 0,
+      "title": "Driven Points",
+      "type": "integer"
+    },
+    "dry_run": {
+      "default": true,
+      "description": "The blades stayed off for the whole run (the default).",
+      "title": "Dry Run",
+      "type": "boolean"
+    },
+    "planned_points": {
+      "default": 0,
+      "description": "Points of the plan in total.",
+      "minimum": 0,
+      "title": "Planned Points",
+      "type": "integer"
+    },
+    "progress_percent": {
+      "default": 0,
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Progress Percent",
+      "type": "integer"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Why the run ended early or paused, if so.",
+      "title": "Reason"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "segment_index": {
+      "default": 0,
+      "description": "The segment being driven (0-based).",
+      "minimum": 0,
+      "title": "Segment Index",
+      "type": "integer"
+    },
+    "segments_total": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Segments Total",
+      "type": "integer"
+    },
+    "state": {
+      "enum": [
+        "preparing",
+        "spot_mowing",
+        "paused_rtk",
+        "stopping",
+        "done",
+        "aborted",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "state"
+  ],
+  "title": "SpotRunStatus",
+  "type": "object"
+}

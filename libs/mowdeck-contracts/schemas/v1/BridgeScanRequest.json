@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``gateway.mower.<id>.bridge.scan`` (internal, Fleet to Device-Gateway).\n\nThe gateway connects to the proxy at ``host``:``port`` with ``noise_psk``, reads its device\ninformation and collects mower advertisements until ``expected_name`` shows up or\n``timeout_s`` passes. While the gateway already holds an open link through this proxy it\nanswers from the live scanner instead (a re-check).",
+  "properties": {
+    "account_id": {
+      "description": "The mower's account as Fleet knows it.",
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "expected_name": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The mower's Bluetooth name (its cloud device name); the scan ends early when it is seen.",
+      "title": "Expected Name"
+    },
+    "host": {
+      "maxLength": 253,
+      "minLength": 1,
+      "title": "Host",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "noise_psk": {
+      "description": "The bridge's API encryption key (`api.encryption.key` of an ESPHome bridge).",
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Noise Psk",
+      "type": "string"
+    },
+    "port": {
+      "default": 6053,
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
+    "timeout_s": {
+      "default": 15,
+      "maximum": 30,
+      "minimum": 1,
+      "title": "Timeout S",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id",
+    "host",
+    "noise_psk"
+  ],
+  "title": "BridgeScanRequest",
+  "type": "object"
+}

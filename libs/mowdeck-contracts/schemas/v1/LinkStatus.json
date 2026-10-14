@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The state of one additional link as the Device-Gateway reports it in ``MowerState.links``.",
+  "properties": {
+    "compiled_at": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the bridge firmware was compiled, as ESPHome reports it (free text).",
+      "title": "Compiled At"
+    },
+    "connected": {
+      "default": false,
+      "description": "The link is open right now.",
+      "title": "Connected",
+      "type": "boolean"
+    },
+    "esphome_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Firmware version of the bridge (the ESPHome release it runs).",
+      "title": "Esphome Version"
+    },
+    "outdated": {
+      "default": false,
+      "description": "The bridge firmware is older than what MowDeck expects; see `outdated_reason`.",
+      "title": "Outdated",
+      "type": "boolean"
+    },
+    "outdated_reason": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Why the firmware counts as outdated, e.g. `esphome_version`, `project_version` or `no_project`; null when up to date.",
+      "title": "Outdated Reason"
+    },
+    "project_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Version of the MowDeck bridge template the firmware was built from; null when the firmware carries no `esphome.project`.",
+      "title": "Project Version"
+    },
+    "rssi": {
+      "anyOf": [
+        {
+          "maximum": 20,
+          "minimum": -128,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Signal strength of the mower at the bridge in dBm, if the bridge reports it.",
+      "title": "Rssi"
+    },
+    "since": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the link was opened (or lost), if known.",
+      "title": "Since"
+    }
+  },
+  "title": "LinkStatus",
+  "type": "object"
+}

@@ -830,7 +830,7 @@ export type components = {
          */
         CommandRequest: {
             /** Command */
-            command: components["schemas"]["StartMow"] | components["schemas"]["PauseMow"] | components["schemas"]["ResumeMow"] | components["schemas"]["ReturnToDock"] | components["schemas"]["EmergencyStop"] | components["schemas"]["SetBladeHeight"] | components["schemas"]["SetSpeed"] | components["schemas"]["SetLight"] | components["schemas"]["ManualDrive"];
+            command: components["schemas"]["StartMow"] | components["schemas"]["PauseMow"] | components["schemas"]["ResumeMow"] | components["schemas"]["ReturnToDock"] | components["schemas"]["EmergencyStop"] | components["schemas"]["SetBladeHeight"] | components["schemas"]["SetSpeed"] | components["schemas"]["SetLight"] | components["schemas"]["FirmwareUpdate"] | components["schemas"]["SpotMow"] | components["schemas"]["SpotStop"] | components["schemas"]["ManualDrive"];
             /** Ttl Seconds */
             ttl_seconds?: number | null;
         };
@@ -1110,6 +1110,27 @@ export type components = {
             description: string;
             /** Key */
             key: string;
+        };
+        /**
+         * FirmwareUpdate
+         * @description Install the firmware version the vendor offers (``MowerState.firmware_info.available``).
+         *
+         *     The adapter refuses it unless ``update_state`` is ``available`` and ``version`` equals
+         *     ``available`` (a stale client), the mower is docked and charging with enough battery, no job
+         *     or drive session runs and no update is already installing. While it runs the mower reports
+         *     the activity ``updating``.
+         */
+        FirmwareUpdate: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "firmware_update";
+            /**
+             * Version
+             * @description The version to install, as offered.
+             */
+            version: string;
         };
         /**
          * GroupIn
@@ -1953,6 +1974,61 @@ export type components = {
             timezone?: string | null;
         };
         /**
+         * SpotCircle
+         * @description A round spot: ``radius_m`` around ``center_wgs84`` (``[lat, lon]``).
+         */
+        SpotCircle: {
+            /** Center Wgs84 */
+            center_wgs84: [
+                number,
+                number
+            ];
+            /** Radius M */
+            radius_m: number;
+        };
+        /**
+         * SpotMow
+         * @description Mow a small spot by driving the mower along ``plan`` with joystick frames (ADR 0039).
+         *
+         *     Unlike ``StartMow.spot_plan`` the mower runs no job of its own: MowDeck's gateway steers it
+         *     over the drive link (needs ``MowerCapabilities.manual_drive``, a fixed RTK position and an
+         *     idle mower). The blades stay off (a dry run) unless ``blades`` and ``confirm_blades`` are
+         *     both true and the mower allows blades while driving (``manual_drive_blades``). ``spot``
+         *     records what the user chose; the route is ``plan``. Progress arrives in
+         *     ``MowerState.spot_run``; ``SpotStop`` ends the run.
+         */
+        SpotMow: {
+            /**
+             * Blades
+             * @description Cut while driving (else a dry run).
+             * @default false
+             */
+            blades: boolean;
+            /**
+             * Confirm Blades
+             * @description The user confirmed the blades separately; required with `blades`.
+             * @default false
+             */
+            confirm_blades: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "spot_mow";
+            plan: components["schemas"]["SpotMowPlan"];
+            /**
+             * Speed Mps
+             * @description Driving speed of the run in metres per second (at most 0.3).
+             * @default 0.2
+             */
+            speed_mps: number;
+            /**
+             * Spot
+             * @description The spot as the user chose it (audit only).
+             */
+            spot?: components["schemas"]["SpotCircle"] | components["schemas"]["SpotPolygon"] | null;
+        };
+        /**
          * SpotMowPlan
          * @description A computed mowing route for ``StartMow.spot_plan``.
          */
@@ -1999,6 +2075,17 @@ export type components = {
             };
         };
         /**
+         * SpotPolygon
+         * @description A drawn spot: a closed ring of WGS84 ``[lat, lon]`` corners (first point not repeated).
+         */
+        SpotPolygon: {
+            /** Polygon Wgs84 */
+            polygon_wgs84: [
+                number,
+                number
+            ][];
+        };
+        /**
          * SpotSegment
          * @description One part of a spot plan: drive along ``path`` with the blades on or off.
          */
@@ -2018,6 +2105,17 @@ export type components = {
             path: string;
             /** Speed Mps */
             speed_mps: number;
+        };
+        /**
+         * SpotStop
+         * @description End the running spot run: zero frame, blades off, the mower stays where it is.
+         */
+        SpotStop: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "spot_stop";
         };
         /**
          * StartMow

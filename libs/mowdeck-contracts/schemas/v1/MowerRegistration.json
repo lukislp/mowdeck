@@ -29,6 +29,15 @@
       "title": "Connection Options",
       "type": "object"
     },
+    "links": {
+      "additionalProperties": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Additional links by kind (e.g. `ble_bridge`, ADR 0038): their public options plus `credentials: \"fleet\"` and `credentials_rev` when secrets were withheld. Empty for a mower with only its primary connection.",
+      "title": "Links",
+      "type": "object"
+    },
     "mower_id": {
       "format": "uuid",
       "title": "Mower Id",

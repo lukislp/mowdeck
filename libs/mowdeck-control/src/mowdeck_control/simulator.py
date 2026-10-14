@@ -465,6 +465,8 @@ class SimulatedMower:
                 outcome = self._set_blade_height(command.mm)
             case SetSpeed():
                 outcome = self._set_speed(command.mps)
+            case _:
+                return Dispatch.done(Outcome.rejected(f"{command.kind} is not supported here"))
         self._publish()
         if delayed and isinstance(command, StartMow | ResumeMow) and self._pending_start:
             return Dispatch.awaiting(f"{command.kind} sent", self._confirm_mowing)

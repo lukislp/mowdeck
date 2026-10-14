@@ -112,6 +112,17 @@ class MowerCapabilities(ContractModel):
     connection_kinds: ConnectionKinds = Field(
         default_factory=frozenset, description="Connection kinds this mower can use."
     )
+    links_supported: list[str] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Additional link kinds this connection can open next to its primary one "
+        "(e.g. `ble_bridge`); empty when the mower has only its primary connection.",
+    )
+    firmware_update: bool = Field(
+        default=False,
+        description="The connection can ask the manufacturer's firmware service for updates "
+        "and install them (`firmware_check`, `firmware_update`).",
+    )
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:

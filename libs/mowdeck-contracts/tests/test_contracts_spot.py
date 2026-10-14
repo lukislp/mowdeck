@@ -136,3 +136,50 @@ def test_position_track_request_and_reply() -> None:
 
 def test_track_query_subject_is_not_captured_by_a_stream() -> None:
     assert stream_for_subject(TELEMETRY_POSITIONS_QUERY) is None
+
+
+def test_spot_mow_command_needs_confirmed_blades_and_a_slow_speed() -> None:
+    from mowdeck_contracts.v1 import (
+        MAX_SPOT_MOW_SPEED_MPS,
+        CommandRequest,
+        SpotCircle,
+        SpotMow,
+        SpotPolygon,
+        SpotStop,
+    )
+
+    plan = _plan()
+    dry = SpotMow(plan=plan, spot=SpotCircle(center_wgs84=(48.1, 11.5), radius_m=1.5))
+    assert dry.kind == "spot_mow" and not dry.blades and dry.speed_mps == 0.2
+    assert isinstance(dry.spot, SpotCircle)
+    with pytest.raises(ValidationError, match="confirm_blades"):
+        SpotMow(plan=plan, blades=True)
+    cutting = SpotMow(plan=plan, blades=True, confirm_blades=True, speed_mps=MAX_SPOT_MOW_SPEED_MPS)
+    assert cutting.blades
+    with pytest.raises(ValidationError):
+        SpotMow(plan=plan, speed_mps=MAX_SPOT_MOW_SPEED_MPS + 0.01)
+    with pytest.raises(ValidationError):
+        SpotCircle(center_wgs84=(48.1, 11.5), radius_m=0)
+    with pytest.raises(ValidationError):
+        SpotPolygon(polygon_wgs84=[(48.1, 11.5), (48.1, 11.6)])
+    drawn = SpotMow(
+        plan=plan, spot=SpotPolygon(polygon_wgs84=[(48.1, 11.5), (48.1, 11.6), (48.2, 11.6)])
+    )
+    request = CommandRequest.model_validate_json(CommandRequest(command=drawn).model_dump_json())
+    assert isinstance(request.command, SpotMow) and isinstance(request.command.spot, SpotPolygon)
+    assert request.command.plan.plan_hash == plan.plan_hash
+    stop = CommandRequest.model_validate({"command": {"kind": "spot_stop"}})
+    assert isinstance(stop.command, SpotStop)
+
+
+def test_spot_run_status_life_cycle() -> None:
+    from mowdeck_contracts.v1 import SPOT_RUN_FINAL_STATES, SpotRunStatus
+
+    run = SpotRunStatus(run_id=uuid4(), state="preparing")
+    assert run.progress_percent == 0 and run.dry_run and not run.final
+    ended = run.model_copy(update={"state": "aborted", "reason": "rtk_lost"})
+    assert ended.final and ended.reason == "rtk_lost"
+    assert {"done", "aborted", "failed"} == SPOT_RUN_FINAL_STATES
+    assert SpotRunStatus.model_validate_json(ended.model_dump_json()) == ended
+    with pytest.raises(ValidationError):
+        SpotRunStatus(run_id=uuid4(), state="done", progress_percent=101)

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``gateway.mower.<id>.firmware.check`` (internal, Fleet to Device-Gateway).",
+  "properties": {
+    "account_id": {
+      "description": "The mower's account as Fleet knows it.",
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id"
+  ],
+  "title": "FirmwareCheckRequest",
+  "type": "object"
+}

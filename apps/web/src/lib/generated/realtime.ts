@@ -40,7 +40,7 @@ export type AccountId1 = string
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
  * via the `definition` "MowerActivity".
  */
-export type MowerActivity = ("idle" | "mowing" | "paused" | "returning" | "docked" | "charging" | "error" | "offline" | "unknown")
+export type MowerActivity = ("idle" | "mowing" | "paused" | "returning" | "docked" | "charging" | "error" | "offline" | "updating" | "unknown")
 export type BatteryPercent = number
 export type BladeHeightMm = (number | null)
 export type Charging = boolean
@@ -59,9 +59,66 @@ export type ErrorCode = (string | null)
 export type ErrorMessage = (string | null)
 export type Firmware = (string | null)
 /**
+ * The newest version the vendor offers for this mower; null when none or unknown.
+ */
+export type Available = (string | null)
+/**
+ * When the vendor was last asked; null when never.
+ */
+export type CheckedAt = (string | null)
+/**
+ * Why the last update failed, if known.
+ */
+export type FailureReason = (string | null)
+/**
+ * The version running on the mower.
+ */
+export type Installed = (string | null)
+/**
+ * Percent done while `installing`, if reported.
+ */
+export type Progress = (number | null)
+/**
+ * Release notes of `available`, if given.
+ */
+export type ReleaseNotes = (string | null)
+export type UpdateState = ("idle" | "available" | "installing" | "failed" | "unknown")
+/**
  * Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).
  */
 export type LightOn = (boolean | null)
+/**
+ * When the bridge firmware was compiled, as ESPHome reports it (free text).
+ */
+export type CompiledAt = (string | null)
+/**
+ * The link is open right now.
+ */
+export type Connected = boolean
+/**
+ * Firmware version of the bridge (the ESPHome release it runs).
+ */
+export type EsphomeVersion = (string | null)
+/**
+ * The bridge firmware is older than what MowDeck expects; see `outdated_reason`.
+ */
+export type Outdated = boolean
+/**
+ * Why the firmware counts as outdated, e.g. `esphome_version`, `project_version` or `no_project`; null when up to date.
+ */
+export type OutdatedReason = (string | null)
+/**
+ * Version of the MowDeck bridge template the firmware was built from; null when the firmware carries no `esphome.project`.
+ */
+export type ProjectVersion = (string | null)
+/**
+ * Signal strength of the mower at the bridge in dBm, if the bridge reports it.
+ */
+export type Rssi = (number | null)
+/**
+ * When the link was opened (or lost), if known.
+ */
+export type Since = (string | null)
 export type MowerId1 = string
 /**
  * When the device reported this state (UTC).
@@ -96,6 +153,30 @@ export type RtkFixStatus = ("none" | "float" | "fixed" | "unknown")
  */
 export type RtkSource = ("base_station" | "network" | "unknown")
 export type SpeedMps = (number | null)
+/**
+ * Points reached so far.
+ */
+export type DrivenPoints = number
+/**
+ * The blades stayed off for the whole run (the default).
+ */
+export type DryRun = boolean
+/**
+ * Points of the plan in total.
+ */
+export type PlannedPoints = number
+export type ProgressPercent = number
+/**
+ * Why the run ended early or paused, if so.
+ */
+export type Reason = (string | null)
+export type RunId = string
+/**
+ * The segment being driven (0-based).
+ */
+export type SegmentIndex = number
+export type SegmentsTotal = number
+export type State = ("preparing" | "spot_mowing" | "paused_rtk" | "stopping" | "done" | "aborted" | "failed")
 export type Type3 = "state"
 export type MowerId2 = string
 export type At = string
@@ -105,7 +186,7 @@ export type CommandId = string
  */
 export type CorrelationId = (string | null)
 export type MowerId3 = string
-export type Reason = (string | null)
+export type Reason1 = (string | null)
 /**
  * Outcome of a command.
  * 
@@ -331,7 +412,12 @@ drive_recoverable?: DriveRecoverable
 error_code?: ErrorCode
 error_message?: ErrorMessage
 firmware?: Firmware
+/**
+ * Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor.
+ */
+firmware_info?: (FirmwareInfo | null)
 light_on?: LightOn
+links?: Links
 mower_id: MowerId1
 observed_at: ObservedAt
 position?: (GeoPosition | null)
@@ -340,6 +426,47 @@ raw?: Raw
 rtk_fix?: RtkFixStatus
 rtk_source?: RtkSource
 speed_mps?: SpeedMps
+/**
+ * The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one.
+ */
+spot_run?: (SpotRunStatus | null)
+}
+/**
+ * The firmware state of a mower (``MowerState.firmware_info``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "FirmwareInfo".
+ */
+export interface FirmwareInfo {
+available?: Available
+checked_at?: CheckedAt
+failure_reason?: FailureReason
+installed?: Installed
+progress?: Progress
+release_notes?: ReleaseNotes
+update_state?: UpdateState
+}
+/**
+ * State of the mower's additional links by kind (e.g. `ble_bridge`); empty for a mower with only its primary connection.
+ */
+export interface Links {
+[k: string]: LinkStatus | undefined
+}
+/**
+ * The state of one additional link as the Device-Gateway reports it in ``MowerState.links``.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "LinkStatus".
+ */
+export interface LinkStatus {
+compiled_at?: CompiledAt
+connected?: Connected
+esphome_version?: EsphomeVersion
+outdated?: Outdated
+outdated_reason?: OutdatedReason
+project_version?: ProjectVersion
+rssi?: Rssi
+since?: Since
 }
 /**
  * A WGS84 position.
@@ -358,6 +485,23 @@ lon: Lon
  */
 export interface Raw {
 [k: string]: unknown | undefined
+}
+/**
+ * Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "SpotRunStatus".
+ */
+export interface SpotRunStatus {
+driven_points?: DrivenPoints
+dry_run?: DryRun
+planned_points?: PlannedPoints
+progress_percent?: ProgressPercent
+reason?: Reason
+run_id: RunId
+segment_index?: SegmentIndex
+segments_total?: SegmentsTotal
+state: State
 }
 /**
  * A command result of a subscribed mower.
@@ -381,7 +525,7 @@ at?: At
 command_id: CommandId
 correlation_id?: CorrelationId
 mower_id: MowerId3
-reason?: Reason
+reason?: Reason1
 status: CommandStatus
 }
 /**

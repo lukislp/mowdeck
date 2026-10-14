@@ -224,3 +224,23 @@ def test_problem_details() -> None:
     assert dumped["errors"] == [{"detail": "missing", "pointer": "#/name"}]
     with pytest.raises(ValidationError):
         ProblemDetails(title="x", status=99)
+
+
+def test_mower_state_links_firmware_and_spot_run_default_to_nothing() -> None:
+    from mowdeck_contracts.v1 import FirmwareInfo, LinkStatus, SpotRunStatus
+
+    state = _state()
+    assert state.links == {} and state.firmware_info is None and state.spot_run is None
+    full = _state(
+        activity="updating",
+        links={"ble_bridge": {"connected": True, "rssi": -60}},
+        firmware_info={"installed": "1.11.3", "available": "1.12.0", "update_state": "installing"},
+        spot_run={"run_id": str(uuid4()), "state": "spot_mowing", "progress_percent": 40},
+    )
+    assert full.activity is MowerActivity.UPDATING
+    assert full.links["ble_bridge"] == LinkStatus(connected=True, rssi=-60)
+    assert isinstance(full.firmware_info, FirmwareInfo)
+    assert isinstance(full.spot_run, SpotRunStatus) and not full.spot_run.final
+    assert MowerState.model_validate_json(full.model_dump_json()) == full
+    with pytest.raises(ValidationError):
+        _state(spot_run={"run_id": str(uuid4()), "state": "dancing"})

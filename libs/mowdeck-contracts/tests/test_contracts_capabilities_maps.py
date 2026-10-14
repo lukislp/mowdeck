@@ -153,3 +153,12 @@ def test_capabilities_path_spacing_range_is_optional_and_ordered() -> None:
     for bad in [(350, 200), (0, 100)]:
         with pytest.raises(ValidationError, match="path_spacing_range_mm"):
             MowerCapabilities(path_spacing_range_mm=bad)
+
+
+def test_capabilities_links_and_firmware_default_to_nothing() -> None:
+    caps = MowerCapabilities()
+    assert caps.links_supported == [] and caps.firmware_update is False
+    linked = MowerCapabilities(links_supported=["ble_bridge"], firmware_update=True)
+    assert MowerCapabilities.model_validate_json(linked.model_dump_json()) == linked
+    with pytest.raises(ValidationError):
+        MowerCapabilities(links_supported=[f"kind{i}" for i in range(9)])

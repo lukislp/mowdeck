@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "End the running spot run: zero frame, blades off, the mower stays where it is.",
+  "properties": {
+    "kind": {
+      "const": "spot_stop",
+      "default": "spot_stop",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "SpotStop",
+  "type": "object"
+}

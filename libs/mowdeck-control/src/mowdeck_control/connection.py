@@ -37,6 +37,7 @@ from mowdeck_contracts.v1 import (
     CommandStatus,
     ConnectionKind,
     EmergencyStop,
+    FirmwareUpdate,
     MowerCapabilities,
     MowerMap,
     MowerState,
@@ -47,6 +48,8 @@ from mowdeck_contracts.v1 import (
     SetBladeHeight,
     SetLight,
     SetSpeed,
+    SpotMow,
+    SpotStop,
     StartMow,
 )
 
@@ -59,6 +62,9 @@ JobCommand = (
     | SetBladeHeight
     | SetSpeed
     | SetLight
+    | FirmwareUpdate
+    | SpotMow
+    | SpotStop
 )
 """Every command except :class:`~mowdeck_contracts.v1.ManualDrive`, which goes through a
 :class:`DriveSession`."""

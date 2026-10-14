@@ -340,6 +340,104 @@
         "title": "FeatureDef",
         "type": "object"
       },
+      "FirmwareInfo": {
+        "description": "The firmware state of a mower (``MowerState.firmware_info``).",
+        "properties": {
+          "available": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest version the vendor offers for this mower; null when none or unknown.",
+            "title": "Available"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the vendor was last asked; null when never.",
+            "title": "Checked At"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last update failed, if known.",
+            "title": "Failure Reason"
+          },
+          "installed": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The version running on the mower.",
+            "title": "Installed"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Percent done while `installing`, if reported.",
+            "title": "Progress"
+          },
+          "release_notes": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Release notes of `available`, if given.",
+            "title": "Release Notes"
+          },
+          "update_state": {
+            "default": "unknown",
+            "enum": [
+              "idle",
+              "available",
+              "installing",
+              "failed",
+              "unknown"
+            ],
+            "title": "Update State",
+            "type": "string"
+          }
+        },
+        "title": "FirmwareInfo",
+        "type": "object"
+      },
       "GeoPosition": {
         "description": "A WGS84 position.",
         "properties": {
@@ -732,6 +830,104 @@
         "title": "Layer",
         "type": "string"
       },
+      "LinkStatus": {
+        "description": "The state of one additional link as the Device-Gateway reports it in ``MowerState.links``.",
+        "properties": {
+          "compiled_at": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the bridge firmware was compiled, as ESPHome reports it (free text).",
+            "title": "Compiled At"
+          },
+          "connected": {
+            "default": false,
+            "description": "The link is open right now.",
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "esphome_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Firmware version of the bridge (the ESPHome release it runs).",
+            "title": "Esphome Version"
+          },
+          "outdated": {
+            "default": false,
+            "description": "The bridge firmware is older than what MowDeck expects; see `outdated_reason`.",
+            "title": "Outdated",
+            "type": "boolean"
+          },
+          "outdated_reason": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the firmware counts as outdated, e.g. `esphome_version`, `project_version` or `no_project`; null when up to date.",
+            "title": "Outdated Reason"
+          },
+          "project_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Version of the MowDeck bridge template the firmware was built from; null when the firmware carries no `esphome.project`.",
+            "title": "Project Version"
+          },
+          "rssi": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": -128.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Signal strength of the mower at the bridge in dBm, if the bridge reports it.",
+            "title": "Rssi"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the link was opened (or lost), if known.",
+            "title": "Since"
+          }
+        },
+        "title": "LinkStatus",
+        "type": "object"
+      },
       "MapArea": {
         "description": "A mowable area (a \"zone\" in the Mammotion app).",
         "properties": {
@@ -1086,6 +1282,7 @@
           "charging",
           "error",
           "offline",
+          "updating",
           "unknown"
         ],
         "title": "MowerActivity",
@@ -1148,11 +1345,26 @@
             "description": "Width of the cut swath in millimetres, if known (coverage heatmaps).",
             "title": "Cutting Width Mm"
           },
+          "firmware_update": {
+            "default": false,
+            "description": "The connection can ask the manufacturer's firmware service for updates and install them (`firmware_check`, `firmware_update`).",
+            "title": "Firmware Update",
+            "type": "boolean"
+          },
           "light": {
             "default": false,
             "description": "The mower's light (the camera's headlamp on Mammotion mowers) can be switched with `set_light`.",
             "title": "Light",
             "type": "boolean"
+          },
+          "links_supported": {
+            "description": "Additional link kinds this connection can open next to its primary one (e.g. `ble_bridge`); empty when the mower has only its primary connection.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Links Supported",
+            "type": "array"
           },
           "manual_drive": {
             "default": false,
@@ -1702,6 +1914,17 @@
             ],
             "title": "Firmware"
           },
+          "firmware_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FirmwareInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor."
+          },
           "light_on": {
             "anyOf": [
               {
@@ -1713,6 +1936,14 @@
             ],
             "description": "Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).",
             "title": "Light On"
+          },
+          "links": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LinkStatus"
+            },
+            "description": "State of the mower's additional links by kind (e.g. `ble_bridge`); empty for a mower with only its primary connection.",
+            "title": "Links",
+            "type": "object"
           },
           "mower_id": {
             "format": "uuid",
@@ -1766,6 +1997,17 @@
               }
             ],
             "title": "Speed Mps"
+          },
+          "spot_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpotRunStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one."
           }
         },
         "required": [
@@ -2055,6 +2297,88 @@
         ],
         "title": "RtkSource",
         "type": "string"
+      },
+      "SpotRunStatus": {
+        "description": "Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``).",
+        "properties": {
+          "driven_points": {
+            "default": 0,
+            "description": "Points reached so far.",
+            "minimum": 0.0,
+            "title": "Driven Points",
+            "type": "integer"
+          },
+          "dry_run": {
+            "default": true,
+            "description": "The blades stayed off for the whole run (the default).",
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "planned_points": {
+            "default": 0,
+            "description": "Points of the plan in total.",
+            "minimum": 0.0,
+            "title": "Planned Points",
+            "type": "integer"
+          },
+          "progress_percent": {
+            "default": 0,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress Percent",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the run ended early or paused, if so.",
+            "title": "Reason"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "segment_index": {
+            "default": 0,
+            "description": "The segment being driven (0-based).",
+            "minimum": 0.0,
+            "title": "Segment Index",
+            "type": "integer"
+          },
+          "segments_total": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Segments Total",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "preparing",
+              "spot_mowing",
+              "paused_rtk",
+              "stopping",
+              "done",
+              "aborted",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "state"
+        ],
+        "title": "SpotRunStatus",
+        "type": "object"
       },
       "StateHistory": {
         "description": "History of a mower in a time range.",
