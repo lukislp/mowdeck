@@ -6,10 +6,14 @@ from dataclasses import dataclass
 from mowdeck_authz import Authorizer, TupleBackend, TupleWriter
 from mowdeck_authz.writer import SupportsInvalidate
 from mowdeck_contracts.v1 import (
+    BridgeScanReply,
+    BridgeScanRequest,
     CameraSessionReply,
     CameraSessionRequest,
     CloudDiscoverReply,
     CloudDiscoverRequest,
+    FirmwareCheckReply,
+    FirmwareCheckRequest,
     PathPreviewGatewayRequest,
     PathPreviewReply,
 )
@@ -24,14 +28,17 @@ from fleet.application.context import FleetConfig
 from fleet.application.drive import DriveService
 from fleet.application.groups import GroupService
 from fleet.application.linked_accounts import CredentialVault, LinkedAccountService
+from fleet.application.links import LinkService
 from fleet.application.mowers import MowerService
 from fleet.application.path_preview import PathPreviewService
 from fleet.application.ports import (
+    BridgeScanGateway,
     CameraGateway,
     Clock,
     CloudDiscovery,
     CommandPublisher,
     EventPublisher,
+    FirmwareCheckGateway,
     PathPreviewGateway,
     SecretCipher,
     Store,
@@ -54,6 +61,7 @@ class Services:
     camera: CameraService
     path_preview: PathPreviewService
     linked_accounts: LinkedAccountService
+    links: LinkService
     access: Access
     writer: TupleWriter
 
@@ -73,6 +81,8 @@ def build_services(
     path_preview_gateway: PathPreviewGateway | None = None,
     cloud_discovery: CloudDiscovery | None = None,
     cipher: SecretCipher | None = None,
+    bridge_scan_gateway: BridgeScanGateway | None = None,
+    firmware_check_gateway: FirmwareCheckGateway | None = None,
 ) -> Services:
     """Wire the use cases. Tuples are written with ``TupleWriter(owner="fleet")``."""
     writer = TupleWriter(tuple_backend, owner="fleet", caches=caches)
@@ -100,6 +110,15 @@ def build_services(
             clock,
             LoginThrottle(clock),
         ),
+        links=LinkService(
+            uow,
+            store,
+            vault,
+            bridge_scan_gateway or _NoBridgeScanGateway(),
+            firmware_check_gateway or _NoFirmwareCheckGateway(),
+            config,
+            clock,
+        ),
         access=access,
         writer=writer,
     )
@@ -117,6 +136,22 @@ class _NoPathPreviewGateway:
     """Without a bus no gateway can plan a route: every request fails."""
 
     async def request(self, request: PathPreviewGatewayRequest) -> PathPreviewReply:
+        msg = "no device gateway is reachable (no event bus)"
+        raise ConnectionError(msg)
+
+
+class _NoBridgeScanGateway:
+    """Without a bus no gateway can scan through a bridge: every request fails."""
+
+    async def request(self, request: BridgeScanRequest) -> BridgeScanReply:
+        msg = "no device gateway is reachable (no event bus)"
+        raise ConnectionError(msg)
+
+
+class _NoFirmwareCheckGateway:
+    """Without a bus no gateway can ask the vendor for firmware: every request fails."""
+
+    async def request(self, request: FirmwareCheckRequest) -> FirmwareCheckReply:
         msg = "no device gateway is reachable (no event bus)"
         raise ConnectionError(msg)
 

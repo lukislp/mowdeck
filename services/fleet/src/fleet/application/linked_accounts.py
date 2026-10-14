@@ -7,7 +7,9 @@ password is stored encrypted (:class:`CredentialVault`) and leaves Fleet only in
 core NATS replies: the discovery request and ``fleet.mowers.credentials``, which the gateway
 sends each time it opens a mower's connection. Registrations (``mower.*`` events, which
 JetStream keeps for 30 days and several services read, and ``fleet.mowers.list``) never carry
-a password, an ESPHome key or the vendor account (:func:`public_registration`).
+a password, an ESPHome key or the vendor account (:func:`public_registration`); the same
+holds for the additional links of a mower (ADR 0038): the registration carries their public
+options, the credentials reply their secrets (``link_secrets``).
 
 Who may do what: managing linked accounts (and seeing their e-mail and device lists) needs
 ``can_manage_mowers`` on the account (403 otherwise; existence of the caller's own account is
@@ -17,7 +19,8 @@ target site and groups). Failed vendor logins are throttled per account and e-ma
 """
 
 import hashlib
-from collections.abc import Iterable
+import json
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 from uuid import UUID, uuid4
@@ -37,6 +40,7 @@ from mowdeck_contracts.v1 import (
     MowerCredentialsRequest,
     MowerRegistration,
 )
+from mowdeck_contracts.v1.links import CREDENTIALS_REV_OPTION
 from mowdeck_service_kit import get_logger
 
 from fleet.application.access import Access
@@ -53,7 +57,7 @@ from fleet.domain.errors import (
     NotFoundError,
     Unavailable,
 )
-from fleet.domain.models import LinkedAccount, Mower
+from fleet.domain.models import LinkedAccount, Mower, MowerLink
 from fleet.domain.rules import CAN_MANAGE_MOWERS, validate_email
 
 _log = get_logger("fleet.linked_accounts")
@@ -119,10 +123,29 @@ def find_device(item: LinkedAccount, device_name: str) -> DiscoveredDevice | Non
     return next((d for d in devices_of(item) if d.device_name == device_name), None)
 
 
-def public_registration(item: Mower, linked: LinkedAccount | None = None) -> MowerRegistration:
+def _revision(sealed: bytes) -> str:
+    return hashlib.sha256(sealed).hexdigest()[:12]
+
+
+def public_link(link: MowerLink) -> dict[str, Any]:
+    """The options of a link as a registration carries them: the public options, never the
+    secrets, plus ``credentials: "fleet"`` and ``credentials_rev`` (a fingerprint of the sealed
+    secrets: a new key changes it, so the Device-Gateway fetches the secrets again)."""
+    return {
+        **{k: v for k, v in link.options.items() if k not in SECRET_OPTION_KEYS},
+        CREDENTIALS_OPTION: CREDENTIALS_FROM_FLEET,
+        CREDENTIALS_REV_OPTION: _revision(link.secrets_encrypted),
+    }
+
+
+def public_registration(
+    item: Mower, linked: LinkedAccount | None = None, links: Sequence[MowerLink] = ()
+) -> MowerRegistration:
     """The registration as Fleet publishes it: without passwords, ESPHome keys and the vendor
     account. When anything was withheld (or the mower uses a linked account) the options say
     ``credentials: "fleet"`` and the gateway fetches the secrets on ``fleet.mowers.credentials``.
+    ``links`` are the mower's additional links (ADR 0038), published by kind under the same
+    rule (:func:`public_link`).
     """
     stored = item.connection_options
     options: dict[str, Any] = {k: v for k, v in stored.items() if k not in SECRET_OPTION_KEYS}
@@ -130,8 +153,7 @@ def public_registration(item: Mower, linked: LinkedAccount | None = None) -> Mow
     if item.linked_account_id is not None:
         options["linked_account_id"] = str(item.linked_account_id)
         if linked is not None:
-            digest = hashlib.sha256(linked.password_encrypted).hexdigest()[:12]
-            options[REVISION_OPTION] = digest
+            options[REVISION_OPTION] = _revision(linked.password_encrypted)
         withheld = True
     if withheld:
         options[CREDENTIALS_OPTION] = CREDENTIALS_FROM_FLEET
@@ -141,6 +163,7 @@ def public_registration(item: Mower, linked: LinkedAccount | None = None) -> Mow
         name=item.name,
         connection_kind=ConnectionKind(item.connection_kind),
         connection_options=options,
+        links={link.kind: public_link(link) for link in sorted(links, key=lambda x: x.kind)},
     )
 
 
@@ -168,10 +191,30 @@ class CredentialVault:
         """The password of ``item``; ``ValueError`` for a wrong key or a disabled vault."""
         return self.cipher.decrypt(str(item.id), item.password_encrypted)
 
+    def seal_link(self, link_id: UUID, secrets: Mapping[str, str]) -> bytes:
+        """The stored form of a link's secret options (a JSON object bound to the link id)."""
+        return self.cipher.encrypt(str(link_id), json.dumps(dict(secrets), sort_keys=True))
+
+    def open_link(self, link: MowerLink) -> dict[str, str]:
+        """The secret options of ``link``; ``ValueError`` for a wrong key, a disabled vault or
+        a blob that is no JSON object of strings."""
+        raw = json.loads(self.cipher.decrypt(str(link.id), link.secrets_encrypted))
+        if not isinstance(raw, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in raw.items()
+        ):
+            msg = "the link secrets are not a JSON object of strings"
+            raise ValueError(msg)
+        return raw
+
     async def registration(
-        self, tx: Tx, item: Mower, cache: dict[UUID, LinkedAccount | None] | None = None
+        self,
+        tx: Tx,
+        item: Mower,
+        cache: dict[UUID, LinkedAccount | None] | None = None,
+        links: Sequence[MowerLink] | None = None,
     ) -> MowerRegistration:
-        """:func:`public_registration` with the linked account loaded (for its revision)."""
+        """:func:`public_registration` with the linked account loaded (for its revision) and the
+        mower's links (loaded unless ``links`` are given)."""
         linked_id = item.linked_account_id
         linked: LinkedAccount | None = None
         if linked_id is not None:
@@ -181,7 +224,9 @@ class CredentialVault:
                 linked = await tx.linked_accounts.get(id=linked_id, account_id=item.account_id)
                 if cache is not None:
                     cache[linked_id] = linked
-        return public_registration(item, linked)
+        if links is None:
+            links = await tx.mower_links.find(mower_id=item.id, account_id=item.account_id)
+        return public_registration(item, linked, links)
 
     async def credentials(self, tx: Tx, request: MowerCredentialsRequest) -> MowerCredentialsReply:
         """``fleet.mowers.credentials``: the withheld options of one mower of the account.
@@ -215,7 +260,19 @@ class CredentialVault:
                 value = item.connection_options.get(key)
                 if isinstance(value, str) and value:
                     secrets[key] = value
-        return MowerCredentialsReply(found=True, secret_options=secrets)
+        link_secrets: dict[str, dict[str, str]] = {}
+        for link in await tx.mower_links.find(mower_id=item.id, account_id=item.account_id):
+            try:
+                link_secrets[link.kind] = self.open_link(link)
+            except ValueError:
+                # The link stays in the registration; the gateway cannot open it until the
+                # owner enters the key again (the connection itself still works).
+                _log.warning(
+                    "cannot decrypt the link secrets (wrong or missing key)",
+                    mower_id=str(item.id),
+                    link_kind=link.kind,
+                )
+        return MowerCredentialsReply(found=True, secret_options=secrets, link_secrets=link_secrets)
 
 
 class LinkedAccountService:
@@ -444,8 +501,10 @@ class LinkedAccountService:
             await work.tx.linked_accounts.update(row)
             mowers = await work.tx.mowers.find(account_id=account_id, linked_account_id=row.id)
             if password is not None:
+                cache: dict[UUID, LinkedAccount | None] = {row.id: row}
                 for mower in mowers:
-                    work.emit(MOWER_UPDATED, account_id, public_registration(mower, row))
+                    payload = await self.vault.registration(work.tx, mower, cache)
+                    work.emit(MOWER_UPDATED, account_id, payload)
             await work.audit(
                 actor,
                 "linked_account.synced",
@@ -483,6 +542,7 @@ class LinkedAccountService:
             mower_id=str(request.mower_id),
             found=reply.found,
             keys=sorted(reply.secret_options),
+            link_kinds=sorted(reply.link_secrets),
         )
         return reply
 

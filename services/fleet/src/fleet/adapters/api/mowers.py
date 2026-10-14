@@ -1,21 +1,24 @@
 """Routes for mowers and their commands under ``/api/v1/fleet``."""
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Path, Query, Request, Response
 from mowdeck_authz import mower
 from mowdeck_authz.fastapi import authorize
 from mowdeck_contracts.v1 import (
+    BridgeScanReply,
     CameraSession,
     CommandAccepted,
     CommandRequest,
     CommandView,
     DriveSessionView,
+    FirmwareInfo,
     MowPath,
     PathPreviewRequest,
 )
+from mowdeck_contracts.v1.links import LINK_BLE_BRIDGE
 from mowdeck_service_kit import CurrentAccountId
 from pydantic import BaseModel
 
@@ -30,8 +33,11 @@ from fleet.adapters.api.deps import (
 from fleet.adapters.api.schemas import (
     AreaNameIn,
     AreaNamesOut,
+    BridgeLinkIn,
+    BridgeScanIn,
     ConnectionKindList,
     ConnectionKindOut,
+    LinkOut,
     MowDefaultsIn,
     MowerGroupsIn,
     MowerIn,
@@ -331,6 +337,169 @@ async def preview_mow_path(
     the start uses the same areas and pattern and the mower plans the same route again."""
     response.headers["Cache-Control"] = "no-store"
     return await services.path_preview.preview(actor_of(principal), account_id, mower_id, body)
+
+
+# --- additional links (ADR 0038) -----------------------------------------------------------
+
+_LINK_RESPONSES: dict[int | str, dict[str, Any]] = {
+    403: {"description": "The caller sees the mower but has no `can_manage_mowers`."},
+    404: {"description": "The mower does not exist or is not visible to the caller."},
+    409: {
+        "description": "`link-not-applicable`: the mower's connection kind carries no Bluetooth "
+        "bridge link (decided by the connection-kind registry, `GET /connection-kinds`)."
+    },
+}
+_SCAN_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **_LINK_RESPONSES,
+    409: {
+        "description": "`link-not-applicable`: the connection kind carries no bridge link; "
+        "`bridge-scan-unsupported`: the Device-Gateway cannot scan through this bridge."
+    },
+    503: {"description": "No Device-Gateway answered in time or holds the mower right now."},
+}
+
+
+@router.post(
+    "/mowers/{mower_id}/links/ble_bridge/scan",
+    responses={
+        **_SCAN_RESPONSES,
+        422: {
+            "description": "`***` as key without a stored link (`#/links/ble_bridge/noise_psk`)."
+        },
+    },
+)
+async def scan_bridge(
+    mower_id: UUID,
+    body: BridgeScanIn,
+    _: ManageMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    response: Response,
+) -> BridgeScanReply:
+    """Look for the mower through a Bluetooth bridge before storing the link (``can_manage_mowers``,
+    hidden otherwise). Fleet relays the request to the Device-Gateway that holds the mower; the
+    gateway connects to the bridge at ``host``:``port`` with the key, reads the bridge's
+    information and collects mower advertisements for up to 30 s (early when the expected name
+    shows up). The answer is the gateway's ``BridgeScanReply``: ``proxy`` as soon as the bridge
+    answered, ``devices`` seen so far, and ``error`` for the outcomes the user must act on
+    (``unreachable``, ``auth_failed``, ``timeout``, ``busy``) — these are a 200 with the reply,
+    so a timeout still shows the bridge and the other mowers seen. When the mower already has a
+    link to the same bridge its ``proxy_info`` is refreshed. ``***`` as key means the stored key.
+    The key is never returned or logged."""
+    response.headers["Cache-Control"] = "no-store"
+    return await services.links.scan(account_id, mower_id, LINK_BLE_BRIDGE, body.to_input())
+
+
+@router.put(
+    "/mowers/{mower_id}/links/ble_bridge",
+    responses={
+        **_LINK_RESPONSES,
+        422: {
+            "description": "An option the `ble_bridge` schema refuses (`#/links/ble_bridge/<key>`)."
+        },
+        503: {"description": "Fleet has no credential encryption key."},
+    },
+)
+async def set_bridge_link(
+    mower_id: UUID,
+    body: BridgeLinkIn,
+    principal: ManageMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> LinkOut:
+    """Create or replace the mower's Bluetooth bridge link (``can_manage_mowers``, hidden
+    otherwise): the bridge's host, port and API encryption key, the mower's Bluetooth address and
+    name (from the scan) and the blade settings for manual driving. The options are validated
+    with the ``ble_bridge`` schema of ``GET /connection-kinds``; the key is stored encrypted and
+    never returned (``***``; sending ``***`` keeps it). Audits ``mower.link_set`` and publishes
+    ``mower.updated`` with the full registration, so the Device-Gateway opens the link."""
+    link = await services.links.set(
+        actor_of(principal), account_id, mower_id, LINK_BLE_BRIDGE, body.to_options()
+    )
+    return LinkOut.of(link)
+
+
+@router.get(
+    "/mowers/{mower_id}/links/ble_bridge",
+    responses={404: {"description": "The mower is not visible or has no bridge link."}},
+)
+async def get_bridge_link(
+    mower_id: UUID, _: ViewMower, account_id: CurrentAccountId, services: ServicesDep
+) -> LinkOut:
+    """The mower's Bluetooth bridge link (``can_view``, hidden otherwise): its options with the
+    key masked and the cached bridge information of the last scan. The live link state comes
+    with telemetry (``MowerState.links.ble_bridge``)."""
+    return LinkOut.of(await services.links.get(account_id, mower_id, LINK_BLE_BRIDGE))
+
+
+@router.delete(
+    "/mowers/{mower_id}/links/ble_bridge",
+    status_code=204,
+    responses={
+        403: {"description": "The caller sees the mower but has no `can_manage_mowers`."},
+        404: {"description": "The mower is not visible or has no bridge link."},
+    },
+)
+async def delete_bridge_link(
+    mower_id: UUID, principal: ManageMower, account_id: CurrentAccountId, services: ServicesDep
+) -> None:
+    """Remove the mower's Bluetooth bridge link (``can_manage_mowers``, hidden otherwise).
+    Audits ``mower.link_removed`` and publishes ``mower.updated`` without the link, so the
+    Device-Gateway closes it."""
+    await services.links.delete(actor_of(principal), account_id, mower_id, LINK_BLE_BRIDGE)
+
+
+@router.post(
+    "/mowers/{mower_id}/links/ble_bridge/check",
+    responses={
+        **_SCAN_RESPONSES,
+        404: {"description": "The mower is not visible or has no bridge link."},
+    },
+)
+async def check_bridge_link(
+    mower_id: UUID,
+    _: ManageMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    response: Response,
+) -> BridgeScanReply:
+    """Scan again through the stored link ("re-check", ``can_manage_mowers``, hidden otherwise):
+    the stored host, port and key; the reply is as for the scan and the link's ``proxy_info``
+    (bridge firmware, outdated flag) is refreshed. While the Device-Gateway holds the link open
+    it answers from the live scanner."""
+    response.headers["Cache-Control"] = "no-store"
+    return await services.links.check(account_id, mower_id, LINK_BLE_BRIDGE)
+
+
+@router.post(
+    "/mowers/{mower_id}/firmware/check",
+    responses={
+        404: {"description": "The mower does not exist or is not visible to the caller."},
+        409: {
+            "description": "`firmware-check-unsupported`: the mower's connection cannot ask the "
+            "vendor (no cloud link)."
+        },
+        503: {
+            "description": "The mower is offline, the vendor did not answer, or no Device-Gateway "
+            "answered in time."
+        },
+    },
+)
+async def check_firmware(
+    mower_id: UUID,
+    _: ViewMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    response: Response,
+) -> FirmwareInfo:
+    """Ask the vendor for firmware updates now (``can_view``, hidden otherwise; ADR 0038). Fleet
+    relays the request to the Device-Gateway that holds the mower, which asks through the
+    mower's connection and answers the fresh ``FirmwareInfo`` (installed and available version,
+    release notes, update state); the same information arrives with telemetry as
+    ``MowerState.firmware_info``. Installing is the command ``firmware_update``
+    (``can_manage_mowers``)."""
+    response.headers["Cache-Control"] = "no-store"
+    return await services.links.firmware_check(account_id, mower_id)
 
 
 @router.get("/commands/{command_id}")

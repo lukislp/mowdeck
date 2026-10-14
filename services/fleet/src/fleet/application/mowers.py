@@ -39,8 +39,8 @@ from fleet.application.linked_accounts import (
 from fleet.application.plan import allow_all, require_limit
 from fleet.application.ports import Clock, In, Store, Tx
 from fleet.application.sites import SiteService
-from fleet.application.work import UnitOfWork
-from fleet.domain.connections import LEGACY_CLOUD_SCHEMA, SCHEMAS
+from fleet.application.work import UnitOfWork, Work
+from fleet.domain.connections import LEGACY_CLOUD_SCHEMA, SCHEMAS, links_supported
 from fleet.domain.errors import (
     ConflictError,
     FieldProblem,
@@ -49,7 +49,7 @@ from fleet.domain.errors import (
     MowerAlreadyRegisteredError,
     NotFoundError,
 )
-from fleet.domain.models import LinkedAccount, MowDefaults, Mower, MowerGroup
+from fleet.domain.models import LinkedAccount, MowDefaults, Mower, MowerGroup, MowerLink
 from fleet.domain.rules import (
     CAN_MANAGE_MOWERS,
     clean_name,
@@ -87,11 +87,13 @@ class MowerInput:
 
 @dataclass(frozen=True, slots=True)
 class MowerView:
-    """A mower with the ids of its groups and the custom names of its map areas."""
+    """A mower with the ids of its groups, the custom names of its map areas and its
+    additional links (ADR 0038)."""
 
     mower: Mower
     group_ids: list[UUID]
     area_names: dict[str, str] = field(default_factory=dict)
+    links: list[MowerLink] = field(default_factory=list)
 
 
 def audited_defaults(defaults: MowDefaults | None) -> dict[str, Any] | None:
@@ -240,11 +242,15 @@ class MowerService:
             where["site_id"] = site_id
         async with self.store.transaction() as tx:
             rows = await tx.mowers.find(order_by="name", **where)
-            links = await tx.mower_groups.find(account_id=account_id)
+            memberships = await tx.mower_groups.find(account_id=account_id)
             names = await names_by_mower(tx, account_id)
+            links = await tx.mower_links.find(account_id=account_id, order_by="kind")
         groups: dict[UUID, list[UUID]] = {}
+        for membership in memberships:
+            groups.setdefault(membership.mower_id, []).append(membership.group_id)
+        links_of: dict[UUID, list[MowerLink]] = {}
         for link in links:
-            groups.setdefault(link.mower_id, []).append(link.group_id)
+            links_of.setdefault(link.mower_id, []).append(link)
         result = []
         for row in rows:
             if visible is not None and row.id not in visible:
@@ -252,7 +258,9 @@ class MowerService:
             member_of = sorted(groups.get(row.id, []), key=str)
             if group_id is not None and group_id not in member_of:
                 continue
-            result.append(MowerView(row, member_of, names.get(row.id, {})))
+            result.append(
+                MowerView(row, member_of, names.get(row.id, {}), links_of.get(row.id, []))
+            )
         return result
 
     async def get(self, account_id: UUID, mower_id: UUID) -> MowerView:
@@ -261,9 +269,10 @@ class MowerService:
             row = await tx.mowers.get(id=mower_id, account_id=account_id)
             if row is None:
                 raise NotFoundError("mower not found")
-            links = await tx.mower_groups.find(mower_id=mower_id)
+            memberships = await tx.mower_groups.find(mower_id=mower_id)
             names = await names_of(tx, mower_id)
-        return MowerView(row, sorted((link.group_id for link in links), key=str), names)
+            links = await tx.mower_links.find(mower_id=mower_id, order_by="kind")
+        return MowerView(row, sorted((m.group_id for m in memberships), key=str), names, links)
 
     async def registrations_for_shard(
         self, shard_index: int, shard_count: int
@@ -276,7 +285,12 @@ class MowerService:
             mine = [m for m in rows if in_shard(m.id, shard_index, shard_count)]
             if self.vault is None:
                 return [registration(m) for m in mine]
-            return [await self.vault.registration(tx, m, cache) for m in mine]
+            links_of: dict[UUID, list[MowerLink]] = {}
+            for link in await tx.mower_links.find(order_by="kind"):
+                links_of.setdefault(link.mower_id, []).append(link)
+            return [
+                await self.vault.registration(tx, m, cache, links_of.get(m.id, [])) for m in mine
+            ]
 
     async def resolve_target(self, request: ResolveTargetRequest) -> ResolveTargetReply:
         """``fleet.targets.resolve``: the mowers of a mower or group target of one account,
@@ -579,15 +593,38 @@ class MowerService:
                 await work.tx.mowers.update(item)
             except ConflictError:
                 raise ConflictError(_SERIAL_EXISTS) from None
-            links = await work.tx.mower_groups.find(mower_id=mower_id)
+            dropped = await self._drop_unsupported_links(work, actor, item)
+            memberships = await work.tx.mower_groups.find(mower_id=mower_id)
             names = await names_of(work.tx, mower_id)
+            links = await work.tx.mower_links.find(mower_id=mower_id, order_by="kind")
             await work.audit(
                 actor, "mower.updated", account_id, "mower", mower_id, {"fields": sorted(changes)}
             )
             after = (item.name, item.connection_kind, item.connection_options, item.site_id)
-            if after != before:
+            if after != before or dropped:
                 work.emit(MOWER_UPDATED, account_id, await self._registration(work.tx, item))
-        return MowerView(item, sorted((link.group_id for link in links), key=str), names)
+        return MowerView(item, sorted((m.group_id for m in memberships), key=str), names, links)
+
+    @staticmethod
+    async def _drop_unsupported_links(work: Work, actor: Actor, item: Mower) -> bool:
+        """After a change of the connection kind: links the new kind cannot carry are removed
+        (audited as ``mower.link_removed``, ADR 0038). Returns True when any was removed."""
+        allowed = links_supported(item.connection_kind)
+        removed = False
+        for link in await work.tx.mower_links.find(mower_id=item.id):
+            if link.kind in allowed:
+                continue
+            await work.tx.mower_links.delete(id=link.id)
+            await work.audit(
+                actor,
+                "mower.link_removed",
+                item.account_id,
+                "mower",
+                item.id,
+                {"kind": link.kind, "reason": "connection_kind_changed"},
+            )
+            removed = True
+        return removed
 
     async def set_mow_defaults(
         self,
@@ -618,9 +655,10 @@ class MowerService:
                         "previous": audited_defaults(previous),
                     },
                 )
-            links = await work.tx.mower_groups.find(mower_id=mower_id)
+            memberships = await work.tx.mower_groups.find(mower_id=mower_id)
             names = await names_of(work.tx, mower_id)
-        return MowerView(item, sorted((link.group_id for link in links), key=str), names)
+            links = await work.tx.mower_links.find(mower_id=mower_id, order_by="kind")
+        return MowerView(item, sorted((m.group_id for m in memberships), key=str), names, links)
 
     async def set_groups(
         self, actor: Actor, account_id: UUID, mower_id: UUID, group_ids: Iterable[UUID]
@@ -664,7 +702,8 @@ class MowerService:
                     },
                 )
                 work.emit(MOWER_UPDATED, account_id, await self._registration(work.tx, item))
-        return MowerView(item, sorted(wanted, key=str), names)
+            links = await work.tx.mower_links.find(mower_id=mower_id, order_by="kind")
+        return MowerView(item, sorted(wanted, key=str), names, links)
 
     async def delete(self, actor: Actor, account_id: UUID, mower_id: UUID) -> None:
         """Remove the mower and all its tuples; publish ``mower.removed``. Command records stay
@@ -673,10 +712,11 @@ class MowerService:
             item = await work.tx.mowers.get(id=mower_id, account_id=account_id)
             if item is None:
                 raise NotFoundError("mower not found")
-            links = await work.tx.mower_groups.find(mower_id=mower_id)
+            memberships = await work.tx.mower_groups.find(mower_id=mower_id)
             await work.tx.mower_groups.delete(mower_id=mower_id)
             await work.tx.area_names.delete(mower_id=mower_id)
+            await work.tx.mower_links.delete(mower_id=mower_id)
             await work.tx.mowers.delete(id=mower_id)
-            work.delete(*mower_tuples(item, [link.group_id for link in links]))
+            work.delete(*mower_tuples(item, [m.group_id for m in memberships]))
             await work.audit(actor, "mower.removed", account_id, "mower", mower_id)
             work.emit(MOWER_REMOVED, account_id, registration(item))

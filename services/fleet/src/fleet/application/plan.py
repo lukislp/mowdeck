@@ -5,9 +5,13 @@ client of ``mowdeck-service-kit`` (cached per account, fail-open only while bill
 * every command except the emergency stop: feature ``control`` (a ``grace`` or ``expired``
   account can still stop its mowers; no plan change ever stops a mower by itself)
 * bulk commands other than the emergency stop: feature ``fleet.bulk_commands``
-* a ``start_mow`` with a spot plan (a route of the Planner): feature ``spot_mowing``
+* a ``start_mow`` with a spot plan (a route of the Planner) and ``spot_mow``: feature
+  ``spot_mowing``
 * ``set_light`` (the mower's light, switched from the camera panel and by AI assist): feature
   ``camera`` as well
+
+The feature names and the rule per command kind live in ``fleet.domain.rules``
+(``command_features``); this module applies them through the Entitlements client.
 """
 
 from uuid import UUID
@@ -15,17 +19,24 @@ from uuid import UUID
 from mowdeck_service_kit.entitlements import Entitlements, EntitlementsClient
 
 from fleet.domain.errors import FeatureNotInPlanError, PlanLimitError
+from fleet.domain.rules import FEATURE_CONTROL, FEATURE_LIGHT, FEATURE_SPOT
 
-FEATURE_CONTROL = "control"
-"""Every command except the emergency stop."""
 FEATURE_BULK = "fleet.bulk_commands"
 """Bulk commands to a site or group (the emergency stop is never gated)."""
-FEATURE_SPOT = "spot_mowing"
-"""Starting a route computed by the Planner (``StartMow.spot_plan``, ADR 0030)."""
-FEATURE_LIGHT = "camera"
-"""``set_light`` needs the plan feature of the live camera, whose panel holds the switch."""
 EMERGENCY_STOP = "emergency_stop"
 SET_LIGHT = "set_light"
+
+__all__ = [
+    "EMERGENCY_STOP",
+    "FEATURE_BULK",
+    "FEATURE_CONTROL",
+    "FEATURE_LIGHT",
+    "FEATURE_SPOT",
+    "SET_LIGHT",
+    "allow_all",
+    "require_feature",
+    "require_limit",
+]
 
 
 def allow_all() -> Entitlements:

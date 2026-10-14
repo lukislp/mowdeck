@@ -86,6 +86,15 @@ class Settings(ServiceSettings):
     """How long Fleet waits for the Device-Gateway to log in to a vendor cloud account and list
     its devices (``gateway.cloud.discover``; 503 after)."""
 
+    bridge_scan_request_timeout_seconds: float = Field(default=35.0, ge=1, le=120)
+    """How long Fleet waits for the Device-Gateway's bridge scan
+    (``gateway.mower.<id>.bridge.scan``, ADR 0038; 503 after). Above the scan's own limit of
+    30 s for the mower's advertisement."""
+
+    firmware_check_request_timeout_seconds: float = Field(default=30.0, ge=1, le=120)
+    """How long Fleet waits for the Device-Gateway's firmware check
+    (``gateway.mower.<id>.firmware.check``, ADR 0038; 503 after)."""
+
     @model_validator(mode="after")
     def _no_dev_key_in_production(self) -> Self:
         key = self.credential_encryption_key

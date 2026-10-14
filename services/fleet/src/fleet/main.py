@@ -46,8 +46,10 @@ from mowdeck_service_kit.entitlements import (
 
 from fleet.adapters.api.deps import install_error_mapping
 from fleet.adapters.api.routes import ROUTERS
+from fleet.adapters.bus.bridge import BusBridgeScanGateway
 from fleet.adapters.bus.camera import BusCameraGateway
 from fleet.adapters.bus.cloud import BusCloudDiscovery
+from fleet.adapters.bus.firmware import BusFirmwareCheckGateway
 from fleet.adapters.bus.path_preview import BusPathPreviewGateway
 from fleet.adapters.bus.publisher import BusCommandPublisher, BusEventPublisher
 from fleet.adapters.bus.subscriptions import subscribe_all
@@ -139,6 +141,12 @@ def build_app(
                 active_bus, timeout_seconds=settings.cloud_discovery_timeout_seconds
             ),
             cipher=cipher,
+            bridge_scan_gateway=BusBridgeScanGateway(
+                active_bus, timeout_seconds=settings.bridge_scan_request_timeout_seconds
+            ),
+            firmware_check_gateway=BusFirmwareCheckGateway(
+                active_bus, timeout_seconds=settings.firmware_check_request_timeout_seconds
+            ),
         )
         app.state.fleet = services
         subscriptions: list[Subscription] = []

@@ -121,6 +121,35 @@ class LinkedAccount:
 
 
 @dataclass(slots=True)
+class MowerLink:
+    """An additional link of a mower next to its connection (ADR 0038): today a Bluetooth
+    bridge (``kind`` ``ble_bridge``) next to a cloud connection, one row per mower and kind.
+
+    ``options`` are the public options of the link (host, port, Bluetooth address, device name,
+    blade settings); ``secrets_encrypted`` is the AES-256-GCM blob (``adapters.crypto``, the
+    link id as context) of a JSON object with the withheld options (``{"noise_psk": ...}``;
+    extensible). ``proxy_info`` caches what the last scan learnt about the bridge
+    (``ProxyInfo`` as JSON) and is None until a scan answered.
+    """
+
+    id: UUID
+    mower_id: UUID
+    account_id: UUID
+    kind: str
+    secrets_encrypted: bytes
+    created_at: datetime
+    updated_at: datetime
+    options: dict[str, Any] = field(default_factory=dict)
+    proxy_info: dict[str, Any] | None = None
+    created_by: UUID | None = None
+
+    @property
+    def pair_key(self) -> tuple[UUID, str]:
+        """Unique (``uq_mower_links_mower_kind``)."""
+        return (self.mower_id, self.kind)
+
+
+@dataclass(slots=True)
 class MowerGroup:
     """Membership of a mower in a group."""
 

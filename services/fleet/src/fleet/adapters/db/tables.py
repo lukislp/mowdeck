@@ -148,6 +148,26 @@ mower_groups = Table(
     Index("ix_mower_groups_group_id", "group_id"),
 )
 
+# Additional links of a mower next to its connection (ADR 0038): one row per mower and link
+# kind, gone with the mower. The secrets are AES-256-GCM encrypted like linked account passwords.
+mower_links = Table(
+    "mower_links",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("mower_id", Uuid, ForeignKey("mowers.id", ondelete="CASCADE"), nullable=False),
+    Column("account_id", Uuid, nullable=False),
+    Column("kind", String(32), nullable=False),
+    Column("options", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("secrets_encrypted", LargeBinary, nullable=False),
+    # What the last scan learnt about the bridge (ProxyInfo as JSON); NULL until one answered.
+    Column("proxy_info", JSONB),
+    Column("created_by", Uuid),
+    Column("created_at", TS, nullable=False),
+    Column("updated_at", TS, nullable=False),
+    UniqueConstraint("mower_id", "kind", name="uq_mower_links_mower_kind"),
+    Index("ix_mower_links_account_id", "account_id"),
+)
+
 # Custom names of map areas per mower (the mower keeps its own names). Gone with the mower.
 mower_area_names = Table(
     "mower_area_names",

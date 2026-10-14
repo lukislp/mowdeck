@@ -8,7 +8,7 @@ import pytest
 from mowdeck_authz import Relation
 from mowdeck_contracts.v1 import COMMAND_MODELS, CommandState
 
-from fleet.domain.errors import InvalidInput
+from fleet.domain.errors import InvalidInput, LinkNotApplicableError
 from fleet.domain.rules import (
     COMMAND_RELATION,
     CommandLimits,
@@ -17,8 +17,11 @@ from fleet.domain.rules import (
     clean_name,
     command_ttl,
     in_shard,
+    mask_link_options,
     relation_for,
+    require_link_supported,
     validate_connection_options,
+    validate_link_options,
     validate_timezone,
 )
 
@@ -115,3 +118,23 @@ def test_fleet_timezone_and_names() -> None:
         clean_name("   ", "site")
     with pytest.raises(InvalidInput):
         clean_name("x" * 101, "group")
+
+
+def test_fleet_link_rules_split_secrets_and_follow_the_registry() -> None:
+    options = {"host": "b.local", "noise_psk": "k", "ble_address": "AA:BB:CC:DD:EE:FF", "port": 1}
+    public, secret = validate_link_options("ble_bridge", options, 4096)
+    assert secret == {"noise_psk": "k"} and "noise_psk" not in public
+    assert public["host"] == "b.local" and public["port"] == 1
+    assert mask_link_options("ble_bridge", public)["noise_psk"] == "***"
+    with pytest.raises(InvalidInput) as missing:
+        validate_link_options("ble_bridge", {"host": "b.local"}, 4096)
+    assert {f.path for f in missing.value.fields} >= {
+        "links/ble_bridge/noise_psk",
+        "links/ble_bridge/ble_address",
+    }
+    with pytest.raises(InvalidInput, match="exceed"):
+        validate_link_options("ble_bridge", {**options, "device_name": "x" * 100}, 64)
+    assert require_link_supported("cloud", "ble_bridge").kind == "ble_bridge"
+    for connection_kind, link_kind in (("simulated", "ble_bridge"), ("cloud", "wifi")):
+        with pytest.raises(LinkNotApplicableError):
+            require_link_supported(connection_kind, link_kind)

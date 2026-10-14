@@ -12,8 +12,8 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import CommandState
 
-from fleet.domain.connections import SCHEMAS, KindSchema, option_problems
-from fleet.domain.errors import FieldProblem, InvalidInput
+from fleet.domain.connections import SCHEMAS, KindSchema, links_supported, option_problems
+from fleet.domain.errors import FieldProblem, InvalidInput, LinkNotApplicableError
 
 CAN_VIEW: Final = "can_view"
 CAN_CONTROL: Final = "can_control"
@@ -46,6 +46,33 @@ def relation_for(kind: str) -> str:
     except KeyError:
         msg = f"unknown command kind {kind!r}"
         raise ValueError(msg) from None
+
+
+FEATURE_CONTROL: Final = "control"
+"""Plan feature of every command except the emergency stop (ADR 0028)."""
+FEATURE_SPOT: Final = "spot_mowing"
+"""Plan feature of a Planner route: ``start_mow`` with a ``spot_plan`` and ``spot_mow``."""
+FEATURE_LIGHT: Final = "camera"
+"""``set_light`` needs the plan feature of the live camera, whose panel holds the switch."""
+
+_EXTRA_FEATURES: Final[Mapping[str, frozenset[str]]] = {
+    "set_light": frozenset({FEATURE_LIGHT}),
+    "spot_mow": frozenset({FEATURE_SPOT}),
+}
+
+
+def command_features(kind: str) -> frozenset[str]:
+    """The plan features a command of ``kind`` needs: nothing for the emergency stop, else
+    ``control`` (so also ``firmware_update``) plus ``camera`` for ``set_light`` and
+    ``spot_mowing`` for ``spot_mow``. A ``start_mow`` with a spot plan adds ``spot_mowing`` in
+    the use case (the kind alone does not say)."""
+    if kind == "emergency_stop":
+        return frozenset()
+    return frozenset({FEATURE_CONTROL}) | _EXTRA_FEATURES.get(kind, frozenset())
+
+
+SINGLE_MOWER_KINDS: Final = frozenset({"spot_mow"})
+"""Kinds that carry a route computed for one mower: never sent to a site or group."""
 
 
 def bulk_gate_relation(kind: str) -> str:
@@ -219,6 +246,62 @@ def keep_masked_secrets(new: Mapping[str, Any], stored: Mapping[str, Any]) -> di
         if merged.get(key) == SECRET_MASK and key in stored:
             merged[key] = stored[key]
     return merged
+
+
+# --- additional links (ADR 0038) -------------------------------------------------------------
+
+
+def require_link_supported(connection_kind: str, link_kind: str) -> KindSchema:
+    """The option schema of ``link_kind`` when a mower with ``connection_kind`` may carry such a
+    link (the connection-kind registry decides, :func:`links_supported`);
+    :class:`LinkNotApplicableError` (409) otherwise."""
+    schema = SCHEMAS.get(link_kind)
+    if schema is None or link_kind not in links_supported(connection_kind):
+        msg = f"a {connection_kind} mower cannot carry a {link_kind} link"
+        raise LinkNotApplicableError(msg)
+    return schema
+
+
+def validate_link_options(
+    link_kind: str, options: Mapping[str, Any], max_bytes: int
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Split and check the options of a link against the link kind's schema.
+
+    Returns the public options (stored as JSON) and the secret options (encrypted at rest);
+    secret values must be non-empty strings. Raises ``InvalidInput`` (422) with every violated
+    rule as a field ``links/<kind>/<key>``, and when the JSON form exceeds ``max_bytes``.
+    """
+    schema = SCHEMAS[link_kind]
+    size = len(json.dumps(options, separators=(",", ":"), default=str).encode("utf-8"))
+    if size > max_bytes:
+        msg = f"the options of a {link_kind} link must not exceed {max_bytes} bytes"
+        raise InvalidInput(msg)
+    problems = option_problems(schema, options)
+    if problems:
+        msg = f"links/{link_kind}: {'; '.join(p.message for p in problems)}"
+        raise InvalidInput(
+            msg,
+            fields=[
+                FieldProblem(f"links/{link_kind}/{p.key}", p.message, p.code) for p in problems
+            ],
+        )
+    secret = {
+        key: value
+        for key, value in options.items()
+        if key in schema.secret_keys and isinstance(value, str) and value
+    }
+    public = {k: v for k, v in options.items() if k not in schema.secret_keys and v is not None}
+    return public, secret
+
+
+def mask_link_options(link_kind: str, options: Mapping[str, Any]) -> dict[str, Any]:
+    """The public options of a link plus :data:`SECRET_MASK` for each secret key of the kind, so
+    a client can read a link and send it back unchanged."""
+    schema = SCHEMAS.get(link_kind)
+    masked = dict(options)
+    for key in sorted(schema.secret_keys if schema is not None else ()):
+        masked[key] = SECRET_MASK
+    return masked
 
 
 def validate_timezone(name: str) -> str:
