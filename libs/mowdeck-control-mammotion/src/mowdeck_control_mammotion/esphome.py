@@ -100,7 +100,7 @@ def install_bleak_wrappers() -> None:
             continue
         for attribute, original, wrapper in replacements:
             if getattr(module, attribute, None) is original:
-                setattr(module, attribute, wrapper)  # noqa: B010
+                setattr(module, attribute, wrapper)
 
 
 async def open_proxy(
