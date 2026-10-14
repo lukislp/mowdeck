@@ -43,7 +43,11 @@ from mowdeck_control_mammotion.fake import (
     dock_buffer,
     sample_device,
 )
-from mowdeck_control_mammotion.options import CloudOptions
+from mowdeck_control_mammotion.options import (
+    DEFAULT_REFRESH_SECONDS,
+    DEFAULT_REPORT_STREAM_SECONDS,
+    CloudOptions,
+)
 from mowdeck_control_mammotion.port import (
     CommandTimeoutError,
     NoTransportAvailableError,
@@ -261,7 +265,8 @@ async def test_mammotion_cloud_active_refresh_comes_from_the_option() -> None:
     conn2, _ = cloud(refresh_seconds_active=2)
     assert conn2.active_refresh_interval_s == 2
     ble_conn, _ = ble()
-    assert ble_conn.refresh_interval_s == 0  # the BLE bridge has no refresh loop
+    # The BLE bridge refreshes like the cloud link (the mower does not report by itself).
+    assert ble_conn.refresh_interval_s == DEFAULT_REFRESH_SECONDS
 
 
 async def _wait_for_streams(port: FakeMammotionPort, count: int, timeout_s: float = 3.0) -> None:
@@ -337,7 +342,7 @@ async def test_mammotion_cloud_report_stream_comes_from_the_option() -> None:
     conn, _ = cloud()
     assert conn.report_stream_s == 60
     assert cloud(report_stream_seconds=0)[0].report_stream_s == 0
-    assert ble()[0].report_stream_s == 0
+    assert ble()[0].report_stream_s == DEFAULT_REPORT_STREAM_SECONDS
 
 
 async def test_mammotion_job_command_boosts_reports_before_the_state_changes(

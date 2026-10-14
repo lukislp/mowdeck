@@ -76,6 +76,7 @@ Options come from Fleet (`connection_options` of the mower registration) through
 | `device_name` | no | advertised name; read from the advertisement when missing |
 | `allow_manual_blades` | no | default false: blades stay off while driving manually |
 | `manual_blade_height_mm`, `scan_timeout_s`, `map_sync_timeout_s`, `confirm_timeout_s` | no | defaults 60, 30, 300, 30 |
+| `refresh_seconds`, `refresh_seconds_active`, `report_stream_seconds` | no | As for the cloud link: fresh-state requests while idle (10 to 300 s, default 20), while active (2 to 60 s, default 5) and the continuous report window while active (0 off, 10 to 300 s, default 60). The mower does not report by itself over Bluetooth either. |
 
 Fleet validates both kinds (`fleet.domain.rules.validate_connection_options`) and masks `password` and `noise_psk` as `***` in every API response.
 

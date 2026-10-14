@@ -217,6 +217,10 @@ class BleProxyOptions:
     scan_timeout_s: float = 30.0
     map_sync_timeout_s: float = 300.0
     confirm_timeout_s: float = 30.0
+    # Fresh-state requests, as for the cloud link: the mower does not report by itself.
+    refresh_seconds: float = DEFAULT_REFRESH_SECONDS
+    refresh_seconds_active: float = DEFAULT_ACTIVE_REFRESH_SECONDS
+    report_stream_seconds: float = DEFAULT_REPORT_STREAM_SECONDS
 
     def __repr__(self) -> str:  # never print the key
         return (
@@ -244,6 +248,9 @@ class BleProxyOptions:
                     "scan_timeout_s",
                     "map_sync_timeout_s",
                     "confirm_timeout_s",
+                    "refresh_seconds",
+                    "refresh_seconds_active",
+                    "report_stream_seconds",
                 }
             ),
         )
@@ -269,4 +276,11 @@ class BleProxyOptions:
             scan_timeout_s=_number(options, "scan_timeout_s", 30.0, 1.0, 300.0),
             map_sync_timeout_s=_number(options, "map_sync_timeout_s", 300.0, 10.0, 1800.0),
             confirm_timeout_s=_number(options, "confirm_timeout_s", 30.0, 1.0, 300.0),
+            refresh_seconds=_number(
+                options, "refresh_seconds", DEFAULT_REFRESH_SECONDS, 10.0, 300.0
+            ),
+            refresh_seconds_active=_number(
+                options, "refresh_seconds_active", DEFAULT_ACTIVE_REFRESH_SECONDS, 2.0, 60.0
+            ),
+            report_stream_seconds=_report_stream(options),
         )

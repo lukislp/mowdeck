@@ -56,8 +56,51 @@ async def _shared_manager() -> Any:
             manager = _NoDiscoveryManager(get_adapters(), slot_manager=None)
             set_manager(manager)
             await manager.async_setup()
+            install_bleak_wrappers()
             _manager = manager
     return _manager
+
+
+def install_bleak_wrappers() -> None:
+    """Route ``BleakClient`` and ``BleakScanner`` through habluetooth, i.e. the proxy.
+
+    PyMammotion opens its Bluetooth link with a bare ``BleakClient(address)``. Without the
+    wrappers bleak picks the platform backend (BlueZ in the container), which knows no such
+    device and fails with ``KeyError('path')``; the wrappers resolve the address through the
+    habluetooth manager, so the connection goes over the ESPHome proxy that saw the mower. This
+    is what Home Assistant does at start-up (``install_multiple_bleak_catcher``). Modules that
+    bound the names at import time, such as PyMammotion's ``bluetooth.ble``, are re-pointed as
+    well. Safe to call more than once.
+    """
+    import sys
+
+    from habluetooth import HaBleakClientWrapper, HaBleakScannerWrapper
+    from habluetooth.usage import (
+        ORIGINAL_BLEAK_CLIENT,
+        ORIGINAL_BLEAK_RETRY_CONNECTOR_CLIENT_WITH_SERVICE_CACHE,
+        ORIGINAL_BLEAK_SCANNER,
+        HaBleakClientWithServiceCache,
+        install_multiple_bleak_catcher,
+    )
+
+    install_multiple_bleak_catcher()
+    # Names bound at import time (PyMammotion's transport uses
+    # ``establish_connection(BleakClientWithServiceCache, ...)``): point them at the wrappers.
+    replacements = (
+        ("BleakClient", ORIGINAL_BLEAK_CLIENT, HaBleakClientWrapper),
+        ("BleakScanner", ORIGINAL_BLEAK_SCANNER, HaBleakScannerWrapper),
+        (
+            "BleakClientWithServiceCache",
+            ORIGINAL_BLEAK_RETRY_CONNECTOR_CLIENT_WITH_SERVICE_CACHE,
+            HaBleakClientWithServiceCache,
+        ),
+    )
+    for name, module in list(sys.modules.items()):
+        if not name.startswith("pymammotion") or module is None:
+            continue
+        for attribute, original, wrapper in replacements:
+            if getattr(module, attribute, None) is original:
+                setattr(module, attribute, wrapper)
 
 
 async def open_proxy(

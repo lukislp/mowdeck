@@ -166,3 +166,27 @@ def test_mammotion_pymammotion_is_imported_by_the_port_module_only() -> None:
         or "from pymammotion" in path.read_text("utf-8")
     )
     assert importers == ["port.py"]
+
+
+def test_ble_proxy_options_refresh_like_the_cloud() -> None:
+    """The bridge link asks for fresh state too; the keys and bounds match the cloud link."""
+    from mowdeck_control_mammotion.options import (
+        DEFAULT_ACTIVE_REFRESH_SECONDS,
+        DEFAULT_REFRESH_SECONDS,
+        DEFAULT_REPORT_STREAM_SECONDS,
+        BleProxyOptions,
+    )
+
+    base = {"host": "10.0.0.5", "noise_psk": "A" * 43 + "=", "ble_address": "aa:bb:cc:dd:ee:ff"}
+    parsed = BleProxyOptions.parse(base)
+    assert parsed.refresh_seconds == DEFAULT_REFRESH_SECONDS
+    assert parsed.refresh_seconds_active == DEFAULT_ACTIVE_REFRESH_SECONDS
+    assert parsed.report_stream_seconds == DEFAULT_REPORT_STREAM_SECONDS
+    tuned = BleProxyOptions.parse(
+        {**base, "refresh_seconds": 20, "refresh_seconds_active": 3, "report_stream_seconds": 0}
+    )
+    assert (tuned.refresh_seconds, tuned.refresh_seconds_active, tuned.report_stream_seconds) == (
+        20.0,
+        3.0,
+        0.0,
+    )

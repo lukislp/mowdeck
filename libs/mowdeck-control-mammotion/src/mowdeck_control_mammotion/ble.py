@@ -88,6 +88,9 @@ class MammotionBleProxyConnection(MammotionBase):
             map_sync_timeout_s=options.map_sync_timeout_s,
             confirm_timeout_s=options.confirm_timeout_s,
             clock=clock,
+            refresh_interval_s=options.refresh_seconds,
+            active_refresh_interval_s=options.refresh_seconds_active,
+            report_stream_s=options.report_stream_seconds,
         )
         self.options = options
         self._session: BleDriveSession | None = None
