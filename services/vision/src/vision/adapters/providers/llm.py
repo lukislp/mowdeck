@@ -29,18 +29,12 @@ from mowdeck_contracts.v1 import VisionTask
 from mowdeck_service_kit import get_logger
 from pydantic import BaseModel, ValidationError
 
-from vision.adapters.providers.calibration_prompt import (
-    CORRESPONDENCE_FORMAT,
-    calibration_content,
-    calibration_system_prompt,
-)
 from vision.adapters.providers.prompt import (
     RESPONSE_FORMAT,
     extract_json,
     system_prompt,
     user_content,
 )
-from vision.domain.calibration import Correspondences, CorrespondencesOut, FrameSize
 from vision.domain.context import SceneContext
 from vision.domain.errors import ProviderFailed
 from vision.domain.models import Assessment, AssessmentOut, Image, ProviderConfig, Usage
@@ -147,18 +141,6 @@ class LiteLlmProvider:
             RESPONSE_FORMAT,
         )
         return Assessment(answer, self.config.model, self.config.family, usage)
-
-    async def correspond(
-        self, left: Image, right: Image, left_size: FrameSize, right_size: FrameSize
-    ) -> Correspondences:
-        """Ask the model for corresponding points of the two frames (panorama calibration)."""
-        answer, usage = await self._ask(
-            lambda prompt_mode: calibration_system_prompt(prompt_mode=prompt_mode),
-            calibration_content(left, right, left_size, right_size),
-            CorrespondencesOut,
-            CORRESPONDENCE_FORMAT,
-        )
-        return Correspondences(answer, self.config.model, self.config.family, usage)
 
     async def _ask[T: BaseModel](
         self,

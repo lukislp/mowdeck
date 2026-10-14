@@ -23,7 +23,6 @@ from mowdeck_contracts.v1 import (
     VisionTrigger,
 )
 
-from vision.domain.calibration import Correspondences, FrameSize
 from vision.domain.context import SceneContext
 from vision.domain.models import (
     Assessment,
@@ -61,13 +60,6 @@ class VisionProvider(Protocol):
         self, images: list[Image], context: SceneContext, task: VisionTask
     ) -> Assessment:
         """Assess the scene and propose at most six drive steps (blades off)."""
-        ...
-
-    async def correspond(
-        self, left: Image, right: Image, left_size: FrameSize, right_size: FrameSize
-    ) -> Correspondences:
-        """Corresponding points of the left and the right front camera frame (panorama
-        calibration, ADR 0037), in pixel coordinates of each image; no geometry."""
         ...
 
 

@@ -20,8 +20,6 @@ GET  /proposals/{id}/images/{index}         ``can_view``    an image the model s
 POST /proposals/{id}/approve                ``can_drive``   approve: drive it on the caller's behalf
 POST /proposals/{id}/reject                 ``can_drive``   reject, or cancel a running execution
 POST /proposals/{id}/retry                  ``can_drive``   another round (up to the limit)
-POST /calibration/correspondences           ``can_view``    corresponding points of a left and a
-                                                            right frame (panorama calibration)
 ==========================================  ==============  ====================================
 """
 
@@ -30,13 +28,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, Path, Query, Request, Response, UploadFile, status
-from mowdeck_authz import Relation, mower
-from mowdeck_authz.fastapi import authorize
 from mowdeck_contracts.v1 import VisionTask
 
 from vision.adapters.api.deps import (
     AutoSettingsDep,
-    CalibrationDep,
     CallerDep,
     MowerDriver,
     MowerViewer,
@@ -46,8 +41,6 @@ from vision.adapters.api.deps import (
     ServiceDep,
 )
 from vision.adapters.api.schemas import (
-    CalibrationIn,
-    CalibrationOut,
     FamilyOut,
     PreferencesIn,
     PreferencesOut,
@@ -272,24 +265,3 @@ async def retry(body: RetryIn, access: ProposalDriver, service: ServiceDep) -> P
     images = [image.to_image() for image in body.images]
     created = await service.retry(principal, proposal.id, images)
     return ProposalOut.of(created, rounds_left=service.config.max_rounds - created.round)
-
-
-@router.post("/calibration/correspondences")
-async def calibration_correspondences(
-    body: CalibrationIn, request: Request, calibration: CalibrationDep
-) -> CalibrationOut:
-    """Corresponding points for the camera panorama calibration (ADR 0037): the caller's
-    provider (or the installation's) gets the ``left`` and ``right`` front camera frame of the
-    same moment and returns 8 to 16 points that show the same detail in both, in pixels of each
-    frame. Points off the images are dropped; fewer than four usable ones answer 502
-    ``vision-provider-failed``, a call beyond the calibration's time budget 504
-    ``vision-provider-timeout``. Nothing is proposed or driven: ``can_view`` on the mower is
-    enough. Recorded for cost accounting as ``kind = calibration`` with its own daily cap (429
-    ``vision-quota``). 403 ``feature-not-in-plan`` without ``ai_recover``, 409
-    ``vision-provider-missing`` without a usable provider, 422 for images that cannot be
-    decoded or were captured too far apart."""
-    principal = await authorize(request, Relation.CAN_VIEW, mower(body.mower_id))
-    answer = await calibration.correspondences(
-        principal, body.mower_id, body.left.to_image(), body.right.to_image()
-    )
-    return CalibrationOut.of(answer)

@@ -186,11 +186,6 @@ config:
   # Automatic AI analysis on errors (ADR 0035): users opt in in the web app; a mower entering a
   # recoverable error gets a proposal that still needs an approval. "false": off for everyone.
   VISION_AUTO_ENABLED: "true"
-  VISION_CALIBRATION_DAILY_REQUESTS: "10"
-  VISION_HOSTED_ACCOUNT_DAILY_CALIBRATIONS: "20"
-  # Total time budget of one calibration call in seconds (all model attempts and retries);
-  # the browser waits 180 s for the answer, so keep it below that.
-  VISION_CALIBRATION_TIMEOUT_SECONDS: "150"
   # No automatic analysis for a mower within this many minutes after the previous analysis.
   VISION_AUTO_COOLDOWN_MINUTES: "10"
   # Automatic analyses per mower and UTC day.

@@ -30,7 +30,7 @@ What a mower can do (patterns, cameras, lights, RTK, manual drive) is reported b
 
 **Cameras** (where the mower has them)
 
-- Both front cameras live in the browser, side by side or stitched into one panorama with a calibration you choose: sliders, local feature matching in the browser, or AI-found corresponding points.
+- Both front cameras live in the browser, single or side by side.
 - Camera headlamp switch; stereo frames and automatic analysis for the AI assistant.
 
 **AI assistant (optional, your own model key)**

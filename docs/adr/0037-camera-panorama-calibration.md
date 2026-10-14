@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (2026-10-13)
+Superseded (2026-10-14)
+
+> **2026-10-14:** The "Panorama" layout and its calibration were removed. The two front cameras of the supported mower are a stereo pair with the same field of view: far objects sit at identical image positions and only near objects shift, so stitching cannot widen the view. The two frames stay useful later as a stereo pair for depth estimation, not as a panorama; the camera panel keeps the single and the side-by-side layouts.
 
 ## Context
 

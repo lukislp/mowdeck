@@ -8,11 +8,7 @@
  * front left and a front right camera (like a LUBA 2 AWD X); the picker switches between them
  * and offers "Beide", which shows both side by side (stacked on a phone), each tile live with
  * its own name, the right pattern mirrored so the two pictures differ, and no "same picture"
- * notice. "Panorama" blends both into one wide canvas (both test patterns, the right one
- * mirrored and labelled), calibrated with the overlap and offset sliders and the mirror switch
- * and once with the local feature calibration (ADR 0037: result, apply, reset; OpenCV is not
- * involved, the matcher is plain TypeScript); the raw pattern canvases stay in the page (hidden)
- * with their capture marks.
+ * notice.
  * Writes apps/web/screenshots/camera-phone.png and camera-both-phone.png.
  */
 import { fileURLToPath } from 'node:url';
@@ -157,75 +153,6 @@ test('camera: the simulated mower shows the test pattern; a viewer can open it',
   await page.waitForTimeout(7_000);
   await expect(page.getByTestId('camera-same-picture')).toHaveCount(0);
   await expect(page.getByTestId('camera-no-data')).toHaveCount(0);
-
-  // "Panorama": one wide canvas drawn from both patterns; the raw canvases stay as its sources.
-  await page.getByTestId('camera-layout-panorama').click();
-  await expect(page.getByTestId('camera-layout-panorama')).toHaveAttribute('aria-checked', 'true');
-  await expect(stage).toHaveAttribute('data-layout', 'panorama');
-  const panorama = page.getByTestId('camera-panorama');
-  await expect(panorama).toBeVisible();
-  const panoramaFrames = async () => Number(await panorama.getAttribute('data-frames'));
-  const firstFrame = await panoramaFrames();
-  await expect.poll(panoramaFrames, { timeout: 5_000 }).toBeGreaterThan(firstFrame);
-  const wide = await panorama.evaluate((node) => {
-    const canvas = node as HTMLCanvasElement;
-    const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
-    const colours = new Set<string>();
-    for (let i = 0; i < data.length; i += 4 * 997) colours.add(`${data[i]},${data[i + 1]}`);
-    return { ratio: canvas.width / canvas.height, colours: colours.size };
-  });
-  // Two 16:9 patterns with 12 % overlap: much wider than one.
-  expect(wide.ratio).toBeGreaterThan(2.5);
-  expect(wide.colours).toBeGreaterThan(3);
-  const panoramaCaption = page.getByTestId('camera-panorama-caption');
-  await expect(panoramaCaption).toContainText('Front links');
-  await expect(panoramaCaption).toContainText('Front rechts');
-  await expect(page.getByTestId('camera-pattern')).toBeHidden();
-  await expect(page.getByTestId('camera-pattern')).toHaveAttribute('data-camera-video', '');
-  await expect(page.getByTestId('camera-pattern-right')).toHaveAttribute(
-    'data-camera-side',
-    'right',
-  );
-  // Calibration: overlap, offset and mirror (the simulator's right pattern is mirrored).
-  await page.getByTestId('camera-panorama-calibrate').click();
-  await page.getByTestId('camera-panorama-overlap').fill('30');
-  await expect(panorama).toHaveAttribute('data-overlap', '30');
-  await page.getByTestId('camera-panorama-offset').fill('-5');
-  await expect(panorama).toHaveAttribute('data-offset', '-5');
-  await page.getByTestId('camera-panorama-mirror').click();
-  await expect(panorama).toHaveAttribute('data-mirror', 'true');
-  await page.getByTestId('camera-panorama-auto').click();
-  await expect(page.getByTestId('camera-panorama-auto-result')).toBeVisible();
-  await page.getByTestId('camera-panorama-reset').click();
-  await expect(panorama).toHaveAttribute('data-overlap', '12');
-  // The local calibration (features in the browser, falling back to the correlation) on the
-  // simulator's patterns. Colour bars and captions are no stereo scene: the run must finish with
-  // a result or an explained failure, never hang; a result is applied and then reset. The
-  // AI-assisted method needs a provider and is covered by the unit tests.
-  await page.getByTestId('camera-calibration-method-features').click();
-  await expect(page.getByTestId('camera-calibration-method-features')).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
-  await page.getByTestId('camera-panorama-mirror').click();
-  await page.getByTestId('camera-calibration-run').click();
-  const calibrationResult = page.getByTestId('camera-calibration-result');
-  const calibrationError = page.getByTestId('camera-calibration-error');
-  await expect(calibrationResult.or(calibrationError)).toBeVisible({ timeout: 15_000 });
-  if (await calibrationResult.isVisible()) {
-    await expect(calibrationResult).toHaveAttribute('data-method', /^(features|correlation)$/);
-    await expect(page.getByTestId('camera-calibration-after')).toBeVisible();
-    await page.getByTestId('camera-calibration-apply').click();
-    await expect(calibrationResult).toHaveCount(0);
-    await expect(panorama).toHaveAttribute('data-method', /^(features|correlation)$/);
-    await expect(page.getByTestId('camera-calibration-active')).toBeVisible();
-  } else {
-    await expect(calibrationError).toHaveAttribute('data-reason', 'no_match');
-  }
-  await page.getByTestId('camera-panorama-reset').click();
-  await expect(panorama).toHaveAttribute('data-method', 'manual');
-  await expect(panorama).toHaveAttribute('data-overlap', '12');
-  await expect(page.getByTestId('camera-same-picture')).toHaveCount(0);
 
   // Back to one camera.
   await picker.getByText('Front links').click();

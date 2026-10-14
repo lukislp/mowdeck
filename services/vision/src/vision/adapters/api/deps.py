@@ -26,7 +26,6 @@ from mowdeck_service_kit.errors import (
 
 from vision.application.assist import VisionService
 from vision.application.auto import AutoSettings
-from vision.application.calibration import CalibrationService
 from vision.application.providers import ProviderService
 from vision.domain.errors import (
     ConflictError,
@@ -35,7 +34,6 @@ from vision.domain.errors import (
     ProposalExpired,
     ProviderFailed,
     ProviderMissing,
-    ProviderTimeout,
     QuotaExceeded,
     SecretsUnavailable,
     VisionError,
@@ -67,15 +65,6 @@ def get_auto_settings(request: Request) -> AutoSettings:
     return auto
 
 
-def get_calibration(request: Request) -> CalibrationService:
-    """The panorama calibration use case (corresponding points)."""
-    calibration: CalibrationService | None = getattr(request.app.state, "calibration_service", None)
-    if calibration is None:
-        raise ServiceUnavailable("vision is starting")
-    return calibration
-
-
-CalibrationDep = Annotated[CalibrationService, Depends(get_calibration)]
 AutoSettingsDep = Annotated[AutoSettings, Depends(get_auto_settings)]
 ServiceDep = Annotated[VisionService, Depends(get_service)]
 ProvidersDep = Annotated[ProviderService, Depends(get_providers)]
@@ -155,14 +144,6 @@ class ProviderFailedProblem(ServiceError):  # noqa: N818 - a problem type, like 
     title: ClassVar[str] = "The vision model failed"
 
 
-class ProviderTimeoutProblem(ServiceError):  # noqa: N818 - a problem type, like the kit
-    """504: the model call did not finish within the use case's time budget."""
-
-    status: ClassVar[int] = 504
-    problem_type: ClassVar[str] = "vision-provider-timeout"
-    title: ClassVar[str] = "The vision model took too long"
-
-
 def to_service_error(exc: VisionError) -> ServiceError:
     """Map a use case error to a problem type."""
     match exc:
@@ -180,8 +161,6 @@ def to_service_error(exc: VisionError) -> ServiceError:
             return Conflict(exc.message)
         case QuotaExceeded():
             return QuotaProblem(exc.message)
-        case ProviderTimeout():
-            return ProviderTimeoutProblem(exc.message)
         case ProviderFailed():
             return ProviderFailedProblem(exc.message)
         case _:
