@@ -19,7 +19,7 @@
 # Environment: CLUSTER (mowdeck-test), REGISTRY (ghcr.io/lukislp/mowdeck), TAG (kind),
 # SOURCE_TAG, BUILD, E2E (1: run the acceptance test), E2E_ARGS (extra pytest arguments),
 # KEEP (1: keep the cluster), PORT (18080), NATS_IMAGE, OPENFGA_IMAGE, TRAEFIK_IMAGE (default:
-# infra/images.txt; CI passes the GHCR mirror).
+# the pinned public images of infra/compose/.env.example).
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -32,10 +32,10 @@ CNPG_CHART_VERSION=0.29.1
 TRAEFIK_CHART_VERSION=41.7.1
 images="identity fleet device-gateway telemetry realtime notifications scheduler entitlements planner vision web authz-bootstrap"
 
-listed() { awk -v a="$1" '$1 == a { print $2 }' "$root/infra/images.txt"; }
-NATS_IMAGE="${NATS_IMAGE:-$(listed nats)}"
-OPENFGA_IMAGE="${OPENFGA_IMAGE:-$(listed openfga)}"
-TRAEFIK_IMAGE="${TRAEFIK_IMAGE:-$(listed traefik)}"
+listed() { sed -n "s/^$1=//p" "$root/infra/compose/.env.example"; }
+NATS_IMAGE="${NATS_IMAGE:-$(listed NATS_IMAGE)}"
+OPENFGA_IMAGE="${OPENFGA_IMAGE:-$(listed OPENFGA_IMAGE)}"
+TRAEFIK_IMAGE="${TRAEFIK_IMAGE:-$(listed TRAEFIK_IMAGE)}"
 ns=mowdeck
 step() { printf '\n== %s\n' "$*"; }
 

@@ -34,3 +34,9 @@ Phase 4 brings the cloud operating mode of the project plan ("Betriebsarten"): t
 - Fixed names for the OpenFGA Secret and the NATS and OpenFGA services (subchart values cannot be templated): one MowDeck release per namespace.
 - The arm64 half of the Python images is built under emulation and is slow; native arm64 runners can replace QEMU without changing the Dockerfiles. The web app's build stage runs on the build platform.
 - Packages in GHCR are private like the repository until their visibility is changed.
+
+## Amendment (2026-10-14): CI pulls the pinned public images directly, without an image mirror
+
+**Decision.** The workflows pull every third-party image from its public registry: the official Docker images from ECR Public (`public.ecr.aws/docker/library/...`, Docker's mirror of Docker Hub), OpenFGA, whoami, jq and uv from GHCR, and Docker Hub only for the OpenFGA CLI, ntfy and stripe-mock. With no anonymous Docker Hub pulls of consequence, a mirror of these images in the repository's own GHCR namespace adds maintenance without benefit: packages to fill before a pull request can run, a login step and a `packages: read` permission in every job, and a second copy of the version list. The one list of pinned images is the heading "Image sources" of `infra/compose/.env.example`; CI exports it into its jobs, and the repository check `tools/repo-checks/tests/test_images.py` keeps the Dockerfiles, Compose, the chart and the workflows equal to it. The kind install test builds the images into the runner's Docker daemon (`push: false`, `load: true`) and loads them into the node (`kind load docker-image`, `pullPolicy: Never`), so only `release.yml` pushes to GHCR.
+
+**Consequences.** Every workflow except `release.yml` runs with `contents: read` alone. A rate limit of a public registry would show as a failed pull and a re-run; should that become frequent, a pull-through cache is the next step, not a mirror in the repository.

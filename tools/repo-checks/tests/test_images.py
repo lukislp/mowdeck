@@ -1,42 +1,39 @@
-"""infra/images.txt is the single list of third-party images.
+"""The "Image sources" lines of infra/compose/.env.example are the one list of third-party images.
 
 Every image default in the Dockerfiles (``ARG *_IMAGE=`` and literal ``FROM``), in the Compose
-stack (``${*_IMAGE:-...}``, literal ``image:``, ``.env.example``) and the mirror references in
-the CI workflows must come from that list, so the GHCR mirror CI pulls from cannot drift.
+stack (``${*_IMAGE:-...}``, literal ``image:``) and in the CI workflows (service containers, the
+CI-only images pinned in their ``env``) must agree with that list, so the images CI pulls from the
+public registries cannot drift from the ones the stack runs. The workflows pull no package of the
+repository's own: no image mirror, no registry login outside the release workflow.
 """
 
 import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 ARG_RE = re.compile(r"^ARG\s+(\w+_IMAGE)=(\S+)\s*$", re.MULTILINE)
 FROM_RE = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(\S+)", re.MULTILINE)
 VAR_DEFAULT_RE = re.compile(r"\$\{(\w+_IMAGE):-([^}]+)\}")
 IMAGE_LINE_RE = re.compile(r"^\s*image:\s*(\S+)\s*$", re.MULTILINE)
 ENV_LINE_RE = re.compile(r"^(\w+_IMAGE)=(\S*)\s*$", re.MULTILINE)
-MIRROR_REF_RE = re.compile(r"mowdeck-mirror/([a-z0-9-]+):([\w.-]+)")
+WORKFLOWS = ["ci.yml", "helm-kind.yml", "release.yml"]
 
 
 def _images(repo_root: Path) -> dict[str, str]:
-    """Return alias -> source image of infra/images.txt."""
+    """Return variable -> image of the ``*_IMAGE=`` lines of infra/compose/.env.example."""
+    text = (repo_root / "infra" / "compose" / ".env.example").read_text("utf-8")
     images: dict[str, str] = {}
-    for raw in (repo_root / "infra" / "images.txt").read_text("utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        alias, source = line.split()
-        assert alias not in images, f"alias {alias} listed twice"
-        images[alias] = source
+    for name, value in ENV_LINE_RE.findall(text):
+        assert name not in images, f".env.example: {name} listed twice"
+        images[name] = value
     return images
 
 
-def _variable(alias: str) -> str:
-    return alias.upper().replace("-", "_") + "_IMAGE"
-
-
-def _by_variable(repo_root: Path) -> dict[str, str]:
-    return {_variable(alias): source for alias, source in _images(repo_root).items()}
+def _tag(image: str) -> str:
+    last = image.rsplit("/", 1)[-1]
+    return last.rsplit(":", 1)[-1] if ":" in last else ""
 
 
 def _dockerfiles(repo_root: Path) -> list[Path]:
@@ -57,72 +54,115 @@ def _compose_files(repo_root: Path) -> list[Path]:
     ]
 
 
+def _workflow(repo_root: Path, name: str) -> tuple[str, dict]:
+    path = repo_root / ".github" / "workflows" / name
+    if not path.is_file():
+        pytest.skip(f"{name} does not exist")
+    text = path.read_text("utf-8")
+    return text, yaml.safe_load(text)
+
+
 def test_image_list_is_well_formed(repo_root: Path) -> None:
     images = _images(repo_root)
-    assert images, "infra/images.txt lists no image"
-    for alias, source in images.items():
-        assert re.fullmatch(r"[a-z0-9][a-z0-9-]*", alias), f"alias {alias!r}: lower case, digits, -"
-        assert "@" not in source, f"{source}: use a tag, the mirror keeps the tag"
-        tag = source.rsplit(":", 1)[-1] if ":" in source.rsplit("/", 1)[-1] else ""
-        assert tag, f"{source} must pin a tag"
-        assert tag != "latest", f"{source} must not use :latest"
+    assert images, "infra/compose/.env.example pins no *_IMAGE"
+    for name, source in images.items():
+        assert "@" not in source, f"{name}={source}: pin a tag, not a digest"
+        assert _tag(source), f"{name}={source} must pin a tag"
+        assert _tag(source) != "latest", f"{name}={source} must not use :latest"
 
 
 def test_dockerfiles_use_listed_base_images(repo_root: Path) -> None:
-    by_variable = _by_variable(repo_root)
-    sources = set(by_variable.values())
+    images = _images(repo_root)
+    sources = set(images.values())
     checked = 0
     for path in _dockerfiles(repo_root):
         text = path.read_text("utf-8")
         args = dict(ARG_RE.findall(text))
         for name, default in args.items():
-            assert by_variable.get(name) == default, (
-                f"{path}: ARG {name}={default} differs from infra/images.txt "
-                f"({by_variable.get(name, 'not listed')})"
+            assert images.get(name) == default, (
+                f"{path}: ARG {name}={default} differs from .env.example "
+                f"({images.get(name, 'not listed')})"
             )
             checked += 1
         stages = {m.group(1) for m in re.finditer(r"\bAS\s+(\S+)", text, re.IGNORECASE)}
         for base in FROM_RE.findall(text):
             if base.startswith("${") or base in stages or base == "scratch":
                 continue
-            assert base in sources, f"{path}: FROM {base} is not listed in infra/images.txt"
+            assert base in sources, f"{path}: FROM {base} is not pinned in .env.example"
             checked += 1
     assert checked >= 10
 
 
 def test_compose_defaults_use_listed_images(repo_root: Path) -> None:
-    by_variable = _by_variable(repo_root)
-    sources = set(by_variable.values())
+    images = _images(repo_root)
+    sources = set(images.values())
     for path in _compose_files(repo_root):
         text = path.read_text("utf-8")
         for name, default in VAR_DEFAULT_RE.findall(text):
-            assert by_variable.get(name) == default, (
-                f"{path}: ${{{name}:-{default}}} differs from infra/images.txt "
-                f"({by_variable.get(name, 'not listed')})"
+            assert images.get(name) == default, (
+                f"{path}: ${{{name}:-{default}}} differs from .env.example "
+                f"({images.get(name, 'not listed')})"
             )
         for image in IMAGE_LINE_RE.findall(text):
             if image.startswith(("mowdeck/", "${")):
                 continue
-            assert image in sources, f"{path}: image {image} is not listed in infra/images.txt"
+            assert image in sources, f"{path}: image {image} is not pinned in .env.example"
 
 
-def test_env_example_matches_the_list(repo_root: Path) -> None:
-    by_variable = _by_variable(repo_root)
-    text = (repo_root / "infra" / "compose" / ".env.example").read_text("utf-8")
-    env = dict(ENV_LINE_RE.findall(text))
+def test_env_example_covers_the_compose_variables(repo_root: Path) -> None:
+    images = _images(repo_root)
     compose = (repo_root / "infra" / "compose" / "docker-compose.yml").read_text("utf-8")
     used = {name for name, _ in VAR_DEFAULT_RE.findall(compose)}
-    assert used <= env.keys(), f".env.example misses {sorted(used - env.keys())}"
-    for name, value in env.items():
-        assert by_variable.get(name) == value, f".env.example: {name}={value} differs from the list"
+    assert used <= images.keys(), f".env.example misses {sorted(used - images.keys())}"
 
 
-@pytest.mark.parametrize("workflow", ["ci.yml"])
-def test_ci_mirror_references_are_listed(repo_root: Path, workflow: str) -> None:
-    path = repo_root / ".github" / "workflows" / workflow
-    if not path.is_file():
-        pytest.skip(f"{workflow} does not exist")
+@pytest.mark.parametrize("workflow", WORKFLOWS)
+def test_workflow_images_are_pinned_and_listed(repo_root: Path, workflow: str) -> None:
+    """Service containers and the CI-only images of the workflows agree with the list."""
+    text, data = _workflow(repo_root, workflow)
     images = _images(repo_root)
-    for alias, tag in MIRROR_REF_RE.findall(path.read_text("utf-8")):
-        assert alias in images, f"{workflow}: mirror image {alias} is not in infra/images.txt"
-        assert images[alias].endswith(f":{tag}"), f"{workflow}: {alias}:{tag} != {images[alias]}"
+    sources = set(images.values())
+    for name, value in (data.get("env") or {}).items():
+        if not name.endswith("_IMAGE"):
+            continue
+        assert "${{" not in str(value), f"{workflow}: env {name} must be a literal image"
+        assert _tag(str(value)) not in {"", "latest"}, f"{workflow}: env {name}={value} not pinned"
+        if name in images:
+            assert images[name] == value, f"{workflow}: env {name}={value} != {images[name]}"
+    for job_name, job in data["jobs"].items():
+        for service, spec in (job.get("services") or {}).items():
+            image = spec["image"]
+            assert image in sources, (
+                f"{workflow}: job {job_name} service {service} runs {image}, "
+                "which .env.example does not pin"
+            )
+    assert "infra/compose/.env.example" in text, f"{workflow}: the image list is not used"
+
+
+@pytest.mark.parametrize("workflow", WORKFLOWS)
+def test_workflows_use_no_image_mirror(repo_root: Path, workflow: str) -> None:
+    text, data = _workflow(repo_root, workflow)
+    assert "mowdeck-mirror" not in text and "mirror-env" not in text, (
+        f"{workflow}: the images come from the public registries, not from a mirror"
+    )
+    if workflow != "release.yml":
+        assert "packages" not in (data.get("permissions") or {}), (
+            f"{workflow}: only release.yml needs the packages permission"
+        )
+
+
+def test_kind_workflow_pushes_nothing(repo_root: Path) -> None:
+    """The kind install test builds locally and loads the images into the node."""
+    text, data = _workflow(repo_root, "helm-kind.yml")
+    assert "docker/login-action" not in text
+    kind_test = (repo_root / "infra" / "helm" / "kind-test.sh").read_text("utf-8")
+    assert "kind load docker-image" in kind_test
+    for job in data["jobs"].values():
+        for step in job["steps"]:
+            if "docker/build-push-action" in str(step.get("uses", "")):
+                assert step["with"].get("push") is False, f"{step['name']}: must not push"
+                assert step["with"].get("load") is True, f"{step['name']}: must load"
+    values = yaml.safe_load(
+        (repo_root / "infra" / "helm" / "mowdeck" / "ci" / "kind-values.yaml").read_text("utf-8")
+    )
+    assert values["image"]["pullPolicy"] in {"Never", "IfNotPresent"}

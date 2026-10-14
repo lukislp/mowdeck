@@ -68,7 +68,7 @@ curl https://mowdeck.example.org/api/v1/billing/status
   ```
 
   (`--status active|trialing|past_due|unpaid|canceled|...`; the account id is in `GET /api/v1/identity/me`).
-- **stripe-mock** (`stripe/stripe-mock`, in `infra/images.txt` for CI): `BILLING_STRIPE_API_BASE=http://stripe-mock:12111` with any `sk_test_...` key validates every request against Stripe's API definition, but it keeps no state and sends no webhooks.
+- **stripe-mock** (`stripe/stripe-mock`, pinned in `.github/workflows/ci.yml` for the python job): `BILLING_STRIPE_API_BASE=http://stripe-mock:12111` with any `sk_test_...` key validates every request against Stripe's API definition, but it keeps no state and sends no webhooks.
 
 ## Operations
 

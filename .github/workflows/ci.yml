@@ -15,24 +15,21 @@ concurrency:
 
 permissions:
   contents: read
-  # Third-party images come from the repository's GHCR mirror (infra/images.txt, filled by
-  # .github/workflows/mirror-images.yml), pulled with GITHUB_TOKEN instead of the shared,
-  # rate limited anonymous quota of Docker Hub and ECR Public.
-  packages: read
 
+# Third-party images come from public registries without a login (ECR Public, ghcr.io, Docker
+# Hub): the Compose example file infra/compose/.env.example pins their versions, the CI-only
+# images are pinned here. The repository has no GHCR mirror and pulls none of its own packages.
 env:
-  MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck-mirror
+  NTFY_IMAGE: binwiederhier/ntfy:v2.28.0
+  STRIPE_MOCK_IMAGE: stripe/stripe-mock:v0.206.0
 
 jobs:
   python:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        # Same tag as the postgres line of infra/images.txt (checked by repo-checks).
-        image: ghcr.io/${{ github.repository_owner }}/mowdeck-mirror/postgres:17.11-alpine
-        credentials:
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        # Same image as POSTGRES_IMAGE in infra/compose/.env.example (checked by repo-checks).
+        image: public.ecr.aws/docker/library/postgres:17.11-alpine
         env:
           POSTGRES_PASSWORD: test
         ports:
@@ -44,18 +41,11 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v7.0.1
-      # Log in to GHCR and export NAME_IMAGE=<mirror>/<alias>:<tag> for every image of
-      # infra/images.txt (PYTHON_IMAGE, NATS_IMAGE, ...) to the following steps.
-      - &ghcr-login
-        name: Log in to the GHCR image mirror
-        uses: docker/login-action@v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - &mirror-env
-        name: Use the image mirror
-        run: sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" | tee -a "$GITHUB_ENV"
+      # Export NAME_IMAGE=<image:tag> for every pinned third-party image of the Compose example
+      # file (PYTHON_IMAGE, NATS_IMAGE, ...) to the following steps: the one list of image versions.
+      - &image-versions
+        name: Image versions (infra/compose/.env.example)
+        run: grep -E '^[A-Z_]+_IMAGE=' infra/compose/.env.example | tee -a "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           version: "0.12.24"
@@ -119,11 +109,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - *ghcr-login
-      - *mirror-env
+      - *image-versions
       - name: fga model test
         run: docker run --rm -v "$PWD/infra/openfga:/w" -w /w "$FGA_CLI_IMAGE" model test --tests model.fga.yaml
-      # sync_model_json.py runs the CLI image named by FGA_CLI_IMAGE (the mirror here).
+      # sync_model_json.py runs the CLI image named by FGA_CLI_IMAGE.
       - name: Packaged model.json matches model.fga
         run: python3 infra/openfga/sync_model_json.py --check
       - name: Bootstrap job is idempotent
@@ -214,8 +203,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - *ghcr-login
-      - *mirror-env
+      - *image-versions
       - uses: docker/setup-buildx-action@v4.4.1
       # amd64 only for now; the images have no architecture specific steps, an arm64
       # build (QEMU or a native arm runner) follows with the release workflow.
@@ -359,8 +347,7 @@ jobs:
           version: "0.12.24"
           enable-cache: true
       - run: uv sync
-      - *ghcr-login
-      - *mirror-env
+      - *image-versions
       - uses: docker/setup-buildx-action@v4.4.1
       - name: Build service images (cached)
         uses: docker/build-push-action@v7.4.0
@@ -450,12 +437,9 @@ jobs:
           load: true
           tags: mowdeck/web:dev
           cache-from: type=gha,scope=web
-      # .env.example with every *_IMAGE line replaced by the mirror (exported above).
+      # The example file as it is (public images, development defaults).
       - name: Configure the stack
-        run: |
-          sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" > mirror.env
-          awk -F= 'NR == FNR { skip[$1] = 1; next } !($1 in skip)' mirror.env infra/compose/.env.example > infra/compose/.env
-          cat mirror.env >> infra/compose/.env
+        run: cp infra/compose/.env.example infra/compose/.env
       - name: Start the stack
         run: docker compose -f infra/compose/docker-compose.yml up -d --build --wait --wait-timeout 600
       - name: Acceptance test (including the slow idle WebSocket check)
@@ -491,8 +475,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter e2e-web
       - run: pnpm --filter e2e-web exec playwright install --with-deps chromium
-      - *ghcr-login
-      - *mirror-env
+      - *image-versions
       - uses: docker/setup-buildx-action@v4.4.1
       - name: Build images (cached)
         uses: docker/build-push-action@v7.4.0
@@ -543,14 +526,12 @@ jobs:
           load: true
           tags: mowdeck/web:dev
           cache-from: type=gha,scope=web
-      # .env.example with every *_IMAGE line replaced by the mirror (exported above) and the
-      # suite's overrides (tests/e2e-web/stack.env: static weather with the dev endpoint).
+      # The example file plus the suite's overrides (tests/e2e-web/stack.env: static weather with
+      # the dev endpoint); a later line in .env overrides an earlier one.
       - name: Configure the stack
         run: |
-          sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" > mirror.env
-          grep '^[A-Z_]*=' tests/e2e-web/stack.env >> mirror.env
-          awk -F= 'NR == FNR { skip[$1] = 1; next } !($1 in skip)' mirror.env infra/compose/.env.example > infra/compose/.env
-          cat mirror.env >> infra/compose/.env
+          cp infra/compose/.env.example infra/compose/.env
+          grep '^[A-Z_]*=' tests/e2e-web/stack.env >> infra/compose/.env
       - name: Start the stack
         run: docker compose -f infra/compose/docker-compose.yml up -d --build --wait --wait-timeout 600
       - name: Phase 2 gate (Playwright)

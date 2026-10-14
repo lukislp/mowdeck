@@ -16,10 +16,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read
-
-env:
-  MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck-mirror
 
 jobs:
   kind:
@@ -27,15 +23,11 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: docker/login-action@v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      # NATS_IMAGE, OPENFGA_IMAGE, TRAEFIK_IMAGE and the base images from the GHCR mirror; the
-      # test script pulls them on the runner and loads them into the kind node.
-      - name: Use the image mirror
-        run: sh infra/mirror-env.sh "$(echo "$MIRROR" | tr '[:upper:]' '[:lower:]')" | tee -a "$GITHUB_ENV"
+      # NATS_IMAGE, OPENFGA_IMAGE, TRAEFIK_IMAGE and the base images as pinned in the Compose
+      # example file (public registries); the test script pulls the three infrastructure images
+      # on the runner and loads them into the kind node together with the images built below.
+      - name: Image versions (infra/compose/.env.example)
+        run: grep -E '^[A-Z_]+_IMAGE=' infra/compose/.env.example | tee -a "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           version: "0.12.24"
@@ -45,7 +37,11 @@ jobs:
         with:
           version: v4.3.0
       - uses: docker/setup-buildx-action@v4.4.1
-      # amd64 images with the GitHub Actions cache of the CI docker job (same scopes).
+      # amd64 images with the GitHub Actions cache of the CI docker job (same scopes), built into
+      # the runner's Docker daemon only (push: false, load: true): no registry is involved, the
+      # test script loads them into the kind node with `kind load docker-image` and the chart runs
+      # them with pullPolicy Never (ci/kind-values.yaml). The ghcr.io/lukislp/mowdeck/<image> names
+      # are the chart's defaults; nothing is pushed under them here.
       - name: Build identity
         uses: docker/build-push-action@v7.4.0
         with:
@@ -54,6 +50,7 @@ jobs:
           build-args: &python-build-args |
             PYTHON_IMAGE=${{ env.PYTHON_IMAGE }}
             UV_IMAGE=${{ env.UV_IMAGE }}
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/identity:kind
           cache-from: type=gha,scope=identity
@@ -63,6 +60,7 @@ jobs:
           context: .
           file: services/fleet/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/fleet:kind
           cache-from: type=gha,scope=fleet
@@ -72,6 +70,7 @@ jobs:
           context: .
           file: services/device-gateway/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/device-gateway:kind
           cache-from: type=gha,scope=device-gateway
@@ -81,6 +80,7 @@ jobs:
           context: .
           file: services/telemetry/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/telemetry:kind
           cache-from: type=gha,scope=telemetry
@@ -90,6 +90,7 @@ jobs:
           context: .
           file: services/realtime/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/realtime:kind
           cache-from: type=gha,scope=realtime
@@ -99,6 +100,7 @@ jobs:
           context: .
           file: services/notifications/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/notifications:kind
           cache-from: type=gha,scope=notifications
@@ -108,6 +110,7 @@ jobs:
           context: .
           file: services/scheduler/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/scheduler:kind
           cache-from: type=gha,scope=scheduler
@@ -117,6 +120,7 @@ jobs:
           context: .
           file: services/entitlements/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/entitlements:kind
           cache-from: type=gha,scope=entitlements
@@ -126,6 +130,7 @@ jobs:
           context: .
           file: services/planner/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/planner:kind
           cache-from: type=gha,scope=planner
@@ -135,6 +140,7 @@ jobs:
           context: .
           file: services/vision/Dockerfile
           build-args: *python-build-args
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/vision:kind
           cache-from: type=gha,scope=vision
@@ -146,6 +152,7 @@ jobs:
           build-args: |
             NODE_IMAGE=${{ env.NODE_IMAGE }}
             NGINX_IMAGE=${{ env.NGINX_IMAGE }}
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/web:kind
           cache-from: type=gha,scope=web
@@ -158,6 +165,7 @@ jobs:
             FGA_CLI_IMAGE=${{ env.FGA_CLI_IMAGE }}
             JQ_IMAGE=${{ env.JQ_IMAGE }}
             BUSYBOX_IMAGE=${{ env.BUSYBOX_IMAGE }}
+          push: false
           load: true
           tags: ghcr.io/lukislp/mowdeck/authz-bootstrap:kind
       - uses: helm/kind-action@v1.15.1

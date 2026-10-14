@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # MowDeck web app: SvelteKit static build served by an unprivileged nginx (uid 101, port 8080).
 # Build context: the repository root (pnpm workspace). Run read-only with a tmpfs on /tmp.
-# Base images: public defaults, overridable with --build-arg (CI uses the GHCR mirror of
-# infra/images.txt).
+# Base images: public defaults, overridable with --build-arg (the pinned list is
+# infra/compose/.env.example, which CI passes).
 
 ARG NODE_IMAGE=public.ecr.aws/docker/library/node:22.23.3-alpine
 ARG NGINX_IMAGE=public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine

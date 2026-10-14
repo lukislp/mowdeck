@@ -30,7 +30,7 @@ image:
 imagePullSecrets: []
 # Base images of the MowDeck images are build arguments, not deployment settings: PYTHON_IMAGE,
 # UV_IMAGE, NODE_IMAGE, NGINX_IMAGE, BUSYBOX_IMAGE, FGA_CLI_IMAGE and JQ_IMAGE are set by the release
-# workflow from infra/images.txt. TRAEFIK_IMAGE and WHOAMI_IMAGE have no counterpart: the cluster's
+# workflow from infra/compose/.env.example. TRAEFIK_IMAGE and WHOAMI_IMAGE have no counterpart: the cluster's
 # ingress controller replaces Traefik (see `ingress`) and the whoami demo route is Compose only.
 
 # --- Plain configuration (ConfigMaps) ---
@@ -642,7 +642,7 @@ nats:
   fullnameOverride: mowdeck-nats
   container:
     image:
-      # Same image as NATS_IMAGE in infra/images.txt.
+      # Same image as NATS_IMAGE in infra/compose/.env.example.
       fullImageName: public.ecr.aws/docker/library/nats:2.15.0-alpine
     resources:
       requests: {cpu: 50m, memory: 64Mi}
@@ -680,7 +680,7 @@ openfga:
   fullnameOverride: mowdeck-openfga
   replicaCount: 1
   image:
-    # Same image as OPENFGA_IMAGE in infra/images.txt.
+    # Same image as OPENFGA_IMAGE in infra/compose/.env.example.
     repository: ghcr.io/openfga/openfga
     tag: v1.22.0
     pullPolicy: IfNotPresent
