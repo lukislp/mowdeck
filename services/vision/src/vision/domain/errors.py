@@ -38,11 +38,6 @@ class ProviderFailed(VisionError):  # noqa: N818 - reads as an outcome
     """The vision model did not answer usefully (502 for the provider test)."""
 
 
-class ProviderTimeout(ProviderFailed):
-    """The model call did not finish within the use case's total time budget (504,
-    ``vision-provider-timeout``); the web maps it like a dropped connection."""
-
-
 class SecretsUnavailable(VisionError):  # noqa: N818 - reads as a state
     """API keys cannot be stored: ``MOWDECK_VISION_SECRETS_KEY`` is not set (409)."""
 

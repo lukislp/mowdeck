@@ -34,15 +34,12 @@ export interface CameraOption {
 /** The picker value of the side-by-side layout. */
 export const BOTH = 'both';
 
-/** The picker value of the panorama layout (both front cameras blended into one picture). */
-export const PANORAMA = 'panorama';
-
 /**
  * The picker's cameras: those whose uid publishes video right now (`publishing`, null: not
  * known, all with a uid), plus the chosen one while it is missing, so the choice stays visible.
  * A publisher the session does not list appears as "Camera <uid>". With `both` (the session
- * has a stereo pair) the side-by-side view and the panorama come last; they are offered even
- * when a camera of the pair does not publish, so its tile can say that it delivers nothing.
+ * has a stereo pair) the side-by-side view comes last; it is offered even when a camera of the
+ * pair does not publish, so its tile can say that it delivers nothing.
  */
 export function cameraOptions(
   cameras: readonly CameraInfo[],
@@ -62,7 +59,6 @@ export function cameraOptions(
   }
   if (both) {
     options.push({ value: BOTH, label: m.camera_both() });
-    options.push({ value: PANORAMA, label: m.camera_panorama() });
   }
   return options;
 }

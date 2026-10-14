@@ -32,6 +32,7 @@ imagePullSecrets: []
 # UV_IMAGE, NODE_IMAGE, NGINX_IMAGE, BUSYBOX_IMAGE, FGA_CLI_IMAGE and JQ_IMAGE are set by the release
 # workflow from infra/compose/.env.example. TRAEFIK_IMAGE and WHOAMI_IMAGE have no counterpart: the cluster's
 # ingress controller replaces Traefik (see `ingress`) and the whoami demo route is Compose only.
+# NTFY_IMAGE and STRIPE_MOCK_IMAGE are run by the CI integration tests alone.
 
 # --- Plain configuration (ConfigMaps) ---
 # Same names as infra/compose/.env.example; the chart passes them to the services as the
@@ -185,11 +186,6 @@ config:
   # Automatic AI analysis on errors (ADR 0035): users opt in in the web app; a mower entering a
   # recoverable error gets a proposal that still needs an approval. "false": off for everyone.
   VISION_AUTO_ENABLED: "true"
-  VISION_CALIBRATION_DAILY_REQUESTS: "10"
-  VISION_HOSTED_ACCOUNT_DAILY_CALIBRATIONS: "20"
-  # Total time budget of one calibration call in seconds (all model attempts and retries);
-  # the browser waits 180 s for the answer, so keep it below that.
-  VISION_CALIBRATION_TIMEOUT_SECONDS: "150"
   # No automatic analysis for a mower within this many minutes after the previous analysis.
   VISION_AUTO_COOLDOWN_MINUTES: "10"
   # Automatic analyses per mower and UTC day.

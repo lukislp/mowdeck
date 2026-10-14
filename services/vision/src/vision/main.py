@@ -41,7 +41,6 @@ from vision.adapters.providers.factory import DefaultProviderFactory
 from vision.adapters.providers.llm import load_litellm
 from vision.application.assist import AssistConfig, VisionService
 from vision.application.auto import AutoAnalysis, AutoSettings
-from vision.application.calibration import CalibrationConfig, CalibrationService
 from vision.application.executor import DriveConfig, Executor
 from vision.application.ports import Clock, ProviderFactory, SecretBox, Store
 from vision.application.providers import HostedDefault, ProviderPolicy, ProviderService
@@ -202,20 +201,6 @@ def build_app(
             config=auto_limits,
         )
         app.state.vision_service = service
-        app.state.calibration_service = CalibrationService(
-            store=store_ref,
-            providers=providers,
-            factory=provider_factory,
-            entitlements=plans,
-            clock=now,
-            config=CalibrationConfig(
-                user_daily_requests=settings.vision_calibration_daily_requests,
-                hosted_account_daily_requests=settings.vision_hosted_account_daily_calibrations,
-                timeout_seconds=settings.vision_calibration_timeout_seconds,
-                max_image_bytes=settings.vision_max_image_bytes,
-                max_skew_ms=settings.vision_stereo_max_skew_ms,
-            ),
-        )
         app.state.provider_service = providers
         app.state.auto_analysis = auto
         app.state.auto_settings = AutoSettings(

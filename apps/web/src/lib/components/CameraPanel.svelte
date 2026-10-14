@@ -8,11 +8,7 @@
   offers "Both": left and right side by side (stacked when the panel is narrow), each tile in
   its own element with its camera name and live resolution and frame rate; a tile whose camera
   delivers nothing within 8 s says "no data from this camera" instead of showing another
-  camera, and two tiles with the same picture say so. "Panorama" blends both front cameras into
-  one wide canvas: the right frame warped onto the left one by the mower's calibration (a
-  homography from the sliders, local features or points from the AI provider; ADR 0037, the card
-  in `CalibrationCard.svelte`), blended with a feathered ramp; the two tiles stay in the page,
-  hidden, as its sources, so the frame capture keeps grabbing the raw pictures. Every live tile is marked
+  camera, and two tiles with the same picture say so. Every live tile is marked
   (`data-camera-video`, name, side) for AI assist's frame capture. The data note reminds that the video goes through
   Mammotion's and Agora's servers and counts against the 4G allowance. Two collapsible lines
   follow for real cameras: "Diagnose" (receive statistics every 2 s) and "Advanced" (connection
@@ -20,21 +16,13 @@
 -->
 <script lang="ts">
   import { Button, ProblemNotice, SegmentedControl, Switch, tokenValue } from '@mowdeck/ui';
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
 
   import { fleetApi, unwrap } from '$lib/api/client';
   import { type DelaySource, shown, trackSummary } from '$lib/camera/diagnostics';
-  import CalibrationCard from '$lib/camera/CalibrationCard.svelte';
-  import {
-    loadCalibration,
-    saveCalibration,
-    sliderSettings,
-  } from '$lib/camera/calibration/storage';
-  import type { PanoramaCalibration } from '$lib/camera/calibration/types';
   import { CameraPlayerFactory } from '$lib/camera/factory';
-  import { BOTH, cameraLabel, cameraOptions as optionsOf, PANORAMA } from '$lib/camera/labels';
+  import { BOTH, cameraLabel, cameraOptions as optionsOf } from '$lib/camera/labels';
   import type { CameraTile } from '$lib/camera/layout';
-  import { PanoramaRenderer } from '$lib/camera/panorama-renderer';
   import type { CameraPlayer } from '$lib/camera/player';
   import {
     meanAbsDifference,
@@ -84,14 +72,6 @@
   let stage = $state<HTMLDivElement | null>(null);
   /** Both tiles have shown the same picture for a few readings. */
   let samePicture = $state(false);
-  /** The panorama's canvas, its calibration (per mower) and the frames drawn so far. */
-  let panoramaCanvas = $state<HTMLCanvasElement | null>(null);
-  // Belongs to the mower; applying a new one overrides it until the mower changes.
-  let calibration = $derived<PanoramaCalibration>(loadCalibration(mowerId));
-  let panoramaFrames = $state(0);
-  let calibrating = $state(false);
-  /** The calibration as slider values (the canvas' data attributes). */
-  const sliders = $derived(sliderSettings(calibration));
 
   const ERRORS: Record<CameraErrorKind, () => string> = {
     unsupported: () => m.camera_error_unsupported(),
@@ -164,23 +144,18 @@
     optionsOf(viewer.cameras, viewer.publishing, viewer.cameraUid, viewer.pair !== null),
   );
   const pickerValue = $derived(
-    viewer.panorama
-      ? PANORAMA
-      : viewer.both
-        ? BOTH
-        : String(viewer.cameraUid ?? viewer.activeUid ?? ''),
+    viewer.both ? BOTH : String(viewer.cameraUid ?? viewer.activeUid ?? ''),
   );
-  const layoutName = $derived(viewer.panorama ? 'panorama' : viewer.both ? 'both' : 'single');
+  const layoutName = $derived(viewer.both ? 'both' : 'single');
 
   function pick(value: string): void {
     if (value === BOTH) void viewer.showBoth();
-    else if (value === PANORAMA) void viewer.showPanorama();
     else void viewer.select(Number(value));
   }
 
-  /** Test ids of the picker's segments (the layouts by name, cameras by uid). */
+  /** Test ids of the picker's segments (the layout by name, cameras by uid). */
   function pickTestid(value: string): string {
-    return value === BOTH || value === PANORAMA ? `camera-layout-${value}` : `camera-pick-${value}`;
+    return value === BOTH ? `camera-layout-${value}` : `camera-pick-${value}`;
   }
   const tiles = $derived(viewer.tiles);
   const failed = $derived(viewer.phase === 'error');
@@ -203,54 +178,6 @@
     if (tile.status !== 'live' || tile.uid === null) return null;
     return trackSummary(viewer.tracks.find((t) => t.uid === tile.uid));
   }
-
-  function setCalibration(next: PanoramaCalibration): void {
-    calibration = next;
-    saveCalibration(mowerId, next);
-  }
-
-  // The panorama: one canvas drawn from both tiles' pictures while the layout shows it; drawing
-  // pauses while the canvas is out of view or the page is hidden.
-  let renderer: PanoramaRenderer | null = null;
-  $effect(() => {
-    const canvas = panoramaCanvas;
-    if (!viewer.panorama || !canvas) return;
-    const current = untrack(
-      () =>
-        new PanoramaRenderer(canvas, {
-          sources: () => [pictureOf(0), pictureOf(1)],
-          homography: () => calibration.homography,
-          onFrame: (frames) => (panoramaFrames = frames),
-          background: (stage ? tokenValue('--md-color-ink', stage) : '') || '#000',
-        }),
-    );
-    renderer = current;
-    let inView = true;
-    const visibility = () => current.setVisible(inView && document.visibilityState !== 'hidden');
-    const resized = new ResizeObserver(([entry]) =>
-      current.resize(entry?.contentRect.width ?? 0, window.devicePixelRatio || 1),
-    );
-    resized.observe(canvas);
-    const seen = new IntersectionObserver(([entry]) => {
-      inView = entry?.isIntersecting ?? true;
-      visibility();
-    });
-    seen.observe(canvas);
-    document.addEventListener('visibilitychange', visibility);
-    current.start();
-    return () => {
-      current.stop();
-      resized.disconnect();
-      seen.disconnect();
-      document.removeEventListener('visibilitychange', visibility);
-      if (renderer === current) renderer = null;
-    };
-  });
-  // New calibration: draw again at once.
-  $effect(() => {
-    void calibration.homography;
-    renderer?.invalidate();
-  });
 
   // Two views must never show the same stream without saying so: compare small thumbnails.
   $effect(() => {
@@ -321,12 +248,7 @@
     </div>
   {/if}
 
-  <div
-    class="stage"
-    class:both={viewer.both && !viewer.panorama}
-    bind:this={stage}
-    data-layout={layoutName}
-  >
+  <div class="stage" class:both={viewer.both} bind:this={stage} data-layout={layoutName}>
     {#if viewer.phase === 'error' && viewer.error}
       <div class="problem" data-testid="camera-error" data-kind={viewer.error}>
         <ProblemNotice
@@ -349,7 +271,6 @@
       <figure
         class="tile"
         class:hidden={!shownTile}
-        class:offstage={shownTile && viewer.panorama}
         data-testid={slot === 0 ? 'camera-tile' : 'camera-tile-right'}
         data-slot={slot}
         data-status={tile?.status ?? ''}
@@ -384,7 +305,7 @@
           data-camera-name={tile?.camera?.name ?? ''}
           data-camera-side={viewer.both ? (tile?.side ?? '') : ''}
         ></video>
-        {#if tile && shownTile && !failed && !viewer.panorama}
+        {#if tile && shownTile && !failed}
           {#if tile.status === 'missing'}
             <p class="notice" data-testid="camera-no-picture">{m.camera_no_picture()}</p>
           {:else if tile.status === 'no_data'}
@@ -406,54 +327,6 @@
         {/if}
       </figure>
     {/each}
-    {#if viewer.panorama}
-      <figure class="panorama" data-testid="camera-panorama-tile">
-        <canvas
-          bind:this={panoramaCanvas}
-          class="panorama-picture"
-          class:hidden={failed || !tiles.some((t) => t.status === 'live')}
-          width="1126"
-          height="480"
-          aria-label={m.camera_panorama_label()}
-          data-testid="camera-panorama"
-          data-frames={panoramaFrames}
-          data-method={calibration.method}
-          data-overlap={Math.round(sliders.overlap * 100)}
-          data-offset={Math.round(sliders.offset * 100)}
-          data-mirror={calibration.mirror ? 'true' : 'false'}
-        ></canvas>
-        {#if !failed}
-          {#each tiles as tile (tile.slot)}
-            {#if tile.status === 'missing'}
-              <p class="notice" data-side={tile.side} data-testid="camera-no-picture">
-                {tileName(tile)}: {m.camera_no_picture()}
-              </p>
-            {:else if tile.status === 'no_data'}
-              <p class="notice" data-side={tile.side} data-testid="camera-no-data">
-                {tileName(tile)}: {m.camera_no_data()}
-              </p>
-            {/if}
-          {/each}
-          <figcaption class="caption mono" data-testid="camera-panorama-caption">
-            {#each tiles as tile (tile.slot)}
-              <span class="part" data-side={tile.side}>
-                {#if tile.side}<span class="side" aria-hidden="true"
-                    >{tile.side === 'left'
-                      ? m.camera_side_left_short()
-                      : m.camera_side_right_short()}</span
-                  >{/if}
-                <span>{tileName(tile)}</span>
-                {#if tileStats(tile)}
-                  <span class="stats">{tileStats(tile)}</span>
-                {:else if tile.status === 'connecting'}
-                  <span class="stats">{m.camera_tile_waiting()}</span>
-                {/if}
-              </span>
-            {/each}
-          </figcaption>
-        {/if}
-      </figure>
-    {/if}
     {#if samePicture && !failed}
       <p class="same" role="status" data-testid="camera-same-picture">{m.camera_same_picture()}</p>
     {/if}
@@ -485,14 +358,6 @@
         {/each}
       </div>
     {/if}
-    {#if viewer.panorama}
-      <Button
-        variant="ghost"
-        icon="settings"
-        testid="camera-panorama-calibrate"
-        onclick={() => (calibrating = !calibrating)}>{m.camera_panorama_calibrate()}</Button
-      >
-    {/if}
     {#if viewer.session && !fake}
       <Button
         variant="ghost"
@@ -503,19 +368,6 @@
       />
     {/if}
   </div>
-
-  {#if viewer.panorama && calibrating}
-    {#key mowerId}
-      <CalibrationCard
-        {mowerId}
-        {calibration}
-        onchange={setCalibration}
-        sources={() => [pictureOf(0), pictureOf(1)]}
-        live={tiles.length === 2 && tiles.every((t) => t.status === 'live')}
-        background={(stage ? tokenValue('--md-color-ink', stage) : '') || '#000'}
-      />
-    {/key}
-  {/if}
 
   <p class="hint" data-testid="camera-data-note">{m.camera_data_note()}</p>
   {#if viewer.both && !fake}
@@ -721,67 +573,6 @@
 
   .fullscreen .stage:not(.both) .tile {
     max-height: calc(100dvh - 260px);
-  }
-
-  /* The panorama's sources: still rendered (frame callbacks, AI assist's capture), not seen. */
-  .tile.offstage {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 1px;
-    height: 1px;
-    aspect-ratio: auto;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .panorama {
-    position: relative;
-    display: grid;
-    place-items: center;
-    margin: 0;
-    min-width: 0;
-    min-height: 120px;
-    background: var(--md-color-ink);
-  }
-
-  .panorama-picture {
-    grid-area: 1 / 1;
-    display: block;
-    width: 100%;
-    height: auto;
-    object-fit: contain;
-  }
-
-  .fullscreen .panorama-picture {
-    max-height: calc(100dvh - 260px);
-  }
-
-  .panorama .notice {
-    align-self: start;
-    margin-top: var(--md-space-6);
-  }
-
-  .panorama .notice[data-side='right'] {
-    justify-self: end;
-  }
-
-  .panorama .notice[data-side='left'] {
-    justify-self: start;
-  }
-
-  .part {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--md-space-1);
-  }
-
-  .part[data-side='right'] {
-    margin-left: auto;
-  }
-
-  .part .stats {
-    margin-left: var(--md-space-1);
   }
 
   .picker {

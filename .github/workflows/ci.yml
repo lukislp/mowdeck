@@ -15,21 +15,28 @@ concurrency:
 
 permissions:
   contents: read
+  # Third-party images come from the repository's GHCR mirror, ghcr.io/<owner>/mowdeck/mirror/
+  # <alias>:<tag>, which .github/workflows/mirror-images.yml fills from the "Image sources" of
+  # infra/compose/.env.example (the one list of pinned images, CI-only ones included). The jobs
+  # pull it with GITHUB_TOKEN: anonymous pulls from the public registries are rate limited (429
+  # Too Many Requests) and the limit is shared by every GitHub-hosted runner behind one address.
+  packages: read
 
-# Third-party images come from public registries without a login (ECR Public, ghcr.io, Docker
-# Hub): the Compose example file infra/compose/.env.example pins their versions, the CI-only
-# images are pinned here. The repository has no GHCR mirror and pulls none of its own packages.
 env:
-  NTFY_IMAGE: binwiederhier/ntfy:v2.28.0
-  STRIPE_MOCK_IMAGE: stripe/stripe-mock:v0.206.0
+  MOWDECK_IMAGE_MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck/mirror
 
 jobs:
   python:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        # Same image as POSTGRES_IMAGE in infra/compose/.env.example (checked by repo-checks).
-        image: public.ecr.aws/docker/library/postgres:17.11-alpine
+        # POSTGRES_IMAGE of infra/compose/.env.example through the mirror (the tag is checked by
+        # repo-checks; a service container cannot run infra/mirror-env.sh, and the owner name is
+        # lower case already).
+        image: ghcr.io/${{ github.repository_owner }}/mowdeck/mirror/postgres:17.11-alpine
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_PASSWORD: test
         ports:
@@ -41,11 +48,19 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v7.0.1
-      # Export NAME_IMAGE=<image:tag> for every pinned third-party image of the Compose example
-      # file (PYTHON_IMAGE, NATS_IMAGE, ...) to the following steps: the one list of image versions.
-      - &image-versions
-        name: Image versions (infra/compose/.env.example)
-        run: grep -E '^[A-Z_]+_IMAGE=' infra/compose/.env.example | tee -a "$GITHUB_ENV"
+      # Log in to GHCR and export NAME_IMAGE=<mirror>/<alias>:<tag> for every third-party image
+      # pinned in infra/compose/.env.example (PYTHON_IMAGE, NATS_IMAGE, NTFY_IMAGE, ...) to the
+      # following steps: the docker run commands and the build arguments pull from the mirror.
+      - &ghcr-login
+        name: Log in to the GHCR image mirror
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - &mirror-env
+        name: Use the image mirror
+        run: sh infra/mirror-env.sh | tee -a "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           version: "0.12.24"
@@ -109,7 +124,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - *image-versions
+      - *ghcr-login
+      - *mirror-env
       - name: fga model test
         run: docker run --rm -v "$PWD/infra/openfga:/w" -w /w "$FGA_CLI_IMAGE" model test --tests model.fga.yaml
       # sync_model_json.py runs the CLI image named by FGA_CLI_IMAGE.
@@ -203,7 +219,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - *image-versions
+      - *ghcr-login
+      - *mirror-env
       - uses: docker/setup-buildx-action@v4.4.1
       # amd64 only for now; the images have no architecture specific steps, an arm64
       # build (QEMU or a native arm runner) follows with the release workflow.
@@ -347,7 +364,8 @@ jobs:
           version: "0.12.24"
           enable-cache: true
       - run: uv sync
-      - *image-versions
+      - *ghcr-login
+      - *mirror-env
       - uses: docker/setup-buildx-action@v4.4.1
       - name: Build service images (cached)
         uses: docker/build-push-action@v7.4.0
@@ -437,9 +455,12 @@ jobs:
           load: true
           tags: mowdeck/web:dev
           cache-from: type=gha,scope=web
-      # The example file as it is (public images, development defaults).
+      # The example file (development defaults) with every *_IMAGE line followed by its mirror
+      # reference: a later line in .env overrides an earlier one.
       - name: Configure the stack
-        run: cp infra/compose/.env.example infra/compose/.env
+        run: |
+          cp infra/compose/.env.example infra/compose/.env
+          sh infra/mirror-env.sh >> infra/compose/.env
       - name: Start the stack
         run: docker compose -f infra/compose/docker-compose.yml up -d --build --wait --wait-timeout 600
       - name: Acceptance test (including the slow idle WebSocket check)
@@ -475,7 +496,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter e2e-web
       - run: pnpm --filter e2e-web exec playwright install --with-deps chromium
-      - *image-versions
+      - *ghcr-login
+      - *mirror-env
       - uses: docker/setup-buildx-action@v4.4.1
       - name: Build images (cached)
         uses: docker/build-push-action@v7.4.0
@@ -526,11 +548,12 @@ jobs:
           load: true
           tags: mowdeck/web:dev
           cache-from: type=gha,scope=web
-      # The example file plus the suite's overrides (tests/e2e-web/stack.env: static weather with
-      # the dev endpoint); a later line in .env overrides an earlier one.
+      # The example file, the mirror references and the suite's overrides (tests/e2e-web/stack.env:
+      # static weather with the dev endpoint); a later line in .env overrides an earlier one.
       - name: Configure the stack
         run: |
           cp infra/compose/.env.example infra/compose/.env
+          sh infra/mirror-env.sh >> infra/compose/.env
           grep '^[A-Z_]*=' tests/e2e-web/stack.env >> infra/compose/.env
       - name: Start the stack
         run: docker compose -f infra/compose/docker-compose.yml up -d --build --wait --wait-timeout 600

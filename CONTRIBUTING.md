@@ -18,7 +18,7 @@ A change is done when:
 
 A new service is generated from `templates/service` and has its own definition of done in `docs/dev/service-template.md`.
 
-A new third-party image (a base image, an infrastructure container, a CI tool image) is pinned under "Image sources" in `infra/compose/.env.example` (an image CI alone runs: in the `env` of `.github/workflows/ci.yml`) and used through its `*_IMAGE` variable or build argument; `tools/repo-checks/tests/test_images.py` keeps every default equal to that list (see `infra/compose/README.md`, "Image sources").
+A new third-party image (a base image, an infrastructure container, an image only CI runs) is pinned under "Image sources" in `infra/compose/.env.example` and used through its `*_IMAGE` variable or build argument; `tools/repo-checks/tests/test_images.py` keeps every default equal to that list. CI pulls the list through the repository's GHCR mirror: the workflow `mirror-images.yml` copies a new or bumped image there when the pull request changes the list (re-run CI jobs that pulled before the copy finished). See `infra/compose/README.md`, "Image sources".
 
 ## Running checks locally
 

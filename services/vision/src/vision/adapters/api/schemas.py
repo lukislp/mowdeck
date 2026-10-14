@@ -11,7 +11,6 @@ from pydantic import AwareDatetime, BaseModel, Field
 
 from vision.application.assist import ProposalDetails
 from vision.application.auto import AutoView
-from vision.application.calibration import CalibrationAnswer
 from vision.application.providers import ProviderView, TestResult
 from vision.domain.errors import InvalidInput
 from vision.domain.families import Family
@@ -64,73 +63,6 @@ class RecoverIn(BaseModel):
 
     task: VisionTask = VisionTask.RECOVER
     images: list[ImageIn] = Field(default_factory=list, max_length=8)
-
-
-class CalibrationIn(BaseModel):
-    """``POST /calibration/correspondences``: a left and a right front camera frame of the same
-    moment (JPEG or PNG, base64) for the mower the cameras belong to."""
-
-    mower_id: UUID
-    left: ImageIn
-    right: ImageIn
-
-
-class PointPairOut(BaseModel):
-    """One correspondence: ``[x, y]`` in pixels of the left and of the right frame."""
-
-    left: list[float] = Field(min_length=2, max_length=2)
-    right: list[float] = Field(min_length=2, max_length=2)
-    label: str
-
-
-class FrameSizeOut(BaseModel):
-    """The pixel size of a frame as the service decoded it (what the points refer to)."""
-
-    width: int
-    height: int
-
-
-class CostOut(BaseModel):
-    """What the model call cost (``cost_usd`` is LiteLLM's estimate; None without a price)."""
-
-    input_tokens: int | None
-    output_tokens: int | None
-    cost_usd: float | None
-    latency_ms: int
-    hosted: bool
-
-
-class CalibrationOut(BaseModel):
-    """The corresponding points (4 to 16, all on both images); the web app fits the
-    homography from them with RANSAC."""
-
-    points: list[PointPairOut]
-    left_size: FrameSizeOut
-    right_size: FrameSizeOut
-    model: str
-    cost: CostOut
-    dropped: int = Field(description="Points of the answer that were off the images.")
-
-    @classmethod
-    def of(cls, answer: CalibrationAnswer) -> "CalibrationOut":
-        """From the use case answer."""
-        return cls(
-            points=[
-                PointPairOut(left=list(p.left), right=list(p.right), label=p.label)
-                for p in answer.points
-            ],
-            left_size=FrameSizeOut(width=answer.left_size.width, height=answer.left_size.height),
-            right_size=FrameSizeOut(width=answer.right_size.width, height=answer.right_size.height),
-            model=answer.model,
-            cost=CostOut(
-                input_tokens=answer.usage.input_tokens,
-                output_tokens=answer.usage.output_tokens,
-                cost_usd=answer.usage.cost_usd,
-                latency_ms=answer.usage.latency_ms,
-                hosted=answer.hosted,
-            ),
-            dropped=answer.dropped,
-        )
 
 
 class RetryIn(BaseModel):

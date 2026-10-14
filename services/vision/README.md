@@ -40,10 +40,9 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | POST | `/vision/proposals/{id}/approve` | `can_drive` | Approve: drive the steps on the caller's behalf; one approval, refused after `expires_at` |
 | POST | `/vision/proposals/{id}/reject` | `can_drive` | Reject a waiting proposal or cancel a running execution |
 | POST | `/vision/proposals/{id}/retry` | `can_drive` | Another round after `not_recovered`, `aborted` or `rejected_by_ai` (up to `MOWDECK_VISION_MAX_ROUNDS`) |
-| POST | `/vision/calibration/correspondences` | `can_view` on `mower_id` | Panorama calibration ([ADR 0037](../../docs/adr/0037-camera-panorama-calibration.md)): a `left` and a `right` front camera frame of the same moment (base64 JPEG or PNG) in, 4 to 16 corresponding points (`left`, `right` as `[x, y]` pixels of each frame, `label`) with the decoded frame sizes, the model and the cost out. No proposal, nothing driven; plan `ai_recover`, the caller's provider or the installation's, `provider_requests.kind = calibration`, own daily caps; 502 `vision-provider-failed` with fewer than four usable points, 504 `vision-provider-timeout` beyond the call's time budget (`MOWDECK_VISION_CALIBRATION_TIMEOUT_SECONDS`) |
 | GET | `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` | none | Operational endpoints of the kit |
 
-Problems: `feature-not-in-plan` (403), `vision-provider-missing`, `vision-proposal-expired`, `vision-secrets-unavailable`, `conflict` (409), `vision-quota` (429), `vision-provider-failed` (502), `vision-provider-timeout` (504), `validation-failed` (422).
+Problems: `feature-not-in-plan` (403), `vision-provider-missing`, `vision-proposal-expired`, `vision-secrets-unavailable`, `conflict` (409), `vision-quota` (429), `vision-provider-failed` (502), `validation-failed` (422).
 
 Proposals carry `trigger` (`manual`, or `error` for an automatic analysis) and `trigger_error_code`.
 
@@ -117,9 +116,6 @@ The kit settings (`MOWDECK_DATABASE_URL`, `MOWDECK_NATS_URL`, ...), OpenFGA (`MO
 | `MOWDECK_VISION_MIN_CONFIDENCE` | `0.6` | Answers below this confidence are `rejected_by_ai`. |
 | `MOWDECK_VISION_USER_DAILY_REQUESTS` | `20` | Analyses per user and UTC day (own and hosted providers). |
 | `MOWDECK_VISION_HOSTED_ACCOUNT_DAILY_REQUESTS` | `50` | Analyses with the installation default per account and UTC day. |
-| `MOWDECK_VISION_CALIBRATION_DAILY_REQUESTS` | `10` | AI-assisted panorama calibrations (corresponding points) per user and UTC day. |
-| `MOWDECK_VISION_HOSTED_ACCOUNT_DAILY_CALIBRATIONS` | `20` | AI-assisted panorama calibrations with the installation default per account and UTC day. |
-| `MOWDECK_VISION_CALIBRATION_TIMEOUT_SECONDS` | `150.0` | Total time budget of one calibration call, every model attempt and retry included; beyond it the call is cancelled and answered with 504 `vision-provider-timeout`. Keep it below the browser's deadline for model calls (180 s). |
 | `MOWDECK_VISION_KEEP_IMAGES_DAYS` | `0` | Keep the images of a proposal this many days longer than its TTL (0: delete with it). |
 | `MOWDECK_VISION_MAX_IMAGES` | `4` | Images per request. |
 | `MOWDECK_VISION_MAX_IMAGE_BYTES` | `2097152` | Size of one uploaded image. |
