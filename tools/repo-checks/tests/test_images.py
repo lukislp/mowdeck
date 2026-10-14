@@ -76,7 +76,7 @@ def _workflow(repo_root: Path, name: str) -> tuple[str, dict[str, Any]]:
     return text, yaml.safe_load(text)
 
 
-def _triggers(data: dict[str, Any]) -> dict[str, Any]:
+def _triggers(data: dict[Any, Any]) -> dict[str, Any]:
     # PyYAML reads the unquoted key ``on`` as the boolean True.
     triggers: dict[str, Any] = data.get("on") or data.get(True) or {}
     return triggers
