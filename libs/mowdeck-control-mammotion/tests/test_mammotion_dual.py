@@ -2,6 +2,7 @@
 a bridge loss, scan error mapping, the firmware port calls and the update tracker."""
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Callable
 from datetime import timedelta
@@ -441,12 +442,19 @@ async def test_mammotion_dual_disconnect_closes_the_proxy_when_the_drive_session
     await _wait(lambda: conn.watcher.proxy_up)
     session = await conn.start_drive_session()
 
+    calls = {"close": 0}
+
     async def broken_close() -> None:
+        calls["close"] += 1
         raise RuntimeError("drive session close failed")
 
     session.close = broken_close  # type: ignore[method-assign]
-    with pytest.raises(RuntimeError):
+    # Disconnect marks the connection down first, so the watcher may detach Bluetooth and close
+    # the session concurrently; the failure then surfaces there instead of in disconnect. Either
+    # way the proxy and the port must end up closed.
+    with contextlib.suppress(RuntimeError):
         await conn.disconnect()
+    assert calls["close"] == 1
     assert not opener.links[0].is_alive()
     assert port.closed == 1
 
