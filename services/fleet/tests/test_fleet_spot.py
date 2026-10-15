@@ -98,7 +98,9 @@ def test_fleet_command_features_per_kind() -> None:
     assert command_features("set_light") == {"control", "camera"}
     assert command_features("spot_mow") == {"control", "spot_mowing"}
     assert command_features("spot_stop") == {"control"}
-    assert {"spot_mow"} == SINGLE_MOWER_KINDS
+    assert command_features("drive_calibrate") == {"control"}
+    assert command_features("set_drive_speed") == {"control"}
+    assert {"spot_mow", "drive_calibrate", "set_drive_speed"} == SINGLE_MOWER_KINDS
 
 
 async def test_fleet_spot_mow_needs_drive_rights_the_feature_and_one_mower() -> None:

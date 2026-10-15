@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The fitted drive behaviour of one mower, as stored in the drive link's options.",
+  "properties": {
+    "calibrated_at": {
+      "format": "date-time",
+      "title": "Calibrated At",
+      "type": "string"
+    },
+    "dead_zone": {
+      "default": 0.0,
+      "description": "`linear` below which the mower stands.",
+      "maximum": 0.9,
+      "minimum": 0,
+      "title": "Dead Zone",
+      "type": "number"
+    },
+    "drive_speed_setting": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The vendor's manual-driving speed setting during the calibration (`MowerState.drive_speed_mps`); null when the connection has none.",
+      "title": "Drive Speed Setting"
+    },
+    "full_speed_mps": {
+      "description": "Ground speed at `linear = 1`.",
+      "exclusiveMinimum": 0,
+      "maximum": 5,
+      "title": "Full Speed Mps",
+      "type": "number"
+    },
+    "full_yaw_rate_dps": {
+      "description": "Yaw rate at `angular = ±1` in degrees per second.",
+      "exclusiveMinimum": 0,
+      "maximum": 720,
+      "title": "Full Yaw Rate Dps",
+      "type": "number"
+    },
+    "turn_dead_zone": {
+      "default": 0.0,
+      "description": "`angular` below which the mower does not turn.",
+      "maximum": 0.9,
+      "minimum": 0,
+      "title": "Turn Dead Zone",
+      "type": "number"
+    }
+  },
+  "required": [
+    "full_speed_mps",
+    "full_yaw_rate_dps",
+    "calibrated_at"
+  ],
+  "title": "DriveCalibration",
+  "type": "object"
+}

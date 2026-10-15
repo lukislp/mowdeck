@@ -13,6 +13,7 @@ from mowdeck_contracts.v1 import (
     CommandAccepted,
     CommandRequest,
     CommandView,
+    DriveCalibration,
     DriveSessionView,
     FirmwareInfo,
     MowPath,
@@ -25,6 +26,7 @@ from pydantic import BaseModel
 from fleet.adapters.api.deps import (
     ActorDep,
     ControlMower,
+    DriveMower,
     ManageMower,
     ServicesDep,
     ViewMower,
@@ -230,7 +232,8 @@ async def send_command(
     services: ServicesDep,
 ) -> CommandAccepted:
     """Send a command. The relation depends on the kind: ``can_control`` (start, pause,
-    resume, dock, blade height, speed), ``can_drive`` (manual drive), ``can_emergency_stop``
+    resume, dock, blade height, speed), ``can_drive`` (manual drive, spot mow, drive
+    calibration, drive speed setting), ``can_emergency_stop``
     (emergency stop, equals ``can_view``). Checked before any database or bus access: 403 when
     the mower is visible, 404 when not."""
     principal = await authorize(request, relation_for(body.command.kind), mower(mower_id))
@@ -500,6 +503,58 @@ async def check_firmware(
     (``can_manage_mowers``)."""
     response.headers["Cache-Control"] = "no-store"
     return await services.links.firmware_check(account_id, mower_id)
+
+
+# --- drive calibration (ADR 0042) ----------------------------------------------------------
+
+_CALIBRATION_RESPONSES: dict[int | str, dict[str, Any]] = {
+    403: {"description": "The caller sees the mower but has no `can_drive`."},
+    404: {"description": "The mower does not exist or is not visible to the caller."},
+}
+
+
+@router.put(
+    "/mowers/{mower_id}/drive-calibration",
+    responses={
+        **_CALIBRATION_RESPONSES,
+        409: {
+            "description": "`drive-calibration-not-applicable`: the mower has no `ble_bridge` "
+            "link and its connection options take no calibration."
+        },
+        422: {"description": "A value out of range."},
+    },
+)
+async def set_drive_calibration(
+    mower_id: UUID,
+    body: DriveCalibration,
+    principal: DriveMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> DriveCalibration:
+    """Store the result of a drive calibration (``can_drive``, 403 when the mower is visible,
+    else 404): the values a finished ``drive_calibrate`` reported in
+    ``MowerState.drive_calibration.result.calibration``. Fleet keeps them as managed options
+    of the mower's ``ble_bridge`` link (the link's key stays as it is), or in the connection
+    options of a connection kind that takes them (the simulator), and replaces a stored
+    calibration. Audits ``mower.drive_calibration_set`` and publishes ``mower.updated``, so the
+    Device-Gateway hands the calibration to every spot run. Answers the stored calibration;
+    the mower shows it as ``MowerOut.drive_calibration``."""
+    return await services.links.set_drive_calibration(
+        actor_of(principal), account_id, mower_id, body
+    )
+
+
+@router.delete(
+    "/mowers/{mower_id}/drive-calibration", status_code=204, responses=_CALIBRATION_RESPONSES
+)
+async def delete_drive_calibration(
+    mower_id: UUID, principal: DriveMower, account_id: CurrentAccountId, services: ServicesDep
+) -> None:
+    """Forget the stored drive calibration (``can_drive``, 403 when the mower is visible, else
+    404); spot runs then go without one. Without a stored calibration
+    nothing changes. Audits ``mower.drive_calibration_removed`` and publishes
+    ``mower.updated``."""
+    await services.links.remove_drive_calibration(actor_of(principal), account_id, mower_id)
 
 
 @router.get("/commands/{command_id}")

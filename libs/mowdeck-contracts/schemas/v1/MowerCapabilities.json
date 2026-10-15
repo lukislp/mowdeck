@@ -21,6 +21,36 @@
       "title": "ConnectionKind",
       "type": "string"
     },
+    "DriveSpeedSetting": {
+      "description": "The vendor's speed setting for manual driving, as far as the connection can change it\n(``MowerCapabilities.drive_speed_setting``): the accepted range and step in m/s.",
+      "properties": {
+        "max_mps": {
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Max Mps",
+          "type": "number"
+        },
+        "min_mps": {
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Min Mps",
+          "type": "number"
+        },
+        "step_mps": {
+          "default": 0.1,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Step Mps",
+          "type": "number"
+        }
+      },
+      "required": [
+        "min_mps",
+        "max_mps"
+      ],
+      "title": "DriveSpeedSetting",
+      "type": "object"
+    },
     "RtkSource": {
       "description": "Where RTK correction data comes from.",
       "enum": [
@@ -91,6 +121,18 @@
       "default": null,
       "description": "Width of the cut swath in millimetres, if known (coverage heatmaps).",
       "title": "Cutting Width Mm"
+    },
+    "drive_speed_setting": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DriveSpeedSetting"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The vendor's speed setting for manual driving can be read (`MowerState.drive_speed_mps`) and changed (`set_drive_speed`) within this range; null when the connection cannot (ADR 0042)."
     },
     "firmware_update": {
       "default": false,

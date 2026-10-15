@@ -31,6 +31,7 @@ from mowdeck_contracts.v1 import (
     CameraSession,
     ConnectionKind,
     DockPose,
+    DriveSpeedSetting,
     FirmwareInfo,
     GeoPosition,
     GeoReference,
@@ -136,7 +137,28 @@ DEAD_ZONE_PERCENT: Final = 15.0
 """Movement scaling of ``MammotionCommand.move_forward`` / ``move_left``
 (``utility/movement.py``): input percent minus a 15 % dead zone, times 10 (linear) or 4.5
 (angular). Full stick forward is 850, full turn 382. PyMammotion's ``move_left`` sends a
-negative angular value, so MowDeck's "left is positive" is negated on the wire."""
+negative angular value, so MowDeck's "left is positive" is negated on the wire.
+
+Checked against PyMammotion 0.10.9 (ADR 0042): ``move_forward(1.0)`` runs
+``get_percent(100) = 85`` through ``RockerControlUtil.transfrom3(90, 85) = [85, 0]`` and
+``transform_both_speeds`` (``linear = 85 * 10 = 850``), ``move_left(1.0)`` gives
+``transfrom3(180, 85) = [0, -85]`` and ``int(-85 * 4.5) = -382``; ``mammotion/control.py`` uses
+the same helpers. The cloud remote drive (``device/remote_drive.py``, ``session_ctrl``) takes
+the caller's values in the same wire units unchanged and documents no other range, so nothing
+in PyMammotion sends more than 850 / 382 and these constants match it. The ground speed of a
+given wire value is not fixed by them: the mower scales the stick by the vendor's speed setting
+for manual driving (``MowerState.drive_speed_mps``), and the drive calibration measures the
+result (``DriveCalibrate``)."""
+
+DRIVE_SPEED_DEFAULT_RANGE_MPS: Final = (0.2, 1.2)
+DRIVE_SPEED_STEP_MPS: Final = 0.1
+"""The speed setting for manual driving (``MowerCapabilities.drive_speed_setting``, ADR 0042):
+read with ``get_speed`` and changed with ``set_speed`` (``MctlDriver.bidire_speed_read_set``,
+``DrvSrSpeed``; the reply sets ``mower_state.travel_speed``). The exact range of the app's
+manual-driving speed is not verified on hardware: it is taken from the model's travel speed
+limits in PyMammotion's table (``working_speed_min/max``, 0.2 to 1.2 m/s for most models), else
+the model's speed range, else this default. ``SetSpeed`` writes the same message, so the
+mowing speed and this setting may well be one value on the mower."""
 
 
 # --- State ------------------------------------------------------------------------------------
@@ -435,6 +457,7 @@ def state_of(
         light_on=light_on,
         links=dict(links) if links else {},
         firmware_info=firmware_info,
+        drive_speed_mps=drive_speed_of(device),
         raw=raw,
     )
 
@@ -797,6 +820,25 @@ def model_limits(
     return blade, speed
 
 
+def drive_speed_setting_of(device: MowerDevice, product_key: str = "") -> DriveSpeedSetting:
+    """The range of the speed setting for manual driving (see
+    :data:`DRIVE_SPEED_DEFAULT_RANGE_MPS`): the model's travel speed limits, else its speed
+    range (:func:`model_limits`), else the default."""
+    config = model_config_of(device, product_key)
+    speed = _range(config, "working_speed_min", "working_speed_max") if config else None
+    if speed is None or speed[1] > MAX_PLAUSIBLE_SPEED_MPS:
+        speed = model_limits(device, product_key)[1] or DRIVE_SPEED_DEFAULT_RANGE_MPS
+    return DriveSpeedSetting(min_mps=speed[0], max_mps=speed[1], step_mps=DRIVE_SPEED_STEP_MPS)
+
+
+def drive_speed_of(device: MowerDevice) -> float | None:
+    """The speed setting for manual driving the mower reported last
+    (``mower_state.travel_speed``, the answer to ``get_speed``); None while it is 0 or
+    implausible."""
+    speed = float(device.mower_state.travel_speed)
+    return speed if 0 < speed <= MAX_PLAUSIBLE_SPEED_MPS else None
+
+
 def path_spacing_of(device: MowerDevice, product_key: str = "") -> tuple[int, int] | None:
     """Path spacing range in centimetres of the model's table entry, None when unknown."""
     config = model_config_of(device, product_key)
@@ -816,6 +858,7 @@ def capabilities_of(
     links_supported: Sequence[str] = (),
     firmware_update: bool = False,
     undock: bool = False,
+    drive_speed: bool = False,
 ) -> MowerCapabilities:
     """Capabilities of one mower over one link (``links_supported`` and ``firmware_update``
     describe the connection, ADR 0038).
@@ -827,7 +870,9 @@ def capabilities_of(
     speed and only used when the entry has no cutting speed); the path spacing range comes from
     the same entry (:func:`path_spacing_of`, centimetres there). Without an entry the limits stay
     unset (the controller then rejects the commands): PyMammotion's own fallback for a Luba VP
-    is the Yuka table, which is wrong for it.
+    is the Yuka table, which is wrong for it. ``drive_speed``: the connection can send driver
+    commands, so it declares the speed setting for manual driving
+    (:func:`drive_speed_setting_of`).
     """
     profile = model_profile(device_name, product_key)
     with_camera = camera and has_camera(device_name, product_key)
@@ -852,6 +897,7 @@ def capabilities_of(
         links_supported=list(links_supported),
         firmware_update=firmware_update,
         undock=undock,
+        drive_speed_setting=drive_speed_setting_of(device, product_key) if drive_speed else None,
     )
 
 

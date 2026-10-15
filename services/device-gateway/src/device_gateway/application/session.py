@@ -16,6 +16,13 @@ plan with its progress as the ordinary path snapshot (``controller.current_path(
 link or a released mower closes the controller, which ends the run (``link_lost``) and so
 publishes its final result too.
 
+Drive calibration (ADR 0042): a ``drive_calibrate`` runs through the controller the same way
+(``accepted`` at once, then ``executed`` with the fit or ``failed`` with the reason); its status
+and result reach clients in ``MowerState.drive_calibration``. The stored calibration lives in the
+registration's link options (``DRIVE_CALIBRATION_OPTION_KEYS``): the session strips those keys
+before the connection is created and hands them to the controller, which applies them to every
+spot run; a change of only the calibration updates the registration without reconnecting.
+
 Link heartbeat (ADR 0040): every state the session publishes carries ``heartbeat_at``, the time
 the gateway last knew the link alive (``MowerConnection.is_connected``), and ``connected``. While
 the link is up the latest state is republished every ``heartbeat_seconds`` even when the adapter
@@ -41,6 +48,7 @@ from mowdeck_contracts.v1 import (
     CommandEnvelope,
     CommandResult,
     CommandStatus,
+    DriveCalibrate,
     FirmwareInfo,
     MowerActivity,
     MowerCapabilitiesSnapshot,
@@ -77,10 +85,12 @@ from device_gateway.application.ports import (
 from device_gateway.domain.rules import (
     ConnectionStatus,
     backoff,
+    drive_calibration_of,
     is_significant_change,
     links_changed,
     path_geometry_key,
     path_publish_due,
+    without_calibration,
 )
 
 _log = get_logger(__name__)
@@ -316,8 +326,14 @@ class MowerSession:
         return registration.model_copy(update={"connection_options": options, "links": links})
 
     async def _connect_and_run(self) -> None:
-        connection = self._provider.create(await self._connected_registration())
-        controller = MowerController(connection, mower_id=self.mower_id)
+        registration = without_calibration(await self._connected_registration())
+        connection = self._provider.create(registration)
+        controller = MowerController(
+            connection,
+            mower_id=self.mower_id,
+            # read on every spot run, so a calibration stored meanwhile applies at once
+            drive_calibration=lambda: drive_calibration_of(self.registration),
+        )
         started = False
         reason = "connection closed"
         try:
@@ -759,7 +775,47 @@ class MowerSession:
             )
             self._spot_followups.add(task)
             task.add_done_callback(self._spot_followups.discard)
+        if (
+            controller is not None
+            and isinstance(envelope.command, DriveCalibrate)
+            and result.status is CommandStatus.ACCEPTED
+        ):
+            task = asyncio.create_task(
+                self._calibration_final(controller, envelope),
+                name=f"calibration-{envelope.command_id}",
+            )
+            self._spot_followups.add(task)
+            task.add_done_callback(self._spot_followups.discard)
         return result
+
+    async def _calibration_final(
+        self, controller: MowerController, envelope: CommandEnvelope
+    ) -> None:
+        """Wait for the end of the calibration of ``envelope`` and publish its final result:
+        ``executed`` with the fit, ``failed`` with the reason."""
+        run = await controller.calibration_result(envelope.command_id)
+        if run is None:
+            status, reason = CommandStatus.FAILED, "calibration ended without a result"
+        else:
+            status = CommandStatus.EXECUTED if run.state == "done" else CommandStatus.FAILED
+            reason = run.summary()
+        _log.info(
+            "drive calibration ended",
+            mower_id=str(self.mower_id),
+            command_id=str(envelope.command_id),
+            state=run.state if run else None,
+            reason=run.reason if run else None,
+        )
+        await self._publish_result(
+            CommandResult(
+                command_id=envelope.command_id,
+                mower_id=envelope.mower_id,
+                status=status,
+                reason=reason[:500],
+                at=self._clock(),
+                correlation_id=envelope.correlation_id,
+            )
+        )
 
     async def _spot_final(self, controller: MowerController, envelope: CommandEnvelope) -> None:
         """Wait for the end of the spot run of ``envelope`` and publish its final result."""

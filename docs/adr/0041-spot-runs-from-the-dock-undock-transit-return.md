@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-15)
+Accepted (2026-10-15); amended by [ADR 0042](0042-drive-calibration.md) (2026-10-15): the transit counts towards the progress-based time limit like the plan.
 
 ## Context
 

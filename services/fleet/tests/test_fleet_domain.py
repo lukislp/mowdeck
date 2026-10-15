@@ -37,6 +37,8 @@ EXPECTED = {
     "spot_mow": Relation.CAN_DRIVE,
     "spot_stop": Relation.CAN_CONTROL,
     "manual_drive": Relation.CAN_DRIVE,
+    "drive_calibrate": Relation.CAN_DRIVE,
+    "set_drive_speed": Relation.CAN_DRIVE,
     "emergency_stop": Relation.CAN_EMERGENCY_STOP,
 }
 

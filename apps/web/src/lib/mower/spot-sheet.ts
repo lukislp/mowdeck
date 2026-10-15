@@ -370,6 +370,8 @@ export function spotReasonLabel(reason: string | null | undefined): string | nul
       return m.spot_reason_emergency_stop();
     case 'sensor_stop':
       return m.spot_reason_sensor_stop();
+    case 'stalled':
+      return m.spot_reason_stalled();
     case 'timeout':
       return m.spot_reason_timeout();
     case 'heading_mismatch':

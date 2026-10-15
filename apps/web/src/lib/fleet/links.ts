@@ -41,6 +41,8 @@ export interface BridgeLink {
   device_name: string;
   allow_manual_blades: boolean;
   manual_blade_height_mm: number | null;
+  /** `max_run_speed` sent when a drive session opens; null: the mower's own setting. */
+  manual_drive_speed_mps: number | null;
   proxy_info: ProxyInfo | null;
 }
 
@@ -48,6 +50,10 @@ const SECRET_MASK = '***';
 
 function text(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
+}
+
+function number(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function integer(value: unknown, fallback: number | null): number | null {
@@ -71,6 +77,7 @@ export function bridgeLinkOf(raw: unknown): BridgeLink | null {
     device_name: text(options.device_name),
     allow_manual_blades: options.allow_manual_blades === true,
     manual_blade_height_mm: integer(options.manual_blade_height_mm, null),
+    manual_drive_speed_mps: number(options.manual_drive_speed_mps),
     proxy_info:
       record.proxy_info && typeof record.proxy_info === 'object'
         ? (record.proxy_info as ProxyInfo)
@@ -151,6 +158,7 @@ export async function putBridgeLink(mowerId: string, input: BridgeLinkIn): Promi
       device_name: input.device_name ?? '',
       allow_manual_blades: input.allow_manual_blades,
       manual_blade_height_mm: input.manual_blade_height_mm ?? null,
+      manual_drive_speed_mps: input.manual_drive_speed_mps ?? null,
       proxy_info: null,
     }
   );

@@ -55,10 +55,88 @@ export type Connected = boolean
  * via the `definition` "ConnectionKind".
  */
 export type ConnectionKind = ("ble_bridge" | "wifi" | "cloud" | "simulated")
+export type Reason = (string | null)
+export type CalibratedAt = string
+/**
+ * `linear` below which the mower stands.
+ */
+export type DeadZone = number
+/**
+ * The vendor's manual-driving speed setting during the calibration (`MowerState.drive_speed_mps`); null when the connection has none.
+ */
+export type DriveSpeedSetting = (number | null)
+/**
+ * Ground speed at `linear = 1`.
+ */
+export type FullSpeedMps = number
+/**
+ * Yaw rate at `angular = ±1` in degrees per second.
+ */
+export type FullYawRateDps = number
+/**
+ * `angular` below which the mower does not turn.
+ */
+export type TurnDeadZone = number
+/**
+ * Ground covered going forward.
+ */
+export type ForwardM = number
+/**
+ * `linear` (forward) or `angular` (turn).
+ */
+export type Command = number
+/**
+ * Ground covered during the step.
+ */
+export type DistanceM = number
+export type DurationS = number
+export type Kind = ("forward" | "turn")
+/**
+ * Ground speed in m/s (forward) or yaw rate in degrees per second, left positive (turn); null when too few reports arrived.
+ */
+export type Measured = (number | null)
+/**
+ * Mean time between those reports.
+ */
+export type ReportIntervalS = (number | null)
+/**
+ * Position reports during the step.
+ */
+export type Reports = number
+/**
+ * Not driven: the forward distance budget was used up (room ahead).
+ */
+export type Skipped = boolean
+/**
+ * Heading change during the step.
+ */
+export type TurnedDeg = number
+/**
+ * @maxItems 32
+ */
+export type Steps = DriveCalibrationStep[]
+export type RunId = string
+export type StartedAt = (string | null)
+export type State = ("preparing" | "measuring" | "stopping" | "done" | "aborted" | "failed")
+/**
+ * The step being driven (0-based).
+ */
+export type StepIndex = number
+/**
+ * The steps measured so far.
+ * 
+ * @maxItems 32
+ */
+export type Steps1 = DriveCalibrationStep[]
+export type StepsTotal = number
 /**
  * With activity `error`: the error is not a safety sensor stop, so manual driving may free the mower (stuck, wheel slip). Lift, tilt and collision stops are never drive recoverable; the controller refuses drive frames for them.
  */
 export type DriveRecoverable = boolean
+/**
+ * The vendor's speed setting for manual driving (`MowerCapabilities.drive_speed_setting`); null when the connection has none or has not read it yet.
+ */
+export type DriveSpeedMps = (number | null)
 export type ErrorCode = (string | null)
 export type ErrorMessage = (string | null)
 export type Firmware = (string | null)
@@ -177,14 +255,14 @@ export type ProgressPercent = number
 /**
  * Why the run ended early or paused, if so.
  */
-export type Reason = (string | null)
-export type RunId = string
+export type Reason1 = (string | null)
+export type RunId1 = string
 /**
  * The segment being driven (0-based).
  */
 export type SegmentIndex = number
 export type SegmentsTotal = number
-export type State = ("preparing" | "undocking" | "waiting_rtk" | "transit" | "spot_mowing" | "paused_rtk" | "returning" | "stopping" | "done" | "aborted" | "failed")
+export type State1 = ("preparing" | "undocking" | "waiting_rtk" | "transit" | "spot_mowing" | "paused_rtk" | "returning" | "stopping" | "done" | "aborted" | "failed")
 export type Type3 = "state"
 export type MowerId2 = string
 export type At = string
@@ -194,7 +272,7 @@ export type CommandId = string
  */
 export type CorrelationId = (string | null)
 export type MowerId3 = string
-export type Reason1 = (string | null)
+export type Reason2 = (string | null)
 /**
  * Outcome of a command.
  * 
@@ -421,7 +499,12 @@ blade_height_mm?: BladeHeightMm
 charging?: Charging
 connected?: Connected
 connection: ConnectionKind
+/**
+ * The drive calibration MowDeck runs on this mower (`DriveCalibrate`, ADR 0042), with its final state and result kept until the next one; null when there never was one.
+ */
+drive_calibration?: (DriveCalibrationStatus | null)
 drive_recoverable?: DriveRecoverable
+drive_speed_mps?: DriveSpeedMps
 error_code?: ErrorCode
 error_message?: ErrorMessage
 firmware?: Firmware
@@ -444,6 +527,67 @@ speed_mps?: SpeedMps
  * The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one.
  */
 spot_run?: (SpotRunStatus | null)
+}
+/**
+ * Progress of the drive calibration on this mower (``MowerState.drive_calibration``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "DriveCalibrationStatus".
+ */
+export interface DriveCalibrationStatus {
+reason?: Reason
+/**
+ * The fit, once the calibration is `done`.
+ */
+result?: (DriveCalibrationResult | null)
+run_id: RunId
+started_at?: StartedAt
+state: State
+step_index?: StepIndex
+steps?: Steps1
+steps_total?: StepsTotal
+}
+/**
+ * What a calibration measured and fitted.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "DriveCalibrationResult".
+ */
+export interface DriveCalibrationResult {
+calibration: DriveCalibration
+forward_m?: ForwardM
+steps?: Steps
+}
+/**
+ * The fitted drive behaviour of one mower, as stored in the drive link's options.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "DriveCalibration".
+ */
+export interface DriveCalibration {
+calibrated_at: CalibratedAt
+dead_zone?: DeadZone
+drive_speed_setting?: DriveSpeedSetting
+full_speed_mps: FullSpeedMps
+full_yaw_rate_dps: FullYawRateDps
+turn_dead_zone?: TurnDeadZone
+}
+/**
+ * One measured step of a calibration.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "DriveCalibrationStep".
+ */
+export interface DriveCalibrationStep {
+command: Command
+distance_m?: DistanceM
+duration_s: DurationS
+kind: Kind
+measured?: Measured
+report_interval_s?: ReportIntervalS
+reports?: Reports
+skipped?: Skipped
+turned_deg?: TurnedDeg
 }
 /**
  * The firmware state of a mower (``MowerState.firmware_info``).
@@ -511,11 +655,11 @@ driven_points?: DrivenPoints
 dry_run?: DryRun
 planned_points?: PlannedPoints
 progress_percent?: ProgressPercent
-reason?: Reason
-run_id: RunId
+reason?: Reason1
+run_id: RunId1
 segment_index?: SegmentIndex
 segments_total?: SegmentsTotal
-state: State
+state: State1
 }
 /**
  * A command result of a subscribed mower.
@@ -539,7 +683,7 @@ at?: At
 command_id: CommandId
 correlation_id?: CorrelationId
 mower_id: MowerId3
-reason?: Reason1
+reason?: Reason2
 status: CommandStatus
 }
 /**

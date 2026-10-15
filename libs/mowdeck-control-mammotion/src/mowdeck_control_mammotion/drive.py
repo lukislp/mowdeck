@@ -6,6 +6,13 @@ controller owns the dead-man timer; there is no timer here). Blades are switched
 otherwise they are kept off. :meth:`stop` sends a zero movement and blades off; both
 :meth:`stop` and :meth:`close` are idempotent and never raise after a link loss.
 
+:meth:`BleDriveSession.begin` opens the session with one ``operate_on_device`` (blades off)
+carrying ``max_run_speed`` (ADR 0042): the vendor app's joystick sends this message with the
+manual-driving speed, while ``send_movement`` alone carries no speed limit. Before, a session
+with the blades off never sent it, so the mower kept whatever ``max_run_speed`` it had last
+received (the emergency stop sends 0.0). The value is :func:`manual_run_speed`; every later
+``operate_on_device`` of the session (blades, stop) repeats it.
+
 With a dual link (ADR 0038) the session gets ``link_up``: a frame while the Bluetooth bridge is
 down closes the session and raises :class:`~mowdeck_control.NotConnected` instead of letting
 PyMammotion route the movement over the cloud.
@@ -26,8 +33,19 @@ from mowdeck_control_mammotion.port import (
 
 _log = logging.getLogger("mowdeck_control_mammotion.drive")
 
-MAX_RUN_SPEED_MPS = 1.2
-"""``max_run_speed`` of ``operate_on_device`` as Mammotion-HA sends it."""
+MANUAL_RUN_SPEED_CAP_MPS = 1.0
+"""Highest ``max_run_speed`` a drive session sends (PyMammotion's blade helper in
+``mower_api.py`` sends 1.2; MowDeck stays below it for manual driving)."""
+
+
+def manual_run_speed(option_mps: float | None, setting_mps: float | None) -> float:
+    """``max_run_speed`` of a drive session: the link option ``manual_drive_speed_mps`` when
+    set, else the mower's own speed setting for manual driving (``mower_state.travel_speed``,
+    the answer to ``get_speed``), else the cap; never above :data:`MANUAL_RUN_SPEED_CAP_MPS`."""
+    for value in (option_mps, setting_mps):
+        if value is not None and value > 0:
+            return round(min(float(value), MANUAL_RUN_SPEED_CAP_MPS), 2)
+    return MANUAL_RUN_SPEED_CAP_MPS
 
 
 class BleDriveSession:
@@ -41,8 +59,10 @@ class BleDriveSession:
         blade_height_mm: int,
         sensor_stop: Callable[[], str | None],
         link_up: Callable[[], bool] | None = None,
+        max_run_speed_mps: float = MANUAL_RUN_SPEED_CAP_MPS,
     ) -> None:
         self._port = port
+        self._max_run_speed = max_run_speed_mps
         self._blades_allowed = blades_allowed
         self._blade_height_mm = blade_height_mm
         self._sensor_stop = sensor_stop
@@ -58,6 +78,22 @@ class BleDriveSession:
     def blades_on(self) -> bool:
         """Whether the last command switched the blades on."""
         return self._blades_on
+
+    @property
+    def max_run_speed_mps(self) -> float:
+        """The ``max_run_speed`` this session sends with every ``operate_on_device``."""
+        return self._max_run_speed
+
+    async def begin(self) -> None:
+        """Open the session on the mower: ``operate_on_device`` with the blades off and
+        ``max_run_speed``, so the stick frames run at the manual-driving speed instead of a
+        value left over from an earlier command. A transport error closes the session and
+        raises :class:`~mowdeck_control.NotConnected`."""
+        try:
+            await self._blades(on=False)
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            self._open = False
+            raise NotConnected("BLE link to the mower lost") from exc
 
     async def update(self, linear: float, angular: float, blade_on: bool) -> None:
         if not self._open:
@@ -94,7 +130,7 @@ class BleDriveSession:
                     "main_ctrl": 0,
                     "cut_knife_ctrl": 0,
                     "cut_knife_height": self._blade_height_mm,
-                    "max_run_speed": MAX_RUN_SPEED_MPS,
+                    "max_run_speed": self._max_run_speed,
                 },
             ),
         ):
@@ -116,6 +152,6 @@ class BleDriveSession:
             main_ctrl=1 if on else 0,
             cut_knife_ctrl=1 if on else 0,
             cut_knife_height=self._blade_height_mm,
-            max_run_speed=MAX_RUN_SPEED_MPS,
+            max_run_speed=self._max_run_speed,
         )
         self._blades_on = on

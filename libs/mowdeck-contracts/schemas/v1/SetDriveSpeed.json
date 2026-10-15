@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Change the vendor's speed setting for manual driving\n(``MowerCapabilities.drive_speed_setting``; the mower scales the stick by it).",
+  "properties": {
+    "kind": {
+      "const": "set_drive_speed",
+      "default": "set_drive_speed",
+      "title": "Kind",
+      "type": "string"
+    },
+    "speed_mps": {
+      "exclusiveMinimum": 0,
+      "maximum": 5,
+      "title": "Speed Mps",
+      "type": "number"
+    }
+  },
+  "required": [
+    "speed_mps"
+  ],
+  "title": "SetDriveSpeed",
+  "type": "object"
+}

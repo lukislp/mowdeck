@@ -45,3 +45,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0039](0039-spot-mowing-by-mowdeck-driven-paths.md) | Spot mowing by MowDeck-driven paths | Accepted |
 | [0040](0040-link-heartbeat-for-online-status.md) | Link heartbeat for online status | Accepted |
 | [0041](0041-spot-runs-from-the-dock-undock-transit-return.md) | Spot runs from the dock: undock, transit and return | Accepted |
+| [0042](0042-drive-calibration.md) | Drive calibration | Accepted |

@@ -12,6 +12,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
+from mowdeck_contracts.v1.calibration import MAX_CALIBRATION_STEP_S, DriveCalibrationStatus
 from mowdeck_contracts.v1.firmware import FirmwareInfo
 from mowdeck_contracts.v1.links import LinkStatus
 from mowdeck_contracts.v1.spot import (
@@ -158,6 +159,20 @@ class MowerState(ContractModel):
         default=None,
         description="The spot run MowDeck drives on this mower right now (`SpotMow`), with its "
         "final state kept until the next run; null when there never was one.",
+    )
+    drive_calibration: DriveCalibrationStatus | None = Field(
+        default=None,
+        description="The drive calibration MowDeck runs on this mower (`DriveCalibrate`, ADR "
+        "0042), with its final state and result kept until the next one; null when there never "
+        "was one.",
+    )
+    drive_speed_mps: float | None = Field(
+        default=None,
+        gt=0,
+        le=5,
+        description="The vendor's speed setting for manual driving "
+        "(`MowerCapabilities.drive_speed_setting`); null when the connection has none or has "
+        "not read it yet.",
     )
     raw: dict[str, Any] = Field(
         default_factory=dict,
@@ -359,9 +374,38 @@ class SpotMow(ContractModel):
 
 
 class SpotStop(ContractModel):
-    """End the running spot run: zero frame, blades off, the mower stays where it is."""
+    """End the running spot run or drive calibration: zero frame, blades off, the mower stays
+    where it is."""
 
     kind: Literal["spot_stop"] = "spot_stop"
+
+
+class DriveCalibrate(ContractModel):
+    """Measure what the stick values mean on the ground (ADR 0042).
+
+    MowDeck drives a few short steps with the blades off (forward at ``linear`` 0.3, 0.5, 0.7
+    and 1.0, then turns in place at ``angular`` ±0.3, ±0.6 and ±1.0, each ``step_s`` long, zero
+    frames in between) and fits the full-scale ground speed, the full-scale yaw rate and the
+    dead zone. Needs ``MowerCapabilities.manual_drive``, an idle mower out of its dock with a
+    fixed RTK position and about 2 m of free lawn straight ahead. Progress and the result arrive
+    in ``MowerState.drive_calibration``; ``SpotStop`` and ``EmergencyStop`` end it.
+    """
+
+    kind: Literal["drive_calibrate"] = "drive_calibrate"
+    step_s: float = Field(
+        default=2.5,
+        ge=1.0,
+        le=MAX_CALIBRATION_STEP_S,
+        description="Duration of each step in seconds.",
+    )
+
+
+class SetDriveSpeed(ContractModel):
+    """Change the vendor's speed setting for manual driving
+    (``MowerCapabilities.drive_speed_setting``; the mower scales the stick by it)."""
+
+    kind: Literal["set_drive_speed"] = "set_drive_speed"
+    speed_mps: float = Field(gt=0, le=5)
 
 
 MANUAL_DRIVE_TTL_MIN_MS = 100
@@ -398,6 +442,8 @@ MowerCommand = Annotated[
     | FirmwareUpdate
     | SpotMow
     | SpotStop
+    | DriveCalibrate
+    | SetDriveSpeed
     | ManualDrive,
     Field(discriminator="kind"),
 ]
@@ -415,6 +461,8 @@ COMMAND_MODELS: tuple[type[ContractModel], ...] = (
     FirmwareUpdate,
     SpotMow,
     SpotStop,
+    DriveCalibrate,
+    SetDriveSpeed,
     ManualDrive,
 )
 """All command model classes, in a stable order."""

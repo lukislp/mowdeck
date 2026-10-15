@@ -6,6 +6,7 @@
         "command": {
           "discriminator": {
             "mapping": {
+              "drive_calibrate": "#/$defs/DriveCalibrate",
               "emergency_stop": "#/$defs/EmergencyStop",
               "firmware_update": "#/$defs/FirmwareUpdate",
               "manual_drive": "#/$defs/ManualDrive",
@@ -13,6 +14,7 @@
               "resume_mow": "#/$defs/ResumeMow",
               "return_to_dock": "#/$defs/ReturnToDock",
               "set_blade_height": "#/$defs/SetBladeHeight",
+              "set_drive_speed": "#/$defs/SetDriveSpeed",
               "set_light": "#/$defs/SetLight",
               "set_speed": "#/$defs/SetSpeed",
               "spot_mow": "#/$defs/SpotMow",
@@ -56,6 +58,12 @@
               "$ref": "#/$defs/SpotStop"
             },
             {
+              "$ref": "#/$defs/DriveCalibrate"
+            },
+            {
+              "$ref": "#/$defs/SetDriveSpeed"
+            },
+            {
               "$ref": "#/$defs/ManualDrive"
             }
           ],
@@ -80,6 +88,27 @@
         "command"
       ],
       "title": "CommandRequest",
+      "type": "object"
+    },
+    "DriveCalibrate": {
+      "description": "Measure what the stick values mean on the ground (ADR 0042).\n\nMowDeck drives a few short steps with the blades off (forward at ``linear`` 0.3, 0.5, 0.7\nand 1.0, then turns in place at ``angular`` ±0.3, ±0.6 and ±1.0, each ``step_s`` long, zero\nframes in between) and fits the full-scale ground speed, the full-scale yaw rate and the\ndead zone. Needs ``MowerCapabilities.manual_drive``, an idle mower out of its dock with a\nfixed RTK position and about 2 m of free lawn straight ahead. Progress and the result arrive\nin ``MowerState.drive_calibration``; ``SpotStop`` and ``EmergencyStop`` end it.",
+      "properties": {
+        "kind": {
+          "const": "drive_calibrate",
+          "default": "drive_calibrate",
+          "title": "Kind",
+          "type": "string"
+        },
+        "step_s": {
+          "default": 2.5,
+          "description": "Duration of each step in seconds.",
+          "maximum": 5.0,
+          "minimum": 1.0,
+          "title": "Step S",
+          "type": "number"
+        }
+      },
+      "title": "DriveCalibrate",
       "type": "object"
     },
     "EmergencyStop": {
@@ -286,6 +315,28 @@
         "mm"
       ],
       "title": "SetBladeHeight",
+      "type": "object"
+    },
+    "SetDriveSpeed": {
+      "description": "Change the vendor's speed setting for manual driving\n(``MowerCapabilities.drive_speed_setting``; the mower scales the stick by it).",
+      "properties": {
+        "kind": {
+          "const": "set_drive_speed",
+          "default": "set_drive_speed",
+          "title": "Kind",
+          "type": "string"
+        },
+        "speed_mps": {
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Speed Mps",
+          "type": "number"
+        }
+      },
+      "required": [
+        "speed_mps"
+      ],
+      "title": "SetDriveSpeed",
       "type": "object"
     },
     "SetLight": {
@@ -577,7 +628,7 @@
       "type": "object"
     },
     "SpotStop": {
-      "description": "End the running spot run: zero frame, blades off, the mower stays where it is.",
+      "description": "End the running spot run or drive calibration: zero frame, blades off, the mower stays\nwhere it is.",
       "properties": {
         "kind": {
           "const": "spot_stop",

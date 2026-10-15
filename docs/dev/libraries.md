@@ -28,6 +28,7 @@ No I/O, only `pydantic`. Everything is versioned under `mowdeck_contracts.v1`:
 - `module`: `ModuleDescriptor`, served by every service at `/.well-known/mowdeck-module`.
 - `problem`: RFC 9457 `ProblemDetails`.
 - `spot`: `SpotMowPlan` (segments as encoded polylines, SHA-256 `plan_hash`, optional `native` job) for `StartMow.spot_plan` and `SpotMow.plan`, `encode_polyline` / `decode_polyline` ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)); `SpotRunStatus` (`MowerState.spot_run`) and `MAX_SPOT_MOW_SPEED_MPS` for spot runs driven by MowDeck ([ADR 0039](../adr/0039-spot-mowing-by-mowdeck-driven-paths.md)).
+- `calibration`: `DriveCalibration` (stored as link options), `DriveCalibrationStatus` (`MowerState.drive_calibration`), `DriveSpeedSetting` (`MowerCapabilities.drive_speed_setting`) for the drive calibration and the vendor's speed setting for manual driving ([ADR 0042](../adr/0042-drive-calibration.md)).
 - `positions`: `PositionTrackRequest` / `PositionTrackReply` for the track query `tracks.positions.query` (Telemetry).
 - `subjects`: `command_subject(id)`, `telemetry_subject(id)`, `event_subject(domain, name)`, wildcards, the request subject `FLEET_MOWERS_LIST` and the streams `COMMANDS`, `TELEMETRY`, `EVENTS`.
 
@@ -146,7 +147,8 @@ flowchart LR
 | `plan_to_native_job` | neutral request (areas, pattern, angle, spacing, border laps) to a native job, `UnsupportedPattern` otherwise |
 | `geo` | local metres to WGS84 and back, point in polygon |
 | `testing` | `ManualClock` and `ManualTimers` to test timing without sleeping |
-| `SpotMowRun` | spot mowing driven by MowDeck ([ADR 0039](../adr/0039-spot-mowing-by-mowdeck-driven-paths.md)): drives a Planner plan with joystick frames through the controller (`SpotMow`, rule 12), with a `Geofence` from the map, pure-pursuit steering, RTK pauses and aborts; reads only the neutral state |
+| `SpotMowRun` | spot mowing driven by MowDeck ([ADR 0039](../adr/0039-spot-mowing-by-mowdeck-driven-paths.md)): drives a Planner plan with joystick frames through the controller (`SpotMow`, rule 12), with a `Geofence` from the map, pure-pursuit steering, RTK pauses and aborts; reads only the neutral state; uses a drive calibration (`SpotRunConfig.calibrated`) and ends `stalled` without progress ([ADR 0042](../adr/0042-drive-calibration.md)) |
+| `DriveCalibrationRun` | drive calibration ([ADR 0042](../adr/0042-drive-calibration.md)): forward and turn steps over the drive channel (`DriveCalibrate`, rule 13), fits full-scale speed, yaw rate and dead zones; blades off, room check, 1.5 m forward budget |
 
 ```python
 from mowdeck_control import MowerController, SimulatedMower

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "End the running spot run: zero frame, blades off, the mower stays where it is.",
+  "description": "End the running spot run or drive calibration: zero frame, blades off, the mower stays\nwhere it is.",
   "properties": {
     "kind": {
       "const": "spot_stop",

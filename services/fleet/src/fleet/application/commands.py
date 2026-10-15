@@ -314,8 +314,11 @@ class CommandService:
         see are omitted, so a group never reveals them.
         """
         kind = request.command.kind
-        if kind in SINGLE_MOWER_KINDS or spot_plan_of(request.command) is not None:
+        if kind == "spot_mow" or spot_plan_of(request.command) is not None:
             msg = "a spot plan is computed for one mower: send it to that mower"
+            raise InvalidInput(msg)
+        if kind in SINGLE_MOWER_KINDS:
+            msg = f"{kind} is a command for one mower: send it to that mower"
             raise InvalidInput(msg)
         await self._check_features(account_id, request)
         if kind != EMERGENCY_STOP:

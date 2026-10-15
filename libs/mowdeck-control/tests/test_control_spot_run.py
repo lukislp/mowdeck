@@ -17,6 +17,8 @@ from mowdeck_contracts.v1 import (
     CommandStatus,
     ConnectionKind,
     DockPose,
+    DriveCalibrate,
+    DriveCalibration,
     EmergencyStop,
     GeoReference,
     LocalPoint,
@@ -59,6 +61,7 @@ from mowdeck_control.spot_run import (
     REASON_HEADING_MISMATCH,
     REASON_LINK_LOST,
     REASON_RTK_LOST,
+    REASON_STALLED,
     REASON_STOPPED_BY_USER,
     REASON_TIMEOUT,
     SPOT_START_MAX_STATE_AGE_S,
@@ -111,7 +114,9 @@ class Harness:
         config: SimulationConfig | None = None,
         spot_config: SpotRunConfig | None = None,
         mower_map: MowerMap = MAP,
+        drive_calibration: DriveCalibration | None = None,
     ) -> None:
+        self.calibration = drive_calibration
         self.clock = ManualClock()
         self.timers = ManualTimers(self.clock)
         self.sim = SimulatedMower(
@@ -128,6 +133,7 @@ class Harness:
             spot_sleep=self.sleep,
             spot_config=spot_config,
             on_state=self._on_state,
+            drive_calibration=lambda: self.calibration,
         )
         self.track: list[LocalPoint] = []
         self.blade_seen = False
@@ -296,16 +302,54 @@ async def test_control_spot_run_aborts_on_a_turn_direction_sign_error() -> None:
     await h.close()
 
 
-async def test_control_spot_run_aborts_on_the_time_limit() -> None:
+async def test_control_spot_run_aborts_stalled_without_progress() -> None:
     stuck_turning = SimulationConfig(state_period_s=1.0, drive_max_turn_rad_s=0.0)
     h = Harness(config=stuck_turning)
     await h.start()
     plan = plan_of([(3.0, 6.5), (3.0, 8.0)])
     _, report = await h.run(SpotMow(plan=plan))
     assert report is not None
+    assert (report.state, report.reason) == ("aborted", REASON_STALLED)
+    assert report.detail == "no progress along the plan for 60 s"
+    # the turn in place never reduces the heading error: a minute without progress
+    assert report.duration_s == pytest.approx(60, abs=2.0)
+    assert report.sent_home, "a stalled run leaves the mower healthy: it is sent home"
+    await h.close()
+
+
+async def test_control_spot_run_aborts_on_the_overall_cap() -> None:
+    stuck_turning = SimulationConfig(state_period_s=1.0, drive_max_turn_rad_s=0.0)
+    h = Harness(config=stuck_turning, spot_config=SpotRunConfig(stall_s=1e6, max_run_floor_s=30))
+    await h.start()
+    _, report = await h.run(SpotMow(plan=plan_of([(3.0, 6.5), (3.0, 8.0)])))
+    assert report is not None
     assert (report.state, report.reason) == ("aborted", REASON_TIMEOUT)
-    # the plan's share (2 x 1.5 m / 0.2 m/s + 60 s) plus twice the transit's 0.5 m at 0.3 m/s
-    assert report.duration_s == pytest.approx(2 * 1.5 / 0.2 + 60 + 2 * 0.5 / 0.3, abs=1.0)
+    # max(30 s, 3 x (1.5 m at 0.2 m/s + the transit's 0.5 m at 0.3 m/s)) = 30 s
+    assert report.duration_s == pytest.approx(30, abs=1.0)
+    await h.close()
+
+
+async def test_control_spot_run_slow_mower_completes_with_the_calibration() -> None:
+    """The first real run: 0.1 m/s and 3 deg/s at full stick. Calibrated, the run uses the whole
+    stick range and a progress-based limit, so it finishes instead of timing out."""
+    slow = SimulationConfig(
+        state_period_s=1.0, drive_max_speed_mps=0.1, drive_max_turn_rad_s=math.radians(3.0)
+    )
+    h = Harness(config=slow)
+    await h.start()
+    calibrated = await h.send(DriveCalibrate())
+    assert calibrated.status is CommandStatus.ACCEPTED, calibrated.reason
+    run = await h.controller.calibration_result(calibrated.command_id)
+    assert run is not None and run.result is not None, run and run.summary()
+    h.calibration = run.result.calibration
+    config = h.controller.spot_config(h.controller.last_state)
+    assert config.max_linear == 1.0 and config.turn_max == pytest.approx(1.0)
+    assert config.assumed_full_speed_mps == pytest.approx(0.1, rel=0.1)
+    plan = plan_of([(4.0, 6.5), (4.0, 8.0)])
+    _, report = await h.run(SpotMow(plan=plan, speed_mps=0.2))
+    assert report is not None
+    assert report.state == "done", report.summary()
+    assert report.duration_s > 30  # slow, but no timeout and no stall
     await h.close()
 
 
@@ -521,7 +565,8 @@ async def test_control_spot_run_path_and_limits() -> None:
     path = run.mow_path()
     assert path.points_total == 4 and path.kinds == ["mow", "mow"]
     assert path.progress is not None and path.progress.index == 0
-    assert run.max_run_s == pytest.approx(2 * (3 + 1 + 3) / 0.2 + 60)
+    assert run.estimated_s == pytest.approx((3 + 1 + 3) / 0.2)
+    assert run.max_run_s == pytest.approx(20 * 60)  # max(20 min, 3 x 35 s)
     assert run.correlation_id == f"spot:{run.run_id}"
     assert run.status.segments_total == 2 and run.status.dry_run
     with pytest.raises(ValueError, match="speed_mps"):

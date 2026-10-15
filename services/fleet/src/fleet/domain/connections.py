@@ -39,7 +39,8 @@ class OptionSpec:
     default: str | int | float | bool | None = None
     examples: tuple[str, ...] = ()
     managed: bool = False
-    """Set by Fleet (from the linked account's device list); shown, never edited by clients."""
+    """Set by Fleet (from the linked account's device list, or a stored drive calibration);
+    shown, never edited by clients."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +100,69 @@ _TIMEOUTS: Final = (
         default=30,
     ),
 )
+
+DRIVE_CALIBRATION_OPTIONS: Final = (
+    OptionSpec(
+        "drive_full_speed_mps",
+        "number",
+        "Calibrated full speed (m/s)",
+        "Ground speed at full stick, measured by a drive calibration.",
+        advanced=True,
+        managed=True,
+        minimum=0,
+        maximum=5,
+    ),
+    OptionSpec(
+        "drive_full_yaw_rate_dps",
+        "number",
+        "Calibrated full turn rate (°/s)",
+        "Turn rate at full stick, measured by a drive calibration.",
+        advanced=True,
+        managed=True,
+        minimum=0,
+        maximum=720,
+    ),
+    OptionSpec(
+        "drive_dead_zone",
+        "number",
+        "Calibrated dead zone",
+        "Stick value below which the mower does not move.",
+        advanced=True,
+        managed=True,
+        minimum=0,
+        maximum=0.9,
+    ),
+    OptionSpec(
+        "drive_turn_dead_zone",
+        "number",
+        "Calibrated turn dead zone",
+        "Stick value below which the mower does not turn.",
+        advanced=True,
+        managed=True,
+        minimum=0,
+        maximum=0.9,
+    ),
+    OptionSpec(
+        "drive_speed_setting",
+        "number",
+        "Speed setting at calibration (m/s)",
+        "The mower's manual-driving speed setting while it was calibrated.",
+        advanced=True,
+        managed=True,
+        minimum=0,
+        maximum=5,
+    ),
+    OptionSpec(
+        "calibrated_at",
+        "string",
+        "Calibrated at",
+        "When the drive calibration was measured (ISO 8601).",
+        advanced=True,
+        managed=True,
+    ),
+)
+"""The stored drive calibration (ADR 0042, ``DRIVE_CALIBRATION_OPTION_KEYS``): set by Fleet from
+``PUT /mowers/{id}/drive-calibration`` on the drive link, never by a link form."""
 
 SCHEMAS: Final[Mapping[str, KindSchema]] = {
     "simulated": KindSchema(
@@ -263,6 +327,16 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
                 default=60,
             ),
             OptionSpec(
+                "manual_drive_speed_mps",
+                "number",
+                "Manual driving speed limit (m/s)",
+                "max_run_speed sent when a drive session opens; empty: the mower's own speed "
+                "setting, at most 1.0.",
+                advanced=True,
+                minimum=0.1,
+                maximum=1.0,
+            ),
+            OptionSpec(
                 "scan_timeout_s",
                 "number",
                 "Scan timeout (s)",
@@ -273,6 +347,7 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
                 default=30,
             ),
             *_TIMEOUTS,
+            *DRIVE_CALIBRATION_OPTIONS,
         ),
     ),
 }

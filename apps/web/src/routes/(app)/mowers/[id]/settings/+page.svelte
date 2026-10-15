@@ -11,6 +11,8 @@
   import BridgeLinkPanel from '$lib/components/BridgeLinkPanel.svelte';
   import BridgeLinkSheet from '$lib/components/BridgeLinkSheet.svelte';
   import ConnectionForm from '$lib/components/ConnectionForm.svelte';
+  import DriveCalibrationPanel from '$lib/components/DriveCalibrationPanel.svelte';
+  import DriveSpeedControl from '$lib/components/DriveSpeedControl.svelte';
   import FirmwarePanel from '$lib/components/FirmwarePanel.svelte';
   import MowerPlacement from '$lib/components/MowerPlacement.svelte';
   import SiteLocation from '$lib/components/SiteLocation.svelte';
@@ -26,6 +28,7 @@
   } from '$lib/connection/form';
   import { loadKinds } from '$lib/connection/kinds';
   import { kindTitle } from '$lib/connection/text';
+  import { deleteDriveCalibration, putDriveCalibration } from '$lib/fleet/drive-calibration';
   import {
     checkFirmware,
     firmwareCheckProblemText,
@@ -45,8 +48,15 @@
   import { connectionLabel, problemMessage } from '$lib/i18n';
   import { isLegacyCloud, type LinkedAccount } from '$lib/linked/accounts';
   import { getLinkedAccount } from '$lib/linked/api';
-  import { permissions, realtime, sendCommand } from '$lib/live.svelte';
+  import { commands, permissions, realtime, sendCommand } from '$lib/live.svelte';
   import { BridgeLinkFlow } from '$lib/mower/bridge-link.svelte';
+  import {
+    calibrationConditions,
+    driveSpeedLocked,
+    storedCalibrationOf,
+    type DriveSpeedSetting,
+  } from '$lib/mower/drive-calibration';
+  import { DriveCalibrationFlow } from '$lib/mower/drive-calibration.svelte';
   import { m } from '$lib/paraglide/messages';
   import { mowers as states } from '$lib/stores/mowers.svelte';
   import { toasts } from '$lib/stores/ui.svelte';
@@ -54,7 +64,12 @@
   type Mower = components['schemas']['MowerOut'];
   type ConnectionKind = components['schemas']['ConnectionKind'];
   /** What this page reads of the capabilities (structural, like the other pages). */
-  type Capabilities = { links_supported?: string[]; firmware_update?: boolean };
+  type Capabilities = {
+    links_supported?: string[];
+    firmware_update?: boolean;
+    manual_drive?: boolean;
+    drive_speed_setting?: DriveSpeedSetting | null;
+  };
 
   const EMPTY: ConnectionState = { values: {}, flags: {}, secretSet: {}, choice: {} };
 
@@ -64,6 +79,7 @@
   let caps = $state<Capabilities | null>(null);
   let bridgeLink = $state<BridgeLink | null>(null);
   let canControl = $state(false);
+  let canDrive = $state(false);
   let checkingFirmware = $state(false);
   /** The answer of the last "Nach Updates suchen", until the telemetry reports a newer check. */
   let checkedFirmware = $state<FirmwareInfo | null>(null);
@@ -135,6 +151,31 @@
     existing: () => bridgeLink,
   });
 
+  // --- manual driving: speed setting and drive calibration (ADR 0042) -------------------------
+
+  const speedSetting = $derived(caps?.drive_speed_setting ?? null);
+  const calibration = new DriveCalibrationFlow({
+    command: (command) => sendCommand(id, command),
+    save: async (input) => {
+      const saved = await putDriveCalibration(id, input);
+      toasts.push('ok', m.calib_saved());
+      return saved;
+    },
+    remove: async () => {
+      await deleteDriveCalibration(id);
+      toasts.push('ok', m.calib_removed());
+    },
+    status: () => ms?.drive_calibration ?? null,
+    stored: () => storedCalibrationOf(mower),
+  });
+  const calibConditions = $derived(
+    calibrationConditions({ state: ms, manualDrive: caps?.manual_drive, now: clock.now }),
+  );
+  /** The section shows when the mower drives manually, has a speed setting or a stored fit. */
+  const driveOffered = $derived(
+    caps?.manual_drive === true || speedSetting !== null || calibration.stored !== null,
+  );
+
   async function runFirmwareCheck(): Promise<void> {
     if (checkingFirmware) return;
     checkingFirmware = true;
@@ -170,6 +211,7 @@
     }
     mower = found;
     bridgeLink = bridgeLinkOfMower(found);
+    calibration.syncStored(storedCalibrationOf(found));
     name = found.name;
     model = found.model ?? '';
     serial = found.serial ?? '';
@@ -216,9 +258,15 @@
           .then((snapshot) => states.upsert(id, snapshot.state, 'rest'))
           .catch(() => undefined);
         void permissions
-          .check(id, ['can_control'])
-          .then((result) => (canControl = result.can_control))
-          .catch(() => (canControl = false));
+          .check(id, ['can_control', 'can_drive'])
+          .then((result) => {
+            canControl = result.can_control;
+            canDrive = result.can_drive;
+          })
+          .catch(() => {
+            canControl = false;
+            canDrive = false;
+          });
       } catch (error) {
         problem = asProblem(error);
       }
@@ -387,6 +435,29 @@
         />
       </Panel>
     {/if}
+    {#if driveOffered}
+      <Panel label={m.drive_settings_title()} testid="drive-section">
+        <div class="drive">
+          {#if speedSetting}
+            <DriveSpeedControl
+              setting={speedSetting}
+              current={ms?.drive_speed_mps ?? null}
+              locked={driveSpeedLocked(ms)}
+              pending={commands.pending(id, 'set_drive_speed')}
+              allowed={canDrive}
+              onset={(command) => void sendCommand(id, command)}
+            />
+          {/if}
+          <DriveCalibrationPanel
+            flow={calibration}
+            conditions={calibConditions}
+            allowed={canDrive}
+            currentSpeed={ms?.drive_speed_mps ?? null}
+            now={clock.now}
+          />
+        </div>
+      </Panel>
+    {/if}
     <Panel label={m.firmware_title()} testid="firmware-section">
       <FirmwarePanel
         info={firmwareInfo}
@@ -506,6 +577,11 @@
 
   .key {
     color: var(--md-color-ink-muted);
+  }
+
+  .drive {
+    display: grid;
+    gap: var(--md-space-6);
   }
 
   .danger {

@@ -63,7 +63,7 @@ from mowdeck_control import CommandRejected, ConnectionConfig, DriveSession
 
 from mowdeck_control_mammotion import mapping
 from mowdeck_control_mammotion.cloud import BridgeScanner, MammotionCloudConnection
-from mowdeck_control_mammotion.drive import BleDriveSession
+from mowdeck_control_mammotion.drive import BleDriveSession, manual_run_speed
 from mowdeck_control_mammotion.esphome import ProxyLink, open_proxy, proxy_info_of, scan_reply_from
 from mowdeck_control_mammotion.options import BleProxyOptions, OptionsError
 from mowdeck_control_mammotion.port import MammotionPort
@@ -424,7 +424,12 @@ class MammotionDualConnection(MammotionCloudConnection):
                 blade_height_mm=self.link_options.manual_blade_height_mm,
                 sensor_stop=self._sensor_stop_reason,
                 link_up=self.ble_connected,
+                max_run_speed_mps=manual_run_speed(
+                    self.link_options.manual_drive_speed_mps,
+                    mapping.drive_speed_of(self._port.device()),
+                ),
             )
+            await self._session.begin()
         finally:
             self._drive_requested = False
         return self._session

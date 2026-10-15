@@ -21,8 +21,13 @@ Control loop (5 Hz frames, ``ttl_ms`` 1000):
   turns in place (``angular = clamp(turn_gain * error, ±turn_max)``, left positive); otherwise
   ``angular = clamp(steer_gain * error, ±steer_max)`` and a speed governor adjusts ``linear``
   (within ``min_linear`` .. ``max_linear``) so the measured ground speed meets the segment
-  speed (the stick-to-speed scale of a mower is unknown). A waypoint counts as reached within
-  ``waypoint_radius_m``.
+  speed. A waypoint counts as reached within ``waypoint_radius_m``.
+* **Drive calibration** (ADR 0042): :meth:`SpotRunConfig.calibrated` turns a measured
+  :class:`~mowdeck_contracts.v1.DriveCalibration` into the stick scale: the full-scale speed
+  (rescaled when the vendor's speed setting changed since), the full-scale yaw rate for dead
+  reckoning, steering gains scaled by it, ``turn_max`` for about ``target_turn_rate_dps``,
+  ``max_linear`` 1.0 and the dead zones (a stick value is ``dead_zone + (1 - dead_zone) *
+  fraction``). Without a calibration the cautious defaults apply.
 * **Undocking** (ADR 0041): a docked mower on a connection with ``capabilities.undock`` is sent
   ``leave_dock`` through :class:`SpotActions` (``undocking``, no frames); the run waits until it
   stands idle out of the dock, then for a fixed RTK position (``waiting_rtk``), at most
@@ -39,9 +44,13 @@ Control loop (5 Hz frames, ``ttl_ms`` 1000):
 * **Aborts**: a cross-track error above ``max_cross_track_m``, or a heading error that grows for
   ``sign_error_reports`` consecutive reports while turning in place (a turn-direction sign
   error), end the run ``heading_mismatch``. A stop request (user, emergency stop, sensor stop,
-  activity change, the link), a refused frame and the run-time limit
-  ``min(2 x estimated + 60 s, 20 min)`` end it as well. Every end sends a zero frame, switches
-  the blades off and closes the drive session (:meth:`FrameChannel.close`).
+  activity change, the link) and a refused frame end it as well. The time limit is progress
+  based (ADR 0042): no progress for ``stall_s`` (the distance along the plan grows by less than
+  ``stall_progress_m``, the distance to the next waypoint shrinks by less than that and, while
+  turning in place, the heading error shrinks by less than ``stall_heading_deg``) ends it
+  ``stalled``; a generous overall cap ``max(max_run_floor_s, max_run_factor x estimated)``,
+  the estimate at the speed the mower can reach, ends it ``timeout``. Every end sends a zero
+  frame, switches the blades off and closes the drive session (:meth:`FrameChannel.close`).
 * **Blades**: on only for ``mow`` and ``turn`` segments that ask for them and only when the
   run was started with blades allowed; otherwise the whole run is a ``dry_run``. Never during
   undocking, transit or the return.
@@ -59,14 +68,16 @@ import contextlib
 import logging
 import math
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Final, Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
     MAX_SPOT_MOW_SPEED_MPS,
+    SPOT_REASON_STALLED,
     CommandStatus,
+    DriveCalibration,
     LocalPoint,
     MowerActivity,
     MowerMap,
@@ -114,6 +125,7 @@ REASON_HEADING_MISMATCH: Final = "heading_mismatch"
 REASON_ACTIVITY_CHANGE: Final = "activity_change"
 REASON_FRAME_REJECTED: Final = "frame_rejected"
 REASON_UNDOCK_FAILED: Final = "undock_failed"
+REASON_STALLED: Final = SPOT_REASON_STALLED
 PAUSE_POSITION_STALE: Final = "position_stale"
 """``SpotRunStatus.reason`` while paused because no fresh pose arrived."""
 
@@ -143,10 +155,7 @@ _DRIVE_KEEPS: Final = frozenset({MowerActivity.IDLE})
 """Activities that do not end a run while it drives (transit and the plan)."""
 
 MAX_RUN_S: Final = 20 * 60.0
-"""Longest spot mowing part of a run, whatever the plan estimates (the transit adds its own
-share, see :attr:`SpotMowRun.max_run_s`)."""
-RUN_TIME_SLACK_S: Final = 60.0
-"""Added to twice the estimated duration for the run-time limit."""
+"""Floor of the overall cap of a run (``SpotRunConfig.max_run_floor_s``)."""
 
 _PATH_KINDS: Final[dict[str, MowPathKind]] = {"mow": "mow", "transfer": "transfer", "turn": "other"}
 
@@ -205,19 +214,97 @@ class SpotRunConfig:
     """Pause between two ``return_to_dock`` attempts."""
     geofence_margin_m: float = 0.3
     max_linear: float = 0.5
-    """Highest ``linear`` stick value the governor may command."""
+    """Highest ``linear`` stick value the governor may command (1.0 once calibrated)."""
     min_linear: float = 0.2
     """Lowest ``linear`` stick value while moving (above the adapters' dead zones)."""
     assumed_full_speed_mps: float = 0.5
-    """Ground speed assumed for ``linear = 1`` (the governor's starting point)."""
+    """Ground speed assumed for ``linear = 1`` (the governor's starting point; calibrated)."""
     assumed_yaw_rate_rad_s: float = 1.0
-    """Yaw rate assumed for ``angular = 1`` (dead reckoning between reports)."""
+    """Yaw rate assumed for ``angular = 1`` (dead reckoning between reports; calibrated)."""
+    dead_zone: float = 0.0
+    """``linear`` below which the mower stands (calibrated; without a calibration
+    ``min_linear`` keeps the stick above the adapters' dead zones)."""
+    turn_dead_zone: float = 0.0
+    """``angular`` below which the mower does not turn (calibrated)."""
+    target_turn_rate_dps: float = 20.0
+    """Calibrated: ``turn_max`` is chosen so a turn in place reaches about this yaw rate."""
+    stall_s: float = 60.0
+    """No progress along the plan for this long ends the run ``stalled``."""
+    stall_progress_m: float = 0.2
+    """Least progress (along the plan or towards the next waypoint) that counts."""
+    stall_heading_deg: float = 10.0
+    """Least decrease of the heading error that counts as progress while turning in place."""
+    max_run_floor_s: float = MAX_RUN_S
+    """Floor of the overall cap of a run."""
+    max_run_factor: float = 3.0
+    """The overall cap is at least this many times the estimated driving time."""
+    calibrated_at: datetime | None = None
+    """When the drive calibration in use was measured (None: the defaults)."""
     governor_gain: float = 0.5
     """How strongly a measured speed error moves the stick (per report)."""
     sign_error_reports: int = 3
     """Consecutive reports with a growing heading error while turning that abort the run."""
     sign_error_min_deg: float = 2.0
     """The error must grow by at least this much per report to count."""
+
+    def calibrated(
+        self, calibration: DriveCalibration | None, drive_speed_setting: float | None = None
+    ) -> "SpotRunConfig":
+        """This configuration with the stick scale of ``calibration`` (ADR 0042); unchanged
+        without one. ``drive_speed_setting`` is the vendor's current manual-driving speed
+        setting: the full-scale speed scales with it when it differs from the calibration's."""
+        if calibration is None:
+            return self
+        full_speed = calibration.full_speed_at(drive_speed_setting)
+        yaw = math.radians(calibration.full_yaw_rate_dps)
+        scale = self.assumed_yaw_rate_rad_s / yaw
+        dead_zone, turn_dead_zone = calibration.dead_zone, calibration.turn_dead_zone
+
+        def stick(fraction: float, zone: float) -> float:
+            return min(1.0, zone + (1 - zone) * min(1.0, fraction))
+
+        steer_rate = self.steer_max * self.assumed_yaw_rate_rad_s  # the defaults' steering rate
+        return replace(
+            self,
+            assumed_full_speed_mps=full_speed,
+            assumed_yaw_rate_rad_s=yaw,
+            dead_zone=dead_zone,
+            turn_dead_zone=turn_dead_zone,
+            max_linear=1.0,
+            min_linear=min(1.0, dead_zone + 0.05),
+            turn_max=stick(math.radians(self.target_turn_rate_dps) / yaw, turn_dead_zone),
+            steer_max=stick(steer_rate / yaw, turn_dead_zone),
+            turn_gain=self.turn_gain * scale,
+            steer_gain=self.steer_gain * scale,
+            calibrated_at=calibration.calibrated_at,
+        )
+
+    def stick_for_speed(self, speed_mps: float) -> float:
+        """The ``linear`` stick value for a ground speed (dead zone included)."""
+        fraction = speed_mps / self.assumed_full_speed_mps
+        return self.dead_zone + (1 - self.dead_zone) * fraction
+
+    def speed_at(self, linear: float) -> float:
+        """The ground speed expected at a ``linear`` stick value."""
+        if linear <= self.dead_zone:
+            return 0.0
+        return self.assumed_full_speed_mps * (linear - self.dead_zone) / (1 - self.dead_zone)
+
+    def yaw_rate_at(self, angular: float) -> float:
+        """The yaw rate (rad/s, left positive) expected at an ``angular`` stick value."""
+        magnitude = abs(angular)
+        if magnitude <= self.turn_dead_zone:
+            return 0.0
+        rate = self.assumed_yaw_rate_rad_s * (magnitude - self.turn_dead_zone)
+        return math.copysign(rate / (1 - self.turn_dead_zone), angular)
+
+    def turn_stick(self, fraction: float) -> float:
+        """The ``angular`` stick value for a signed fraction of the full yaw rate: the turn dead
+        zone is added, so small corrections still turn the mower."""
+        if abs(fraction) < 1e-3 or self.turn_dead_zone <= 0:
+            return fraction
+        magnitude = self.turn_dead_zone + (1 - self.turn_dead_zone) * abs(fraction)
+        return math.copysign(magnitude, fraction)
 
 
 # --- geometry ---------------------------------------------------------------------------------
@@ -499,6 +586,12 @@ class SpotMowRun:
         self._measured_speed: float | None = None
         self._turning = False
         self._turn_errors: list[float] = []
+        # progress (stall check)
+        self._progress_at: datetime | None = None
+        self._best_along = -math.inf
+        self._best_target_m = math.inf
+        self._best_heading = math.inf
+        self._progress_key: tuple[int, int] = (-1, -1)
 
     # --- properties ----------------------------------------------------------------------------
 
@@ -590,19 +683,26 @@ class SpotMowRun:
         )
 
     @property
-    def max_run_s(self) -> float:
-        """The run-time limit from the start of the transit: ``min(2 x estimated + 60 s,
-        20 min)`` for the plan plus twice the transit's driving time."""
-        estimated = self.plan.estimated_duration_s
-        if estimated <= 0:
-            estimated = sum(
-                distance(a, b) / max(s.speed_mps, 0.05)
-                for s in self._segments
-                if not s.transit
-                for a, b in zip(s.points, s.points[1:], strict=False)
-            )
+    def estimated_s(self) -> float:
+        """The estimated driving time of the transit and the plan at the speed the mower can
+        reach (the segment speed, at most the full-scale speed at ``max_linear``)."""
+        reachable = max(0.01, self._config.speed_at(self._config.max_linear))
         transit = self._transit.length_m if self._transit is not None else 0.0
-        return min(2 * estimated + RUN_TIME_SLACK_S, MAX_RUN_S) + 2 * transit / self._transit_speed
+        driving = sum(
+            distance(a, b) / max(0.01, min(s.speed_mps, reachable))
+            for s in self._segments
+            if not s.transit
+            for a, b in zip(s.points, s.points[1:], strict=False)
+        )
+        return driving + transit / max(0.01, min(self._transit_speed, reachable))
+
+    @property
+    def max_run_s(self) -> float:
+        """The overall cap from the start of the transit: ``max(max_run_floor_s,
+        max_run_factor x estimated_s)`` (the progress check, ``stall_s``, ends a run that
+        gets nowhere much earlier)."""
+        config = self._config
+        return max(config.max_run_floor_s, config.max_run_factor * self.estimated_s)
 
     @property
     def _transit_speed(self) -> float:
@@ -857,6 +957,7 @@ class SpotMowRun:
             if paused_since is not None:
                 self._paused_s += (now - paused_since).total_seconds()
                 paused_since = None
+                self._progress_at = now  # a pause is not a stall
                 self._set_state(self._driving_state(), None)
             new_report = (
                 self._last_report is None or pose.observed_at != self._last_report.observed_at
@@ -871,6 +972,13 @@ class SpotMowRun:
             if not self._advance(estimate):
                 self._end("done", None, None)
                 return
+            if self._stalled(now):
+                self._end(
+                    "aborted",
+                    REASON_STALLED,
+                    f"no progress along the plan for {config.stall_s:.0f} s",
+                )
+                return
             linear, angular = self._steer(estimate, now)
             segment = self._segments[self._progress.segment]
             blade_on = self._blades and segment.blades_on and not segment.transit
@@ -883,6 +991,62 @@ class SpotMowRun:
             else:
                 self._moving_since = None
             await self._sleep(1 / config.frame_hz)
+
+    def _stalled(self, now: datetime) -> bool:
+        """Update the progress from the latest report; True when there was none for
+        ``stall_s`` (see the module docs)."""
+        config = self._config
+        report = self._last_report
+        if self._progress_at is None:
+            self._progress_at = now
+        if report is None:
+            return False
+        key = (self._progress.segment, self._progress.target)
+        if key != self._progress_key:  # a waypoint was reached
+            self._progress_key = key
+            self._best_target_m = math.inf
+            self._best_heading = math.inf
+            self._progress_at = now
+        along = self._along(report.point)
+        _, target = self._leg()
+        to_target = distance(report.point, target)
+        heading = abs(self._heading_error(report.x, report.y, report.theta))
+        progressed = False
+        if along >= self._best_along + config.stall_progress_m or self._best_along == -math.inf:
+            self._best_along = along
+            progressed = True
+        if to_target <= self._best_target_m - config.stall_progress_m or math.isinf(
+            self._best_target_m
+        ):
+            self._best_target_m = to_target
+            progressed = True
+        if self._turning and (
+            heading <= self._best_heading - math.radians(config.stall_heading_deg)
+            or math.isinf(self._best_heading)
+        ):
+            self._best_heading = heading
+            progressed = True
+        if progressed:
+            self._progress_at = now
+        return (now - self._progress_at).total_seconds() > config.stall_s
+
+    def _along(self, point: LocalPoint) -> float:
+        """Distance along the transit and the plan up to the projection of ``point`` on the
+        current leg."""
+        done = 0.0
+        for index, segment in enumerate(self._segments):
+            legs = list(zip(segment.points, segment.points[1:], strict=False))
+            if index < self._progress.segment:
+                done += sum(distance(a, b) for a, b in legs)
+                continue
+            for leg_index, (a, b) in enumerate(legs, start=1):
+                if leg_index < self._progress.target:
+                    done += distance(a, b)
+                else:
+                    t = max(0.0, min(1.0, _projection(point, a, b)))
+                    return done + t * distance(a, b)
+            break
+        return done
 
     def _fence_violation(self, point: LocalPoint) -> str | None:
         """The geofence of the current segment: the drivable space during the transit, the
@@ -911,14 +1075,7 @@ class SpotMowRun:
         self._frames_sent += 1
         if refusal is None:
             return True
-        lowered = refusal.casefold()
-        if "sensor stop" in lowered:
-            reason = REASON_SENSOR_STOP
-        elif lowered.startswith("failed") or "not connected" in lowered:
-            reason = REASON_LINK_LOST
-        else:
-            reason = REASON_FRAME_REJECTED
-        self._end("aborted", reason, refusal)
+        self._end("aborted", refusal_reason(refusal), refusal)
         return False
 
     # --- reports -------------------------------------------------------------------------------
@@ -970,14 +1127,17 @@ class SpotMowRun:
             return
         config = self._config
         target = self._segments[self._progress.segment].speed_mps
-        step = config.governor_gain * (target - measured) / config.assumed_full_speed_mps
+        step = (
+            config.governor_gain
+            * (target - measured)
+            * (1 - config.dead_zone)
+            / config.assumed_full_speed_mps
+        )
         self._linear = self._clamp(self._linear + step, config.min_linear, config.max_linear)
 
     def _linear_for(self, speed_mps: float) -> float:
         config = self._config
-        return self._clamp(
-            speed_mps / config.assumed_full_speed_mps, config.min_linear, config.max_linear
-        )
+        return self._clamp(config.stick_for_speed(speed_mps), config.min_linear, config.max_linear)
 
     # --- geometry of the plan -------------------------------------------------------------------
 
@@ -1057,11 +1217,12 @@ class SpotMowRun:
             if not self._turning:
                 self._turning = True
                 self._turn_errors.clear()
-            return 0.0, self._clamp(config.turn_gain * error, -config.turn_max, config.turn_max)
+            angular = config.turn_stick(config.turn_gain * error)
+            return 0.0, self._clamp(angular, -config.turn_max, config.turn_max)
         self._turning = False
         self._turn_errors.clear()
-        angular = self._clamp(config.steer_gain * error, -config.steer_max, config.steer_max)
-        return self._linear, angular
+        angular = config.turn_stick(config.steer_gain * error)
+        return self._linear, self._clamp(angular, -config.steer_max, config.steer_max)
 
     # --- dead reckoning ---------------------------------------------------------------------------
 
@@ -1075,16 +1236,16 @@ class SpotMowRun:
         speed = (
             self._measured_speed
             if self._measured_speed is not None
-            else (linear * self._config.assumed_full_speed_mps)
+            else self._config.speed_at(linear)
         )
-        theta = report.theta + 0.5 * angular * self._config.assumed_yaw_rate_rad_s * dt
+        theta = report.theta + 0.5 * self._config.yaw_rate_at(angular) * dt
         return (report.x + math.cos(theta) * speed * dt, report.y + math.sin(theta) * speed * dt)
 
     def _estimated_theta(self, now: datetime) -> float:
         report = self._last_report
         assert report is not None  # noqa: S101 - a usable pose was seen
         dt = self._reckon_dt(report, now)
-        return report.theta + self._last_cmd[1] * self._config.assumed_yaw_rate_rad_s * dt
+        return report.theta + self._config.yaw_rate_at(self._last_cmd[1]) * dt
 
     def _reckon_dt(self, report: Pose, now: datetime) -> float:
         since_report = (now - report.observed_at).total_seconds()
@@ -1170,6 +1331,17 @@ class SpotMowRun:
     @staticmethod
     def _clamp(value: float, low: float, high: float) -> float:
         return max(low, min(high, value))
+
+
+def refusal_reason(refusal: str) -> str:
+    """The end reason of a refused frame: ``sensor_stop`` for a sensor stop, ``link_lost`` for
+    a lost link (``failed: ...``, not connected), ``frame_rejected`` otherwise."""
+    lowered = refusal.casefold()
+    if "sensor stop" in lowered:
+        return REASON_SENSOR_STOP
+    if lowered.startswith("failed") or "not connected" in lowered:
+        return REASON_LINK_LOST
+    return REASON_FRAME_REJECTED
 
 
 def _transit_segment(route: TransitRoute, speed_mps: float) -> _Segment:
@@ -1263,10 +1435,10 @@ __all__ = [
     "REASON_LINK_LOST",
     "REASON_RTK_LOST",
     "REASON_SENSOR_STOP",
+    "REASON_STALLED",
     "REASON_STOPPED_BY_USER",
     "REASON_TIMEOUT",
     "REASON_UNDOCK_FAILED",
-    "RUN_TIME_SLACK_S",
     "SPOT_START_MAX_STATE_AGE_S",
     "FrameChannel",
     "Geofence",
@@ -1276,6 +1448,7 @@ __all__ = [
     "SpotRunConfig",
     "SpotRunReport",
     "pose_of",
+    "refusal_reason",
     "spot_start_problem",
     "transit_start",
 ]

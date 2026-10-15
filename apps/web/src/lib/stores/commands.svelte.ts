@@ -16,7 +16,9 @@ export type CommandKind =
   | 'set_light'
   | 'firmware_update'
   | 'spot_mow'
-  | 'spot_stop';
+  | 'spot_stop'
+  | 'drive_calibrate'
+  | 'set_drive_speed';
 
 export type CommandOutcome =
   'pending' | 'accepted' | 'executed' | 'rejected' | 'failed' | 'expired';

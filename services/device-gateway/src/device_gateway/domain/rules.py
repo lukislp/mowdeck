@@ -1,11 +1,13 @@
 """Rules of the Device-Gateway as pure functions."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    DRIVE_CALIBRATION_OPTION_KEYS,
     LINK_BLE_BRIDGE,
     BridgeScanErrorCode,
     BridgeScanReply,
@@ -14,6 +16,7 @@ from mowdeck_contracts.v1 import (
     CameraSessionRequest,
     CommandEnvelope,
     ConnectionKind,
+    DriveCalibration,
     FirmwareCheckErrorCode,
     FirmwareCheckRequest,
     MowerRegistration,
@@ -21,6 +24,7 @@ from mowdeck_contracts.v1 import (
     MowPath,
     PathPreviewErrorCode,
     PathPreviewGatewayRequest,
+    calibration_of_links,
 )
 
 
@@ -171,6 +175,38 @@ def bridge_in_use(
         return False
     link = state.links.get(LINK_BLE_BRIDGE)
     return link is not None and link.connected
+
+
+def _strip(options: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in options.items() if k not in DRIVE_CALIBRATION_OPTION_KEYS}
+
+
+def without_calibration(registration: MowerRegistration) -> MowerRegistration:
+    """The registration without the stored drive calibration (ADR 0042): the calibration keys
+    are MowDeck's, not the adapter's, so they never reach a connection."""
+    return registration.model_copy(
+        update={
+            "connection_options": _strip(registration.connection_options),
+            "links": {kind: _strip(link) for kind, link in registration.links.items()},
+        }
+    )
+
+
+def drive_calibration_of(registration: MowerRegistration) -> DriveCalibration | None:
+    """The drive calibration stored with the mower: on a link (the drive link, e.g. the
+    Bluetooth bridge) or in the connection options; the newest one wins."""
+    return calibration_of_links({**registration.links, "": registration.connection_options})
+
+
+def same_link(old: MowerRegistration, new: MowerRegistration) -> bool:
+    """True when ``new`` opens the same connection as ``old``: a change of the drive
+    calibration alone does not reopen the link (the controller reads it on every run)."""
+    before, after = without_calibration(old), without_calibration(new)
+    return (before.connection_kind, before.connection_options, before.links) == (
+        after.connection_kind,
+        after.connection_options,
+        after.links,
+    )
 
 
 def links_changed(previous: MowerState | None, current: MowerState) -> bool:

@@ -149,6 +149,20 @@
             "description": "Blade height for manual driving.",
             "title": "Manual Blade Height Mm"
           },
+          "manual_drive_speed_mps": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`max_run_speed` the mower gets when a drive session opens (ADR 0042); omitted: the mower's own speed setting for manual driving, at most 1.0 m/s.",
+            "title": "Manual Drive Speed Mps"
+          },
           "noise_psk": {
             "description": "The bridge's API encryption key (`api.encryption.key` of an ESPHome bridge); `***` keeps the stored key.",
             "maxLength": 256,
@@ -699,6 +713,7 @@
           "command": {
             "discriminator": {
               "mapping": {
+                "drive_calibrate": "#/components/schemas/DriveCalibrate",
                 "emergency_stop": "#/components/schemas/EmergencyStop",
                 "firmware_update": "#/components/schemas/FirmwareUpdate",
                 "manual_drive": "#/components/schemas/ManualDrive",
@@ -706,6 +721,7 @@
                 "resume_mow": "#/components/schemas/ResumeMow",
                 "return_to_dock": "#/components/schemas/ReturnToDock",
                 "set_blade_height": "#/components/schemas/SetBladeHeight",
+                "set_drive_speed": "#/components/schemas/SetDriveSpeed",
                 "set_light": "#/components/schemas/SetLight",
                 "set_speed": "#/components/schemas/SetSpeed",
                 "spot_mow": "#/components/schemas/SpotMow",
@@ -747,6 +763,12 @@
               },
               {
                 "$ref": "#/components/schemas/SpotStop"
+              },
+              {
+                "$ref": "#/components/schemas/DriveCalibrate"
+              },
+              {
+                "$ref": "#/components/schemas/SetDriveSpeed"
               },
               {
                 "$ref": "#/components/schemas/ManualDrive"
@@ -1112,7 +1134,7 @@
           },
           "managed": {
             "default": false,
-            "description": "Set by Fleet from the linked account's device list: shown, not editable.",
+            "description": "Set by Fleet (from the linked account's device list, or a stored drive calibration): shown, not editable.",
             "title": "Managed",
             "type": "boolean"
           },
@@ -1192,6 +1214,88 @@
           "examples"
         ],
         "title": "ConnectionOptionOut",
+        "type": "object"
+      },
+      "DriveCalibrate": {
+        "description": "Measure what the stick values mean on the ground (ADR 0042).\n\nMowDeck drives a few short steps with the blades off (forward at ``linear`` 0.3, 0.5, 0.7\nand 1.0, then turns in place at ``angular`` ±0.3, ±0.6 and ±1.0, each ``step_s`` long, zero\nframes in between) and fits the full-scale ground speed, the full-scale yaw rate and the\ndead zone. Needs ``MowerCapabilities.manual_drive``, an idle mower out of its dock with a\nfixed RTK position and about 2 m of free lawn straight ahead. Progress and the result arrive\nin ``MowerState.drive_calibration``; ``SpotStop`` and ``EmergencyStop`` end it.",
+        "properties": {
+          "kind": {
+            "const": "drive_calibrate",
+            "default": "drive_calibrate",
+            "title": "Kind",
+            "type": "string"
+          },
+          "step_s": {
+            "default": 2.5,
+            "description": "Duration of each step in seconds.",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Step S",
+            "type": "number"
+          }
+        },
+        "title": "DriveCalibrate",
+        "type": "object"
+      },
+      "DriveCalibration": {
+        "description": "The fitted drive behaviour of one mower, as stored in the drive link's options.",
+        "properties": {
+          "calibrated_at": {
+            "format": "date-time",
+            "title": "Calibrated At",
+            "type": "string"
+          },
+          "dead_zone": {
+            "default": 0.0,
+            "description": "`linear` below which the mower stands.",
+            "maximum": 0.9,
+            "minimum": 0.0,
+            "title": "Dead Zone",
+            "type": "number"
+          },
+          "drive_speed_setting": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 5.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The vendor's manual-driving speed setting during the calibration (`MowerState.drive_speed_mps`); null when the connection has none.",
+            "title": "Drive Speed Setting"
+          },
+          "full_speed_mps": {
+            "description": "Ground speed at `linear = 1`.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 5.0,
+            "title": "Full Speed Mps",
+            "type": "number"
+          },
+          "full_yaw_rate_dps": {
+            "description": "Yaw rate at `angular = ±1` in degrees per second.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 720.0,
+            "title": "Full Yaw Rate Dps",
+            "type": "number"
+          },
+          "turn_dead_zone": {
+            "default": 0.0,
+            "description": "`angular` below which the mower does not turn.",
+            "maximum": 0.9,
+            "minimum": 0.0,
+            "title": "Turn Dead Zone",
+            "type": "number"
+          }
+        },
+        "required": [
+          "full_speed_mps",
+          "full_yaw_rate_dps",
+          "calibrated_at"
+        ],
+        "title": "DriveCalibration",
         "type": "object"
       },
       "DriveEndReason": {
@@ -1701,7 +1805,7 @@
           },
           "options": {
             "additionalProperties": true,
-            "description": "The link's options (`host`, `port`, `ble_address`, `device_name`, `allow_manual_blades`, `manual_blade_height_mm`); secret keys show `***` and sending `***` back keeps the stored value.",
+            "description": "The link's options (`host`, `port`, `ble_address`, `device_name`, `allow_manual_blades`, `manual_blade_height_mm`, `manual_drive_speed_mps` and the managed drive calibration keys); secret keys show `***` and sending `***` back keeps the stored value.",
             "title": "Options",
             "type": "object"
           },
@@ -2733,6 +2837,17 @@
             "title": "Created By",
             "type": "string"
           },
+          "drive_calibration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriveCalibration"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The stored drive calibration (`PUT /mowers/{id}/drive-calibration`): from the `ble_bridge` link, else from the connection options; null until one is stored."
+          },
           "group_ids": {
             "items": {
               "format": "uuid",
@@ -3247,6 +3362,28 @@
           "mm"
         ],
         "title": "SetBladeHeight",
+        "type": "object"
+      },
+      "SetDriveSpeed": {
+        "description": "Change the vendor's speed setting for manual driving\n(``MowerCapabilities.drive_speed_setting``; the mower scales the stick by it).",
+        "properties": {
+          "kind": {
+            "const": "set_drive_speed",
+            "default": "set_drive_speed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "speed_mps": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 5.0,
+            "title": "Speed Mps",
+            "type": "number"
+          }
+        },
+        "required": [
+          "speed_mps"
+        ],
+        "title": "SetDriveSpeed",
         "type": "object"
       },
       "SetLight": {
@@ -3782,7 +3919,7 @@
         "type": "object"
       },
       "SpotStop": {
-        "description": "End the running spot run: zero frame, blades off, the mower stays where it is.",
+        "description": "End the running spot run or drive calibration: zero frame, blades off, the mower stays\nwhere it is.",
         "properties": {
           "kind": {
             "const": "spot_stop",
@@ -5117,7 +5254,7 @@
         ]
       },
       "post": {
-        "description": "Send a command. The relation depends on the kind: ``can_control`` (start, pause,\nresume, dock, blade height, speed), ``can_drive`` (manual drive), ``can_emergency_stop``\n(emergency stop, equals ``can_view``). Checked before any database or bus access: 403 when\nthe mower is visible, 404 when not.",
+        "description": "Send a command. The relation depends on the kind: ``can_control`` (start, pause,\nresume, dock, blade height, speed), ``can_drive`` (manual drive, spot mow, drive\ncalibration, drive speed setting), ``can_emergency_stop``\n(emergency stop, equals ``can_view``). Checked before any database or bus access: 403 when\nthe mower is visible, 404 when not.",
         "operationId": "send_command_api_v1_fleet_mowers__mower_id__commands_post",
         "parameters": [
           {
@@ -5164,6 +5301,103 @@
           }
         },
         "summary": "Send Command",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/drive-calibration": {
+      "delete": {
+        "description": "Forget the stored drive calibration (``can_drive``, 403 when the mower is visible, else\n404); spot runs then go without one. Without a stored calibration\nnothing changes. Audits ``mower.drive_calibration_removed`` and publishes\n``mower.updated``.",
+        "operationId": "delete_drive_calibration_api_v1_fleet_mowers__mower_id__drive_calibration_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_drive`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Drive Calibration",
+        "tags": [
+          "mowers"
+        ]
+      },
+      "put": {
+        "description": "Store the result of a drive calibration (``can_drive``, 403 when the mower is visible,\nelse 404): the values a finished ``drive_calibrate`` reported in\n``MowerState.drive_calibration.result.calibration``. Fleet keeps them as managed options\nof the mower's ``ble_bridge`` link (the link's key stays as it is), or in the connection\noptions of a connection kind that takes them (the simulator), and replaces a stored\ncalibration. Audits ``mower.drive_calibration_set`` and publishes ``mower.updated``, so the\nDevice-Gateway hands the calibration to every spot run. Answers the stored calibration;\nthe mower shows it as ``MowerOut.drive_calibration``.",
+        "operationId": "set_drive_calibration_api_v1_fleet_mowers__mower_id__drive_calibration_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriveCalibration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveCalibration"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_drive`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "`drive-calibration-not-applicable`: the mower has no `ble_bridge` link and its connection options take no calibration."
+          },
+          "422": {
+            "description": "A value out of range."
+          }
+        },
+        "summary": "Set Drive Calibration",
         "tags": [
           "mowers"
         ]
