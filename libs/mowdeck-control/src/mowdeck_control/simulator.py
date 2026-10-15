@@ -105,6 +105,7 @@ from mowdeck_contracts.v1 import (
     SetSpeed,
     SpotMowPlan,
     StartMow,
+    TurnStyle,
     utc_now,
 )
 
@@ -277,6 +278,11 @@ class SimulationConfig:
     """Offer ``leave_dock`` (capability ``undock``): from the dock the mower drives
     ``undock_distance_m`` straight out along the dock's heading and stands idle there."""
     undock_distance_m: float = 1.0
+    drive_reverse: bool = True
+    """The drive link can reverse (capability ``drive_reverse``, ADR 0043); without it a
+    negative ``linear`` stands the mower still, like a link that cannot drive backwards."""
+    turn_style: TurnStyle | None = None
+    """The mower's own turn setting reported in ``MowerState.turn_style`` (None: none)."""
 
     @property
     def origin(self) -> tuple[float, float]:
@@ -475,6 +481,7 @@ class SimulatedMower:
             links_supported=[LINK_BLE_BRIDGE],
             firmware_update=True,
             undock=self.config.undock,
+            drive_reverse=self.config.drive_reverse,
             drive_speed_setting=(
                 DriveSpeedSetting(
                     min_mps=self.config.drive_speed_range[0],
@@ -1020,6 +1027,7 @@ class SimulatedMower:
             links=self._link_status(),
             firmware_info=self.firmware_info(),
             drive_speed_mps=self._drive_speed if self.config.drive_speed_setting else None,
+            turn_style=self.config.turn_style,
             raw=raw,
         )
 
@@ -1316,6 +1324,8 @@ class SimulatedMower:
     def _drive_update(self, linear: float, angular: float, blade_on: bool) -> None:
         self._require_no_sensor_stop()
         allowed = blade_on and self._capabilities.manual_drive_blades and not self.stuck
+        if linear < 0 and not self.config.drive_reverse:
+            linear = 0.0  # this drive link cannot reverse
         command = _DriveCommand(
             linear=max(-1.0, min(1.0, linear)),
             angular=max(-1.0, min(1.0, angular)),

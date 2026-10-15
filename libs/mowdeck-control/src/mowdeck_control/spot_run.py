@@ -22,6 +22,17 @@ Control loop (5 Hz frames, ``ttl_ms`` 1000):
   ``angular = clamp(steer_gain * error, ±steer_max)`` and a speed governor adjusts ``linear``
   (within ``min_linear`` .. ``max_linear``) so the measured ground speed meets the segment
   speed. A waypoint counts as reached within ``waypoint_radius_m``.
+* **Turns** (ADR 0043): the run turns at lane ends as ``turn_style`` says (resolved by the
+  caller from the command, the mower's own setting and the drive link). ``turn`` segments are
+  followed with the yaw rate limited to ``turn_rate_dps`` (the speed drops so the arc stays
+  drivable). A heading error above ``turn_in_place_deg`` turns in place only with
+  ``in_place``, where no shaped turn segment applies (the start, a joint between parts, a lane
+  end the Planner left straight) or when a forward arc would leave the geofence; inside a shaped
+  turn it drives a tight forward (or reverse) arc instead. ``reverse`` segments of a three-point
+  turn are driven backwards (negative ``linear``, pure pursuit on the reversed heading, the
+  blades always off); a plan with them needs a drive link that can reverse. While reversing, a
+  mower that moves forwards for ``sign_error_reports`` reports ends the run
+  ``heading_mismatch``.
 * **Drive calibration** (ADR 0042): :meth:`SpotRunConfig.calibrated` turns a measured
   :class:`~mowdeck_contracts.v1.DriveCalibration` into the stick scale: the full-scale speed
   (rescaled when the vendor's speed setting changed since), the full-scale yaw rate for dead
@@ -65,6 +76,7 @@ The run publishes :class:`~mowdeck_contracts.v1.SpotRunStatus` through its statu
 
 import asyncio
 import contextlib
+import itertools
 import logging
 import math
 from collections.abc import Awaitable, Callable
@@ -90,6 +102,7 @@ from mowdeck_contracts.v1 import (
     SpotMowPlan,
     SpotRunState,
     SpotRunStatus,
+    TurnStyle,
     utc_now,
 )
 
@@ -247,6 +260,16 @@ class SpotRunConfig:
     """Consecutive reports with a growing heading error while turning that abort the run."""
     sign_error_min_deg: float = 2.0
     """The error must grow by at least this much per report to count."""
+    turn_rate_dps: float = 15.0
+    """Highest yaw rate while following a shaped ``turn`` segment (ADR 0043); the speed drops
+    so the segment's arc stays drivable at it."""
+    cusp_radius_m: float = 0.08
+    """The last point before the direction of travel changes (a three-point turn's cusp) counts
+    as reached only this close, or once the mower passed it (``waypoint_radius_m`` would skip
+    the short reverse leg)."""
+    reverse_sign_min_m: float = 0.02
+    """While reversing, a report this far ahead of the previous one along the heading counts
+    as moving the wrong way."""
 
     def calibrated(
         self, calibration: DriveCalibration | None, drive_speed_setting: float | None = None
@@ -298,6 +321,11 @@ class SpotRunConfig:
             return 0.0
         rate = self.assumed_yaw_rate_rad_s * (magnitude - self.turn_dead_zone)
         return math.copysign(rate / (1 - self.turn_dead_zone), angular)
+
+    def yaw_stick(self, rate_rad_s: float) -> float:
+        """The ``angular`` stick magnitude for a yaw rate (turn dead zone included, at most
+        1)."""
+        return min(1.0, abs(self.turn_stick(rate_rad_s / self.assumed_yaw_rate_rad_s)))
 
     def turn_stick(self, fraction: float) -> float:
         """The ``angular`` stick value for a signed fraction of the full yaw rate: the turn dead
@@ -442,6 +470,10 @@ class SpotRunReport:
     """``return_to_dock`` went out after the run."""
     return_problem: str | None = None
     """Why the return was not sent although it was due."""
+    turn_style: TurnStyle = TurnStyle.IN_PLACE
+    """How the run turned at lane ends (ADR 0043)."""
+    in_place_turns: int = 0
+    """How often the run rotated the mower on the spot."""
 
     @property
     def command_status(self) -> CommandStatus:
@@ -457,6 +489,8 @@ class SpotRunReport:
         if self.detail:
             head += f" ({self.detail})"
         tail = ""
+        if self.in_place_turns:
+            tail += f", {self.in_place_turns} in-place turns"
         if self.transit_m > 0:
             tail += f", transit {self.transit_m:.0f} m"
         if self.sent_home:
@@ -484,6 +518,13 @@ class _Segment:
     """False for the transit and the joining legs (their points are not plan points)."""
     transit: bool = False
     """The transit to the spot: its geofence is the drivable space."""
+    reverse: bool = False
+    """Driven backwards (a three-point turn's middle leg; the blades stay off)."""
+
+    @property
+    def shaped_turn(self) -> bool:
+        """A turn the Planner shaped (an arc of several points), not a straight joint."""
+        return self.kind == "turn" and len(self.points) >= 3
 
 
 @dataclass(slots=True)
@@ -530,6 +571,8 @@ class SpotMowRun:
         clock: Callable[[], datetime] = utc_now,
         sleep: Sleep | None = None,
         config: SpotRunConfig | None = None,
+        turn_style: TurnStyle = TurnStyle.IN_PLACE,
+        reverse: bool = False,
     ) -> None:
         if not 0 < speed_mps <= MAX_SPOT_MOW_SPEED_MPS:
             msg = f"speed_mps must be within (0, {MAX_SPOT_MOW_SPEED_MPS}]"
@@ -549,7 +592,17 @@ class SpotMowRun:
         self._config = config or SpotRunConfig()
         self._fence = Geofence.of(mower_map, self._config.geofence_margin_m)
         self._space = DrivableSpace.of(mower_map, self._config.transit)
+        self._reverse = reverse
+        self.turn_style = (
+            TurnStyle.ARC if turn_style is TurnStyle.MULTI_POINT and not reverse else turn_style
+        )
         self._segments = _segments_of(plan, speed_mps, self._config.waypoint_radius_m)
+        if self.turn_style is not TurnStyle.IN_PLACE:
+            limit = math.radians(self._config.turn_rate_dps)
+            for segment in self._segments:
+                if segment.shaped_turn:
+                    radius = _arc_radius(segment.points)
+                    segment.speed_mps = max(0.02, min(segment.speed_mps, limit * radius))
         self._planned_points = sum(len(s.points) for s in self._segments if s.planned)
         self._mow_points = sum(
             len(s.points) for s in self._segments if s.planned and s.kind == "mow"
@@ -589,6 +642,8 @@ class SpotMowRun:
         self._measured_speed: float | None = None
         self._turning = False
         self._turn_errors: list[float] = []
+        self._in_place_turns = 0
+        self._wrong_way: list[float] = []
         # progress (stall check)
         self._progress_at: datetime | None = None
         self._best_along = -math.inf
@@ -721,6 +776,11 @@ class SpotMowRun:
         from its real pose after undocking; any other mower needs a fixed RTK position and gets
         the transit prepended now. No route returns ``no_route: ...``.
         """
+        if not self._reverse and any(s.reverse for s in self._segments):
+            return (
+                "the plan drives backwards (three-point turns) and this drive link cannot "
+                "reverse; plan it with arc turns"
+            )
         for segment in self._segments:
             for point in segment.points:
                 problem = self._fence.violation(point)
@@ -984,12 +1044,14 @@ class SpotMowRun:
                 return
             linear, angular = self._steer(estimate, now)
             segment = self._segments[self._progress.segment]
-            blade_on = self._blades and segment.blades_on and not segment.transit
+            blade_on = (
+                self._blades and segment.blades_on and not segment.transit and not segment.reverse
+            )
             if not await self._send(linear, angular, blade_on=blade_on):
                 return
             self._last_cmd = (linear, angular)
             self._cmd_at = now
-            if linear > 0:
+            if linear != 0:
                 self._moving_since = self._moving_since or now
             else:
                 self._moving_since = None
@@ -1013,7 +1075,7 @@ class SpotMowRun:
         along = self._along(report.point)
         _, target = self._leg()
         to_target = distance(report.point, target)
-        heading = abs(self._heading_error(report.x, report.y, report.theta))
+        heading = abs(self._heading_error(report.x, report.y, self._travel(report.theta)))
         progressed = False
         if along >= self._best_along + config.stall_progress_m or self._best_along == -math.inf:
             self._best_along = along
@@ -1097,13 +1159,23 @@ class SpotMowRun:
             moving = (
                 self._moving_since is not None
                 and self._moving_since <= previous.observed_at
-                and self._last_cmd[0] > 0
+                and self._last_cmd[0] != 0
             )
             if moving and 0.2 <= dt <= 3.0:
                 self._measured_speed = distance(previous.point, pose.point) / dt
                 self._govern()
+            if moving and self._last_cmd[0] < 0 and not self._reverse_ok(previous, pose):
+                self._end(
+                    "aborted",
+                    REASON_HEADING_MISMATCH,
+                    f"the mower moved forwards for {self._config.sign_error_reports} reports "
+                    "while reversing (reverse direction?)",
+                )
+                return False
+        if self._last_cmd[0] >= 0:
+            self._wrong_way.clear()
         if self._turning:
-            error = abs(self._heading_error(pose.x, pose.y, pose.theta))
+            error = abs(self._heading_error(pose.x, pose.y, self._travel(pose.theta)))
             errors = self._turn_errors
             if errors and error > errors[-1] + math.radians(self._config.sign_error_min_deg):
                 errors.append(error)
@@ -1123,6 +1195,17 @@ class SpotMowRun:
             self._end("aborted", REASON_HEADING_MISMATCH, f"cross-track error {cross:.2f} m")
             return False
         return True
+
+    def _reverse_ok(self, previous: Pose, pose: Pose) -> bool:
+        """Track the wrong-way reports while reversing; False once there were
+        ``sign_error_reports`` in a row (the mower drives forwards on a negative stick)."""
+        dx, dy = pose.x - previous.x, pose.y - previous.y
+        ahead = dx * math.cos(previous.theta) + dy * math.sin(previous.theta)
+        if ahead > self._config.reverse_sign_min_m:
+            self._wrong_way.append(ahead)
+        else:
+            self._wrong_way.clear()
+        return len(self._wrong_way) < self._config.sign_error_reports
 
     def _govern(self) -> None:
         measured = self._measured_speed
@@ -1154,14 +1237,16 @@ class SpotMowRun:
 
     def _advance(self, estimate: LocalPoint) -> bool:
         """Move the target past every reached waypoint; False when the plan is complete."""
-        radius = self._config.waypoint_radius_m
         while True:
             segment = self._segments[self._progress.segment]
             target = segment.points[self._progress.target]
             start = segment.points[self._progress.target - 1]
+            radius = self._config.waypoint_radius_m
+            if self._progress.target + 1 >= len(segment.points) and self._cusp_after(segment):
+                radius = self._config.cusp_radius_m
             reached = distance(estimate, target) <= radius or (
                 _projection(estimate, start, target) >= 1.0
-                and distance(estimate, target) <= 2 * radius
+                and distance(estimate, target) <= max(2 * radius, self._config.waypoint_radius_m)
             )
             if not reached:
                 return True
@@ -1186,6 +1271,13 @@ class SpotMowRun:
                     self._linear = self._linear_for(following.speed_mps)
                 self._set_state(self._driving_state(), None)
             self._notify()
+
+    def _cusp_after(self, segment: _Segment) -> bool:
+        """True when the segment after ``segment`` is driven in the other direction."""
+        index = self._progress.segment + 1
+        if index >= len(self._segments):
+            return False
+        return self._segments[index].reverse != segment.reverse
 
     def _count_point(self, segment: _Segment) -> None:
         self._driven += 1
@@ -1212,20 +1304,72 @@ class SpotMowRun:
             return 0.0
         return wrap_angle(math.atan2(target[1] - y, target[0] - x) - theta)
 
+    def _travel(self, theta: float) -> float:
+        """The direction of travel for a heading: reversed on a ``reverse`` segment."""
+        if self._segments[self._progress.segment].reverse:
+            return wrap_angle(theta + math.pi)
+        return theta
+
     def _steer(self, estimate: LocalPoint, now: datetime) -> tuple[float, float]:
         theta = self._estimated_theta(now)
-        error = self._heading_error(estimate[0], estimate[1], theta)
+        segment = self._segments[self._progress.segment]
+        error = self._heading_error(estimate[0], estimate[1], self._travel(theta))
         config = self._config
+        direction = -1.0 if segment.reverse else 1.0
+        shaped = segment.shaped_turn and self.turn_style is not TurnStyle.IN_PLACE
+        turn_rate = config.yaw_stick(math.radians(config.turn_rate_dps))
+        limit = turn_rate if shaped else None
         if abs(error) > math.radians(config.turn_in_place_deg):
+            if self._in_turn() and not self._at_fence_edge(estimate, theta, error, direction):
+                # a tight arc at the turn rate instead of a rotation on the spot
+                self._turning = False
+                self._turn_errors.clear()
+                angular = math.copysign(turn_rate, error)
+                return direction * self._config.min_linear, angular
             if not self._turning:
                 self._turning = True
                 self._turn_errors.clear()
+                self._in_place_turns += 1
             angular = config.turn_stick(config.turn_gain * error)
-            return 0.0, self._clamp(angular, -config.turn_max, config.turn_max)
+            high = min(config.turn_max, limit) if limit is not None else config.turn_max
+            return 0.0, self._clamp(angular, -high, high)
         self._turning = False
         self._turn_errors.clear()
         angular = config.turn_stick(config.steer_gain * error)
-        return self._linear, self._clamp(angular, -config.steer_max, config.steer_max)
+        high = limit if limit is not None else config.steer_max
+        return direction * self._linear, self._clamp(angular, -high, high)
+
+    def _in_turn(self) -> bool:
+        """True while a shaped turn applies: on a shaped ``turn`` segment, or on the first leg
+        right after one (the mower may leave the arc late at 1 Hz reports), unless the run
+        turns in place by style."""
+        if self.turn_style is TurnStyle.IN_PLACE:
+            return False
+        index = self._progress.segment
+        if self._segments[index].shaped_turn:
+            return True
+        return index > 0 and self._progress.target == 1 and self._segments[index - 1].shaped_turn
+
+    def _at_fence_edge(
+        self, estimate: LocalPoint, theta: float, error: float, direction: float
+    ) -> bool:
+        """True when the tight arc a shaped turn would drive for ``error`` (at the lowest
+        speed and the turn rate) leaves the geofence: the mower then turns in place."""
+        config = self._config
+        rate = math.radians(config.turn_rate_dps)
+        radius = max(0.05, config.speed_at(config.min_linear) / rate)
+        side = math.copysign(1.0, error) * direction
+        cx = estimate[0] - side * radius * math.sin(theta)
+        cy = estimate[1] + side * radius * math.cos(theta)
+        steps = max(2, math.ceil(abs(error) / math.radians(10)))
+        for i in range(1, steps + 1):
+            turn = math.copysign(abs(error) * i / steps, error)
+            c, s = math.cos(turn), math.sin(turn)
+            dx, dy = estimate[0] - cx, estimate[1] - cy
+            point = (cx + dx * c - dy * s, cy + dx * s + dy * c)
+            if self._fence_violation(point) is not None:
+                return True
+        return False
 
     # --- dead reckoning ---------------------------------------------------------------------------
 
@@ -1234,13 +1378,14 @@ class SpotMowRun:
         assert report is not None  # noqa: S101 - a usable pose was seen
         dt = self._reckon_dt(report, now)
         linear, angular = self._last_cmd
-        if dt <= 0 or linear <= 0:
+        if dt <= 0 or linear == 0:
             return report.point
         speed = (
             self._measured_speed
             if self._measured_speed is not None
-            else self._config.speed_at(linear)
+            else self._config.speed_at(abs(linear))
         )
+        speed = math.copysign(speed, linear)
         theta = report.theta + 0.5 * self._config.yaw_rate_at(angular) * dt
         return (report.x + math.cos(theta) * speed * dt, report.y + math.sin(theta) * speed * dt)
 
@@ -1310,6 +1455,8 @@ class SpotMowRun:
             undocked=self._undock,
             sent_home=self._sent_home,
             return_problem=self._return_problem,
+            turn_style=self.turn_style,
+            in_place_turns=self._in_place_turns,
         )
         _log.info("spot run %s: %s", self.run_id, self._report.summary())
         self._finished.set()
@@ -1375,8 +1522,31 @@ def _segments_of(plan: SpotMowPlan, speed_mps: float, join_m: float) -> list[_Se
                 points = [points[0], points[0]]
             else:
                 continue
-        segments.append(_Segment(points, segment.kind, segment.blades_on, speed))
+        segments.append(
+            _Segment(
+                points,
+                segment.kind,
+                segment.blades_on and not segment.reverse,
+                speed,
+                reverse=segment.reverse,
+            )
+        )
     return segments
+
+
+def _arc_radius(points: list[LocalPoint]) -> float:
+    """The mean radius of a curved polyline: its mean leg length over its mean heading change
+    per point (infinite for a straight one)."""
+    length = sum(distance(a, b) for a, b in itertools.pairwise(points))
+    turned = 0.0
+    for a, b, c in zip(points, points[1:], points[2:], strict=False):
+        h1 = math.atan2(b[1] - a[1], b[0] - a[0])
+        h2 = math.atan2(c[1] - b[1], c[0] - b[0])
+        turned += abs(wrap_angle(h2 - h1))
+    if turned <= 1e-3:
+        return math.inf
+    # mean leg over mean corner: the arc's radius for evenly sampled points
+    return (length / (len(points) - 1)) / (turned / (len(points) - 2))
 
 
 def _projection(p: LocalPoint, a: LocalPoint, b: LocalPoint) -> float:

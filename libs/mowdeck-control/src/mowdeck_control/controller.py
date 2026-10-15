@@ -70,7 +70,10 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    sends ``ReturnToDock`` to the connection after it ended, unless it was stopped. A spot run takes
    the stick scale from the drive calibration (``drive_calibration``, ADR 0042,
    :meth:`~mowdeck_control.spot_run.SpotRunConfig.calibrated`) and the vendor's current speed
-   setting (``MowerState.drive_speed_mps``).
+   setting (``MowerState.drive_speed_mps``). It turns at lane ends as
+   :func:`~mowdeck_contracts.v1.resolve_turn_style` says (ADR 0043): the command's
+   ``turn_style``, else the mower's own ``MowerState.turn_style``, else ``arc``;
+   ``multi_point`` only with ``capabilities.drive_reverse``.
 13. A ``DriveCalibrate`` (ADR 0042) starts a
    :class:`~mowdeck_control.calibration.DriveCalibrationRun` with frames through this controller
    (``correlation_id = calibration:<command_id>``): it needs ``capabilities.manual_drive``, no open
@@ -130,6 +133,8 @@ from mowdeck_contracts.v1 import (
     SpotRunStatus,
     SpotStop,
     StartMow,
+    TurnStyle,
+    resolve_turn_style,
     utc_now,
 )
 
@@ -892,6 +897,9 @@ class MowerController:
         if problem is not None:
             return self._result(envelope, CommandStatus.REJECTED, problem)
         blades = command.blades and command.confirm_blades and caps.manual_drive_blades
+        turn_style = resolve_turn_style(
+            command.turn_style, state.turn_style, reverse=caps.drive_reverse
+        )
         run = SpotMowRun(
             run_id=envelope.command_id,
             plan=command.plan,
@@ -907,6 +915,8 @@ class MowerController:
             clock=self._clock,
             sleep=self._spot_sleep,
             config=self.spot_config(state),
+            turn_style=turn_style,
+            reverse=caps.drive_reverse,
         )
         # The transit planning is pure geometry; a large map takes a moment, off the loop.
         problem = await asyncio.to_thread(run.prepare, state)
@@ -920,6 +930,9 @@ class MowerController:
             detail += "; leaving the dock first"
         if run.transit is not None and run.transit.length_m > 0:
             detail += f"; transit {run.transit.length_m:.0f} m"
+        detail += f"; turns {turn_style.value}"
+        if command.turn_style is TurnStyle.MULTI_POINT and turn_style is not TurnStyle.MULTI_POINT:
+            detail += " (the drive link cannot reverse)"
         if command.blades and not blades:
             detail += "; blades forced off: " + (
                 "this mower does not allow blades while driving manually"
