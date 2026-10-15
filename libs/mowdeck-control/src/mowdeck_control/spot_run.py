@@ -198,6 +198,11 @@ class SpotRunConfig:
     """Two consecutive reports closer than this count as standing still."""
     return_timeout_s: float = 30.0
     """Longest wait for the answer to ``return_to_dock``."""
+    return_attempts: int = 3
+    """How often ``return_to_dock`` is tried. The link may blink right after the drive session
+    closes (seen live: the cloud reported the mower offline for a second)."""
+    return_retry_s: float = 5.0
+    """Pause between two ``return_to_dock`` attempts."""
     geofence_margin_m: float = 0.3
     max_linear: float = 0.5
     """Highest ``linear`` stick value the governor may command."""
@@ -792,16 +797,30 @@ class SpotMowRun:
         self._state = "returning"
         self._notify()
         _log.info("spot run %s: sending the mower home", self.run_id)
-        try:
-            async with asyncio.timeout(self._config.return_timeout_s):
-                refusal = await self._actions.return_to_dock()
-        except TimeoutError:
-            refusal = f"no answer within {self._config.return_timeout_s:.0f} s"
-        if refusal is None:
-            self._sent_home = True
-        else:
-            self._return_problem = refusal
-            _log.warning("spot run %s: return to dock not sent: %s", self.run_id, refusal)
+        config = self._config
+        refusal: str | None = None
+        for attempt in range(1, max(1, config.return_attempts) + 1):
+            if attempt > 1:
+                await self._sleep(config.return_retry_s)
+                state = self._pose_source()
+                if state is not None and state.activity in DOCKED_ACTIVITIES:
+                    return  # docked meanwhile (someone sent it home)
+            try:
+                async with asyncio.timeout(config.return_timeout_s):
+                    refusal = await self._actions.return_to_dock()
+            except TimeoutError:
+                refusal = f"no answer within {config.return_timeout_s:.0f} s"
+            if refusal is None:
+                self._sent_home = True
+                return
+            _log.warning(
+                "spot run %s: return to dock not sent (attempt %d of %d): %s",
+                self.run_id,
+                attempt,
+                config.return_attempts,
+                refusal,
+            )
+        self._return_problem = refusal
 
     # --- driving ---------------------------------------------------------------------------------
 
