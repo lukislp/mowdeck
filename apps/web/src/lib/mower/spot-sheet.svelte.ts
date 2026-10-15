@@ -1,7 +1,7 @@
 /**
  * The spot sheet's flow, without any markup: spot mode on the map (a circle around a tap, or a
- * polygon of up to eight taps, or the polygon of a missed spot), the pattern, spacing, speed and
- * blade settings, the debounced Planner preview (one at a time, keyed by the whole request), the
+ * polygon of up to eight taps, or the polygon of a missed spot), the pattern, spacing, speed,
+ * turn style and blade settings, the debounced Planner preview (one at a time, keyed by the whole request), the
  * start conditions, "Starten" (`POST /planner/plans`, then the `spot_mow` command), the STOP of a
  * running spot run and the end notice of the run this page watched. The page constructs it with
  * the real API calls and binds to its state; `spot-sheet.test.ts` drives it with fakes.
@@ -35,6 +35,9 @@ import {
   isSpotRunFinal,
   planRequest,
   previewMowPath,
+  resolveTurnStyle,
+  turnFallsBack,
+  turnOptions as buildTurnOptions,
   spotCommand,
   spotConditions,
   spotFromGap,
@@ -49,6 +52,7 @@ import {
   type SpotRunStatus,
   type SpotSettings,
   type ConditionState,
+  type TurnStyle,
 } from './spot-sheet';
 import type { SheetArea } from './start-sheet';
 
@@ -63,6 +67,8 @@ export interface SpotSheetContext {
     cutting_width_mm?: number | null;
     links_supported?: string[];
     undock?: boolean;
+    /** The drive link can drive backwards (multi-point turns need it; ADR 0043). */
+    drive_reverse?: boolean;
   } | null;
   state: ConditionState | null;
   /** This browser drives the mower with the joystick right now. */
@@ -135,6 +141,20 @@ export class SpotSheetFlow {
   areaId = $derived.by(() => containingArea(this.spot, this.deps.context().areas));
   complete = $derived(spotComplete(this.spot));
   corners = $derived(this.spot?.kind === 'polygon' ? this.spot.points.length : 0);
+  /** `capabilities.drive_reverse`: the drive link can drive backwards. */
+  driveReverse = $derived.by(() => this.deps.context().capabilities?.drive_reverse === true);
+  /** The mower's own turn setting (`MowerState.turn_style`), null when not reported. */
+  mowerTurnStyle = $derived.by(() => this.deps.context().state?.turn_style ?? null);
+  /** The choices of the "Wenden" select (the default names the style it resolves to). */
+  turnOptions = $derived(buildTurnOptions(this.mowerTurnStyle, this.driveReverse));
+  /** The style the run turns with: the choice, the mower's setting or `arc`, after fallback. */
+  turnStyle = $derived(
+    resolveTurnStyle(this.settings.turnStyle, this.mowerTurnStyle, this.driveReverse),
+  );
+  /** Multi-point was wanted (picked or the mower's setting) but is driven as arcs. */
+  turnFallback = $derived(
+    turnFallsBack(this.settings.turnStyle, this.mowerTurnStyle, this.driveReverse),
+  );
   request = $derived.by((): PlanRequest | null =>
     planRequest({
       mowerId: this.deps.context().mowerId,
@@ -147,6 +167,8 @@ export class SpotSheetFlow {
         this.deps.context().reference,
         this.deps.context().capabilities?.undock,
       ),
+      mowerTurnStyle: this.mowerTurnStyle,
+      driveReverse: this.driveReverse,
     }),
   );
   key = $derived(spotPreviewKey(this.request));
@@ -339,6 +361,13 @@ export class SpotSheetFlow {
 
   setSpeed(value: number): void {
     this.settings = { ...this.settings, speedMps: clampSpeedMps(value) };
+  }
+
+  /** The "Wenden" choice: null for the mower's own setting; an unavailable style is ignored. */
+  setTurnStyle(style: TurnStyle | null): void {
+    const option = untrack(() => this.turnOptions).find((o) => o.value === style);
+    if (!option || option.disabled) return;
+    this.settings = { ...this.settings, turnStyle: style };
   }
 
   setBlades(on: boolean): void {

@@ -1,6 +1,6 @@
 /**
  * Pure rules of the spot sheet (the flow itself is `spot-sheet.svelte.ts`): the limits of the
- * spot, the Planner request for a spot and its pattern, the preview as a mow path for the map,
+ * spot, the turn style (ADR 0043), the Planner request for a spot and its pattern, the preview as a mow path for the map,
  * the `spot_mow` command, and the start conditions (green or red rows). Unit tested in
  * `spot-sheet.test.ts`.
  */
@@ -35,6 +35,8 @@ export type PreviewOut = Planner['schemas']['PreviewOut'];
 export type PlanOut = Planner['schemas']['PlanOut'];
 export type SpotRunStatus = Telemetry['schemas']['SpotRunStatus'];
 export type SpotRunState = SpotRunStatus['state'];
+/** How a spot run turns at lane ends (ADR 0043). */
+export type TurnStyle = Planner['schemas']['TurnStyle'];
 
 // --- limits ------------------------------------------------------------------------------------
 
@@ -85,6 +87,8 @@ export interface SpotSettings {
   /** The blades switch is on (needs `confirmBlades` and the capability to count). */
   blades: boolean;
   confirmBlades: boolean;
+  /** The turn style the user picked; null: as set on the mower (`MowerState.turn_style`). */
+  turnStyle: TurnStyle | null;
 }
 
 export function defaultSpacingMm(cuttingWidthMm: number | null | undefined): number {
@@ -124,12 +128,105 @@ export function initialSettings(cuttingWidthMm: number | null | undefined): Spot
     speedMps: SPOT_SPEED_DEFAULT_MPS,
     blades: false,
     confirmBlades: false,
+    turnStyle: null,
   };
 }
 
 /** The blades run only when the mower allows them while driving, the switch is on and confirmed. */
 export function bladesRequested(settings: SpotSettings, allowed: boolean): boolean {
   return allowed && settings.blades && settings.confirmBlades;
+}
+
+// --- turn styles (ADR 0043) ------------------------------------------------------------------
+
+/** The style a run turns with when neither the user nor the mower names one. */
+export const DEFAULT_TURN_STYLE: TurnStyle = 'arc';
+export const TURN_STYLES: readonly TurnStyle[] = ['in_place', 'arc', 'multi_point'];
+
+/**
+ * The turn style a spot run uses, as the gateway resolves it (`resolve_turn_style` of the
+ * contracts): the requested one, else the mower's own setting, else `arc`; `multi_point` falls
+ * back to `arc` when the drive link cannot reverse (`capabilities.drive_reverse`).
+ */
+export function resolveTurnStyle(
+  requested: TurnStyle | null | undefined,
+  mowerDefault: TurnStyle | null | undefined,
+  driveReverse: boolean | null | undefined,
+): TurnStyle {
+  const style = requested ?? mowerDefault ?? DEFAULT_TURN_STYLE;
+  return style === 'multi_point' && driveReverse !== true ? 'arc' : style;
+}
+
+/** True when the wanted style is `multi_point` but the drive link turns it into `arc`. */
+export function turnFallsBack(
+  requested: TurnStyle | null | undefined,
+  mowerDefault: TurnStyle | null | undefined,
+  driveReverse: boolean | null | undefined,
+): boolean {
+  return (requested ?? mowerDefault) === 'multi_point' && driveReverse !== true;
+}
+
+export function turnStyleLabel(style: TurnStyle): string {
+  switch (style) {
+    case 'in_place':
+      return m.spot_turn_in_place();
+    case 'arc':
+      return m.spot_turn_arc();
+    case 'multi_point':
+      return m.spot_turn_multi_point();
+  }
+}
+
+/** What a style does, one line under the select. */
+export function turnStyleHint(style: TurnStyle): string {
+  switch (style) {
+    case 'in_place':
+      return m.spot_turn_hint_in_place();
+    case 'arc':
+      return m.spot_turn_hint_arc();
+    case 'multi_point':
+      return m.spot_turn_hint_multi_point();
+  }
+}
+
+/** One choice of the "Wenden" select. */
+export interface TurnOption {
+  /** null: as set on the mower. */
+  value: TurnStyle | null;
+  /** The style a run with this choice turns with (after the fallback). */
+  resolved: TurnStyle;
+  label: string;
+  /** Not available over this drive link (multi-point without reverse driving). */
+  disabled: boolean;
+  /** Why it is disabled, or null. */
+  hint: string | null;
+}
+
+/** The choices of the select: the mower's own setting (with the style it resolves to) first. */
+export function turnOptions(
+  mowerDefault: TurnStyle | null | undefined,
+  driveReverse: boolean | null | undefined,
+): TurnOption[] {
+  const fallback = resolveTurnStyle(null, mowerDefault, driveReverse);
+  return [
+    {
+      value: null,
+      resolved: fallback,
+      label: m.spot_turn_mower_resolved({ style: turnStyleLabel(fallback) }),
+      disabled: false,
+      hint: null,
+    },
+    ...TURN_STYLES.map((style): TurnOption => {
+      const disabled = style === 'multi_point' && driveReverse !== true;
+      return {
+        value: style,
+        resolved: resolveTurnStyle(style, mowerDefault, driveReverse),
+        label: turnStyleLabel(style),
+        disabled,
+        hint: disabled ? m.spot_turn_needs_reverse() : null,
+      };
+    }),
+  ];
 }
 
 // --- the Planner request ---------------------------------------------------------------------
@@ -146,7 +243,7 @@ export function spotChain(settings: SpotSettings): NonNullable<PlanRequest['chai
  * `POST /planner/plans/preview` and `/plans` take the same body: the spot as a local polygon
  * inside `areaId` (the Planner clips to that area), the pattern chain and the mower data the
  * sheet decides: the speed for mowing and transfers, the spacing as cutting width minus overlap,
- * and the safety margin. Null without a complete spot inside one area.
+ * the safety margin and the resolved turn style (`resolveTurnStyle`). Null without a complete spot inside one area.
  */
 export function planRequest(input: {
   mowerId: string;
@@ -156,6 +253,10 @@ export function planRequest(input: {
   cuttingWidthMm: number | null | undefined;
   /** Where the run's transit starts (`spotTransitFrom`); the Planner returns the route. */
   transitFrom?: TransitFrom | null;
+  /** The mower's own turn setting (`MowerState.turn_style`). */
+  mowerTurnStyle?: TurnStyle | null;
+  /** `capabilities.drive_reverse`: the drive link can drive backwards. */
+  driveReverse?: boolean | null;
 }): PlanRequest | null {
   const polygon = spotPolygon(input.spot);
   if (polygon.length < 3 || !input.areaId) return null;
@@ -174,6 +275,12 @@ export function planRequest(input: {
       safety_margin_m: SPOT_SAFETY_MARGIN_M,
     },
     wgs84: false,
+    // Always the resolved style, so the preview shows the lane ends the run will drive.
+    turn_style: resolveTurnStyle(
+      input.settings.turnStyle,
+      input.mowerTurnStyle,
+      input.driveReverse,
+    ),
     ...(input.transitFrom ? { transit: input.transitFrom } : {}),
   };
 }
@@ -229,12 +336,29 @@ function stableJson(value: unknown): string {
 
 interface PreviewFeature {
   geometry?: { type?: string; coordinates?: unknown };
-  properties?: { kind?: string };
+  properties?: { kind?: string; reverse?: boolean };
+}
+
+/** The kinds of a spot preview's polylines (the map styles each as `md-mowpath--<kind>`). */
+export type PreviewKind = 'mow' | 'turn' | 'reverse' | 'transfer';
+
+/** The map kind of one preview segment: a reverse leg first, then the Planner's own kind. */
+export function previewKind(properties: PreviewFeature['properties']): PreviewKind {
+  if (properties?.reverse === true) return 'reverse';
+  if (properties?.kind === 'transfer') return 'transfer';
+  if (properties?.kind === 'turn') return 'turn';
+  return 'mow';
+}
+
+/** True when a path holds lane-end turns or reverse legs (the sheet shows their legend). */
+export function hasTurnKinds(path: Pick<MowPath, 'kinds'> | null | undefined): boolean {
+  return (path?.kinds ?? []).some((kind) => kind === 'turn' || kind === 'reverse');
 }
 
 /**
  * The Planner's preview (a FeatureCollection of LineStrings in local metres) as the map's mow
- * path: one polyline per segment, `mow` and `turn` as mowing, `transfer` dotted, without
+ * path: one polyline per segment, `mow` as mowing, `turn` (the lane-end arcs) and `reverse` (a
+ * three-point turn's backwards leg, blades off) styled apart, `transfer` dotted, without
  * progress; a found transit comes first as a `transfer`. The plan hash is the path hash, so a
  * start can seed the map with it.
  */
@@ -258,7 +382,7 @@ export function previewMowPath(preview: PreviewOut, plannedAt: string): MowPath 
       .map((c) => [Number(c[0]), Number(c[1])]);
     if (points.length < 2) continue;
     polylines.push(points);
-    kinds.push(feature.properties?.kind === 'transfer' ? 'transfer' : 'mow');
+    kinds.push(previewKind(feature.properties));
   }
   return {
     path_hash: preview.plan_hash,
@@ -298,6 +422,8 @@ export type SpotMowCommand = {
   confirm_blades: boolean;
   speed_mps: number;
   spot: SpotTarget | null;
+  /** The user's choice; null: the mower's own setting (the gateway resolves the same way). */
+  turn_style: TurnStyle | null;
 };
 
 export function spotCommand(input: {
@@ -314,6 +440,7 @@ export function spotCommand(input: {
     confirm_blades: blades,
     speed_mps: clampSpeedMps(input.settings.speedMps),
     spot: input.target,
+    turn_style: input.settings.turnStyle,
   };
 }
 
@@ -427,6 +554,8 @@ export interface ConditionState {
   /** False once the gateway reported the link lost. */
   connected?: boolean | null;
   spot_run?: SpotRunStatus | null;
+  /** The mower's own turn setting for its jobs (read only; ADR 0043). */
+  turn_style?: TurnStyle | null;
 }
 
 export interface SpotConditionInput {

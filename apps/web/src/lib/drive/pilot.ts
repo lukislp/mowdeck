@@ -6,7 +6,8 @@
  * sends a zero frame at 2 Hz only, to keep the session alive without traffic; letting go sends one
  * zero frame (forced past the rate limit) and then nothing, so the Device-Gateway's dead-man timer
  * is the backstop. The speed limit scales `linear` only; blades ride along only when the page has
- * armed and switched them on, and never in the release frame. The pilot also counts frames sent
+ * armed and switched them on, and never in the release frame. Backwards frames go out only when
+ * the drive link can reverse (`reverseAllowed`, `clampReverse`). The pilot also counts frames sent
  * and acknowledged in the last second for the session strip.
  */
 import { isZero, limitVector, type StickVector } from '@mowdeck/ui';
@@ -18,6 +19,16 @@ export const IDLE_FRAME_MS = 500;
 export const SPEED_LIMITS = [25, 50, 100] as const;
 export type SpeedLimit = (typeof SPEED_LIMITS)[number];
 
+/**
+ * The stick as the drive link can carry it: without reverse driving
+ * (`capabilities.drive_reverse` false, ADR 0043) the backwards part is cut to zero, so no frame
+ * with a negative `linear` ever goes out; turning keeps its range.
+ */
+export function clampReverse(vector: StickVector, reverseAllowed: boolean): StickVector {
+  if (reverseAllowed || vector.linear >= 0) return vector;
+  return { linear: 0, angular: vector.angular };
+}
+
 export interface DriveLink {
   sendFrame(frame: DriveFrame, force?: boolean): boolean;
 }
@@ -27,6 +38,11 @@ export class DrivePilot {
   speedLimit: SpeedLimit = 25;
   /** Blades on in the frames (the page decides: capability, armed, switched). */
   bladeOn = false;
+  /**
+   * The drive link can drive backwards (`capabilities.drive_reverse`); off by default, so an
+   * unknown link never gets a backwards frame.
+   */
+  reverseAllowed = false;
 
   readonly #link: DriveLink;
   readonly #now: () => number;
@@ -41,7 +57,7 @@ export class DrivePilot {
 
   /** One sample of the held stick; returns whether a frame went out. */
   sample(vector: StickVector): boolean {
-    const limited = limitVector(vector, this.speedLimit / 100);
+    const limited = limitVector(clampReverse(vector, this.reverseAllowed), this.speedLimit / 100);
     const now = this.#now();
     if (isZero(limited) && now - this.#lastSentAt < IDLE_FRAME_MS) return false;
     return this.#send(limited, false);
