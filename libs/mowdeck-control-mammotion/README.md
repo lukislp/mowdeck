@@ -13,8 +13,10 @@ flowchart LR
     gw["Device-Gateway / script"] --> ctl["MowerController<br/>(mowdeck-control)"]
     ctl --> base["MammotionBase<br/>state, map, commands"]
     base --> cloud["MammotionCloudConnection<br/>kind cloud"]
+    cloud --> dual["MammotionDualConnection<br/>cloud + ble_bridge link"]
     base --> ble["MammotionBleProxyConnection<br/>kind ble_bridge"]
     cloud --> port{{"MammotionPort<br/>port.py: the only module<br/>that imports pymammotion"}}
+    dual --> port
     ble --> port
     port --> pym["PyMammotion 0.10.9<br/>MammotionClient, DeviceHandle"]
     pym -->|MQTT| mcloud["Mammotion cloud"]
@@ -27,11 +29,12 @@ flowchart LR
 | `port` | `MammotionPort` protocol, `ClientPort` on `MammotionClient` + `DeviceHandle`, cloud login with credential cache, BLE only registration; re-exports the PyMammotion types the rest uses |
 | `mapping` | pure translation: work mode to activity, RTK fix and source, position, errors, capabilities per model, `HashList` to `MowerMap`, `StartMow` pattern to `OperationSettings`, joystick to `send_movement` units |
 | `base` | `MammotionBase`: the `MowerConnection` implementation shared by both links |
-| `cloud` | `MammotionCloudConnection`, `create_cloud_connection` (entry point `cloud`), `cloud_connection_factory(pool)`, `default_pool()` |
+| `cloud` | `MammotionCloudConnection` (also the `FirmwarePort` and `BridgeScanCapable` of a Mammotion mower), `create_cloud_connection` (entry point `cloud`), `cloud_connection_factory(pool)` (a registration with a `ble_bridge` link gets the dual connection), `default_pool()` |
+| `dual` | `MammotionDualConnection` and `BridgeWatcher`: the cloud plus a Bluetooth bridge as the second link ([ADR 0038](../../docs/adr/0038-dual-link-per-mower-and-firmware-updates.md), see [Dual link](#dual-link-cloud-plus-bluetooth-bridge)) |
 | `session` | `CloudSessionPool`: one logged-in client per set of credentials, shared by the mowers of an account and the discovery ([ADR 0034](../../docs/adr/0034-linked-cloud-accounts-and-device-discovery.md)) |
 | `discovery` | `discover_devices`: the devices of an account as `DiscoveredDevice` (mowers first; `is_mower` false for RTK base stations and pool cleaners) |
 | `fake_cloud` | the fake Mammotion cloud (`*@fake.mowdeck.test`, password `fake-cloud-password`) for development and the browser tests |
-| `ble`, `drive`, `esphome` | `MammotionBleProxyConnection`, `BleDriveSession`, ESPHome proxy wiring, `create_ble_bridge_connection` (entry point `ble_bridge`) |
+| `ble`, `drive`, `esphome` | `MammotionBleProxyConnection`, `BleDriveSession`, ESPHome proxy wiring (`open_proxy`, `scan_proxy`, `proxy_info_of` with the bridge firmware constants `BRIDGE_MIN_ESPHOME` and `BRIDGE_TEMPLATE_VERSION`), `create_ble_bridge_connection` (entry point `ble_bridge`) |
 | `options` | `CloudOptions`, `BleProxyOptions`, secret references |
 | `fake` | `FakeMammotionPort` and `sample_device()` (a LUBA 2 AWD 5000X: 25 to 70 mm, 0.2 to 0.6 m/s) for tests and the owner script's `--dry-run` |
 
@@ -58,6 +61,7 @@ Options come from Fleet (`connection_options` of the mower registration) through
 | `credential_ref` | one of `credential_ref`, `password` | `env:NAME` or `file:/run/secrets/name`, resolved in the Device-Gateway's environment |
 | `password` | | plain password; accepted in Phase 2 with a warning, never returned by the Fleet API |
 | `session_cache_path` | no | file for PyMammotion's credential cache (live tokens) on a private, writable volume; avoids a password login on every reconnect |
+| `links` | no | the registration's additional links as the Device-Gateway passes them (`{"ble_bridge": {...}}`, the `ble_bridge` options below with `noise_psk` merged); present: the connection is a `MammotionDualConnection` |
 | `refresh_seconds` | no | how often the mower is asked for a fresh report while docked, charging, idle or offline, 10 to 300 s, default 20 (see **Fresh state** below) |
 | `report_stream_seconds` | no | length of the continuous report window kept open while the mower is active (renewed every half window), 10 to 300 s or 0 for off, default 60 (see **Fresh state**) |
 | `refresh_seconds_active` | no | the same while it mows, returns or is paused away from the dock, 2 to 60 s, default 5 (never longer than `refresh_seconds`) |
@@ -169,6 +173,26 @@ Mammotion-HA comparison: its report coordinator (`coordinator.py`, `REPORT_INTER
 
 **Link loss.** Cloud: a transient MQTT loss keeps the connection (PyMammotion reconnects by itself, commands raise `NotConnected` meanwhile); only a dead login makes `is_connected` false. BLE: a lost proxy or BLE link makes `is_connected` false and commands raise `NotConnected`, so the Device-Gateway reconnects with backoff.
 
+### Dual link: cloud plus Bluetooth bridge
+
+[ADR 0038](../../docs/adr/0038-dual-link-per-mower-and-firmware-updates.md). A cloud mower whose registration carries a `ble_bridge` link gets a `MammotionDualConnection` (`dual.py`), one PyMammotion client with two transports:
+
+- A `BridgeWatcher` task opens the ESPHome proxy (`esphome.open_proxy`: API client, `bleak-esphome` scanner, the mower's `BLEDevice` by `ble_address`), attaches the BLE transport to the registered cloud device (`MammotionPort.attach_bridge`: `client.add_ble_to_device(name, ble_device, account_id, rssi)`, `connect_ble`, `handle.set_prefer_ble(True)`) and reconnects with its own backoff (5 s doubling to 60 s), independent of the cloud session. The device id equals the cloud device name, which is also the advertised Bluetooth name.
+- Preference and fallback are PyMammotion's own: BLE while connected, else MQTT (and the handle keeps using BLE while MQTT reconnects). `MowerState.connection` is `ble_bridge` while the bridge carries the link, `cloud` otherwise; `raw.link` keeps the label. `MowerState.links.ble_bridge` reports `connected`, `since`, the mower's RSSI at the bridge (from the scanner's advertisement data, refreshed on every publish) and the bridge firmware from ESPHome's `device_info`: `esphome_version`, `compiled_at`, `project_version` of MowDeck's template, and `outdated` with the reason `esphome_version` (older than `BRIDGE_MIN_ESPHOME`), `project_version` (an older template) or `no_project` (flashed from the stock proxy YAML). Every link change publishes a state.
+- `is_connected` stays the cloud rule: a lost bridge does not end the connection (the cloud goes on, the Device-Gateway does not reconnect), a dead cloud login does; with both down commands raise `NotConnected`. The camera and the firmware service stay with the cloud.
+- Manual driving needs the bridge: `capabilities.manual_drive` is true only while it is connected (the Device-Gateway republishes the capabilities on a link change), `start_drive_session` refuses without it ("the Bluetooth bridge is not connected"), and an open session ends when the bridge drops: a frame never falls back to the cloud transport (`BleDriveSession(link_up=...)`). Blades while driving follow the link's `allow_manual_blades`.
+- Bridge scans (`BridgeScanCapable`, the web app's "add a bridge" dialog through Fleet and the Device-Gateway): `scan_bridge(host, port, secret, expected_name, timeout_s)` runs `esphome.scan_proxy` (connect, `device_info`, collect `Luba-*`/`Yuka-*` advertisements until the expected name shows up or the timeout passes; `APIConnectionError` and its kin map to `unreachable`, `InvalidEncryptionKeyAPIError` to `auth_failed`, a mower that did not advertise to `timeout` with the proxy description). A dual connection answers a scan for the bridge it holds from its live scanner, so a re-check never opens a second API client to the proxy (one native API client per proxy at a time). The plain cloud connection scans too, so a bridge can be added to a mower that has none yet.
+
+### Firmware
+
+The cloud connection is the `FirmwarePort` of a Mammotion mower (`capabilities.firmware_update`); the BLE-only connection has none (the vendor's firmware service is HTTPS). `check_firmware()` calls `MammotionHTTP.get_device_ota_firmware([iot_id])` (`POST /device-server/v1/devices/version/check`) and maps the `CheckDeviceVersion` to a `FirmwareInfo`: `installed` (the adapter's firmware version, else the check's `current_version`), `available` and `release_notes` from `product_version_info_vo` when `upgradeable`, `update_state` `available`, `idle`, `installing` (`isupgrading`) or `unknown`. The Device-Gateway asks once after the connect and daily, and on `gateway.mower.<id>.firmware.check`.
+
+A `FirmwareUpdate {version}` passes the controller's safety rules (the adapter applies them once more for direct callers), then `MowerDevice.clear_version_info()` and `MammotionHTTP.start_ota_upgrade(iot_id, version)` (`POST /device-server/v1/ota/device/upgrade`); the command is confirmed by `update_check.isupgrading` or the work mode `MODE_UPDATING` (mapped to the activity `updating`, during which the controller refuses everything but the emergency stop). A `FirmwareTracker` (`mapping.py`) follows the update through the device updates: progress from `update_check` (the MQTT property `otaProgress` and the BLE `toapp_upgrade_report` both land there, PyMammotion's `Device.apply_ota_progress`), the end on a report with a new firmware version or a completed OTA frame (`idle`, then the device information rounds run again and the vendor is asked once more after 60 s), a failed frame (`failed` with the mower's message), or 45 minutes without either (`unknown`). An update started in the vendor app is picked up the same way. The MQTT drop while the mower reboots is PyMammotion's normal reconnect. Nothing here talks to Aliyun directly.
+
+### Fake cloud: bridge and firmware
+
+The fake cloud (`fake_cloud.py`, `MOWDECK_FAKE_MAMMOTION_CLOUD`) offers every mower the firmware `1.30.31.19` (`upgradeable`); a started update progresses to the new version by itself within 8 s. A fake bridge scan answers any host with `Luba-FAKE0001` at -62 dBm (a host containing `unreachable` is `unreachable`, a key that is not 32 base64 bytes `auth_failed`), and a mower registered with a `ble_bridge` link gets a dual connection whose bridge connects at once, so the web app's flows run end to end without hardware.
+
 ## Testing with a real mower
 
 The owner script connects through this adapter exactly as the Device-Gateway does, prints capabilities, state (battery, activity, RTK status and source, firmware) and a map summary (areas with names and sizes), and optionally sends one command through the `MowerController`. Every step is appended to a JSON lines log (default `out/try_real_mower.jsonl`) for the results table of [spike 0001](../../docs/spikes/0001-ble-bridge-and-pymammotion.md).
@@ -185,6 +209,12 @@ uv run python libs/mowdeck-control-mammotion/scripts/try_real_mower.py --camera
 uv run python libs/mowdeck-control-mammotion/scripts/try_real_mower.py --light on   # then --light off
 # BLE through the ESPHome proxy, once the XIAO ESP32-S3 is flashed:
 uv run python libs/mowdeck-control-mammotion/scripts/try_real_mower.py --esphome mowdeck-bridge.local,<noise_psk>,AA:BB:CC:DD:EE:FF
+# Dual link (ADR 0038): the cloud plus the bridge, watching the link state for 90 s
+$env:MAMMOTION_BLE_ADDRESS = "AA:BB:CC:DD:EE:FF"
+uv run python libs/mowdeck-control-mammotion/scripts/try_real_mower.py --bridge mowdeck-bridge.local,<noise_psk> --wait 90
+# Only look through the bridge for mowers (no cloud login), or only ask the cloud for firmware
+uv run python libs/mowdeck-control-mammotion/scripts/try_real_mower.py --scan mowdeck-bridge.local,<noise_psk>
+uv run python libs/mowdeck-control-mammotion/scripts/try_real_mower.py --firmware-check
 # Without credentials or hardware (fake port):
 uv run python libs/mowdeck-control-mammotion/scripts/try_real_mower.py --dry-run --start-area "Front lawn"
 ```
@@ -196,6 +226,8 @@ Safety: the script prints a safety notice, asks for `yes` before every command (
 **Camera (owner test, one step).** `--camera` requests a live camera session exactly as the Device-Gateway does and prints it with the token, the encryption key and the salt redacted, plus the camera list (`0: Front left (uid 1)`, ...); the log gets the same redacted record. Note what it shows: whether `encryption` is set, the cameras and uids, `expires_at` (the token lifetime) and the `quota` numbers against the app's 4G allowance. Requesting a session makes the mower publish video for a while (over 4G it counts against the allowance). To see the picture, run the stack with `WEB_CAMERA_ENABLED=true`, register the mower with the `cloud` connection, open the web app over HTTPS (or `http://localhost`) and press "Live camera" on the mower page ([web app guide](../../docs/dev/web-app.md#live-camera)). `--dry-run --camera` shows the output on a fake encrypted session.
 
 What the run verifies (unverified until then): the work modes and RTK fields the LUBA 2 AWD X really reports, the map reference with network RTK, the dock position and heading convention, the heading of the position, the StartMow sequence and pattern mapping (`channel_mode`, `toward_mode`, border laps), the emergency stop sequence over MQTT, the ESPHome path, and for the camera the stream token fields, the camera uid mapping, the token lifetime and the units of the video budget.
+
+**Dual link and firmware (owner run, ADR 0038).** `--bridge HOST,KEY --wait 90` prints a `link` line every two seconds: expect `connection=ble_bridge bridge=up rssi=...` within the scan timeout, `connection=cloud bridge=down` a few seconds after the bridge is unplugged (the cloud lines go on; nothing reconnects) and `ble_bridge` again after the backoff once it is powered. Unverified until then: that `add_ble_to_device` plus `connect_ble` brings the BLE transport up on the cloud handle and that `set_prefer_ble` makes the drive frames take it (the Device-Gateway's drive path), the RSSI values of `bleak-esphome`'s advertisements, and the `device_info` fields of the bridge (`project_name`/`project_version` once the template carries `esphome.project`). `--firmware-check` shows the `CheckDeviceVersion` mapping (`installed`, `available`, release notes) on the real account; an update itself is sent only from the web app, with the mower docked and charging. `--scan HOST,KEY` shows the advertisement list and the error mapping against the real proxy (wrong key, wrong host).
 
 ## Development
 
