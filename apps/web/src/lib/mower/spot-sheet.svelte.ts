@@ -40,6 +40,7 @@ import {
   spotFromGap,
   spotPreviewKey,
   spotTarget,
+  spotTransitFrom,
   type PlanOut,
   type PlanRequest,
   type PreviewOut,
@@ -61,6 +62,7 @@ export interface SpotSheetContext {
     manual_drive_blades?: boolean;
     cutting_width_mm?: number | null;
     links_supported?: string[];
+    undock?: boolean;
   } | null;
   state: ConditionState | null;
   /** This browser drives the mower with the joystick right now. */
@@ -140,6 +142,11 @@ export class SpotSheetFlow {
       areaId: this.areaId,
       settings: this.settings,
       cuttingWidthMm: this.cuttingWidthMm,
+      transitFrom: spotTransitFrom(
+        this.deps.context().state,
+        this.deps.context().reference,
+        this.deps.context().capabilities?.undock,
+      ),
     }),
   );
   key = $derived(spotPreviewKey(this.request));
@@ -163,6 +170,8 @@ export class SpotSheetFlow {
       linksSupported: ctx.capabilities?.links_supported,
       driveSession: ctx.driveSession,
       now: this.deps.now(),
+      undock: ctx.capabilities?.undock,
+      transit: this.previewReady?.transit ?? null,
     });
   });
   /** Blades really run: allowed, switched on and confirmed. */

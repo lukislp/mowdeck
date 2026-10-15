@@ -564,6 +564,8 @@ export type components = {
             spot_plan: components["schemas"]["SpotMowPlan"];
             /** Transfer Length M */
             transfer_length_m: number;
+            /** @description The transit of a spot run, when the request asked for it. */
+            transit?: components["schemas"]["TransitOut"] | null;
             /** Warnings */
             warnings: string[];
         };
@@ -585,6 +587,8 @@ export type components = {
              * @description Use the chain of a saved template instead of `chain`.
              */
             template?: string | null;
+            /** @description Also plan the transit of a spot run from the dock or a position to the plan's first point (ADR 0041). */
+            transit?: components["schemas"]["TransitIn"] | null;
             /**
              * Wgs84
              * @description Preview coordinates as `[lon, lat]`.
@@ -626,6 +630,8 @@ export type components = {
             segment_count: number;
             /** Transfer Length M */
             transfer_length_m: number;
+            /** @description The transit of a spot run, when the request asked for it. */
+            transit?: components["schemas"]["TransitOut"] | null;
             /** Warnings */
             warnings: string[];
         };
@@ -766,6 +772,50 @@ export type components = {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * TransitIn
+         * @description Where a spot run's transit would start (ADR 0041): ``from_dock`` for a docked mower (the
+         *     map's dock, as the Device-Gateway plans it), else the mower's ``position`` in local
+         *     metres.
+         */
+        TransitIn: {
+            /**
+             * From Dock
+             * @default false
+             */
+            from_dock: boolean;
+            /** Position */
+            position?: [
+                number,
+                number
+            ] | null;
+        };
+        /**
+         * TransitOut
+         * @description The transit a spot run would drive from the start to the plan's first point (blades
+         *     off), planned by the same algorithm as the Device-Gateway's run.
+         */
+        TransitOut: {
+            /**
+             * Found
+             * @description A route exists (the web app's route condition).
+             */
+            found: boolean;
+            /** From Dock */
+            from_dock: boolean;
+            /** Length M */
+            length_m: number;
+            /**
+             * Reason
+             * @description `no_route: ...` without a route.
+             */
+            reason?: string | null;
+            /**
+             * Route
+             * @description The route, local metres or `[lon, lat]` with `wgs84`; empty without one.
+             */
+            route: number[][];
         };
         /**
          * UiAreaDef

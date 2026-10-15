@@ -997,6 +997,12 @@ export type components = {
              * @description RTK correction sources the mower can report.
              */
             rtk_sources?: components["schemas"]["RtkSource"][];
+            /**
+             * Undock
+             * @description The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).
+             * @default false
+             */
+            undock: boolean;
         };
         /**
          * MowerCapabilitiesList
@@ -1603,7 +1609,7 @@ export type components = {
              * State
              * @enum {string}
              */
-            state: "preparing" | "spot_mowing" | "paused_rtk" | "stopping" | "done" | "aborted" | "failed";
+            state: "preparing" | "undocking" | "waiting_rtk" | "transit" | "spot_mowing" | "paused_rtk" | "returning" | "stopping" | "done" | "aborted" | "failed";
         };
         /**
          * StateHistory

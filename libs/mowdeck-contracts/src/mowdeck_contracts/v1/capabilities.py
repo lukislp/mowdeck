@@ -73,6 +73,11 @@ class MowerCapabilities(ContractModel):
         default=False,
         description="Blades may run during manual driving when a frame explicitly asks for it.",
     )
+    undock: bool = Field(
+        default=False,
+        description="The connection can make the mower leave its charging station by itself "
+        "(`leave_dock`), so a spot run may start from the dock (ADR 0041).",
+    )
     custom_paths: bool = Field(
         default=False,
         description="The mower can follow an arbitrary path or boundary (False for LUBA today).",

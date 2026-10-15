@@ -50,6 +50,17 @@ the first frame to the first report that shows the turn. ``--spot-dry-run`` driv
 ``--spot-speed`` (default 0.2 m/s), with ``SpotMowRun`` behind ``MowerController`` (geofence,
 pauses, aborts, dead-man). Ctrl-C sends ``spot_stop``.
 
+From the dock (ADR 0041), the mower docked, blades always off::
+
+    uv run python .../try_real_mower.py --bridge HOST,KEY --spot-dry-run --from-dock
+    uv run python .../try_real_mower.py --bridge H,K --spot-dry-run --from-dock --spot-at 6.5,4
+
+``--from-dock`` runs the whole cycle: ``leave_dock`` over the cloud, the wait for a fixed RTK
+position out of the dock, the transit planned on the map (printed before the start), the 1 m
+circle around ``--spot-at`` (local metres; default: the centre of ``--spot-area`` or of the
+area nearest to the dock) and ``return_to_dock``. Ctrl-C sends ``spot_stop``; the mower then
+stops where it is and is not sent home.
+
 Without hardware or credentials (fake PyMammotion port)::
 
     uv run python .../try_real_mower.py --dry-run --start-area "Front lawn" --estop
@@ -97,10 +108,13 @@ from mowdeck_control import (
     ConnectionConfig,
     MowerConnection,
     MowerController,
+    NoRouteError,
     NotConnected,
     camera_session_of,
     firmware_port_of,
+    plan_transit,
     pose_of,
+    transit_start,
 )
 from mowdeck_control_mammotion.base import MammotionBase
 from mowdeck_control_mammotion.cloud import MammotionCloudConnection, create_cloud_connection
@@ -178,6 +192,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="speed of --spot-dry-run in m/s (0.05 to 0.3)",
     )
     parser.add_argument(
+        "--from-dock",
+        action="store_true",
+        help="with --spot-dry-run: start docked, undock, drive the transit, the circle and "
+        "back to the dock (blades off)",
+    )
+    parser.add_argument(
+        "--spot-at",
+        metavar="X,Y",
+        help="with --from-dock: centre of the circle in local metres",
+    )
+    parser.add_argument(
+        "--spot-area",
+        metavar="NAME",
+        help="with --from-dock: put the circle at the centre of this area",
+    )
+    parser.add_argument(
         "--camera",
         action="store_true",
         help="request a live camera session and print it (token and key redacted)",
@@ -227,7 +257,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="use the fake PyMammotion port (no network, no credentials)",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if (args.from_dock or args.spot_at or args.spot_area) and not args.spot_dry_run:
+        parser.error("--from-dock, --spot-at and --spot-area go with --spot-dry-run")
+    if (args.spot_at or args.spot_area) and not args.from_dock:
+        parser.error("--spot-at and --spot-area go with --from-dock")
+    return args
 
 
 def build_connection(args: argparse.Namespace) -> MowerConnection:
@@ -602,6 +637,8 @@ async def run_spot_dry_run(
         log.write("spot_dry_run", error="no manual drive")
         return 1
     mower_map = await controller.mower_map()
+    if args.from_dock:
+        return await run_spot_from_dock(controller, args, log, mower_map)
     pose = pose_of(controller.last_state, mower_map)
     if pose is None:
         show("spot dry run", {"error": "the mower reports no position or heading"})
@@ -616,6 +653,87 @@ async def run_spot_dry_run(
         "spot dry run plan", {"start": [round(pose.x, 2), round(pose.y, 2)], "points": len(points)}
     )
     confirm(args, "spot_mow dry run (blades off, Ctrl-C stops)")
+    return await follow_spot_run(controller, command, log)
+
+
+def spot_centre(args: argparse.Namespace, mower_map: MowerMap) -> LocalPoint:
+    """``--spot-at``, the centre of ``--spot-area`` or of the area nearest to the dock."""
+    if args.spot_at:
+        x, _, y = args.spot_at.partition(",")
+        try:
+            return (float(x), float(y))
+        except ValueError:
+            raise SystemExit("--spot-at needs X,Y in metres, for example 6.5,4.0") from None
+    if not mower_map.areas:
+        raise SystemExit("the map has no areas")
+    if args.spot_area:
+        found = mower_map.area(find_area(mower_map, args.spot_area))
+        if found is None:
+            raise SystemExit(f"no area named {args.spot_area!r}")
+        area = found
+    else:
+        dock = (mower_map.dock.x, mower_map.dock.y) if mower_map.dock else (0.0, 0.0)
+        area = min(
+            mower_map.areas,
+            key=lambda a: min(math.dist(dock, p) for p in a.boundary),
+        )
+    xs = [p[0] for p in area.boundary]
+    ys = [p[1] for p in area.boundary]
+    return (sum(xs) / len(xs), sum(ys) / len(ys))
+
+
+async def run_spot_from_dock(
+    controller: MowerController,
+    args: argparse.Namespace,
+    log: JsonLog,
+    mower_map: MowerMap,
+) -> int:
+    """``--spot-dry-run --from-dock``: undock, transit, a 1 m circle, return; blades off."""
+    caps = await controller.capabilities()
+    state = controller.last_state
+    if not caps.undock:
+        show("spot from dock", {"error": "this connection cannot undock the mower"})
+        log.write("spot_from_dock", error="no undock")
+        return 1
+    if state is None or state.activity.value not in ("docked", "charging"):
+        activity = state.activity.value if state else "unknown"
+        show("spot from dock", {"error": f"the mower is {activity}, not docked"})
+        log.write("spot_from_dock", error="not docked", activity=activity)
+        return 1
+    cx, cy = spot_centre(args, mower_map)
+    points = circle_points(cx, cy - CIRCLE_DIAMETER_M / 2, 0.0)
+    start = transit_start(state, mower_map)
+    try:
+        if start is None:
+            raise NoRouteError("the map has no dock and the mower reports no position")
+        route = plan_transit(mower_map, start, points[0])
+    except NoRouteError as exc:
+        show("spot from dock", {"error": f"no route to the spot: {exc}"})
+        log.write("spot_from_dock", error="no_route", detail=str(exc))
+        return 1
+    segment = SpotSegment.from_points(points, blades_on=False, speed_mps=args.spot_speed)
+    command = SpotMow(
+        plan=SpotMowPlan.build([segment], ["circle"]),
+        speed_mps=args.spot_speed,
+        blades=False,
+        return_to_dock=True,
+    )
+    show(
+        "spot from dock plan",
+        {
+            "centre": [round(cx, 2), round(cy, 2)],
+            "transit_m": round(route.length_m, 1),
+            "transit": [[round(x, 2), round(y, 2)] for x, y in route.points],
+            "points": len(points),
+        },
+    )
+    log.write("spot_from_dock_plan", transit_m=route.length_m, centre=[cx, cy])
+    confirm(args, "spot_mow from the dock (undock, transit, circle, return; blades off)")
+    return await follow_spot_run(controller, command, log)
+
+
+async def follow_spot_run(controller: MowerController, command: SpotMow, log: JsonLog) -> int:
+    """Send ``command``, print the run's status every second, Ctrl-C sends ``spot_stop``."""
     envelope = envelope_of(command)
     result = await controller.handle(envelope)
     show("result", {"command": command.kind, "status": result.status, "reason": result.reason})
@@ -646,6 +764,9 @@ async def run_spot_dry_run(
         "summary": report.summary(),
         "frames_sent": report.frames_sent,
         "paused_s": round(report.paused_s, 1),
+        "transit_m": round(report.transit_m, 1),
+        "undocked": report.undocked,
+        "sent_home": report.sent_home,
     }
     show("spot run report", data)
     log.write("spot_report", **data)

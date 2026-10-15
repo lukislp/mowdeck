@@ -12,6 +12,8 @@ from planner.application.planning import (
     Execution,
     GapsResult,
     PlanResult,
+    TransitResult,
+    TransitStart,
 )
 from planner.domain.models import Template
 
@@ -108,6 +110,50 @@ class AreaIn(_Body):
         )
 
 
+class TransitIn(_Body):
+    """Where a spot run's transit would start (ADR 0041): ``from_dock`` for a docked mower (the
+    map's dock, as the Device-Gateway plans it), else the mower's ``position`` in local
+    metres."""
+
+    from_dock: bool = False
+    position: LocalPoint | None = None
+
+    @model_validator(mode="after")
+    def _one_start(self) -> Self:
+        if self.from_dock == (self.position is not None):
+            msg = "give from_dock or position"
+            raise ValueError(msg)
+        return self
+
+    def start(self) -> TransitStart:
+        """As the use case input."""
+        return TransitStart(from_dock=self.from_dock, position=self.position)
+
+
+class TransitOut(BaseModel):
+    """The transit a spot run would drive from the start to the plan's first point (blades
+    off), planned by the same algorithm as the Device-Gateway's run."""
+
+    found: bool = Field(description="A route exists (the web app's route condition).")
+    from_dock: bool
+    length_m: float
+    route: list[list[float]] = Field(
+        description="The route, local metres or `[lon, lat]` with `wgs84`; empty without one."
+    )
+    reason: str | None = Field(default=None, description="`no_route: ...` without a route.")
+
+    @classmethod
+    def of(cls, result: TransitResult) -> "TransitOut":
+        """From the use case result."""
+        return cls(
+            found=result.found,
+            from_dock=result.from_dock,
+            length_m=round(result.length_m, 2),
+            route=[[round(x, 7), round(y, 7)] for x, y in result.route],
+            reason=result.reason,
+        )
+
+
 class PlanRequestIn(_Body):
     """A plan for a mower (``mower_id``: its map and capabilities) or for a raw ``map``."""
 
@@ -120,6 +166,11 @@ class PlanRequestIn(_Body):
     )
     mower: MowerSpecIn | None = None
     wgs84: bool = Field(default=False, description="Preview coordinates as `[lon, lat]`.")
+    transit: TransitIn | None = Field(
+        default=None,
+        description="Also plan the transit of a spot run from the dock or a position to the "
+        "plan's first point (ADR 0041).",
+    )
 
     @model_validator(mode="after")
     def _sources(self) -> Self:
@@ -171,6 +222,9 @@ class PreviewOut(BaseModel):
         description="FeatureCollection: one LineString per segment with `kind`, `blades_on`, "
         "`speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`."
     )
+    transit: TransitOut | None = Field(
+        default=None, description="The transit of a spot run, when the request asked for it."
+    )
 
     @classmethod
     def fields_of(cls, result: PlanResult) -> dict[str, Any]:
@@ -200,6 +254,7 @@ class PreviewOut(BaseModel):
                 safety_margin_m=spec.safety_margin_m,
             ),
             "preview": result.preview,
+            "transit": TransitOut.of(result.transit) if result.transit is not None else None,
         }
 
     @classmethod

@@ -57,6 +57,7 @@ async def _plan_input(body: PlanRequestIn, account_id: UUID, services: Services)
         raw_map=body.map,
         mower_overrides=body.mower.overrides() if body.mower else {},
         wgs84_preview=body.wgs84,
+        transit=body.transit.start() if body.transit is not None else None,
     )
 
 

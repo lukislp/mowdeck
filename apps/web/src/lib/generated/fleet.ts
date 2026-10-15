@@ -2344,7 +2344,11 @@ export type components = {
          *
          *     Unlike ``StartMow.spot_plan`` the mower runs no job of its own: MowDeck's gateway steers it
          *     over the drive link (needs ``MowerCapabilities.manual_drive``, a fixed RTK position and an
-         *     idle mower). The blades stay off (a dry run) unless ``blades`` and ``confirm_blades`` are
+         *     idle mower, or a docked one when the connection can leave the dock by itself:
+         *     ``MowerCapabilities.undock``, ADR 0041). A transit with the blades off takes the mower from
+         *     where it stands to the start of the plan; with ``return_to_dock`` it is sent home after the
+         *     run (also after an abort that left it healthy, never after a stop). The blades stay off (a
+         *     dry run) unless ``blades`` and ``confirm_blades`` are
          *     both true and the mower allows blades while driving (``manual_drive_blades``). ``spot``
          *     records what the user chose; the route is ``plan``. Progress arrives in
          *     ``MowerState.spot_run``; ``SpotStop`` ends the run.
@@ -2368,6 +2372,12 @@ export type components = {
              */
             kind: "spot_mow";
             plan: components["schemas"]["SpotMowPlan"];
+            /**
+             * Return To Dock
+             * @description Send the mower back to its charging station after the run (also after an abort that left it healthy; never after a stop).
+             * @default true
+             */
+            return_to_dock: boolean;
             /**
              * Speed Mps
              * @description Driving speed of the run in metres per second (at most 0.3).

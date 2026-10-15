@@ -258,13 +258,26 @@ SpotTarget = SpotCircle | SpotPolygon
 """Where a spot run was requested, kept for the audit record (the route is in ``plan``)."""
 
 SpotRunState = Literal[
-    "preparing", "spot_mowing", "paused_rtk", "stopping", "done", "aborted", "failed"
+    "preparing",
+    "undocking",
+    "waiting_rtk",
+    "transit",
+    "spot_mowing",
+    "paused_rtk",
+    "returning",
+    "stopping",
+    "done",
+    "aborted",
+    "failed",
 ]
-"""Life cycle of a spot run: ``preparing`` (checks, approach), ``spot_mowing`` (driving the
-plan), ``paused_rtk`` (waiting for a fixed RTK position), ``stopping`` (a stop was requested),
-then one of ``done``, ``aborted`` (``reason`` says why, e.g. ``rtk_lost``, ``geofence``,
-``link_lost``, ``stopped_by_user``, ``emergency_stop``, ``sensor_stop``, ``timeout``,
-``heading_mismatch``) or ``failed``."""
+"""Life cycle of a spot run (ADR 0039, ADR 0041): ``preparing`` (checks), ``undocking`` (the
+mower leaves its charging station on its own), ``waiting_rtk`` (out of the dock, waiting for a
+fixed RTK position), ``transit`` (driving to the spot with the blades off), ``spot_mowing``
+(driving the plan), ``paused_rtk`` (waiting for a fixed RTK position), ``returning`` (the mower
+was sent home), ``stopping`` (a stop was requested), then one of ``done``, ``aborted``
+(``reason`` says why, e.g. ``rtk_lost``, ``geofence``, ``link_lost``, ``stopped_by_user``,
+``emergency_stop``, ``sensor_stop``, ``timeout``, ``heading_mismatch``, ``undock_failed``,
+``no_route``) or ``failed``."""
 
 SPOT_RUN_FINAL_STATES: Final[frozenset[str]] = frozenset({"done", "aborted", "failed"})
 """States after which a spot run does not change any more."""

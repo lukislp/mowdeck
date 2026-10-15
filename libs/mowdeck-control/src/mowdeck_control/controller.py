@@ -51,14 +51,19 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
 12. A ``SpotMow`` (ADR 0039) starts a :class:`~mowdeck_control.spot_run.SpotMowRun` that drives
    the plan with frames through this controller (``correlation_id = spot:<command_id>``): it
    needs ``capabilities.manual_drive``, no open drive session or pending confirmation, an idle
-   mower with a fresh state, enough battery, a fixed RTK position inside the geofence, a plan
-   inside the geofence and a clear approach of at most 10 m; the command is answered
+   mower (or a docked one when the connection has ``capabilities.undock`` and implements
+   :class:`~mowdeck_control.connection.UndockCapable`, ADR 0041) with a fresh state, enough
+   battery, a fixed RTK position (not yet for a docked mower: the run waits for it after
+   undocking), a plan inside the geofence and a transit route on the map from the mower (from
+   the dock while docked) to the plan (``no_route: ...`` otherwise); the command is answered
    ``accepted`` at once (``rejected`` or ``failed`` when a check fails) and the run's end is
    read with :meth:`MowerController.spot_run_result`. Blades run only with ``blades`` and
    ``confirm_blades`` on a mower with ``manual_drive_blades``; otherwise the run is a dry run.
    While a run is active every command except ``EmergencyStop``, ``SpotStop``, ``SetLight`` and
    the run's own frames is rejected ("spot run active; stop it first"); ``SpotStop`` without a
-   run is rejected. An emergency stop, a sensor stop and a change of the activity end the run.
+   run is rejected. An emergency stop, a sensor stop and a change of the activity end the run
+   (while undocking only an error, an update or a lost mower do). With ``SpotMow.return_to_dock``
+   the run sends ``ReturnToDock`` to the connection after it ended, unless it was stopped.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -110,6 +115,7 @@ from mowdeck_control.connection import (
     MowerConnection,
     Outcome,
     PathPreviewCapable,
+    UndockCapable,
     current_map_of,
     current_path_of,
     dispatch_of,
@@ -126,6 +132,7 @@ from mowdeck_control.spot_run import (
     REASON_LINK_LOST,
     REASON_SENSOR_STOP,
     REASON_STOPPED_BY_USER,
+    SpotActions,
     SpotMowRun,
     SpotRunConfig,
     SpotRunReport,
@@ -146,17 +153,6 @@ _SUPERSEDING = (StartMow, PauseMow, ResumeMow, ReturnToDock, EmergencyStop)
 """Job commands that end the confirmation wait of every earlier command (rule 9)."""
 SPOT_RUN_ACTIVE = "spot run active; stop it first"
 """Rejection reason of every other command while a spot run drives (rule 12)."""
-_RUN_ENDING_ACTIVITIES = frozenset(
-    {
-        MowerActivity.MOWING,
-        MowerActivity.RETURNING,
-        MowerActivity.DOCKED,
-        MowerActivity.CHARGING,
-        MowerActivity.UPDATING,
-        MowerActivity.OFFLINE,
-    }
-)
-"""Activities that end a spot run when the mower reports them (it is no longer idle)."""
 _SPOT_STOP_WAIT_S = 5.0
 """How long a stop waits for the run's zero frame before the task is cancelled."""
 
@@ -757,7 +753,8 @@ class MowerController:
             state = await self._connection.get_state()
         except NotConnected:
             return self._result(envelope, CommandStatus.FAILED, "mower is not connected")
-        problem = spot_start_problem(state, now=self._clock())
+        undock = caps.undock and isinstance(self._connection, UndockCapable)
+        problem = spot_start_problem(state, now=self._clock(), undock=undock)
         if problem is not None:
             return self._result(envelope, CommandStatus.REJECTED, problem)
         blades = command.blades and command.confirm_blades and caps.manual_drive_blades
@@ -769,18 +766,26 @@ class MowerController:
             frames=_SpotFrames(self, envelope, run_id=envelope.command_id),
             speed_mps=command.speed_mps,
             blades=blades,
+            actions=_SpotActions(self),
+            undock=undock,
+            return_to_dock=command.return_to_dock,
             on_status=self._on_spot_status,
             clock=self._clock,
             sleep=self._spot_sleep,
             config=self._spot_config,
         )
-        problem = run.prepare(self._last_state or state)
+        # The transit planning is pure geometry; a large map takes a moment, off the loop.
+        problem = await asyncio.to_thread(run.prepare, state)
         if problem is not None:
             return self._result(envelope, CommandStatus.REJECTED, problem)
         self._spot_run = run
         self._spot_task = asyncio.create_task(run.run(), name=f"spot-{envelope.command_id}")
         self._spot_task.add_done_callback(self._spot_done)
         detail = "spot run started (dry run)" if run.dry_run else "spot run started with blades"
+        if run.undocks:
+            detail += "; leaving the dock first"
+        if run.transit is not None and run.transit.length_m > 0:
+            detail += f"; transit {run.transit.length_m:.0f} m"
         if command.blades and not blades:
             detail += "; blades forced off: " + (
                 "this mower does not allow blades while driving manually"
@@ -812,11 +817,21 @@ class MowerController:
         state = self._last_state
         if state is None or state.spot_run == status:
             return
-        merged = state.model_copy(update={"spot_run": status})
-        self._last_state = merged
-        task = asyncio.create_task(self._emit(merged), name=f"spot-status-{self._mower_id}")
+        self._last_state = state.model_copy(update={"spot_run": status})
+        task = asyncio.create_task(self._emit_spot_status(), name=f"spot-status-{self._mower_id}")
         self._status_tasks.add(task)
         task.add_done_callback(self._status_tasks.discard)
+
+    async def _emit_spot_status(self) -> None:
+        """Publish the latest state with the run's current status (taken when the task runs, so
+        a status never overtakes a newer one, e.g. ``returning`` after the final ``done``)."""
+        state = self._last_state
+        if state is None:
+            return
+        if state.spot_run != self._spot_status:
+            state = state.model_copy(update={"spot_run": self._spot_status})
+            self._last_state = state
+        await self._emit(state)
 
     async def _send_spot_frame(
         self, envelope: CommandEnvelope, run_id: UUID, frame: ManualDrive
@@ -852,10 +867,10 @@ class MowerController:
             state = state.model_copy(update={"spot_run": self._spot_status})
         self._last_state = state
         run = self._spot_run
-        if run is not None and run.active:
+        if run is not None and run.ends_on(state.activity):
             if state.activity is MowerActivity.ERROR:
                 run.request_stop(REASON_SENSOR_STOP, state.error_code)
-            elif state.activity in _RUN_ENDING_ACTIVITIES:
+            else:
                 run.request_stop(REASON_ACTIVITY_CHANGE, state.activity.value)
         if (
             state.activity is MowerActivity.ERROR
@@ -948,6 +963,51 @@ class _SpotFrames:
 
     async def close(self) -> None:
         await self._controller._end_drive("spot run ended")
+
+
+class _SpotActions(SpotActions):
+    """:class:`~mowdeck_control.spot_run.SpotActions` on a controller's connection. Both go to
+    the connection directly (rule 12 keeps every other command out while the run is active);
+    adapter errors become the refusal text."""
+
+    def __init__(self, controller: MowerController) -> None:
+        self._controller = controller
+
+    async def leave_dock(self) -> str | None:
+        connection = self._controller.connection
+        if not isinstance(connection, UndockCapable):
+            return "this connection cannot undock the mower"
+        try:
+            await connection.leave_dock()
+        except CommandRejected as exc:
+            return exc.reason
+        except NotConnected:
+            return "mower is not connected"
+        except Exception as exc:
+            _log.exception("leave_dock failed")
+            return f"adapter error: {type(exc).__name__}"
+        _log.info("spot run: leave_dock sent")
+        return None
+
+    async def return_to_dock(self) -> str | None:
+        connection = self._controller.connection
+        try:
+            dispatch = await dispatch_of(connection, ReturnToDock())
+            outcome = await dispatch.settle()
+        except CommandRejected as exc:
+            return exc.reason
+        except NotConnected:
+            return "mower is not connected"
+        except Exception as exc:
+            _log.exception("return_to_dock after a spot run failed")
+            return f"adapter error: {type(exc).__name__}"
+        if outcome.status in (CommandStatus.REJECTED, CommandStatus.FAILED):
+            return outcome.reason or outcome.status.value
+        _log.info("spot run: return_to_dock sent (%s)", outcome.reason)
+        return None
+
+
+_log = logging.getLogger("mowdeck_control.controller")
 
 
 def _native_start(command: StartMow) -> StartMow:
