@@ -239,6 +239,7 @@
           </li>
         {/each}
       </ul>
+      <p class="hint" data-testid="spot-fresh-hint">{m.spot_cond_fresh_hint()}</p>
     </section>
   </div>
 

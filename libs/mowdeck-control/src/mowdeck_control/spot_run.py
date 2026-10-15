@@ -882,15 +882,24 @@ def _projection(p: LocalPoint, a: LocalPoint, b: LocalPoint) -> float:
     return ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length
 
 
+SPOT_START_MAX_STATE_AGE_S: Final = 60.0
+"""The newest state may be this old when a spot run starts. A standing mower on a cloud-first
+connection reports about every 20 s, and the drive link (the Bluetooth bridge) attaches only when
+the run opens its drive session; the run itself pauses while the pose is older than
+``SpotRunConfig.max_pose_age_s`` (``position_stale``) and waits up to ``rtk_wait_s`` for live
+positions before it moves."""
+
+
 def spot_start_problem(
     state: MowerState,
     *,
     now: datetime,
-    max_state_age_s: float = 5.0,
+    max_state_age_s: float = SPOT_START_MAX_STATE_AGE_S,
     min_battery_percent: int = 20,
 ) -> str | None:
     """Why a spot run must not start from ``state``, or None: the mower stands idle (not docked,
-    no job, no error), its state is fresh and the battery is above ``min_battery_percent``."""
+    no job, no error), its state is at most ``max_state_age_s`` old and the battery is above
+    ``min_battery_percent``. Live positions are the run's job (it waits for them)."""
     if state.activity.value != "idle":
         return f"the mower is {state.activity.value}; a spot run needs it idle on the lawn"
     age = (now - state.observed_at).total_seconds()
@@ -915,6 +924,7 @@ __all__ = [
     "REASON_STOPPED_BY_USER",
     "REASON_TIMEOUT",
     "RUN_TIME_SLACK_S",
+    "SPOT_START_MAX_STATE_AGE_S",
     "FrameChannel",
     "Geofence",
     "Pose",

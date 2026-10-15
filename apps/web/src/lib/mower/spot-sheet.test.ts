@@ -306,8 +306,15 @@ describe('start conditions', () => {
     expect(failing({ state: stateAt([10, 10], { spot_run: run() }) })).toEqual(['free']);
     expect(failing({ state: stateAt([10, 10], { battery_percent: 20 }) })).toEqual(['battery']);
     expect(
-      failing({ state: stateAt([10, 10], { observed_at: new Date(NOW - 6_000).toISOString() }) }),
+      failing({ state: stateAt([10, 10], { observed_at: new Date(NOW - 61_000).toISOString() }) }),
     ).toEqual(['fresh']);
+  });
+
+  it('a cloud-first state of 20 s is fresh enough (the run waits for live positions)', () => {
+    const state = stateAt([10, 10], { observed_at: new Date(NOW - 20_000).toISOString() });
+    expect(failing({ state })).toEqual([]);
+    const minute = stateAt([10, 10], { observed_at: new Date(NOW - 60_000).toISOString() });
+    expect(failing({ state: minute })).toEqual([]);
   });
 
   it('without a state every mower condition is red', () => {

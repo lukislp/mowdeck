@@ -6,7 +6,7 @@ import asyncio
 import itertools
 import math
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -58,6 +58,8 @@ from mowdeck_control.spot_run import (
     REASON_RTK_LOST,
     REASON_STOPPED_BY_USER,
     REASON_TIMEOUT,
+    SPOT_START_MAX_STATE_AGE_S,
+    spot_start_problem,
 )
 from mowdeck_control.testing import ManualClock, ManualTimers
 
@@ -524,3 +526,46 @@ def test_control_spot_run_geofence() -> None:
     assert fence.violation((20.0, 1.0)) is not None  # outside
     assert fence.segment_clear((1.0, 1.0), (8.0, 1.0))
     assert not fence.segment_clear((8.0, 10.0), (12.0, 10.0))
+
+
+# --- a stale state at the start (cloud-first mowers) ----------------------------------------
+
+
+def test_control_spot_start_accepts_a_cloud_first_state_age() -> None:
+    """A standing mower on a cloud connection reports about every 20 s: the start allows a
+    state up to a minute old (the run waits for live positions itself)."""
+    now = datetime(2026, 6, 1, 12, 0, 0, tzinfo=UTC)
+    assert spot_start_problem(state_at(3.0, 6.0, 0.0, now - timedelta(seconds=20)), now=now) is None
+    assert spot_start_problem(state_at(3.0, 6.0, 0.0, now - timedelta(seconds=60)), now=now) is None
+    old = spot_start_problem(state_at(3.0, 6.0, 0.0, now - timedelta(seconds=61)), now=now)
+    assert old is not None and "61 s old" in old
+    assert SPOT_START_MAX_STATE_AGE_S == 60.0
+
+
+async def test_control_spot_run_waits_for_a_fresh_pose_when_the_first_is_stale() -> None:
+    """The first pose is 20 s old: the run pauses (``position_stale``) without moving and drives
+    once live poses arrive; it does not abort."""
+    clock = ManualClock()
+    frames = FakeFrames()
+    script = Scripted(clock, [(3.0 + 0.2 * i, 6.0, 0.0) for i in range(40)])
+    clock.advance(20)
+    statuses: list[SpotRunStatus] = []
+    run = SpotMowRun(
+        run_id=uuid4(),
+        plan=plan_of([(3.0, 6.0), (6.0, 6.0)]),
+        mower_map=MAP,
+        pose_source=script,
+        frames=frames,
+        speed_mps=0.2,
+        on_status=statuses.append,
+        clock=clock,
+        sleep=script.sleep,
+    )
+    assert run.prepare(script()) is None
+    report = await run.run()
+    seen = [(s.state, s.reason) for s in statuses]
+    paused = seen.index(("paused_rtk", "position_stale"))
+    assert all(state == "spot_mowing" for state, _ in seen[:paused]), seen
+    assert frames.frames[0] == (0.0, 0.0, False), "no movement while the pose is stale"
+    assert report.state == "done", report.summary()
+    assert 0 < report.paused_s < 5

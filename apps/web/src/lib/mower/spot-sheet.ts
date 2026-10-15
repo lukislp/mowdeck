@@ -55,8 +55,12 @@ export const FALLBACK_CUTTING_WIDTH_MM = 400;
 export const SPOT_SAFETY_MARGIN_M = 0.4;
 /** The mower must stand within this distance of the spot. */
 export const SPOT_NEAR_M = 10;
-/** The state must be younger than this. */
-export const SPOT_FRESH_MS = 5_000;
+/**
+ * The state must be younger than this. A standing mower on a cloud-first connection reports
+ * about every 20 s, and the bridge attaches when the run opens its drive session; the gateway's
+ * run then pauses until positions are live (pose at most 2.5 s old, waiting up to 30 s).
+ */
+export const SPOT_FRESH_MS = 60_000;
 export const SPOT_BATTERY_MIN_PERCENT = 20;
 /** The preview is asked for this long after the last change. */
 export const SPOT_PREVIEW_DEBOUNCE_MS = 400;
