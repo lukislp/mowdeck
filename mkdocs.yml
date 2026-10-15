@@ -82,6 +82,7 @@ nav:
       - adr/0039-spot-mowing-by-mowdeck-driven-paths.md
       - adr/0040-link-heartbeat-for-online-status.md
       - adr/0041-spot-runs-from-the-dock-undock-transit-return.md
+      - adr/0042-drive-calibration.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
