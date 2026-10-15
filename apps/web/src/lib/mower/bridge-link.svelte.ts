@@ -182,6 +182,14 @@ export class BridgeLinkFlow {
       device_name: device.name,
       allow_manual_blades: this.allowBlades,
     };
+    // Options this sheet does not edit stay as stored (Fleet replaces the whole link).
+    const existing = this.#editing ? this.deps.existing() : null;
+    if (existing?.manual_blade_height_mm != null) {
+      input.manual_blade_height_mm = existing.manual_blade_height_mm;
+    }
+    if (existing?.manual_drive_speed_mps != null) {
+      input.manual_drive_speed_mps = existing.manual_drive_speed_mps;
+    }
     this.error = null;
     this.errorCode = null;
     this.step = 'saving';

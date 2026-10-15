@@ -64,6 +64,10 @@ const OPTIONS: Record<string, Record<string, OptionText>> = {
     device_name: { label: m.conn_ble_device_name, help: m.conn_ble_device_name_help },
     allow_manual_blades: { label: m.conn_ble_manual_blades, help: m.conn_ble_manual_blades_help },
     manual_blade_height_mm: { label: m.conn_ble_manual_blade_height },
+    manual_drive_speed_mps: {
+      label: m.conn_ble_manual_drive_speed,
+      help: m.conn_ble_manual_drive_speed_help,
+    },
     scan_timeout_s: { label: m.conn_ble_scan_timeout, help: m.conn_ble_scan_timeout_help },
     ...TIMEOUTS,
   },

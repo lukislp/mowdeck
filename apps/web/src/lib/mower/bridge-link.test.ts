@@ -33,6 +33,7 @@ function deps(overrides: Partial<BridgeLinkDeps> = {}): BridgeLinkDeps {
       device_name: input.device_name,
       allow_manual_blades: input.allow_manual_blades,
       manual_blade_height_mm: null,
+      manual_drive_speed_mps: null,
       proxy_info: PROXY,
     })),
     expectedName: () => 'Luba-VP1234',
@@ -256,6 +257,7 @@ describe('bridge link flow', () => {
       device_name: 'Luba-VP1234',
       allow_manual_blades: true,
       manual_blade_height_mm: null,
+      manual_drive_speed_mps: null,
       proxy_info: null,
     };
     const d = deps({ existing: () => stored, scan: vi.fn(async () => reply({ devices: [LUBA] })) });
@@ -274,6 +276,27 @@ describe('bridge link flow', () => {
     await flow.save();
     expect(d.save).toHaveBeenCalledWith(expect.objectContaining({ noise_psk: '***' }));
     expect(flow.step).toBe('saved');
+  });
+
+  it('keeps the options the sheet does not edit when it replaces a stored link', async () => {
+    const stored: BridgeLink = {
+      host: 'bridge.local',
+      port: 6053,
+      ble_address: LUBA.address,
+      device_name: 'Luba-VP1234',
+      allow_manual_blades: false,
+      manual_blade_height_mm: 45,
+      manual_drive_speed_mps: 0.6,
+      proxy_info: null,
+    };
+    const d = deps({ existing: () => stored, scan: vi.fn(async () => reply({ devices: [LUBA] })) });
+    const flow = new BridgeLinkFlow(d);
+    flow.start();
+    await flow.scan();
+    await flow.save();
+    expect(d.save).toHaveBeenCalledWith(
+      expect.objectContaining({ manual_blade_height_mm: 45, manual_drive_speed_mps: 0.6 }),
+    );
   });
 
   it('keeps the list when the save fails and says why', async () => {

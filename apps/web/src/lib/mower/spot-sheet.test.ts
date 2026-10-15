@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { fromWgs84, toWgs84, type GeoReference, type MapSpot } from '@mowdeck/ui';
 
+import { setLocale } from '$lib/paraglide/runtime';
+
 import {
   SPOT_SPEED_MAX_MPS,
   allGreen,
@@ -343,6 +345,13 @@ describe('run states', () => {
     expect(spotReasonLabel('no_route')).not.toBe('no_route');
     expect(spotReasonLabel('geofence')).not.toBe('geofence');
     expect(spotReasonLabel('something_new')).toBe('something_new');
+    setLocale('de', { reload: false });
+    expect(spotReasonLabel('stalled')).toBe('seit 60 s kein Fortschritt entlang des Plans');
+    expect(spotReasonLabel('timeout')).toBe('Gesamtzeitlimit erreicht');
+    setLocale('en', { reload: false });
+    expect(spotReasonLabel('stalled')).toBe('no progress along the plan for 60 s');
+    expect(spotReasonLabel('timeout')).toBe('overall time limit reached');
+    setLocale('de', { reload: false });
     expect(spotReasonLabel(null)).toBeNull();
   });
 });
