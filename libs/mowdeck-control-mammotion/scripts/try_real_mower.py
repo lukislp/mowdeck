@@ -521,7 +521,10 @@ def frame_of(angular: float) -> CommandEnvelope:
     return envelope_of(frame, timedelta(seconds=1))
 
 
-NO_DRIVE = "this connection offers no manual driving (use --bridge or --esphome)"
+NO_DRIVE = (
+    "this connection offers no manual driving (use --bridge or --esphome; with --bridge the "
+    "bridge did not attach within --wait seconds)"
+)
 VERDICTS = {
     "ok": "OK: the compass heading decreased (left positive); spot runs steer the right way.",
     "sign_error": "SIGN ERROR: the heading increased; do NOT start a spot run.",
@@ -531,10 +534,24 @@ VERDICTS = {
 }
 
 
-async def run_turn_check(controller: MowerController, log: JsonLog, *, settle_s: float) -> int:
+async def wait_for_manual_drive(controller: MowerController, wait_s: float) -> bool:
+    """True once the connection offers manual driving; the dual link offers it only after the
+    bridge attached, so the capabilities are read again every second for up to ``wait_s``."""
+    deadline = time.perf_counter() + wait_s
+    while True:
+        if (await controller.capabilities(refresh=True)).manual_drive:
+            return True
+        if time.perf_counter() >= deadline:
+            return False
+        print("waiting for the Bluetooth bridge (manual driving) ...")
+        await asyncio.sleep(1.0)
+
+
+async def run_turn_check(
+    controller: MowerController, log: JsonLog, *, settle_s: float, wait_s: float
+) -> int:
     """``--turn-check``: turn in place left and evaluate heading sign, report rate, latency."""
-    caps = await controller.capabilities()
-    if not caps.manual_drive:
+    if not await wait_for_manual_drive(controller, wait_s):
         show("turn check", {"error": NO_DRIVE})
         log.write("turn_check", error="no manual drive")
         return 1
@@ -580,8 +597,7 @@ async def run_spot_dry_run(
     low, high = SPOT_SPEED_RANGE
     if not low <= args.spot_speed <= high:
         raise SystemExit(f"--spot-speed must be between {low} and {high} m/s")
-    caps = await controller.capabilities()
-    if not caps.manual_drive:
+    if not await wait_for_manual_drive(controller, 0.0 if args.dry_run else args.wait):
         show("spot dry run", {"error": NO_DRIVE})
         log.write("spot_dry_run", error="no manual drive")
         return 1
@@ -692,7 +708,8 @@ async def run(args: argparse.Namespace) -> int:
         if args.turn_check:
             confirm(args, "turn check (turns in place, blades off)")
             settle_s = 0.0 if args.dry_run else 1.5
-            return await run_turn_check(controller, log, settle_s=settle_s)
+            wait_s = 0.0 if args.dry_run else args.wait
+            return await run_turn_check(controller, log, settle_s=settle_s, wait_s=wait_s)
         if args.spot_dry_run:
             return await run_spot_dry_run(controller, args, log)
         if args.bridge and not (args.start_area or args.dock or args.estop or args.light):
