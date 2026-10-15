@@ -36,6 +36,7 @@ def preview(
                 "index": index,
                 "kind": segment.kind,
                 "blades_on": segment.blades_on,
+                "reverse": segment.reverse,
                 "speed_mps": round(segment.speed, 3),
                 "length_m": round(segment.length, 3),
             },
@@ -55,6 +56,7 @@ def preview(
             "transfer_length_m": round(plan.transfer_length_m, 2),
             "segment_count": len(plan.segments),
             "warnings": list(plan.warnings),
+            "turn_style": plan.turn_style,
         },
         "features": features,
     }

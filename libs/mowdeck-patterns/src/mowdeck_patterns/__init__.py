@@ -35,12 +35,14 @@ from mowdeck_patterns.registry import (
     default_registry,
     plan,
 )
+from mowdeck_patterns.turns import TURN_STYLES, TurnOptions, TurnResult, shape_turns
 from mowdeck_patterns.validation import check, validate
 
 __version__ = "0.1.0"
 
 __all__ = [
     "ENTRY_POINT_GROUP",
+    "TURN_STYLES",
     "Area",
     "BasePattern",
     "Chain",
@@ -57,6 +59,8 @@ __all__ = [
     "PlanningError",
     "Point",
     "Segment",
+    "TurnOptions",
+    "TurnResult",
     "UnknownPattern",
     "__version__",
     "build_plan",
@@ -68,5 +72,6 @@ __all__ = [
     "gaps",
     "plan",
     "preview",
+    "shape_turns",
     "validate",
 ]

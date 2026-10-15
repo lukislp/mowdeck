@@ -19,6 +19,7 @@
     "index": 0,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -42,6 +43,7 @@
     "index": 1,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -65,6 +67,7 @@
     "index": 2,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -88,6 +91,7 @@
     "index": 3,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -111,6 +115,7 @@
     "index": 4,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -134,6 +139,7 @@
     "index": 5,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -157,6 +163,7 @@
     "index": 6,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -180,6 +187,7 @@
     "index": 7,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -203,6 +211,7 @@
     "index": 8,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -226,6 +235,7 @@
     "index": 9,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -249,6 +259,7 @@
     "index": 10,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -272,6 +283,7 @@
     "index": 11,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -295,6 +307,7 @@
     "index": 12,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -318,6 +331,7 @@
     "index": 13,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -341,6 +355,7 @@
     "index": 14,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -364,6 +379,7 @@
     "index": 15,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -387,6 +403,7 @@
     "index": 16,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -410,6 +427,7 @@
     "index": 17,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -433,6 +451,7 @@
     "index": 18,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -456,6 +475,7 @@
     "index": 19,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -479,6 +499,7 @@
     "index": 20,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -502,6 +523,7 @@
     "index": 21,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -525,6 +547,7 @@
     "index": 22,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -548,6 +571,7 @@
     "index": 23,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -571,6 +595,7 @@
     "index": 24,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -594,6 +619,7 @@
     "index": 25,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -617,6 +643,7 @@
     "index": 26,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -640,6 +667,7 @@
     "index": 27,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -663,6 +691,7 @@
     "index": 28,
     "kind": "mow",
     "length_m": 11.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -690,6 +719,7 @@
     "index": 29,
     "kind": "transfer",
     "length_m": 3.037,
+    "reverse": false,
     "speed_mps": 0.6
    },
    "type": "Feature"
@@ -713,6 +743,7 @@
     "index": 30,
     "kind": "mow",
     "length_m": 8.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -736,6 +767,7 @@
     "index": 31,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -759,6 +791,7 @@
     "index": 32,
     "kind": "mow",
     "length_m": 8.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -782,6 +815,7 @@
     "index": 33,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -805,6 +839,7 @@
     "index": 34,
     "kind": "mow",
     "length_m": 8.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -828,6 +863,7 @@
     "index": 35,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -851,6 +887,7 @@
     "index": 36,
     "kind": "mow",
     "length_m": 8.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -874,6 +911,7 @@
     "index": 37,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -897,6 +935,7 @@
     "index": 38,
     "kind": "mow",
     "length_m": 8.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -920,6 +959,7 @@
     "index": 39,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -943,6 +983,7 @@
     "index": 40,
     "kind": "mow",
     "length_m": 8.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -966,6 +1007,7 @@
     "index": 41,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -989,6 +1031,7 @@
     "index": 42,
     "kind": "mow",
     "length_m": 8.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -1012,6 +1055,7 @@
     "index": 43,
     "kind": "turn",
     "length_m": 0.344,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -1035,6 +1079,7 @@
     "index": 44,
     "kind": "mow",
     "length_m": 8.58,
+    "reverse": false,
     "speed_mps": 0.4
    },
    "type": "Feature"
@@ -1052,6 +1097,7 @@
   ],
   "segment_count": 45,
   "transfer_length_m": 3.04,
+  "turn_style": null,
   "warnings": []
  },
  "type": "FeatureCollection"

@@ -72,6 +72,18 @@ Every built-in pattern also accepts `speed_mps` (default: the mower's speed). Un
 - `turn`: the short connection between two neighbouring runs, inside the cutting region, blades on;
 - `transfer`: driving to the next part (another cell, the next chain step), always blades off, routed around holes and zones inside the safe region along the shortest way (a visibility graph of the region's corners).
 
+A segment with `reverse` is driven backwards (a three-point turn's middle leg) and always has the blades off.
+
+### Turn styles
+
+`plan(area, mower, steps, turns=TurnOptions(style, min_radius_m, reverse, fence))` shapes the lane ends for a spot run that turns this way ([ADR 0043](../../docs/adr/0043-turn-styles.md), `mowdeck_patterns.turns.shape_turns`). Only reversals between two `mow` runs (directions differing by more than 150 degrees) are shaped; spirals and rings stay as they are.
+
+- `arc`: a semicircle of half the spacing when that reaches `min_radius_m` (0.3 m in the Planner), else a bulb turn of three arcs of the radius (away from the next lane, over it, back in); at the first and the last lane two lopsided bulbs that swing towards the inside only.
+- `multi_point`: a three-point turn, forward arc, reverse arc (`reverse`, blades off), forward arc; without `reverse` (the drive link cannot reverse) it falls back to `arc` with a warning.
+- `in_place`: the straight connection.
+
+Every shape stays inside the area minus the safety margin and inside `fence` (the Planner passes the spot run's geofence). A shape that does not fit is pulled back into the lanes in 5 cm steps (each run keeps at least 10 cm); a lane end where nothing fits keeps its straight connection and the plan's `warnings` count those lane ends. `MowPlan.turn_style` is the style used.
+
 `estimated_duration_s` is driving time plus `MowerSpec.turn_time_s` per heading change above 60 degrees; `covered_area_m2` is the mowable area under the blades (blades-on segments widened to the cutting width); `area_m2` the mowable area; `pattern_chain` the keys of the chain.
 
 ## The validation chain
@@ -80,8 +92,8 @@ The same for every plan (`check()` lists the findings, `validate()` raises `Plan
 
 1. every segment inside the area minus `safety_margin_m` (holes, no-go zones and obstacles left out);
 2. no blades-on segment through a no-go zone, an obstacle or a hole;
-3. transfers with the blades off, speeds positive and within `max_speed_mps` (blades on) and `transfer_speed_mps` (blades off);
-4. turns feasible for `turning_radius_m`: a heading change of `theta` needs `r * tan(theta / 2)` of straight track before and after the corner, a reversal is impossible for `r > 0`. Mowers that turn on the spot use `r = 0`.
+3. transfers and reverse segments with the blades off, speeds positive and within `max_speed_mps` (blades on) and `transfer_speed_mps` (blades off);
+4. turns feasible for `turning_radius_m`: a heading change of `theta` needs `r * tan(theta / 2)` of straight track before and after the corner, a reversal is impossible for `r > 0` (a change of the direction of travel, forwards to reverse, is a stop, not a corner). Mowers that turn on the spot use `r = 0`.
 
 ## Coverage and gaps
 
