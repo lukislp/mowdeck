@@ -34,7 +34,7 @@ export default defineConfig({
     {
       name: 'desktop',
       testMatch:
-        /(desktop|notifications|connection|schedules|drive|health|fleet|operator|camera|vision|spot)\.spec\.ts/,
+        /(desktop|notifications|connection|schedules|drive|calibration|health|fleet|operator|camera|vision|spot)\.spec\.ts/,
       use: { browserName: 'chromium', viewport: { width: 1280, height: 800 } },
     },
     {

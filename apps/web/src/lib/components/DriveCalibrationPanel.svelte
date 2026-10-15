@@ -332,7 +332,11 @@
 </section>
 
 <style>
+  /* Positioned, so the visually hidden table caption (absolute) is laid out inside the panel.
+     Without it the caption's containing block is the viewport: it hangs below the shell's
+     scrolling main area, outside its clip, and gives the document a second scrollbar. */
   .calib {
+    position: relative;
     display: grid;
     gap: var(--md-space-4);
   }
@@ -519,8 +523,11 @@
   }
 
   /* --- the step table: monospace numbers, the kind as a tag ------------------------------- */
+
+  /* A wide table scrolls sideways in its own box, never up and down: overflow-x alone would
+     make overflow-y auto as well, and the collapsed bottom border may stick out a pixel. */
   .table-wrap {
-    overflow-x: auto;
+    overflow: auto hidden;
   }
 
   .steps {
