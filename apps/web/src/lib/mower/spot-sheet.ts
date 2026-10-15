@@ -177,7 +177,7 @@ export function turnStyleLabel(style: TurnStyle): string {
   }
 }
 
-/** What a style does, one line under the select. */
+/** What a style does, one line under the tiles. */
 export function turnStyleHint(style: TurnStyle): string {
   switch (style) {
     case 'in_place':
@@ -189,7 +189,7 @@ export function turnStyleHint(style: TurnStyle): string {
   }
 }
 
-/** One choice of the "Wenden" select. */
+/** One tile of the "Turns" choice. */
 export interface TurnOption {
   /** null: as set on the mower. */
   value: TurnStyle | null;
@@ -202,7 +202,7 @@ export interface TurnOption {
   hint: string | null;
 }
 
-/** The choices of the select: the mower's own setting (with the style it resolves to) first. */
+/** The tiles of the choice: the mower's own setting (with the style it resolves to) first. */
 export function turnOptions(
   mowerDefault: TurnStyle | null | undefined,
   driveReverse: boolean | null | undefined,

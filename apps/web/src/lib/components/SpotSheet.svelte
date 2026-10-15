@@ -13,7 +13,7 @@
     one lamp with "6/8" (a tap opens half, scrolled to the conditions) and START; while a run
     starts, runs or has just ended, the run bar (`runBar`, with its big STOP) instead, and the
     sheet stays at peek, so STOP never needs a drag;
-  - half: shape and radius, pattern (and angle), speed, turns ("Wenden": the mower's own setting
+  - half: shape and radius, pattern (and angle), speed, turns (tiles: the mower's own setting
     with the style it resolves to, in place, arc, multi-point; multi-point is unavailable when
     the drive link cannot reverse);
   - full: spacing, blades with the second confirmation, every start condition, the preview's

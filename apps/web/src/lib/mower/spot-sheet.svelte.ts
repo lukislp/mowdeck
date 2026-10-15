@@ -145,7 +145,7 @@ export class SpotSheetFlow {
   driveReverse = $derived.by(() => this.deps.context().capabilities?.drive_reverse === true);
   /** The mower's own turn setting (`MowerState.turn_style`), null when not reported. */
   mowerTurnStyle = $derived.by(() => this.deps.context().state?.turn_style ?? null);
-  /** The choices of the "Wenden" select (the default names the style it resolves to). */
+  /** The tiles of the "Turns" choice (the default names the style it resolves to). */
   turnOptions = $derived(buildTurnOptions(this.mowerTurnStyle, this.driveReverse));
   /** The style the run turns with: the choice, the mower's setting or `arc`, after fallback. */
   turnStyle = $derived(
@@ -363,7 +363,7 @@ export class SpotSheetFlow {
     this.settings = { ...this.settings, speedMps: clampSpeedMps(value) };
   }
 
-  /** The "Wenden" choice: null for the mower's own setting; an unavailable style is ignored. */
+  /** The "Turns" choice: null for the mower's own setting; an unavailable style is ignored. */
   setTurnStyle(style: TurnStyle | null): void {
     const option = untrack(() => this.turnOptions).find((o) => o.value === style);
     if (!option || option.disabled) return;
