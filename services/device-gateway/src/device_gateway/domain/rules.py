@@ -6,9 +6,14 @@ from enum import StrEnum
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    LINK_BLE_BRIDGE,
+    BridgeScanErrorCode,
+    BridgeScanRequest,
     CameraSessionErrorCode,
     CameraSessionRequest,
     CommandEnvelope,
+    FirmwareCheckErrorCode,
+    FirmwareCheckRequest,
     MowerRegistration,
     MowerState,
     MowPath,
@@ -84,6 +89,61 @@ def preview_rejection(
     if registration.account_id != request.account_id:
         return PathPreviewErrorCode.FORBIDDEN, "the request's account does not own this mower"
     return None
+
+
+def bridge_scan_rejection(
+    registration: MowerRegistration | None, request: BridgeScanRequest
+) -> tuple[BridgeScanErrorCode, str] | None:
+    """Why a bridge scan must not run, or None if it may (the command account rule)."""
+    if registration is None:
+        return BridgeScanErrorCode.NOT_FOUND, "unknown mower"
+    if registration.account_id != request.account_id:
+        return BridgeScanErrorCode.FORBIDDEN, "the request's account does not own this mower"
+    return None
+
+
+def firmware_check_rejection(
+    registration: MowerRegistration | None, request: FirmwareCheckRequest
+) -> tuple[FirmwareCheckErrorCode, str] | None:
+    """Why a firmware check must not run, or None if it may (the command account rule)."""
+    if registration is None:
+        return FirmwareCheckErrorCode.NOT_FOUND, "unknown mower"
+    if registration.account_id != request.account_id:
+        return FirmwareCheckErrorCode.FORBIDDEN, "the request's account does not own this mower"
+    return None
+
+
+def bridge_host_of(registration: MowerRegistration) -> tuple[str, int] | None:
+    """``(host, port)`` of the registration's Bluetooth bridge link, None without one."""
+    link = registration.links.get(LINK_BLE_BRIDGE)
+    if not link or not isinstance(link.get("host"), str):
+        return None
+    port = link.get("port", 6053)
+    return str(link["host"]).casefold(), int(port) if isinstance(port, int) else 6053
+
+
+def bridge_in_use(
+    registration: MowerRegistration, state: MowerState | None, host: str, port: int
+) -> bool:
+    """True when ``registration``'s mower holds an open bridge link to ``host``:``port``
+    (its last state reports the link connected): a scan from another mower through that
+    bridge would fight the open connection and is answered ``busy``."""
+    bridge = bridge_host_of(registration)
+    if bridge is None or bridge != (host.casefold(), port):
+        return False
+    if state is None:
+        return False
+    link = state.links.get(LINK_BLE_BRIDGE)
+    return link is not None and link.connected
+
+
+def links_changed(previous: MowerState | None, current: MowerState) -> bool:
+    """True when the additional links differ from the previous state (the capabilities may
+    have changed with them: manual driving follows the bridge)."""
+    before = previous.links if previous is not None else {}
+    if before.keys() != current.links.keys():
+        return True
+    return any(before[k].connected != current.links[k].connected for k in before)
 
 
 def path_geometry_key(path: MowPath | None) -> str:

@@ -1,7 +1,7 @@
 """Ports: what the gateway's use cases need from the outside world, as protocols."""
 
 from collections.abc import Callable, Coroutine, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -129,19 +129,29 @@ class CloudAccounts(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class MowerCredentials:
+    """The secrets Fleet withheld from a registration: the connection's options and those of
+    every additional link by kind (ADR 0038). Never logged."""
+
+    options: dict[str, str] = field(default_factory=dict)
+    link_secrets: dict[str, dict[str, str]] = field(default_factory=dict)
+
+
 class CredentialSource(Protocol):
     """Fetches the secrets Fleet withholds from registrations (``fleet.mowers.credentials``)."""
 
-    async def fetch(self, registration: MowerRegistration) -> dict[str, str]:
-        """The withheld options of the mower; raises when Fleet has none or does not answer.
-        Callers keep the values only in the connection they open and never log them."""
+    async def fetch(self, registration: MowerRegistration) -> MowerCredentials:
+        """The withheld options of the mower and its links; raises when Fleet has none or does
+        not answer. Callers keep the values only in the connection they open and never log
+        them."""
         ...
 
 
 class NoCredentials:
     """Without Fleet (tests, bootstrap mowers): no secrets can be fetched."""
 
-    async def fetch(self, registration: MowerRegistration) -> dict[str, str]:
+    async def fetch(self, registration: MowerRegistration) -> MowerCredentials:
         """Always refused."""
         msg = "no credential source is configured"
         raise LookupError(msg)

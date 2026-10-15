@@ -44,8 +44,15 @@ class RegistryConnectionProvider:
         self._cloud_factory = cloud_factory
 
     def create(self, registration: MowerRegistration) -> MowerConnection:
-        """Create the connection; simulated mowers default to the configured time scale."""
+        """Create the connection; simulated mowers default to the configured time scale.
+
+        The additional links of the registration (ADR 0038) travel in the option ``links``
+        (``{kind: options}``, with the secrets the session merged), so an adapter that supports
+        them opens them next to its primary connection.
+        """
         options: dict[str, Any] = dict(registration.connection_options)
+        if registration.links:
+            options["links"] = {k: dict(v) for k, v in registration.links.items()}
         if registration.connection_kind is ConnectionKind.SIMULATED:
             options.setdefault("time_scale", self._sim_time_scale)
         config = ConnectionConfig(

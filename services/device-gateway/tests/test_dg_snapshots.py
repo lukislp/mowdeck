@@ -52,7 +52,7 @@ async def test_snapshot_msg_id_follows_the_content() -> None:
         await wait_until(lambda: _maps(bus, reg))
         message = bus.messages(device_subject(reg.mower_id, "map"))[0]
         snap = message.model(MowerMapSnapshot)
-    assert message.msg_id == f"{reg.mower_id}:map:{fingerprint(snap.map)}"
+    assert message.msg_id == f"{reg.mower_id}:map:{fingerprint(snap)}"
 
 
 class DeviceSubjectsDown(InMemoryBus):

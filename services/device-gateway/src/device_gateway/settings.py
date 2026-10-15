@@ -69,6 +69,15 @@ class Settings(ServiceSettings):
     path_progress_seconds: float = Field(default=5.0, gt=0, le=600)
     """A mow path snapshot whose only change is the progress is republished at most this often."""
 
+    firmware_check_initial_seconds: float = Field(default=120.0, ge=0, le=86_400)
+    """Wait after a connect before the manufacturer is asked for firmware updates (after the
+    adapter's device information rounds), for connections with ``capabilities.firmware_update``
+    (ADR 0038). 0 switches the periodic check off; ``gateway.mower.<id>.firmware.check`` still
+    works."""
+
+    firmware_check_interval_seconds: float = Field(default=24 * 3600.0, ge=60, le=30 * 86_400)
+    """Then ask again this often while the connection lasts."""
+
     capture_url: str | None = None
     """Base URL of the capture worker (``http://vision-capture:8000``, ADR 0035). When set,
     mowers whose adapter offers a live camera but cannot take photos (the Mammotion cloud

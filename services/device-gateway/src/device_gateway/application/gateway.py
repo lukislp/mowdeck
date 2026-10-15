@@ -8,6 +8,10 @@ from typing import Literal
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    BridgeScanError,
+    BridgeScanErrorCode,
+    BridgeScanReply,
+    BridgeScanRequest,
     CameraSessionError,
     CameraSessionErrorCode,
     CameraSessionReply,
@@ -15,6 +19,10 @@ from mowdeck_contracts.v1 import (
     CommandEnvelope,
     CommandResult,
     CommandStatus,
+    FirmwareCheckError,
+    FirmwareCheckErrorCode,
+    FirmwareCheckReply,
+    FirmwareCheckRequest,
     MowerRegistration,
     PathPreviewError,
     PathPreviewErrorCode,
@@ -39,6 +47,8 @@ from device_gateway.application.ports import (
     SnapshotFailed,
 )
 from device_gateway.application.session import (
+    BridgeScanUnsupported,
+    FirmwareUnsupported,
     MowerSession,
     PathPreviewUnsupported,
     PhotoUnsupported,
@@ -47,8 +57,11 @@ from device_gateway.application.session import (
 from device_gateway.domain.rules import (
     Shard,
     backoff,
+    bridge_in_use,
+    bridge_scan_rejection,
     camera_rejection,
     command_rejection,
+    firmware_check_rejection,
     preview_rejection,
 )
 
@@ -90,6 +103,8 @@ class DeviceGateway:
         self._sessions: dict[UUID, MowerSession] = {}
         self._accepting = True
         self._fleet_sync: asyncio.Task[None] | None = None
+        self._bridge_scans: dict[tuple[str, int], asyncio.Lock] = {}
+        """One scan at a time per bridge (host and port)."""
         self.fleet_synced = False
         """True once Fleet answered ``fleet.mowers.list``."""
 
@@ -117,9 +132,10 @@ class DeviceGateway:
         existing = self._sessions.get(mower_id)
         if existing is not None:
             old = existing.registration
-            same_link = (old.connection_kind, old.connection_options) == (
+            same_link = (old.connection_kind, old.connection_options, old.links) == (
                 registration.connection_kind,
                 registration.connection_options,
+                registration.links,
             )
             if same_link:
                 existing.registration = registration
@@ -274,6 +290,120 @@ class DeviceGateway:
             )
         return CameraSessionReply(session=camera)
 
+    # --- bridge scan and firmware (ADR 0038) --------------------------------------------------
+
+    async def bridge_scan(self, request: BridgeScanRequest) -> BridgeScanReply | None:
+        """Answer a bridge scan request; None when the mower belongs to another shard.
+
+        The account of the request must own the mower (like commands). The scan goes through
+        the mower's connection when it can open bridge links (``unsupported`` otherwise); one
+        scan runs per bridge at a time, and a bridge another mower of this instance holds open
+        is ``busy`` (the connection that holds it answers its own re-check from the live
+        scanner). The key in the request is used, never logged.
+        """
+        if not self.shard.owns(request.mower_id):
+            return None
+        session = self._sessions.get(request.mower_id)
+        refusal = bridge_scan_rejection(session.registration if session else None, request)
+        if refusal is not None or session is None:
+            code, detail = refusal or (BridgeScanErrorCode.NOT_FOUND, "unknown mower")
+            _log.warning(
+                "bridge scan refused",
+                mower_id=str(request.mower_id),
+                account_id=str(request.account_id),
+                code=code.value,
+            )
+            return _scan_error(code, detail)
+        host, port = request.host.casefold(), request.port
+        for other in self._sessions.values():
+            if other is not session and bridge_in_use(
+                other.registration, other.last_state, host, port
+            ):
+                return _scan_error(
+                    BridgeScanErrorCode.BUSY, "another mower is connected through this bridge"
+                )
+        lock = self._bridge_scans.setdefault((host, port), asyncio.Lock())
+        if lock.locked():
+            return _scan_error(BridgeScanErrorCode.BUSY, "a scan through this bridge is running")
+        async with lock:
+            try:
+                async with asyncio.timeout(request.timeout_s + 15):
+                    reply = await session.scan_bridge(
+                        host=request.host,
+                        port=request.port,
+                        secret=request.noise_psk,
+                        expected_name=request.expected_name,
+                        timeout_s=request.timeout_s,
+                    )
+            except NotConnected as exc:
+                return _scan_error(
+                    BridgeScanErrorCode.UNSUPPORTED, f"{exc}; connect the mower first"
+                )
+            except BridgeScanUnsupported as exc:
+                return _scan_error(BridgeScanErrorCode.UNSUPPORTED, str(exc))
+            except TimeoutError:
+                return _scan_error(BridgeScanErrorCode.TIMEOUT, "the scan did not finish in time")
+            except Exception as exc:
+                _log.warning(
+                    "bridge scan failed", mower_id=str(request.mower_id), error=type(exc).__name__
+                )
+                return _scan_error(
+                    BridgeScanErrorCode.UNREACHABLE, f"the scan failed: {type(exc).__name__}"
+                )
+        _log.info(
+            "bridge scan answered",
+            mower_id=str(request.mower_id),
+            host=request.host,
+            outcome="ok" if reply.error is None else reply.error.code.value,
+            devices=len(reply.devices),
+        )
+        return reply
+
+    async def firmware_check(self, request: FirmwareCheckRequest) -> FirmwareCheckReply | None:
+        """Answer a firmware check request; None when the mower belongs to another shard.
+
+        The account of the request must own the mower (like commands). The check goes through
+        the connection's firmware port when it has one (``unsupported`` otherwise) and
+        publishes the state with the answer.
+        """
+        if not self.shard.owns(request.mower_id):
+            return None
+        session = self._sessions.get(request.mower_id)
+        refusal = firmware_check_rejection(session.registration if session else None, request)
+        if refusal is not None or session is None:
+            code, detail = refusal or (FirmwareCheckErrorCode.NOT_FOUND, "unknown mower")
+            _log.warning(
+                "firmware check refused",
+                mower_id=str(request.mower_id),
+                account_id=str(request.account_id),
+                code=code.value,
+            )
+            return _firmware_error(code, detail)
+        try:
+            info = await session.check_firmware()
+        except NotConnected as exc:
+            return _firmware_error(FirmwareCheckErrorCode.UNAVAILABLE, str(exc))
+        except FirmwareUnsupported as exc:
+            return _firmware_error(FirmwareCheckErrorCode.UNSUPPORTED, str(exc))
+        except Exception as exc:
+            _log.warning(
+                "firmware check failed", mower_id=str(request.mower_id), error=type(exc).__name__
+            )
+            return _firmware_error(
+                FirmwareCheckErrorCode.UNAVAILABLE, "the manufacturer did not answer"
+            )
+        if info is None:
+            return _firmware_error(
+                FirmwareCheckErrorCode.UNSUPPORTED, "the connection cannot ask the manufacturer"
+            )
+        _log.info(
+            "firmware check answered",
+            mower_id=str(request.mower_id),
+            installed=info.installed,
+            update_state=info.update_state,
+        )
+        return FirmwareCheckReply(info=info)
+
     # --- mow path preview ---------------------------------------------------------------------
 
     async def path_preview(
@@ -410,6 +540,14 @@ def _camera_error(code: CameraSessionErrorCode, detail: str) -> CameraSessionRep
 
 def _preview_error(code: PathPreviewErrorCode, detail: str) -> PathPreviewReply:
     return PathPreviewReply(error=PathPreviewError(code=code, detail=detail[:500]))
+
+
+def _scan_error(code: BridgeScanErrorCode, detail: str) -> BridgeScanReply:
+    return BridgeScanReply(error=BridgeScanError(code=code, detail=detail[:500]))
+
+
+def _firmware_error(code: FirmwareCheckErrorCode, detail: str) -> FirmwareCheckReply:
+    return FirmwareCheckReply(error=FirmwareCheckError(code=code, detail=detail[:500]))
 
 
 def _photo_error(code: PhotoErrorCode, detail: str) -> PhotoReply:
