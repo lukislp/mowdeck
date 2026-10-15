@@ -79,3 +79,20 @@ export function installProgress(info: FirmwareInfo | null): number | null {
 export function updateOffered(info: FirmwareInfo | null): boolean {
   return !!info?.available && (info.update_state === 'available' || info.update_state === 'failed');
 }
+
+/**
+ * The firmware info to show: the live one from the telemetry or the answer of the last
+ * "Nach Updates suchen". While an update installs, the live info always wins; its progress
+ * moves without a new `checked_at`, so comparing the check times alone would freeze the bar.
+ * Otherwise the newer check wins (the live one on a tie).
+ */
+export function shownFirmwareInfo(
+  live: FirmwareInfo | null,
+  checked: FirmwareInfo | null,
+): FirmwareInfo | null {
+  if (!live || !checked) return live ?? checked;
+  if (live.update_state === 'installing' || live.update_state === 'failed') return live;
+  const liveAt = live.checked_at ? Date.parse(live.checked_at) : 0;
+  const checkedAt = checked.checked_at ? Date.parse(checked.checked_at) : 0;
+  return liveAt >= checkedAt ? live : checked;
+}
