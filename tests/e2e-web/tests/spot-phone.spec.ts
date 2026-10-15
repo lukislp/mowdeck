@@ -41,7 +41,8 @@ async function tapNextToMower(page: Page): Promise<void> {
     )
     .toBe(true);
   const marker = (await markerLoc.boundingBox())!;
-  const sheet = await page.getByTestId('spot-sheet').boundingBox();
+  const sheetLoc = page.getByTestId('spot-sheet');
+  const sheet = (await sheetLoc.count()) > 0 ? await sheetLoc.boundingBox() : null;
   const y = Math.min(marker.y + marker.height / 2, (sheet?.y ?? Infinity) - 40);
   await page.touchscreen.tap(marker.x + marker.width / 2 + 24, y);
 }
