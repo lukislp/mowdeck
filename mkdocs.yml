@@ -1,5 +1,5 @@
 site_name: MowDeck
-site_description: Self-hosted multi-tenant platform for Mammotion mowers
+site_description: Self-hosted, manufacturer-independent control centre for robotic lawn mowers
 repo_url: https://github.com/lukislp/mowdeck
 strict: true
 

@@ -1,6 +1,6 @@
 # MowDeck
 
-MowDeck is a self-hosted control centre for robotic mowers. It runs on a mini PC or Raspberry Pi at home with Docker Compose, keeps your data in your own house, and gives you and your family one web app for everything the mower does: live status and map, starting a job with your own settings, schedules that respect the weather, the cameras, notifications on the phone, and an optional AI assistant for a stuck mower. The same images also run on Kubernetes if you prefer a server.
+MowDeck is a self-hosted control centre for robotic mowers. It runs on a mini PC or Raspberry Pi at home with Docker Compose, keeps your data in your own house, and gives you and your family one web app for everything the mower does: live status and map, starting a job with your own settings, spot mowing that MowDeck steers itself, schedules that respect the weather, the cameras, notifications on the phone, and an optional AI assistant for a stuck mower. The same images also run on Kubernetes if you prefer a server.
 
 MowDeck is not tied to one manufacturer. The services never talk to a mower directly; they use the `mowdeck-control` interface, and each manufacturer is an adapter package behind it. The first adapter is for Mammotion (LUBA, YUKA); a simulator implements the same interface for trying everything without hardware. A Home Assistant integration and native app shells for iOS and Android come with it.
 
@@ -8,20 +8,36 @@ MowDeck is not tied to one manufacturer. The services never talk to a mower dire
 
 | Mowers | Adapter | Link to the mower | State |
 | --- | --- | --- | --- |
-| Mammotion LUBA 2 / LUBA mini / YUKA | `libs/mowdeck-control-mammotion` (GPL-3.0, built on [PyMammotion](https://github.com/mikey0000/PyMammotion)) | Manufacturer cloud today; a small Bluetooth bridge board on the mower is prepared | In daily use on a LUBA 2 AWD X |
+| Mammotion LUBA 2 / LUBA mini / YUKA | `libs/mowdeck-control-mammotion` (GPL-3.0, built on [PyMammotion](https://github.com/mikey0000/PyMammotion)) | Manufacturer cloud, plus an optional Bluetooth bridge (an ESPHome Bluetooth proxy, e.g. an ESP32 board) | In daily use on a LUBA 2 AWD X |
 | Simulator | `libs/mowdeck-control` | none | For development, tests and trying the app |
 
-What a mower can do (patterns, cameras, lights, RTK, manual drive) is reported by its adapter as capabilities; the web app shows only what the connected mower supports. Adding a manufacturer means one adapter package that implements the interface (connection, state, commands, map, capabilities) and, if the manufacturer has a cloud with accounts, its account linking and device list. See [libs/mowdeck-control/README.md](libs/mowdeck-control/README.md) and [ADR 0012](docs/adr/0012-mower-control-interface-and-safety-rules.md).
+What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extra links, firmware updates) is reported by its adapter as capabilities; the web app shows only what the connected mower supports. Adding a manufacturer means one adapter package that implements the interface (connection, state, commands, map, capabilities) and, if the manufacturer has a cloud with accounts, its account linking and device list. See [libs/mowdeck-control/README.md](libs/mowdeck-control/README.md) and [ADR 0012](docs/adr/0012-mower-control-interface-and-safety-rules.md).
 
 ## Features
 
 **Mower and map**
 
-- Live status with battery, blades, speed, signal and RTK fix quality, refreshed faster while the mower works.
+- Live status with battery, blades, speed, signal and RTK fix quality, refreshed faster while the mower works; online or offline from a link heartbeat, so a docked mower that reports rarely still shows as online.
 - Map with your zones, the charging station, the mower's heading and track, the mower's own computed mow path, and heatmap layers for coverage, RTK, WLAN and mobile signal with a list of missed spots.
 - Commands confirmed by the mower's real state: start, pause, resume, emergency stop, "to the station" with the choice to end the job or keep it paused.
 - Start sheet: mowing pattern, angle, border laps, spacing, blade height and speed per run, remembered per mower; a path preview before you start; a rain warning with the expected duration.
 - Area names you choose, model limits read from the mower (cutting height, speed), real model names in the mower list.
+
+**Links and firmware**
+
+- The manufacturer cloud plus an optional Bluetooth bridge per mower, added in the mower settings. Cloud first: state and commands go over the cloud, while Bluetooth carries manual driving, spot runs and faster positions while mowing.
+- The bridge panel shows the mower's signal at the bridge, the bridge firmware and whether it is outdated.
+- Firmware check and update of the mower from the web app, with release notes and live progress; it installs only in the dock with enough battery.
+
+**Spot mowing, driven by MowDeck**
+
+- Pick a circle or draw a shape on the map, or re-mow a missed spot from the coverage heatmap; spiral or stripes, with a route preview and duration before the start.
+- Starts from the dock: the mower undocks, drives to the spot over the map's paths and areas, mows, and returns to the dock.
+- Blades off by default (dry run); blades on only where the mower supports it and after a double confirmation.
+- Safety checks before and during the run: geofence, RTK fix and fresh position, the Bluetooth signal, progress-based limits, and a STOP next to the emergency stop.
+- Turns at lane ends in place, as an arc or as a multi-point turn (needs a link that can reverse), by default as set on the mower.
+- Drive calibration measures the mower's real speed and turn rate; the drive speed setting can be changed from MowDeck.
+- On phones the spot controls sit in a bottom sheet over the map.
 
 **Schedules and weather**
 
