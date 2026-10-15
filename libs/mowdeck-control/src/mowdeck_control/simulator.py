@@ -53,6 +53,7 @@ import asyncio
 import itertools
 import logging
 import math
+import random
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta
@@ -234,6 +235,15 @@ class SimulationConfig:
     ``links`` option with a ``ble_bridge`` entry (what the Device-Gateway passes)."""
     bridge_connected: bool = True
     """Initial state of the bridge link (test hook :meth:`SimulatedMower.set_bridge`)."""
+    state_period_s: float = 0.0
+    """Report throttle: ``tick()`` publishes a state at most this often in simulated seconds
+    (0: every tick), like a real mower that reports about once a second. Events (RTK, errors,
+    commands) still publish at once."""
+    position_noise_m: float = 0.0
+    """Standard deviation of a Gaussian noise added to the reported position (metres), so
+    control loops are tested with RTK-like scatter; the true position is not disturbed."""
+    noise_seed: int = 1
+    """Seed of the position noise (deterministic runs)."""
     bridge_rssi: int = -60
     """Signal strength the bridge reports for the mower while connected."""
     bridge_devices: tuple[BridgeDevice, ...] = (("Luba-SIM0001", "FC:23:45:67:89:AB", -62),)
@@ -418,6 +428,8 @@ class SimulatedMower:
         self._firmware_progress: int | None = None
         self._firmware_remaining_s = 0.0
         self._firmware_target: str | None = None
+        self._last_report_s: float | None = None
+        self._noise = random.Random(self.config.noise_seed)  # noqa: S311 - not security
         self._capabilities = MowerCapabilities(
             model=self.config.model,
             native_patterns=frozenset({Pattern.STRIPES, Pattern.DIAGONAL, Pattern.CHECKERBOARD}),
@@ -837,7 +849,14 @@ class SimulatedMower:
             remaining -= self._advance(remaining)
         state = self.snapshot()
         self._changed.set()
-        if self._connected:
+        period = self.config.state_period_s
+        due = (
+            period <= 0
+            or self._last_report_s is None
+            or self._elapsed_s - self._last_report_s >= period - 1e-9
+        )
+        if self._connected and due:
+            self._last_report_s = self._elapsed_s
             self._broadcaster.publish(state)
         return state
 
@@ -880,6 +899,10 @@ class SimulatedMower:
         if self.stuck:
             raw["stuck"] = True
             raw["backed_off_m"] = round(self._backed_off_m, 3)
+        x, y = self._x, self._y
+        if self.config.position_noise_m > 0:
+            x += self._noise.gauss(0.0, self.config.position_noise_m)
+            y += self._noise.gauss(0.0, self.config.position_noise_m)
         return MowerState(
             mower_id=self.mower_id,
             account_id=self.account_id,
@@ -887,7 +910,7 @@ class SimulatedMower:
             activity=status.activity,
             battery_percent=max(0, min(100, math.floor(self._battery))),
             charging=status.activity in (MowerActivity.CHARGING, MowerActivity.UPDATING),
-            position=to_geo_position(self._map.reference, self._x, self._y, self._theta),
+            position=to_geo_position(self._map.reference, x, y, self._theta),
             rtk_fix=self._rtk_fix,
             rtk_source=self._rtk_source,
             position_source=_POSITION_SOURCE.get(self._rtk_fix, PositionSource.UNKNOWN),

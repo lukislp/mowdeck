@@ -5,6 +5,8 @@
   dead-man switch, blade rules, firmware update rules and capability checks for every adapter.
 * :class:`FirmwarePort` and :class:`BridgeScanCapable`: optional capabilities of a connection
   (firmware checks and updates, scans through a Bluetooth bridge, ADR 0038).
+* :class:`SpotMowRun`: spot mowing driven by MowDeck along a Planner route (ADR 0039), with
+  its geofence and pure-pursuit steering, fed by the generic drive channel and state.
 * :class:`SimulatedMower`: a deterministic simulated mower (``ConnectionKind.SIMULATED``).
 * :func:`plan_to_native_job`: neutral mowing request to a native mower job.
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
@@ -83,6 +85,16 @@ from mowdeck_control.simulator import (
     create_simulated_connection,
     default_map,
 )
+from mowdeck_control.spot_run import (
+    FrameChannel,
+    Geofence,
+    Pose,
+    SpotMowRun,
+    SpotRunConfig,
+    SpotRunReport,
+    pose_of,
+    spot_start_problem,
+)
 from mowdeck_control.timers import AsyncioTimerFactory, Timer, TimerFactory
 from mowdeck_control.translation import (
     MowOrder,
@@ -114,6 +126,8 @@ __all__ = [
     "Dispatch",
     "DriveSession",
     "FirmwarePort",
+    "FrameChannel",
+    "Geofence",
     "JobCommand",
     "MapRebuildable",
     "MowOrder",
@@ -129,10 +143,14 @@ __all__ = [
     "Pattern",
     "Photo",
     "PhotoCapture",
+    "Pose",
     "SensorStop",
     "SimulatedDriveSession",
     "SimulatedMower",
     "SimulationConfig",
+    "SpotMowRun",
+    "SpotRunConfig",
+    "SpotRunReport",
     "StateBroadcaster",
     "StateCallback",
     "StateSubscription",
@@ -159,8 +177,10 @@ __all__ = [
     "local_angle",
     "plan_to_native_job",
     "point_in_polygon",
+    "pose_of",
     "register_connection",
     "render_scene",
+    "spot_start_problem",
     "to_geo_position",
     "to_wgs84",
 ]

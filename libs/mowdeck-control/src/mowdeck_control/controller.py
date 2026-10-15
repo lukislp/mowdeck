@@ -48,6 +48,17 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    mower docked and charging with enough battery, no job, no open drive session, no update
    already installing. While the mower reports ``updating`` every command but ``EmergencyStop``
    is rejected with ``"firmware update running"``, drive frames included.
+12. A ``SpotMow`` (ADR 0039) starts a :class:`~mowdeck_control.spot_run.SpotMowRun` that drives
+   the plan with frames through this controller (``correlation_id = spot:<command_id>``): it
+   needs ``capabilities.manual_drive``, no open drive session or pending confirmation, an idle
+   mower with a fresh state, enough battery, a fixed RTK position inside the geofence, a plan
+   inside the geofence and a clear approach of at most 10 m; the command is answered
+   ``accepted`` at once (``rejected`` or ``failed`` when a check fails) and the run's end is
+   read with :meth:`MowerController.spot_run_result`. Blades run only with ``blades`` and
+   ``confirm_blades`` on a mower with ``manual_drive_blades``; otherwise the run is a dry run.
+   While a run is active every command except ``EmergencyStop``, ``SpotStop``, ``SetLight`` and
+   the run's own frames is rejected ("spot run active; stop it first"); ``SpotStop`` without a
+   run is rejected. An emergency stop, a sensor stop and a change of the activity end the run.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -61,7 +72,7 @@ import logging
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import TracebackType
 from typing import Any, Self
 from uuid import UUID
@@ -84,6 +95,9 @@ from mowdeck_contracts.v1 import (
     SetBladeHeight,
     SetLight,
     SetSpeed,
+    SpotMow,
+    SpotRunStatus,
+    SpotStop,
     StartMow,
     utc_now,
 )
@@ -106,6 +120,17 @@ from mowdeck_control.safety import (
     decide_manual_blade,
     firmware_update_problem,
 )
+from mowdeck_control.spot_run import (
+    REASON_ACTIVITY_CHANGE,
+    REASON_EMERGENCY_STOP,
+    REASON_LINK_LOST,
+    REASON_SENSOR_STOP,
+    REASON_STOPPED_BY_USER,
+    SpotMowRun,
+    SpotRunConfig,
+    SpotRunReport,
+    spot_start_problem,
+)
 from mowdeck_control.timers import AsyncioTimerFactory, Timer, TimerFactory
 from mowdeck_control.translation import MowRequest, plan_to_native_job
 
@@ -119,6 +144,21 @@ _JOB_ACTIVITIES = frozenset({MowerActivity.MOWING, MowerActivity.PAUSED, MowerAc
 """Activities of a running job: no path preview then (rule 10)."""
 _SUPERSEDING = (StartMow, PauseMow, ResumeMow, ReturnToDock, EmergencyStop)
 """Job commands that end the confirmation wait of every earlier command (rule 9)."""
+SPOT_RUN_ACTIVE = "spot run active; stop it first"
+"""Rejection reason of every other command while a spot run drives (rule 12)."""
+_RUN_ENDING_ACTIVITIES = frozenset(
+    {
+        MowerActivity.MOWING,
+        MowerActivity.RETURNING,
+        MowerActivity.DOCKED,
+        MowerActivity.CHARGING,
+        MowerActivity.UPDATING,
+        MowerActivity.OFFLINE,
+    }
+)
+"""Activities that end a spot run when the mower reports them (it is no longer idle)."""
+_SPOT_STOP_WAIT_S = 5.0
+"""How long a stop waits for the run's zero frame before the task is cancelled."""
 
 
 @dataclass(slots=True)
@@ -143,6 +183,8 @@ class MowerController:
         dedup_size: int = DEFAULT_DEDUP_SIZE,
         on_state: StateCallback | None = None,
         logger: logging.Logger | None = None,
+        spot_config: SpotRunConfig | None = None,
+        spot_sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
         if dedup_size < 1:
             msg = "dedup_size must be at least 1"
@@ -165,6 +207,12 @@ class MowerController:
         self._broadcaster = StateBroadcaster()
         self._pump: asyncio.Task[None] | None = None
         self._confirming: dict[UUID, _Confirmation] = {}
+        self._spot_config = spot_config or SpotRunConfig()
+        self._spot_sleep = spot_sleep
+        self._spot_run: SpotMowRun | None = None
+        self._spot_task: asyncio.Task[SpotRunReport] | None = None
+        self._spot_status: SpotRunStatus | None = None
+        self._status_tasks: set[asyncio.Task[None]] = set()
 
     # --- Lifecycle ----------------------------------------------------------------------------
 
@@ -188,6 +236,46 @@ class MowerController:
         """True while a manual drive session is open."""
         return self._session is not None
 
+    @property
+    def spot_run_active(self) -> bool:
+        """True while a spot run drives the mower (rule 12)."""
+        return self._spot_run is not None and self._spot_run.active
+
+    @property
+    def spot_status(self) -> SpotRunStatus | None:
+        """The status of the current or last spot run (``MowerState.spot_run``)."""
+        return self._spot_status
+
+    async def spot_run_result(self, run_id: UUID) -> SpotRunReport | None:
+        """Wait for the end of the spot run started by the ``SpotMow`` command ``run_id`` and
+        return its report; None when no such run is known."""
+        run = self._spot_run
+        if run is None or run.run_id != run_id:
+            return None
+        return await run.wait()
+
+    async def stop_spot_run(self, reason: str = REASON_LINK_LOST) -> SpotRunReport | None:
+        """End an active spot run with ``reason`` (zero frame, blades off, session closed) and
+        return its report; None without an active run."""
+        run = self._spot_run
+        if run is None or not run.active:
+            return None
+        run.request_stop(reason)
+        task = self._spot_task
+        if task is not None:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(run.wait()), _SPOT_STOP_WAIT_S)
+            if not run.finished:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
+        return run.report
+
+    async def end_drive_session(self, reason: str = "ended by the caller") -> None:
+        """Stop and close an open manual drive session (scripts; the dead-man does it for
+        clients that stop sending frames)."""
+        await self._end_drive(reason)
+
     async def start(self) -> None:
         """Connect, load capabilities and map, and start forwarding state updates."""
         await self._connection.connect()
@@ -200,8 +288,10 @@ class MowerController:
         )
 
     async def close(self) -> None:
-        """End any drive session and confirmation wait, stop the state pump and disconnect."""
+        """End any spot run, drive session and confirmation wait, stop the state pump and
+        disconnect."""
         self._interrupt_confirmations("controller close")
+        await self.stop_spot_run(REASON_LINK_LOST)
         await self._end_drive("controller closed")
         if self._pump is not None:
             self._pump.cancel()
@@ -254,7 +344,11 @@ class MowerController:
 
     def current_path(self) -> MowPath | None:
         """The route of the running job with its progress, when the adapter knows it
-        (:class:`~mowdeck_control.connection.MowPathSource`); None otherwise."""
+        (:class:`~mowdeck_control.connection.MowPathSource`); the plan of an active spot run
+        with its progress while one drives; None otherwise."""
+        run = self._spot_run
+        if run is not None and run.active:
+            return run.mow_path()
         return current_path_of(self._connection)
 
     @property
@@ -337,6 +431,8 @@ class MowerController:
         command = envelope.command
         if isinstance(command, EmergencyStop):
             return await self._emergency_stop(envelope, command)
+        if isinstance(command, SpotStop):
+            return await self._spot_stop(envelope)
         epoch = self._estop_epoch
         async with self._lock:
             if epoch != self._estop_epoch:
@@ -347,6 +443,14 @@ class MowerController:
                 return self._result(
                     envelope, CommandStatus.EXPIRED, "command expired while waiting in the queue"
                 )
+            run = self._spot_run
+            if run is not None and run.active:
+                own_frame = (
+                    isinstance(command, ManualDrive)
+                    and envelope.correlation_id == run.correlation_id
+                )
+                if not own_frame and not isinstance(command, SetLight):
+                    return self._result(envelope, CommandStatus.REJECTED, SPOT_RUN_ACTIVE)
             if await self._updating():
                 return self._result(envelope, CommandStatus.REJECTED, FIRMWARE_UPDATE_RUNNING)
             if isinstance(command, FirmwareUpdate) and self._session is not None:
@@ -363,6 +467,8 @@ class MowerController:
                         "a command is still waiting for its confirmation; pause the mower first",
                     )
                 return await self._manual_drive(envelope, command)
+            if isinstance(command, SpotMow):
+                return await self._spot_mow(envelope, command)
             if not isinstance(command, SetLight):
                 await self._end_drive(f"ended by {command.kind}")
             problem = await self._validate(command)
@@ -384,6 +490,7 @@ class MowerController:
         self._estop_epoch += 1
         self._log_event(envelope, "emergency stop: preempting queue and drive session")
         self._interrupt_confirmations(command.kind)
+        await self.stop_spot_run(REASON_EMERGENCY_STOP)
         await self._end_drive("emergency stop")
         return await self._execute(envelope, command)
 
@@ -617,6 +724,110 @@ class MowerController:
             self._log.exception("drive session close failed for mower %s", self._mower_id)
         self._log.info("drive session of mower %s ended: %s", self._mower_id, reason)
 
+    # --- Spot runs (ADR 0039) -----------------------------------------------------------------
+
+    async def _spot_mow(self, envelope: CommandEnvelope, command: SpotMow) -> CommandResult:
+        """Rule 12: check the preconditions and start the run; ``accepted`` at once."""
+        caps = await self.capabilities()
+        if not caps.manual_drive:
+            return self._result(
+                envelope,
+                CommandStatus.REJECTED,
+                "manual driving is not supported on this connection",
+            )
+        if self._session is not None:
+            return self._result(
+                envelope,
+                CommandStatus.REJECTED,
+                "a manual drive session is open; stop driving first",
+            )
+        if self._confirming:
+            return self._result(
+                envelope, CommandStatus.REJECTED, "a command is still waiting for its confirmation"
+            )
+        try:
+            state = await self._connection.get_state()
+        except NotConnected:
+            return self._result(envelope, CommandStatus.FAILED, "mower is not connected")
+        problem = spot_start_problem(state, now=self._clock())
+        if problem is not None:
+            return self._result(envelope, CommandStatus.REJECTED, problem)
+        blades = command.blades and command.confirm_blades and caps.manual_drive_blades
+        run = SpotMowRun(
+            run_id=envelope.command_id,
+            plan=command.plan,
+            mower_map=await self.mower_map(),
+            pose_source=lambda: self._last_state,
+            frames=_SpotFrames(self, envelope, run_id=envelope.command_id),
+            speed_mps=command.speed_mps,
+            blades=blades,
+            on_status=self._on_spot_status,
+            clock=self._clock,
+            sleep=self._spot_sleep,
+            config=self._spot_config,
+        )
+        problem = run.prepare(self._last_state or state)
+        if problem is not None:
+            return self._result(envelope, CommandStatus.REJECTED, problem)
+        self._spot_run = run
+        self._spot_task = asyncio.create_task(run.run(), name=f"spot-{envelope.command_id}")
+        self._spot_task.add_done_callback(self._spot_done)
+        detail = "spot run started (dry run)" if run.dry_run else "spot run started with blades"
+        if command.blades and not blades:
+            detail += "; blades forced off: " + (
+                "this mower does not allow blades while driving manually"
+                if not caps.manual_drive_blades
+                else "confirm_blades missing"
+            )
+        self._log_event(envelope, detail)
+        return self._result(envelope, CommandStatus.ACCEPTED, detail)
+
+    def _spot_done(self, task: "asyncio.Task[SpotRunReport]") -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            self._log.error("spot run task failed for mower %s", self._mower_id, exc_info=exc)
+
+    async def _spot_stop(self, envelope: CommandEnvelope) -> CommandResult:
+        """``SpotStop``: end the active run; rejected without one (rule 12)."""
+        run = self._spot_run
+        if run is None or not run.active:
+            return self._result(envelope, CommandStatus.REJECTED, "no spot run is active")
+        self._log_event(envelope, "stopping the spot run")
+        report = await self.stop_spot_run(REASON_STOPPED_BY_USER)
+        reason = report.summary() if report is not None else "spot run stopped"
+        return self._result(envelope, CommandStatus.EXECUTED, reason)
+
+    def _on_spot_status(self, status: SpotRunStatus) -> None:
+        self._spot_status = status
+        state = self._last_state
+        if state is None or state.spot_run == status:
+            return
+        merged = state.model_copy(update={"spot_run": status})
+        self._last_state = merged
+        task = asyncio.create_task(self._emit(merged), name=f"spot-status-{self._mower_id}")
+        self._status_tasks.add(task)
+        task.add_done_callback(self._status_tasks.discard)
+
+    async def _send_spot_frame(
+        self, envelope: CommandEnvelope, run_id: UUID, frame: ManualDrive
+    ) -> str | None:
+        """Send one frame of the run through :meth:`handle` (all drive rules apply)."""
+        wrapped = CommandEnvelope.create(
+            mower_id=self._mower_id,
+            account_id=envelope.account_id,
+            issued_by=envelope.issued_by,
+            command=frame,
+            ttl=timedelta(milliseconds=frame.ttl_ms),
+            correlation_id=f"spot:{run_id}",
+            now=self._clock(),
+        )
+        result = await self.handle(wrapped)
+        if result.status is CommandStatus.ACCEPTED:
+            return None
+        return f"{result.status.value}: {result.reason}"
+
     # --- State --------------------------------------------------------------------------------
 
     async def _pump_states(self) -> None:
@@ -629,13 +840,24 @@ class MowerController:
             self._log.exception("state stream of mower %s failed", self._mower_id)
 
     async def _on_state_received(self, state: MowerState) -> None:
+        if self._spot_status is not None:
+            state = state.model_copy(update={"spot_run": self._spot_status})
         self._last_state = state
+        run = self._spot_run
+        if run is not None and run.active:
+            if state.activity is MowerActivity.ERROR:
+                run.request_stop(REASON_SENSOR_STOP, state.error_code)
+            elif state.activity in _RUN_ENDING_ACTIVITIES:
+                run.request_stop(REASON_ACTIVITY_CHANGE, state.activity.value)
         if (
             state.activity is MowerActivity.ERROR
             and not state.drive_recoverable
             and self._session is not None
         ):
             await self._end_drive(f"sensor stop: {state.error_code}")
+        await self._emit(state)
+
+    async def _emit(self, state: MowerState) -> None:
         self._broadcaster.publish(state)
         if self._on_state is not None:
             try:
@@ -695,6 +917,29 @@ class MowerController:
         if status is not None:
             extra["status"] = str(status)
         return extra
+
+
+class _SpotFrames:
+    """:class:`~mowdeck_control.spot_run.FrameChannel` on a controller: frames go through
+    :meth:`MowerController.handle`, the close ends the drive session."""
+
+    def __init__(
+        self, controller: MowerController, envelope: CommandEnvelope, *, run_id: UUID
+    ) -> None:
+        self._controller = controller
+        self._envelope = envelope
+        self._run_id = run_id
+
+    async def send(
+        self, *, linear: float, angular: float, blade_on: bool, ttl_ms: int
+    ) -> str | None:
+        frame = ManualDrive(
+            linear=round(linear, 4), angular=round(angular, 4), blade_on=blade_on, ttl_ms=ttl_ms
+        )
+        return await self._controller._send_spot_frame(self._envelope, self._run_id, frame)
+
+    async def close(self) -> None:
+        await self._controller._end_drive("spot run ended")
 
 
 def _native_start(command: StartMow) -> StartMow:
