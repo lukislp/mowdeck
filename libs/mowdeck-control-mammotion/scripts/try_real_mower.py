@@ -36,17 +36,35 @@ the bridge is unplugged, does the cloud go on meanwhile. ``--scan HOST,KEY`` onl
 the bridge for mowers (what the web app's "add a bridge" dialog does) and ``--firmware-check``
 asks the Mammotion cloud what is installed and offered; neither changes anything on the mower.
 
+Spot mowing (ADR 0039), over a link with manual driving (``--bridge`` or ``--esphome``),
+blades always off, the mower idle on the lawn with a fixed RTK position::
+
+    uv run python .../try_real_mower.py --bridge HOST,KEY --turn-check
+    uv run python .../try_real_mower.py --bridge HOST,KEY --spot-dry-run
+
+``--turn-check`` turns in place with ``angular`` +0.3 for two seconds (5 frames per second
+through the controller, exactly as a spot run sends them), then stops and checks that the
+compass heading decreased (left positive), and prints the report interval and the latency from
+the first frame to the first report that shows the turn. ``--spot-dry-run`` drives a circle of
+1 m diameter that starts at the mower's position along its heading (to the left), at
+``--spot-speed`` (default 0.2 m/s), with ``SpotMowRun`` behind ``MowerController`` (geofence,
+pauses, aborts, dead-man). Ctrl-C sends ``spot_stop``.
+
 Without hardware or credentials (fake PyMammotion port)::
 
     uv run python .../try_real_mower.py --dry-run --start-area "Front lawn" --estop
 
-The script never drives the mower manually and never switches blades on outside a mowing job.
+Apart from ``--turn-check`` and ``--spot-dry-run`` the script never drives the mower manually,
+and it never switches blades on outside a mowing job.
 """
 
 import argparse
 import asyncio
+import itertools
 import json
+import math
 import os
+import statistics
 import sys
 import time
 from collections.abc import Sequence
@@ -57,7 +75,11 @@ from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
     CommandEnvelope,
+    CommandResult,
+    CommandStatus,
     EmergencyStop,
+    LocalPoint,
+    ManualDrive,
     MowerCommand,
     MowerMap,
     MowerState,
@@ -65,6 +87,10 @@ from mowdeck_contracts.v1 import (
     PrincipalRef,
     ReturnToDock,
     SetLight,
+    SpotMow,
+    SpotMowPlan,
+    SpotSegment,
+    SpotStop,
     StartMow,
 )
 from mowdeck_control import (
@@ -74,6 +100,7 @@ from mowdeck_control import (
     NotConnected,
     camera_session_of,
     firmware_port_of,
+    pose_of,
 )
 from mowdeck_control_mammotion.base import MammotionBase
 from mowdeck_control_mammotion.cloud import MammotionCloudConnection, create_cloud_connection
@@ -86,7 +113,8 @@ SAFETY_NOTICE = """\
 SAFETY: this script can start a real mowing job and drive the mower to its dock.
   * Keep people, children and pets off the lawn; someone stays at the red STOP button.
   * Close the Mammotion app on the phone and disable the old Home Assistant integration.
-  * The script never drives the mower manually and never enables blades outside a job.
+  * Only --turn-check and --spot-dry-run drive the mower manually, always with the
+    blades off; stay within reach of the mower and keep the vendor app open.
   * --estop sends pause, zero movement and blades off with emergency priority; the
     physical STOP button is still the only guaranteed stop."""
 
@@ -119,6 +147,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     action.add_argument("--dock", action="store_true", help="send the mower back to its dock")
     action.add_argument("--estop", action="store_true", help="send an emergency stop")
     action.add_argument(
+        "--turn-check",
+        action="store_true",
+        help="turn in place (angular +0.3 for 2 s) and check the heading sign, report rate and "
+        "latency (needs manual driving: --bridge or --esphome)",
+    )
+    action.add_argument(
+        "--spot-dry-run",
+        action="store_true",
+        help="drive a 1 m circle from the current position with the blades off as a spot run "
+        "(needs manual driving: --bridge or --esphome); Ctrl-C stops it",
+    )
+    action.add_argument(
         "--light",
         choices=("on", "off"),
         help="switch the camera headlamp; the state shows light_on, raw.manual_light and "
@@ -131,6 +171,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "random_angle)",
     )
     parser.add_argument("--angle", type=float, default=0.0, help="stripe angle in degrees")
+    parser.add_argument(
+        "--spot-speed",
+        type=float,
+        default=0.2,
+        help="speed of --spot-dry-run in m/s (0.05 to 0.3)",
+    )
     parser.add_argument(
         "--camera",
         action="store_true",
@@ -387,6 +433,226 @@ def show(title: str, data: Any) -> None:
     print(json.dumps(data, indent=2, default=str))
 
 
+# --- spot mowing hardware checks (ADR 0039) ------------------------------------------------
+
+TURN_ANGULAR = 0.3
+"""``angular`` of the turn check (left positive: the compass heading must decrease)."""
+TURN_SECONDS = 2.0
+FRAME_HZ = 5.0
+TURN_SEEN_DEG = 2.0
+"""A heading change of at least this many degrees counts as the turn showing in a report."""
+CIRCLE_DIAMETER_M = 1.0
+SPOT_SPEED_RANGE = (0.05, 0.3)
+
+
+def heading_delta(start_deg: float, end_deg: float) -> float:
+    """Signed compass change from ``start_deg`` to ``end_deg`` in ``(-180, 180]`` degrees."""
+    return 180.0 - (180.0 - (end_deg - start_deg)) % 360.0
+
+
+def turn_check_summary(
+    samples: Sequence[tuple[float, float, float | None]], first_frame_s: float
+) -> dict[str, Any]:
+    """Evaluate a turn check from ``(received_s, observed_s, heading_deg)`` samples (one per
+    published state: perf-counter receive time, ``observed_at`` as a timestamp, heading).
+
+    The last heading before the first frame is the reference; the verdict is ``ok`` when the
+    compass heading decreased by at least :data:`TURN_SEEN_DEG`, ``sign_error`` when it
+    increased by that much, ``no_turn`` otherwise and ``no_heading`` without headings."""
+    before = [h for r, _, h in samples if r <= first_frame_s and h is not None]
+    after = [(r, h) for r, _, h in samples if r > first_frame_s and h is not None]
+    observed = sorted({o for _, o, _ in samples})
+    intervals = [b - a for a, b in itertools.pairwise(observed)]
+    summary: dict[str, Any] = {
+        "reports": len(observed),
+        "report_interval_s": {
+            "min": round(min(intervals), 2),
+            "median": round(statistics.median(intervals), 2),
+            "max": round(max(intervals), 2),
+        }
+        if intervals
+        else None,
+        "start_heading_deg": before[-1] if before else None,
+        "end_heading_deg": after[-1][1] if after else None,
+        "heading_change_deg": None,
+        "latency_s": None,
+        "verdict": "no_heading",
+    }
+    if not before or not after:
+        return summary
+    start = before[-1]
+    change = heading_delta(start, after[-1][1])
+    summary["heading_change_deg"] = round(change, 1)
+    seen = [r for r, h in after if abs(heading_delta(start, h)) >= TURN_SEEN_DEG]
+    if seen:
+        summary["latency_s"] = round(seen[0] - first_frame_s, 2)
+    if change <= -TURN_SEEN_DEG:
+        summary["verdict"] = "ok"
+    elif change >= TURN_SEEN_DEG:
+        summary["verdict"] = "sign_error"
+    else:
+        summary["verdict"] = "no_turn"
+    return summary
+
+
+def circle_points(
+    x: float, y: float, theta: float, diameter_m: float = CIRCLE_DIAMETER_M, step_m: float = 0.2
+) -> list[LocalPoint]:
+    """A closed circle that starts at ``(x, y)`` heading ``theta`` (local radians) and turns
+    left (counter-clockwise), points about ``step_m`` apart."""
+    r = diameter_m / 2
+    cx, cy = x - r * math.sin(theta), y + r * math.cos(theta)
+    steps = max(8, math.ceil(math.pi * diameter_m / step_m))
+    start = theta - math.pi / 2
+    angles = [start + 2 * math.pi * i / steps for i in range(steps + 1)]
+    return [(cx + r * math.cos(a), cy + r * math.sin(a)) for a in angles]
+
+
+def envelope_of(command: MowerCommand, ttl: timedelta = timedelta(seconds=60)) -> CommandEnvelope:
+    """An envelope of the script's principal."""
+    return CommandEnvelope.create(
+        mower_id=MOWER_ID, account_id=ACCOUNT_ID, issued_by=ISSUER, command=command, ttl=ttl
+    )
+
+
+def frame_of(angular: float) -> CommandEnvelope:
+    """A turn-in-place frame as a spot run sends it (``ttl_ms`` 1000)."""
+    frame = ManualDrive(linear=0.0, angular=angular, ttl_ms=1000)
+    return envelope_of(frame, timedelta(seconds=1))
+
+
+NO_DRIVE = "this connection offers no manual driving (use --bridge or --esphome)"
+VERDICTS = {
+    "ok": "OK: the compass heading decreased (left positive); spot runs steer the right way.",
+    "sign_error": "SIGN ERROR: the heading increased; do NOT start a spot run.",
+    "no_turn": "NO TURN SEEN: no heading change in the reports; check the link and the report "
+    "rate before a spot run.",
+    "no_heading": "NO HEADING: the mower reports no heading; spot runs cannot start.",
+}
+
+
+async def run_turn_check(controller: MowerController, log: JsonLog, *, settle_s: float) -> int:
+    """``--turn-check``: turn in place left and evaluate heading sign, report rate, latency."""
+    caps = await controller.capabilities()
+    if not caps.manual_drive:
+        show("turn check", {"error": NO_DRIVE})
+        log.write("turn_check", error="no manual drive")
+        return 1
+    samples: list[tuple[float, float, float | None]] = []
+    subscription = controller.watch_state()
+
+    async def collect() -> None:
+        async for state in subscription:
+            heading = state.position.heading if state.position else None
+            samples.append((time.perf_counter(), state.observed_at.timestamp(), heading))
+
+    collector = asyncio.create_task(collect(), name="turn-check-states")
+    await asyncio.sleep(settle_s)  # a reference heading before the first frame
+    first_frame_s = time.perf_counter()
+    refused: CommandResult | None = None
+    try:
+        for _ in range(round(TURN_SECONDS * FRAME_HZ)):
+            result = await controller.handle(frame_of(TURN_ANGULAR))
+            if result.status is not CommandStatus.ACCEPTED:
+                refused = result
+                break
+            await asyncio.sleep(1 / FRAME_HZ)
+        await controller.handle(frame_of(0.0))
+        await asyncio.sleep(settle_s * 2)  # reports that arrive after the stop
+    finally:
+        await controller.end_drive_session("turn check finished")
+        collector.cancel()
+    if refused is not None:
+        show("turn check", {"error": f"frame {refused.status}: {refused.reason}"})
+        log.write("turn_check", error=refused.reason, status=str(refused.status))
+        return 1
+    summary = turn_check_summary(samples, first_frame_s)
+    show("turn check", summary)
+    log.write("turn_check", **summary)
+    print(VERDICTS[summary["verdict"]])
+    return 0 if summary["verdict"] == "ok" else 1
+
+
+async def run_spot_dry_run(
+    controller: MowerController, args: argparse.Namespace, log: JsonLog
+) -> int:
+    """``--spot-dry-run``: a 1 m circle from the current pose with the blades off."""
+    low, high = SPOT_SPEED_RANGE
+    if not low <= args.spot_speed <= high:
+        raise SystemExit(f"--spot-speed must be between {low} and {high} m/s")
+    caps = await controller.capabilities()
+    if not caps.manual_drive:
+        show("spot dry run", {"error": NO_DRIVE})
+        log.write("spot_dry_run", error="no manual drive")
+        return 1
+    mower_map = await controller.mower_map()
+    pose = pose_of(controller.last_state, mower_map)
+    if pose is None:
+        show("spot dry run", {"error": "the mower reports no position or heading"})
+        log.write("spot_dry_run", error="no pose")
+        return 1
+    points = circle_points(pose.x, pose.y, pose.theta)
+    segment = SpotSegment.from_points(points, blades_on=False, speed_mps=args.spot_speed)
+    command = SpotMow(
+        plan=SpotMowPlan.build([segment], ["circle"]), speed_mps=args.spot_speed, blades=False
+    )
+    show(
+        "spot dry run plan", {"start": [round(pose.x, 2), round(pose.y, 2)], "points": len(points)}
+    )
+    confirm(args, "spot_mow dry run (blades off, Ctrl-C stops)")
+    envelope = envelope_of(command)
+    result = await controller.handle(envelope)
+    show("result", {"command": command.kind, "status": result.status, "reason": result.reason})
+    log.write("spot_dry_run", status=str(result.status), reason=result.reason)
+    if result.status is not CommandStatus.ACCEPTED:
+        return 1
+    waiter = asyncio.ensure_future(controller.spot_run_result(envelope.command_id))
+    try:
+        while not waiter.done():
+            await asyncio.wait({waiter}, timeout=1.0)
+            print_spot_status(controller, log)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        task = asyncio.current_task()
+        if task is not None:
+            task.uncancel()
+        print("\nCtrl-C: sending spot_stop")
+        stopped = await controller.handle(envelope_of(SpotStop()))
+        print(f"spot_stop {stopped.status}: {stopped.reason}")
+        log.write("spot_stop", status=str(stopped.status), reason=stopped.reason)
+        raise
+    report = waiter.result()
+    if report is None:
+        return 1
+    data = {
+        "state": report.state,
+        "reason": report.reason,
+        "detail": report.detail,
+        "summary": report.summary(),
+        "frames_sent": report.frames_sent,
+        "paused_s": round(report.paused_s, 1),
+    }
+    show("spot run report", data)
+    log.write("spot_report", **data)
+    return 0 if report.state == "done" else 1
+
+
+def print_spot_status(controller: MowerController, log: JsonLog) -> None:
+    """One status line of a running spot run (and a log record)."""
+    status = controller.spot_status
+    state = controller.last_state
+    if status is None or state is None:
+        return
+    heading = state.position.heading if state.position else None
+    reason = f" reason={status.reason}" if status.reason else ""
+    print(
+        f"spot {status.state} {status.progress_percent}% "
+        f"points={status.driven_points}/{status.planned_points} rtk={state.rtk_fix.value} "
+        f"heading={heading} observed={state.observed_at.time().isoformat(timespec='seconds')}"
+        f"{reason}"
+    )
+    log.write("spot_status", **status.model_dump(mode="json"), rtk=state.rtk_fix.value)
+
+
 async def run(args: argparse.Namespace) -> int:
     print(SAFETY_NOTICE)
     log = JsonLog(args.log)
@@ -423,6 +689,12 @@ async def run(args: argparse.Namespace) -> int:
         if args.firmware_check:
             await show_firmware(connection, log)
         command: MowerCommand | None = None
+        if args.turn_check:
+            confirm(args, "turn check (turns in place, blades off)")
+            settle_s = 0.0 if args.dry_run else 1.5
+            return await run_turn_check(controller, log, settle_s=settle_s)
+        if args.spot_dry_run:
+            return await run_spot_dry_run(controller, args, log)
         if args.bridge and not (args.start_area or args.dock or args.estop or args.light):
             await watch_links(connection, log, args.wait)
         if args.start_area:
