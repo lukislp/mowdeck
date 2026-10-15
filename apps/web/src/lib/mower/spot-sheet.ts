@@ -21,6 +21,7 @@ import type { components as Telemetry } from '$lib/generated/telemetry';
 import { m } from '$lib/paraglide/messages';
 
 import type { MowPath } from './mow-path';
+import { isOnline } from './presence';
 import { isJobActivity } from './mow-path';
 import type { SheetArea } from './start-sheet';
 
@@ -355,6 +356,10 @@ export interface ConditionState {
   activity: string;
   battery_percent: number;
   observed_at: string;
+  /** The gateway's link heartbeat (ADR 0040); absent on states from before it. */
+  heartbeat_at?: string | null;
+  /** False once the gateway reported the link lost. */
+  connected?: boolean | null;
   spot_run?: SpotRunStatus | null;
 }
 
@@ -419,7 +424,11 @@ export function spotConditions(input: SpotConditionInput): SpotCondition[] {
       ok: !!s && !isJobActivity(s.activity) && !input.driveSession && !isSpotRunActive(s.spot_run),
     },
     { id: 'battery', ok: !!s && s.battery_percent > SPOT_BATTERY_MIN_PERCENT },
-    { id: 'fresh', ok: Number.isFinite(age) && age <= SPOT_FRESH_MS },
+    // Online by the link heartbeat (presence.ts) and values younger than SPOT_FRESH_MS.
+    {
+      id: 'fresh',
+      ok: !!s && isOnline(s, input.now) && Number.isFinite(age) && age <= SPOT_FRESH_MS,
+    },
   ];
 }
 

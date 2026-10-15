@@ -12,6 +12,12 @@
 import type { components } from '$lib/generated/telemetry';
 
 type MowerState = components['schemas']['MowerState'];
+/** The fields presence reads (spot conditions pass a narrower state). */
+interface LinkFields {
+  observed_at: MowerState['observed_at'];
+  heartbeat_at?: string | null;
+  connected?: boolean | null;
+}
 
 /**
  * A mower whose last link heartbeat is older than this counts as offline. The gateway sends one
@@ -23,14 +29,14 @@ export const OFFLINE_AFTER_MS = 45_000;
 export const VALUES_OLD_AFTER_MS = 3 * 60_000;
 
 /** When the link was last known alive, in epoch milliseconds (`observed_at` as fallback). */
-export function linkSeenAt(state: MowerState): number {
+export function linkSeenAt(state: LinkFields): number {
   const observed = Date.parse(state.observed_at);
   const beat = state.heartbeat_at ? Date.parse(state.heartbeat_at) : Number.NaN;
   return Number.isNaN(beat) ? observed : Math.max(beat, observed);
 }
 
 /** True while the gateway holds a live connection to the mower. */
-export function isOnline(state: MowerState, now: number): boolean {
+export function isOnline(state: LinkFields, now: number): boolean {
   if (state.connected === false) return false;
   return now - linkSeenAt(state) <= OFFLINE_AFTER_MS;
 }
