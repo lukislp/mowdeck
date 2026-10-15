@@ -158,6 +158,36 @@ export function formatMeasured(step: Pick<DriveCalibrationStep, 'kind' | 'measur
   return step.kind === 'forward' ? formatSpeedMps(step.measured, 3) : formatYawRate(step.measured);
 }
 
+export type StepOutcome = DriveCalibrationStep['outcome'];
+
+/**
+ * What became of a step. States from before the outcome existed carry only `skipped`, and a
+ * missing value then means too few reports.
+ */
+export function stepOutcome(
+  step: Pick<DriveCalibrationStep, 'skipped' | 'measured'> & { outcome?: StepOutcome | null },
+): StepOutcome {
+  if (step.outcome) return step.outcome;
+  if (step.skipped) return 'skipped';
+  return step.measured == null ? 'invalid' : 'measured';
+}
+
+/** The marker of a step the fit does not use, in words; empty for a measured step. */
+export function stepOutcomeLabel(outcome: StepOutcome): string {
+  switch (outcome) {
+    case 'measured':
+      return '';
+    case 'skipped':
+      return m.calib_skipped();
+    case 'invalid':
+      return m.calib_outcome_invalid();
+    case 'inconsistent':
+      return m.calib_outcome_inconsistent();
+    case 'outlier':
+      return m.calib_outcome_outlier();
+  }
+}
+
 export interface StepRow {
   /** 1-based. */
   index: number;
@@ -165,25 +195,36 @@ export interface StepRow {
   kindLabel: string;
   command: string;
   measured: string;
-  /** No value was measured (too few reports) or the step was skipped. */
+  /** No value: the step was skipped or had too few reports (never shown as 0). */
   missing: boolean;
   reports: string;
   interval: string;
-  skipped: boolean;
+  outcome: StepOutcome;
+  /** The marker for the status column; empty for a measured step. */
+  outcomeLabel: string;
+  /** Not driven or left out of the fit (skipped, invalid, inconsistent, outlier). */
+  dropped: boolean;
 }
 
 export function stepRows(steps: readonly DriveCalibrationStep[] | null | undefined): StepRow[] {
-  return (steps ?? []).map((step, i) => ({
-    index: i + 1,
-    kind: step.kind,
-    kindLabel: stepKindLabel(step.kind),
-    command: formatCommand(step.command),
-    measured: step.skipped ? '–' : formatMeasured(step),
-    missing: step.skipped || step.measured == null,
-    reports: formatNumber(step.reports),
-    interval: step.report_interval_s == null ? '–' : `${formatNumber(step.report_interval_s, 2)} s`,
-    skipped: step.skipped,
-  }));
+  return (steps ?? []).map((step, i) => {
+    const outcome = stepOutcome(step);
+    const missing = outcome === 'skipped' || outcome === 'invalid' || step.measured == null;
+    return {
+      index: i + 1,
+      kind: step.kind,
+      kindLabel: stepKindLabel(step.kind),
+      command: formatCommand(step.command),
+      measured: missing ? '–' : formatMeasured(step),
+      missing,
+      reports: formatNumber(step.reports),
+      interval:
+        step.report_interval_s == null ? '–' : `${formatNumber(step.report_interval_s, 2)} s`,
+      outcome,
+      outcomeLabel: stepOutcomeLabel(outcome),
+      dropped: outcome !== 'measured',
+    };
+  });
 }
 
 export type FitFactId =

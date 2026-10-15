@@ -81,26 +81,39 @@
           <th scope="col" class="num">{m.calib_col_measured()}</th>
           <th scope="col" class="num">{m.calib_col_reports()}</th>
           <th scope="col" class="num">{m.calib_col_interval()}</th>
-          <th scope="col">{m.calib_col_skipped()}</th>
+          <th scope="col">{m.calib_col_status()}</th>
         </tr>
       </thead>
       <tbody>
         {#each rows as row (row.index)}
-          <tr data-kind={row.kind} data-skipped={row.skipped ? 'true' : undefined}>
+          <tr
+            data-kind={row.kind}
+            data-outcome={row.outcome}
+            data-dropped={row.dropped ? 'true' : undefined}
+          >
             <th scope="row">
               <span class="idx mono">{String(row.index).padStart(2, '0')}</span>
               <span class="kind" data-kind={row.kind}>{row.kindLabel}</span>
             </th>
             <td class="num mono">{row.command}</td>
-            <td class="num mono" data-missing={row.missing ? 'true' : undefined}>{row.measured}</td>
+            <td class="num mono measured" data-missing={row.missing ? 'true' : undefined}
+              >{row.measured}</td
+            >
             <td class="num mono">{row.reports}</td>
             <td class="num mono">{row.interval}</td>
-            <td>{row.skipped ? m.calib_skipped() : ''}</td>
+            <td class="outcome">
+              {#if row.dropped}
+                <span class="marker" data-outcome={row.outcome}>{row.outcomeLabel}</span>
+              {/if}
+            </td>
           </tr>
         {/each}
       </tbody>
     </table>
   </div>
+  {#if rows.some((row) => row.dropped && row.outcome !== 'skipped')}
+    <p class="hint" data-testid="calib-outcome-hint">{m.calib_outcome_hint()}</p>
+  {/if}
 {/snippet}
 
 <section class="calib" aria-labelledby="{uid}-title" data-testid="calib">
@@ -558,8 +571,28 @@
   }
 
   .steps td[data-missing='true'],
-  .steps tr[data-skipped='true'] {
+  .steps tr[data-dropped='true'] {
     color: var(--md-color-ink-muted);
+  }
+
+  /* a value the fit left out stays readable but is struck through */
+  .steps tr[data-outcome='inconsistent'] .measured,
+  .steps tr[data-outcome='outlier'] .measured {
+    text-decoration: line-through;
+  }
+
+  .marker {
+    display: inline-block;
+    padding-inline-start: var(--md-space-2);
+    border-inline-start: 3px solid var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+    line-height: 1.3;
+  }
+
+  .marker[data-outcome='invalid'],
+  .marker[data-outcome='inconsistent'],
+  .marker[data-outcome='outlier'] {
+    border-inline-start-color: var(--md-state-paused);
   }
 
   /* --- the end notice, as the run bar's -------------------------------------------------- */
