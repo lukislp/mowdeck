@@ -20,7 +20,11 @@ from mowdeck_control import CommandRejected, MowerController, NotConnected, Sens
 from mowdeck_control.testing import ManualClock, ManualTimers
 from mowdeck_control_mammotion import base as mammotion_base
 from mowdeck_control_mammotion import ble as ble_module
-from mowdeck_control_mammotion.drive import BleDriveSession
+from mowdeck_control_mammotion.drive import (
+    MANUAL_RUN_SPEED_CAP_MPS,
+    BleDriveSession,
+    manual_run_speed,
+)
 from mowdeck_control_mammotion.esphome import ProxyLink
 from mowdeck_control_mammotion.fake import FakeMammotionPort
 from mowdeck_control_mammotion.options import BleProxyOptions
@@ -49,6 +53,7 @@ async def test_mammotion_drive_frames_stop_and_close() -> None:
     conn, port = ble()
     await conn.connect()
     session = await conn.start_drive_session()
+    port.sent.clear()  # the opening operate_on_device, see the max_run_speed tests
     await session.update(0.5, 0.0, False)
     await session.update(0.0, -1.0, False)
     assert [(c.name, c.kwargs, c.priority) for c in port.sent] == [
@@ -69,10 +74,64 @@ async def test_mammotion_drive_frames_stop_and_close() -> None:
         await session.update(0.1, 0.0, False)
 
 
+async def test_mammotion_drive_session_opens_with_max_run_speed() -> None:
+    conn, port = ble(manual_blade_height_mm=50)
+    await conn.connect()
+    port.device().mower_state.travel_speed = 0.4
+    port.sent.clear()
+    session = await conn.start_drive_session()
+    assert [(c.name, c.kwargs, c.priority) for c in port.sent] == [
+        (
+            "operate_on_device",
+            {"main_ctrl": 0, "cut_knife_ctrl": 0, "cut_knife_height": 50, "max_run_speed": 0.4},
+            Priority.USER,
+        )
+    ]
+    port.sent.clear()
+    await session.stop()  # the stop repeats the session's speed, never 0
+    assert port.sent[1].kwargs["max_run_speed"] == 0.4
+    await session.close()
+
+
+@pytest.mark.parametrize(
+    ("option", "travel_speed", "expected"),
+    [(None, 0.6, 0.6), (None, 1.2, 1.0), (None, 0.0, 1.0), (0.8, 0.3, 0.8)],
+)
+async def test_mammotion_drive_session_speed_from_option_or_setting(
+    option: float | None, travel_speed: float, expected: float
+) -> None:
+    extra: dict[str, Any] = {} if option is None else {"manual_drive_speed_mps": option}
+    conn, port = ble(**extra)
+    await conn.connect()
+    port.device().mower_state.travel_speed = travel_speed
+    port.sent.clear()
+    session = await conn.start_drive_session()
+    assert isinstance(session, BleDriveSession)
+    assert session.max_run_speed_mps == expected
+    assert port.sent[0].kwargs["max_run_speed"] == expected
+    await session.close()
+
+
+def test_mammotion_manual_run_speed_rules() -> None:
+    assert manual_run_speed(None, None) == MANUAL_RUN_SPEED_CAP_MPS == 1.0
+    assert manual_run_speed(0.5, 0.9) == 0.5
+    assert manual_run_speed(None, 0.35) == 0.35
+    assert manual_run_speed(2.0, None) == 1.0
+
+
+async def test_mammotion_drive_session_open_fails_without_a_link() -> None:
+    conn, port = ble()
+    await conn.connect()
+    port.fail["operate_on_device"] = NoTransportAvailableError("BLE gone")
+    with pytest.raises(NotConnected):
+        await conn.start_drive_session()
+
+
 async def test_mammotion_blades_stay_off_unless_allowed() -> None:
     conn, port = ble()
     await conn.connect()
     session = await conn.start_drive_session()
+    port.sent.clear()
     await session.update(0.5, 0.0, True)
     assert port.names() == ["send_movement"]  # no blade command at all
     assert isinstance(session, BleDriveSession) and not session.blades_on
@@ -82,6 +141,7 @@ async def test_mammotion_blades_follow_the_frames_when_allowed() -> None:
     conn, port = ble(allow_manual_blades=True, manual_blade_height_mm=50)
     await conn.connect()
     session = await conn.start_drive_session()
+    port.sent.clear()
     await session.update(0.5, 0.0, True)
     await session.update(0.5, 0.0, True)  # already on: not sent again
     await session.update(0.5, 0.0, False)
@@ -101,6 +161,7 @@ async def test_mammotion_drive_sensor_stop_ends_the_session() -> None:
     conn, port = ble()
     await conn.connect()
     session = await conn.start_drive_session()
+    port.sent.clear()
     port.set_mode(WorkMode.MODE_LOCK)
     with pytest.raises(SensorStop):
         await session.update(0.3, 0.0, False)
@@ -162,11 +223,11 @@ async def test_mammotion_dead_man_through_the_controller_stops_the_mower() -> No
         result = await controller.handle(frame)
         assert result.status is CommandStatus.ACCEPTED
         assert "blade" in (result.reason or "")  # forced off: not allowed on this link
-        assert port.names() == ["send_movement"]
+        assert port.names() == ["operate_on_device", "send_movement"]
         await timers.advance(1.5)
         assert not controller.drive_session_active
-    assert port.names()[1:3] == ["send_movement", "operate_on_device"]
-    assert port.sent[1].kwargs == {"linear_speed": 0, "angular_speed": 0}
+    assert port.names()[2:4] == ["send_movement", "operate_on_device"]
+    assert port.sent[2].kwargs == {"linear_speed": 0, "angular_speed": 0}
 
 
 # --- the real proxy port, with the ESPHome and PyMammotion calls replaced -------------------

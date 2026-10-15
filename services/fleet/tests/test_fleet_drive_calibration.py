@@ -229,3 +229,28 @@ async def test_fleet_calibration_needs_a_place_to_live_and_drive_rights() -> Non
     by_id = {m["id"]: m for m in listed.json()["items"]}
     assert by_id[simulated]["drive_calibration"]["full_speed_mps"] == 0.42
     assert by_id[cloud]["drive_calibration"] is None
+
+
+# --- the manual-drive speed limit of the bridge link -------------------------------------------
+
+
+async def test_fleet_bridge_link_takes_a_manual_drive_speed_limit() -> None:
+    async with harness(**_settings()) as h:
+        await _gateway(h.bus)
+        owner = await h.owner()
+        mower_id = await _cloud_mower(h, owner)
+        stored = await h.client.put(
+            _link_url(mower_id), headers=owner.headers, json={**LINK, "manual_drive_speed_mps": 0.6}
+        )
+        published = _updates(h)[-1]
+        too_fast = await h.client.put(
+            _link_url(mower_id),
+            headers=owner.headers,
+            json={**LINK, "noise_psk": "***", "manual_drive_speed_mps": 1.5},
+        )
+    assert stored.status_code == 200, stored.text
+    assert stored.json()["options"]["manual_drive_speed_mps"] == 0.6
+    assert published.links["ble_bridge"]["manual_drive_speed_mps"] == 0.6
+    assert too_fast.status_code == 422
+    spec = {o.key: o for o in SCHEMAS["ble_bridge"].options}["manual_drive_speed_mps"]
+    assert (spec.minimum, spec.maximum, spec.managed) == (0.1, 1.0, False)

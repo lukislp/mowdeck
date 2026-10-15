@@ -214,6 +214,9 @@ class BleProxyOptions:
     device_name: str | None = None
     allow_manual_blades: bool = False
     manual_blade_height_mm: int = 60
+    manual_drive_speed_mps: float | None = None
+    """``max_run_speed`` a drive session sends (ADR 0042); None: the mower's own speed setting
+    for manual driving, capped at 1.0 m/s (see ``drive.manual_run_speed``)."""
     scan_timeout_s: float = 30.0
     map_sync_timeout_s: float = 300.0
     confirm_timeout_s: float = 30.0
@@ -248,6 +251,7 @@ class BleProxyOptions:
                     "device_name",
                     "allow_manual_blades",
                     "manual_blade_height_mm",
+                    "manual_drive_speed_mps",
                     "scan_timeout_s",
                     "map_sync_timeout_s",
                     "confirm_timeout_s",
@@ -277,6 +281,11 @@ class BleProxyOptions:
             device_name=_str(options, "device_name"),
             allow_manual_blades=_bool(options, "allow_manual_blades", False),
             manual_blade_height_mm=int(_number(options, "manual_blade_height_mm", 60, 20, 100)),
+            manual_drive_speed_mps=(
+                _number(options, "manual_drive_speed_mps", 1.0, 0.1, 1.0)
+                if options.get("manual_drive_speed_mps") is not None
+                else None
+            ),
             scan_timeout_s=_number(options, "scan_timeout_s", 30.0, 1.0, 300.0),
             map_sync_timeout_s=_number(options, "map_sync_timeout_s", 300.0, 10.0, 1800.0),
             confirm_timeout_s=_number(options, "confirm_timeout_s", 30.0, 1.0, 300.0),

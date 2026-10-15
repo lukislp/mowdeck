@@ -250,6 +250,13 @@ class BridgeLinkIn(In):
     manual_blade_height_mm: int | None = Field(
         default=None, ge=10, le=120, description="Blade height for manual driving."
     )
+    manual_drive_speed_mps: float | None = Field(
+        default=None,
+        ge=0.1,
+        le=1.0,
+        description="`max_run_speed` the mower gets when a drive session opens (ADR 0042); "
+        "omitted: the mower's own speed setting for manual driving, at most 1.0 m/s.",
+    )
 
     def to_options(self) -> dict[str, Any]:
         """The link options the use case validates with the `ble_bridge` schema."""
@@ -284,7 +291,8 @@ class LinkOut(BaseModel):
     kind: str
     options: dict[str, Any] = Field(
         description="The link's options (`host`, `port`, `ble_address`, `device_name`, "
-        "`allow_manual_blades`, `manual_blade_height_mm`); secret keys show `***` and sending "
+        "`allow_manual_blades`, `manual_blade_height_mm`, `manual_drive_speed_mps` and the "
+        "managed drive calibration keys); secret keys show `***` and sending "
         "`***` back keeps the stored value."
     )
     proxy_info: ProxyInfo | None = Field(

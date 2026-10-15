@@ -327,6 +327,16 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
                 default=60,
             ),
             OptionSpec(
+                "manual_drive_speed_mps",
+                "number",
+                "Manual driving speed limit (m/s)",
+                "max_run_speed sent when a drive session opens; empty: the mower's own speed "
+                "setting, at most 1.0.",
+                advanced=True,
+                minimum=0.1,
+                maximum=1.0,
+            ),
+            OptionSpec(
                 "scan_timeout_s",
                 "number",
                 "Scan timeout (s)",

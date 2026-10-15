@@ -791,6 +791,11 @@ export type components = {
              */
             manual_blade_height_mm?: number | null;
             /**
+             * Manual Drive Speed Mps
+             * @description `max_run_speed` the mower gets when a drive session opens (ADR 0042); omitted: the mower's own speed setting for manual driving, at most 1.0 m/s.
+             */
+            manual_drive_speed_mps?: number | null;
+            /**
              * Noise Psk
              * @description The bridge's API encryption key (`api.encryption.key` of an ESPHome bridge); `***` keeps the stored key.
              */
@@ -1769,7 +1774,7 @@ export type components = {
             kind: string;
             /**
              * Options
-             * @description The link's options (`host`, `port`, `ble_address`, `device_name`, `allow_manual_blades`, `manual_blade_height_mm`); secret keys show `***` and sending `***` back keeps the stored value.
+             * @description The link's options (`host`, `port`, `ble_address`, `device_name`, `allow_manual_blades`, `manual_blade_height_mm`, `manual_drive_speed_mps` and the managed drive calibration keys); secret keys show `***` and sending `***` back keeps the stored value.
              */
             options: {
                 [key: string]: unknown;

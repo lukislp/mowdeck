@@ -19,8 +19,9 @@ from datetime import datetime
 from mowdeck_contracts.v1 import ConnectionKind, MowerActivity, utc_now
 from mowdeck_control import CommandRejected, ConnectionConfig, DriveSession
 
+from mowdeck_control_mammotion import mapping
 from mowdeck_control_mammotion.base import MammotionBase
-from mowdeck_control_mammotion.drive import BleDriveSession
+from mowdeck_control_mammotion.drive import BleDriveSession, manual_run_speed
 from mowdeck_control_mammotion.esphome import ProxyLink, open_proxy
 from mowdeck_control_mammotion.options import BleProxyOptions
 from mowdeck_control_mammotion.port import (
@@ -127,7 +128,11 @@ class MammotionBleProxyConnection(MammotionBase):
             blades_allowed=self.options.allow_manual_blades,
             blade_height_mm=self.options.manual_blade_height_mm,
             sensor_stop=self._sensor_stop_reason,
+            max_run_speed_mps=manual_run_speed(
+                self.options.manual_drive_speed_mps, mapping.drive_speed_of(self._port.device())
+            ),
         )
+        await self._session.begin()
         return self._session
 
     def _drive_active(self) -> bool:

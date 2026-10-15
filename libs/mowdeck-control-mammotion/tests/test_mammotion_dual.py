@@ -301,8 +301,12 @@ async def test_mammotion_dual_drive_session_uses_bluetooth_and_releases_it() -> 
     await conn.connect()
     try:
         await _wait(lambda: conn.watcher.proxy_up)
+        port.sent.clear()
         session = await conn.start_drive_session()
         assert conn.ble_connected() and port.attached == 1
+        opening = [c for c in port.sent if c.name == "operate_on_device"]
+        assert [(c.link, c.kwargs["main_ctrl"]) for c in opening] == [("ble", 0)]
+        assert 0 < opening[0].kwargs["max_run_speed"] <= 1.0
         assert conn.bridge_roles() == frozenset({"drive"})
         assert (await conn.get_state()).connection is ConnectionKind.BLE_BRIDGE
         port.sent.clear()

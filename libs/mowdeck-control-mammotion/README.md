@@ -80,6 +80,7 @@ Options come from Fleet (`connection_options` of the mower registration) through
 | `device_name` | no | advertised name; read from the advertisement when missing |
 | `allow_manual_blades` | no | default false: blades stay off while driving manually |
 | `manual_blade_height_mm`, `scan_timeout_s`, `map_sync_timeout_s`, `confirm_timeout_s` | no | defaults 60, 30, 300, 30 |
+| `manual_drive_speed_mps` | no | `max_run_speed` a drive session sends when it opens, 0.1 to 1.0 m/s; default the mower's own speed setting for manual driving (`mower_state.travel_speed`), at most 1.0 (see "max_run_speed of a drive session") |
 | `refresh_seconds`, `refresh_seconds_active`, `report_stream_seconds` | no | As for the cloud link: fresh-state requests while idle (10 to 300 s, default 20), while active (2 to 60 s, default 5) and the continuous report window while active (0 off, 10 to 300 s, default 60). The mower does not report by itself over Bluetooth either. |
 
 Fleet validates both kinds (`fleet.domain.rules.validate_connection_options`) and masks `password` and `noise_psk` as `***` in every API response.
@@ -131,7 +132,7 @@ Mapped fields (PyMammotion `MowerDevice`, the same sources as Mammotion-HA's `se
 | `EmergencyStop` | `Priority.EMERGENCY`: `pause_execute_task`, `send_movement(0, 0)` and `operate_on_device` with blades off, every step tried |
 | `SetBladeHeight`, `SetSpeed` | `set_blade_height` (mm), `set_speed` (m/s), `accepted` |
 | `SetLight` | the headlamp: `set_car_manual_light(manual_ctrl=on)` (`SetHeadlamp` with `set_ids` 1125 on or 1127 off, `lamp_power_ctrl=2`; user priority), then the read `get_car_light(ids=1126)` waiting for `get_lamp_rsp` (PyMammotion's `async_set_manual_light`: write, then read); `executed` when the answer shows the wanted state within 3 s, else `accepted`. Runs also while the mower reports an error (no sensor stop check: AI assist lights up a stuck mower); `CommandRejected` for a model without `light` |
-| `ManualDrive` (BLE) | `BleDriveSession`: one `send_movement` per frame (PyMammotion's scaling: 15 % dead zone, full stick 850 linear, 382 angular), `stop()` sends zero movement and blades off |
+| `ManualDrive` (BLE) | `BleDriveSession`: opens with `operate_on_device` (blades off, `max_run_speed`, see below), then one `send_movement` per frame (PyMammotion's scaling: 15 % dead zone, full stick 850 linear, 382 angular), `stop()` sends zero movement and blades off with the same `max_run_speed` |
 
 **Confirmation.** The adapter implements `mowdeck_control.TwoPhaseExecution`: `dispatch()` sends, the `confirm` it returns only watches the reported state (it never sends and may be cancelled at any point). The controller holds its queue only for the send, so a pause or return issued while a start waits for its confirmation runs at once and ends that wait (the start then reports `accepted`, see the controller rules).
 
@@ -181,6 +182,16 @@ Mammotion-HA comparison: its report coordinator (`coordinator.py`, `REPORT_INTER
 **Driving and spot runs** ([ADR 0039](../../docs/adr/0039-spot-mowing-by-mowdeck-driven-paths.md)). A spot run steers the mower with joystick frames and needs a pose about once a second, but the mower may not count manual driving as an active work mode, so the report stream alone is not enough. While a drive session is open (`_drive_active()`: the BLE bridge connection and the dual connection override it) the refresh loop is in `drive` mode: it opens PyMammotion's report window at once and renews it every half window (`report_stream_seconds`), and whenever no device update arrived for 1 s (`DRIVE_POLL_S`) it asks for an undebounced report (`MammotionPort.refresh()`, the user path). Every device update is published while driving, also an unchanged one, so `observed_at` stays fresh for a mower that stands still (the run pauses on a pose older than 2.5 s). The loop leaves `drive` mode when the session closes. Nothing here knows about spot runs: the generic `SpotMowRun` in `mowdeck-control` only needs the drive session and the state (position, heading, RTK fix).
 
 **Link loss.** Cloud: a transient MQTT loss keeps the connection (PyMammotion reconnects by itself, commands raise `NotConnected` meanwhile); only a dead login makes `is_connected` false. BLE: a lost proxy or BLE link makes `is_connected` false and commands raise `NotConnected`, so the Device-Gateway reconnects with backoff.
+
+### max_run_speed of a drive session
+
+`operate_on_device` (`MctlDriver.mow_ctrl_by_hand`, `DrvMowCtrlByHand{main_ctrl, cut_knife_ctrl, cut_knife_height, max_run_speed}`) is the vendor app's manual-mowing message; its joystick sends it with the manual-driving speed as `max_run_speed`, while the movement frames (`send_movement`, `DrvMotionCtrl{set_linear_speed, set_angular_speed}`) carry no speed limit. What the code did before ADR 0042's fix, checked against PyMammotion 0.10.9:
+
+- `BleDriveSession` sent nothing when it opened and only `send_movement` per frame. `operate_on_device` went out only when the blades changed (never with the blades off, so never in a spot run or a calibration) and in `stop()`, both with `max_run_speed` 1.2 copied from PyMammotion's blade helper.
+- The emergency stop sends `operate_on_device` with `max_run_speed` 0.0.
+- PyMammotion's own manual-drive helpers (`move_forward`, `move_back`, `move_left`, `move_right` in `mammotion_command.py`, used by its `mower_api.py`) send only `send_movement`; its `mower_api.py` sends `operate_on_device` only to start or stop the blades, with `max_run_speed` 1.2.
+
+So during the first real spot run the mower drove with whatever `max_run_speed` it held from an earlier command (possibly 0.0 from an emergency stop, or its minimum), which fits the observed crawl of about 0.05 m/s at stick 0.5 and about 1 °/s at angular 0.4. A drive session now opens with one `operate_on_device` (blades off, `main_ctrl` 0, `cut_knife_ctrl` 0, the manual blade height) carrying `max_run_speed` = the link option `manual_drive_speed_mps`, else the mower's own speed setting for manual driving (`mower_state.travel_speed`, read by `get_speed` after connecting), else 1.0, never above 1.0 m/s; the blade changes and `stop()` repeat the same value. On a dual link the message goes over the bridge with the frames. An open that fails on the link closes the session and raises `NotConnected`. The stick-to-wire constants are unchanged, and whether `max_run_speed` scales the stick or only caps it is not assumed: the drive calibration measures the result.
 
 ### Dual link: cloud plus Bluetooth bridge
 
