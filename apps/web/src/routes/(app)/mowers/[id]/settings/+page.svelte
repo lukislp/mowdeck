@@ -395,7 +395,6 @@
         reported={ms?.firmware ?? null}
         capable={caps?.firmware_update === true}
         activity={ms?.activity ?? null}
-        charging={ms?.charging === true}
         batteryPercent={ms?.battery_percent ?? null}
         stale={snap === undefined || stale}
         allowed={canControl}

@@ -302,9 +302,9 @@ class FirmwareUpdate(ContractModel):
     """Install the firmware version the vendor offers (``MowerState.firmware_info.available``).
 
     The adapter refuses it unless ``update_state`` is ``available`` and ``version`` equals
-    ``available`` (a stale client), the mower is docked and charging with enough battery, no job
-    or drive session runs and no update is already installing. While it runs the mower reports
-    the activity ``updating``.
+    ``available`` (a stale client), the mower is docked with enough battery (it need not be
+    charging: a full mower stops charging), no job or drive session runs and no update is
+    already installing. While it runs the mower reports the activity ``updating``.
     """
 
     kind: Literal["firmware_update"] = "firmware_update"

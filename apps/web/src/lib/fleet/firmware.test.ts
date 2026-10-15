@@ -18,7 +18,6 @@ function conditions(override: Partial<UpdateConditions> = {}): UpdateConditions 
   return {
     info: offered,
     activity: 'charging',
-    charging: true,
     batteryPercent: 80,
     stale: false,
     allowed: true,
@@ -27,10 +26,17 @@ function conditions(override: Partial<UpdateConditions> = {}): UpdateConditions 
 }
 
 describe('updateBlocker', () => {
-  it('allows the update when docked, charging, full enough and idle', () => {
+  it('allows the update when docked, full enough and idle', () => {
     expect(updateBlocker(conditions())).toBeNull();
     expect(updateBlocker(conditions({ activity: 'docked' }))).toBeNull();
-    expect(updateBlocker(conditions({ batteryPercent: 50 }))).toBeNull();
+    expect(updateBlocker(conditions({ batteryPercent: 70 }))).toBeNull();
+  });
+
+  it('needs the dock and 70 % battery, not charging', () => {
+    // A full mower stops charging in its dock: activity docked, battery high.
+    expect(updateBlocker(conditions({ activity: 'docked', batteryPercent: 75 }))).toBeNull();
+    expect(updateBlocker(conditions({ activity: 'docked', batteryPercent: 65 }))).toBe('battery');
+    expect(updateBlocker(conditions({ activity: 'mowing', batteryPercent: 75 }))).toBe('job');
   });
 
   it('names the first unmet condition in the order the user can act on it', () => {
@@ -49,9 +55,8 @@ describe('updateBlocker', () => {
     expect(updateBlocker(conditions({ stale: true }))).toBe('offline');
     expect(updateBlocker(conditions({ activity: 'mowing' }))).toBe('job');
     expect(updateBlocker(conditions({ activity: 'paused' }))).toBe('job');
-    expect(updateBlocker(conditions({ activity: 'idle', charging: false }))).toBe('not_docked');
-    expect(updateBlocker(conditions({ activity: 'docked', charging: false }))).toBe('not_charging');
-    expect(updateBlocker(conditions({ batteryPercent: 49 }))).toBe('battery');
+    expect(updateBlocker(conditions({ activity: 'idle' }))).toBe('not_docked');
+    expect(updateBlocker(conditions({ batteryPercent: 69 }))).toBe('battery');
     expect(updateBlocker(conditions({ batteryPercent: null }))).toBe('battery');
   });
 

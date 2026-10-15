@@ -45,9 +45,9 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    sent meanwhile simply plans the same route again.
 11. A ``FirmwareUpdate`` (ADR 0038) needs ``capabilities.firmware_update`` and passes the rules
    of :func:`mowdeck_control.safety.firmware_update_problem`: the offered version only, the
-   mower docked and charging with enough battery, no job, no open drive session, no update
-   already installing. While the mower reports ``updating`` every command but ``EmergencyStop``
-   is rejected with ``"firmware update running"``, drive frames included.
+   mower docked with enough battery (charging is not required), no job, no open drive session,
+   no update already installing. While the mower reports ``updating`` every command but
+   ``EmergencyStop`` is rejected with ``"firmware update running"``, drive frames included.
 12. A ``SpotMow`` (ADR 0039) starts a :class:`~mowdeck_control.spot_run.SpotMowRun` that drives
    the plan with frames through this controller (``correlation_id = spot:<command_id>``): it
    needs ``capabilities.manual_drive``, no open drive session or pending confirmation, an idle
