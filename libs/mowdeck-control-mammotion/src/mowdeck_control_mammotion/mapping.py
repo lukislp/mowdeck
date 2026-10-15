@@ -799,6 +799,7 @@ def capabilities_of(
     model: str = "",
     links_supported: Sequence[str] = (),
     firmware_update: bool = False,
+    undock: bool = False,
 ) -> MowerCapabilities:
     """Capabilities of one mower over one link (``links_supported`` and ``firmware_update``
     describe the connection, ADR 0038).
@@ -834,6 +835,7 @@ def capabilities_of(
         connection_kinds=CONNECTION_KINDS,
         links_supported=list(links_supported),
         firmware_update=firmware_update,
+        undock=undock,
     )
 
 

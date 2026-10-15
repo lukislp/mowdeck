@@ -20,6 +20,12 @@ Commands (Mammotion-HA order for ``StartMow``, spike 0001 section 3.3):
                    wheels and blades, in place), ``send_movement(0, 0)`` (halts manual
                    motion) and ``operate_on_device`` with blades off; every step is tried
                    even when an earlier one fails
+``leave_dock``     not a command but :meth:`MammotionBase.leave_dock`
+                   (:class:`~mowdeck_control.UndockCapable`, capability ``undock``, ADR 0041):
+                   PyMammotion's ``leave_dock`` (``todev_one_touch_leave_pile``) sent once with
+                   ``Priority.USER``, only from the dock; over the cloud on a dual link (link
+                   roles: only the drive channel uses the bridge); the spot run watches the
+                   state, nothing is confirmed here
 ``SetBladeHeight`` ``set_blade_height`` (millimetres)
 ``SetSpeed``       ``set_speed`` (metres per second)
 ``SetLight``       the camera's headlamp: ``set_car_manual_light(manual_ctrl=on)``, then the
@@ -652,6 +658,7 @@ class MammotionBase:
             model=self._port.model(),
             links_supported=self._links_supported(),
             firmware_update=self._firmware_offered(),
+            undock=True,
         )
 
     async def get_state(self) -> MowerState:
@@ -763,6 +770,23 @@ class MammotionBase:
             return Dispatch.done(Outcome.failed(f"transport error: {type(exc).__name__}"))
         msg = f"unsupported command {type(command).__name__}"  # pragma: no cover - exhaustive
         raise CommandRejected(msg)  # pragma: no cover
+
+    async def leave_dock(self) -> None:
+        """:class:`~mowdeck_control.UndockCapable` (ADR 0041): send ``leave_dock`` once; the
+        mower drives out of its charging station by itself. Only from the dock."""
+        self._require_connected()
+        self._require_no_sensor_stop()
+        activity = self._snapshot().activity
+        if activity not in (MowerActivity.DOCKED, MowerActivity.CHARGING):
+            msg = f"the mower is {activity.value}, not in its dock"
+            raise CommandRejected(msg)
+        try:
+            await self._send("leave_dock")
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("no usable link to the mower") from exc
+        except TransportError as exc:
+            msg = f"transport error: {type(exc).__name__}"
+            raise CommandRejected(msg) from exc
 
     async def start_drive_session(self) -> DriveSession:
         self._require_connected()
@@ -1272,7 +1296,7 @@ class MammotionBase:
 
 
 BOOST_COMMANDS: Final = frozenset(
-    {"start_job", "pause_execute_task", "resume_execute_task", "return_to_dock"}
+    {"start_job", "pause_execute_task", "resume_execute_task", "return_to_dock", "leave_dock"}
 )
 """Sent commands after which the refresh loop boosts (:meth:`MammotionBase.boost_refresh`)."""
 BOOST_POLL_S: Final = 3.0

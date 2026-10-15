@@ -562,6 +562,20 @@ async def test_mammotion_return_with_end_job_cancels_the_job_first(mode: WorkMod
     assert port.device().report_data.dev.sys_status == int(WorkMode.MODE_RETURNING)
 
 
+async def test_mammotion_leave_dock_is_sent_once_from_the_dock() -> None:
+    conn, port = cloud()
+    await conn.connect()
+    assert (await conn.capabilities()).undock is True
+    assert (await conn.get_state()).activity is MowerActivity.DOCKED
+    await conn.leave_dock()
+    assert port.names() == ["leave_dock"]
+    assert all(c.priority is Priority.USER and c.via == "send" for c in port.sent)
+    assert (await conn.get_state()).activity is MowerActivity.IDLE
+    with pytest.raises(CommandRejected, match="not in its dock"):
+        await conn.leave_dock()
+    assert port.names() == ["leave_dock"]
+
+
 async def test_mammotion_return_without_end_job_keeps_the_job() -> None:
     conn, port = cloud()
     await conn.connect()

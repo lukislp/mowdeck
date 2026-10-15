@@ -262,6 +262,20 @@ async def test_mammotion_dual_docked_holds_the_proxy_and_polls_only_over_the_clo
     assert port.attached == 0 and not opener.links[0].is_alive()
 
 
+async def test_mammotion_dual_leave_dock_goes_over_the_cloud() -> None:
+    conn, port, _, _ = _dual()
+    await conn.connect()
+    try:
+        await _wait(lambda: conn.watcher.proxy_up)
+        assert (await conn.capabilities()).undock is True
+        port.sent.clear()
+        await conn.leave_dock()
+        assert [(c.name, c.link) for c in port.sent] == [("leave_dock", "cloud")]
+        assert not conn.ble_connected(), "undocking must not connect Bluetooth"
+    finally:
+        await conn.disconnect()
+
+
 async def test_mammotion_dual_drive_session_uses_bluetooth_and_releases_it() -> None:
     conn, port, _, _ = _dual()
     await conn.connect()

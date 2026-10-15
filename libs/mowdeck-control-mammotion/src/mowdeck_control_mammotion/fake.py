@@ -746,6 +746,12 @@ class FakeMammotionPort:
             state.model_id, state.sub_model_id = self.product_model
             await self.emit()
             return
+        if command == "leave_dock" and self.cooperative:
+            # the mower drives out of its charging station and stands ready on the lawn
+            self.set_mode(WorkMode.MODE_READY)
+            self._device.report_data.dev.charge_state = 0
+            await self.emit()
+            return
         mode = _MODE_AFTER.get(command)
         if command == "start_job" and self.cooperative and self.path_lines is not None:
             self._device.report_data.work.path_hash = route_hash(self.path_lines)

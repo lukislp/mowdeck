@@ -8,6 +8,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from mowdeck_control import default_map
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "try_real_mower.py"
 
@@ -119,6 +120,30 @@ def test_mammotion_owner_script_spot_checks_need_manual_driving(
     steps = [json.loads(line) for line in log.read_text("utf-8").splitlines()]
     (record,) = [s for s in steps if s["step"] == step]
     assert record["error"] == "no manual drive"
+
+
+def test_mammotion_owner_script_from_dock_needs_manual_driving(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "log.jsonl"
+    argv = ["--dry-run", "--log", str(log), "--spot-dry-run", "--from-dock"]
+    assert _script().main(argv) == 1
+    assert "no manual driving" in capsys.readouterr().out
+
+
+def test_mammotion_owner_script_from_dock_options() -> None:
+    script = _script()
+    with pytest.raises(SystemExit):
+        script.parse_args(["--from-dock"])  # needs --spot-dry-run
+    with pytest.raises(SystemExit):
+        script.parse_args(["--spot-dry-run", "--spot-at", "1,2"])  # needs --from-dock
+    args = script.parse_args(["--spot-dry-run", "--from-dock", "--spot-at", "6.5,4"])
+    garden = default_map()
+    assert script.spot_centre(args, garden) == (6.5, 4.0)
+    nearest = script.parse_args(["--spot-dry-run", "--from-dock"])
+    assert script.spot_centre(nearest, garden) == (6.0, 4.0)  # the front lawn's centre
+    back = script.parse_args(["--spot-dry-run", "--from-dock", "--spot-area", "Back lawn"])
+    assert script.spot_centre(back, garden) == (5.0, 14.0)
 
 
 def test_mammotion_owner_script_turn_check_summary() -> None:
