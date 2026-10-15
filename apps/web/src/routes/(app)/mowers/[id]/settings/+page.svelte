@@ -7,7 +7,11 @@
 
   import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
   import { asProblem, type ApiProblem } from '$lib/api/problem';
+  import { clock } from '$lib/clock.svelte';
+  import BridgeLinkPanel from '$lib/components/BridgeLinkPanel.svelte';
+  import BridgeLinkSheet from '$lib/components/BridgeLinkSheet.svelte';
   import ConnectionForm from '$lib/components/ConnectionForm.svelte';
+  import FirmwarePanel from '$lib/components/FirmwarePanel.svelte';
   import MowerPlacement from '$lib/components/MowerPlacement.svelte';
   import SiteLocation from '$lib/components/SiteLocation.svelte';
   import SlowLoading from '$lib/components/SlowLoading.svelte';
@@ -22,20 +26,42 @@
   } from '$lib/connection/form';
   import { loadKinds } from '$lib/connection/kinds';
   import { kindTitle } from '$lib/connection/text';
+  import { checkFirmware, firmwareCheckProblemText, type FirmwareInfo } from '$lib/fleet/firmware';
+  import {
+    BLE_BRIDGE,
+    bridgeLinkOfMower,
+    checkBridge,
+    deleteBridgeLink,
+    putBridgeLink,
+    scanBridge,
+    type BridgeLink,
+  } from '$lib/fleet/links';
   import type { components } from '$lib/generated/fleet';
   import { connectionLabel, problemMessage } from '$lib/i18n';
   import { isLegacyCloud, type LinkedAccount } from '$lib/linked/accounts';
   import { getLinkedAccount } from '$lib/linked/api';
+  import { permissions, realtime, sendCommand } from '$lib/live.svelte';
+  import { BridgeLinkFlow } from '$lib/mower/bridge-link.svelte';
   import { m } from '$lib/paraglide/messages';
+  import { mowers as states } from '$lib/stores/mowers.svelte';
   import { toasts } from '$lib/stores/ui.svelte';
 
   type Mower = components['schemas']['MowerOut'];
   type ConnectionKind = components['schemas']['ConnectionKind'];
+  /** What this page reads of the capabilities (structural, like the other pages). */
+  type Capabilities = { links_supported?: string[]; firmware_update?: boolean };
 
   const EMPTY: ConnectionState = { values: {}, flags: {}, secretSet: {}, choice: {} };
 
   const id = $derived(page.params.id ?? '');
   let mower = $state<Mower | null>(null);
+  // The bridge link and the firmware panel read the capabilities and the live state (ADR 0038).
+  let caps = $state<Capabilities | null>(null);
+  let bridgeLink = $state<BridgeLink | null>(null);
+  let canControl = $state(false);
+  let checkingFirmware = $state(false);
+  /** The answer of the last "Nach Updates suchen", until the telemetry reports a newer check. */
+  let checkedFirmware = $state<FirmwareInfo | null>(null);
   let kinds = $state<KindSchema[]>([]);
   let name = $state('');
   let kind = $state('simulated');
@@ -76,11 +102,76 @@
     return list;
   });
 
+  // --- Bluetooth bridge and firmware (ADR 0038) -----------------------------------------------
+
+  const snap = $derived(states.get(id));
+  const ms = $derived(snap?.state ?? null);
+  const stale = $derived(states.isStale(id, clock.now));
+  const bridgeStatus = $derived(ms?.links?.[BLE_BRIDGE] ?? null);
+  /** The panel shows when the connection can open a bridge, or while a link is stored. */
+  const bridgeOffered = $derived(
+    bridgeLink !== null || (caps?.links_supported ?? []).includes(BLE_BRIDGE),
+  );
+  /** The newer of the telemetry's firmware info and the last check's answer. */
+  const firmwareInfo = $derived.by((): FirmwareInfo | null => {
+    const live = ms?.firmware_info ?? null;
+    const fresh = checkedFirmware;
+    if (!live || !fresh) return live ?? fresh;
+    const liveAt = live.checked_at ? Date.parse(live.checked_at) : 0;
+    const freshAt = fresh.checked_at ? Date.parse(fresh.checked_at) : 0;
+    return liveAt > freshAt ? live : fresh;
+  });
+
+  const bridge = new BridgeLinkFlow({
+    scan: (input, signal) => scanBridge(id, input, signal),
+    save: async (input) => {
+      const saved = await putBridgeLink(id, input);
+      bridgeLink = saved;
+      toasts.push('ok', m.bridge_saved());
+      return saved;
+    },
+    expectedName: () => {
+      const value = mower?.connection_options?.device_name;
+      return typeof value === 'string' && value !== '' ? value : null;
+    },
+    existing: () => bridgeLink,
+  });
+
+  async function runFirmwareCheck(): Promise<void> {
+    if (checkingFirmware) return;
+    checkingFirmware = true;
+    try {
+      const info = await checkFirmware(id);
+      checkedFirmware = info;
+      toasts.push(
+        'ok',
+        info.available && info.update_state !== 'idle'
+          ? m.firmware_check_available({ version: info.available })
+          : m.firmware_check_none(),
+      );
+    } catch (error) {
+      const p = asProblem(error);
+      toasts.push(
+        'error',
+        firmwareCheckProblemText(p),
+        p.detail ?? undefined,
+        p.correlationId ?? undefined,
+      );
+    } finally {
+      checkingFirmware = false;
+    }
+  }
+
+  function installFirmware(version: string): void {
+    void sendCommand(id, { kind: 'firmware_update', version });
+  }
+
   function show(found: Mower): void {
     if (found.linked_account_id && found.linked_account_id !== mower?.linked_account_id) {
       loadLinkedAccount(found.linked_account_id);
     }
     mower = found;
+    bridgeLink = bridgeLinkOfMower(found);
     name = found.name;
     model = found.model ?? '';
     serial = found.serial ?? '';
@@ -114,18 +205,33 @@
         ]);
         kinds = available;
         show(found);
+        const path = { params: { path: { mower_id: id } } };
         // The map's geo origin is offered as the site's coordinates (rain pause location).
-        void unwrap(
-          telemetryApi.GET('/api/v1/telemetry/mowers/{mower_id}/map', {
-            params: { path: { mower_id: id } },
-          }),
-        )
+        void unwrap(telemetryApi.GET('/api/v1/telemetry/mowers/{mower_id}/map', path))
           .then((snapshot) => (origin = snapshot.map.reference))
           .catch(() => undefined);
+        // Capabilities decide the bridge panel; the state feeds the link status and firmware.
+        void unwrap(telemetryApi.GET('/api/v1/telemetry/mowers/{mower_id}/capabilities', path))
+          .then((snapshot) => (caps = snapshot.capabilities))
+          .catch(() => (caps = null));
+        void unwrap(telemetryApi.GET('/api/v1/telemetry/mowers/{mower_id}/state', path))
+          .then((snapshot) => states.upsert(id, snapshot.state, 'rest'))
+          .catch(() => undefined);
+        void permissions
+          .check(id, ['can_control'])
+          .then((result) => (canControl = result.can_control))
+          .catch(() => (canControl = false));
       } catch (error) {
         problem = asProblem(error);
       }
     })();
+  });
+  $effect(() => realtime.watch([id]));
+  $effect(() => clock.hold(5_000));
+  $effect(() => {
+    void id;
+    caps = null;
+    checkedFirmware = null;
   });
 
   async function focusFirstIssue(): Promise<void> {
@@ -270,6 +376,37 @@
       >
     </div>
   </form>
+  <div class="links">
+    {#if bridgeOffered}
+      <Panel label={m.bridge_title()} testid="bridge-panel">
+        <BridgeLinkPanel
+          link={bridgeLink}
+          status={bridgeStatus}
+          onadd={() => bridge.start()}
+          check={() => checkBridge(id)}
+          remove={() => deleteBridgeLink(id)}
+          onremoved={() => (bridgeLink = null)}
+        />
+      </Panel>
+    {/if}
+    <Panel label={m.firmware_title()} testid="firmware-section">
+      <FirmwarePanel
+        info={firmwareInfo}
+        reported={ms?.firmware ?? null}
+        capable={caps?.firmware_update === true}
+        activity={ms?.activity ?? null}
+        charging={ms?.charging === true}
+        batteryPercent={ms?.battery_percent ?? null}
+        stale={snap === undefined || stale}
+        allowed={canControl}
+        checking={checkingFirmware}
+        now={clock.now}
+        oncheck={() => void runFirmwareCheck()}
+        oninstall={installFirmware}
+      />
+    </Panel>
+  </div>
+  <BridgeLinkSheet flow={bridge} />
   <div class="site">
     <MowerPlacement
       {mower}
@@ -326,7 +463,8 @@
     padding: 0 var(--md-gutter) var(--md-space-6);
   }
 
-  .site {
+  .site,
+  .links {
     max-width: 720px;
   }
 

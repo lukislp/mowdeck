@@ -37,6 +37,8 @@
       <path d="M5 2h2v5H5zM5 8.5h2v2H5z" />
     {:else if activity === 'offline'}
       <circle cx="6" cy="6" r="3.6" class="stroke" />
+    {:else if activity === 'updating'}
+      <path d="M6 1.5v6M3.5 5L6 7.5 8.5 5M2.5 10.5h7" class="stroke" />
     {:else if activity === 'unknown'}
       <path d="M4 4.5a2 2 0 1 1 2.8 1.8c-.5.3-.8.6-.8 1.2V8M6 9.6v.9" class="stroke" />
     {:else}

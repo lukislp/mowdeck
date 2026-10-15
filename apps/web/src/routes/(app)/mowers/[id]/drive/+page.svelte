@@ -148,11 +148,15 @@
   const busyJob = $derived(activity === 'mowing' || activity === 'returning');
   const offline = $derived(activity === 'offline' || (snap !== undefined && stale));
   const bladesCapable = $derived(caps?.manual_drive_blades === true);
+  // A mower with a Bluetooth bridge drives over it: while the bridge is down the cloud link
+  // keeps the state coming, but a session would be refused (ADR 0038).
+  const bridgeDown = $derived(ms?.links?.ble_bridge?.connected === false);
   const blocker = $derived.by((): string | null => {
     if (canDrive === false) return m.drive_no_permission();
-    if (caps && !caps.manual_drive) return m.drive_unsupported();
+    if (caps && !caps.manual_drive && !bridgeDown) return m.drive_unsupported();
     if (realtime.phase !== 'ready') return m.drive_socket_down();
     if (offline) return m.drive_offline();
+    if (bridgeDown) return m.drive_bridge_disconnected();
     if (busyJob) return m.drive_busy_job();
     return null;
   });

@@ -8,14 +8,14 @@
  * follows the visible span (1, 2, 5 times a power of ten), so a garden and a fleet spread over
  * a region both get a readable grid. Each mower's map areas use that mower's own reference.
  */
-import { ACTIVITIES, activityTone, type Activity } from '../types';
+import { ACTIVITIES, activityTone, type Activity, type ActivityTone } from '../types';
 
 import type { GeoReference } from './geo';
 import { buildLayers, type GridLine, type MapMowerState, type MapSnapshot } from './layers';
 import { createProjection, type MapCoord, type Projection } from './projection';
 
 /** The state colour family of a fleet marker. */
-export type FleetTone = Exclude<Activity, 'idle'>;
+export type FleetTone = ActivityTone;
 
 /** Legend order: what needs attention first. */
 export const FLEET_TONES: readonly FleetTone[] = [

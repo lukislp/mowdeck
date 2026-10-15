@@ -13,7 +13,8 @@ export type CommandKind =
   | 'emergency_stop'
   | 'set_blade_height'
   | 'set_speed'
-  | 'set_light';
+  | 'set_light'
+  | 'firmware_update';
 
 export type CommandOutcome =
   'pending' | 'accepted' | 'executed' | 'rejected' | 'failed' | 'expired';

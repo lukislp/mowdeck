@@ -8,10 +8,19 @@
 import type { components } from '$lib/generated/notifications';
 import { m } from '$lib/paraglide/messages';
 
-export type NotificationKind = components['schemas']['NotificationKind'];
+/**
+ * The firmware kinds (ADR 0038) are listed here until the Notifications OpenAPI document carries
+ * them; the union keeps the switches below exhaustive either way.
+ */
+export type FirmwareNotificationKind =
+  'firmware_update_available' | 'firmware_update_finished' | 'firmware_update_failed';
+export type NotificationKind = components['schemas']['NotificationKind'] | FirmwareNotificationKind;
 export type NotificationTone = 'mowing' | 'docked' | 'paused' | 'error' | 'offline' | 'unknown';
 
-/** The kinds a user can switch on, in the order of the settings page. */
+/**
+ * The kinds a user can switch on, in the order of the settings page (the page offers only those
+ * the service reports in `available_kinds`).
+ */
 export const USER_KINDS: NotificationKind[] = [
   'mowing_finished',
   'mower_stuck',
@@ -25,6 +34,9 @@ export const USER_KINDS: NotificationKind[] = [
   'blade_maintenance',
   'vision_proposal',
   'vision_auto_proposal',
+  'firmware_update_available',
+  'firmware_update_finished',
+  'firmware_update_failed',
 ];
 
 /** Theft alarms: critical, acknowledged by the user in the inbox (ADR 0027). */
@@ -80,6 +92,12 @@ export function kindLabel(kind: NotificationKind): string {
       return m.notif_kind_vision_proposal();
     case 'vision_auto_proposal':
       return m.notif_kind_vision_auto_proposal();
+    case 'firmware_update_available':
+      return m.notif_kind_firmware_update_available();
+    case 'firmware_update_finished':
+      return m.notif_kind_firmware_update_finished();
+    case 'firmware_update_failed':
+      return m.notif_kind_firmware_update_failed();
     case 'test':
       return m.notif_kind_test();
   }
@@ -111,6 +129,12 @@ export function kindHint(kind: NotificationKind): string {
       return m.notif_kind_vision_proposal_hint();
     case 'vision_auto_proposal':
       return m.notif_kind_vision_auto_proposal_hint();
+    case 'firmware_update_available':
+      return m.notif_kind_firmware_update_available_hint();
+    case 'firmware_update_finished':
+      return m.notif_kind_firmware_update_finished_hint();
+    case 'firmware_update_failed':
+      return m.notif_kind_firmware_update_failed_hint();
     case 'test':
       return '';
   }
@@ -119,6 +143,7 @@ export function kindHint(kind: NotificationKind): string {
 export function kindTone(kind: NotificationKind): NotificationTone {
   switch (kind) {
     case 'mowing_finished':
+    case 'firmware_update_finished':
       return 'docked';
     case 'job_started':
     case 'mower_online':
@@ -132,6 +157,8 @@ export function kindTone(kind: NotificationKind): NotificationTone {
     case 'blade_maintenance':
     case 'vision_proposal':
     case 'vision_auto_proposal':
+    case 'firmware_update_available':
+    case 'firmware_update_failed':
       return 'paused';
     case 'mower_offline':
       return 'offline';

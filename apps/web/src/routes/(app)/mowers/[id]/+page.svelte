@@ -879,6 +879,7 @@
     resume: () => m.reason_resume(),
     dock: () => m.reason_dock(),
     offline: () => m.reason_offline(),
+    updating: () => m.reason_updating(),
   } as const;
 
   const actions = $derived.by((): CommandAction[] => {

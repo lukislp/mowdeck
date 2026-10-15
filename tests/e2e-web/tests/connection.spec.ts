@@ -8,10 +8,21 @@
  * devices have fixed IoT ids, so the cloud test always removes its mowers and linked accounts.
  * A ble_bridge mower saved with a noise key shows the key as "set" afterwards without ever
  * echoing it; it points at a documentation address (192.0.2.0/24) and is removed at the end.
+ * The last test adds a Bluetooth bridge as an additional link of a simulated mower through the
+ * settings sheet and runs the firmware check (ADR 0038).
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
-import { RUN, actor, loginByUi, registerByApi, watchCsp, type Actor } from './support';
+import {
+  RUN,
+  actor,
+  createMowerByApi,
+  loginByUi,
+  registerByApi,
+  waitForMap,
+  watchCsp,
+  type Actor,
+} from './support';
 
 const NOISE_KEY = 'ZTJlLW5vaXNlLWtleS1vZi0zMi1ieXRlcy0xMjM0NTY=';
 const FAKE_PASSWORD = 'fake-cloud-password';
@@ -287,4 +298,162 @@ test('ble_bridge: the noise key is write-only and shown as set', async ({ page, 
   });
   expect(removed.status()).toBe(204);
   csp.assertNone();
+});
+
+/**
+ * Bluetooth bridge and firmware on the mower settings (ADR 0038), against the simulated mower.
+ * The bridge panel shows only when the capabilities list `ble_bridge`; the scan and the firmware
+ * check depend on the gateway's fake answers. Where the stack does not offer a part yet (no
+ * `ble_bridge` capability, a 503 from Fleet, `unsupported` from the gateway) that part is
+ * recorded as skipped and the rest of the test still runs.
+ */
+test('bridge sheet and firmware check on the mower settings', async ({ page, request }) => {
+  test.setTimeout(240_000);
+  const csp = watchCsp(page);
+  const owner = await registerByApi(request, actor('bridge'));
+  const mowerId = await createMowerByApi(request, owner, `Luba bridge ${RUN}`);
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  const skipped = (part: string, why: string) =>
+    test.info().annotations.push({ type: 'skip', description: `${part}: ${why}` });
+  interface Caps {
+    links_supported?: string[];
+    firmware_update?: boolean;
+  }
+  let caps: Caps = {};
+  try {
+    await waitForMap(request, owner, mowerId);
+    await expect
+      .poll(
+        async () => {
+          const r = await request.get(`/api/v1/telemetry/mowers/${mowerId}/capabilities`, {
+            headers: auth,
+          });
+          if (r.ok()) caps = ((await r.json()) as { capabilities: Caps }).capabilities;
+          return r.status();
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(200);
+
+    await loginByUi(page, owner);
+    await page.goto(`/mowers/${mowerId}/settings`);
+    await expect(page.getByTestId('firmware-section')).toBeVisible();
+
+    // --- firmware: the check relays to the gateway; its reply fills the panel ----------------
+    if (caps.firmware_update) {
+      const checked = page.waitForResponse(
+        (r) =>
+          r.url().endsWith(`/mowers/${mowerId}/firmware/check`) && r.request().method() === 'POST',
+        { timeout: 60_000 },
+      );
+      await page.getByTestId('firmware-check').click();
+      const response = await checked;
+      // A 200 is the fresh FirmwareInfo; a connection that cannot ask answers 409, no gateway 503.
+      const info = response.ok()
+        ? ((await response.json()) as { installed?: string | null; available?: string | null })
+        : null;
+      if (!info) {
+        skipped('firmware', `check answered ${response.status()}`);
+      } else {
+        if (info.installed) {
+          await expect(page.getByTestId('firmware-installed')).toHaveText(info.installed);
+        }
+        if (info.available) {
+          await expect(page.getByTestId('firmware-available')).toHaveText(info.available);
+          const install = page.getByTestId('firmware-install');
+          await expect(install).toBeVisible();
+          // Enabled, or disabled with the unmet precondition written under it.
+          if (await install.isDisabled()) {
+            await expect(page.getByTestId('firmware-blocker')).toBeVisible();
+          } else {
+            await install.click();
+            await expect(page.getByTestId('firmware-confirm')).toBeVisible();
+            await expect(page.getByTestId('firmware-confirm')).toContainText('10 bis 20 Minuten');
+            await page.getByTestId('firmware-confirm').getByLabel('Schließen').click();
+          }
+        }
+      }
+    } else {
+      await expect(page.getByTestId('firmware-unsupported')).toBeVisible();
+      skipped('firmware', 'the connection reports no firmware_update capability');
+    }
+
+    // --- bridge: add through the sheet, status chips, remove with confirmation ----------------
+    if (!caps.links_supported?.includes('ble_bridge')) {
+      await expect(page.getByTestId('bridge-panel')).toHaveCount(0);
+      skipped('bridge', 'the connection lists no ble_bridge link');
+      csp.assertNone();
+      return;
+    }
+    await expect(page.getByTestId('bridge-empty')).toBeVisible();
+    await page.getByTestId('bridge-add').click();
+    await expect(page.getByTestId('bridge-sheet')).toBeVisible();
+    // An empty form does not scan; host and key are required.
+    await page.getByTestId('bridge-scan').click();
+    await expect(page.getByTestId('bridge-host')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByTestId('bridge-key')).toHaveAttribute('aria-invalid', 'true');
+    await page.getByTestId('bridge-host').fill('192.0.2.20');
+    await page.getByTestId('bridge-key').fill(NOISE_KEY);
+    const scanned = page.waitForResponse(
+      (r) => r.url().endsWith('/links/ble_bridge/scan') && r.request().method() === 'POST',
+      { timeout: 90_000 },
+    );
+    await page.getByTestId('bridge-scan').click();
+    await expect(page.getByTestId('bridge-scanning')).toContainText('bis zu 30 s');
+    const scan = await scanned;
+    const reply = scan.ok()
+      ? ((await scan.json()) as {
+          devices: { name: string; address: string }[];
+          error: { code: string } | null;
+        })
+      : null;
+    if (!reply || reply.error?.code === 'unsupported' || reply.devices.length === 0) {
+      await expect(page.getByTestId('bridge-scan-error')).toBeVisible();
+      skipped('bridge', `scan answered ${scan.status()} ${reply?.error?.code ?? 'no devices'}`);
+      csp.assertNone();
+      return;
+    }
+    await expect(page.getByTestId('bridge-device-list')).toBeVisible();
+    const first = reply.devices[0]!;
+    await page.getByTestId(`bridge-device-${first.address}`).click();
+    await expect(page.getByTestId(`bridge-device-${first.address}`)).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await page.getByTestId('bridge-blades').click();
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith('/links/ble_bridge') && r.request().method() === 'PUT',
+    );
+    await page.getByTestId('bridge-save').click();
+    expect((await saved).ok()).toBe(true);
+    await expect(page.getByTestId('bridge-saved')).toBeVisible();
+    await page.getByTestId('bridge-done').click();
+    await expect(page.getByTestId('bridge-sheet')).toHaveCount(0);
+    await expect(page.getByTestId('bridge-status')).toBeVisible();
+    await expect(page.getByTestId('bridge-device-value')).toContainText(first.name);
+    await expect(page.getByTestId('bridge-host-value')).toHaveText('192.0.2.20:6053');
+
+    // The key is write-only: neither Fleet's answer nor the page ever contains it.
+    const read = await request.get(`/api/v1/fleet/mowers/${mowerId}/links/ble_bridge`, {
+      headers: auth,
+    });
+    expect(read.status()).toBe(200);
+    expect(await read.text()).not.toContain(NOISE_KEY);
+    expect(await page.content()).not.toContain(NOISE_KEY);
+
+    // The link survives a reload; "Entfernen" asks once more, then deletes it.
+    await page.reload();
+    await expect(page.getByTestId('bridge-status')).toBeVisible();
+    await page.getByTestId('bridge-remove').click();
+    await expect(page.getByTestId('bridge-remove-body')).toBeVisible();
+    const removed = page.waitForResponse(
+      (r) => r.url().endsWith('/links/ble_bridge') && r.request().method() === 'DELETE',
+    );
+    await page.getByTestId('bridge-remove').click();
+    expect((await removed).status()).toBe(204);
+    await expect(page.getByTestId('bridge-empty')).toBeVisible();
+    csp.assertNone();
+  } finally {
+    await request.delete(`/api/v1/fleet/mowers/${mowerId}`, { headers: auth });
+  }
 });

@@ -30,6 +30,8 @@ export function activityLabel(activity: Activity): string {
       return m.activity_error();
     case 'offline':
       return m.activity_offline();
+    case 'updating':
+      return m.activity_updating();
     case 'unknown':
       return m.activity_unknown();
   }
@@ -161,6 +163,8 @@ export function commandLabel(
       return m.command_set_speed();
     case 'set_light':
       return m.command_set_light();
+    case 'firmware_update':
+      return m.command_firmware_update();
     case 'manual_drive':
       return m.command_manual_drive();
   }
