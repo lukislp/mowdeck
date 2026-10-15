@@ -276,6 +276,26 @@ async def test_mammotion_dual_leave_dock_goes_over_the_cloud() -> None:
         await conn.disconnect()
 
 
+async def test_mammotion_dual_drive_speed_goes_over_the_cloud_during_a_drive() -> None:
+    conn, port, _, _ = _dual()
+    await conn.connect()
+    try:
+        await _wait(lambda: conn.watcher.proxy_up)
+        assert (await conn.capabilities()).drive_speed_setting is not None
+        session = await conn.start_drive_session()
+        assert conn.ble_connected()
+        port.sent.clear()
+        await conn.set_drive_speed(0.6)
+        assert [(c.name, c.link, c.priority) for c in port.sent] == [
+            ("set_speed", "cloud", Priority.USER),
+            ("get_speed", "cloud", Priority.USER),
+        ]
+        assert (await conn.get_state()).drive_speed_mps == 0.6
+        await session.close()
+    finally:
+        await conn.disconnect()
+
+
 async def test_mammotion_dual_drive_session_uses_bluetooth_and_releases_it() -> None:
     conn, port, _, _ = _dual()
     await conn.connect()

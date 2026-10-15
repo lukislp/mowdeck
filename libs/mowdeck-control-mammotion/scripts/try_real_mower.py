@@ -61,12 +61,45 @@ circle around ``--spot-at`` (local metres; default: the centre of ``--spot-area`
 area nearest to the dock) and ``return_to_dock``. Ctrl-C sends ``spot_stop``; the mower then
 stops where it is and is not sent home.
 
+Drive calibration (ADR 0042), over the bridge, blades off, the mower idle on open lawn with a
+fixed RTK position and about 2 m of room ahead::
+
+    uv run python .../try_real_mower.py --bridge HOST,KEY --calibrate
+    uv run python .../try_real_mower.py --bridge HOST,KEY --calibrate --step-s 2.5 \\
+        --calibration-out out/calibration.json
+    uv run python .../try_real_mower.py --bridge HOST,KEY --spot-dry-run \\
+        --use-calibration out/calibration.json
+
+``--calibrate`` sends ``DriveCalibrate`` through the ``MowerController``: short forward steps at
+several stick values (at most 1.5 m in all) and turns in place both ways, ``--step-s`` seconds
+each. It prints a table of the steps (command, measured speed or yaw rate, reports, report
+interval, distance or turn), the fit (full speed, full yaw rate, dead zones, the speed setting it
+was measured at) and the link options JSON to paste. Ctrl-C sends ``spot_stop``.
+``--calibration-out FILE`` writes the result to a file that ``--use-calibration FILE`` reads back
+(it also takes the options JSON), so ``--spot-dry-run`` steers with it.
+
+Saving to Fleet (``PUT {fleet-url}/mowers/{id}/drive-calibration`` with the bearer token in
+``MOWDECK_TOKEN``), right after a calibration or from a file without touching the mower::
+
+    uv run python .../try_real_mower.py --bridge HOST,KEY --calibrate --save \\
+        --fleet-url https://mowdeck.example/api/v1/fleet --mower-id <uuid>
+    uv run python .../try_real_mower.py --save --use-calibration out/calibration.json \\
+        --fleet-url https://mowdeck.example/api/v1/fleet --mower-id <uuid>
+
+Without the URL, the mower id or the token, ``--save`` prints the JSON to paste instead.
+
+The speed setting for manual driving (the vendor app's movement speed, by which the mower scales
+the stick), read or changed over the cloud::
+
+    uv run python .../try_real_mower.py --get-speed
+    uv run python .../try_real_mower.py --set-speed 0.4
+
 Without hardware or credentials (fake PyMammotion port)::
 
     uv run python .../try_real_mower.py --dry-run --start-area "Front lawn" --estop
 
-Apart from ``--turn-check`` and ``--spot-dry-run`` the script never drives the mower manually,
-and it never switches blades on outside a mowing job.
+Apart from ``--turn-check``, ``--spot-dry-run`` and ``--calibrate`` the script never drives the
+mower manually, and it never switches blades on outside a mowing job.
 """
 
 import argparse
@@ -78,16 +111,23 @@ import os
 import statistics
 import sys
 import time
-from collections.abc import Sequence
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
+    MAX_CALIBRATION_STEP_S,
     CommandEnvelope,
     CommandResult,
     CommandStatus,
+    DriveCalibrate,
+    DriveCalibration,
+    DriveCalibrationStep,
     EmergencyStop,
     LocalPoint,
     ManualDrive,
@@ -97,6 +137,7 @@ from mowdeck_contracts.v1 import (
     PrincipalKind,
     PrincipalRef,
     ReturnToDock,
+    SetDriveSpeed,
     SetLight,
     SpotMow,
     SpotMowPlan,
@@ -105,12 +146,14 @@ from mowdeck_contracts.v1 import (
     StartMow,
 )
 from mowdeck_control import (
+    CommandRejected,
     ConnectionConfig,
     MowerConnection,
     MowerController,
     NoRouteError,
     NotConnected,
     camera_session_of,
+    drive_speed_port_of,
     firmware_port_of,
     plan_transit,
     pose_of,
@@ -127,10 +170,15 @@ SAFETY_NOTICE = """\
 SAFETY: this script can start a real mowing job and drive the mower to its dock.
   * Keep people, children and pets off the lawn; someone stays at the red STOP button.
   * Close the Mammotion app on the phone and disable the old Home Assistant integration.
-  * Only --turn-check and --spot-dry-run drive the mower manually, always with the
-    blades off; stay within reach of the mower and keep the vendor app open.
+  * Only --turn-check, --spot-dry-run and --calibrate drive the mower manually, always
+    with the blades off; stay within reach of the mower and keep the vendor app open.
   * --estop sends pause, zero movement and blades off with emergency priority; the
     physical STOP button is still the only guaranteed stop."""
+
+DEFAULT_STEP_S = 2.5
+"""``DriveCalibrate.step_s`` when ``--step-s`` is not given."""
+TOKEN_ENV = "MOWDECK_TOKEN"  # noqa: S105 - the variable name, not a token
+"""Environment variable with the bearer token for ``--save``."""
 
 MOWER_ID = UUID("00000000-0000-4000-8000-0000000000e1")
 ACCOUNT_ID = UUID("00000000-0000-4000-8000-0000000000e2")
@@ -173,6 +221,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "(needs manual driving: --bridge or --esphome); Ctrl-C stops it",
     )
     action.add_argument(
+        "--calibrate",
+        action="store_true",
+        help="drive calibration: short forward steps and turns in place with the blades off, "
+        "then print the steps, the fit and the options JSON (needs manual driving: --bridge or "
+        "--esphome); Ctrl-C stops it",
+    )
+    action.add_argument(
+        "--get-speed",
+        action="store_true",
+        help="print the speed setting for manual driving (m/s)",
+    )
+    action.add_argument(
+        "--set-speed",
+        type=float,
+        metavar="MPS",
+        help="change the speed setting for manual driving (m/s, clamped to the model's range) "
+        "and print the read-back",
+    )
+    action.add_argument(
         "--light",
         choices=("on", "off"),
         help="switch the camera headlamp; the state shows light_on, raw.manual_light and "
@@ -206,6 +273,40 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--spot-area",
         metavar="NAME",
         help="with --from-dock: put the circle at the centre of this area",
+    )
+    parser.add_argument(
+        "--step-s",
+        type=float,
+        metavar="SECONDS",
+        help=f"with --calibrate: duration of each step (1 to {MAX_CALIBRATION_STEP_S:g}, "
+        f"default {DEFAULT_STEP_S:g})",
+    )
+    parser.add_argument(
+        "--calibration-out",
+        type=Path,
+        metavar="FILE",
+        help="with --calibrate: write the result as JSON (read back by --use-calibration)",
+    )
+    parser.add_argument(
+        "--use-calibration",
+        type=Path,
+        metavar="FILE",
+        help="a calibration JSON (--calibration-out or the options JSON) for --spot-dry-run, or "
+        "to --save without a new calibration",
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="with --calibrate or --use-calibration: PUT the calibration to Fleet (--fleet-url, "
+        f"--mower-id and the token in {TOKEN_ENV}); without them print the JSON to paste",
+    )
+    parser.add_argument(
+        "--fleet-url",
+        metavar="URL",
+        help="with --save: Fleet's API base URL, e.g. https://HOST/api/v1/fleet",
+    )
+    parser.add_argument(
+        "--mower-id", type=UUID, metavar="UUID", help="with --save: the mower's id in Fleet"
     )
     parser.add_argument(
         "--camera",
@@ -262,6 +363,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--from-dock, --spot-at and --spot-area go with --spot-dry-run")
     if (args.spot_at or args.spot_area) and not args.from_dock:
         parser.error("--spot-at and --spot-area go with --from-dock")
+    if (args.step_s is not None or args.calibration_out) and not args.calibrate:
+        parser.error("--step-s and --calibration-out go with --calibrate")
+    if args.step_s is not None and not 1.0 <= args.step_s <= MAX_CALIBRATION_STEP_S:
+        parser.error(f"--step-s must be between 1 and {MAX_CALIBRATION_STEP_S:g} seconds")
+    if args.use_calibration and not (args.spot_dry_run or args.save):
+        parser.error("--use-calibration goes with --spot-dry-run or --save")
+    if args.save and args.calibrate == bool(args.use_calibration):
+        parser.error("--save needs either --calibrate or --use-calibration")
+    if args.save and args.use_calibration and args.spot_dry_run:
+        parser.error("--save --use-calibration only saves; run --spot-dry-run separately")
+    if (args.fleet_url or args.mower_id) and not args.save:
+        parser.error("--fleet-url and --mower-id go with --save")
+    if args.set_speed is not None and not 0 < args.set_speed <= 5:
+        parser.error("--set-speed must be above 0 and at most 5 m/s")
     return args
 
 
@@ -375,6 +490,7 @@ def state_line(state: MowerState) -> dict[str, Any]:
         "position_source": state.position_source.value,
         "blade_height_mm": state.blade_height_mm,
         "light_on": state.light_on,
+        "drive_speed_mps": state.drive_speed_mps,
         "error_code": state.error_code,
         "raw": state.raw,
     }
@@ -790,15 +906,291 @@ def print_spot_status(controller: MowerController, log: JsonLog) -> None:
     log.write("spot_status", **status.model_dump(mode="json"), rtk=state.rtk_fix.value)
 
 
+# --- drive calibration and the speed setting (ADR 0042) ------------------------------------
+
+CALIBRATION_COLUMNS = (
+    "#",
+    "kind",
+    "command",
+    "measured",
+    "reports",
+    "interval s",
+    "distance/turned",
+    "skipped",
+)
+
+
+def calibration_rows(steps: Sequence[DriveCalibrationStep]) -> list[list[str]]:
+    """The cells of the step table (:data:`CALIBRATION_COLUMNS`), one row per step."""
+    rows: list[list[str]] = []
+    for number, step in enumerate(steps, start=1):
+        forward = step.kind == "forward"
+        unit = "m/s" if forward else "deg/s"
+        measured = "-" if step.measured is None else f"{step.measured:.3f} {unit}"
+        interval = "-" if step.report_interval_s is None else f"{step.report_interval_s:.2f}"
+        moved = f"{step.distance_m:.2f} m" if forward else f"{step.turned_deg:+.1f} deg"
+        rows.append(
+            [
+                str(number),
+                step.kind,
+                f"{'linear' if forward else 'angular'} {step.command:+.2f}",
+                measured,
+                str(step.reports),
+                interval,
+                moved,
+                "yes" if step.skipped else "no",
+            ]
+        )
+    return rows
+
+
+def calibration_table(steps: Sequence[DriveCalibrationStep]) -> str:
+    """The steps as a plain-text table with aligned columns."""
+    rows = [list(CALIBRATION_COLUMNS), *calibration_rows(steps)]
+    widths = [max(len(row[i]) for row in rows) for i in range(len(CALIBRATION_COLUMNS))]
+    lines = [
+        "  ".join(cell.ljust(width) for cell, width in zip(row, widths, strict=True))
+        for row in rows
+    ]
+    lines.insert(1, "  ".join("-" * width for width in widths))
+    return "\n".join(line.rstrip() for line in lines)
+
+
+def calibration_fit(calibration: DriveCalibration) -> dict[str, Any]:
+    """The fitted values with their units, as printed after the table."""
+    return {
+        "full_speed_mps": round(calibration.full_speed_mps, 4),
+        "full_yaw_rate_dps": round(calibration.full_yaw_rate_dps, 2),
+        "dead_zone": round(calibration.dead_zone, 3),
+        "turn_dead_zone": round(calibration.turn_dead_zone, 3),
+        "drive_speed_setting_mps": calibration.drive_speed_setting,
+        "calibrated_at": calibration.calibrated_at.isoformat(),
+    }
+
+
+def calibration_body(calibration: DriveCalibration) -> dict[str, Any]:
+    """The JSON body of ``PUT /mowers/{id}/drive-calibration`` (the calibration's fields)."""
+    return {
+        "full_speed_mps": calibration.full_speed_mps,
+        "full_yaw_rate_dps": calibration.full_yaw_rate_dps,
+        "dead_zone": calibration.dead_zone,
+        "turn_dead_zone": calibration.turn_dead_zone,
+        "drive_speed_setting": calibration.drive_speed_setting,
+        "calibrated_at": calibration.calibrated_at.isoformat(),
+    }
+
+
+def load_calibration(path: Path) -> DriveCalibration:
+    """A calibration from ``path``: the file of ``--calibration-out`` (``calibration`` key), the
+    link options JSON (``drive_full_speed_mps``, ...) or the calibration's own fields."""
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"cannot read the calibration {path}: {exc}") from None
+    if isinstance(data, dict) and isinstance(data.get("calibration"), dict):
+        data = data["calibration"]
+    if isinstance(data, dict) and "drive_full_speed_mps" in data:
+        found = DriveCalibration.from_options(data)
+        if found is None:
+            raise SystemExit(f"{path} holds invalid calibration options")
+        return found
+    try:
+        return DriveCalibration.model_validate(data)
+    except ValueError as exc:
+        raise SystemExit(f"{path} holds no valid calibration: {exc}") from None
+
+
+def calibration_file(
+    calibration: DriveCalibration, steps: Sequence[DriveCalibrationStep]
+) -> dict[str, Any]:
+    """What ``--calibration-out`` writes (and :func:`load_calibration` reads back)."""
+    return {
+        "calibration": calibration.model_dump(mode="json"),
+        "options": calibration.to_options(),
+        "steps": [step.model_dump(mode="json") for step in steps],
+    }
+
+
+Opener = Callable[..., Any]
+"""``urllib.request.urlopen`` (tests pass a fake)."""
+
+
+def save_calibration(
+    calibration: DriveCalibration,
+    *,
+    fleet_url: str | None,
+    mower_id: UUID | None,
+    token: str | None,
+    opener: Opener = urllib.request.urlopen,
+) -> tuple[bool, str]:
+    """``--save``: PUT the calibration to Fleet; ``(saved, message)``. Without the URL, the
+    mower id or the token nothing is sent and the message says what is missing."""
+    missing = [
+        name
+        for name, value in (
+            ("--fleet-url", fleet_url),
+            ("--mower-id", mower_id),
+            (TOKEN_ENV, token),
+        )
+        if not value
+    ]
+    if missing:
+        return False, f"not saved (missing {', '.join(missing)}); paste the JSON above instead"
+    assert fleet_url is not None  # noqa: S101 - checked above
+    scheme = urllib.parse.urlsplit(fleet_url).scheme
+    if scheme not in ("http", "https"):
+        return False, f"not saved: --fleet-url must be an http or https URL, not {scheme!r}"
+    url = f"{fleet_url.rstrip('/')}/mowers/{mower_id}/drive-calibration"
+    request = urllib.request.Request(  # noqa: S310 - the scheme is checked above
+        url,
+        data=json.dumps(calibration_body(calibration)).encode("utf-8"),
+        method="PUT",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    try:
+        with opener(request, timeout=15) as response:
+            status = getattr(response, "status", 200)
+    except urllib.error.HTTPError as exc:
+        return False, f"Fleet refused the calibration: HTTP {exc.code} {exc.reason}"
+    except (urllib.error.URLError, OSError) as exc:
+        return False, f"Fleet not reachable at {url}: {exc}"
+    return True, f"saved to {url} (HTTP {status})"
+
+
+def show_save(calibration: DriveCalibration, args: argparse.Namespace, log: JsonLog) -> bool:
+    """Print the body, PUT it when Fleet is configured, and print the outcome."""
+    show("calibration JSON (PUT /mowers/{id}/drive-calibration)", calibration_body(calibration))
+    saved, message = save_calibration(
+        calibration,
+        fleet_url=args.fleet_url,
+        mower_id=args.mower_id,
+        token=os.environ.get(TOKEN_ENV),
+    )
+    print(message)
+    log.write("calibration_save", saved=saved, message=message)
+    return saved
+
+
+def print_calibration_status(controller: MowerController, log: JsonLog) -> None:
+    """One status line of a running calibration (and a log record)."""
+    status = controller.calibration_status
+    state = controller.last_state
+    if status is None or state is None:
+        return
+    heading = state.position.heading if state.position else None
+    reason = f" reason={status.reason}" if status.reason else ""
+    print(
+        f"calibration {status.state} step {status.step_index + 1}/{status.steps_total} "
+        f"rtk={state.rtk_fix.value} heading={heading} "
+        f"observed={state.observed_at.time().isoformat(timespec='seconds')}{reason}"
+    )
+    log.write("calibration_status", state=status.state, step_index=status.step_index)
+
+
+async def run_calibration(
+    controller: MowerController, args: argparse.Namespace, log: JsonLog
+) -> int:
+    """``--calibrate``: run ``DriveCalibrate`` and print the steps, the fit and the options."""
+    if not await wait_for_manual_drive(controller, 0.0 if args.dry_run else args.wait):
+        show("calibration", {"error": NO_DRIVE})
+        log.write("calibration", error="no manual drive")
+        return 1
+    step_s = args.step_s if args.step_s is not None else DEFAULT_STEP_S
+    confirm(args, "drive calibration (forward up to 1.5 m and turns in place, blades off)")
+    envelope = envelope_of(DriveCalibrate(step_s=step_s))
+    result = await controller.handle(envelope)
+    show("result", {"command": "drive_calibrate", "status": result.status, "reason": result.reason})
+    log.write("calibration", status=str(result.status), reason=result.reason)
+    if result.status is not CommandStatus.ACCEPTED:
+        return 1
+    waiter = asyncio.ensure_future(controller.calibration_result(envelope.command_id))
+    try:
+        while not waiter.done():
+            await asyncio.wait({waiter}, timeout=1.0)
+            print_calibration_status(controller, log)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        task = asyncio.current_task()
+        if task is not None:
+            task.uncancel()
+        print("\nCtrl-C: sending spot_stop")
+        stopped = await controller.handle(envelope_of(SpotStop()))
+        print(f"spot_stop {stopped.status}: {stopped.reason}")
+        log.write("spot_stop", status=str(stopped.status), reason=stopped.reason)
+        raise
+    run = waiter.result()
+    if run is None:
+        return 1
+    print(f"\n{run.summary()}")
+    log.write("calibration_end", state=run.state, reason=run.reason, detail=run.detail)
+    steps = run.result.steps if run.result is not None else run.status.steps
+    if steps:
+        print("\n== calibration steps")
+        print(calibration_table(steps))
+    if run.state != "done" or run.result is None:
+        return 1
+    calibration = run.result.calibration
+    show("fit", calibration_fit(calibration))
+    show("link options (paste into the drive link's options)", calibration.to_options())
+    log.write("calibration_fit", **calibration_fit(calibration))
+    if args.calibration_out:
+        args.calibration_out.parent.mkdir(parents=True, exist_ok=True)
+        payload = calibration_file(calibration, steps)
+        args.calibration_out.write_text(json.dumps(payload, indent=2) + "\n", "utf-8")
+        print(f"calibration written to {args.calibration_out}")
+    if args.save:
+        show_save(calibration, args, log)
+    return 0
+
+
+async def show_drive_speed(
+    controller: MowerController, connection: MowerConnection, args: argparse.Namespace, log: JsonLog
+) -> int:
+    """``--get-speed`` / ``--set-speed``: the speed setting for manual driving."""
+    caps = await controller.capabilities()
+    port = drive_speed_port_of(connection)
+    if port is None or caps.drive_speed_setting is None:
+        show("drive speed", {"error": "this connection has no speed setting for manual driving"})
+        log.write("drive_speed", error="not supported")
+        return 1
+    setting = caps.drive_speed_setting.model_dump(mode="json")
+    if args.set_speed is not None:
+        confirm(args, f"set_drive_speed {args.set_speed:g} m/s")
+        result = await controller.handle(envelope_of(SetDriveSpeed(speed_mps=args.set_speed)))
+        show(
+            "result",
+            {"command": "set_drive_speed", "status": result.status, "reason": result.reason},
+        )
+        log.write("set_drive_speed", status=str(result.status), reason=result.reason)
+        if result.status is not CommandStatus.EXECUTED:
+            return 1
+    try:
+        speed = await port.get_drive_speed()
+    except (NotConnected, CommandRejected) as exc:
+        show("drive speed", {"error": str(exc)})
+        log.write("drive_speed", error=str(exc))
+        return 1
+    show("drive speed", {"drive_speed_mps": speed, "range": setting})
+    log.write("drive_speed", drive_speed_mps=speed, range=setting)
+    return 0 if speed is not None else 1
+
+
 async def run(args: argparse.Namespace) -> int:
     print(SAFETY_NOTICE)
     log = JsonLog(args.log)
     if args.scan:
         return await run_scan(args, log)
+    stored = load_calibration(args.use_calibration) if args.use_calibration else None
+    if stored is not None and args.save:
+        # --save --use-calibration: only the PUT, the mower is not touched
+        return 0 if show_save(stored, args, log) else 1
+    if stored is not None:
+        show("drive calibration in use", calibration_fit(stored))
     connection = build_connection(args)
     log.write("start", kind=str(connection.kind), dry_run=args.dry_run)
     started = time.perf_counter()
-    async with MowerController(connection, mower_id=MOWER_ID) as controller:
+    async with MowerController(
+        connection, mower_id=MOWER_ID, drive_calibration=lambda: stored
+    ) as controller:
         connect_s = round(time.perf_counter() - started, 2)
         caps = await controller.capabilities()
         state = await connection.get_state()
@@ -833,6 +1225,10 @@ async def run(args: argparse.Namespace) -> int:
             return await run_turn_check(controller, log, settle_s=settle_s, wait_s=wait_s)
         if args.spot_dry_run:
             return await run_spot_dry_run(controller, args, log)
+        if args.calibrate:
+            return await run_calibration(controller, args, log)
+        if args.get_speed or args.set_speed is not None:
+            return await show_drive_speed(controller, connection, args, log)
         if args.bridge and not (args.start_area or args.dock or args.estop or args.light):
             await watch_links(connection, log, args.wait)
         if args.start_area:

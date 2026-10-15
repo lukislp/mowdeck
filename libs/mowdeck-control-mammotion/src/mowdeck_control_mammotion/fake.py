@@ -337,6 +337,11 @@ class FakeMammotionPort:
         (``light_follows_writes``)."""
         self.light_follows_writes = True
         self.lamp_bright = 80
+        self.speed_answer: float | None = 0.4
+        """The speed setting for manual driving the mower reports on ``get_speed`` (answer
+        ``bidire_speed_read_set``), stored like PyMammotion's reducer in
+        ``mower_state.travel_speed``; None: no answer (the read times out). ``set_speed``
+        changes it while the mower answers."""
         """``lamp_bright`` of an answer while the lamp is on."""
         """``(model_id, sub_model_id)`` that ``get_device_product_model`` stores on the device,
         like PyMammotion's reducer on the ``device_product_type_info`` answer (None: no
@@ -515,6 +520,11 @@ class FakeMammotionPort:
                 raise CommandTimeoutError(expected_field, 2)
             await self.deliver_light(on=self.light_answer)
             return {expected_field: {}}
+        if command == "get_speed":
+            if self.speed_answer is None:
+                raise CommandTimeoutError(expected_field, 2)
+            await self.deliver_speed(self.speed_answer)
+            return {expected_field: {"speed": self.speed_answer}}
         await self._apply(command, kwargs)
         return {expected_field: {}}
 
@@ -712,6 +722,11 @@ class FakeMammotionPort:
             bool(c.kwargs["manual_ctrl"]) for c in self.sent if c.name == "set_car_manual_light"
         ]
 
+    async def deliver_speed(self, speed: float) -> None:
+        """Store an answer to ``get_speed`` like PyMammotion's reducer and notify the listeners."""
+        self._device.mower_state.travel_speed = speed
+        await self.emit()
+
     async def deliver_dock_buffer(self, buffer: SystemUpdateBufMsg | None = None) -> None:
         """Apply a dock buffer (default: :func:`dock_buffer`) like PyMammotion's reducer and
         notify the listeners, as when the mower's ``system_update_buf`` arrives."""
@@ -736,6 +751,10 @@ class FakeMammotionPort:
         if command == "read_write_device" and (kwargs or {}).get("rw_id") == 5:
             if self.dock_answer is not None:
                 await self.deliver_dock_buffer(self.dock_answer)
+            return
+        if command == "set_speed":
+            if self.speed_answer is not None:
+                self.speed_answer = float((kwargs or {}).get("speed", 0.0))
             return
         if command == "set_car_manual_light":
             if self.light_answer is not None and self.light_follows_writes:

@@ -60,8 +60,12 @@ DOCK_ARGS = {"rw_id": 5, "context": 1, "rw": 1}
 
 
 def _is_info_request(name: str) -> bool:
-    """The connect-time device information, dock buffer and light read requests."""
-    return name.startswith("get_device_") or name in {"read_write_device", LIGHT_READ_COMMAND}
+    """The connect-time device information, dock buffer, light and drive speed reads."""
+    return name.startswith("get_device_") or name in {
+        "read_write_device",
+        LIGHT_READ_COMMAND,
+        "get_speed",
+    }
 
 
 FRONT = str(FRONT_HASH)

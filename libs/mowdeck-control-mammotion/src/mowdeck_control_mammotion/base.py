@@ -28,6 +28,15 @@ Commands (Mammotion-HA order for ``StartMow``, spike 0001 section 3.3):
                    state, nothing is confirmed here
 ``SetBladeHeight`` ``set_blade_height`` (millimetres)
 ``SetSpeed``       ``set_speed`` (metres per second)
+drive speed        not a command but :meth:`MammotionBase.get_drive_speed` and
+                   :meth:`MammotionBase.set_drive_speed`
+                   (:class:`~mowdeck_control.DriveSpeedCapable`, capability
+                   ``drive_speed_setting``, ADR 0042): the speed setting for manual driving,
+                   ``get_speed`` (a read through :meth:`MammotionPort.send_and_wait`, reply
+                   ``bidire_speed_read_set``, which PyMammotion stores in
+                   ``mower_state.travel_speed``) and ``set_speed`` sent once with
+                   ``Priority.USER`` and read back; a setting, not a drive frame, so a dual
+                   link sends both over the cloud
 ``SetLight``       the camera's headlamp: ``set_car_manual_light(manual_ctrl=on)``, then the
                    read ``get_car_light(ids=1126)`` (PyMammotion's ``mower_api.py``); ``executed``
                    when the answer shows the wanted state, else ``accepted``; allowed during
@@ -224,6 +233,17 @@ FIRMWARE_RECHECK_S: Final = 60.0
 """Wait after an update ended before the vendor is asked again (the cloud lags the mower)."""
 FIRMWARE_CONFIRM_S: Final = 120.0
 """Longest wait for the mower to report a requested update as running."""
+DRIVE_SPEED_READ_COMMAND: Final = "get_speed"
+DRIVE_SPEED_WRITE_COMMAND: Final = "set_speed"
+DRIVE_SPEED_REPLY: Final = "bidire_speed_read_set"
+"""``get_speed`` / ``set_speed`` (``mammotion/commands/messages/driver.py``) build
+``MctlDriver(bidire_speed_read_set=DrvSrSpeed(rw=0))`` and ``DrvSrSpeed(speed, rw=1)``; the
+mower answers with the same field, which PyMammotion's reducer stores in
+``mower_state.travel_speed``."""
+DRIVE_SPEED_READ_TIMEOUT_S: Final = 5.0
+"""Wait per attempt for the answer to ``get_speed`` (PyMammotion sends twice, so about 10 s)."""
+DRIVE_SPEED_SETTLE_S: Final = 1.0
+"""How long a read waits after the answer for the reducer to store it."""
 
 
 async def _cancel(task: asyncio.Task[Any] | None, what: str) -> None:
@@ -659,6 +679,7 @@ class MammotionBase:
             links_supported=self._links_supported(),
             firmware_update=self._firmware_offered(),
             undock=True,
+            drive_speed=self._drive_speed_offered(),
         )
 
     async def get_state(self) -> MowerState:
@@ -788,6 +809,49 @@ class MammotionBase:
             msg = f"transport error: {type(exc).__name__}"
             raise CommandRejected(msg) from exc
 
+    async def get_drive_speed(self) -> float | None:
+        """:class:`~mowdeck_control.DriveSpeedCapable` (ADR 0042): ask the mower for the speed
+        setting for manual driving (``get_speed``) and return what it reports in
+        ``mower_state.travel_speed``; None when it does not answer in time."""
+        self._require_connected()
+        try:
+            await self._port.send_and_wait(
+                DRIVE_SPEED_READ_COMMAND,
+                DRIVE_SPEED_REPLY,
+                priority=Priority.USER,
+                timeout_s=DRIVE_SPEED_READ_TIMEOUT_S,
+            )
+        except CommandTimeoutError:
+            return None
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("no usable link to the mower") from exc
+        except TransportError as exc:
+            msg = f"transport error: {type(exc).__name__}"
+            raise CommandRejected(msg) from exc
+        await self._port.wait_for(
+            lambda device: mapping.drive_speed_of(device) is not None, DRIVE_SPEED_SETTLE_S
+        )
+        speed = mapping.drive_speed_of(self._port.device())
+        if speed is not None:
+            self._publish()
+        return speed
+
+    async def set_drive_speed(self, speed_mps: float) -> None:
+        """:class:`~mowdeck_control.DriveSpeedCapable` (ADR 0042): send ``set_speed`` once,
+        then read the setting back (best effort: the state shows the answer)."""
+        self._require_connected()
+        try:
+            await self._send(DRIVE_SPEED_WRITE_COMMAND, speed=float(speed_mps))
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("no usable link to the mower") from exc
+        except TransportError as exc:
+            msg = f"transport error: {type(exc).__name__}"
+            raise CommandRejected(msg) from exc
+        try:
+            await self.get_drive_speed()
+        except (NotConnected, CommandRejected) as exc:
+            _log.info("drive speed of %s not read back: %s", self._port.device_name, exc)
+
     async def start_drive_session(self) -> DriveSession:
         self._require_connected()
         raise CommandRejected("manual drive is not available over cloud")
@@ -812,6 +876,11 @@ class MammotionBase:
     def _firmware_offered(self) -> bool:
         """Whether the vendor's firmware service is reachable (the cloud connections)."""
         return False
+
+    def _drive_speed_offered(self) -> bool:
+        """Whether the connection can send driver commands (``get_speed`` / ``set_speed``):
+        every Mammotion link can (the cloud, the bridge, and a dual link over the cloud)."""
+        return True
 
     def _links_supported(self) -> list[str]:
         """Additional link kinds this connection can open (``capabilities.links_supported``)."""
