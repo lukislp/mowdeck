@@ -148,7 +148,7 @@
     selectedAreas?: readonly string[];
     /** Tapping an area toggles it in the selection. */
     selectable?: boolean;
-    /** The state is older than the stale threshold (the chevron is drawn hollow). */
+    /** The mower has no live link (offline, ADR 0040; the chevron is drawn hollow). */
     stale?: boolean;
     tiles?: MapTiles | null;
     labels: MowerMapLabels;

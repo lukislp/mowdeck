@@ -35,7 +35,7 @@ export interface FleetMower {
   name: string;
   /** The latest state, or null before the first telemetry. */
   state: MapMowerState | null;
-  /** The state is older than the stale threshold (drawn hollow). */
+  /** The mower has no live link (offline, ADR 0040; drawn hollow). */
   stale?: boolean;
   /** The mower's map snapshot, once loaded (areas are drawn lazily). */
   map?: MapSnapshot | null;

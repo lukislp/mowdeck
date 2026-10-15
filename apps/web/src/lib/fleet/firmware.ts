@@ -51,7 +51,7 @@ export interface UpdateConditions {
   activity: string | null;
   charging: boolean;
   batteryPercent: number | null;
-  /** The state is older than the stale threshold or missing: treated as offline. */
+  /** No live link to the mower (ADR 0040) or no state: treated as offline. */
   stale: boolean;
   /** The user may control the mower (`can_control`). */
   allowed: boolean;

@@ -112,7 +112,7 @@
         id: mower.id,
         name: mower.name,
         state: snap?.state ?? null,
-        stale: states.isStale(mower.id, clock.now),
+        stale: states.isOffline(mower.id, clock.now),
         map: maps.get(mower.id) ?? null,
       };
     }),
@@ -212,7 +212,7 @@
                 label={chosenState
                   ? activityLabel(chosenState.activity as Activity)
                   : m.activity_no_telemetry()}
-                stale={states.isStale(chosen.id, clock.now)}
+                stale={states.isOffline(chosen.id, clock.now)}
               />
               <span class="quiet mono">{siteName.get(chosen.site_id) ?? ''}</span>
             </div>

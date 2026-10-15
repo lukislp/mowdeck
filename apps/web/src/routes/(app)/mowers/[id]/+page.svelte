@@ -62,17 +62,18 @@
     activityLabel,
     commandLabel,
     connectionLabel,
-    formatAge,
     formatClock,
     formatDateTime,
     formatNumber,
     formatTime,
     outcomeLabel,
+    presenceLabel,
     problemMessage,
     rtkFixShort,
     rtkSourceLabel,
     rtkSourceShort,
     type RtkSource,
+    valuesAgeLabel,
   } from '$lib/i18n';
   import { commands, permissions, realtime, revoked, sendCommand } from '$lib/live.svelte';
   import { formatDuration } from '$lib/mower/duration';
@@ -606,7 +607,9 @@
   const snap = $derived(states.get(id));
   const ms = $derived(snap?.state ?? null);
   const activity = $derived((ms?.activity ?? null) as Activity | null);
-  const stale = $derived(states.isStale(id, clock.now));
+  /** No live link from the gateway (ADR 0040); old values of a connected mower are not stale. */
+  const stale = $derived(states.isOffline(id, clock.now));
+  const valuesAge = $derived(ms ? valuesAgeLabel(ms, clock.now) : null);
   const accessEnded = $derived(revoked.has(id));
 
   // Commands from other devices or integrations show up when the activity changes.
@@ -1341,8 +1344,13 @@
           {:else}
             <StatusBadge activity="unknown" label={m.activity_no_telemetry()} size="large" />
           {/if}
-          <span class="age">
-            {ms ? formatAge(ms.observed_at, clock.now) : m.detail_no_telemetry()}
+          <span class="presence">
+            <span class="age" data-testid="mower-presence">
+              {ms ? presenceLabel(ms, clock.now) : m.detail_no_telemetry()}
+            </span>
+            {#if valuesAge}
+              <span class="values-age" data-testid="mower-values-age">{valuesAge}</span>
+            {/if}
           </span>
         </div>
         {#if ms?.error_code}
@@ -2276,10 +2284,25 @@
     padding: var(--md-space-3) var(--md-gutter);
   }
 
+  .presence {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    text-align: right;
+  }
+
   .age {
     color: var(--md-color-ink-muted);
     font-family: var(--md-font-mono);
     font-size: var(--md-font-size-12);
+  }
+
+  .values-age {
+    color: var(--md-color-ink-muted);
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-11);
+    opacity: 0.8;
   }
 
   .readouts {

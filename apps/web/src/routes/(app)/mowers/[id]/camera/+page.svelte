@@ -17,7 +17,7 @@
   import SlowLoading from '$lib/components/SlowLoading.svelte';
   import StopBar from '$lib/components/StopBar.svelte';
   import type { components as Fleet } from '$lib/generated/fleet';
-  import { activityLabel, formatAge, problemMessage } from '$lib/i18n';
+  import { activityLabel, presenceLabel, problemMessage, valuesAgeLabel } from '$lib/i18n';
   import { realtime, revoked } from '$lib/live.svelte';
   import { m } from '$lib/paraglide/messages';
   import { mowers as states } from '$lib/stores/mowers.svelte';
@@ -57,7 +57,7 @@
 
   const ms = $derived(states.get(id)?.state ?? null);
   const activity = $derived((ms?.activity ?? null) as Activity | null);
-  const stale = $derived(states.isStale(id, clock.now));
+  const stale = $derived(states.isOffline(id, clock.now));
 </script>
 
 <svelte:head><title>{m.camera_title()} · {mower?.name ?? m.app_name()}</title></svelte:head>
@@ -87,7 +87,11 @@
       {:else}
         <StatusBadge activity="unknown" label={m.activity_no_telemetry()} />
       {/if}
-      {#if ms}<span class="age mono">{formatAge(ms.observed_at, clock.now)}</span>{/if}
+      {#if ms}
+        {@const valuesAge = valuesAgeLabel(ms, clock.now)}
+        <span class="age mono">{presenceLabel(ms, clock.now)}</span>
+        {#if valuesAge}<span class="age mono values-age">{valuesAge}</span>{/if}
+      {/if}
     </div>
     <div class="pad">
       {#key id}
@@ -134,5 +138,10 @@
   .age {
     color: var(--md-color-ink-muted);
     font-size: var(--md-font-size-13);
+  }
+
+  .values-age {
+    font-size: var(--md-font-size-12);
+    opacity: 0.8;
   }
 </style>

@@ -118,7 +118,7 @@
     docked: () => m.mowers_filter_docked(),
   };
   const passes = (filter: QuickFilter, row: (typeof rows)[number]) =>
-    passesQuick(filter, row.snap?.state.activity, states.isStale(row.mower.id, clock.now));
+    passesQuick(filter, row.snap?.state.activity, states.isOffline(row.mower.id, clock.now));
   const counts = $derived(
     Object.fromEntries(
       QUICK_FILTERS.map((f) => [f, rows.filter((row) => passes(f, row)).length]),
@@ -235,7 +235,7 @@
       rtk={(st?.rtk_fix ?? 'unknown') as RtkFix}
       rtkLabel={rtkLabel((st?.rtk_fix ?? 'unknown') as RtkFix)}
       age={st ? formatAge(st.observed_at, clock.now) : m.no_data()}
-      stale={states.isStale(mower.id, clock.now)}
+      stale={states.isOffline(mower.id, clock.now)}
       error={st?.error_code ? `${st.error_code} ${st.error_message ?? ''}`.trim() : null}
     />
   {/snippet}
