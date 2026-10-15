@@ -10,7 +10,7 @@ export type BarCommand = 'start' | 'pause' | 'resume' | 'dock';
 export interface Availability {
   enabled: boolean;
   /** Why it is disabled: a key of the reason messages. */
-  reason: 'start' | 'pause' | 'resume' | 'dock' | 'offline' | null;
+  reason: 'start' | 'pause' | 'resume' | 'dock' | 'offline' | 'updating' | null;
 }
 
 const AT_REST: ReadonlySet<Activity> = new Set(['docked', 'charging', 'idle']);
@@ -21,6 +21,8 @@ export function availability(command: BarCommand, activity: Activity | null): Av
   if (activity === null || activity === 'offline' || activity === 'unknown') {
     return { enabled: false, reason: 'offline' };
   }
+  // A firmware update: the controller refuses everything but the emergency stop meanwhile.
+  if (activity === 'updating') return { enabled: false, reason: 'updating' };
   const ok = (enabled: boolean, reason: Availability['reason']): Availability =>
     enabled ? { enabled: true, reason: null } : { enabled: false, reason };
   switch (command) {

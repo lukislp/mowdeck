@@ -7,7 +7,7 @@
  * The input types are structural copies of the contracts (`MowerMap`, `MowerState`,
  * `PositionOut`), so the library does not depend on generated API types.
  */
-import { ACTIVITIES, activityTone, type Activity } from '../types';
+import { ACTIVITIES, activityTone, type Activity, type ActivityTone } from '../types';
 
 import type { GeoReference } from './geo';
 import type { MapCoord, Projection } from './projection';
@@ -127,7 +127,7 @@ export interface MowerLayer {
   at: MapCoord;
   /** Screen rotation of the chevron, or null when the heading is unknown (drawn as a dot). */
   rotation: number | null;
-  tone: Exclude<Activity, 'idle'>;
+  tone: ActivityTone;
   /** Stale, offline or without an RTK fix: drawn hollow and dashed. */
   hollow: boolean;
   /** No RTK fix and not the dock pose (`isPositionInexact`). */

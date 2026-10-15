@@ -14,7 +14,6 @@
     kindHint,
     kindLabel,
     USER_KINDS,
-    type NotificationKind,
   } from '$lib/notifications/kinds';
   import { inbox, pushDevice } from '$lib/notifications/runtime';
   import { m } from '$lib/paraglide/messages';
@@ -51,7 +50,9 @@
   let saveProblem = $state<ApiProblem | null>(null);
 
   const offeredKinds = $derived(
-    USER_KINDS.filter((k) => prefs?.available_kinds.includes(k) ?? false),
+    USER_KINDS.filter(
+      (k) => (prefs?.available_kinds as string[] | undefined)?.includes(k) ?? false,
+    ),
   );
 
   function show(found: Preferences): void {
@@ -81,7 +82,7 @@
           body: {
             enabled_kinds: Object.entries(kinds)
               .filter(([, on]) => on)
-              .map(([kind]) => kind as NotificationKind),
+              .map(([kind]) => kind as components['schemas']['NotificationKind']),
             all_mowers: allMowers,
             mower_ids: allMowers
               ? []

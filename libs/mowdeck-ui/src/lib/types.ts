@@ -9,17 +9,26 @@ export const ACTIVITIES = [
   'charging',
   'error',
   'offline',
+  'updating',
   'unknown',
 ] as const;
 
 export type Activity = (typeof ACTIVITIES)[number];
 
+/** The state colour families: every activity maps to one of these tokens (`--md-state-*`). */
+export type ActivityTone = Exclude<Activity, 'idle' | 'updating'>;
+
 /** RTK fix quality as in the contracts (`RtkFixStatus`). */
 export type RtkFix = 'fixed' | 'float' | 'none' | 'unknown';
 
-/** The state colour family used for an activity (idle shares the neutral docked tone). */
-export function activityTone(activity: Activity): Exclude<Activity, 'idle'> {
-  return activity === 'idle' ? 'docked' : activity;
+/**
+ * The state colour family used for an activity: idle shares the neutral docked tone, a firmware
+ * update (the mower stands docked and charging while it runs) the charging tone.
+ */
+export function activityTone(activity: Activity): ActivityTone {
+  if (activity === 'idle') return 'docked';
+  if (activity === 'updating') return 'charging';
+  return activity;
 }
 
 /** One command button of the command bar. Texts arrive translated. */
