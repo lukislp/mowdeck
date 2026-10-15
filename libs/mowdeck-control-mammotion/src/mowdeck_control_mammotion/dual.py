@@ -36,8 +36,9 @@ at the bridge; every link change publishes a state.
 What stays the cloud's: ``is_connected`` (a lost bridge does not end the connection, a dead
 cloud login does), the camera, the firmware service. What needs the bridge: manual driving
 (``capabilities.manual_drive`` follows the proxy link;
-:meth:`MammotionDualConnection.start_drive_session` connects Bluetooth on demand and refuses
-when it does not come up, and an open session ends when Bluetooth drops: a frame never falls
+:meth:`MammotionDualConnection.start_drive_session` connects Bluetooth on demand and raises
+``NotConnected`` without the bridge or when Bluetooth does not come up, so a spot run or a
+calibration ends ``link_lost``; an open session ends when Bluetooth drops: a frame never falls
 back to the cloud). A bridge scan
 (:meth:`MammotionDualConnection.scan_bridge`) for the bridge this connection holds is answered
 from the live scanner, so a "re-check" never opens a second API client to the proxy.
@@ -59,7 +60,7 @@ from mowdeck_contracts.v1 import (
     ProxyInfo,
     utc_now,
 )
-from mowdeck_control import CommandRejected, ConnectionConfig, DriveSession
+from mowdeck_control import ConnectionConfig, DriveSession, NotConnected
 
 from mowdeck_control_mammotion import mapping
 from mowdeck_control_mammotion.cloud import BridgeScanner, MammotionCloudConnection
@@ -410,7 +411,7 @@ class MammotionDualConnection(MammotionCloudConnection):
     async def start_drive_session(self) -> DriveSession:
         self._require_connected()
         if not self._watcher.proxy_up:
-            raise CommandRejected(BRIDGE_NOT_CONNECTED)
+            raise NotConnected(BRIDGE_NOT_CONNECTED)
         self._require_no_sensor_stop()
         if self._session is not None and self._session.is_open:
             await self._session.close()
@@ -440,7 +441,7 @@ class MammotionDualConnection(MammotionCloudConnection):
         deadline = loop.time() + self._attach_timeout_s
         while not self.ble_connected():
             if loop.time() >= deadline or not self._watcher.proxy_up:
-                raise CommandRejected(BLE_NOT_UP)
+                raise NotConnected(BLE_NOT_UP)
             await asyncio.sleep(0.05)
 
     def _sensor_stop_reason(self) -> str | None:

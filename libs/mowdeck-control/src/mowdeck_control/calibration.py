@@ -83,6 +83,7 @@ from mowdeck_control.spot_run import (
     Pose,
     pose_of,
     refusal_reason,
+    weak_link_problem,
 )
 
 _log = logging.getLogger("mowdeck_control.calibration")
@@ -190,7 +191,8 @@ def room_ahead_problem(
 def calibration_start_problem(state: MowerState, *, now: datetime) -> str | None:
     """Why a calibration must not start from ``state`` (besides the room ahead), or None: an
     idle mower out of its dock, a state at most 60 s old, a fixed RTK position, enough
-    battery."""
+    battery, and no drive link reporting a signal below
+    :data:`~mowdeck_contracts.v1.LINK_MIN_RSSI_DBM` (:func:`weak_link_problem`)."""
     if state.activity is not MowerActivity.IDLE:
         return f"the mower is {state.activity.value}; a calibration needs it idle out of its dock"
     age = (now - state.observed_at).total_seconds()
@@ -200,7 +202,7 @@ def calibration_start_problem(state: MowerState, *, now: datetime) -> str | None
         return f"no fixed RTK position (the fix is {state.rtk_fix.value})"
     if state.battery_percent <= 20:
         return f"battery {state.battery_percent} % is too low for a calibration"
-    return None
+    return weak_link_problem(state)
 
 
 class DriveCalibrationRun:

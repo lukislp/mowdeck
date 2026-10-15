@@ -9,6 +9,13 @@ import type { components as Telemetry } from '$lib/generated/telemetry';
 import { formatNumber } from '$lib/i18n';
 import { m } from '$lib/paraglide/messages';
 
+import {
+  bridgeSignal,
+  linkLostLabel,
+  signalCondition,
+  signalConditionHint,
+  signalConditionText,
+} from './drive-link';
 import { isOnline } from './presence';
 import { isSpotRunActive, type SpotRunStatus } from './spot-sheet';
 
@@ -56,7 +63,7 @@ export function calibrationStateLabel(state: DriveCalibrationState): string {
   }
 }
 
-function reasonCodeLabel(code: string): string | null {
+function reasonCodeLabel(code: string, bridge: boolean): string | null {
   switch (code) {
     case 'stopped_by_user':
       return m.calib_reason_stopped_by_user();
@@ -71,7 +78,7 @@ function reasonCodeLabel(code: string): string | null {
     case 'activity_change':
       return m.calib_reason_activity_change();
     case 'link_lost':
-      return m.calib_reason_link_lost();
+      return linkLostLabel(bridge, m.calib_reason_link_lost);
     case 'frame_rejected':
       return m.calib_reason_frame_rejected();
     case 'no_fit':
@@ -85,15 +92,19 @@ function reasonCodeLabel(code: string): string | null {
 
 /**
  * Why a calibration ended, in words. The gateway sends `code` or `code: detail`; a known code is
- * translated and its detail kept in brackets, an unknown reason is shown as it came.
+ * translated and its detail kept in brackets, an unknown reason is shown as it came. `bridge`:
+ * the mower drives over the Bluetooth bridge, so a lost drive link names it.
  */
-export function calibrationReasonLabel(reason: string | null | undefined): string | null {
+export function calibrationReasonLabel(
+  reason: string | null | undefined,
+  { bridge = false }: { bridge?: boolean } = {},
+): string | null {
   const text = reason?.trim() ?? '';
   if (text === '') return null;
   const colon = text.indexOf(': ');
   const code = colon < 0 ? text : text.slice(0, colon);
   const detail = colon < 0 ? '' : text.slice(colon + 2).trim();
-  const label = reasonCodeLabel(code);
+  const label = reasonCodeLabel(code, bridge);
   if (label === null) return text;
   return detail ? `${label} (${detail})` : label;
 }
@@ -348,15 +359,21 @@ export function speedSettingDiffers(
 
 // --- start conditions ------------------------------------------------------------------------------
 
-export type CalibConditionId = 'idle' | 'rtk' | 'fresh' | 'battery' | 'manual' | 'free';
+export type CalibConditionId = 'idle' | 'rtk' | 'fresh' | 'battery' | 'manual' | 'signal' | 'free';
 
 export interface CalibCondition {
   id: CalibConditionId;
   ok: boolean;
+  /** Not known yet: shown neutral, never blocks (the bridge signal without a value). */
+  neutral?: boolean;
+  /** The bridge signal in dBm (`signal`). */
+  rssi?: number | null;
 }
 
 /** The parts of a mower state the conditions read (`MowerState` of Telemetry). */
 export interface CalibConditionState {
+  connection: string;
+  links?: Record<string, { connected: boolean; rssi?: number | null } | undefined> | null;
   activity: string;
   rtk_fix: string;
   position_source: string;
@@ -383,6 +400,7 @@ export interface CalibConditionInput {
 export function calibrationConditions(input: CalibConditionInput): CalibCondition[] {
   const s = input.state;
   const age = s ? input.now - Date.parse(s.observed_at) : Number.POSITIVE_INFINITY;
+  const signal = bridgeSignal(s);
   return [
     { id: 'idle', ok: s?.activity === 'idle' },
     { id: 'rtk', ok: !!s && s.rtk_fix === 'fixed' && s.position_source === 'rtk' },
@@ -392,6 +410,8 @@ export function calibrationConditions(input: CalibConditionInput): CalibConditio
     },
     { id: 'battery', ok: !!s && s.battery_percent > CALIB_BATTERY_MIN_PERCENT },
     { id: 'manual', ok: input.manualDrive === true },
+    // Only when the bridge carries the driving; the gateway refuses below LINK_MIN_RSSI_DBM.
+    ...(signal ? [signalCondition(signal)] : []),
     {
       id: 'free',
       ok: !!s && !isSpotRunActive(s.spot_run) && !isCalibrationActive(s.drive_calibration),
@@ -411,9 +431,25 @@ export function calibConditionLabel(id: CalibConditionId): string {
       return m.calib_cond_battery();
     case 'manual':
       return m.calib_cond_manual();
+    case 'signal':
+      return signalConditionText({});
     case 'free':
       return m.calib_cond_free();
   }
+}
+
+/** The words of a condition row with its value (the bridge signal shows its dBm). */
+export function calibConditionText(condition: CalibCondition): string {
+  return condition.id === 'signal'
+    ? signalConditionText(condition)
+    : calibConditionLabel(condition.id);
+}
+
+/** The line under a row, or null: why the bridge signal is red or neutral. */
+export function calibConditionHint(condition: CalibCondition): string | null {
+  return condition.id === 'signal'
+    ? signalConditionHint({ ...condition, id: 'signal', rssi: condition.rssi ?? null })
+    : null;
 }
 
 /** Start only with every checkable row green, the free room confirmed and the permission. */

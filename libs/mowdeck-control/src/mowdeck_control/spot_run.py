@@ -74,6 +74,7 @@ from typing import Final, Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    LINK_MIN_RSSI_DBM,
     MAX_SPOT_MOW_SPEED_MPS,
     SPOT_REASON_STALLED,
     CommandStatus,
@@ -389,8 +390,10 @@ class FrameChannel(Protocol):
     ) -> str | None:
         """Send one frame; None when it was accepted, else why it was refused (ends the run).
 
-        A refusal that starts with ``failed`` (the link) ends the run ``link_lost``, one that
-        names a sensor stop ends it ``sensor_stop``, any other ``frame_rejected``.
+        A refusal that starts with ``failed`` (the drive link is not available or was lost:
+        the adapter raised ``NotConnected``, or the frame was refused while the state reports a
+        link down) ends the run ``link_lost``, one that names a sensor stop ends it
+        ``sensor_stop``, any other ``frame_rejected``.
         """
         ...
 
@@ -1405,7 +1408,9 @@ def spot_start_problem(
     """Why a spot run must not start from ``state``, or None: the mower stands idle (no job, no
     error), or docked when the connection can undock it (``undock``, ADR 0041), its state is at
     most ``max_state_age_s`` old and the battery is above ``min_battery_percent``. Live
-    positions are the run's job (it waits for them)."""
+    positions are the run's job (it waits for them). A drive link that reports a signal
+    below :data:`~mowdeck_contracts.v1.LINK_MIN_RSSI_DBM` refuses the start
+    (:func:`weak_link_problem`)."""
     docked_ok = undock and state.activity in DOCKED_ACTIVITIES
     if state.activity is not MowerActivity.IDLE and not docked_ok:
         if state.activity in DOCKED_ACTIVITIES:
@@ -1419,6 +1424,19 @@ def spot_start_problem(
         return f"the mower's state is {age:.0f} s old; wait for a fresh report"
     if state.battery_percent <= min_battery_percent:
         return f"battery {state.battery_percent} % is too low for a spot run"
+    return weak_link_problem(state)
+
+
+def weak_link_problem(state: MowerState) -> str | None:
+    """Why the mower's additional links (``state.links``, the drive link of a bridge) are too
+    weak to carry a drive session, or None: a link that reports the mower's signal below
+    :data:`~mowdeck_contracts.v1.LINK_MIN_RSSI_DBM`. An unknown signal does not block."""
+    for kind, link in sorted(state.links.items()):
+        if link.rssi is not None and link.rssi < LINK_MIN_RSSI_DBM:
+            return (
+                f"the mower's signal at the {kind} link is {link.rssi} dBm, below "
+                f"{LINK_MIN_RSSI_DBM} dBm; bring the bridge closer to the mower"
+            )
     return None
 
 
@@ -1451,4 +1469,5 @@ __all__ = [
     "refusal_reason",
     "spot_start_problem",
     "transit_start",
+    "weak_link_problem",
 ]

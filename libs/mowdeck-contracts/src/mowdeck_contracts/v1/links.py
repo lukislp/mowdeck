@@ -41,6 +41,12 @@ the Device-Gateway knows when to fetch them again (``credentials: "fleet"`` mark
 see :data:`~mowdeck_contracts.v1.fleet.CREDENTIALS_OPTION`)."""
 BRIDGE_SCAN_MAX_TIMEOUT_S: Final = 30
 """Longest a bridge scan may wait for the mower's advertisement."""
+LINK_MIN_RSSI_DBM: Final = -90
+"""Weakest signal of the mower at a link's bridge (``LinkStatus.rssi``, dBm) that still carries a
+drive session. A spot run or a drive calibration does not start below it (the Device-Gateway's
+start checks); the web app mirrors it as the start condition "Bluetooth signal sufficient". An
+unknown signal does not block. Measured on a bridge: at -97 dBm the Bluetooth link to the mower
+did not come up, at -74 dBm it did."""
 
 
 class LinkStatus(ContractModel):

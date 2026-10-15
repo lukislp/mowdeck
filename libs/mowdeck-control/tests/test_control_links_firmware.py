@@ -29,6 +29,7 @@ from mowdeck_control import (
     ConnectionConfig,
     FirmwarePort,
     MowerController,
+    NotConnected,
     SimulatedMower,
     SimulationConfig,
     bridge_scanner_of,
@@ -87,13 +88,15 @@ async def test_control_bridge_switch_flips_manual_drive_and_connection() -> None
     session = await mower.start_drive_session()
     mower.set_bridge(False)
     assert not session.is_open  # the frames would have nowhere to go
+    with pytest.raises(NotConnected, match="bridge is not connected"):
+        await session.update(0.5, 0.0, blade_on=False)  # the drive link dropped
     caps = await mower.capabilities()
     assert caps.manual_drive is False and caps.manual_drive_blades is False
     state = await mower.get_state()
     assert state.connection is ConnectionKind.SIMULATED
     assert state.links[LINK_BLE_BRIDGE].connected is False
     assert state.links[LINK_BLE_BRIDGE].rssi is None
-    with pytest.raises(CommandRejected, match="bridge is not connected"):
+    with pytest.raises(NotConnected, match="bridge is not connected"):
         await mower.start_drive_session()
 
     mower.set_bridge(True)

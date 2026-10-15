@@ -22,6 +22,8 @@
     /** A run that ended while this page watched it, or null. */
     ended: SpotRunStatus | null;
     rtkFix: string | null | undefined;
+    /** The mower drives over the Bluetooth bridge (a lost drive link names it). */
+    bridge?: boolean;
     stopping: boolean;
     onstop: () => void;
     /** "Nachmähen" again is offered when given. */
@@ -36,6 +38,7 @@
     run,
     ended,
     rtkFix,
+    bridge = false,
     stopping,
     onstop,
     onremow = null,
@@ -103,8 +106,10 @@
         <span class="badge" data-blades={run.dry_run ? 'off' : 'on'} data-testid="spot-run-blades"
           >{run.dry_run ? m.spot_run_dry() : m.spot_run_blades_on()}</span
         >
-        {#if spotReasonLabel(run.reason)}
-          <span class="reason" data-testid="spot-run-reason">{spotReasonLabel(run.reason)}</span>
+        {#if spotReasonLabel(run.reason, { bridge })}
+          <span class="reason" data-testid="spot-run-reason"
+            >{spotReasonLabel(run.reason, { bridge })}</span
+          >
         {/if}
       </div>
     </div>
@@ -140,9 +145,9 @@
             ? m.spot_end_aborted()
             : m.spot_end_failed()}
       </strong>
-      {#if spotReasonLabel(ended.reason)}
+      {#if spotReasonLabel(ended.reason, { bridge })}
         <span data-testid="spot-end-reason"
-          >{m.spot_end_reason({ reason: spotReasonLabel(ended.reason) ?? '' })}</span
+          >{m.spot_end_reason({ reason: spotReasonLabel(ended.reason, { bridge }) ?? '' })}</span
         >
       {/if}
       <span class="mono">
