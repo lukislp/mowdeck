@@ -14,6 +14,7 @@ PyMammotion's ``MowPathSaga`` (:func:`install_mow_path`).
 import asyncio
 import contextlib
 import math
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Final
@@ -47,6 +48,7 @@ from mowdeck_control_mammotion.port import (
     SystemUpdateBufMsg,
     VideoResourceResponse,
     WorkMode,
+    bridge_route,
     model_of,
 )
 
@@ -293,6 +295,8 @@ class SentCommand:
     kwargs: dict[str, Any] = field(default_factory=dict)
     expected_field: str | None = None
     """The reply field of a :meth:`FakeMammotionPort.send_and_wait`; None for a plain send."""
+    link: str = "cloud"
+    """The link that carried it (``cloud`` or ``ble``, :func:`~.port.bridge_route`)."""
 
     @property
     def via(self) -> str:
@@ -387,6 +391,12 @@ class FakeMammotionPort:
         """The RSSI reported while the bridge is attached (``None``: unknown)."""
         self.attached = 0
         self.detached = 0
+        self.report_links: list[str] = []
+        """The link of every report request (``ensure_fresh``, ``refresh``, report stream)."""
+        self.report_at = 0.0
+        """What :meth:`report_received_at` answers (:meth:`emit` sets it)."""
+        self.drive_open: Callable[[], bool] | None = None
+        """Set by :meth:`route_bridge` (cloud-first routing on)."""
         self.firmware_check: CheckDeviceVersion | None = None
         """What :meth:`check_firmware` answers (None: the cloud API is not available)."""
         self.firmware_check_error: Exception | None = None
@@ -468,9 +478,23 @@ class FakeMammotionPort:
 
         return unsubscribe
 
+    def _route(self, command: str | None) -> str:
+        return bridge_route(
+            command,
+            cloud_first=self.drive_open is not None,
+            ble_connected=self.ble_connected(),
+            drive_open=self.drive_open is not None and self.drive_open(),
+        )
+
+    def report_received_at(self) -> float:
+        return self.report_at
+
+    def route_bridge(self, drive_open: Callable[[], bool] | None) -> None:
+        self.drive_open = drive_open
+
     async def send(self, command: str, *, priority: Priority, **kwargs: Any) -> None:
         self._check(command)
-        self.sent.append(SentCommand(command, priority, dict(kwargs)))
+        self.sent.append(SentCommand(command, priority, dict(kwargs), link=self._route(command)))
         await self._apply(command, kwargs)
 
     async def send_and_wait(
@@ -483,7 +507,9 @@ class FakeMammotionPort:
         **kwargs: Any,
     ) -> Any:
         self._check(command)
-        self.sent.append(SentCommand(command, priority, dict(kwargs), expected_field))
+        self.sent.append(
+            SentCommand(command, priority, dict(kwargs), expected_field, self._route(command))
+        )
         if command == "get_car_light" and kwargs.get("ids") == 1126:
             if self.light_answer is None:
                 raise CommandTimeoutError(expected_field, 2)
@@ -509,15 +535,18 @@ class FakeMammotionPort:
 
     async def refresh(self) -> None:
         self.refreshes += 1
+        self.report_links.append(self._route(None))
         await self.emit()
 
     async def ensure_fresh(self, max_age_s: float) -> None:
         self.fresh_requests.append(max_age_s)
+        self.report_links.append(self._route(None))
         if self._open:
             await self.emit()
 
     async def start_report_stream(self, duration_ms: int) -> None:
         self.report_stream_requests.append(duration_ms)
+        self.report_links.append(self._route(None))
         if self._open:
             await self.emit()
 
@@ -691,6 +720,7 @@ class FakeMammotionPort:
 
     async def emit(self) -> None:
         """Notify every listener, as PyMammotion does after a new report."""
+        self.report_at = time.monotonic()
         self._emitted.set()
         for listener in list(self._listeners):
             await listener()

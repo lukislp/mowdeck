@@ -221,6 +221,9 @@ class BleProxyOptions:
     refresh_seconds: float = DEFAULT_REFRESH_SECONDS
     refresh_seconds_active: float = DEFAULT_ACTIVE_REFRESH_SECONDS
     report_stream_seconds: float = DEFAULT_REPORT_STREAM_SECONDS
+    fast_position: bool = True
+    """Dual link only (ADR 0038, link roles): while mowing or returning the bridge also carries
+    the continuous Bluetooth report stream (on top of the cloud polling)."""
 
     def __repr__(self) -> str:  # never print the key
         return (
@@ -251,6 +254,7 @@ class BleProxyOptions:
                     "refresh_seconds",
                     "refresh_seconds_active",
                     "report_stream_seconds",
+                    "fast_position",
                 }
             ),
         )
@@ -283,4 +287,5 @@ class BleProxyOptions:
                 options, "refresh_seconds_active", DEFAULT_ACTIVE_REFRESH_SECONDS, 2.0, 60.0
             ),
             report_stream_seconds=_report_stream(options),
+            fast_position=_bool(options, "fast_position", True),
         )

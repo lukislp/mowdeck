@@ -286,6 +286,8 @@ class MammotionBase:
         self._broadcaster = StateBroadcaster()
         self._connected = False
         self._port_held = False
+        self._report_seen = 0.0
+        """:meth:`MammotionPort.report_received_at` of the last report the loop published."""
         """True from the first open attempt until the port is closed again (also when the
         connect failed or was cancelled half way): :meth:`disconnect` then still closes it."""
         self._unsubscribe: Callable[[], None] | None = None
@@ -490,6 +492,7 @@ class MammotionBase:
                     continue  # activity changed: work out the wait again
             if not self._connected:
                 return
+            self._publish_new_report()
             last = loop.time()
             try:
                 if mode == "drive":
@@ -508,6 +511,15 @@ class MammotionBase:
                     await self._port.refresh()  # user path: no debounce, no queue
             except Exception:  # the loop never dies on a failed request
                 _log.debug("fresh state request failed", exc_info=True)
+
+    def _publish_new_report(self) -> None:
+        """Publish when a report arrived since the last tick, also one that changed nothing:
+        PyMammotion signals only changed states, and a docked mower's reports often repeat,
+        so without this ``observed_at`` would stand still although the mower answers."""
+        seen = self._port.report_received_at()
+        if seen > self._report_seen:
+            self._report_seen = seen
+            self._publish()
 
     async def _drive_poll(self) -> None:
         """One tick of the ``drive`` mode: renew the report window when half of it passed and
