@@ -27,7 +27,7 @@ No I/O, only `pydantic`. Everything is versioned under `mowdeck_contracts.v1`:
 - `principal`: `Principal` mirrors the claims of the Identity access token.
 - `module`: `ModuleDescriptor`, served by every service at `/.well-known/mowdeck-module`.
 - `problem`: RFC 9457 `ProblemDetails`.
-- `spot`: `SpotMowPlan` (segments as encoded polylines, SHA-256 `plan_hash`, optional `native` job) for `StartMow.spot_plan`, `encode_polyline` / `decode_polyline` ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)).
+- `spot`: `SpotMowPlan` (segments as encoded polylines, SHA-256 `plan_hash`, optional `native` job) for `StartMow.spot_plan` and `SpotMow.plan`, `encode_polyline` / `decode_polyline` ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)); `SpotRunStatus` (`MowerState.spot_run`) and `MAX_SPOT_MOW_SPEED_MPS` for spot runs driven by MowDeck ([ADR 0039](../adr/0039-spot-mowing-by-mowdeck-driven-paths.md)).
 - `positions`: `PositionTrackRequest` / `PositionTrackReply` for the track query `tracks.positions.query` (Telemetry).
 - `subjects`: `command_subject(id)`, `telemetry_subject(id)`, `event_subject(domain, name)`, wildcards, the request subject `FLEET_MOWERS_LIST` and the streams `COMMANDS`, `TELEMETRY`, `EVENTS`.
 
@@ -146,6 +146,7 @@ flowchart LR
 | `plan_to_native_job` | neutral request (areas, pattern, angle, spacing, border laps) to a native job, `UnsupportedPattern` otherwise |
 | `geo` | local metres to WGS84 and back, point in polygon |
 | `testing` | `ManualClock` and `ManualTimers` to test timing without sleeping |
+| `SpotMowRun` | spot mowing driven by MowDeck ([ADR 0039](../adr/0039-spot-mowing-by-mowdeck-driven-paths.md)): drives a Planner plan with joystick frames through the controller (`SpotMow`, rule 12), with a `Geofence` from the map, pure-pursuit steering, RTK pauses and aborts; reads only the neutral state |
 
 ```python
 from mowdeck_control import MowerController, SimulatedMower
@@ -194,7 +195,9 @@ async with MowerController(connection, mower_id=mower_id) as controller:
     result = await controller.handle(envelope)
 ```
 
-The owner script `libs/mowdeck-control-mammotion/scripts/try_real_mower.py` runs the adapter against the real mower (or `--dry-run` against the fake); see "Testing with a real mower" in `libs/mowdeck-control-mammotion/README.md`.
+While a drive session is open the refresh loop keeps the report window open and polls for an undebounced report whenever none arrived for a second, so spot runs (ADR 0039) get a pose about once a second.
+
+The owner script `libs/mowdeck-control-mammotion/scripts/try_real_mower.py` runs the adapter against the real mower (or `--dry-run` against the fake), including `--turn-check` and `--spot-dry-run` for spot mowing; see "Testing with a real mower" in `libs/mowdeck-control-mammotion/README.md`.
 
 ## mowdeck-authz
 

@@ -42,3 +42,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0036](0036-native-app-shells-with-capacitor.md) | Native app shells with Capacitor, loading the web app from the server | Accepted |
 | [0037](0037-camera-panorama-calibration.md) | Camera panorama calibration in the browser, with the AI supplying points only | Superseded |
 | [0038](0038-dual-link-per-mower-and-firmware-updates.md) | Dual link per mower (cloud plus Bluetooth bridge) and firmware updates | Accepted |
+| [0039](0039-spot-mowing-by-mowdeck-driven-paths.md) | Spot mowing by MowDeck-driven paths | Accepted |
