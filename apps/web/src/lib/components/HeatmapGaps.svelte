@@ -2,8 +2,9 @@
   Missed spots of the coverage layer, under the map: largest first with their area in m². A
   row highlights its spot on the map; the selected row offers the follow-ups:
 
-  - "Nachmähen" (re-mow just this spot) stays disabled with its reason shown: the app has no
-    spot-mowing start yet, and the area start takes area ids, not a polygon.
+  - "Nachmähen" (re-mow just this spot) opens the spot sheet with the spot's polygon when the
+    viewer may drive the mower and it drives manually (`canSpot`); otherwise it stays disabled
+    with its reason shown.
   - "Bereich mähen" opens the area start with the area around the spot chosen (when the
     viewer may start and the spot lies inside a mapped area).
 -->
@@ -24,9 +25,22 @@
     /** The viewer may start a job now. */
     canStart: boolean;
     onmowarea: (areaId: string) => void;
+    /** The viewer may drive the mower and it drives manually: spot mowing is offered. */
+    canSpot?: boolean;
+    /** "Nachmähen": the spot's polygon goes to the spot sheet. */
+    onremow?: (gap: HeatGap) => void;
   }
 
-  let { gaps, selected, onselect, areaOf, canStart, onmowarea }: Props = $props();
+  let {
+    gaps,
+    selected,
+    onselect,
+    areaOf,
+    canStart,
+    onmowarea,
+    canSpot = false,
+    onremow,
+  }: Props = $props();
 
   const uid = $props.id();
   const total = $derived(gaps.reduce((sum, g) => sum + g.gap.area_m2, 0));
@@ -65,15 +79,25 @@
           </button>
           {#if active}
             <div class="actions">
-              <span class="disabled-wrap" title={m.heat_gap_remow_unavailable()}>
+              {#if canSpot && onremow}
                 <button
                   type="button"
-                  class="act"
-                  disabled
-                  aria-describedby="{uid}-why"
-                  data-testid="heatmap-gap-remow">{m.heat_gap_remow()}</button
+                  class="act act--go"
+                  title={m.heat_gap_remow_hint()}
+                  data-testid="heatmap-gap-remow"
+                  onclick={() => onremow(item.gap)}>{m.heat_gap_remow()}</button
                 >
-              </span>
+              {:else}
+                <span class="disabled-wrap" title={m.heat_gap_remow_unavailable()}>
+                  <button
+                    type="button"
+                    class="act"
+                    disabled
+                    aria-describedby="{uid}-why"
+                    data-testid="heatmap-gap-remow">{m.heat_gap_remow()}</button
+                  >
+                </span>
+              {/if}
               {#if around && canStart}
                 <button
                   type="button"
@@ -90,7 +114,9 @@
                 data-testid="heatmap-gap-clear"
                 onclick={() => onselect(null)}>{m.heat_gap_clear()}</button
               >
-              <p class="why" id="{uid}-why">{m.heat_gap_remow_unavailable()}</p>
+              {#if !(canSpot && onremow)}
+                <p class="why" id="{uid}-why">{m.heat_gap_remow_unavailable()}</p>
+              {/if}
             </div>
           {/if}
         </li>

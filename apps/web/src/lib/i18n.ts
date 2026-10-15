@@ -165,6 +165,10 @@ export function commandLabel(
       return m.command_set_light();
     case 'firmware_update':
       return m.command_firmware_update();
+    case 'spot_mow':
+      return m.command_spot_mow();
+    case 'spot_stop':
+      return m.command_spot_stop();
     case 'manual_drive':
       return m.command_manual_drive();
   }

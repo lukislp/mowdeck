@@ -34,6 +34,7 @@
     apiFetch,
     fleetApi,
     fleetSlowApi,
+    plannerApi,
     schedulerApi,
     telemetryApi,
     unwrap,
@@ -52,6 +53,8 @@
   import PlanBanner from '$lib/components/PlanBanner.svelte';
   import RainReadout from '$lib/components/RainReadout.svelte';
   import SlowLoading from '$lib/components/SlowLoading.svelte';
+  import SpotRunBar from '$lib/components/SpotRunBar.svelte';
+  import SpotSheet from '$lib/components/SpotSheet.svelte';
   import ToneBadge from '$lib/components/ToneBadge.svelte';
   import { loadConfig, type MapTilesConfig } from '$lib/config';
   import type { components as Fleet } from '$lib/generated/fleet';
@@ -107,6 +110,7 @@
     windowStart,
     type RouteWindow,
   } from '$lib/mower/route';
+  import { SpotSheetFlow } from '$lib/mower/spot-sheet.svelte';
   import { StartSheetFlow } from '$lib/mower/start-sheet.svelte';
   import { jobActive, rainStatusOf } from '$lib/mower/start-sheet';
   import { assistProposal } from '$lib/notifications/kinds';
@@ -150,6 +154,8 @@
     path_spacing_range_mm?: number[] | null;
     model?: string | null;
     manual_drive?: boolean;
+    manual_drive_blades?: boolean;
+    links_supported?: string[];
     camera?: string;
     light?: boolean;
   };
@@ -269,6 +275,33 @@
           : null,
     }),
   });
+
+  // Spot mowing (ADR 0039): the spot on the map, the sheet's settings, the Planner preview, the
+  // start conditions, the start and the run bar: `$lib/mower/spot-sheet.svelte` holds the flow,
+  // this page the API calls. The Planner plans the spot; the gateway drives the plan.
+  const spotFlow = new SpotSheetFlow({
+    preview: (request, signal) =>
+      unwrap(plannerApi.POST('/api/v1/planner/plans/preview', { body: request, signal })),
+    plan: (request) => unwrap(plannerApi.POST('/api/v1/planner/plans', { body: request })),
+    command: (command) => sendCommand(id, command),
+    paths: {
+      replace: (seed) => {
+        dropPath(false);
+        lastPath = seed;
+      },
+    },
+    now: () => clock.now,
+    context: () => ({
+      mowerId: id,
+      reference: mowerMap?.reference ?? null,
+      areas: mowerMap?.areas ?? [],
+      capabilities: caps,
+      state: ms,
+      driveSession: realtime.drive?.mowerId === id,
+    }),
+  });
+  spotFlow.autoPreview();
+  $effect(() => spotFlow.observe(ms?.spot_run));
 
   async function loadMower(mowerId: string): Promise<void> {
     // The last answer of this tab shows at once; the page never blanks while it reloads.
@@ -461,6 +494,7 @@
     mapEtag = null;
     caps = lastLoad.get<Capabilities>(`caps:${mowerId}`) ?? null;
     sheet.reset();
+    spotFlow.reset();
     renaming = null;
     renamingInline = null;
     livePath = null;
@@ -555,6 +589,17 @@
     return valid ? { lat: lat.toFixed(6), lon: lon.toFixed(6) } : null;
   });
   const canOpenDrive = $derived(canDrive && caps?.manual_drive === true);
+  /** Spot mowing needs the same: the gateway drives the mower over its drive link. */
+  const canSpot = $derived(canOpenDrive);
+
+  /** "Spot mähen": the next tap on the map sets the spot (the start sheet closes). */
+  function openSpot(): void {
+    sheet.close();
+    assisting = false;
+    renaming = null;
+    renamingInline = null;
+    spotFlow.begin();
+  }
   /** Anybody who sees the mower may watch its camera; Fleet checks the plan feature. */
   const hasCamera = $derived(!!caps?.camera && caps.camera !== 'none');
 
@@ -610,13 +655,14 @@
   // while the job exists on the mower and goes when the gateway has none and the mower rests ---
 
   const jobRunning = $derived(isJobActivity(activity));
-  const pollPath = $derived(jobRunning || (lastPath !== null && lastFromJob));
+  // A spot run publishes its planned path the same way (the activity stays as reported).
+  const pollPath = $derived(jobRunning || spotFlow.running || (lastPath !== null && lastFromJob));
 
   function applyPolled(polled: MowPath | null): void {
     const next = reconcilePath(
       { live: livePath, last: lastPath },
       polled,
-      untrack(() => activity),
+      untrack(() => (spotFlow.running ? 'spot_mowing' : activity)),
       endedHash,
     );
     livePath = next.live;
@@ -906,6 +952,7 @@
       assisting = false;
       renaming = null;
       renamingInline = null;
+      spotFlow.cancel();
       sheet.open();
       return;
     }
@@ -932,7 +979,12 @@
   const savedPattern = $derived(readPattern(mower?.mow_defaults?.pattern));
 
   const mapPath = $derived(
-    shownPath({ shown: pathShown, preview: sheet.previewPath, live: livePath, last: lastPath }),
+    shownPath({
+      shown: pathShown,
+      preview: sheet.previewPath ?? spotFlow.previewPath,
+      live: livePath,
+      last: lastPath,
+    }),
   );
   const pathNote = $derived.by(() => {
     const percent = donePercent(livePath);
@@ -998,8 +1050,9 @@
   const canStart = $derived(
     canControl && availability('start', activity).enabled && !!mowerMap?.areas?.length,
   );
-  /** Areas on the map can be tapped whenever a start is possible (or the picker is open). */
-  const mapSelectable = $derived(canControl && (canStart || sheet.picking));
+  /** Areas on the map can be tapped whenever a start is possible (or the picker is open), but
+   * not while a spot is placed: those taps belong to the spot. */
+  const mapSelectable = $derived(canControl && (canStart || sheet.picking) && !spotFlow.active);
 
   const labels = $derived(mapLabels());
   const routeOptions = $derived([
@@ -1181,6 +1234,8 @@
             {highlightGap}
             path={mapPath.path}
             pathPreview={mapPath.preview}
+            spot={spotFlow.spot}
+            onmaptap={spotFlow.active ? (local) => spotFlow.mapTap(local) : undefined}
             {areaName}
             onselectionchange={(ids) => (sheet.picked = ids)}
             onarealabel={canControl ? openRename : undefined}
@@ -1188,7 +1243,37 @@
             expanded={mapExpanded}
             onexpandchange={phone ? (value) => (mapExpanded = value) : undefined}
           />
-          {#if sheet.picked.length && !sheet.picking}
+          {#if spotFlow.active}
+            <div class="chosen spot-chip" data-testid="spot-chip" data-mode={spotFlow.mode}>
+              <Icon name="crosshair" size={16} />
+              <span class="spot-chip-text">
+                {#if spotFlow.mode === 'polygon'}
+                  {m.spot_corners({ n: spotFlow.corners, max: 8 })}
+                {:else if spotFlow.spot}
+                  {m.spot_chip_placed()}
+                {:else}
+                  {m.spot_chip_tap()}
+                {/if}
+              </span>
+              {#if spotFlow.spot && !spotFlow.open && (spotFlow.mode === 'circle' || spotFlow.corners >= 3)}
+                <button
+                  type="button"
+                  class="chosen-act"
+                  data-testid="spot-chip-open"
+                  onclick={() => (spotFlow.open = true)}>{m.spot_settings()}</button
+                >
+              {/if}
+              <button
+                type="button"
+                class="chosen-clear"
+                aria-label={m.cancel()}
+                data-testid="spot-chip-cancel"
+                onclick={() => spotFlow.cancel()}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+          {:else if sheet.picked.length && !sheet.picking}
             <div class="chosen" data-testid="map-selection">
               <span class="mono">{m.map_selected({ count: sheet.picked.length })}</span>
               <button
@@ -1228,6 +1313,8 @@
             areaOf={areaOfGap}
             {canStart}
             onmowarea={mowGapArea}
+            {canSpot}
+            onremow={(gap) => spotFlow.fromGap(gap)}
           />
         {/if}
       {:else if mowerMap && hasMap}
@@ -1260,6 +1347,17 @@
         </div>
         {#if ms?.error_code}
           <ProblemNotice title="{ms.error_code} {ms.error_message ?? ''}" />
+        {/if}
+        {#if canSpot}
+          <div class="spot-entry" data-testid="spot-entry">
+            <Button
+              icon="crosshair"
+              disabled={spotFlow.active || spotFlow.running}
+              onclick={openSpot}
+              testid="spot-open">{m.spot_open()}</Button
+            >
+            <span class="hint">{m.spot_open_hint()}</span>
+          </div>
         {/if}
         {#if canRecover || canFindDock}
           <div class="assist-entry" data-testid="assist-entry">
@@ -1665,6 +1763,17 @@
     </div>
 
     <div class="bar" bind:clientHeight={barHeight}>
+      {#if spotFlow.running || spotFlow.ended}
+        <SpotRunBar
+          run={spotFlow.running ? spotFlow.run : null}
+          ended={spotFlow.ended}
+          rtkFix={ms?.rtk_fix}
+          stopping={spotFlow.stopping}
+          onstop={() => spotFlow.stop()}
+          onremow={canSpot && spotFlow.lastSpot ? () => spotFlow.remowLast() : null}
+          ondismiss={() => spotFlow.dismissEnd()}
+        />
+      {/if}
       <CommandBar
         {actions}
         {onaction}
@@ -1829,6 +1938,7 @@
         </div>
       {/snippet}
     </Sheet>
+    <SpotSheet flow={spotFlow} areaName={(areaId) => areaName({ id: areaId })} />
     <Sheet
       open={sheet.dockChoice}
       title={m.dock_choice_title()}
@@ -2101,9 +2211,50 @@
     cursor: pointer;
   }
 
-  .chosen-clear:focus-visible {
+  .chosen-clear:focus-visible,
+  .chosen-act:focus-visible {
     outline: 2px solid var(--md-color-focus);
     outline-offset: -2px;
+  }
+
+  /* Spot mode: the chip tells what the next tap does and offers the sheet again. */
+  .spot-chip {
+    max-width: calc(100% - 2 * var(--md-space-3) - 56px);
+  }
+
+  .spot-chip-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chosen-act {
+    min-height: var(--md-target);
+    padding: 0 var(--md-space-3);
+    border: 0;
+    border-inline-start: var(--md-hairline) solid var(--md-color-line);
+    background: none;
+    color: var(--md-color-focus);
+    font: inherit;
+    font-size: var(--md-font-size-12);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .spot-entry {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--md-space-2) var(--md-space-3);
+    padding: var(--md-space-2) var(--md-gutter) 0;
+  }
+
+  .spot-entry .hint {
+    flex: 1 1 12rem;
+    margin: 0;
   }
 
   .alarm {
