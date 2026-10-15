@@ -52,6 +52,10 @@ def test_significant_change_ignores_timestamp_and_raw() -> None:
     assert is_significant_change(None, state)
     assert not is_significant_change(state, later)
     assert is_significant_change(state, later.model_copy(update={"battery_percent": 50}))
+    # the gateway's link fields are not part of the mower's report (ADR 0040)
+    assert not is_significant_change(
+        state, later.model_copy(update={"heartbeat_at": later.observed_at, "connected": False})
+    )
     assert isinstance(later, MowerState)
 
 

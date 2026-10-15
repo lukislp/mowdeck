@@ -15,6 +15,13 @@ reaches clients in ``MowerState.spot_run`` (the controller merges it into every 
 plan with its progress as the ordinary path snapshot (``controller.current_path()``). A lost
 link or a released mower closes the controller, which ends the run (``link_lost``) and so
 publishes its final result too.
+
+Link heartbeat (ADR 0040): every state the session publishes carries ``heartbeat_at``, the time
+the gateway last knew the link alive (``MowerConnection.is_connected``), and ``connected``. While
+the link is up the latest state is republished every ``heartbeat_seconds`` even when the adapter
+reported nothing new, with a fresh ``heartbeat_at`` and the unchanged ``observed_at``; clients
+judge online and offline by ``heartbeat_at``, not by the age of the values. When the link ends
+the heartbeats stop and the last state goes out once more with ``connected = false``.
 """
 
 import asyncio
@@ -97,6 +104,8 @@ class SessionTiming:
     """Timing of one session (from the settings)."""
 
     heartbeat_seconds: float = 10.0
+    """The latest state is republished this often while the link is alive (link heartbeat,
+    ADR 0040), also when the adapter reported nothing new."""
     drive_heartbeat_seconds: float = 1.0
     """Heartbeat while a drive session is open: automated driving (AI assist) aborts when no
     state arrives for a few seconds, also when the mower does not move (stuck)."""
@@ -176,6 +185,8 @@ class MowerSession:
         self.connected_since: datetime | None = None
         self.last_activity_at: datetime | None = None
         self.last_state: MowerState | None = None
+        self.heartbeat_at: datetime | None = None
+        """When the link was last known alive (the ``heartbeat_at`` of the last publish)."""
         self._provider = provider
         self._publisher = publisher
         self._timing = timing
@@ -329,6 +340,8 @@ class MowerSession:
         finally:
             self._controller = None
             self.connected_since = None
+            if started:  # before the close, which may take a while: clients learn it at once
+                await self._publish_disconnected(controller.last_state or self.last_state)
             await self._close_to_the_end(controller, reason)
             if started:
                 await self._connection_event(MOWER_DISCONNECTED, reason)
@@ -466,7 +479,10 @@ class MowerSession:
 
     async def _telemetry(self, controller: MowerController) -> None:
         """Publish every significant state change, and the latest state as a heartbeat (every
-        ``drive_heartbeat_seconds`` while a drive session is open)."""
+        ``drive_heartbeat_seconds`` while a drive session is open).
+
+        The heartbeat is the link heartbeat of ADR 0040: it goes out while the connection says
+        it is connected, even when no new report arrived, and is skipped once it says not."""
         loop = asyncio.get_running_loop()
         drive_heartbeat = min(self._timing.drive_heartbeat_seconds, self._timing.heartbeat_seconds)
         subscription = controller.watch_state()
@@ -492,7 +508,8 @@ class MowerSession:
                     if loop.time() - published_at < heartbeat:
                         continue
                     latest = controller.last_state or self.last_state
-                    if latest is None:
+                    if latest is None or not controller.connection.is_connected:
+                        # nothing to repeat, or the link is down (the watch ends the run)
                         published_at = loop.time()
                         continue
                     state = latest
@@ -510,7 +527,10 @@ class MowerSession:
                     previous_activity = state.activity
                     rechecked_at = self._recheck_due(controller, rechecked_at)
                     await self._publish_path(controller)
-                    if not is_significant_change(published, state):
+                    if (
+                        not is_significant_change(published, state)
+                        and loop.time() - published_at < heartbeat
+                    ):
                         continue
                 await self._publish_state(state)
                 published = state
@@ -654,6 +674,22 @@ class MowerSession:
         return await controller.preview_path(area_ids, pattern)
 
     async def _publish_state(self, state: MowerState) -> None:
+        """Publish ``state`` as seen over a live link: ``heartbeat_at`` now, ``connected``."""
+        now = self._clock()
+        self.heartbeat_at = now
+        await self._send_state(state.model_copy(update={"heartbeat_at": now, "connected": True}))
+
+    async def _publish_disconnected(self, state: MowerState | None) -> None:
+        """The link ended: publish the last values once more with ``connected = false`` and the
+        last ``heartbeat_at``, so clients show the mower offline without waiting for the
+        heartbeats to go missing. Nothing when the mower never reported."""
+        if state is None:
+            return
+        await self._send_state(
+            state.model_copy(update={"heartbeat_at": self.heartbeat_at, "connected": False})
+        )
+
+    async def _send_state(self, state: MowerState) -> None:
         try:
             await self._publisher.telemetry(state)
         except Exception as exc:
