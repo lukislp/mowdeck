@@ -597,7 +597,7 @@
       "type": "string"
     },
     "MowerState": {
-      "description": "A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.",
+      "description": "A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.\n\nTwo times: ``observed_at`` is when the mower reported the values, ``heartbeat_at`` when the\ngateway's link to it was last alive. A docked mower reports rarely, so old values do not mean\nan offline mower (ADR 0040).",
       "properties": {
         "account_id": {
           "format": "uuid",
@@ -630,6 +630,12 @@
         "charging": {
           "default": false,
           "title": "Charging",
+          "type": "boolean"
+        },
+        "connected": {
+          "default": true,
+          "description": "False in the state the Device-Gateway publishes right after its connection to the mower ended: the last known values, with `heartbeat_at` the last time the link was alive. Set by the gateway, never by an adapter.",
+          "title": "Connected",
           "type": "boolean"
         },
         "connection": {
@@ -691,6 +697,20 @@
           ],
           "default": null,
           "description": "Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor."
+        },
+        "heartbeat_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the Device-Gateway last knew its connection to the mower alive (UTC). The gateway sets it on every publish, never an adapter: it advances with each heartbeat while `observed_at` stays the time of the mower's last report. Clients judge online and offline by it (ADR 0040); null in states from before the field, then `observed_at` stands in.",
+          "title": "Heartbeat At"
         },
         "light_on": {
           "anyOf": [
