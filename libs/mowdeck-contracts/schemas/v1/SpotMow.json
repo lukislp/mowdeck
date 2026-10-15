@@ -185,7 +185,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Mow a small spot by driving the mower along ``plan`` with joystick frames (ADR 0039).\n\nUnlike ``StartMow.spot_plan`` the mower runs no job of its own: MowDeck's gateway steers it\nover the drive link (needs ``MowerCapabilities.manual_drive``, a fixed RTK position and an\nidle mower). The blades stay off (a dry run) unless ``blades`` and ``confirm_blades`` are\nboth true and the mower allows blades while driving (``manual_drive_blades``). ``spot``\nrecords what the user chose; the route is ``plan``. Progress arrives in\n``MowerState.spot_run``; ``SpotStop`` ends the run.",
+  "description": "Mow a small spot by driving the mower along ``plan`` with joystick frames (ADR 0039).\n\nUnlike ``StartMow.spot_plan`` the mower runs no job of its own: MowDeck's gateway steers it\nover the drive link (needs ``MowerCapabilities.manual_drive``, a fixed RTK position and an\nidle mower, or a docked one when the connection can leave the dock by itself:\n``MowerCapabilities.undock``, ADR 0041). A transit with the blades off takes the mower from\nwhere it stands to the start of the plan; with ``return_to_dock`` it is sent home after the\nrun (also after an abort that left it healthy, never after a stop). The blades stay off (a\ndry run) unless ``blades`` and ``confirm_blades`` are\nboth true and the mower allows blades while driving (``manual_drive_blades``). ``spot``\nrecords what the user chose; the route is ``plan``. Progress arrives in\n``MowerState.spot_run``; ``SpotStop`` ends the run.",
   "properties": {
     "blades": {
       "default": false,
@@ -207,6 +207,12 @@
     },
     "plan": {
       "$ref": "#/$defs/SpotMowPlan"
+    },
+    "return_to_dock": {
+      "default": true,
+      "description": "Send the mower back to its charging station after the run (also after an abort that left it healthy; never after a stop).",
+      "title": "Return To Dock",
+      "type": "boolean"
     },
     "speed_mps": {
       "default": 0.2,

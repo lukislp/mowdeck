@@ -198,6 +198,12 @@
           "title": "Rtk Sources",
           "type": "array",
           "uniqueItems": true
+        },
+        "undock": {
+          "default": false,
+          "description": "The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).",
+          "title": "Undock",
+          "type": "boolean"
         }
       },
       "title": "MowerCapabilities",

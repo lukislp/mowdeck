@@ -64,8 +64,12 @@
     "state": {
       "enum": [
         "preparing",
+        "undocking",
+        "waiting_rtk",
+        "transit",
         "spot_mowing",
         "paused_rtk",
+        "returning",
         "stopping",
         "done",
         "aborted",
