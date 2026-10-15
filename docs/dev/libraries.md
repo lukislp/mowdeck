@@ -18,7 +18,7 @@ The libraries under `libs/` are independent Python packages in the uv workspace,
 No I/O, only `pydantic`. Everything is versioned under `mowdeck_contracts.v1`:
 
 - `envelopes`: `CommandEnvelope` (command id, expiry, priority), `CommandResult`, `EventEnvelope[Payload]`.
-- `mower`: `MowerState` telemetry (its `position_source` says where the position comes from: `rtk`, `gnss` without an RTK fix, `dock` for the charging station while docked, `unknown`) and the commands `StartMow`, `PauseMow`, `ResumeMow`, `ReturnToDock`, `EmergencyStop`, `SetBladeHeight`, `SetSpeed`, `ManualDrive`.
+- `mower`: `MowerState` telemetry (`observed_at` is the time of the mower's report, `heartbeat_at` and `connected` the gateway's link, set by the Device-Gateway only, [ADR 0040](../adr/0040-link-heartbeat-for-online-status.md); its `position_source` says where the position comes from: `rtk`, `gnss` without an RTK fix, `dock` for the charging station while docked, `unknown`) and the commands `StartMow`, `PauseMow`, `ResumeMow`, `ReturnToDock`, `EmergencyStop`, `SetBladeHeight`, `SetSpeed`, `ManualDrive`.
 - `capabilities`: `MowerCapabilities` (native patterns, manual drive, blades while driving, custom paths, camera access, RTK sources, blade height range, minimum and maximum speed, connection kinds).
 - `maps`: `MowerMap` with areas, no-go zones, obstacles, paths and dock in local metres plus a `GeoReference` for WGS84.
 - `fleet`: `MowerRegistration` (mower, account, name, connection kind and options), `MowerListRequest` / `MowerListReply` for `fleet.mowers.list`, `MowerConnectionEvent` for `mower.connected` and `mower.disconnected`.

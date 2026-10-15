@@ -6,8 +6,8 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 
 ## Purpose
 
-- **Latest state** per mower (the full `MowerState`), guarded so an older `observed_at` never overwrites a newer one.
-- **History** of state changes for charts. The Device-Gateway republishes an unchanged state every 10 s; an unchanged heartbeat is stored at most once per `MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS` (default 300), a change always. Downsampling with `date_bin` on request.
+- **Latest state** per mower (the full `MowerState`), guarded so an older `observed_at` never overwrites a newer one. The Device-Gateway's link heartbeat (every 10 s, the same `observed_at` with a fresh `heartbeat_at`) and its offline state after a lost link (`connected: false`) only replace this row ([ADR 0040](../../docs/adr/0040-link-heartbeat-for-online-status.md)).
+- **History** of state changes for charts. A state with the same `observed_at` as the stored one (a link heartbeat, the offline state, a redelivery) writes no history or position row; an unchanged report of the mower is stored at most once per `MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS` (default 300), a change always. Downsampling with `date_bin` on request.
 - **Position track** (with RTK fix and source, Wi-Fi and mobile signal, blade state), one row per distinct position.
 - **Heatmaps** over the mower's map: cut share and missed areas, RTK fix quality, Wi-Fi and mobile signal per cell (see [Heatmaps](#heatmaps)).
 - **Command timeline**: every status transition from `command.result.mower.*` (Fleet stays the authority for the command record).
@@ -139,7 +139,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_TELEMETRY_QUERY_MAX_RANGE_DAYS` | `31` | Longest time range of a history or position query |
 | `MOWDECK_TELEMETRY_QUERY_MAX_ROWS` | `5000` | Most points a query returns; a `step` needing more bins is refused |
 | `MOWDECK_TELEMETRY_STATES_LIMIT` | `200` | Most mowers in the account state list |
-| `MOWDECK_TELEMETRY_STALE_AFTER_SECONDS` | `60` | A state older than this is reported `stale` (six missed heartbeats) |
+| `MOWDECK_TELEMETRY_STALE_AFTER_SECONDS` | `60` | A mower is reported `stale` (offline) when its last link heartbeat (`state.heartbeat_at`, else `observed_at`) is older than this (six missed heartbeats) or the state says `connected: false`; old values of a connected mower are not stale (ADR 0040) |
 | `MOWDECK_TELEMETRY_UNKNOWN_MOWER_ATTEMPTS` | `3` | Deliveries of a result for an unknown mower before it is dropped |
 | `MOWDECK_TELEMETRY_FLEET_TIMEOUT_SECONDS` | `5` | Timeout of the `fleet.mowers.list` seed request |
 | `MOWDECK_TELEMETRY_FLEET_RETRY_MAX_SECONDS` | `30` | Upper bound of the backoff between seed attempts |
