@@ -160,6 +160,10 @@ class BridgeScanErrorCode(StrEnum):
     """The gateway does not hold the mower (or the shard owner is down)."""
     FORBIDDEN = "forbidden"
     """The account of the request does not own the mower."""
+    ALREADY_CONNECTED = "already_connected"
+    """The expected mower was not seen, and the gateway itself holds a Bluetooth connection
+    through this bridge for another mower entry (a connected mower stops advertising);
+    ``held_by`` names that entry."""
 
 
 class BridgeScanError(ContractModel):
@@ -167,6 +171,12 @@ class BridgeScanError(ContractModel):
 
     code: BridgeScanErrorCode
     detail: str = Field(max_length=500)
+    held_by: str | None = Field(
+        default=None,
+        max_length=100,
+        description="For already_connected: the name of the mower entry whose connection holds "
+        "the mower through this bridge.",
+    )
 
 
 class BridgeScanReply(ContractModel):

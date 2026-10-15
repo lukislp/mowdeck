@@ -64,7 +64,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Final, Literal, Protocol, runtime_checkable
 
 from pymammotion.client import MammotionClient
 from pymammotion.data.error_codes import describe as describe_error
@@ -105,7 +105,7 @@ from pymammotion.http.model.camera_stream import (
 from pymammotion.http.model.http import CheckDeviceVersion, ProductVersionInfo
 from pymammotion.messaging.command_queue import Priority
 from pymammotion.messaging.mow_path_saga import MowPathSaga
-from pymammotion.proto import DrvUpgradeReport, SystemUpdateBufMsg
+from pymammotion.proto import DrvUpgradeReport, RptAct, RptInfoType, SystemUpdateBufMsg
 from pymammotion.transport.base import (
     AccountInUseError,
     AuthError,
@@ -480,13 +480,26 @@ class MammotionPort(Protocol):
         """The mower's signal strength at the attached bridge (dBm), None without one."""
         ...
 
+    def report_received_at(self) -> float:
+        """Monotonic time (``time.monotonic``) of the last telemetry report, 0 without one; it
+        also advances for a report that changed nothing."""
+        ...
+
+    def route_bridge(self, drive_open: Callable[[], bool] | None) -> None:
+        """Dual link (ADR 0038, link roles): route cloud first. With ``drive_open`` set, only
+        the drive channel (:data:`BRIDGE_DRIVE_COMMANDS`) and, while ``drive_open()``, the
+        report requests use a connected Bluetooth bridge; every other command, read and report
+        request goes over the cloud (:func:`bridge_route`). None: PyMammotion's own choice."""
+        ...
+
     async def attach_bridge(self, link: BridgeLink) -> None:
-        """Attach the BLE transport of ``link`` to the mower's cloud device, connect it and
-        prefer it for commands (ADR 0038). Raises when the Bluetooth connection fails."""
+        """Attach the BLE transport of ``link`` to the mower's cloud device and connect it
+        (ADR 0038). Raises when the Bluetooth connection fails."""
         ...
 
     async def detach_bridge(self) -> None:
-        """Drop the BLE transport again (the bridge is gone); commands go over the cloud."""
+        """Remove the BLE transport again (no role needs it, or the bridge is gone); everything
+        goes over the cloud."""
         ...
 
     async def check_firmware(self) -> CheckDeviceVersion | None:
@@ -497,6 +510,40 @@ class MammotionPort(Protocol):
     async def start_firmware_update(self, version: str) -> None:
         """Ask the vendor cloud to install ``version``; raises :class:`FirmwareRefused`."""
         ...
+
+
+BRIDGE_DRIVE_COMMANDS: Final = frozenset({"send_movement", "operate_on_device"})
+"""What the drive channel sends (frames and blades): on a cloud-first port only these use a
+connected Bluetooth bridge."""
+REPORT_CHANNELS: Final = (
+    RptInfoType.RIT_DEV_STA,
+    RptInfoType.RIT_DEV_LOCAL,
+    RptInfoType.RIT_WORK,
+    RptInfoType.RIT_MAINTAIN,
+    RptInfoType.RIT_BASESTATION_INFO,
+    RptInfoType.RIT_VIO,
+    RptInfoType.RIT_CONNECT,
+    RptInfoType.RIT_RTK,
+)
+"""The report channels of a one-shot report request (PyMammotion's own set)."""
+
+
+def bridge_route(
+    command: str | None, *, cloud_first: bool, ble_connected: bool, drive_open: bool
+) -> Literal["ble", "cloud"]:
+    """Which link carries ``command`` (None: a report request).
+
+    PyMammotion always picks a connected BLE transport. A cloud-first port (ADR 0038, link
+    roles) keeps everything on the cloud but the drive channel and, while a drive session is
+    open, its fast report polling.
+    """
+    if not ble_connected:
+        return "cloud"
+    if not cloud_first:
+        return "ble"
+    if command is None:
+        return "ble" if drive_open else "cloud"
+    return "ble" if command in BRIDGE_DRIVE_COMMANDS else "cloud"
 
 
 def select_handle(
@@ -600,6 +647,7 @@ class ClientPort:
         self._handle: DeviceHandle | None = None
         self._release: Callable[[], Awaitable[None]] | None = None
         self._bridge: BridgeLink | None = None
+        self._drive_open: Callable[[], bool] | None = None
 
     # --- state ----------------------------------------------------------------------------
 
@@ -631,6 +679,41 @@ class ClientPort:
 
     def ble_rssi(self) -> int | None:
         return self._bridge.rssi() if self._bridge is not None else None
+
+    def report_received_at(self) -> float:
+        handle = self._handle
+        return float(handle.last_report_data_at) if handle is not None else 0.0
+
+    def route_bridge(self, drive_open: Callable[[], bool] | None) -> None:
+        self._drive_open = drive_open
+
+    def _pinned_to_cloud(self, command: str | None) -> bool:
+        """True when PyMammotion would pick the bridge but the cloud must carry ``command``."""
+        ble = self.ble_connected()
+        route = bridge_route(
+            command,
+            cloud_first=self._drive_open is not None,
+            ble_connected=ble,
+            drive_open=self._drive_open is not None and self._drive_open(),
+        )
+        return ble and route == "cloud"
+
+    async def _cloud_report(self, max_age_s: float) -> None:
+        """A one-shot report request over the cloud when the last report is older than
+        ``max_age_s`` (best effort, never raises)."""
+        handle = self._require_handle()
+        if handle.report_data_age <= max_age_s:
+            return
+        payload = handle.commands.request_iot_sys(
+            rpt_act=RptAct.RPT_START,
+            rpt_info_type=list(REPORT_CHANNELS),
+            timeout=10_000,
+            count=1,
+        )
+        try:
+            await handle.send_cloud(payload)
+        except Exception:
+            _log.debug("cloud report request for %s failed", self.device_name, exc_info=True)
 
     def device(self) -> MowerDevice:
         raw = self._require_handle().snapshot.raw
@@ -666,18 +749,22 @@ class ClientPort:
         client, self._client, self._handle = self._client, None, None
         release, self._release = self._release, None
         self._bridge = None
-        if release is not None:
-            try:
-                await release()
-            except Exception:
-                _log.exception("releasing the shared PyMammotion client failed")
-        elif client is not None:
-            try:
-                await client.stop()
-            except Exception:
-                _log.exception("stopping the PyMammotion client failed")
-        if self._on_close is not None:
-            await self._on_close()
+        try:
+            if release is not None:
+                try:
+                    await release()
+                except Exception:
+                    _log.exception("releasing the shared PyMammotion client failed")
+            elif client is not None:
+                try:
+                    await client.stop()
+                except Exception:
+                    _log.exception("stopping the PyMammotion client failed")
+        finally:
+            # Always, also when stopping the client was cancelled: the closer releases what the
+            # opener set up beside the client (the ESPHome proxy of a Bluetooth bridge).
+            if self._on_close is not None:
+                await self._on_close()
 
     def subscribe(self, listener: StateListener) -> Callable[[], None]:
         handle = self._require_handle()
@@ -692,6 +779,11 @@ class ClientPort:
 
     async def send(self, command: str, *, priority: Priority, **kwargs: Any) -> None:
         client = self._require_client()
+        if self._pinned_to_cloud(command):
+            handle = self._require_handle()
+            payload = getattr(handle.commands, command)(**kwargs)
+            await handle.send_cloud(payload, user_initiated=priority.is_direct)
+            return
         await client.send_command_with_args(self.device_name, command, priority=priority, **kwargs)
 
     async def send_and_wait(
@@ -704,6 +796,16 @@ class ClientPort:
         **kwargs: Any,
     ) -> Any:
         client = self._require_client()
+        if self._pinned_to_cloud(command):
+            handle = self._require_handle()
+            payload = getattr(handle.commands, command)(**kwargs)
+
+            async def send_over_cloud() -> None:
+                await handle.send_cloud(payload, user_initiated=priority.is_direct)
+
+            return await handle.broker.send_and_wait(
+                send_fn=send_over_cloud, expected_field=expected_field, send_timeout=timeout_s
+            )
         return await client.send_command_and_wait(
             self.device_name,
             command,
@@ -727,6 +829,9 @@ class ClientPort:
 
     async def refresh(self) -> None:
         client = self._require_client()
+        if self._pinned_to_cloud(None):
+            await self._cloud_report(0.0)
+            return
         try:
             await client.refresh_status(self.device_name)
         except Exception:
@@ -734,6 +839,9 @@ class ClientPort:
 
     async def ensure_fresh(self, max_age_s: float) -> None:
         client = self._require_client()
+        if self._pinned_to_cloud(None):
+            await self._cloud_report(max_age_s)
+            return
         try:
             # wait=False: a BACKGROUND queued count=1 report request, debounced by PyMammotion
             # (no send when a report arrived within the last 15 s or a BLE stream is live).
@@ -743,6 +851,10 @@ class ClientPort:
 
     async def start_report_stream(self, duration_ms: int) -> None:
         client = self._require_client()
+        if self._pinned_to_cloud(None):
+            # Bluetooth streams the positions while it is attached; the cloud keeps polling.
+            await self._cloud_report(1.0)
+            return
         try:
             # Active work mode: RPT_START (count=0, about 1 Hz) plus a stop timer, repeated calls
             # reset the window; docked or idle: PyMammotion falls back to a one-shot poll.
@@ -837,7 +949,9 @@ class ClientPort:
         if not handle.is_transport_connected(TransportType.BLE):
             msg = f"the Bluetooth link to {handle.device_name} did not come up"
             raise NoTransportAvailableError(msg)
-        handle.set_prefer_ble(value=True)
+        # No preference: with it PyMammotion reconnects Bluetooth on every send after a detach.
+        # The routing is cloud first instead (bridge_route).
+        handle.set_prefer_ble(value=False)
         self._bridge = link
         _log.info("BLE through the bridge attached to %s", handle.device_name)
 
@@ -848,7 +962,8 @@ class ClientPort:
             return
         handle.set_prefer_ble(value=False)
         try:
-            await handle.disconnect_transport(TransportType.BLE)
+            # Removed, not only disconnected: nothing reconnects it until a role asks again.
+            await handle.remove_transport(TransportType.BLE)
         except Exception:  # the bridge is gone already; the cloud goes on
             _log.debug("dropping the BLE transport of %s failed", handle.device_name, exc_info=True)
 

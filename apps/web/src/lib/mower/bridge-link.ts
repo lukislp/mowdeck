@@ -105,6 +105,10 @@ export function scanErrorText(error: BridgeScanError, host: string, port: number
       return m.bridge_error_timeout();
     case 'busy':
       return m.bridge_error_busy();
+    case 'already_connected':
+      return error.held_by
+        ? m.bridge_error_already_connected({ name: error.held_by })
+        : m.bridge_error_already_connected_unnamed();
     case 'unsupported':
       return m.bridge_error_unsupported();
     case 'not_found':

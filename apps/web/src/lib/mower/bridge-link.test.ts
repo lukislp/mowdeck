@@ -141,12 +141,30 @@ describe('bridge link flow', () => {
     expect(flow.issues).toEqual({ port: 'range' });
   });
 
+  it('names the mower entry that already holds the mower through the bridge', async () => {
+    const d = deps({
+      scan: vi.fn(async () =>
+        reply({
+          devices: [],
+          error: { code: 'already_connected', detail: 'x', held_by: 'Garage mower' },
+        }),
+      ),
+    });
+    const flow = new BridgeLinkFlow(d);
+    filled(flow);
+    await flow.scan();
+    expect(flow.step).toBe('form');
+    expect(flow.errorCode).toBe('already_connected');
+    expect(flow.error).toBe(m.bridge_error_already_connected({ name: 'Garage mower' }));
+  });
+
   it.each([
     ['unreachable', m.bridge_error_unreachable({ host: '192.0.2.10', port: '6054' })],
     ['auth_failed', m.bridge_error_auth_failed()],
     ['timeout', m.bridge_error_timeout()],
     ['busy', m.bridge_error_busy()],
     ['unsupported', m.bridge_error_unsupported()],
+    ['already_connected', m.bridge_error_already_connected_unnamed()],
   ] as const)('maps the scan error %s to its text and stays on the form', async (code, text) => {
     const d = deps({
       scan: vi.fn(async () => reply({ devices: [], error: { code, detail: 'x' } })),

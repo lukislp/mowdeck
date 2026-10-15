@@ -148,6 +148,30 @@ async def test_mammotion_unchanged_state_is_republished_after_a_while() -> None:
     await conn.disconnect()
 
 
+async def test_mammotion_a_report_that_changed_nothing_still_moves_observed_at() -> None:
+    """PyMammotion signals only changed states; the refresh loop publishes on every report."""
+    port = FakeMammotionPort()
+    ticks = [100.0]
+    times = iter(NOW + timedelta(seconds=s) for s in range(100))
+    conn = MammotionCloudConnection(
+        port,
+        config(),
+        CloudOptions.parse(CLOUD_OPTIONS),
+        clock=lambda: next(times),
+    )
+    conn._publish_clock = lambda: ticks[0]
+    await conn.connect()
+    watch = conn.watch_state()
+    first = await anext(watch)
+    conn._publish_new_report()  # no report yet: nothing
+    ticks[0] += UNCHANGED_REPUBLISH_S
+    port.report_at += 1.0  # the mower answered, its state is the same: no listener call
+    conn._publish_new_report()
+    again = await asyncio.wait_for(anext(watch), 1)
+    assert again.observed_at > first.observed_at
+    await conn.disconnect()
+
+
 async def test_mammotion_refresh_loop_asks_for_fresh_state_until_disconnect() -> None:
     port = FakeMammotionPort()
     conn = MammotionCloudConnection(

@@ -1609,6 +1609,8 @@
   "bridge_error_auth_failed": "Key refused. Use the value of api.encryption.key.",
   "bridge_error_timeout": "No mower found. Is the bridge mounted on the switched-on mower?",
   "bridge_error_busy": "The bridge is in use right now, please wait a moment",
+  "bridge_error_already_connected": "The mower is already connected through this bridge (by the mower entry “{name}”).",
+  "bridge_error_already_connected_unnamed": "The mower is already connected through this bridge (by another mower entry).",
   "bridge_error_unsupported": "This connection cannot use a Bluetooth bridge.",
   "bridge_error_not_found": "No gateway holds this mower right now; wait a moment and try again.",
   "bridge_error_other": "The scan failed ({code}).",

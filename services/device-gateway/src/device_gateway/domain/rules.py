@@ -8,10 +8,12 @@ from uuid import UUID
 from mowdeck_contracts.v1 import (
     LINK_BLE_BRIDGE,
     BridgeScanErrorCode,
+    BridgeScanReply,
     BridgeScanRequest,
     CameraSessionErrorCode,
     CameraSessionRequest,
     CommandEnvelope,
+    ConnectionKind,
     FirmwareCheckErrorCode,
     FirmwareCheckRequest,
     MowerRegistration,
@@ -120,6 +122,40 @@ def bridge_host_of(registration: MowerRegistration) -> tuple[str, int] | None:
         return None
     port = link.get("port", 6053)
     return str(link["host"]).casefold(), int(port) if isinstance(port, int) else 6053
+
+
+def bluetooth_bridge_of(registration: MowerRegistration) -> tuple[str, int] | None:
+    """``(host, port)`` of the bridge a registration reaches its mower through over Bluetooth:
+    its ``ble_bridge`` link, or its own options when the connection kind is ``ble_bridge``."""
+    linked = bridge_host_of(registration)
+    if linked is not None:
+        return linked
+    if registration.connection_kind is not ConnectionKind.BLE_BRIDGE:
+        return None
+    options = registration.connection_options
+    if not isinstance(options.get("host"), str):
+        return None
+    port = options.get("port", 6053)
+    return str(options["host"]).casefold(), int(port) if isinstance(port, int) else 6053
+
+
+def holds_bluetooth_through(
+    registration: MowerRegistration, state: MowerState | None, host: str, port: int
+) -> bool:
+    """True when ``registration``'s mower is connected over Bluetooth through the bridge at
+    ``host``:``port`` right now (its last state reports the ``ble_bridge`` connection): the
+    mower then does not advertise, and a scan through that bridge cannot see it."""
+    if state is None or state.connection is not ConnectionKind.BLE_BRIDGE:
+        return False
+    return bluetooth_bridge_of(registration) == (host.casefold(), port)
+
+
+def scan_found(reply: BridgeScanReply, expected_name: str | None) -> bool:
+    """True when the scan saw the expected mower (any mower without an expected name)."""
+    if expected_name is None:
+        return bool(reply.devices)
+    wanted = expected_name.casefold()
+    return any((device.name or "").casefold() == wanted for device in reply.devices)
 
 
 def bridge_in_use(

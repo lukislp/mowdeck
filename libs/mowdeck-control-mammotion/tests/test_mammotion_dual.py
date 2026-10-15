@@ -2,6 +2,7 @@
 a bridge loss, scan error mapping, the firmware port calls and the update tracker."""
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Callable
 from datetime import timedelta
@@ -76,7 +77,14 @@ from mowdeck_control_mammotion.fake_cloud import (
     fake_pool,
 )
 from mowdeck_control_mammotion.options import CloudOptions, OptionsError
-from mowdeck_control_mammotion.port import OTA_RESULT_FAILED, OTA_RESULT_SUCCESS, FirmwareRefused
+from mowdeck_control_mammotion.port import (
+    OTA_RESULT_FAILED,
+    OTA_RESULT_SUCCESS,
+    FirmwareRefused,
+    Priority,
+    WorkMode,
+    bridge_route,
+)
 
 ISSUER = PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER)
 LINK_OPTIONS: dict[str, Any] = {**BLE_OPTIONS, "credentials": "fleet", "credentials_rev": "2"}
@@ -184,7 +192,10 @@ async def _wait(predicate: Callable[[], object], *, within: float = 30.0) -> Non
 
 
 def _dual(
-    port: FakeMammotionPort | None = None, **link_changes: Any
+    port: FakeMammotionPort | None = None,
+    *,
+    attach_timeout_s: float = 5.0,
+    **link_changes: Any,
 ) -> tuple[MammotionDualConnection, FakeMammotionPort, _Opener, _Sleeps]:
     fake = port or FakeMammotionPort()
     opener, sleeps = _Opener(), _Sleeps()
@@ -197,6 +208,7 @@ def _dual(
         opener=opener,
         sleep=sleeps,
         poll_s=0.01,
+        attach_timeout_s=attach_timeout_s,
     )
     return conn, fake, opener, sleeps
 
@@ -211,77 +223,152 @@ def _envelope(command: Any) -> CommandEnvelope:
     )
 
 
-# --- bridge link ----------------------------------------------------------------------------
+# --- bridge link and link roles -------------------------------------------------------------
 
 
-async def test_mammotion_dual_bridge_up_offers_manual_drive_over_ble() -> None:
+async def _settle(seconds: float = 0.1) -> None:
+    """Let the watcher run a few of its (fast) polls."""
+    await asyncio.sleep(seconds)
+
+
+async def test_mammotion_dual_docked_holds_the_proxy_and_polls_only_over_the_cloud() -> None:
     conn, port, opener, _ = _dual()
     assert conn.kind is ConnectionKind.CLOUD
     await conn.connect()
     try:
-        await _wait(conn.ble_connected)
-        assert port.attached == 1 and port.bridge is opener.links[0]
+        await _wait(lambda: conn.watcher.proxy_up)
+        await _settle()
+        assert port.attached == 0 and not conn.ble_connected()  # no role: no Bluetooth
+        assert conn.bridge_roles() == frozenset()
         assert opener.calls[0]["ble_address"] == "AA:BB:CC:DD:EE:FF"
         assert "noise_psk" in opener.calls[0]
         caps = await conn.capabilities()
         assert caps.manual_drive is True and caps.manual_drive_blades is False
         assert caps.links_supported == [LINK_BLE_BRIDGE] and caps.firmware_update is True
         state = await conn.get_state()
-        assert state.connection is ConnectionKind.BLE_BRIDGE
-        assert state.raw["link"] == LINK_BLE_BRIDGE
+        assert state.connection is ConnectionKind.CLOUD
         link = state.links[LINK_BLE_BRIDGE]
-        assert link.connected is True and link.since == NOW and link.rssi == -61
+        assert link.connected is True and link.since == NOW
+        assert link.rssi == -58  # from the mower's advertisements at the bridge
         assert link.esphome_version == "2026.1.0" and link.project_version == "1"
         assert link.outdated is False and link.outdated_reason is None
+        await port.ensure_fresh(10.0)
+        await port.send("pause_execute_task", priority=Priority.USER)
+        assert port.report_links and set(port.report_links) == {"cloud"}
+        assert {c.link for c in port.sent} == {"cloud"}
         assert conn.is_connected
     finally:
         await conn.disconnect()
-    assert port.detached >= 1 and not opener.links[0].is_alive()
+    assert port.attached == 0 and not opener.links[0].is_alive()
 
 
-async def test_mammotion_dual_bridge_loss_keeps_the_cloud_and_ends_the_drive_session() -> None:
-    conn, port, opener, sleeps = _dual()
+async def test_mammotion_dual_drive_session_uses_bluetooth_and_releases_it() -> None:
+    conn, port, _, _ = _dual()
     await conn.connect()
     try:
+        await _wait(lambda: conn.watcher.proxy_up)
+        session = await conn.start_drive_session()
+        assert conn.ble_connected() and port.attached == 1
+        assert conn.bridge_roles() == frozenset({"drive"})
+        assert (await conn.get_state()).connection is ConnectionKind.BLE_BRIDGE
+        port.sent.clear()
+        await session.update(0.3, 0.0, False)
+        await port.send("pause_execute_task", priority=Priority.USER)
+        await port.refresh()  # the fast report polling of the drive
+        assert [(c.name, c.link) for c in port.sent] == [
+            ("send_movement", "ble"),
+            ("pause_execute_task", "cloud"),  # other commands stay on the cloud
+        ]
+        assert port.report_links[-1] == "ble"
+        await session.close()
+        await _wait(lambda: port.detached >= 1 and not conn.ble_connected())
+        assert (await conn.get_state()).connection is ConnectionKind.CLOUD
+        assert conn.watcher.proxy_up  # the link is still held
+    finally:
+        await conn.disconnect()
+
+
+async def test_mammotion_dual_mowing_merges_bluetooth_positions_on_top_of_the_cloud() -> None:
+    conn, port, _, _ = _dual()
+    await conn.connect()
+    try:
+        await _wait(lambda: conn.watcher.proxy_up)
+        port.set_mode(WorkMode.MODE_WORKING)
+        await port.emit()
         await _wait(conn.ble_connected)
+        assert conn.bridge_roles() == frozenset({"fast_position"})
+        assert conn._mode() == "poll"  # the cloud keeps polling, Bluetooth streams
         subscription = conn.watch_state()
-        first = await anext(subscription)
-        assert first.connection is ConnectionKind.BLE_BRIDGE
+        await anext(subscription)
+        port.device().report_data.dev.battery_val = 55
+        await port.emit()  # a report over Bluetooth
+        merged = await asyncio.wait_for(anext(subscription), 1.0)
+        assert merged.connection is ConnectionKind.BLE_BRIDGE
+        assert merged.activity is MowerActivity.MOWING and merged.battery_percent == 55
+        await subscription.aclose()
+        await port.ensure_fresh(10.0)
+        assert port.report_links[-1] == "cloud"
+        port.set_mode(WorkMode.MODE_CHARGING)
+        await port.emit()
+        await _wait(lambda: not conn.ble_connected() and port.detached >= 1)
+    finally:
+        await conn.disconnect()
+
+
+async def test_mammotion_dual_fast_position_can_be_switched_off() -> None:
+    conn, port, _, _ = _dual(fast_position=False)
+    await conn.connect()
+    try:
+        await _wait(lambda: conn.watcher.proxy_up)
+        port.set_mode(WorkMode.MODE_WORKING)
+        await port.emit()
+        await _settle()
+        assert port.attached == 0 and conn.bridge_roles() == frozenset()
+    finally:
+        await conn.disconnect()
+
+
+async def test_mammotion_dual_bluetooth_loss_keeps_the_link_and_ends_the_drive_session() -> None:
+    conn, port, opener, _ = _dual()
+    await conn.connect()
+    try:
+        await _wait(lambda: conn.watcher.proxy_up)
         session = await conn.start_drive_session()
         await session.update(0.3, 0.0, False)
-        assert port.names()[-1] == "send_movement"
-
-        sleeps.hold = True  # the watcher waits for the test before it reconnects
         port.ble = False  # the Bluetooth transport dropped
-        await _wait(lambda: port.detached == 1 and sleeps.delays)
+        await _wait(lambda: port.detached >= 1 and not session.is_open)
         assert not conn.ble_connected()
         assert conn.is_connected  # the cloud carries on
-        assert not session.is_open
         with pytest.raises(CommandRejected):
             await session.update(0.3, 0.0, False)
         state = await conn.get_state()
         assert state.connection is ConnectionKind.CLOUD and state.raw["link"] == "cloud"
+        assert state.links[LINK_BLE_BRIDGE].connected is True  # the proxy link is held
+        assert opener.links[0].is_alive() and len(opener.links) == 1
+        again = await conn.start_drive_session()  # Bluetooth comes back on demand
+        assert again.is_open and conn.ble_connected()
+    finally:
+        await conn.disconnect()
+
+
+async def test_mammotion_dual_proxy_loss_reconnects_with_backoff() -> None:
+    conn, port, opener, sleeps = _dual()
+    await conn.connect()
+    try:
+        await _wait(lambda: conn.watcher.proxy_up)
+        sleeps.hold = True
+        await opener.links[0].close()  # the proxy went away
+        await _wait(lambda: sleeps.delays and not conn.watcher.proxy_up)
+        state = await conn.get_state()
         assert state.links[LINK_BLE_BRIDGE].connected is False
-        assert state.links[LINK_BLE_BRIDGE].rssi is None
         assert state.links[LINK_BLE_BRIDGE].esphome_version == "2026.1.0"  # what we last saw
         assert (await conn.capabilities()).manual_drive is False
         with pytest.raises(CommandRejected, match=BRIDGE_NOT_CONNECTED):
             await conn.start_drive_session()
-        published = [first]
-        while True:
-            try:
-                published.append(await asyncio.wait_for(anext(subscription), 1.0))
-            except TimeoutError:
-                break
-        kinds = [s.connection for s in published]
-        assert ConnectionKind.CLOUD in kinds  # the link change was published
-        await subscription.aclose()
-
-        # The watcher reconnects on its own after the backoff.
         assert sleeps.delays[:1] == [5.0]
         sleeps.release()
-        await _wait(lambda: len(opener.links) >= 2 and conn.ble_connected())
-        assert (await conn.get_state()).connection is ConnectionKind.BLE_BRIDGE
+        await _wait(lambda: len(opener.links) >= 2 and conn.watcher.proxy_up)
+        assert port.attached == 0
     finally:
         await conn.disconnect()
 
@@ -302,25 +389,86 @@ async def test_mammotion_dual_without_a_bridge_stays_cloud_and_backs_off() -> No
         with pytest.raises(CommandRejected, match=BRIDGE_NOT_CONNECTED):
             await conn.start_drive_session()
         opener.error = None
-        await _wait(conn.ble_connected)
-        assert (await conn.get_state()).connection is ConnectionKind.BLE_BRIDGE
+        await _wait(lambda: conn.watcher.proxy_up)
+        assert (await conn.capabilities()).manual_drive is True
     finally:
         await conn.disconnect()
 
 
-async def test_mammotion_dual_attach_failure_closes_the_link_and_retries() -> None:
-    conn, port, opener, sleeps = _dual()
+async def test_mammotion_dual_attach_failure_keeps_the_proxy_and_refuses_the_drive() -> None:
+    conn, port, opener, sleeps = _dual(attach_timeout_s=0.3)
     port.attach_error = RuntimeError("GATT connect failed")
     await conn.connect()
     try:
-        await _wait(lambda: port.attached >= 2)
-        assert not opener.links[0].is_alive()
-        assert conn.watcher.last_error == "RuntimeError"
-        assert sleeps.delays[0] == 5.0
+        await _wait(lambda: conn.watcher.proxy_up)
+        with pytest.raises(CommandRejected, match="did not come up"):
+            await conn.start_drive_session()
+        assert port.attached >= 1 and conn.watcher.last_error == "RuntimeError"
+        assert opener.links[0].is_alive()  # the proxy link stays held
+        assert 5.0 in sleeps.delays
         port.attach_error = None
-        await _wait(conn.ble_connected)
+        session = await conn.start_drive_session()
+        assert session.is_open and conn.ble_connected()
     finally:
         await conn.disconnect()
+
+
+async def test_mammotion_dual_disconnect_closes_the_proxy_link() -> None:
+    conn, port, opener, _ = _dual()
+    await conn.connect()
+    await _wait(lambda: conn.watcher.proxy_up)
+    await conn.start_drive_session()
+    link = opener.links[0]
+    closes: list[str] = []
+    original = link.close
+
+    async def counted_close() -> None:
+        closes.append("proxy")
+        await original()
+
+    link.close = counted_close
+    await conn.disconnect()
+    await conn.disconnect()  # idempotent
+    assert closes == ["proxy"]
+    assert not link.is_alive()
+    assert port.detached == 1 and port.closed == 1
+    assert conn.watcher.link is None
+
+
+async def test_mammotion_dual_disconnect_closes_the_proxy_when_the_drive_session_fails() -> None:
+    """A drive session that fails to close must not keep the bridge open."""
+    conn, port, opener, _ = _dual()
+    await conn.connect()
+    await _wait(lambda: conn.watcher.proxy_up)
+    session = await conn.start_drive_session()
+
+    calls = {"close": 0}
+
+    async def broken_close() -> None:
+        calls["close"] += 1
+        raise RuntimeError("drive session close failed")
+
+    session.close = broken_close  # type: ignore[method-assign]
+    # Disconnect marks the connection down first, so the watcher may detach Bluetooth and close
+    # the session concurrently; the failure then surfaces there instead of in disconnect. Either
+    # way the proxy and the port must end up closed.
+    with contextlib.suppress(RuntimeError):
+        await conn.disconnect()
+    assert calls["close"] == 1
+    assert not opener.links[0].is_alive()
+    assert port.closed == 1
+
+
+def test_mammotion_bridge_route_is_cloud_first() -> None:
+    route = bridge_route
+    assert route("send_movement", cloud_first=True, ble_connected=True, drive_open=False) == "ble"
+    assert route("start_job", cloud_first=True, ble_connected=True, drive_open=True) == "cloud"
+    assert route(None, cloud_first=True, ble_connected=True, drive_open=False) == "cloud"
+    assert route(None, cloud_first=True, ble_connected=True, drive_open=True) == "ble"
+    assert route("start_job", cloud_first=False, ble_connected=True, drive_open=False) == "ble"
+    assert route("send_movement", cloud_first=True, ble_connected=False, drive_open=True) == (
+        "cloud"
+    )
 
 
 async def test_mammotion_dual_drive_frames_never_fall_back_to_the_cloud() -> None:
@@ -374,10 +522,10 @@ async def test_mammotion_fake_cloud_dual_connects_its_bridge_and_answers_scans()
     assert isinstance(conn, MammotionDualConnection)
     await conn.connect()
     try:
-        await _wait(conn.ble_connected)
+        await _wait(lambda: conn.watcher.proxy_up)
         state = await conn.get_state()
-        assert state.connection is ConnectionKind.BLE_BRIDGE
-        assert state.links[LINK_BLE_BRIDGE].rssi == -62
+        assert state.connection is ConnectionKind.CLOUD  # docked: no Bluetooth role
+        assert state.links[LINK_BLE_BRIDGE].connected is True
         info = state.firmware_info
         assert info is None  # no check yet
         checked = await conn.check_firmware()
@@ -417,7 +565,7 @@ async def test_mammotion_dual_scan_of_its_own_bridge_answers_from_the_live_scann
     conn._scanner = other_scanner
     await conn.connect()
     try:
-        await _wait(conn.ble_connected)
+        await _wait(lambda: conn.watcher.proxy_up)
         reply = await conn.scan_bridge(
             host="MOWDECK-BRIDGE.local",
             port=6053,

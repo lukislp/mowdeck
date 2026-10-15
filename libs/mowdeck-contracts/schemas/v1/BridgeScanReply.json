@@ -10,6 +10,20 @@
           "maxLength": 500,
           "title": "Detail",
           "type": "string"
+        },
+        "held_by": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For already_connected: the name of the mower entry whose connection holds the mower through this bridge.",
+          "title": "Held By"
         }
       },
       "required": [
@@ -28,7 +42,8 @@
         "busy",
         "unsupported",
         "not_found",
-        "forbidden"
+        "forbidden",
+        "already_connected"
       ],
       "title": "BridgeScanErrorCode",
       "type": "string"

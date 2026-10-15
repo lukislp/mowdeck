@@ -1609,6 +1609,8 @@
   "bridge_error_auth_failed": "Schlüssel abgelehnt – den Wert von api.encryption.key verwenden",
   "bridge_error_timeout": "Kein Mäher gefunden – sitzt die Bridge am eingeschalteten Mäher?",
   "bridge_error_busy": "Die Bridge wird gerade benutzt, bitte kurz warten",
+  "bridge_error_already_connected": "Der Mäher ist bereits über diese Bridge verbunden (durch den Mähereintrag „{name}“).",
+  "bridge_error_already_connected_unnamed": "Der Mäher ist bereits über diese Bridge verbunden (durch einen anderen Mähereintrag).",
   "bridge_error_unsupported": "Diese Verbindung kann keine Bluetooth-Bridge nutzen.",
   "bridge_error_not_found": "Kein Gateway hält diesen Mäher gerade; bitte kurz warten und erneut versuchen.",
   "bridge_error_other": "Die Suche ist fehlgeschlagen ({code}).",

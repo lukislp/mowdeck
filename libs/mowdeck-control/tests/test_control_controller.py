@@ -972,3 +972,20 @@ async def test_expiry_still_applies_while_a_confirmation_waits() -> None:
     assert result.reason == "command expired before delivery"
     assert not start.done()
     await s.controller.close()
+
+
+async def test_close_disconnects_even_when_ending_the_drive_session_is_cancelled() -> None:
+    """A library that cancels its own future while the drive session ends must not leave the
+    link open: the disconnect runs anyway."""
+    h = Harness()
+    await h.controller.start()
+    assert (await h.send(ManualDrive(linear=0.5, angular=0))).status is CommandStatus.ACCEPTED
+    session = h.conn.sessions[-1]
+
+    async def cancelled_close() -> None:
+        raise asyncio.CancelledError
+
+    session.close = cancelled_close  # type: ignore[method-assign]
+    with pytest.raises(asyncio.CancelledError):
+        await h.controller.close()
+    assert not h.conn.connected

@@ -4,23 +4,41 @@
 :class:`~mowdeck_control_mammotion.cloud.MammotionCloudConnection` whose registration carries
 a ``ble_bridge`` link (``config.options["links"]["ble_bridge"]``, the public link options of
 Fleet merged with the withheld ``noise_psk`` by the Device-Gateway).
-It owns a :class:`BridgeWatcher` task that opens the ESPHome proxy
-(:func:`~mowdeck_control_mammotion.esphome.open_proxy`), attaches the mower's BLE transport to
-the cloud device handle (:meth:`~mowdeck_control_mammotion.port.MammotionPort.attach_bridge`:
-PyMammotion's ``add_ble_to_device`` plus ``connect_ble`` and ``prefer_ble``) and reconnects with
-its own backoff (5 s doubling to 60 s), independent of the cloud session.
 
-Preference and fallback are PyMammotion's own: a command goes over BLE while it is connected,
-else over MQTT (and the handle keeps using BLE while MQTT reconnects). The state reports
-``connection`` ``ble_bridge`` while the bridge carries the link, ``cloud`` otherwise, and
-``links["ble_bridge"]`` with the bridge's firmware (``esphome_version``, ``project_version``,
-``outdated``) and the mower's RSSI at the bridge; every link change publishes a state.
+Link roles (ADR 0038): the cloud carries the state, the data requests, the fresh-state polling
+and every command but the drive channel, like the camera. The bridge has two roles:
+
+* ``drive``: manual driving and spot runs (both hold a drive session). The drive frames and
+  the fast report polling of the open session go over Bluetooth.
+* ``fast_position``: while the mower is mowing or returning (and the link option
+  ``fast_position`` is on, the default) the bridge also carries PyMammotion's continuous
+  Bluetooth report stream, so positions arrive about once a second. This comes on top of the
+  cloud polling, never instead of it.
+
+While docked or idle no role needs Bluetooth: the bridge only holds the ESPHome proxy link and
+reports the link status and the mower's RSSI from its advertisements; it does not poll and the
+mower keeps advertising (other bridge scans still see it).
+
+:class:`BridgeWatcher` keeps the proxy open (:func:`~mowdeck_control_mammotion.esphome.open_proxy`,
+reconnecting with its own backoff, 5 s doubling to 60 s, independent of the cloud session) and
+attaches the mower's BLE transport to the cloud device handle only while a role needs it
+(:meth:`~mowdeck_control_mammotion.port.MammotionPort.attach_bridge`), removing it again when no
+role is left (:meth:`~mowdeck_control_mammotion.port.MammotionPort.detach_bridge`). PyMammotion
+would send everything over a connected BLE transport; the port therefore routes cloud first
+(:func:`~mowdeck_control_mammotion.port.bridge_route`): only the drive channel and the report
+polling of an open drive session use the bridge.
+
+The state reports ``connection`` ``ble_bridge`` while Bluetooth carries traffic, ``cloud``
+otherwise, and ``links["ble_bridge"]`` with ``connected`` while the proxy link is held, the
+bridge's firmware (``esphome_version``, ``project_version``, ``outdated``) and the mower's RSSI
+at the bridge; every link change publishes a state.
 
 What stays the cloud's: ``is_connected`` (a lost bridge does not end the connection, a dead
-cloud login does; both links down means ``NotConnected`` on commands), the camera, the firmware
-service. What needs the bridge: manual driving (``capabilities.manual_drive`` follows the
-bridge, :meth:`MammotionDualConnection.start_drive_session` refuses without it, and an open
-session ends when the bridge drops: a frame never falls back to the cloud). A bridge scan
+cloud login does), the camera, the firmware service. What needs the bridge: manual driving
+(``capabilities.manual_drive`` follows the proxy link;
+:meth:`MammotionDualConnection.start_drive_session` connects Bluetooth on demand and refuses
+when it does not come up, and an open session ends when Bluetooth drops: a frame never falls
+back to the cloud). A bridge scan
 (:meth:`MammotionDualConnection.scan_bridge`) for the bridge this connection holds is answered
 from the live scanner, so a "re-check" never opens a second API client to the proxy.
 """
@@ -53,10 +71,15 @@ from mowdeck_control_mammotion.port import MammotionPort
 _log = logging.getLogger("mowdeck_control_mammotion.dual")
 
 BRIDGE_NOT_CONNECTED: Final = "the Bluetooth bridge is not connected"
+BLE_NOT_UP: Final = "the Bluetooth connection through the bridge did not come up"
 BRIDGE_BACKOFF_INITIAL_S: Final = 5.0
 BRIDGE_BACKOFF_MAX_S: Final = 60.0
 BRIDGE_POLL_S: Final = 2.0
-"""How often an open bridge link is checked for a drop (and the RSSI refreshed)."""
+"""How often the watcher checks the proxy link and the roles (attach or detach Bluetooth)."""
+BLE_ATTACH_TIMEOUT_S: Final = 45.0
+"""Longest wait of :meth:`MammotionDualConnection.start_drive_session` for Bluetooth."""
+FAST_POSITION_ACTIVITIES: Final = frozenset({MowerActivity.MOWING, MowerActivity.RETURNING})
+"""Activities in which the ``fast_position`` role attaches Bluetooth."""
 
 
 class ProxyOpener(Protocol):
@@ -75,11 +98,18 @@ def link_options_of(raw: Mapping[str, Any]) -> BleProxyOptions:
     return BleProxyOptions.parse(options)
 
 
-class BridgeWatcher:
-    """Keeps the Bluetooth bridge link of one mower open: connect, attach, watch, reconnect.
+def _never() -> bool:
+    return False
 
-    ``on_change(connected)`` is awaited after every attach and loss (the connection publishes
-    a state and ends an open drive session). The watcher never touches the cloud session.
+
+class BridgeWatcher:
+    """Keeps the Bluetooth bridge link of one mower: holds the proxy, attaches Bluetooth while
+    ``wanted()`` says a role needs it, detaches it when not, reconnects the proxy.
+
+    ``on_change(carrying)`` is awaited after every change of the proxy link or of the Bluetooth
+    attachment (``carrying``: Bluetooth carries traffic now); the connection publishes a state
+    and ends an open drive session when Bluetooth is gone. The watcher never touches the cloud
+    session.
     """
 
     def __init__(
@@ -88,6 +118,7 @@ class BridgeWatcher:
         options: BleProxyOptions,
         *,
         on_change: Callable[[bool], Awaitable[None]],
+        wanted: Callable[[], bool] = _never,
         opener: ProxyOpener = open_proxy,
         clock: Callable[[], datetime] = utc_now,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -98,6 +129,7 @@ class BridgeWatcher:
         self._port = port
         self._options = options
         self._on_change = on_change
+        self._wanted = wanted
         self._opener = opener
         self._clock = clock
         self._sleep = sleep
@@ -110,14 +142,21 @@ class BridgeWatcher:
         self.since: datetime | None = None
         """When the link opened or was lost last."""
         self.last_error: str | None = None
-        """The exception type of the last failed open (never the key)."""
+        """The exception type of the last failed open or attach (never the key)."""
         self.attempts = 0
+        self.attached = False
+        """True while the mower's BLE transport is attached through the bridge."""
         self._task: asyncio.Task[None] | None = None
 
     @property
+    def proxy_up(self) -> bool:
+        """True while the proxy link is open (the bridge holds the link)."""
+        return self.link is not None and self.link.is_alive()
+
+    @property
     def connected(self) -> bool:
-        """True while the proxy link is open and the BLE transport connected."""
-        return self.link is not None and self.link.is_alive() and self._port.ble_connected()
+        """True while Bluetooth through the bridge is attached and connected."""
+        return self.attached and self.proxy_up and self._port.ble_connected()
 
     def holds(self, host: str, port: int) -> bool:
         """True while this watcher holds an open link to the proxy at ``host``:``port``."""
@@ -136,14 +175,17 @@ class BridgeWatcher:
     async def stop(self) -> None:
         """Cancel the task and close an open link (the BLE transport is detached)."""
         task, self._task = self._task, None
-        if task is not None:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        await self._drop(notify=False)
+        try:
+            if task is not None:
+                task.cancel()
+                await asyncio.wait({task})
+                if not task.cancelled() and (error := task.exception()) is not None:
+                    _log.debug("bridge watcher had failed: %r", error)
+        finally:
+            await self._drop(notify=False)
 
     async def run(self) -> None:
-        """Open, attach and watch the bridge until cancelled; reconnect with backoff."""
+        """Open the proxy, follow the roles while it stays up, reconnect with backoff."""
         delay = self._initial_backoff_s
         options = self._options
         while True:
@@ -169,51 +211,72 @@ class BridgeWatcher:
                 await self._sleep(delay)
                 delay = min(delay * 2, self._max_backoff_s)
                 continue
-            try:
-                await self._port.attach_bridge(link)
-            except asyncio.CancelledError:
-                await link.close()
-                raise
-            except Exception as exc:
-                self.last_error = type(exc).__name__
-                _log.warning(
-                    "BLE through bridge %s not attached (%s), next try in %.0f s",
-                    options.host,
-                    self.last_error,
-                    delay,
-                )
-                await link.close()
-                await self._sleep(delay)
-                delay = min(delay * 2, self._max_backoff_s)
-                continue
             self.link = link
             self.proxy = proxy_info_of(link.device_info, checked_at=self._clock())
             self.since = self._clock()
             self.last_error = None
             delay = self._initial_backoff_s
             _log.info(
-                "bridge %s (%s, ESPHome %s%s) carries %s",
+                "bridge %s (%s, ESPHome %s%s) holds the link to %s",
                 link.proxy_name,
                 options.host,
                 self.proxy.esphome_version,
                 ", outdated" if self.proxy.outdated else "",
                 options.ble_address,
             )
-            await self._on_change(True)
-            while self.connected:
-                await self._sleep(self._poll_s)
+            await self._on_change(False)
+            await self._follow_roles(link)
             _log.warning("bridge link to %s lost", options.host)
             await self._drop(notify=True)
             await self._sleep(delay)
             delay = min(delay * 2, self._max_backoff_s)
 
+    async def _follow_roles(self, link: ProxyLink) -> None:
+        """While the proxy is up: attach Bluetooth when a role needs it (retrying with its own
+        backoff), detach it when none does or when it dropped."""
+        attach_delay = self._initial_backoff_s
+        while link.is_alive():
+            wanted = self._wanted()
+            if self.attached and (not wanted or not self._port.ble_connected()):
+                if wanted:
+                    _log.warning("Bluetooth through bridge %s lost", self._options.host)
+                await self._detach()
+                await self._on_change(False)
+            elif wanted and not self.attached:
+                try:
+                    await self._port.attach_bridge(link)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    self.last_error = type(exc).__name__
+                    _log.warning(
+                        "BLE through bridge %s not attached (%s), next try in %.0f s",
+                        self._options.host,
+                        self.last_error,
+                        attach_delay,
+                    )
+                    await self._sleep(attach_delay)
+                    attach_delay = min(attach_delay * 2, self._max_backoff_s)
+                    continue
+                self.attached = True
+                self.last_error = None
+                attach_delay = self._initial_backoff_s
+                _log.info("bridge %s carries Bluetooth to the mower", self._options.host)
+                await self._on_change(True)
+            await self._sleep(self._poll_s)
+
+    async def _detach(self) -> None:
+        self.attached = False
+        with contextlib.suppress(Exception):
+            await self._port.detach_bridge()
+
     async def _drop(self, *, notify: bool) -> None:
         link, self.link = self.link, None
+        if self.attached:
+            await self._detach()
         if link is None:
             return
         self.since = self._clock()
-        with contextlib.suppress(Exception):
-            await self._port.detach_bridge()
         with contextlib.suppress(Exception):
             await link.close()
         if notify:
@@ -235,24 +298,50 @@ class MammotionDualConnection(MammotionCloudConnection):
         scanner: BridgeScanner | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         poll_s: float = BRIDGE_POLL_S,
+        attach_timeout_s: float = BLE_ATTACH_TIMEOUT_S,
     ) -> None:
         super().__init__(port, config, options, clock=clock, scanner=scanner)
         self.link_options = link
         self._session: BleDriveSession | None = None
+        self._drive_requested = False
+        self._attach_timeout_s = attach_timeout_s
         self._watcher = BridgeWatcher(
             port,
             link,
             on_change=self._on_bridge_change,
+            wanted=self.bridge_wanted,
             opener=opener,
             clock=clock,
             sleep=sleep,
             poll_s=poll_s,
         )
+        port.route_bridge(self._drive_active)
 
     @property
     def watcher(self) -> BridgeWatcher:
         """The bridge watcher (diagnostics and tests)."""
         return self._watcher
+
+    # --- link roles -------------------------------------------------------------------------
+
+    def bridge_roles(self) -> frozenset[str]:
+        """The roles that need Bluetooth through the bridge right now: ``drive`` (a drive
+        session is open or being opened) and ``fast_position`` (mowing or returning)."""
+        roles: set[str] = set()
+        if self._drive_requested or self._drive_active():
+            roles.add("drive")
+        state = self._last_state
+        if (
+            self.link_options.fast_position
+            and state is not None
+            and state.activity in FAST_POSITION_ACTIVITIES
+        ):
+            roles.add("fast_position")
+        return frozenset(roles)
+
+    def bridge_wanted(self) -> bool:
+        """True when a role needs Bluetooth (the watcher attaches it)."""
+        return self._connected and bool(self.bridge_roles())
 
     # --- lifecycle --------------------------------------------------------------------------
 
@@ -263,12 +352,14 @@ class MammotionDualConnection(MammotionCloudConnection):
 
     async def _before_close(self) -> None:
         session, self._session = self._session, None
-        if session is not None:
-            await session.close()
-        await self._watcher.stop()
+        try:
+            if session is not None:
+                await session.close()
+        finally:
+            await self._watcher.stop()
 
-    async def _on_bridge_change(self, connected: bool) -> None:
-        if not connected:
+    async def _on_bridge_change(self, carrying: bool) -> None:
+        if not carrying:
             session, self._session = self._session, None
             if session is not None:
                 await session.close()
@@ -278,17 +369,23 @@ class MammotionDualConnection(MammotionCloudConnection):
     # --- hooks --------------------------------------------------------------------------------
 
     def ble_connected(self) -> bool:
-        """True while the bridge carries the mower's BLE link."""
+        """True while Bluetooth through the bridge carries traffic (a role is active)."""
         return self._connected and self._watcher.connected
 
     def _manual_drive_offered(self) -> bool:
-        return self.ble_connected()
+        return self._connected and self._watcher.proxy_up
 
     def _manual_blades_allowed(self) -> bool:
         return self.link_options.allow_manual_blades
 
     def _drive_active(self) -> bool:
         return self._session is not None and self._session.is_open
+
+    def _mode(self) -> str:
+        mode = super()._mode()
+        # Bluetooth streams the positions while it is attached; the cloud keeps polling at the
+        # active interval instead of holding its own report window.
+        return "poll" if mode == "stream" and self.ble_connected() else mode
 
     def _connection_kind(self) -> ConnectionKind:
         return ConnectionKind.BLE_BRIDGE if self.ble_connected() else ConnectionKind.CLOUD
@@ -297,13 +394,14 @@ class MammotionDualConnection(MammotionCloudConnection):
         return LINK_BLE_BRIDGE if self.ble_connected() else super()._link_label()
 
     def _link_statuses(self) -> dict[str, LinkStatus]:
-        connected = self.ble_connected()
+        held = self._connected and self._watcher.proxy_up
+        link = self._watcher.link
+        rssi = self._port.ble_rssi() if self.ble_connected() else None
+        if rssi is None and held and link is not None:
+            rssi = link.rssi()  # from the mower's advertisements at the bridge
         return {
             LINK_BLE_BRIDGE: mapping.link_status_of(
-                self._watcher.proxy,
-                connected=connected,
-                since=self._watcher.since,
-                rssi=self._port.ble_rssi() if connected else None,
+                self._watcher.proxy, connected=held, since=self._watcher.since, rssi=rssi
             )
         }
 
@@ -311,20 +409,34 @@ class MammotionDualConnection(MammotionCloudConnection):
 
     async def start_drive_session(self) -> DriveSession:
         self._require_connected()
-        if not self.ble_connected():
+        if not self._watcher.proxy_up:
             raise CommandRejected(BRIDGE_NOT_CONNECTED)
         self._require_no_sensor_stop()
-        self.boost_refresh()
         if self._session is not None and self._session.is_open:
             await self._session.close()
-        self._session = BleDriveSession(
-            self._port,
-            blades_allowed=self.link_options.allow_manual_blades,
-            blade_height_mm=self.link_options.manual_blade_height_mm,
-            sensor_stop=self._sensor_stop_reason,
-            link_up=self.ble_connected,
-        )
+        self._drive_requested = True
+        try:
+            await self._wait_for_bluetooth()
+            self.boost_refresh()
+            self._session = BleDriveSession(
+                self._port,
+                blades_allowed=self.link_options.allow_manual_blades,
+                blade_height_mm=self.link_options.manual_blade_height_mm,
+                sensor_stop=self._sensor_stop_reason,
+                link_up=self.ble_connected,
+            )
+        finally:
+            self._drive_requested = False
         return self._session
+
+    async def _wait_for_bluetooth(self) -> None:
+        """Wait until the watcher attached Bluetooth for the ``drive`` role."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._attach_timeout_s
+        while not self.ble_connected():
+            if loop.time() >= deadline or not self._watcher.proxy_up:
+                raise CommandRejected(BLE_NOT_UP)
+            await asyncio.sleep(0.05)
 
     def _sensor_stop_reason(self) -> str | None:
         state = self._snapshot()

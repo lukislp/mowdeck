@@ -114,6 +114,9 @@ class SessionTiming:
     adapter's device information rounds); 0 switches the periodic check off."""
     firmware_check_interval_seconds: float = 24 * 3600.0
     """Then ask again this often while the connection lasts."""
+    close_timeout_seconds: float = 30.0
+    """Longest wait for a connection to close (its link, a bridge's proxy) before the session
+    gives up on it and logs a warning."""
 
 
 class ConnectionLost(Exception):  # noqa: N818 - reads as an event
@@ -134,6 +137,13 @@ class FirmwareUnsupported(Exception):  # noqa: N818 - reads as a state
 
 class BridgeScanUnsupported(Exception):  # noqa: N818 - reads as a state
     """The connection of the mower cannot look through a Bluetooth bridge."""
+
+
+def _cancelling() -> bool:
+    """True when the current task was asked to stop (``Task.cancel``), as opposed to a
+    ``CancelledError`` that escaped from a library's own future."""
+    task = asyncio.current_task()
+    return task is not None and task.cancelling() > 0
 
 
 def snapshot_camera_uid(session: CameraSession) -> int | None:
@@ -255,7 +265,15 @@ class MowerSession:
             try:
                 await self._connect_and_run()
             except asyncio.CancelledError:
-                raise
+                if _cancelling():
+                    raise
+                # A vendor library cancelled one of its own futures (a dropped transport): a
+                # failed connection, not the gateway releasing the mower.
+                _log.warning(
+                    "mower connection failed",
+                    mower_id=str(self.mower_id),
+                    error="CancelledError inside the connection",
+                )
             except ConnectionLost:
                 _log.warning("mower connection lost", mower_id=str(self.mower_id))
                 delays = backoff(
@@ -306,15 +324,45 @@ class MowerSession:
             reason = "connection lost"
             raise ConnectionLost
         except asyncio.CancelledError:
-            reason = "gateway released the mower"
+            reason = "gateway released the mower" if _cancelling() else "connection failed"
             raise
         finally:
             self._controller = None
             self.connected_since = None
-            with contextlib.suppress(Exception):
-                await controller.close()
+            await self._close_to_the_end(controller, reason)
             if started:
                 await self._connection_event(MOWER_DISCONNECTED, reason)
+
+    async def _close_to_the_end(self, controller: MowerController, reason: str) -> None:
+        """Close ``controller`` and its connection even when the session is cancelled while
+        it closes (a removal during a reconnect): an interrupted close would leave the link,
+        and a bridge's proxy and Bluetooth connection, open until the gateway restarts. A
+        cancellation that arrived meanwhile is raised once the close is done."""
+        closing = asyncio.create_task(
+            self._close_controller(controller, reason), name=f"close-{self.mower_id}"
+        )
+        cancelled = False
+        while not closing.done():
+            try:
+                await asyncio.shield(closing)
+            except asyncio.CancelledError:
+                cancelled = True
+        if cancelled:
+            raise asyncio.CancelledError
+
+    async def _close_controller(self, controller: MowerController, reason: str) -> None:
+        try:
+            async with asyncio.timeout(self._timing.close_timeout_seconds):
+                await controller.close()
+        except Exception as exc:
+            _log.warning(
+                "closing the mower connection failed",
+                mower_id=str(self.mower_id),
+                reason=reason,
+                error=repr(exc),
+            )
+        else:
+            _log.info("connection for mower closed", mower_id=str(self.mower_id), reason=reason)
 
     async def _run_connected(
         self, controller: MowerController, connection: MowerConnection
