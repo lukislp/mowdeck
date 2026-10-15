@@ -530,7 +530,8 @@ class FirmwareTracker:
 
     An update starts with :meth:`started` (or when the device reports ``isupgrading`` out of the
     blue: someone started it in the vendor app) and ends when :meth:`observe` sees a report
-    with a new firmware version or a completed OTA frame (``idle``), a failed OTA frame
+    with the target firmware version or a completed OTA frame for it (``idle``; the mower also
+    reports each upgraded component as complete, which must not end it), a failed OTA frame
     (``failed`` with the mower's message), or :data:`FIRMWARE_UPDATE_MAX_S` passed
     (``unknown``). Progress comes from ``device.update_check`` (the MQTT property
     ``otaProgress`` and the BLE ``toapp_upgrade_report`` both land there).
@@ -545,6 +546,8 @@ class FirmwareTracker:
     """``time.monotonic()`` when MowDeck requested the update: OTA frames stamped before it
     belong to an earlier update and are ignored."""
     check: CheckDeviceVersion | None = None
+    last_frame: tuple[str, str, int, int, str] | None = None
+    """The last upgrade report that was logged (each distinct report is logged once)."""
 
     @property
     def installing(self) -> bool:
@@ -596,17 +599,30 @@ class FirmwareTracker:
         assert self.info is not None  # noqa: S101 - set when the update started
         current = _clean_version(installed)
         ota = _live_ota_frame(device, since=self.started_mono)
-        if current is not None and current != self.started_from:
-            return self._ended("finished", installed=current, now=now)
+        if ota is not None:
+            key = (ota.devname, ota.version, ota.progress, ota.result, ota.message)
+            if key != self.last_frame:
+                self.last_frame = key
+                _log.info(
+                    "upgrade report: component %s version %s progress %s result %s (%s)",
+                    *key,
+                )
         if ota is not None and ota.is_failed:
             reason = (ota.message or "the mower reported an error").strip()[:500]
             return self._ended("failed", installed=current, now=now, reason=reason)
-        complete = (ota is not None and ota.is_complete) or (
-            not check.isupgrading and (check.progress or 0) >= 100
-        )
-        if complete:
-            new_version = _clean_version(ota.version) if ota is not None else None
-            return self._ended("finished", installed=new_version or current, now=now)
+        # The mower upgrades several components one after the other and reports each one as
+        # complete (``result`` 0) with its own name and version; PyMammotion then also writes
+        # that component's version as the device version. So only the target version ends the
+        # whole update (any change, when the target is unknown: started in the vendor app).
+        target = _clean_version(self.info.available)
+        if current is not None and current != self.started_from:
+            if target is None or current == target:
+                return self._ended("finished", installed=current, now=now)
+            current = self.started_from
+        if ota is not None and ota.is_complete:
+            done_version = _clean_version(ota.version)
+            if target is not None and done_version == target:
+                return self._ended("finished", installed=done_version, now=now)
         if loop_time - (self.started_at or loop_time) > FIRMWARE_UPDATE_MAX_S:
             return self._ended("unknown", installed=current, now=now)
         progress = (

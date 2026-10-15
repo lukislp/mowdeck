@@ -276,6 +276,16 @@ class PortClosedError(TransportError):
     """The port has no open client (never opened, or closed)."""
 
 
+def vendor_call_succeeded(code: object) -> bool:
+    """Whether a Mammotion cloud response code means success.
+
+    The cloud API answers ``0`` for success (PyMammotion checks ``code != 0`` everywhere).
+    PyMammotion returns ``200`` itself when the answer was not JSON, and the HTTP status (never
+    200) when the request failed. A missing code counts as success.
+    """
+    return code is None or code in (0, 200)
+
+
 class FirmwareRefused(Exception):  # noqa: N818 - reads like the other outcomes
     """The vendor's firmware service refused the request (the message is safe to show)."""
 
@@ -983,7 +993,7 @@ class ClientPort:
         )
         if check is None:
             code = getattr(response, "code", None)
-            if code not in (None, 200):
+            if not vendor_call_succeeded(code):
                 msg = f"the firmware check failed with code {code}"
                 raise FirmwareRefused(msg)
             return None
@@ -998,8 +1008,8 @@ class ClientPort:
             raise FirmwareRefused("firmware updates need the cloud link")
         self.device().clear_version_info()  # the version is fetched again after the update
         response = await http.start_ota_upgrade(handle.iot_id, version)
-        code = getattr(response, "code", 200)
-        if code != 200:
+        code = getattr(response, "code", None)
+        if not vendor_call_succeeded(code):
             msg = f"the firmware service refused the update (code {code})"
             raise FirmwareRefused(msg)
         _log.info("firmware update of %s to %s requested", handle.device_name, version)

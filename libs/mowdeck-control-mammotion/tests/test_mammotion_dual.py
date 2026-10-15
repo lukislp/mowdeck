@@ -807,3 +807,26 @@ def test_mammotion_firmware_info_mapping() -> None:
     )
     assert running.update_state == "installing" and running.progress == 55
     assert mapping.available_version_of(firmware_offer(available=None)) is None
+
+
+async def test_mammotion_firmware_update_ignores_a_finished_component() -> None:
+    """The mower reports each upgraded component as complete; only the target version, or the
+    installed version changing, ends the update."""
+    conn, port = cloud()
+    port.firmware_check = firmware_offer()
+    await conn.connect()
+    await conn.check_firmware()
+    await conn.start_firmware_update(SAMPLE_NEWER_FIRMWARE)
+    await port.deliver_ota_progress(1, version=SAMPLE_NEWER_FIRMWARE)
+    await port.deliver_ota_progress(100, result=OTA_RESULT_SUCCESS, version="0.4.2.7")
+    state = await conn.get_state()
+    assert state.firmware_info is not None
+    assert state.firmware_info.update_state == "installing"
+    assert state.firmware_info.installed == SAMPLE_FIRMWARE
+    await port.deliver_ota_progress(
+        100, result=OTA_RESULT_SUCCESS, version=SAMPLE_NEWER_FIRMWARE, otaid="fake-ota-2"
+    )
+    state = await conn.get_state()
+    assert state.firmware_info is not None and state.firmware_info.update_state == "idle"
+    assert state.firmware_info.installed == SAMPLE_NEWER_FIRMWARE
+    await conn.disconnect()

@@ -11,11 +11,13 @@ from mowdeck_control_mammotion import esphome, port
 from mowdeck_control_mammotion.fake import sample_device
 from mowdeck_control_mammotion.port import (
     ClientPort,
+    FirmwareRefused,
     MowerDevice,
     NoTransportAvailableError,
     PortClosedError,
     Priority,
     TransportType,
+    vendor_call_succeeded,
 )
 
 PASSWORD = "test-only"  # noqa: S105
@@ -656,3 +658,41 @@ async def test_mammotion_client_port_firmware_and_model_read_the_device() -> Non
     assert (p.firmware(), p.model()) == ("1.30.30.1", "LubaAWD1000723")
     device.mower_state.sub_model_id = "HM030070LB2PAWD50OMNI"
     assert p.model() == "LUBA 2 AWD 5000X"
+
+
+@pytest.mark.parametrize(
+    ("code", "ok"), [(0, True), (200, True), (None, True), (500, False), (401, False), (1, False)]
+)
+def test_mammotion_vendor_call_success_codes(code: object, ok: bool) -> None:
+    """The cloud answers 0 for success; PyMammotion's own 200 and a missing code count too."""
+    assert vendor_call_succeeded(code) is ok
+
+
+class _OtaHttp:
+    def __init__(self, code: int) -> None:
+        self.code = code
+        self.requests: list[tuple[str, str]] = []
+
+    async def start_ota_upgrade(self, iot_id: str, version: str) -> Any:
+        self.requests.append((iot_id, version))
+        return SimpleNamespace(code=self.code, msg="", data=None)
+
+
+@pytest.mark.parametrize("code", [0, 200])
+async def test_mammotion_firmware_update_accepts_the_cloud_success_code(code: int) -> None:
+    client = _Client()
+    http = _OtaHttp(code)
+    client.mammotion_http = http  # type: ignore[attr-defined]
+    p = _port(client)
+    await p.open()
+    await p.start_firmware_update("1.30.31.19")
+    assert http.requests == [("iot-1", "1.30.31.19")]
+
+
+async def test_mammotion_firmware_update_refused_on_an_error_code() -> None:
+    client = _Client()
+    client.mammotion_http = _OtaHttp(500)  # type: ignore[attr-defined]
+    p = _port(client)
+    await p.open()
+    with pytest.raises(FirmwareRefused, match="code 500"):
+        await p.start_firmware_update("1.30.31.19")
