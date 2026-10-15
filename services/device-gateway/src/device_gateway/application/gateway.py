@@ -62,7 +62,9 @@ from device_gateway.domain.rules import (
     camera_rejection,
     command_rejection,
     firmware_check_rejection,
+    holds_bluetooth_through,
     preview_rejection,
+    scan_found,
 )
 
 _log = get_logger(__name__)
@@ -315,10 +317,13 @@ class DeviceGateway:
             )
             return _scan_error(code, detail)
         host, port = request.host.casefold(), request.port
+        holder = self._bluetooth_holder(session, host, port)
         for other in self._sessions.values():
             if other is not session and bridge_in_use(
                 other.registration, other.last_state, host, port
             ):
+                if holder is not None and request.expected_name:
+                    return self._already_connected(request, holder)
                 return _scan_error(
                     BridgeScanErrorCode.BUSY, "another mower is connected through this bridge"
                 )
@@ -350,6 +355,12 @@ class DeviceGateway:
                 return _scan_error(
                     BridgeScanErrorCode.UNREACHABLE, f"the scan failed: {type(exc).__name__}"
                 )
+        if (
+            request.expected_name
+            and not scan_found(reply, request.expected_name)
+            and (holder := self._bluetooth_holder(session, host, port)) is not None
+        ):
+            return self._already_connected(request, holder, reply)
         _log.info(
             "bridge scan answered",
             mower_id=str(request.mower_id),
@@ -358,6 +369,42 @@ class DeviceGateway:
             devices=len(reply.devices),
         )
         return reply
+
+    def _bluetooth_holder(self, asking: MowerSession, host: str, port: int) -> MowerSession | None:
+        """Another session of this instance whose mower is connected over Bluetooth through
+        the bridge at ``host``:``port`` (from its link status, never the manufacturer)."""
+        for other in self._sessions.values():
+            if other is not asking and holds_bluetooth_through(
+                other.registration, other.last_state, host, port
+            ):
+                return other
+        return None
+
+    def _already_connected(
+        self,
+        request: BridgeScanRequest,
+        holder: MowerSession,
+        reply: BridgeScanReply | None = None,
+    ) -> BridgeScanReply:
+        name = holder.registration.name
+        _log.info(
+            "bridge scan answered",
+            mower_id=str(request.mower_id),
+            host=request.host,
+            outcome=BridgeScanErrorCode.ALREADY_CONNECTED.value,
+            held_by=str(holder.mower_id),
+        )
+        error = BridgeScanError(
+            code=BridgeScanErrorCode.ALREADY_CONNECTED,
+            detail=(
+                "the mower is already connected through this bridge "
+                f"(by mower entry {name}, {holder.mower_id})"
+            )[:500],
+            held_by=name,
+        )
+        if reply is None:
+            return BridgeScanReply(error=error)
+        return reply.model_copy(update={"error": error})
 
     async def firmware_check(self, request: FirmwareCheckRequest) -> FirmwareCheckReply | None:
         """Answer a firmware check request; None when the mower belongs to another shard.

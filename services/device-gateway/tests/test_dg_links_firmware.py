@@ -28,6 +28,7 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerCapabilitiesSnapshot,
     MowerRegistration,
+    ScannedDevice,
 )
 from mowdeck_contracts.v1.subjects import (
     bridge_scan_subject,
@@ -41,7 +42,14 @@ from mowdeck_service_kit.testing import lifespan_client
 from device_gateway.application.gateway import DeviceGateway
 from device_gateway.application.ports import MowerCredentials
 from device_gateway.application.session import MowerSession, SessionTiming
-from device_gateway.domain.rules import Shard, bridge_in_use, links_changed
+from device_gateway.domain.rules import (
+    Shard,
+    bluetooth_bridge_of,
+    bridge_in_use,
+    holds_bluetooth_through,
+    links_changed,
+    scan_found,
+)
 
 KEY = "ZTJlLW5vaXNlLWtleS1vZi0zMi1ieXRlcy0xMjM0NTY="
 BRIDGE_LINK: dict[str, Any] = {
@@ -218,8 +226,15 @@ async def test_dg_bridge_scan_is_busy_while_another_mower_holds_the_bridge() -> 
         held = telemetry(bus, holder.mower_id)[-1]
         assert held.connection is ConnectionKind.BLE_BRIDGE  # the simulated bridge is up
         assert held.links[LINK_BLE_BRIDGE].connected is True
-        busy = await _ask_scan(bus, _scan(asker, host="192.0.2.10"))
+        busy = await _ask_scan(bus, _scan(asker, host="192.0.2.10", expected_name=None))
         assert busy.error is not None and busy.error.code is BridgeScanErrorCode.BUSY
+        # Looking for a mower while this gateway holds a Bluetooth connection through the
+        # bridge: the mower does not advertise, the answer names the entry that holds it.
+        held_here = await _ask_scan(bus, _scan(asker, host="192.0.2.10"))
+        assert held_here.error is not None
+        assert held_here.error.code is BridgeScanErrorCode.ALREADY_CONNECTED
+        assert held_here.error.held_by == holder.name
+        assert str(holder.mower_id) in held_here.error.detail
         # The holder itself re-checks its own bridge.
         own = await _ask_scan(bus, _scan(holder, host="192.0.2.10"))
         assert own.ok
@@ -475,6 +490,76 @@ def test_dg_rules_links_changed_and_bridge_in_use() -> None:
     assert bridge_in_use(reg, down, "192.0.2.10", 6053) is False
     assert bridge_in_use(reg, None, "192.0.2.10", 6053) is False
     assert bridge_in_use(registration(), up, "192.0.2.10", 6053) is False
+    assert holds_bluetooth_through(reg, up, "192.0.2.10", 6053) is True
+    assert holds_bluetooth_through(reg, down, "192.0.2.10", 6053) is False
+    assert holds_bluetooth_through(reg, up, "192.0.2.11", 6053) is False
+    standalone = registration().model_copy(
+        update={
+            "connection_kind": ConnectionKind.BLE_BRIDGE,
+            "connection_options": {"host": "Bridge.local", "ble_address": "AA:BB:CC:DD:EE:FF"},
+        }
+    )
+    assert bluetooth_bridge_of(standalone) == ("bridge.local", 6053)
+    assert holds_bluetooth_through(standalone, up, "bridge.local", 6053) is True
+    assert bluetooth_bridge_of(registration()) is None
+    seen = BridgeScanReply(
+        devices=[ScannedDevice(name="Luba-A", address="AA:BB:CC:DD:EE:01", rssi=-60)]
+    )
+    assert scan_found(seen, "luba-a") and not scan_found(seen, "Luba-B")
+    assert scan_found(seen, None) and not scan_found(BridgeScanReply(), None)
+
+
+async def test_dg_bridge_scan_names_the_entry_that_holds_the_mower_after_an_empty_scan() -> None:
+    """The asker's own scan ran and saw nothing; another entry holds the mower through the
+    same bridge over Bluetooth (a standalone bridge connection, which reports no link)."""
+    holder = registration(name="Garage mower")
+    holder = holder.model_copy(
+        update={
+            "connection_kind": ConnectionKind.BLE_BRIDGE,
+            "connection_options": {"host": "192.0.2.10", "ble_address": "AA:BB:CC:DD:EE:FF"},
+        }
+    )
+    asker = registration(account_id=holder.account_id)
+
+    def bluetooth(r: MowerRegistration) -> MowerConnection:
+        return SlowMower(
+            mower_id=r.mower_id,
+            account_id=r.account_id,
+            config=SimulationConfig(time_scale=60, bridge=True),
+        )
+
+    def empty_bridge(r: MowerRegistration) -> MowerConnection:
+        return SlowMower(
+            mower_id=r.mower_id,
+            account_id=r.account_id,
+            config=SimulationConfig(time_scale=60, bridge_devices=()),
+        )
+
+    gateway = DeviceGateway(
+        shard=Shard(),
+        provider=TestProvider({holder.mower_id: bluetooth, asker.mower_id: empty_bridge}),
+        publisher=_NullPublisher(),
+        timing=SessionTiming(reconnect_initial_seconds=5, reconnect_max_seconds=5),
+    )
+    try:
+        await gateway.register(holder, source="test")
+        await gateway.register(asker, source="test")
+
+        def ready() -> bool:
+            held, asking = gateway.session(holder.mower_id), gateway.session(asker.mower_id)
+            return bool(held and held.last_state and asking and asking.last_state)
+
+        await wait_until(ready)
+        reply = await gateway.bridge_scan(_scan(asker))
+        assert reply is not None and reply.error is not None
+        assert reply.error.code is BridgeScanErrorCode.ALREADY_CONNECTED
+        assert reply.error.held_by == "Garage mower"
+        assert reply.proxy is not None  # the scan itself ran
+        other = await gateway.bridge_scan(_scan(asker, host="192.0.2.99"))
+        assert other is not None and other.error is not None
+        assert other.error.code is BridgeScanErrorCode.TIMEOUT  # nobody holds that bridge
+    finally:
+        await gateway.close()
 
 
 async def test_dg_session_check_firmware_needs_a_connection() -> None:

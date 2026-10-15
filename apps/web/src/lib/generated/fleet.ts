@@ -775,13 +775,18 @@ export type components = {
             code: components["schemas"]["BridgeScanErrorCode"];
             /** Detail */
             detail: string;
+            /**
+             * Held By
+             * @description For already_connected: the name of the mower entry whose connection holds the mower through this bridge.
+             */
+            held_by?: string | null;
         };
         /**
          * BridgeScanErrorCode
          * @description Why a bridge scan gave no result.
          * @enum {string}
          */
-        BridgeScanErrorCode: "unreachable" | "auth_failed" | "timeout" | "busy" | "unsupported" | "not_found" | "forbidden";
+        BridgeScanErrorCode: "unreachable" | "auth_failed" | "timeout" | "busy" | "unsupported" | "not_found" | "forbidden" | "already_connected";
         /**
          * BridgeScanIn
          * @description ``POST /mowers/{id}/links/ble_bridge/scan``: where the bridge is and its key (`***`: the
