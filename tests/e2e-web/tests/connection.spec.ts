@@ -394,13 +394,23 @@ test('bridge sheet and firmware check on the mower settings', async ({ page, req
     await expect(page.getByTestId('bridge-key')).toHaveAttribute('aria-invalid', 'true');
     await page.getByTestId('bridge-host').fill('192.0.2.20');
     await page.getByTestId('bridge-key').fill(NOISE_KEY);
+    // Hold the scan request until the waiting step has been seen: the fake gateway answers at
+    // once, so without the gate the spinner can be gone before the assertion runs.
+    let releaseScan: () => void = () => {};
+    const scanGate = new Promise<void>((resolve) => (releaseScan = resolve));
+    await page.route('**/links/ble_bridge/scan', async (route) => {
+      await scanGate;
+      await route.continue();
+    });
     const scanned = page.waitForResponse(
       (r) => r.url().endsWith('/links/ble_bridge/scan') && r.request().method() === 'POST',
       { timeout: 90_000 },
     );
     await page.getByTestId('bridge-scan').click();
     await expect(page.getByTestId('bridge-scanning')).toContainText('bis zu 30 s');
+    releaseScan();
     const scan = await scanned;
+    await page.unroute('**/links/ble_bridge/scan');
     const reply = scan.ok()
       ? ((await scan.json()) as {
           devices: { name: string; address: string }[];
