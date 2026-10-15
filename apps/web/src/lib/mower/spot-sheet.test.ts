@@ -306,8 +306,35 @@ describe('start conditions', () => {
     expect(failing({ state: stateAt([10, 10], { spot_run: run() }) })).toEqual(['free']);
     expect(failing({ state: stateAt([10, 10], { battery_percent: 20 }) })).toEqual(['battery']);
     expect(
-      failing({ state: stateAt([10, 10], { observed_at: new Date(NOW - 6_000).toISOString() }) }),
+      failing({
+        state: stateAt([10, 10], {
+          observed_at: new Date(NOW - 61_000).toISOString(),
+          heartbeat_at: new Date(NOW - 2_000).toISOString(),
+        }),
+      }),
     ).toEqual(['fresh']);
+  });
+
+  it('a cloud-first state of 20 s is fresh enough (the run waits for live positions)', () => {
+    const state = stateAt([10, 10], { observed_at: new Date(NOW - 20_000).toISOString() });
+    expect(failing({ state })).toEqual([]);
+    // A minute-old report counts while the link heartbeat says the mower is online.
+    const minute = stateAt([10, 10], {
+      observed_at: new Date(NOW - 60_000).toISOString(),
+      heartbeat_at: new Date(NOW - 8_000).toISOString(),
+    });
+    expect(failing({ state: minute })).toEqual([]);
+    const silent = stateAt([10, 10], { observed_at: new Date(NOW - 50_000).toISOString() });
+    expect(failing({ state: silent })).toEqual(['fresh']);
+  });
+
+  it('a state of a mower whose link the gateway reported lost is not fresh', () => {
+    expect(failing({ state: stateAt([10, 10], { connected: false }) })).toEqual(['fresh']);
+    const beat = new Date(NOW - 5_000).toISOString();
+    const old = new Date(NOW - 30_000).toISOString();
+    expect(failing({ state: stateAt([10, 10], { observed_at: old, heartbeat_at: beat }) })).toEqual(
+      [],
+    );
   });
 
   it('without a state every mower condition is red', () => {

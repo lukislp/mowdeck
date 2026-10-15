@@ -9,9 +9,11 @@ import asyncio
 from datetime import timedelta
 from uuid import uuid4
 
+import pytest
 from mowdeck_contracts.v1 import CommandStatus, MowerActivity, Principal, PrincipalKind
 from mowdeck_contracts.v1.realtime import RealtimeCloseCode
 from realtime_support import T0, harness, make_state, short_token
+from structlog.testing import capture_logs
 
 
 async def test_realtime_auth_timeout_closes_4401() -> None:
@@ -301,6 +303,23 @@ async def test_realtime_origin_check() -> None:
             assert "403" in str(exc)
         else:  # pragma: no cover
             raise AssertionError("a foreign origin was accepted")
+
+
+async def test_realtime_refused_origin_is_logged() -> None:
+    """A refused socket names its origin at info level (a phone on a LAN address was refused
+    without a trace)."""
+    async with harness(realtime_allowed_origins="http://localhost") as h:
+        with capture_logs() as logs, pytest.raises(Exception, match="403"):
+            await h.connect(origin="http://192.168.1.20")
+        refused = [e for e in logs if e["event"] == "websocket refused: origin not allowed"]
+        assert len(refused) == 1, logs
+        assert refused[0]["log_level"] == "info"
+        assert refused[0]["origin"] == "http://192.168.1.20"
+        assert refused[0]["allowed"] == ["http://localhost"]
+        assert "REALTIME_ALLOWED_ORIGINS" in refused[0]["hint"]
+        with capture_logs() as quiet:
+            await h.connect(origin="http://localhost")
+        assert not [e for e in quiet if e["event"].startswith("websocket refused")]
 
 
 async def test_realtime_shutdown_closes_with_1001() -> None:

@@ -23,6 +23,7 @@
     type MapSnapshot,
     type RoutePoint,
     type RtkFix,
+    type SnapPoint,
     type StopState,
   } from '@mowdeck/ui';
   import { untrack } from 'svelte';
@@ -171,6 +172,11 @@
   let mapFailed = $state(false);
   let mapExpanded = $state(false);
   let phone = $state(false);
+  // Spot mowing on phones: the bottom sheet's snap point and the height it covers.
+  let spotSnap = $state<SnapPoint>('peek');
+  let spotSheetHeight = $state(0);
+  /** Height of the chip at the top left of the map (spot mode or the area selection). */
+  let chipHeight = $state(0);
   let tiles = $state.raw<MapTilesConfig | null>(null);
   let route = $state.raw<RoutePoint[]>([]);
   let routeSince = $state.raw(new Date());
@@ -303,6 +309,32 @@
   });
   spotFlow.autoPreview();
   $effect(() => spotFlow.observe(ms?.spot_run));
+  /**
+   * Phones: while a spot is placed, starts, runs or has just ended, the map goes full screen and
+   * the spot sheet is a bottom sheet over it (the map stays visible above it). Placing the spot
+   * needs the map, so it cannot be collapsed then; from the start on it can.
+   */
+  const spotFocus = $derived(
+    phone && (spotFlow.active || spotFlow.launching || spotFlow.running || spotFlow.ended !== null),
+  );
+  let spotWasFocused = false;
+  $effect(() => {
+    const focus = spotFocus;
+    untrack(() => {
+      if (focus && !spotWasFocused) mapExpanded = true;
+      if (!focus && spotWasFocused) mapExpanded = false;
+      spotWasFocused = focus;
+    });
+  });
+  // Every new sheet (a placed spot, "Nachmähen") opens at peek.
+  $effect(() => {
+    if (spotFlow.open) untrack(() => (spotSnap = 'peek'));
+  });
+  /** A tap on the map places or moves the spot; the sheet collapses to peek to show the map. */
+  function spotMapTap(local: [number, number]): void {
+    spotSnap = 'peek';
+    spotFlow.mapTap(local);
+  }
 
   async function loadMower(mowerId: string): Promise<void> {
     // The last answer of this tab shows at once; the page never blanks while it reloads.
@@ -1177,7 +1209,11 @@
     />
   </div>
 {:else if mower}
-  <div class="detail" style:--md-commandbar-height="{barHeight}px">
+  <div
+    class="detail"
+    style:--md-commandbar-height="{barHeight}px"
+    style:--md-spot-sheet-height="{phone ? spotSheetHeight : 0}px"
+  >
     <div class="top">
       <TopBar
         title={mower.name}
@@ -1221,7 +1257,11 @@
       <PlanBanner />
     </div>
 
-    <section class="plan" class:expanded={mapExpanded} aria-label={m.detail_areas()}>
+    <section
+      class="plan"
+      class:expanded={mapExpanded || (phone && spotFlow.active)}
+      aria-label={m.detail_areas()}
+    >
       {#if mowerMap && hasMap && !mapFailed}
         <div class="map-box">
           <MowerMap
@@ -1238,16 +1278,27 @@
             path={mapPath.path}
             pathPreview={mapPath.preview}
             spot={spotFlow.spot}
-            onmaptap={spotFlow.active ? (local) => spotFlow.mapTap(local) : undefined}
+            onmaptap={spotFlow.active ? spotMapTap : undefined}
+            insetBottom={phone ? spotSheetHeight : 0}
+            insetTop={spotFlow.active || (sheet.picked.length && !sheet.picking)
+              ? chipHeight + 8
+              : 0}
             {areaName}
             onselectionchange={(ids) => (sheet.picked = ids)}
             onarealabel={canControl ? openRename : undefined}
             onfail={() => (mapFailed = true)}
-            expanded={mapExpanded}
-            onexpandchange={phone ? (value) => (mapExpanded = value) : undefined}
+            expanded={mapExpanded || (phone && spotFlow.active)}
+            onexpandchange={phone && !spotFlow.active
+              ? (value) => (mapExpanded = value)
+              : undefined}
           />
           {#if spotFlow.active}
-            <div class="chosen spot-chip" data-testid="spot-chip" data-mode={spotFlow.mode}>
+            <div
+              class="chosen spot-chip"
+              data-testid="spot-chip"
+              data-mode={spotFlow.mode}
+              bind:offsetHeight={chipHeight}
+            >
               <Icon name="crosshair" size={16} />
               <span class="spot-chip-text">
                 {#if spotFlow.mode === 'polygon'}
@@ -1277,7 +1328,7 @@
               </button>
             </div>
           {:else if sheet.picked.length && !sheet.picking}
-            <div class="chosen" data-testid="map-selection">
+            <div class="chosen" data-testid="map-selection" bind:offsetHeight={chipHeight}>
               <span class="mono">{m.map_selected({ count: sheet.picked.length })}</span>
               <button
                 type="button"
@@ -1771,16 +1822,8 @@
     </div>
 
     <div class="bar" bind:clientHeight={barHeight}>
-      {#if spotFlow.running || spotFlow.ended}
-        <SpotRunBar
-          run={spotFlow.running ? spotFlow.run : null}
-          ended={spotFlow.ended}
-          rtkFix={ms?.rtk_fix}
-          stopping={spotFlow.stopping}
-          onstop={() => spotFlow.stop()}
-          onremow={canSpot && spotFlow.lastSpot ? () => spotFlow.remowLast() : null}
-          ondismiss={() => spotFlow.dismissEnd()}
-        />
+      {#if !spotFocus && (spotFlow.running || spotFlow.launching || spotFlow.ended)}
+        {@render spotRunBar(false)}
       {/if}
       <CommandBar
         {actions}
@@ -1946,7 +1989,30 @@
         </div>
       {/snippet}
     </Sheet>
-    <SpotSheet flow={spotFlow} areaName={(areaId) => areaName({ id: areaId })} />
+    {#snippet spotRunBar(embedded: boolean)}
+      <SpotRunBar
+        run={spotFlow.running ? spotFlow.run : null}
+        ended={spotFlow.ended}
+        launching={spotFlow.launching}
+        rtkFix={ms?.rtk_fix}
+        stopping={spotFlow.stopping}
+        onstop={() => spotFlow.stop()}
+        onremow={canSpot && spotFlow.lastSpot ? () => spotFlow.remowLast() : null}
+        ondismiss={() => spotFlow.dismissEnd()}
+        {embedded}
+      />
+    {/snippet}
+    <SpotSheet
+      flow={spotFlow}
+      areaName={(areaId) => areaName({ id: areaId })}
+      {phone}
+      bind:snap={spotSnap}
+      bind:visibleHeight={spotSheetHeight}
+    >
+      {#snippet runBar()}
+        {@render spotRunBar(true)}
+      {/snippet}
+    </SpotSheet>
     <Sheet
       open={sheet.dockChoice}
       title={m.dock_choice_title()}
@@ -2026,7 +2092,7 @@
     --md-sheet-bottom: var(--md-commandbar-height);
     display: flex;
     flex-direction: column;
-    padding-bottom: var(--md-commandbar-height);
+    padding-bottom: calc(var(--md-commandbar-height) + var(--md-spot-sheet-height));
   }
 
   .top {

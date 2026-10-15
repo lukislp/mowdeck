@@ -21,6 +21,7 @@ import type { components as Telemetry } from '$lib/generated/telemetry';
 import { m } from '$lib/paraglide/messages';
 
 import type { MowPath } from './mow-path';
+import { isOnline } from './presence';
 import { isJobActivity } from './mow-path';
 import type { SheetArea } from './start-sheet';
 
@@ -55,9 +56,15 @@ export const FALLBACK_CUTTING_WIDTH_MM = 400;
 export const SPOT_SAFETY_MARGIN_M = 0.4;
 /** The mower must stand within this distance of the spot. */
 export const SPOT_NEAR_M = 10;
-/** The state must be younger than this. */
-export const SPOT_FRESH_MS = 5_000;
+/**
+ * The state must be younger than this. A standing mower on a cloud-first connection reports
+ * about every 20 s, and the bridge attaches when the run opens its drive session; the gateway's
+ * run then pauses until positions are live (pose at most 2.5 s old, waiting up to 30 s).
+ */
+export const SPOT_FRESH_MS = 60_000;
 export const SPOT_BATTERY_MIN_PERCENT = 20;
+/** After a start, the run bar says "starting" this long at most until the run shows up. */
+export const SPOT_LAUNCH_WAIT_MS = 20_000;
 /** The preview is asked for this long after the last change. */
 export const SPOT_PREVIEW_DEBOUNCE_MS = 400;
 
@@ -349,6 +356,10 @@ export interface ConditionState {
   activity: string;
   battery_percent: number;
   observed_at: string;
+  /** The gateway's link heartbeat (ADR 0040); absent on states from before it. */
+  heartbeat_at?: string | null;
+  /** False once the gateway reported the link lost. */
+  connected?: boolean | null;
   spot_run?: SpotRunStatus | null;
 }
 
@@ -413,7 +424,11 @@ export function spotConditions(input: SpotConditionInput): SpotCondition[] {
       ok: !!s && !isJobActivity(s.activity) && !input.driveSession && !isSpotRunActive(s.spot_run),
     },
     { id: 'battery', ok: !!s && s.battery_percent > SPOT_BATTERY_MIN_PERCENT },
-    { id: 'fresh', ok: Number.isFinite(age) && age <= SPOT_FRESH_MS },
+    // Online by the link heartbeat (presence.ts) and values younger than SPOT_FRESH_MS.
+    {
+      id: 'fresh',
+      ok: !!s && isOnline(s, input.now) && Number.isFinite(age) && age <= SPOT_FRESH_MS,
+    },
   ];
 }
 

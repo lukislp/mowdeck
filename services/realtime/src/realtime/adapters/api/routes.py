@@ -8,6 +8,7 @@ sends it in the first message.
 
 from fastapi import APIRouter, WebSocket
 from mowdeck_contracts.v1.realtime import RealtimeCloseCode
+from mowdeck_service_kit import get_logger
 from starlette.websockets import WebSocketState
 
 from realtime.application.hub import Hub
@@ -15,6 +16,7 @@ from realtime.application.session import Receive
 from realtime.domain.errors import FrameRejectedError
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
+_log = get_logger("realtime.api")
 
 POLICY_VIOLATION = 1008
 """Close code of a refused origin (RFC 6455)."""
@@ -60,6 +62,14 @@ async def realtime_socket(websocket: WebSocket) -> None:
     allowed: frozenset[str] = websocket.app.state.allowed_origins
     origin = websocket.headers.get("origin")
     if allowed and origin is not None and origin not in allowed:
+        # Say which origin was refused: a phone opening the app on a LAN address is refused
+        # silently otherwise (add that address to REALTIME_ALLOWED_ORIGINS).
+        _log.info(
+            "websocket refused: origin not allowed",
+            origin=origin,
+            allowed=sorted(allowed),
+            hint="add it to REALTIME_ALLOWED_ORIGINS",
+        )
         await websocket.close(code=POLICY_VIOLATION)
         return
     await websocket.accept()

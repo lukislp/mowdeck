@@ -1691,7 +1691,8 @@
   "spot_cond_idle": "Mower idle (not docked)",
   "spot_cond_free": "No job, no drive session, no spot run",
   "spot_cond_battery": "Battery above 20 %",
-  "spot_cond_fresh": "State younger than 5 s",
+  "spot_cond_fresh": "State younger than 60 s",
+  "spot_cond_fresh_hint": "After the start the run waits for live positions (at most 2.5 s old, for up to 30 s) before the mower moves.",
   "spot_preview_hint": "The route appears on the map once the spot lies inside an area.",
   "spot_preview_loading": "Computing the route …",
   "spot_preview_ready": "≈ {duration} · {segments} segments · {area} m²",
@@ -1725,5 +1726,13 @@
   "spot_reason_timeout": "time limit reached",
   "spot_reason_heading_mismatch": "heading does not match the compass",
   "spot_radius_value": "{value} m",
-  "spot_speed_value": "{value} m/s"
+  "spot_speed_value": "{value} m/s",
+  "spot_sheet_handle": "Spot settings",
+  "spot_size_area": "{area} m²",
+  "spot_peek_duration": "≈ {duration}",
+  "spot_peek_computing": "Route …",
+  "spot_peek_no_route": "No route",
+  "spot_conditions_summary": "Start conditions: {ok} of {total} met",
+  "spot_preview_title": "Preview",
+  "spot_launching": "Waiting for live positions, then the mower moves."
 }

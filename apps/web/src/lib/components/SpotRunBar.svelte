@@ -5,6 +5,9 @@
   words, and a big STOP that sends `spot_stop` (a controlled stop: zero frame, blades off; the
   emergency stop below stays the last resort). After the run, a notice with the end state (done,
   aborted with its reason, failed), the progress reached, "Nachmähen" again and "Ausblenden".
+  Between a start and the run's first status (`launching`) it says the run is starting and waits
+  for live positions, with STOP already there. `embedded` drops the bar's own edge and padding
+  (inside the phone bottom sheet's peek).
 -->
 <script lang="ts">
   import { Button, Icon, type RtkFix } from '@mowdeck/ui';
@@ -24,8 +27,22 @@
     /** "Nachmähen" again is offered when given. */
     onremow?: (() => void) | null;
     ondismiss: () => void;
+    /** A start went out and the run has not shown up yet. */
+    launching?: boolean;
+    /** Inside another container (the bottom sheet): no edge, no padding of its own. */
+    embedded?: boolean;
   }
-  let { run, ended, rtkFix, stopping, onstop, onremow = null, ondismiss }: Props = $props();
+  let {
+    run,
+    ended,
+    rtkFix,
+    stopping,
+    onstop,
+    onremow = null,
+    ondismiss,
+    launching = false,
+    embedded = false,
+  }: Props = $props();
 
   const tone = $derived(
     run?.state === 'spot_mowing'
@@ -46,8 +63,23 @@
   );
 </script>
 
+{#snippet stopButton()}
+  <button
+    type="button"
+    class="stop"
+    disabled={stopping}
+    aria-busy={stopping ? 'true' : undefined}
+    title={m.spot_stop_hint()}
+    data-testid="spot-stop"
+    onclick={onstop}
+  >
+    <Icon name="stop" size={22} />
+    <span>{m.spot_stop()}</span>
+  </button>
+{/snippet}
+
 {#if run}
-  <div class="run" data-testid="spot-run" data-state={run.state} data-tone={tone}>
+  <div class="run" class:embedded data-testid="spot-run" data-state={run.state} data-tone={tone}>
     <div class="info">
       <div class="head">
         <span class="lamp" aria-hidden="true"></span>
@@ -76,21 +108,27 @@
         {/if}
       </div>
     </div>
-    <button
-      type="button"
-      class="stop"
-      disabled={stopping}
-      aria-busy={stopping ? 'true' : undefined}
-      title={m.spot_stop_hint()}
-      data-testid="spot-stop"
-      onclick={onstop}
-    >
-      <Icon name="stop" size={22} />
-      <span>{m.spot_stop()}</span>
-    </button>
+    {@render stopButton()}
+  </div>
+{:else if launching}
+  <div
+    class="run"
+    class:embedded
+    data-testid="spot-run-launching"
+    data-state="launching"
+    data-tone="returning"
+  >
+    <div class="info">
+      <div class="head">
+        <span class="lamp" aria-hidden="true"></span>
+        <span class="state">{m.spot_run_preparing()}</span>
+      </div>
+      <p class="wait" role="status">{m.spot_launching()}</p>
+    </div>
+    {@render stopButton()}
   </div>
 {:else if ended}
-  <div class="end" data-testid="spot-end" data-state={ended.state}>
+  <div class="end" class:embedded data-testid="spot-end" data-state={ended.state}>
     <span class="glyph" aria-hidden="true">
       <Icon name={ended.state === 'done' ? 'check' : 'alert'} size={18} />
     </span>
@@ -178,8 +216,23 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 25%, transparent);
   }
 
-  .run[data-state='spot_mowing'] .lamp {
+  .run[data-state='spot_mowing'] .lamp,
+  .run[data-state='launching'] .lamp {
     animation: pulse 1.6s var(--md-ease) infinite;
+  }
+
+  .wait {
+    margin: 0;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+    line-height: var(--md-line-16);
+  }
+
+  .run.embedded,
+  .end.embedded {
+    padding: 0;
+    border-top: 0;
+    background: none;
   }
 
   .state {
@@ -360,7 +413,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .run[data-state='spot_mowing'] .lamp {
+    .run[data-state='spot_mowing'] .lamp,
+    .run[data-state='launching'] .lamp {
       animation: none;
     }
   }

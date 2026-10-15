@@ -24,7 +24,7 @@ export default defineConfig({
   projects: [
     {
       name: 'phone',
-      testMatch: /gate\.spec\.ts/,
+      testMatch: /(gate|spot-phone)\.spec\.ts/,
       use: {
         ...devices['Pixel 7'],
         browserName: 'chromium',

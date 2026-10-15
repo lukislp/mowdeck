@@ -27,6 +27,12 @@
   far while a polygon is still being drawn. With `onmaptap` a tap on the map (not on a control)
   reports its local metres, so the page can place or extend the spot; the cursor says so.
 
+  `insetTop` (px) is the part covered at the top left by a page overlay (a chip): the legend moves
+  below it and the fit and the spot keep clear of it. `insetBottom` (px) is the part of the map that something covers at its bottom (a bottom sheet
+  on phones): the fit pads by it, the scale, the lower legend and the attribution move above it,
+  and the spot with its route preview is panned (or, when larger, fitted) into the part above it
+  whenever the spot, the preview or the inset changes (`viewport.ts`).
+
   Texts arrive translated in `labels`; area selection is reported with `onselectionchange`.
   With `onarealabel` each area label gets a small edit button (rename an area from the map).
 -->
@@ -109,6 +115,7 @@
   import { pathLayers, type MapMowPath } from './mow-path';
   import { spotLayer, type MapSpot } from './spot';
   import { scaleFor } from './scale';
+  import { pixelBox, revealPan } from './viewport';
 
   type LeafletModule = typeof import('leaflet');
 
@@ -163,6 +170,10 @@
     onexpandchange?: (expanded: boolean) => void;
     /** Keep the mower centred (bindable; a drag or the fit control ends it). */
     follow?: boolean;
+    /** Pixels covered at the bottom of the map (a bottom sheet); content is kept above them. */
+    insetBottom?: number;
+    /** Pixels covered at the top of the map (a chip); the legend and content stay below them. */
+    insetTop?: number;
     testid?: string;
   }
 
@@ -192,6 +203,8 @@
     expanded = false,
     onexpandchange,
     follow = $bindable(false),
+    insetBottom = 0,
+    insetTop = 0,
     testid = 'mower-map',
   }: Props = $props();
 
@@ -674,7 +687,8 @@
       autoFit = false;
       untrack(() => (follow = false));
       m.fitBounds(active.bounds, {
-        padding: [64, 64],
+        paddingTopLeft: [64, 64 + untrack(() => insetTop)],
+        paddingBottomRight: [64, 64 + untrack(() => insetBottom)],
         maxZoom: mode === 'local' ? 5 : 21,
         animate: !reducedMotion(),
       });
@@ -768,6 +782,45 @@
     if (follow) m.panTo(current.at, { animate: !reducedMotion() });
   });
 
+  // --- keep the spot and its route preview above a bottom sheet --------------------------------
+
+  $effect(() => {
+    void generation;
+    const m = lmap;
+    const bounds = spotDrawn?.bounds;
+    const inset = insetBottom;
+    const top = insetTop;
+    const pieces = pathPreview ? pathPieces : [];
+    if (!m || !bounds) return;
+    untrack(() => reveal(m, [...bounds, ...pieces.flatMap((piece) => piece.points)], inset, top));
+  });
+
+  /** Pan (or fit, when larger) so `coords` lie in the part of the map not covered below. */
+  function reveal(m: Leaflet.Map, coords: MapCoord[], inset: number, top: number): void {
+    const size = m.getSize();
+    const box = pixelBox(coords.map((c) => m.latLngToContainerPoint(c)));
+    if (!box) return;
+    const pad = 24;
+    const how = revealPan(
+      { ...box, top: box.top - top, bottom: box.bottom - top },
+      size.x,
+      size.y - top,
+      inset,
+      pad,
+    );
+    const animate = !reducedMotion();
+    if (how.kind === 'pan') {
+      m.panBy([how.dx, how.dy], { animate });
+    } else if (how.kind === 'fit') {
+      m.fitBounds(coords, {
+        paddingTopLeft: [pad, pad + top],
+        paddingBottomRight: [pad, pad + inset],
+        maxZoom: m.getZoom(),
+        animate,
+      });
+    }
+  }
+
   // --- helpers ------------------------------------------------------------------------------
 
   /** The pencil of the label edit buttons (the `edit` icon, built as DOM for Leaflet). */
@@ -800,7 +853,8 @@
     if (!m || !bounds) return;
     if (byUser) follow = false;
     m.fitBounds(bounds, {
-      padding: [32, 32],
+      paddingTopLeft: [32, 32 + insetTop],
+      paddingBottomRight: [32, 32 + insetBottom],
       maxZoom: mode === 'local' ? 6 : 21,
       animate: animate && !reducedMotion(),
     });
@@ -895,6 +949,9 @@
   data-path-preview={path && pathPreview ? 'true' : undefined}
   data-spot={spot ? spot.kind : undefined}
   data-spot-corners={spot?.kind === 'polygon' ? spot.points.length : undefined}
+  data-inset-bottom={insetBottom > 0 ? Math.round(insetBottom) : undefined}
+  style:--md-map-inset-bottom="{Math.max(0, insetBottom)}px"
+  style:--md-map-inset-top="{Math.max(0, insetTop)}px"
 >
   <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
     <defs>
@@ -1595,7 +1652,7 @@
   .hud {
     position: absolute;
     inset-inline-start: var(--md-space-3);
-    bottom: var(--md-space-3);
+    bottom: calc(var(--md-space-3) + var(--md-map-inset-bottom, 0px));
     z-index: 2;
     display: flex;
     align-items: flex-end;
@@ -1661,7 +1718,7 @@
 
   .legend {
     position: absolute;
-    top: var(--md-space-3);
+    top: calc(var(--md-space-3) + var(--md-map-inset-top, 0px));
     inset-inline-start: var(--md-space-3);
     z-index: 2;
     display: flex;
@@ -1713,7 +1770,7 @@
 
   .legend--path.legend--below {
     top: auto;
-    bottom: calc(var(--md-space-3) + 48px);
+    bottom: calc(var(--md-space-3) + 48px + var(--md-map-inset-bottom, 0px));
   }
 
   .legend--path [data-path='done'] {
@@ -1940,7 +1997,7 @@
   .attribution {
     position: absolute;
     inset-inline-end: 0;
-    bottom: 0;
+    bottom: var(--md-map-inset-bottom, 0);
     z-index: 2;
     max-width: 70%;
     margin: 0;

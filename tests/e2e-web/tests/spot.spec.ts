@@ -7,68 +7,20 @@
  * With spot runs, a start with all conditions green shows the run bar; STOP ends the run with
  * its reason in words. Unmet conditions (the simulator starts docked) are recorded, not failed.
  */
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import {
   RUN,
   actor,
+  capabilities,
   createMowerByApi,
   loginByUi,
   registerByApi,
+  spotRunsSupported,
   waitForMap,
   watchCsp,
-  type Actor,
+  type SpotCaps,
 } from './support';
-
-interface Caps {
-  manual_drive?: boolean;
-  manual_drive_blades?: boolean;
-}
-
-async function capabilities(
-  request: APIRequestContext,
-  who: Actor,
-  mowerId: string,
-): Promise<Caps | null> {
-  const response = await request.get(`/api/v1/telemetry/mowers/${mowerId}/capabilities`, {
-    headers: { Authorization: `Bearer ${who.token}` },
-  });
-  return response.ok() ? ((await response.json()) as { capabilities: Caps }).capabilities : null;
-}
-
-/**
- * Send `spot_stop` and wait for its outcome: false when Fleet refuses the kind or the gateway
- * answers that the connection has no spot runs.
- */
-async function spotRunsSupported(
-  request: APIRequestContext,
-  who: Actor,
-  mowerId: string,
-): Promise<{ supported: boolean; why: string }> {
-  const auth = { Authorization: `Bearer ${who.token}` };
-  const sent = await request.post(`/api/v1/fleet/mowers/${mowerId}/commands`, {
-    headers: auth,
-    data: { command: { kind: 'spot_stop' } },
-  });
-  if (sent.status() !== 202) return { supported: false, why: `Fleet answered ${sent.status()}` };
-  const { command_id: commandId } = (await sent.json()) as { command_id: string };
-  let record: { status: string; reason?: string | null } = { status: 'pending' };
-  await expect
-    .poll(
-      async () => {
-        const r = await request.get(`/api/v1/fleet/commands/${commandId}`, { headers: auth });
-        if (r.ok()) record = (await r.json()) as typeof record;
-        return record.status;
-      },
-      { timeout: 30_000, intervals: [500] },
-    )
-    .not.toBe('pending');
-  const reason = record.reason ?? '';
-  if (record.status === 'rejected' && /unsupported|not supported|unknown/i.test(reason)) {
-    return { supported: false, why: `gateway: ${reason}` };
-  }
-  return { supported: true, why: `${record.status} ${reason}`.trim() };
-}
 
 test('spot mowing: spot mode, the sheet, and a run when the gateway offers spot runs', async ({
   page,
@@ -79,7 +31,7 @@ test('spot mowing: spot mode, the sheet, and a run when the gateway offers spot 
   const owner = await registerByApi(request, actor('spot'));
   const mowerId = await createMowerByApi(request, owner, `Luba spot ${RUN}`);
   await waitForMap(request, owner, mowerId);
-  let caps: Caps | null = null;
+  let caps: SpotCaps | null = null;
   await expect
     .poll(
       async () => {

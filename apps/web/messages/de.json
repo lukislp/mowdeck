@@ -1691,7 +1691,8 @@
   "spot_cond_idle": "Mäher bereit (nicht angedockt)",
   "spot_cond_free": "Kein Auftrag, keine Fahrt, kein Spot-Lauf",
   "spot_cond_battery": "Akku über 20 %",
-  "spot_cond_fresh": "Zustand jünger als 5 s",
+  "spot_cond_fresh": "Zustand jünger als 60 s",
+  "spot_cond_fresh_hint": "Nach dem Start wartet der Lauf auf Live-Positionen (höchstens 2,5 s alt, bis zu 30 s lang), bevor der Mäher losfährt.",
   "spot_preview_hint": "Die Route erscheint auf der Karte, sobald der Spot in einem Bereich liegt.",
   "spot_preview_loading": "Route wird berechnet …",
   "spot_preview_ready": "≈ {duration} · {segments} Segmente · {area} m²",
@@ -1725,5 +1726,13 @@
   "spot_reason_timeout": "Zeitlimit erreicht",
   "spot_reason_heading_mismatch": "Fahrtrichtung passt nicht zum Kompass",
   "spot_radius_value": "{value} m",
-  "spot_speed_value": "{value} m/s"
+  "spot_speed_value": "{value} m/s",
+  "spot_sheet_handle": "Spot-Einstellungen",
+  "spot_size_area": "{area} m²",
+  "spot_peek_duration": "≈ {duration}",
+  "spot_peek_computing": "Route …",
+  "spot_peek_no_route": "Keine Route",
+  "spot_conditions_summary": "Startbedingungen: {ok} von {total} erfüllt",
+  "spot_preview_title": "Vorschau",
+  "spot_launching": "Wartet auf Live-Positionen, dann fährt der Mäher los."
 }
