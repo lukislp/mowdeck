@@ -78,6 +78,15 @@ Path previews: Fleet sends `PathPreviewGatewayRequest{mower_id, account_id, area
 
 Commands are acknowledged once admitted. The controller serializes the ordinary commands of one mower and lets an emergency stop overtake them; commands of different mowers never wait for each other.
 
+### Spot runs
+
+[ADR 0039](../../docs/adr/0039-spot-mowing-by-mowdeck-driven-paths.md). `spot_mow` is a MowDeck job, not the mower's: the controller of `mowdeck-control` checks the start conditions and starts a `SpotMowRun` that drives the inline plan with joystick frames (5 per second, `ttl_ms` 1000, `correlation_id = spot:<command_id>`) through its own command path, so the dead-man switch, the blade rules and the sensor stop apply. The session publishes the controller's `accepted` result at once (or `rejected`/`failed` when a check fails), then waits for the run's end in a follow-up task and publishes the final result: `executed` when the plan was driven, `failed` otherwise, with the run's summary as the reason (`spot run aborted: rtk_lost (...); 12/40 points, 30 % coverage, 95 s, dry run`). Both rows reach Fleet and Telemetry's command timeline (msg ids `<command>:accepted` and `<command>:<status>`).
+
+- **State.** `MowerState.spot_run` (`SpotRunStatus`: state `preparing`, `spot_mowing`, `paused_rtk`, `stopping`, `done`, `aborted`, `failed`, progress, segment, points, `dry_run`, reason) is merged into every published state by the controller; a status change publishes a state at once. `MowerActivity` stays what the mower reports.
+- **Path.** While the run drives, `controller.current_path()` returns its plan with the progress, so it is published as the ordinary `device.mower.<id>.path` snapshot (progress-only changes at most every `MOWDECK_PATH_PROGRESS_SECONDS`) and the web app draws it with the mow-path layer; the run's end publishes the cleared path at once.
+- **Rule 12.** While a run is active every command except `emergency_stop`, `spot_stop` and `set_light` is rejected (`spot run active; stop it first`); `spot_stop` ends the run (zero frame, blades off, session closed) and is answered `executed`, without a run `rejected`.
+- **Link loss and shutdown.** A lost link or a released mower closes the controller, which ends the run with `link_lost` and publishes its final result; the mower's own dead-man stops it within the frame's ttl. `/readyz` draining does not wait for a run (it may last up to 20 minutes); closing the controller ends it.
+
 ### Camera sessions
 
 `gateway.mower.<id>.camera.session` ([ADR 0032](../../docs/adr/0032-live-camera-over-agora.md)): Fleet sends a `CameraSessionRequest{mower_id, account_id, requested_by}` after its own `can_view` and plan checks. Every instance subscribes with `gateway.mower.*.camera.session`; an instance stays silent for mowers of other shards, so Fleet gets one answer or a timeout. Requests whose subject and body name different mowers are dropped. The owner answers a `CameraSessionReply` with exactly one of `session` or `error`:

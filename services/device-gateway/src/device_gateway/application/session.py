@@ -6,6 +6,15 @@ A :class:`MowerSession` supervises the link: it creates the connection through t
 reconnects with backoff when the link drops. Commands run as one task each; the controller
 serializes ordinary commands of this mower and lets an emergency stop overtake them, and no
 mower ever waits for another one.
+
+Spot runs (ADR 0039): a ``spot_mow`` is a MowDeck job, not the mower's. The controller starts
+the :class:`~mowdeck_control.SpotMowRun` and answers ``accepted`` at once, which is published as
+usual; a follow-up task waits for the run's end and publishes the final ``executed`` (the
+plan was driven) or ``failed`` result with the run's summary as the reason. The run status
+reaches clients in ``MowerState.spot_run`` (the controller merges it into every state) and the
+plan with its progress as the ordinary path snapshot (``controller.current_path()``). A lost
+link or a released mower closes the controller, which ends the run (``link_lost``) and so
+publishes its final result too.
 """
 
 import asyncio
@@ -34,6 +43,7 @@ from mowdeck_contracts.v1 import (
     MowerRegistration,
     MowerState,
     MowPath,
+    SpotMow,
     utc_now,
 )
 from mowdeck_control import (
@@ -163,6 +173,9 @@ class MowerSession:
         self._controller: MowerController | None = None
         self._supervisor: asyncio.Task[None] | None = None
         self._commands: set[asyncio.Task[CommandResult]] = set()
+        self._spot_followups: set[asyncio.Task[None]] = set()
+        """Tasks that publish the final result of a spot run (not part of :meth:`wait_idle`:
+        a run lasts minutes; closing the controller ends it)."""
         self._snapshot_tasks: set[asyncio.Task[None]] = set()
         self._recheck_again: MowerController | None = None
         self._published_map: str | None = None
@@ -232,6 +245,8 @@ class MowerSession:
             supervisor.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await supervisor
+        if self._spot_followups:  # the closed controller ended the runs: publish their end
+            await asyncio.wait(list(self._spot_followups), timeout=5.0)
         self.status = ConnectionStatus.CLOSED
 
     async def _supervise(self) -> None:
@@ -649,13 +664,53 @@ class MowerSession:
         else:
             result = await controller.handle(envelope)
         self.last_activity_at = self._clock()
+        await self._publish_result(result)
+        if (
+            controller is not None
+            and isinstance(envelope.command, SpotMow)
+            and result.status is CommandStatus.ACCEPTED
+        ):
+            task = asyncio.create_task(
+                self._spot_final(controller, envelope), name=f"spot-{envelope.command_id}"
+            )
+            self._spot_followups.add(task)
+            task.add_done_callback(self._spot_followups.discard)
+        return result
+
+    async def _spot_final(self, controller: MowerController, envelope: CommandEnvelope) -> None:
+        """Wait for the end of the spot run of ``envelope`` and publish its final result."""
+        report = await controller.spot_run_result(envelope.command_id)
+        if report is None:
+            status, reason = CommandStatus.FAILED, "spot run ended without a report"
+        else:
+            status, reason = report.command_status, report.summary()
+        _log.info(
+            "spot run ended",
+            mower_id=str(self.mower_id),
+            command_id=str(envelope.command_id),
+            state=report.state if report else None,
+            reason=report.reason if report else None,
+        )
+        # The path of the run is gone now: publish the cleared one without waiting for a state.
+        await self._publish_path(controller)
+        await self._publish_result(
+            CommandResult(
+                command_id=envelope.command_id,
+                mower_id=envelope.mower_id,
+                status=status,
+                reason=reason,
+                at=self._clock(),
+                correlation_id=envelope.correlation_id,
+            )
+        )
+
+    async def _publish_result(self, result: CommandResult) -> None:
         try:
             await self._publisher.command_result(result)
         except Exception as exc:
             _log.error(
                 "command result publish failed",
-                command_id=str(envelope.command_id),
+                command_id=str(result.command_id),
                 status=str(result.status),
                 error=repr(exc),
             )
-        return result
