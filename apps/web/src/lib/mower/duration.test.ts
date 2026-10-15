@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateMinutes, formatDuration } from './duration';
+import { estimateMinutes, formatDuration, formatSpotDuration } from './duration';
 
 describe('estimateMinutes', () => {
   it('uses points x 1 m / speed with a path', () => {
@@ -29,5 +29,19 @@ describe('formatDuration', () => {
     expect(formatDuration(45)).toBe('45 min');
     expect(formatDuration(120)).toBe('2 h');
     expect(formatDuration(82)).toBe('1 h 20 min');
+  });
+});
+
+describe('formatSpotDuration', () => {
+  it('says "< 1 min" below a minute instead of "0 min"', () => {
+    expect(formatSpotDuration(0)).toBe('< 1 min');
+    expect(formatSpotDuration(42)).toBe('< 1 min');
+    expect(formatSpotDuration(59.9)).toBe('< 1 min');
+  });
+  it('whole minutes below an hour, then hours', () => {
+    expect(formatSpotDuration(60)).toBe('1 min');
+    expect(formatSpotDuration(260)).toBe('4 min');
+    expect(formatSpotDuration(3600)).toBe('1 h');
+    expect(formatSpotDuration(4800)).toBe('1 h 20 min');
   });
 });

@@ -52,3 +52,13 @@ export function formatDuration(minutes: number): string {
   if (h === 0) return `${min} min`;
   return min === 0 ? `${h} h` : `${h} h ${min} min`;
 }
+
+/**
+ * A spot run's estimated duration from seconds: "< 1 min" below a minute, whole minutes below an
+ * hour ("4 min"; a spot is short, so no 5-minute rounding), then as {@link formatDuration}.
+ */
+export function formatSpotDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 60) return '< 1 min';
+  const minutes = Math.round(seconds / 60);
+  return minutes < 60 ? `${minutes} min` : formatDuration(minutes);
+}
