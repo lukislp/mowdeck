@@ -3,9 +3,10 @@
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from mowdeck_authz import mower
 from mowdeck_contracts.v1 import MODULE_DESCRIPTOR_PATH, SpotMowPlan, StartMow
-from mowdeck_control import default_map, to_wgs84
+from mowdeck_control import default_map, plan_transit, to_wgs84
 from mowdeck_service_kit.testing import FakeEntitlements
 from planner_support import API, FLEET, LUBA_LIKE, harness
 
@@ -99,6 +100,71 @@ async def test_planner_preview_of_a_raw_map_without_a_mower() -> None:
     assert response.json()["execution"]["mode"] == "unknown"
     assert response.json()["pattern_chain"] == ["edge_only", "diagonal"]
     assert polygon_only.status_code == 200, polygon_only.text
+
+
+SPOT_IN_BACK = {"area_id": "back", "polygon": [(4, 13), (6, 13), (6, 15), (4, 15)]}
+
+
+async def test_planner_preview_plans_the_transit_like_the_gateway() -> None:
+    """The preview's transit is the run's: the same pure planner on the same map and start."""
+    garden = default_map()
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.mower(owner)
+        docked = await h.preview(
+            owner,
+            mower_id=str(mower_id),
+            area=SPOT_IN_BACK,
+            chain=[{"pattern": "spiral"}],
+            transit={"from_dock": True},
+        )
+        on_lawn = await h.preview(
+            owner,
+            mower_id=str(mower_id),
+            area=SPOT_IN_BACK,
+            chain=[{"pattern": "spiral"}],
+            transit={"position": [6.0, 4.0]},
+        )
+        without = await h.preview(
+            owner, mower_id=str(mower_id), area=SPOT_IN_BACK, chain=[{"pattern": "spiral"}]
+        )
+        bad = await h.preview(
+            owner,
+            mower_id=str(mower_id),
+            area=SPOT_IN_BACK,
+            chain=[{"pattern": "spiral"}],
+            transit={"from_dock": True, "position": [1.0, 1.0]},
+        )
+    assert docked.status_code == 200, docked.text
+    transit = docked.json()["transit"]
+    assert transit["found"] and transit["from_dock"] and transit["reason"] is None
+    assert garden.dock is not None
+    assert transit["route"][0] == [garden.dock.x, garden.dock.y]
+    first = docked.json()["preview"]["features"][0]["geometry"]["coordinates"][0]
+    assert transit["route"][-1] == pytest.approx(first, abs=0.01)
+    expected = plan_transit(garden, (garden.dock.x, garden.dock.y), tuple(first))
+    assert transit["length_m"] == pytest.approx(expected.length_m, abs=0.02)
+    assert transit["length_m"] > 10  # through the side path to the back lawn
+    assert on_lawn.json()["transit"]["found"] and not on_lawn.json()["transit"]["from_dock"]
+    assert without.json()["transit"] is None
+    assert bad.status_code == 422
+
+
+async def test_planner_preview_reports_no_route() -> None:
+    unconnected = default_map().model_copy(update={"paths": []})
+    async with harness() as h:
+        owner = await h.owner()
+        response = await h.preview(
+            owner,
+            map=unconnected.model_dump(mode="json"),
+            area=SPOT_IN_BACK,
+            chain=[{"pattern": "spiral"}],
+            transit={"from_dock": True},
+        )
+    assert response.status_code == 200, response.text
+    transit = response.json()["transit"]
+    assert not transit["found"] and transit["route"] == []
+    assert transit["reason"].startswith("no_route:")
 
 
 async def test_planner_preview_errors() -> None:

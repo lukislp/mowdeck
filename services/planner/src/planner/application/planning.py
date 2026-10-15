@@ -3,6 +3,10 @@
 * :meth:`Planning.compute`: area (a map area, a spot polygon in local metres or WGS84, or both)
   plus a pattern chain gives a validated plan, its preview, the ``SpotMowPlan`` for Fleet and
   how the mower can run it (``custom_paths``, natively, or not at all).
+* With a transit start (the dock, or the mower's position) the result also carries the transit
+  a spot run would drive to the plan's first point (ADR 0041), computed by the same pure
+  :func:`mowdeck_control.transit.plan_transit` on the same map as the Device-Gateway's run, so
+  the web app's "route found" condition and the gateway's ``no_route`` check agree.
 * :meth:`Planning.gaps`: the mower's position track in a time range gives the covered ground
   and the gaps left in the area, ready for a ``remow`` step.
 
@@ -27,6 +31,7 @@ from mowdeck_contracts.v1 import (
     SpotNativeJob,
 )
 from mowdeck_control.geo import from_wgs84, to_wgs84
+from mowdeck_control.transit import REASON_NO_ROUTE, NoRouteError, plan_transit
 from mowdeck_patterns import (
     Area,
     InvalidArea,
@@ -81,6 +86,25 @@ class AreaSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class TransitStart:
+    """Where a spot run's transit starts: the map's dock (a docked mower) or a local position."""
+
+    from_dock: bool = False
+    position: tuple[float, float] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TransitResult:
+    """The transit to the plan's first point, or why there is none."""
+
+    found: bool
+    from_dock: bool
+    length_m: float = 0.0
+    route: LocalPoints = field(default_factory=list)
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PlanInput:
     """One planning request."""
 
@@ -90,6 +114,7 @@ class PlanInput:
     raw_map: MowerMap | None = None
     mower_overrides: dict[str, float] = field(default_factory=dict)
     wgs84_preview: bool = False
+    transit: TransitStart | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +136,7 @@ class PlanResult:
     execution: Execution
     mower: MowerSpec
     plan_bytes: int
+    transit: TransitResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,7 +380,11 @@ class Planning:
             )
             raise InvalidInput(msg)
         document["properties"]["plan_hash"] = spot.plan_hash
-        return PlanResult(result, spot, document, execution, mower_spec, size)
+        transit = None
+        if request.transit is not None:
+            start = request.transit
+            transit = await self._run(lambda: _transit(mower_map, spot, start, request))
+        return PlanResult(result, spot, document, execution, mower_spec, size, transit)
 
     # --- coverage ------------------------------------------------------------------------
 
@@ -416,6 +446,43 @@ class Planning:
             gaps_wgs84=[[_round_geo(to_wgs84(reference, x, y)) for x, y in ring] for ring in local],
             gap_area_m2=round(sum(g.area for g in left), 2),
         )
+
+
+def _transit(
+    mower_map: MowerMap | None, spot: SpotMowPlan, start_spec: TransitStart, request: PlanInput
+) -> TransitResult:
+    """The transit from ``start_spec`` to the first point of ``spot``, as the run plans it: from
+    the map's dock for a docked mower, else from the given position."""
+    from_dock = start_spec.from_dock
+
+    def none(reason: str) -> TransitResult:
+        text = f"{REASON_NO_ROUTE}: {reason}"
+        return TransitResult(found=False, from_dock=from_dock, reason=text)
+
+    if mower_map is None:
+        return none("no map")
+    if from_dock:
+        if mower_map.dock is None:
+            return none("the map has no dock")
+        start = (mower_map.dock.x, mower_map.dock.y)
+    elif start_spec.position is not None:
+        start = start_spec.position
+    else:
+        return none("no start position")
+    goal = spot.segments[0].points()[0]
+    try:
+        route = plan_transit(mower_map, start, goal)
+    except NoRouteError as exc:
+        return none(str(exc))
+    points = list(route.points)
+    if request.wgs84_preview:
+        points = [_lon_lat(mower_map, p) for p in points]
+    return TransitResult(found=True, from_dock=from_dock, length_m=route.length_m, route=points)
+
+
+def _lon_lat(mower_map: MowerMap, point: tuple[float, float]) -> tuple[float, float]:
+    lat, lon = to_wgs84(mower_map.reference, point[0], point[1])
+    return (lon, lat)
 
 
 def _ring(polygon: Polygon) -> LocalPoints:

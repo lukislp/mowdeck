@@ -8,6 +8,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 
 - **Patterns**: `GET /patterns` lists key, name, description, the settings JSON Schema (the app builds its form from it) and the native hint (`stripes`, `diagonal`, `checkerboard`, `edge_only`).
 - **Preview**: area plus pattern chain gives a validated plan with duration, mowable and covered area, coverage ratio, lengths, warnings, the segments as a GeoJSON-like collection (local metres, or `[lon, lat]` with `wgs84: true`) and how the mower can run it.
+- **Transit** ([ADR 0041](../../docs/adr/0041-spot-runs-from-the-dock-undock-transit-return.md)): with `transit` in the request (`{from_dock: true}` for a docked mower that can undock, or `{position: [x, y]}` in local metres) the answer carries `transit{found, from_dock, length_m, route, reason}`: the route a spot run would drive to the plan's first point, computed by `mowdeck_control.transit.plan_transit` on the mower's map snapshot, the same algorithm and map as the Device-Gateway's run (`reason` is `no_route: ...` without one). The web app shows "route found" from it and draws the route.
 - **Plans to start**: `POST /plans` returns the same plus the `SpotMowPlan` (encoded segments, SHA-256 `plan_hash`) and the ready `StartMow` command; the client sends it to Fleet (`POST /api/v1/fleet/mowers/{id}/commands`), which gates `spot_mowing`, limits the size, records the hash and publishes it to the Device-Gateway.
 - **Coverage and gaps**: `POST /coverage/gaps` asks Telemetry for the position track of a time range (`tracks.positions.query`), widens it to the cutting width and returns the covered share and the gap polygons (local and WGS84) with a ready `remow` chain step.
 - **Templates**: saved chains per account ("2 border laps + diagonal + re-mow"), usable in a plan request as `template`.
@@ -32,7 +33,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`); Trae
 | Method | Path | Required | Notes |
 | --- | --- | --- | --- |
 | GET | `/api/v1/planner/patterns` | a principal | not gated by the plan |
-| POST | `/api/v1/planner/plans/preview` | `spot_mowing`; `can_view` on the mower | body `{mower_id or map, area, chain or template, mower?, wgs84?}` |
+| POST | `/api/v1/planner/plans/preview` | `spot_mowing`; `can_view` on the mower | body `{mower_id or map, area, chain or template, mower?, wgs84?, transit?}` |
 | POST | `/api/v1/planner/plans` | `spot_mowing`; `can_control` on the mower | adds `spot_plan` and `command` |
 | POST | `/api/v1/planner/coverage/gaps` | `spot_mowing`; `can_view` on the mower | body `{mower_id, start, end, area?, min_gap_m2?, cutting_width_m?}`; without `area` the map area with the most track points |
 | GET | `/api/v1/planner/templates` | a principal of the account | by name |
