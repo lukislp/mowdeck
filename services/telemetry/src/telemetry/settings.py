@@ -52,7 +52,8 @@ class Settings(ServiceSettings):
     """Most mowers in ``GET /accounts/me/mowers/states``."""
 
     telemetry_stale_after_seconds: float = Field(default=60, ge=1)
-    """A state older than this is reported with ``stale: true`` (six missed heartbeats)."""
+    """A mower whose last link heartbeat is older than this is reported with ``stale: true``
+    (six missed heartbeats, ADR 0040)."""
 
     telemetry_unknown_mower_attempts: int = Field(default=3, ge=1, le=20)
     """Deliveries of a command result for a mower missing from the directory before it is

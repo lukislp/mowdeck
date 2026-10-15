@@ -6,11 +6,12 @@ re-checks (``identity.grants.changed`` and the periodic timer), limits and shutd
 """
 
 import asyncio
+from datetime import timedelta
 from uuid import uuid4
 
 from mowdeck_contracts.v1 import CommandStatus, MowerActivity, Principal, PrincipalKind
 from mowdeck_contracts.v1.realtime import RealtimeCloseCode
-from realtime_support import harness, make_state, short_token
+from realtime_support import T0, harness, make_state, short_token
 
 
 async def test_realtime_auth_timeout_closes_4401() -> None:
@@ -95,6 +96,24 @@ async def test_realtime_state_and_command_result_are_delivered() -> None:
             assert result["result"]["command_id"] == str(command_id)
             assert result["result"]["status"] == "executed"
             assert (await client.expect("state"))["state"]["activity"] == "docked"
+
+
+async def test_realtime_link_fields_pass_through_unchanged() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        client = await h.connect_as(owner)
+        await client.subscribe(mower_id)
+        state = make_state(mower_id, owner.account_id, at=T0)
+        beat = state.model_copy(update={"heartbeat_at": T0 + timedelta(minutes=5)})
+        await h.publish_state(beat)
+        live = (await client.expect("state"))["state"]
+        await h.publish_state(beat.model_copy(update={"connected": False}))
+        lost = (await client.expect("state"))["state"]
+    assert live["observed_at"].startswith("2026-10-09T12:00:00")  # the values' time stays
+    assert live["heartbeat_at"].startswith("2026-10-09T12:05:00")
+    assert live["connected"] is True
+    assert lost["connected"] is False and lost["heartbeat_at"] == live["heartbeat_at"]
 
 
 async def test_realtime_state_of_another_account_is_not_forwarded() -> None:

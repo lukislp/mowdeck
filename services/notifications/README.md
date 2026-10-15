@@ -6,7 +6,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 
 ## Purpose
 
-- Derives notifications from the Device-Gateway's `MowerState` stream and the `mower.connected`/`mower.disconnected` events: mowing finished, mower stuck, battery low, offline and back online, optionally job started.
+- Derives notifications from the Device-Gateway's `MowerState` stream and the `mower.connected`/`mower.disconnected` events: mowing finished, mower stuck, battery low, offline and back online, optionally job started. Every state proves contact (the link heartbeat repeats the latest one every 10 s) except the gateway's offline state after a lost link (`connected: false`, [ADR 0040](../../docs/adr/0040-link-heartbeat-for-online-status.md)), which is skipped: `mower.disconnected` and its grace time decide.
 - Theft alarm: mower lifted, mower left the dock without a command, mower outside its mapped garden (geofence from the map snapshots, commands from the command stream). Alarms bypass quiet hours and can be acknowledged.
 - Blade maintenance reminder from Telemetry's `telemetry.blade_hours.threshold` event.
 - Fans them out to the users who subscribed in their preferences, after checking `can_view` on the mower for every recipient; renders them per user in German or English; respects quiet hours in the user's time zone.

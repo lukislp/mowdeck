@@ -106,7 +106,7 @@
 
   const snap = $derived(states.get(id));
   const ms = $derived(snap?.state ?? null);
-  const stale = $derived(states.isStale(id, clock.now));
+  const stale = $derived(states.isOffline(id, clock.now));
   const bridgeStatus = $derived(ms?.links?.[BLE_BRIDGE] ?? null);
   /** The panel shows when the connection can open a bridge, or while a link is stored. */
   const bridgeOffered = $derived(

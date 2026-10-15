@@ -333,3 +333,18 @@ async def test_notifications_flow_seed_retries_until_fleet_answers() -> None:
                 await h.bus.subscribe(FLEET_MOWERS_LIST, answer)
             await asyncio.sleep(0.02)
         assert h.app.state.directory_seeded is True
+
+
+async def test_notifications_flow_offline_state_after_a_lost_link_is_no_contact() -> None:
+    async with harness(notifications_disconnect_grace_seconds=30) as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        await h.subscribe_all(owner)
+        last = make_state(mower_id, owner.account_id, at=h.clock.now)
+        await h.publish_state(last)
+        await h.link(mower_id, owner.account_id, connected=False)
+        # the gateway's offline state (ADR 0040) may arrive after the event: it is no contact
+        await h.publish_state(last.model_copy(update={"connected": False}))
+        h.clock.advance(31)
+        swept = await h.services.watcher.sweep_offline()
+    assert [e.kind.value for e in swept] == ["mower_offline"]

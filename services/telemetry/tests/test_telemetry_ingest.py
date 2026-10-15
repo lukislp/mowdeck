@@ -367,3 +367,40 @@ async def test_telemetry_consumer_names_are_the_documented_queue_groups() -> Non
         assert h.app.state.telemetry.ingest is not None
         assert MowerActivity.DOCKED.value == "docked"
         assert RetentionTarget.HISTORY.value == "mower_history"
+
+
+async def test_telemetry_link_heartbeats_update_latest_but_write_no_rows() -> None:
+    async with harness(telemetry_heartbeat_history_seconds=60) as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        report = make_state(mower_id, owner.account_id, at=T0, position=(48.1, 11.5))
+        await h.publish_state(report)
+        for step in range(10, 301, 10):  # five minutes of heartbeats, no new report
+            beat = report.model_copy(update={"heartbeat_at": T0 + seconds(step)})
+            await h.publish_state(beat)
+        await h.publish_state(  # the link was lost
+            report.model_copy(update={"heartbeat_at": T0 + seconds(300), "connected": False})
+        )
+        latest = await h.store.latest_of(owner.account_id, mower_id)
+        history, positions = h.store.data.history, h.store.data.positions
+    assert len(history) == 1 and len(positions) == 1  # one report, one row each
+    assert latest is not None and latest.observed_at == T0
+    assert latest.state["heartbeat_at"] == (T0 + seconds(300)).isoformat().replace("+00:00", "Z")
+    assert latest.state["connected"] is False
+
+
+async def test_telemetry_standing_mower_reports_still_write_periodic_position_rows() -> None:
+    async with harness(telemetry_heartbeat_history_seconds=60) as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        for step in range(0, 121, 20):  # a docked mower's own reports, each with heartbeats
+            report = make_state(
+                mower_id, owner.account_id, at=T0 + seconds(step), position=(48.1, 11.5)
+            )
+            await h.publish_state(report)
+            for beat in (5, 10, 15):
+                await h.publish_state(
+                    report.model_copy(update={"heartbeat_at": report.observed_at + seconds(beat)})
+                )
+        stored = sorted(r.observed_at for r in h.store.data.positions.values())
+    assert stored == [T0, T0 + seconds(60), T0 + seconds(120)]  # the heartbeats add none

@@ -93,11 +93,30 @@ class GeoPosition(ContractModel):
 
 
 class MowerState(ContractModel):
-    """A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``."""
+    """A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.
+
+    Two times: ``observed_at`` is when the mower reported the values, ``heartbeat_at`` when the
+    gateway's link to it was last alive. A docked mower reports rarely, so old values do not mean
+    an offline mower (ADR 0040).
+    """
 
     mower_id: UUID
     account_id: UUID
     observed_at: UtcDateTime = Field(description="When the device reported this state (UTC).")
+    heartbeat_at: UtcDateTime | None = Field(
+        default=None,
+        description="When the Device-Gateway last knew its connection to the mower alive (UTC). "
+        "The gateway sets it on every publish, never an adapter: it advances with each heartbeat "
+        "while `observed_at` stays the time of the mower's last report. Clients judge online and "
+        "offline by it (ADR 0040); null in states from before the field, then `observed_at` "
+        "stands in.",
+    )
+    connected: bool = Field(
+        default=True,
+        description="False in the state the Device-Gateway publishes right after its connection "
+        "to the mower ended: the last known values, with `heartbeat_at` the last time the link "
+        "was alive. Set by the gateway, never by an adapter.",
+    )
     activity: MowerActivity
     battery_percent: int = Field(ge=0, le=100)
     charging: bool = False

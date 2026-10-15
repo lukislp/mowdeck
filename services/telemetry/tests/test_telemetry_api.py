@@ -308,3 +308,25 @@ async def test_telemetry_default_range_with_a_step_fits_the_bin_limit() -> None:
     assert fine.status_code == 200, fine.text  # 100 bins of 5 s: the default range shrinks
     assert fine.json()["to"] == "2026-10-09T13:00:00Z" and fine.json()["from"] > "2026-10-09T12:50"
     assert coarse.status_code == 200 and coarse.json()["from"] == "2026-10-08T13:00:00Z"
+
+
+async def test_telemetry_stale_follows_the_link_heartbeat_not_the_age_of_the_values() -> None:
+    later = T0 + timedelta(minutes=10)
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        # a docked mower reported at T0; the gateway's heartbeat says the link is alive now
+        await h.publish_state(make_state(mower_id, owner.account_id, at=T0, heartbeat_at=later))
+        h.app.state.telemetry.queries._clock = lambda: later + seconds(5)
+        online = await h.client.get(f"{API}/mowers/{mower_id}/state", headers=owner.headers)
+        h.app.state.telemetry.queries._clock = lambda: later + timedelta(minutes=2)
+        silent = await h.client.get(f"{API}/mowers/{mower_id}/state", headers=owner.headers)
+        await h.publish_state(
+            make_state(mower_id, owner.account_id, at=T0, heartbeat_at=later, connected=False)
+        )
+        h.app.state.telemetry.queries._clock = lambda: later + seconds(5)
+        lost = await h.client.get(f"{API}/mowers/{mower_id}/state", headers=owner.headers)
+    assert online.json()["stale"] is False
+    assert silent.json()["stale"] is True
+    assert lost.json()["stale"] is True
+    assert lost.json()["state"]["connected"] is False

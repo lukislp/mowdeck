@@ -170,7 +170,7 @@ export interface LayerInput {
   selected?: readonly string[];
   projection: Projection;
   areaName: (area: { id: string; name?: string | null }) => string;
-  /** The state is older than the stale threshold. */
+  /** The mower has no live link (offline, ADR 0040). */
   stale?: boolean;
   /** Colour route segments by RTK fix quality. */
   rtkTint?: boolean;

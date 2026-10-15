@@ -218,11 +218,12 @@ def is_significant_change(previous: MowerState | None, current: MowerState) -> b
     """True if ``current`` differs from ``previous`` beyond the timestamp and adapter extras.
 
     ``observed_at`` changes with every snapshot and ``raw`` holds adapter specific counters, so
-    neither counts as a change; the heartbeat publishes them regularly anyway.
+    neither counts as a change; the heartbeat publishes them regularly anyway. ``heartbeat_at``
+    and ``connected`` belong to the gateway's link, not to the mower's report (ADR 0040).
     """
     if previous is None:
         return True
-    ignored = {"observed_at", "raw"}
+    ignored = {"observed_at", "raw", "heartbeat_at", "connected"}
     return previous.model_dump(exclude=ignored) != current.model_dump(exclude=ignored)
 
 

@@ -1,10 +1,15 @@
 /**
- * Latest state per mower, from REST and the socket. The newest `observed_at` wins (REST and the
- * socket can race), so a store entry never goes back in time.
+ * Latest state per mower, from REST and the socket. The newest `observed_at` wins, then the
+ * newest link heartbeat (REST and the socket can race), so a store entry never goes back in time.
+ * Online and offline follow the gateway's link heartbeat, not the age of the values (ADR 0040,
+ * `$lib/mower/presence`).
  */
 import { SvelteMap } from 'svelte/reactivity';
 
 import type { components } from '$lib/generated/telemetry';
+import { isNewer, isOnline, oldValuesAge } from '$lib/mower/presence';
+
+export { OFFLINE_AFTER_MS, VALUES_OLD_AFTER_MS } from '$lib/mower/presence';
 
 export type MowerState = components['schemas']['MowerState'];
 
@@ -13,14 +18,6 @@ export interface MowerSnapshot {
   receivedAt: number;
   source: 'rest' | 'live';
 }
-
-/**
- * A state older than this counts as stale. `observed_at` is when the mower last reported: a
- * cloud mower is asked for a report every 20 s (adapter option `refresh_seconds`) and the
- * gateway repeats the newest state every 10 s, so a healthy cloud mower's age peaks around
- * 30 s; 45 s leaves room for a slow answer without flagging it.
- */
-export const STALE_AFTER_MS = 45_000;
 
 export class MowerStore {
   #items = new SvelteMap<string, MowerSnapshot>();
@@ -41,7 +38,7 @@ export class MowerStore {
   /** Store `state` unless a newer one is already known; returns whether it was taken. */
   upsert(id: string, state: MowerState, source: MowerSnapshot['source']): boolean {
     const current = this.#items.get(id);
-    if (current && Date.parse(current.state.observed_at) > Date.parse(state.observed_at)) {
+    if (current && !isNewer(current.state, state)) {
       return false;
     }
     this.#items.set(id, { state, receivedAt: this.#now(), source });
@@ -56,10 +53,23 @@ export class MowerStore {
     this.#items.clear();
   }
 
-  /** True when the state of `id` is older than {@link STALE_AFTER_MS} at `now`. */
-  isStale(id: string, now: number = this.#now()): boolean {
+  /**
+   * True when the gateway holds no live connection to `id` at `now`: the link was reported lost,
+   * or the last heartbeat is older than `OFFLINE_AFTER_MS`. False for an unknown mower (no
+   * state is not an offline state).
+   */
+  isOffline(id: string, now: number = this.#now()): boolean {
     const item = this.#items.get(id);
-    return item ? now - Date.parse(item.state.observed_at) > STALE_AFTER_MS : false;
+    return item ? !isOnline(item.state, now) : false;
+  }
+
+  /**
+   * The age of the values of an online mower in milliseconds once they are older than
+   * `VALUES_OLD_AFTER_MS` (a docked mower reports rarely); null otherwise.
+   */
+  oldValuesAge(id: string, now: number = this.#now()): number | null {
+    const item = this.#items.get(id);
+    return item ? oldValuesAge(item.state, now) : null;
   }
 }
 

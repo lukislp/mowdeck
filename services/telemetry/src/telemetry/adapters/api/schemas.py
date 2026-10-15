@@ -25,7 +25,12 @@ class MowerStateSnapshot(BaseModel):
     mower_id: UUID
     state: MowerState
     received_at: datetime = Field(description="When Telemetry stored this state (UTC).")
-    stale: bool = Field(description="True when the state is older than the stale threshold.")
+    stale: bool = Field(
+        description="True when the mower is offline: the gateway reported its link lost "
+        "(`state.connected` false) or the last link heartbeat (`state.heartbeat_at`, else "
+        "`observed_at`) is older than the stale threshold. Old values of a connected mower are "
+        "not stale (ADR 0040)."
+    )
 
     @classmethod
     def of(cls, row: LatestRow, *, stale: bool) -> "MowerStateSnapshot":

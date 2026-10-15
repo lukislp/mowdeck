@@ -1,6 +1,6 @@
 <!--
   The activity of a mower: a word, a glyph and the state colour (never colour alone).
-  Offline and stale states get a dashed outline.
+  Offline mowers (the activity, or no live link) get a dashed outline.
 -->
 <script lang="ts">
   import { activityTone, type Activity } from '../types.js';
@@ -9,7 +9,7 @@
     activity: Activity;
     /** The translated activity word, e.g. "Mäht". */
     label: string;
-    /** The state is older than expected (shown dashed like offline). */
+    /** The mower has no live link (offline, ADR 0040), shown dashed like offline. */
     stale?: boolean;
     size?: 'regular' | 'large';
   }

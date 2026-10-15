@@ -130,7 +130,7 @@
   const snap = $derived(states.get(id));
   const ms = $derived(snap?.state ?? null);
   const activity = $derived((ms?.activity ?? null) as Activity | null);
-  const stale = $derived(states.isStale(id, clock.now));
+  const stale = $derived(states.isOffline(id, clock.now));
 
   // The route of this visit: the live positions since the page opened.
   $effect(() => {

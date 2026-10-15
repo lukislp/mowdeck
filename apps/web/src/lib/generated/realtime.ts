@@ -45,6 +45,10 @@ export type BatteryPercent = number
 export type BladeHeightMm = (number | null)
 export type Charging = boolean
 /**
+ * False in the state the Device-Gateway publishes right after its connection to the mower ended: the last known values, with `heartbeat_at` the last time the link was alive. Set by the gateway, never by an adapter.
+ */
+export type Connected = boolean
+/**
  * How the Device-Gateway is connected to the mower.
  * 
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
@@ -84,6 +88,10 @@ export type Progress = (number | null)
 export type ReleaseNotes = (string | null)
 export type UpdateState = ("idle" | "available" | "installing" | "failed" | "unknown")
 /**
+ * When the Device-Gateway last knew its connection to the mower alive (UTC). The gateway sets it on every publish, never an adapter: it advances with each heartbeat while `observed_at` stays the time of the mower's last report. Clients judge online and offline by it (ADR 0040); null in states from before the field, then `observed_at` stands in.
+ */
+export type HeartbeatAt = (string | null)
+/**
  * Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).
  */
 export type LightOn = (boolean | null)
@@ -94,7 +102,7 @@ export type CompiledAt = (string | null)
 /**
  * The link is open right now.
  */
-export type Connected = boolean
+export type Connected1 = boolean
 /**
  * Firmware version of the bridge (the ESPHome release it runs).
  */
@@ -398,6 +406,10 @@ type: Type3
 /**
  * A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.
  * 
+ * Two times: ``observed_at`` is when the mower reported the values, ``heartbeat_at`` when the
+ * gateway's link to it was last alive. A docked mower reports rarely, so old values do not mean
+ * an offline mower (ADR 0040).
+ * 
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
  * via the `definition` "MowerState".
  */
@@ -407,6 +419,7 @@ activity: MowerActivity
 battery_percent: BatteryPercent
 blade_height_mm?: BladeHeightMm
 charging?: Charging
+connected?: Connected
 connection: ConnectionKind
 drive_recoverable?: DriveRecoverable
 error_code?: ErrorCode
@@ -416,6 +429,7 @@ firmware?: Firmware
  * Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor.
  */
 firmware_info?: (FirmwareInfo | null)
+heartbeat_at?: HeartbeatAt
 light_on?: LightOn
 links?: Links
 mower_id: MowerId1
@@ -460,7 +474,7 @@ export interface Links {
  */
 export interface LinkStatus {
 compiled_at?: CompiledAt
-connected?: Connected
+connected?: Connected1
 esphome_version?: EsphomeVersion
 outdated?: Outdated
 outdated_reason?: OutdatedReason

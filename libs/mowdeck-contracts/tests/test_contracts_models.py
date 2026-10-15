@@ -244,3 +244,15 @@ def test_mower_state_links_firmware_and_spot_run_default_to_nothing() -> None:
     assert MowerState.model_validate_json(full.model_dump_json()) == full
     with pytest.raises(ValidationError):
         _state(spot_run={"run_id": str(uuid4()), "state": "dancing"})
+
+
+def test_mower_state_link_fields_default_to_a_state_from_before_them() -> None:
+    old = _state()
+    assert old.heartbeat_at is None  # clients fall back to observed_at
+    assert old.connected is True
+    beat = datetime(2026, 10, 8, 12, 5, tzinfo=UTC)
+    live = _state(heartbeat_at="2026-10-08T14:05:00+02:00", connected=False)
+    assert live.heartbeat_at == beat  # normalised to UTC
+    assert MowerState.model_validate_json(live.model_dump_json()) == live
+    with pytest.raises(ValidationError):
+        _state(heartbeat_at="2026-10-08T12:05:00")  # naive times are rejected

@@ -6,7 +6,9 @@
 import type { Activity, RtkFix } from '@mowdeck/ui';
 
 import type { ApiProblem } from '$lib/api/problem';
+import type { components } from '$lib/generated/telemetry';
 import { angleApplies, minLaps, type MowPattern, type PatternName } from '$lib/mower/mow-pattern';
+import { isOnline, linkSeenAt, oldValuesAge } from '$lib/mower/presence';
 import { m } from '$lib/paraglide/messages';
 import { planProblemText } from '$lib/plan/problems';
 import { getLocale } from '$lib/paraglide/runtime';
@@ -267,6 +269,29 @@ export function formatClock(value: string | number | Date, locale: string = getL
   return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(
     new Date(value),
   );
+}
+
+/**
+ * The link line of a mower (ADR 0040): "Verbunden" while the gateway holds a live connection,
+ * else "Offline, zuletzt verbunden vor 3 min" from the last link heartbeat.
+ */
+export function presenceLabel(state: components['schemas']['MowerState'], now: number): string {
+  return isOnline(state, now)
+    ? m.presence_online()
+    : m.presence_offline({ age: formatAge(linkSeenAt(state), now) });
+}
+
+/**
+ * "Werte von vor 4 min" when an online mower's values are older than a few minutes (a docked
+ * mower reports rarely); null otherwise. Shown apart from the link line, subdued.
+ */
+export function valuesAgeLabel(
+  state: components['schemas']['MowerState'],
+  now: number,
+): string | null {
+  return oldValuesAge(state, now) === null
+    ? null
+    : m.presence_values_age({ age: formatAge(state.observed_at, now) });
 }
 
 /** "vor 12 s" from an ISO time and the current time. */

@@ -169,6 +169,38 @@ async def test_telemetry_db_latest_never_goes_back_in_time(
 
 
 @pytest.mark.parametrize("kind", KINDS)
+async def test_telemetry_db_link_heartbeat_replaces_the_latest_state_of_the_same_report(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account, mower = uuid4(), uuid4()
+
+    def latest(heartbeat: datetime, *, connected: bool = True) -> LatestRow:
+        return LatestRow(
+            mower_id=mower,
+            account_id=account,
+            observed_at=NOW,  # the mower's report stays, only the link heartbeat moves
+            received_at=heartbeat,
+            activity="docked",
+            battery_percent=90,
+            state={"heartbeat_at": heartbeat.isoformat(), "connected": connected},
+            history_written_at=NOW,
+            history_fingerprint="f",
+            position_fingerprint="p",
+        )
+
+    async with store_of(kind, monkeypatch) as store:
+        async with store.transaction() as tx:
+            await tx.put_latest(latest(NOW))
+        async with store.transaction() as tx:
+            await tx.put_latest(latest(NOW + seconds(10)))
+        async with store.transaction() as tx:
+            await tx.put_latest(latest(NOW + seconds(10), connected=False))
+        row = await store.latest_of(account, mower)
+    assert row is not None
+    assert row.state == {"heartbeat_at": (NOW + seconds(10)).isoformat(), "connected": False}
+
+
+@pytest.mark.parametrize("kind", KINDS)
 async def test_telemetry_db_history_positions_commands_and_isolation(
     kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommandStore, POLL_INTERVAL_MS, RESULT_WAIT_MS, type CommandApi } from './commands.svelte';
-import { MowerStore, STALE_AFTER_MS, type MowerState } from './mowers.svelte';
+import {
+  MowerStore,
+  OFFLINE_AFTER_MS,
+  VALUES_OLD_AFTER_MS,
+  type MowerState,
+} from './mowers.svelte';
 
-function state(observedAt: string, activity: MowerState['activity'] = 'docked'): MowerState {
+function state(
+  observedAt: string,
+  activity: MowerState['activity'] = 'docked',
+  link: Partial<Pick<MowerState, 'heartbeat_at' | 'connected'>> = {},
+): MowerState {
   return {
     mower_id: 'm1',
     account_id: 'a1',
@@ -11,6 +20,7 @@ function state(observedAt: string, activity: MowerState['activity'] = 'docked'):
     activity,
     battery_percent: 80,
     connection: 'simulated',
+    ...link,
   } as MowerState;
 }
 
@@ -24,13 +34,57 @@ describe('MowerStore', () => {
     expect(store.get('m1')?.source).toBe('live');
   });
 
-  it('flags stale states and forgets mowers', () => {
+  it('takes heartbeats of the same report and never an older heartbeat', () => {
+    const store = new MowerStore(() => 0);
+    const at = '2026-10-09T12:00:00Z';
+    store.upsert('m1', state(at, 'docked', { heartbeat_at: '2026-10-09T12:05:00Z' }), 'live');
+    expect(
+      store.upsert('m1', state(at, 'docked', { heartbeat_at: '2026-10-09T12:04:00Z' }), 'rest'),
+    ).toBe(false);
+    expect(
+      store.upsert('m1', state(at, 'docked', { heartbeat_at: '2026-10-09T12:05:10Z' }), 'live'),
+    ).toBe(true);
+    expect(store.get('m1')?.state.heartbeat_at).toBe('2026-10-09T12:05:10Z');
+  });
+
+  it('keeps a docked mower with old values online while its heartbeats arrive', () => {
+    const beat = Date.parse('2026-10-09T12:10:00Z');
+    const store = new MowerStore(() => beat);
+    store.upsert(
+      'm1',
+      state('2026-10-09T12:00:00Z', 'docked', { heartbeat_at: '2026-10-09T12:10:00Z' }),
+      'live',
+    );
+    expect(store.isOffline('m1', beat + OFFLINE_AFTER_MS)).toBe(false);
+    expect(store.oldValuesAge('m1', beat)).toBe(10 * 60_000);
+    expect(store.isOffline('m1', beat + OFFLINE_AFTER_MS + 1)).toBe(true);
+    expect(store.oldValuesAge('m1', beat + OFFLINE_AFTER_MS + 1)).toBeNull();
+  });
+
+  it('is offline at once when the gateway reports the link lost', () => {
+    const beat = Date.parse('2026-10-09T12:00:05Z');
+    const store = new MowerStore(() => beat);
+    store.upsert(
+      'm1',
+      state('2026-10-09T12:00:00Z', 'docked', {
+        heartbeat_at: '2026-10-09T12:00:05Z',
+        connected: false,
+      }),
+      'live',
+    );
+    expect(store.isOffline('m1', beat)).toBe(true);
+    expect(store.oldValuesAge('m1', beat)).toBeNull();
+  });
+
+  it('falls back to observed_at for old states and forgets mowers', () => {
     const at = Date.parse('2026-10-09T12:00:00Z');
     const store = new MowerStore(() => at);
     store.upsert('m1', state('2026-10-09T12:00:00Z'), 'rest');
-    expect(store.isStale('m1', at + STALE_AFTER_MS)).toBe(false);
-    expect(store.isStale('m1', at + STALE_AFTER_MS + 1)).toBe(true);
-    expect(store.isStale('unknown')).toBe(false);
+    expect(store.isOffline('m1', at + OFFLINE_AFTER_MS)).toBe(false);
+    expect(store.isOffline('m1', at + OFFLINE_AFTER_MS + 1)).toBe(true);
+    expect(store.oldValuesAge('m1', at + VALUES_OLD_AFTER_MS)).toBeNull();
+    expect(store.isOffline('unknown')).toBe(false);
+    expect(store.oldValuesAge('unknown')).toBeNull();
     store.remove('m1');
     expect(store.has('m1')).toBe(false);
     store.upsert('m1', state('2026-10-09T12:00:00Z'), 'rest');
