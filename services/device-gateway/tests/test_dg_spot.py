@@ -164,3 +164,65 @@ async def test_dg_spot_run_rule_12_and_spot_stop() -> None:
         final = [r for r in results(bus, reg.mower_id) if r.command_id == spot.command_id][-1]
         assert final.status is CommandStatus.FAILED
         assert "stopped_by_user" in (final.reason or "")
+
+
+GARDENS = MowerMap(
+    reference=GeoReference(origin_lat=48.1, origin_lon=11.5),
+    areas=[
+        MapArea(id="lawn", boundary=[(0, 0), (12, 0), (12, 12), (0, 12)]),
+        MapArea(id="far", boundary=[(200, 0), (212, 0), (212, 12), (200, 12)]),
+    ],
+    dock=DockPose(x=3.0, y=6.0, heading_deg=0.0),
+)
+"""Two gardens without a transfer path between them."""
+
+
+def _gardens_app(bus: InMemoryBus, reg: MowerRegistration) -> object:
+    def factory(registration: MowerRegistration) -> MowerConnection:
+        return SimulatedMower(
+            mower_id=registration.mower_id,
+            account_id=registration.account_id,
+            mower_map=GARDENS,
+            config=SimulationConfig(time_scale=1.0),
+        )
+
+    return make_app(
+        bus=bus,
+        provider=TestProvider({reg.mower_id: factory}, tick_seconds=0.05),
+        bootstrap_mowers=[reg.model_dump(mode="json")],
+        telemetry_heartbeat_seconds=1.0,
+        path_progress_seconds=0.1,
+    )
+
+
+async def test_dg_spot_run_without_a_route_is_rejected() -> None:
+    bus = InMemoryBus()
+    reg = registration()
+    async with lifespan_client(_gardens_app(bus, reg)):  # type: ignore[arg-type]
+        await wait_until(lambda: telemetry(bus, reg.mower_id))
+        far = envelope(reg, SpotMow(plan=plan_of((205.0, 6.0), (206.0, 6.0))))
+        await publish_command(bus, far)
+        await wait_until(lambda: _results_of(bus, reg, far.command_id))
+        (refused,) = [r for r in results(bus, reg.mower_id) if r.command_id == far.command_id]
+        assert refused.status is CommandStatus.REJECTED
+        assert (refused.reason or "").startswith("no_route:"), refused.reason
+        assert all(s.activity is not MowerActivity.IDLE for s in telemetry(bus, reg.mower_id))
+
+
+async def test_dg_spot_run_starts_at_the_dock() -> None:
+    bus = InMemoryBus()
+    reg = registration()
+    async with lifespan_client(_gardens_app(bus, reg)):  # type: ignore[arg-type]
+        await wait_until(lambda: telemetry(bus, reg.mower_id))
+        spot = envelope(reg, SpotMow(plan=plan_of((6.0, 6.0), (7.0, 6.0))))
+        await publish_command(bus, spot)
+        await wait_until(lambda: _results_of(bus, reg, spot.command_id))
+        (accepted,) = [r for r in results(bus, reg.mower_id) if r.command_id == spot.command_id]
+        assert accepted.status is CommandStatus.ACCEPTED, accepted.reason
+        assert "leaving the dock" in (accepted.reason or "")
+        await wait_until(lambda: "undocking" in _statuses(bus, reg, spot.command_id))
+        stop = envelope(reg, SpotStop())
+        await publish_command(bus, stop)
+        await wait_until(lambda: len(_results_of(bus, reg, spot.command_id)) == 2)
+        final = [r for r in results(bus, reg.mower_id) if r.command_id == spot.command_id][-1]
+        assert final.status is CommandStatus.FAILED and "stopped_by_user" in (final.reason or "")
