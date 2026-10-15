@@ -149,18 +149,32 @@ class _Opener:
 
 
 class _Sleeps:
-    """A sleep that yields briefly and records the delays the watcher asked for."""
+    """The watcher's sleep: polls yield briefly, backoff delays (a second or more) are recorded
+    and, with ``hold``, block until the test calls :meth:`release`, so a test observes the
+    "bridge down" window deterministically instead of racing the reconnect."""
 
     def __init__(self) -> None:
         self.delays: list[float] = []
+        self.hold = False
+        self._gate = asyncio.Event()
+
+    def release(self) -> None:
+        """Let a held backoff delay pass (the watcher tries again)."""
+        self._gate.set()
 
     async def __call__(self, seconds: float) -> None:
         if seconds >= 1:
             self.delays.append(seconds)
+            if self.hold:
+                self._gate.clear()
+                await self._gate.wait()
+                return
         await asyncio.sleep(0.002)
 
 
-async def _wait(predicate: Callable[[], object], *, within: float = 3.0) -> None:
+async def _wait(predicate: Callable[[], object], *, within: float = 30.0) -> None:
+    """Poll ``predicate`` (a condition that stays true once reached); CI runners are slow, so
+    the budget is generous."""
     deadline = time.monotonic() + within
     while not predicate():
         if time.monotonic() > deadline:
@@ -237,8 +251,10 @@ async def test_mammotion_dual_bridge_loss_keeps_the_cloud_and_ends_the_drive_ses
         await session.update(0.3, 0.0, False)
         assert port.names()[-1] == "send_movement"
 
+        sleeps.hold = True  # the watcher waits for the test before it reconnects
         port.ble = False  # the Bluetooth transport dropped
-        await _wait(lambda: not conn.ble_connected() and port.detached == 1)
+        await _wait(lambda: port.detached == 1 and sleeps.delays)
+        assert not conn.ble_connected()
         assert conn.is_connected  # the cloud carries on
         assert not session.is_open
         with pytest.raises(CommandRejected):
@@ -254,7 +270,7 @@ async def test_mammotion_dual_bridge_loss_keeps_the_cloud_and_ends_the_drive_ses
         published = [first]
         while True:
             try:
-                published.append(await asyncio.wait_for(anext(subscription), 0.2))
+                published.append(await asyncio.wait_for(anext(subscription), 1.0))
             except TimeoutError:
                 break
         kinds = [s.connection for s in published]
@@ -262,8 +278,9 @@ async def test_mammotion_dual_bridge_loss_keeps_the_cloud_and_ends_the_drive_ses
         await subscription.aclose()
 
         # The watcher reconnects on its own after the backoff.
-        await _wait(lambda: len(opener.links) >= 2 and conn.ble_connected())
         assert sleeps.delays[:1] == [5.0]
+        sleeps.release()
+        await _wait(lambda: len(opener.links) >= 2 and conn.ble_connected())
         assert (await conn.get_state()).connection is ConnectionKind.BLE_BRIDGE
     finally:
         await conn.disconnect()
