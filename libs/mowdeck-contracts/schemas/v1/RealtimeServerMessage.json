@@ -1131,6 +1131,18 @@
           ],
           "default": null,
           "description": "The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one."
+        },
+        "turn_style": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnStyle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How the mower turns at lane ends in its own jobs, as its connection reports the vendor setting (read only; ADR 0043). A spot run without its own `turn_style` uses it; null when the connection does not report one."
         }
       },
       "required": [
@@ -1494,6 +1506,16 @@
       },
       "title": "SubscribedMessage",
       "type": "object"
+    },
+    "TurnStyle": {
+      "description": "How a spot run turns at the end of a lane (ADR 0043).\n\n``in_place``: the mower rotates on the spot (fast, but an all-wheel-drive mower scuffs the\nturf). ``arc``: a forward U-turn with a radius of at least half the lane spacing, or a bulb\nturn over the neighbouring lane when the spacing is narrower than the turning radius.\n``multi_point``: a three-point turn (forward arc, reverse arc with the blades off, forward\narc); needs a drive link that can reverse (``MowerCapabilities.drive_reverse``).",
+      "enum": [
+        "in_place",
+        "arc",
+        "multi_point"
+      ],
+      "title": "TurnStyle",
+      "type": "string"
     },
     "UnsubscribedMessage": {
       "description": "Answer to ``unsubscribe``.",

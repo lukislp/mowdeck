@@ -554,7 +554,7 @@ export type components = {
             plan_hash: string;
             /**
              * Preview
-             * @description FeatureCollection: one LineString per segment with `kind`, `blades_on`, `speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`.
+             * @description FeatureCollection: one LineString per segment with `kind`, `blades_on`, `reverse`, `speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`.
              */
             preview: {
                 [key: string]: unknown;
@@ -566,6 +566,8 @@ export type components = {
             transfer_length_m: number;
             /** @description The transit of a spot run, when the request asked for it. */
             transit?: components["schemas"]["TransitOut"] | null;
+            /** @description The turn style the lane ends were shaped with (after the `multi_point` fallback); null without a requested style. */
+            turn_style?: components["schemas"]["TurnStyle"] | null;
             /** Warnings */
             warnings: string[];
         };
@@ -589,6 +591,8 @@ export type components = {
             template?: string | null;
             /** @description Also plan the transit of a spot run from the dock or a position to the plan's first point (ADR 0041). */
             transit?: components["schemas"]["TransitIn"] | null;
+            /** @description Shape the lane ends for a spot run that turns this way (ADR 0043): `arc` (U-turn or bulb turn), `multi_point` (three-point turn; `arc` when the mower's drive link cannot reverse) or `in_place`; null keeps the straight connections. */
+            turn_style?: components["schemas"]["TurnStyle"] | null;
             /**
              * Wgs84
              * @description Preview coordinates as `[lon, lat]`.
@@ -621,7 +625,7 @@ export type components = {
             plan_hash: string;
             /**
              * Preview
-             * @description FeatureCollection: one LineString per segment with `kind`, `blades_on`, `speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`.
+             * @description FeatureCollection: one LineString per segment with `kind`, `blades_on`, `reverse`, `speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`.
              */
             preview: {
                 [key: string]: unknown;
@@ -632,6 +636,8 @@ export type components = {
             transfer_length_m: number;
             /** @description The transit of a spot run, when the request asked for it. */
             transit?: components["schemas"]["TransitOut"] | null;
+            /** @description The turn style the lane ends were shaped with (after the `multi_point` fallback); null without a requested style. */
+            turn_style?: components["schemas"]["TurnStyle"] | null;
             /** Warnings */
             warnings: string[];
         };
@@ -683,7 +689,9 @@ export type components = {
         };
         /**
          * SpotSegment
-         * @description One part of a spot plan: drive along ``path`` with the blades on or off.
+         * @description One part of a spot plan: drive along ``path`` with the blades on or off (backwards with
+         *     ``reverse``: the mower faces against the direction of travel, part of a three-point
+         *     turn).
          */
         SpotSegment: {
             /** Blades On */
@@ -699,6 +707,12 @@ export type components = {
              * @description Encoded polyline of local metres (x, y), centimetre precision (`encode_polyline`), at least two points.
              */
             path: string;
+            /**
+             * Reverse
+             * @description Drive the polyline backwards (negative linear speed, the mower faces against the direction of travel); always with the blades off (ADR 0043).
+             * @default false
+             */
+            reverse: boolean;
             /** Speed Mps */
             speed_mps: number;
         };
@@ -817,6 +831,18 @@ export type components = {
              */
             route: number[][];
         };
+        /**
+         * TurnStyle
+         * @description How a spot run turns at the end of a lane (ADR 0043).
+         *
+         *     ``in_place``: the mower rotates on the spot (fast, but an all-wheel-drive mower scuffs the
+         *     turf). ``arc``: a forward U-turn with a radius of at least half the lane spacing, or a bulb
+         *     turn over the neighbouring lane when the spacing is narrower than the turning radius.
+         *     ``multi_point``: a three-point turn (forward arc, reverse arc with the blades off, forward
+         *     arc); needs a drive link that can reverse (``MowerCapabilities.drive_reverse``).
+         * @enum {string}
+         */
+        TurnStyle: "in_place" | "arc" | "multi_point";
         /**
          * UiAreaDef
          * @description An area the module occupies in the web app shell.

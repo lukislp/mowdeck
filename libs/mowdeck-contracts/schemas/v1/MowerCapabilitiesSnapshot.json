@@ -111,6 +111,12 @@
           "description": "Width of the cut swath in millimetres, if known (coverage heatmaps).",
           "title": "Cutting Width Mm"
         },
+        "drive_reverse": {
+          "default": false,
+          "description": "The drive link that carries the joystick frames can drive backwards (a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and a spot run's `multi_point` turns fall back to `arc` (ADR 0043).",
+          "title": "Drive Reverse",
+          "type": "boolean"
+        },
         "drive_speed_setting": {
           "anyOf": [
             {

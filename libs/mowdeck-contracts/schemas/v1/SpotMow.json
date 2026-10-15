@@ -145,7 +145,7 @@
       "type": "object"
     },
     "SpotSegment": {
-      "description": "One part of a spot plan: drive along ``path`` with the blades on or off.",
+      "description": "One part of a spot plan: drive along ``path`` with the blades on or off (backwards with\n``reverse``: the mower faces against the direction of travel, part of a three-point\nturn).",
       "properties": {
         "blades_on": {
           "title": "Blades On",
@@ -168,6 +168,12 @@
           "title": "Path",
           "type": "string"
         },
+        "reverse": {
+          "default": false,
+          "description": "Drive the polyline backwards (negative linear speed, the mower faces against the direction of travel); always with the blades off (ADR 0043).",
+          "title": "Reverse",
+          "type": "boolean"
+        },
         "speed_mps": {
           "exclusiveMinimum": 0,
           "maximum": 2.0,
@@ -182,6 +188,16 @@
       ],
       "title": "SpotSegment",
       "type": "object"
+    },
+    "TurnStyle": {
+      "description": "How a spot run turns at the end of a lane (ADR 0043).\n\n``in_place``: the mower rotates on the spot (fast, but an all-wheel-drive mower scuffs the\nturf). ``arc``: a forward U-turn with a radius of at least half the lane spacing, or a bulb\nturn over the neighbouring lane when the spacing is narrower than the turning radius.\n``multi_point``: a three-point turn (forward arc, reverse arc with the blades off, forward\narc); needs a drive link that can reverse (``MowerCapabilities.drive_reverse``).",
+      "enum": [
+        "in_place",
+        "arc",
+        "multi_point"
+      ],
+      "title": "TurnStyle",
+      "type": "string"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -237,6 +253,18 @@
       "default": null,
       "description": "The spot as the user chose it (audit only).",
       "title": "Spot"
+    },
+    "turn_style": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TurnStyle"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "How the run turns at lane ends (ADR 0043); null: the mower's own setting (`MowerState.turn_style`), else `arc`. `multi_point` falls back to `arc` on a drive link without `drive_reverse`. The plan should be computed with the same style."
     }
   },
   "required": [

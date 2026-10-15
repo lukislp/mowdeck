@@ -15,6 +15,7 @@ from mowdeck_contracts.v1 import (
     RtkFixStatus,
     RtkSource,
     StartMow,
+    TurnStyle,
 )
 from mowdeck_control import UnsupportedPattern
 from mowdeck_control.geo import from_wgs84, to_wgs84
@@ -782,3 +783,35 @@ def test_mammotion_model_is_surfaced_in_raw_and_capabilities() -> None:
 
     assert caps() == "LUBA 2 AWD 5000X"  # exact model from the sub model's table entry
     assert caps("LubaAWD1000723") == "LubaAWD1000723"
+
+
+@pytest.mark.parametrize(
+    ("turning_mode", "expected"),
+    [(0, TurnStyle.IN_PLACE), (1, TurnStyle.MULTI_POINT), (7, None)],
+)
+def test_mammotion_turning_mode_is_the_mowers_turn_style(
+    turning_mode: int, expected: TurnStyle | None
+) -> None:
+    """ADR 0043: ``mower_state.turning_mode`` (0 zero-turn, 1 multipoint), read only."""
+    device = sample_device()
+    device.mower_state.turning_mode = turning_mode
+    assert mapping.turn_style_of(device) is expected
+    assert _state(device).turn_style is expected
+    assert device.mower_state.turning_mode == turning_mode  # never changed
+
+
+def test_mammotion_drive_reverse_follows_the_bluetooth_drive_session() -> None:
+    device = MowerDevice(name="Luba-VP12345")
+
+    def caps(manual_drive: bool) -> MowerCapabilities:
+        return mapping.capabilities_of(
+            device,
+            device_name="Luba-VP12345",
+            product_key="",
+            manual_drive=manual_drive,
+            manual_drive_blades=False,
+        )
+
+    assert caps(True).drive_reverse  # send_movement takes a negative linear speed
+    assert not caps(False).drive_reverse
+    assert mapping.movement_wire(-1.0, 0.0)[0] < 0

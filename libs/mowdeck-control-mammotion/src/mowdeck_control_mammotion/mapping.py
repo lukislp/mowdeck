@@ -52,6 +52,7 @@ from mowdeck_contracts.v1 import (
     RtkFixStatus,
     RtkSource,
     StartMow,
+    TurnStyle,
 )
 from mowdeck_control.geo import to_wgs84
 from mowdeck_control.translation import MowRequest, NativeJob, Pattern, plan_to_native_job
@@ -458,6 +459,7 @@ def state_of(
         links=dict(links) if links else {},
         firmware_info=firmware_info,
         drive_speed_mps=drive_speed_of(device),
+        turn_style=turn_style_of(device),
         raw=raw,
     )
 
@@ -839,6 +841,21 @@ def drive_speed_of(device: MowerDevice) -> float | None:
     return speed if 0 < speed <= MAX_PLAUSIBLE_SPEED_MPS else None
 
 
+TURNING_MODES: Final[dict[int, TurnStyle]] = {0: TurnStyle.IN_PLACE, 1: TurnStyle.MULTI_POINT}
+"""The mower's own turn setting for its jobs (ADR 0043): ``mower_state.turning_mode``, which
+PyMammotion's state reducer sets from the read/write parameter 6 (``nav_sys_param_cmd`` on a
+Luba Pro, ``bidire_comm_cmd`` otherwise; ``state_reducer.py``: "0=zero-turn, 1=multipoint
+turn"). MowDeck only reads it: the vendor app's setting is never changed."""
+
+
+def turn_style_of(device: MowerDevice) -> TurnStyle | None:
+    """The mower's own turn style (:data:`TURNING_MODES`); None for an unknown value.
+
+    PyMammotion has no read request for the parameter and starts at 0, so until the mower
+    reports it the value reads as zero-turn (``in_place``)."""
+    return TURNING_MODES.get(int(device.mower_state.turning_mode))
+
+
 def path_spacing_of(device: MowerDevice, product_key: str = "") -> tuple[int, int] | None:
     """Path spacing range in centimetres of the model's table entry, None when unknown."""
     config = model_config_of(device, product_key)
@@ -872,7 +889,9 @@ def capabilities_of(
     unset (the controller then rejects the commands): PyMammotion's own fallback for a Luba VP
     is the Yuka table, which is wrong for it. ``drive_speed``: the connection can send driver
     commands, so it declares the speed setting for manual driving
-    (:func:`drive_speed_setting_of`).
+    (:func:`drive_speed_setting_of`). ``drive_reverse`` follows ``manual_drive``: every drive
+    session of this adapter is a Bluetooth one (``send_movement``), which takes a negative
+    linear speed (ADR 0043).
     """
     profile = model_profile(device_name, product_key)
     with_camera = camera and has_camera(device_name, product_key)
@@ -897,6 +916,7 @@ def capabilities_of(
         links_supported=list(links_supported),
         firmware_update=firmware_update,
         undock=undock,
+        drive_reverse=manual_drive,
         drive_speed_setting=drive_speed_setting_of(device, product_key) if drive_speed else None,
     )
 

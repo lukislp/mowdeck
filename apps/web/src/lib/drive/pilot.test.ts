@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DriveFrame } from '$lib/realtime/client.svelte';
 
-import { DrivePilot, IDLE_FRAME_MS } from './pilot';
+import { DrivePilot, IDLE_FRAME_MS, clampReverse } from './pilot';
 
 function setup(accept = true) {
   let now = 10_000;
@@ -83,5 +83,42 @@ describe('DrivePilot', () => {
     expect(pilot.sample({ linear: 1, angular: 0 })).toBe(false);
     expect(pilot.release()).toBe(false);
     expect(pilot.rates().sent).toBe(0);
+  });
+});
+
+describe('reverse driving', () => {
+  it('clampReverse cuts the backwards part without reverse and keeps turning', () => {
+    expect(clampReverse({ linear: -0.6, angular: 0.3 }, false)).toEqual({
+      linear: 0,
+      angular: 0.3,
+    });
+    expect(clampReverse({ linear: 0.6, angular: -0.3 }, false)).toEqual({
+      linear: 0.6,
+      angular: -0.3,
+    });
+    expect(clampReverse({ linear: -0.6, angular: 0.3 }, true)).toEqual({
+      linear: -0.6,
+      angular: 0.3,
+    });
+  });
+
+  it('never sends a backwards frame over a link without reverse (the default)', () => {
+    const { pilot, frames, advance } = setup();
+    expect(pilot.reverseAllowed).toBe(false);
+    pilot.speedLimit = 100;
+    pilot.sample({ linear: -1, angular: 0.5 });
+    advance(100);
+    pilot.sample({ linear: -0.4, angular: -0.2 });
+    expect(frames.map((f) => f.frame.linear)).toEqual([0, 0]);
+    expect(frames[0]!.frame.angular).toBe(0.5);
+    expect(frames.every((f) => f.frame.linear >= 0)).toBe(true);
+  });
+
+  it('sends backwards frames, scaled, when the link can reverse', () => {
+    const { pilot, frames } = setup();
+    pilot.reverseAllowed = true;
+    pilot.speedLimit = 50;
+    pilot.sample({ linear: -0.8, angular: 0 });
+    expect(frames.at(0)?.frame.linear).toBe(-0.4);
   });
 });

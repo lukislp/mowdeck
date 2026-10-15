@@ -26,7 +26,7 @@
       "type": "object"
     },
     "SpotSegment": {
-      "description": "One part of a spot plan: drive along ``path`` with the blades on or off.",
+      "description": "One part of a spot plan: drive along ``path`` with the blades on or off (backwards with\n``reverse``: the mower faces against the direction of travel, part of a three-point\nturn).",
       "properties": {
         "blades_on": {
           "title": "Blades On",
@@ -48,6 +48,12 @@
           "minLength": 4,
           "title": "Path",
           "type": "string"
+        },
+        "reverse": {
+          "default": false,
+          "description": "Drive the polyline backwards (negative linear speed, the mower faces against the direction of travel); always with the blades off (ADR 0043).",
+          "title": "Reverse",
+          "type": "boolean"
         },
         "speed_mps": {
           "exclusiveMinimum": 0,

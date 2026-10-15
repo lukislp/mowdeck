@@ -36,7 +36,7 @@
   import StopBar from '$lib/components/StopBar.svelte';
   import { loadConfig, type MapTilesConfig } from '$lib/config';
   import { driveEndLabel, driveErrorLabel } from '$lib/drive/labels';
-  import { DrivePilot, SPEED_LIMITS, type SpeedLimit } from '$lib/drive/pilot';
+  import { DrivePilot, SPEED_LIMITS, clampReverse, type SpeedLimit } from '$lib/drive/pilot';
   import type { components as Fleet } from '$lib/generated/fleet';
   import { activityLabel, formatNumber, problemMessage } from '$lib/i18n';
   import { permissions, realtime, revoked } from '$lib/live.svelte';
@@ -48,7 +48,11 @@
   import { toasts } from '$lib/stores/ui.svelte';
 
   type Mower = Fleet['schemas']['MowerOut'];
-  type DriveCaps = { manual_drive?: boolean; manual_drive_blades?: boolean };
+  type DriveCaps = {
+    manual_drive?: boolean;
+    manual_drive_blades?: boolean;
+    drive_reverse?: boolean;
+  };
 
   // Units are not translated.
   const PER_SECOND = '/s';
@@ -148,6 +152,9 @@
   const busyJob = $derived(activity === 'mowing' || activity === 'returning');
   const offline = $derived(activity === 'offline' || (snap !== undefined && stale));
   const bladesCapable = $derived(caps?.manual_drive_blades === true);
+  // The drive link can drive backwards (ADR 0043); otherwise the pilot cuts every backwards
+  // deflection and the pad's lower half is marked off.
+  const reverseCapable = $derived(caps?.drive_reverse === true);
   // A mower with a Bluetooth bridge drives over it: while the bridge is down the cloud link
   // keeps the state coming, but a session would be refused (ADR 0038).
   const bridgeDown = $derived(ms?.links?.ble_bridge?.connected === false);
@@ -267,6 +274,9 @@
     pilot.speedLimit = speedLimit;
   });
   $effect(() => {
+    pilot.reverseAllowed = reverseCapable;
+  });
+  $effect(() => {
     pilot.bladeOn = live && armed && bladesOn && session?.bladeOnAllowed === true;
   });
 
@@ -285,9 +295,12 @@
     const left = Math.max(0, session.maxSeconds - Math.floor((now - session.startedAt) / 1000));
     return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
   });
-  const output = $derived({
-    linear: engaged ? Math.round(stick.linear * speedLimit) / 100 : 0,
-    angular: engaged ? stick.angular : 0,
+  const output = $derived.by(() => {
+    const sent = clampReverse(stick, reverseCapable);
+    return {
+      linear: engaged ? Math.round(sent.linear * speedLimit) / 100 : 0,
+      angular: engaged ? sent.angular : 0,
+    };
   });
   const stateWord = $derived(
     live
@@ -407,16 +420,27 @@
       {/if}
 
       <div class="stick">
-        <Joystick
-          label={m.drive_pad()}
-          hint={m.drive_pad_hint()}
-          disabled={!live}
-          {interval}
-          bind:value={stick}
-          {onsample}
-          {onengage}
-          testid="joystick"
-        />
+        <div
+          class="stick-pad"
+          data-reverse={reverseCapable ? 'true' : 'false'}
+          data-testid="drive-pad"
+        >
+          <Joystick
+            label={m.drive_pad()}
+            hint={m.drive_pad_hint()}
+            disabled={!live}
+            {interval}
+            bind:value={stick}
+            {onsample}
+            {onengage}
+            testid="joystick"
+          />
+          {#if !reverseCapable}
+            <p class="no-reverse" data-testid="drive-no-reverse">
+              <Icon name="alert" size={14} />{m.drive_no_reverse()}
+            </p>
+          {/if}
+        </div>
         <SegmentedControl
           label={m.drive_speed_limit()}
           options={speedOptions}
@@ -677,6 +701,42 @@
 
   .stick > :global(.md-segmented) {
     width: 100%;
+  }
+
+  /*
+   * A drive link without reverse: the pad's lower (backwards) half is hatched off under the
+   * thumb and its arrow mark hidden; the pilot cuts backwards deflections to zero either way.
+   */
+  .stick-pad {
+    display: grid;
+    gap: var(--md-space-2);
+  }
+
+  .stick-pad[data-reverse='false'] :global(.md-joystick)::before {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: repeating-linear-gradient(-45deg, var(--md-color-line) 0 2px, transparent 2px 9px);
+    clip-path: inset(50% 0 0 0);
+    content: '';
+    pointer-events: none;
+  }
+
+  .stick-pad[data-reverse='false'] :global(.md-joystick path:nth-of-type(2)) {
+    visibility: hidden;
+  }
+
+  .no-reverse {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--md-space-2);
+    margin: 0;
+    color: var(--md-color-ink-muted);
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-12);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
   }
 
   .controls {

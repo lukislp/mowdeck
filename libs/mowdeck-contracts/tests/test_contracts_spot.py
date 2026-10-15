@@ -1,5 +1,7 @@
 """Spot plans in StartMow and the position track request."""
 
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -14,8 +16,10 @@ from mowdeck_contracts.v1 import (
     SpotNativeJob,
     SpotSegment,
     StartMow,
+    TurnStyle,
     decode_polyline,
     encode_polyline,
+    resolve_turn_style,
     spot_plan_hash,
 )
 from mowdeck_contracts.v1.positions import TRACK_PRECISION
@@ -183,3 +187,33 @@ def test_spot_run_status_life_cycle() -> None:
     assert SpotRunStatus.model_validate_json(ended.model_dump_json()) == ended
     with pytest.raises(ValidationError):
         SpotRunStatus(run_id=uuid4(), state="done", progress_percent=101)
+
+
+def test_reverse_segments_keep_the_blades_off_and_old_hashes_stable() -> None:
+    forward = SpotSegment.from_points([(0, 0), (1, 0)], blades_on=False, speed_mps=0.2)
+    backward = SpotSegment.from_points(
+        [(1, 0), (0, 0)], blades_on=False, speed_mps=0.2, kind="turn", reverse=True
+    )
+    # A plan without reverse segments hashes exactly as before the field existed.
+    canonical = json.dumps(
+        {"pattern_chain": ["stripes"], "segments": [["mow", False, 0.2, forward.path]]},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    legacy = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    assert spot_plan_hash(["stripes"], [forward]) == legacy
+    assert spot_plan_hash(["s"], [forward]) != spot_plan_hash(
+        ["s"], [forward.model_copy(update={"reverse": True})]
+    )
+    plan = SpotMowPlan.build([forward, backward], ["stripes"])
+    assert SpotMowPlan.model_validate_json(plan.model_dump_json()).segments[1].reverse is True
+    with pytest.raises(ValidationError, match="reverse segments must have the blades off"):
+        SpotSegment.from_points(
+            [(0, 0), (1, 0)], blades_on=True, speed_mps=0.2, kind="turn", reverse=True
+        )
+    assert resolve_turn_style(None, None, reverse=True) is TurnStyle.ARC
+    assert resolve_turn_style(None, TurnStyle.IN_PLACE, reverse=True) is TurnStyle.IN_PLACE
+    assert resolve_turn_style(TurnStyle.ARC, TurnStyle.IN_PLACE, reverse=True) is TurnStyle.ARC
+    assert resolve_turn_style(TurnStyle.MULTI_POINT, None, reverse=True) is TurnStyle.MULTI_POINT
+    assert resolve_turn_style(TurnStyle.MULTI_POINT, None, reverse=False) is TurnStyle.ARC
+    assert resolve_turn_style(None, TurnStyle.MULTI_POINT, reverse=False) is TurnStyle.ARC

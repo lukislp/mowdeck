@@ -330,3 +330,86 @@ describe('spot sheet flow', () => {
     stop();
   });
 });
+
+describe('spot sheet turn styles', () => {
+  it('a new style re-runs the preview with the resolved style; spot_mow gets the choice', async () => {
+    const { flow, deps, fire, timers, stop } = setup({
+      capabilities: {
+        manual_drive: true,
+        cutting_width_mm: 220,
+        links_supported: ['ble_bridge'],
+        drive_reverse: true,
+      },
+      state: readyState({ turn_style: 'in_place' }),
+    });
+    flow.begin();
+    flow.mapTap([10, 10]);
+    flushSync();
+    await fire();
+    expect(deps.preview).toHaveBeenCalledTimes(1);
+    expect(deps.preview).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ turn_style: 'in_place' }),
+      expect.anything(),
+    );
+    expect(flow.turnStyle).toBe('in_place');
+    expect(flow.turnOptions[0]!.resolved).toBe('in_place');
+
+    const before = flow.key;
+    flow.setTurnStyle('multi_point');
+    flushSync();
+    expect(flow.key).not.toBe(before);
+    expect(timers).toHaveLength(1);
+    await fire();
+    expect(deps.preview).toHaveBeenCalledTimes(2);
+    expect(deps.preview).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ turn_style: 'multi_point' }),
+      expect.anything(),
+    );
+
+    await flow.start();
+    expect(deps.plan).toHaveBeenCalledWith(expect.objectContaining({ turn_style: 'multi_point' }));
+    expect(deps.command).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'spot_mow', turn_style: 'multi_point' }),
+    );
+    stop();
+  });
+
+  it('the mower setting sends null in spot_mow and the resolved style to the Planner', async () => {
+    const { flow, deps, fire, stop } = setup();
+    flow.begin();
+    flow.mapTap([10, 10]);
+    flushSync();
+    await fire();
+    expect(flow.settings.turnStyle).toBeNull();
+    expect(deps.preview).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ turn_style: 'arc' }),
+      expect.anything(),
+    );
+    await flow.start();
+    expect(deps.command).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'spot_mow', turn_style: null }),
+    );
+    stop();
+  });
+
+  it('without reverse driving multi-point cannot be picked and the mower setting falls back', () => {
+    const { flow, stop } = setup({ state: readyState({ turn_style: 'multi_point' }) });
+    flow.begin();
+    flow.mapTap([10, 10]);
+    flushSync();
+    expect(flow.driveReverse).toBe(false);
+    expect(flow.turnOptions.find((o) => o.value === 'multi_point')?.disabled).toBe(true);
+    expect(flow.turnStyle).toBe('arc');
+    expect(flow.turnFallback).toBe(true);
+    expect(flow.request?.turn_style).toBe('arc');
+    flow.setTurnStyle('multi_point');
+    expect(flow.settings.turnStyle).toBeNull();
+    flow.setTurnStyle('in_place');
+    expect(flow.settings.turnStyle).toBe('in_place');
+    expect(flow.turnFallback).toBe(false);
+    stop();
+  });
+});

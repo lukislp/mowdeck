@@ -28,6 +28,7 @@ from mowdeck_contracts.v1 import (
     SpotMowPlan,
     SpotSegment,
     StartMow,
+    TurnStyle,
 )
 from mowdeck_control import (
     CommandRejected,
@@ -695,3 +696,29 @@ async def test_return_to_dock_leaves_no_job_to_resume(end_job: bool) -> None:
     assert state.activity is MowerActivity.RETURNING
     assert "job_areas" not in state.raw
     assert (await sim.execute(ResumeMow())).status == "rejected"
+
+
+async def test_drive_reverse_and_the_turn_setting() -> None:
+    """ADR 0043: ``drive_reverse`` is a capability; a link without it does not drive backwards;
+    the mower's own turn setting is reported in the state."""
+    sim = await _connected()
+    assert (await sim.capabilities()).drive_reverse
+    assert (await sim.get_state()).turn_style is None
+    session = await sim.start_drive_session()
+    await session.update(-1.0, 0.0, False)
+    sim.tick(1)
+    assert sim.local_position[0] < -0.1  # backwards from the origin
+    await session.close()
+
+    forward_only = SimulatedMower(
+        config=SimulationConfig(drive_reverse=False, turn_style=TurnStyle.MULTI_POINT)
+    )
+    await forward_only.connect()
+    assert not (await forward_only.capabilities()).drive_reverse
+    assert (await forward_only.get_state()).turn_style is TurnStyle.MULTI_POINT
+    session = await forward_only.start_drive_session()
+    start = forward_only.local_position
+    await session.update(-1.0, 0.0, False)
+    forward_only.tick(1)
+    assert forward_only.local_position == start
+    await session.close()

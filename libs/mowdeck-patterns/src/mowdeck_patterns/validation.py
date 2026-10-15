@@ -2,7 +2,8 @@
 
 1. Every segment stays inside the area minus the safety margin (holes and zones included).
 2. No segment with the blades on crosses a no-go zone, an obstacle or a hole.
-3. Transfers have the blades off; speeds are positive and within the mower's limits.
+3. Transfers and reverse legs have the blades off; speeds are positive and within the
+   mower's limits.
 4. Turns are feasible for the turning radius: at each heading change of ``theta`` the mower
    needs ``r * tan(theta / 2)`` of straight track before and after the corner to fit an arc of
    radius ``r``; a reversal is impossible for ``r > 0``. Mowers that turn on the spot use
@@ -67,6 +68,8 @@ def check(plan: MowPlan, area: Area, mower: MowerSpec) -> list[str]:
                 )
         if segment.kind == "transfer" and segment.blades_on:
             reasons.append(f"{label} is a transfer with the blades on")
+        if segment.reverse and segment.blades_on:
+            reasons.append(f"{label} drives backwards with the blades on")
         limit = (
             mower.max_speed_mps
             if segment.blades_on
@@ -92,16 +95,20 @@ def validate(plan: MowPlan, area: Area, mower: MowerSpec) -> MowPlan:
 
 
 def _track(plan: MowPlan) -> list[list[Point]]:
-    """Continuous pieces of the plan (consecutive segments that share their end points)."""
+    """Continuous pieces of the plan (consecutive segments that share their end points and
+    their direction of travel: a three-point turn's reversal is a stop, not a corner)."""
     pieces: list[list[Point]] = []
     current: list[Point] = []
+    reverse = False
     for segment in plan.segments:
         points = list(segment.polyline)
-        if current and math.dist(current[-1], points[0]) <= EPS:
+        joined = current and math.dist(current[-1], points[0]) <= EPS
+        if joined and segment.reverse == reverse:
             points = points[1:]
         elif current:
             pieces.append(current)
             current = []
+        reverse = segment.reverse
         for point in points:
             if not current or math.dist(current[-1], point) > EPS:
                 current.append(point)

@@ -1111,6 +1111,12 @@ export type components = {
              * @description Width of the cut swath in millimetres, if known (coverage heatmaps).
              */
             cutting_width_mm?: number | null;
+            /**
+             * Drive Reverse
+             * @description The drive link that carries the joystick frames can drive backwards (a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and a spot run's `multi_point` turns fall back to `arc` (ADR 0043).
+             * @default false
+             */
+            drive_reverse: boolean;
             /** @description The vendor's speed setting for manual driving can be read (`MowerState.drive_speed_mps`) and changed (`set_drive_speed`) within this range; null when the connection cannot (ADR 0042). */
             drive_speed_setting?: components["schemas"]["DriveSpeedSetting"] | null;
             /**
@@ -1493,6 +1499,8 @@ export type components = {
             speed_mps?: number | null;
             /** @description The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one. */
             spot_run?: components["schemas"]["SpotRunStatus"] | null;
+            /** @description How the mower turns at lane ends in its own jobs, as its connection reports the vendor setting (read only; ADR 0043). A spot run without its own `turn_style` uses it; null when the connection does not report one. */
+            turn_style?: components["schemas"]["TurnStyle"] | null;
         };
         /**
          * MowerStateList
@@ -1826,6 +1834,18 @@ export type components = {
             /** Truncated */
             truncated: boolean;
         };
+        /**
+         * TurnStyle
+         * @description How a spot run turns at the end of a lane (ADR 0043).
+         *
+         *     ``in_place``: the mower rotates on the spot (fast, but an all-wheel-drive mower scuffs the
+         *     turf). ``arc``: a forward U-turn with a radius of at least half the lane spacing, or a bulb
+         *     turn over the neighbouring lane when the spacing is narrower than the turning radius.
+         *     ``multi_point``: a three-point turn (forward arc, reverse arc with the blades off, forward
+         *     arc); needs a drive link that can reverse (``MowerCapabilities.drive_reverse``).
+         * @enum {string}
+         */
+        TurnStyle: "in_place" | "arc" | "multi_point";
         /**
          * UiAreaDef
          * @description An area the module occupies in the web app shell.

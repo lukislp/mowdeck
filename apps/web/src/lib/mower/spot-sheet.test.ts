@@ -15,11 +15,14 @@ import {
   clampSpeedMps,
   defaultSpacingMm,
   driveLinkUp,
+  hasTurnKinds,
   initialSettings,
   isSpotRunActive,
   isSpotRunFinal,
   planRequest,
+  previewKind,
   previewMowPath,
+  resolveTurnStyle,
   spotCommand,
   spotConditions,
   spotFromGap,
@@ -29,6 +32,10 @@ import {
   spotTarget,
   spotTransitFrom,
   startsFromDock,
+  turnFallsBack,
+  turnOptions,
+  turnStyleHint,
+  turnStyleLabel,
   type ConditionState,
   type PlanOut,
   type PreviewOut,
@@ -505,5 +512,143 @@ describe('start conditions', () => {
     );
     expect(spotReasonLabel('link_lost')).toBe('Fahrverbindung unterbrochen');
     expect(spotReasonLabel('frame_rejected', { bridge: true })).toBe('frame_rejected');
+  });
+});
+
+describe('turn styles', () => {
+  it('resolves the choice, then the mower setting, then arc', () => {
+    expect(resolveTurnStyle('in_place', 'multi_point', true)).toBe('in_place');
+    expect(resolveTurnStyle(null, 'in_place', false)).toBe('in_place');
+    expect(resolveTurnStyle(undefined, 'multi_point', true)).toBe('multi_point');
+    expect(resolveTurnStyle(null, null, true)).toBe('arc');
+    expect(resolveTurnStyle(undefined, undefined, undefined)).toBe('arc');
+  });
+
+  it('multi-point falls back to arc without reverse driving, picked or from the mower', () => {
+    expect(resolveTurnStyle('multi_point', null, false)).toBe('arc');
+    expect(resolveTurnStyle('multi_point', null, null)).toBe('arc');
+    expect(resolveTurnStyle(null, 'multi_point', false)).toBe('arc');
+    expect(resolveTurnStyle('multi_point', 'in_place', true)).toBe('multi_point');
+    expect(turnFallsBack('multi_point', null, false)).toBe(true);
+    expect(turnFallsBack(null, 'multi_point', false)).toBe(true);
+    expect(turnFallsBack(null, 'multi_point', true)).toBe(false);
+    expect(turnFallsBack('arc', 'multi_point', false)).toBe(false);
+  });
+
+  it('the default option names the resolved style; multi-point is disabled without reverse', () => {
+    setLocale('de', { reload: false });
+    const plain = turnOptions(null, true);
+    expect(plain.map((o) => o.value)).toEqual([null, 'in_place', 'arc', 'multi_point']);
+    expect(plain.map((o) => o.label)).toEqual([
+      'Wie am Mäher eingestellt (Bogen)',
+      'Auf der Stelle',
+      'Bogen',
+      'Mehrpunkt',
+    ]);
+    expect(plain.every((o) => !o.disabled && o.hint === null)).toBe(true);
+    expect(turnOptions('in_place', true)[0]!.label).toBe(
+      'Wie am Mäher eingestellt (Auf der Stelle)',
+    );
+    expect(turnOptions('multi_point', true)[0]!.label).toBe('Wie am Mäher eingestellt (Mehrpunkt)');
+
+    const noReverse = turnOptions('multi_point', false);
+    expect(noReverse[0]).toMatchObject({
+      value: null,
+      resolved: 'arc',
+      label: 'Wie am Mäher eingestellt (Bogen)',
+      disabled: false,
+    });
+    expect(noReverse[3]).toMatchObject({
+      value: 'multi_point',
+      resolved: 'arc',
+      disabled: true,
+      hint: 'braucht Rückwärtsfahrt',
+    });
+    expect(noReverse.slice(1, 3).every((o) => !o.disabled)).toBe(true);
+
+    setLocale('en', { reload: false });
+    expect(turnOptions(null, false).map((o) => o.label)).toEqual([
+      'As set on the mower (Arc)',
+      'In place',
+      'Arc',
+      'Multi-point',
+    ]);
+    expect(turnOptions(null, false)[3]!.hint).toBe('needs reverse driving');
+    expect(turnStyleLabel('multi_point')).toBe('Multi-point');
+    expect(turnStyleHint('in_place')).not.toBe(turnStyleHint('arc'));
+    setLocale('de', { reload: false });
+  });
+
+  it('the preview request carries the resolved style and the key follows it', () => {
+    const base = { mowerId: 'm1', spot: circle, areaId: 'front', cuttingWidthMm: 220 };
+    const settings = initialSettings(220);
+    expect(settings.turnStyle).toBeNull();
+    const byMower = planRequest({ ...base, settings, mowerTurnStyle: 'in_place' });
+    expect(byMower?.turn_style).toBe('in_place');
+    const fallback = planRequest({ ...base, settings });
+    expect(fallback?.turn_style).toBe('arc');
+    const multi = planRequest({
+      ...base,
+      settings: { ...settings, turnStyle: 'multi_point' },
+      driveReverse: true,
+    });
+    expect(multi?.turn_style).toBe('multi_point');
+    const noReverse = planRequest({
+      ...base,
+      settings: { ...settings, turnStyle: 'multi_point' },
+      driveReverse: false,
+    });
+    expect(noReverse?.turn_style).toBe('arc');
+    expect(spotPreviewKey(byMower)).not.toBe(spotPreviewKey(fallback));
+    expect(spotPreviewKey(multi)).not.toBe(spotPreviewKey(noReverse));
+    // Same resolved style, same key: the preview is not asked again.
+    expect(spotPreviewKey(noReverse)).toBe(spotPreviewKey(fallback));
+  });
+
+  it('spot_mow carries the choice, null for the mower setting', () => {
+    const plan = { spot_plan: { plan_hash: 'h1' } } as unknown as PlanOut;
+    const settings = initialSettings(220);
+    expect(spotCommand({ plan, settings, bladesAllowed: false, target: null }).turn_style).toBe(
+      null,
+    );
+    expect(
+      spotCommand({
+        plan,
+        settings: { ...settings, turnStyle: 'multi_point' },
+        bladesAllowed: false,
+        target: null,
+      }).turn_style,
+    ).toBe('multi_point');
+  });
+
+  it('maps turn segments and reverse legs to their own kinds', () => {
+    expect(previewKind({ kind: 'mow' })).toBe('mow');
+    expect(previewKind({ kind: 'turn' })).toBe('turn');
+    expect(previewKind({ kind: 'turn', reverse: true })).toBe('reverse');
+    expect(previewKind({ kind: 'transfer' })).toBe('transfer');
+    expect(previewKind({ kind: 'something' })).toBe('mow');
+    expect(previewKind(undefined)).toBe('mow');
+    const line = (kind: string, reverse = false) => ({
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+      properties: { kind, reverse, blades_on: !reverse },
+    });
+    const preview = {
+      plan_hash: 'h3',
+      preview: {
+        type: 'FeatureCollection',
+        features: [line('mow'), line('turn'), line('turn', true), line('turn'), line('mow')],
+      },
+    } as unknown as PreviewOut;
+    const path = previewMowPath(preview, '2026-10-15T10:00:00Z');
+    expect(path.kinds).toEqual(['mow', 'turn', 'reverse', 'turn', 'mow']);
+    expect(hasTurnKinds(path)).toBe(true);
+    expect(hasTurnKinds({ kinds: ['mow', 'transfer'] })).toBe(false);
+    expect(hasTurnKinds(null)).toBe(false);
   });
 });

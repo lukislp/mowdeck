@@ -69,7 +69,7 @@ result = plan(area, MowerSpec(cutting_width_m=0.4), [("edge_only", {"laps": 2}),
 spot = result.to_spot_plan()  # StartMow(spot_plan=spot)
 ```
 
-Built-in patterns, coverage and gaps, and how to add a pattern: `libs/mowdeck-patterns/README.md`. The Planner service (`services/planner`) serves it over HTTP ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)).
+Built-in patterns, coverage and gaps, turn styles at lane ends (`TurnOptions`, `shape_turns`, [ADR 0043](../adr/0043-turn-styles.md)) and how to add a pattern: `libs/mowdeck-patterns/README.md`. The Planner service (`services/planner`) serves it over HTTP ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)).
 
 ## mowdeck-service-kit
 
@@ -147,7 +147,7 @@ flowchart LR
 | `plan_to_native_job` | neutral request (areas, pattern, angle, spacing, border laps) to a native job, `UnsupportedPattern` otherwise |
 | `geo` | local metres to WGS84 and back, point in polygon |
 | `testing` | `ManualClock` and `ManualTimers` to test timing without sleeping |
-| `SpotMowRun` | spot mowing driven by MowDeck ([ADR 0039](../adr/0039-spot-mowing-by-mowdeck-driven-paths.md)): drives a Planner plan with joystick frames through the controller (`SpotMow`, rule 12), with a `Geofence` from the map, pure-pursuit steering, RTK pauses and aborts; reads only the neutral state; uses a drive calibration (`SpotRunConfig.calibrated`) and ends `stalled` without progress ([ADR 0042](../adr/0042-drive-calibration.md)) |
+| `SpotMowRun` | spot mowing driven by MowDeck ([ADR 0039](../adr/0039-spot-mowing-by-mowdeck-driven-paths.md)): drives a Planner plan with joystick frames through the controller (`SpotMow`, rule 12), with a `Geofence` from the map, pure-pursuit steering, RTK pauses and aborts; reads only the neutral state; uses a drive calibration (`SpotRunConfig.calibrated`) and ends `stalled` without progress ([ADR 0042](../adr/0042-drive-calibration.md)); turns as the resolved turn style says, at most 15 °/s on shaped turns, reverse legs backwards with the blades off ([ADR 0043](../adr/0043-turn-styles.md)) |
 | `DriveCalibrationRun` | drive calibration ([ADR 0042](../adr/0042-drive-calibration.md)): forward and turn steps over the drive channel (`DriveCalibrate`, rule 13), measures each step over its steady window (without the first 1.5 s, at least 4 reports in 3 s, else `invalid`), drops inconsistent turn pairs and outliers, fits full-scale speed, yaw rate and dead zones from at least two points per axis; blades off, room check, 1.5 m forward budget |
 
 ```python

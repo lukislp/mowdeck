@@ -12,13 +12,14 @@ called without arguments. A failing entry point is logged and skipped.
 import logging
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib.metadata import EntryPoint, entry_points
 from typing import Any
 
 from mowdeck_patterns.base import MowPattern, build_plan
 from mowdeck_patterns.geometry import ROUNDING_SLACK_M, Router, inset
 from mowdeck_patterns.models import Area, MowerSpec, MowPlan, PatternError, Segment
+from mowdeck_patterns.turns import TurnOptions, shape_turns
 from mowdeck_patterns.validation import validate
 
 ENTRY_POINT_GROUP = "mowdeck.patterns"
@@ -139,13 +140,15 @@ class Chain:
         """``key1+key2+...``."""
         return "+".join(step.pattern.key for step in self.steps)
 
-    def compute(self, area: Area, mower: MowerSpec) -> MowPlan:
-        """The joined plan (not yet validated)."""
+    def compute(self, area: Area, mower: MowerSpec, turns: TurnOptions | None = None) -> MowPlan:
+        """The joined plan (not yet validated). With ``turns`` the lane ends get the turn
+        shapes of :func:`mowdeck_patterns.turns.shape_turns` inside the safe region."""
         if not self.steps:
             msg = "a chain needs at least one pattern"
             raise PatternError(msg)
         region = area.region()
-        router = Router(inset(region, mower.safety_margin_m + ROUNDING_SLACK_M))
+        safe = inset(region, mower.safety_margin_m + ROUNDING_SLACK_M)
+        router = Router(safe)
         segments: list[Segment] = []
         chain: list[str] = []
         warnings: list[str] = []
@@ -158,9 +161,18 @@ class Chain:
                 path = router.route(segments[-1].end, part[0].start)
                 segments.append(Segment(tuple(path), False, mower.transfer_speed_mps, "transfer"))
             segments.extend(part)
-        return build_plan(
+        turn_style = None
+        if turns is not None:
+            if mower.turning_radius_m > turns.min_radius_m:
+                turns = replace(turns, min_radius_m=mower.turning_radius_m)
+            shaped = shape_turns(segments, safe, turns)
+            segments = shaped.segments
+            warnings.extend(shaped.warnings)
+            turn_style = shaped.style
+        result = build_plan(
             segments, area, mower, tuple(chain), region=region, warnings=tuple(warnings)
         )
+        return replace(result, turn_style=turn_style) if turn_style is not None else result
 
 
 def chain(
@@ -188,9 +200,12 @@ def plan(
     mower: MowerSpec,
     steps: Sequence[tuple[MowPattern | str, Mapping[str, Any]] | MowPattern | str],
     registry: PatternRegistry | None = None,
+    *,
+    turns: TurnOptions | None = None,
 ) -> MowPlan:
-    """Compute and validate: the one call the Planner makes. Raises ``PlanRejected``."""
-    result = chain(steps, registry).compute(area, mower)
+    """Compute and validate: the one call the Planner makes. Raises ``PlanRejected``.
+    ``turns`` shapes the lane ends (ADR 0043; None keeps the straight connections)."""
+    result = chain(steps, registry).compute(area, mower, turns)
     return validate(result, area, mower)
 
 

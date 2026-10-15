@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
-from mowdeck_contracts.v1 import MowerMap, SpotMowPlan, StartMow
+from mowdeck_contracts.v1 import MowerMap, SpotMowPlan, StartMow, TurnStyle
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from planner.application.planning import (
@@ -171,6 +171,12 @@ class PlanRequestIn(_Body):
         description="Also plan the transit of a spot run from the dock or a position to the "
         "plan's first point (ADR 0041).",
     )
+    turn_style: TurnStyle | None = Field(
+        default=None,
+        description="Shape the lane ends for a spot run that turns this way (ADR 0043): `arc` "
+        "(U-turn or bulb turn), `multi_point` (three-point turn; `arc` when the mower's drive "
+        "link cannot reverse) or `in_place`; null keeps the straight connections.",
+    )
 
     @model_validator(mode="after")
     def _sources(self) -> Self:
@@ -220,10 +226,15 @@ class PreviewOut(BaseModel):
     mower: MowerSpecOut
     preview: dict[str, Any] = Field(
         description="FeatureCollection: one LineString per segment with `kind`, `blades_on`, "
-        "`speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`."
+        "`reverse`, `speed_mps`; coordinates local metres, or `[lon, lat]` with `wgs84`."
     )
     transit: TransitOut | None = Field(
         default=None, description="The transit of a spot run, when the request asked for it."
+    )
+    turn_style: TurnStyle | None = Field(
+        default=None,
+        description="The turn style the lane ends were shaped with (after the `multi_point` "
+        "fallback); null without a requested style.",
     )
 
     @classmethod
@@ -255,6 +266,7 @@ class PreviewOut(BaseModel):
             ),
             "preview": result.preview,
             "transit": TransitOut.of(result.transit) if result.transit is not None else None,
+            "turn_style": TurnStyle(plan.turn_style) if plan.turn_style is not None else None,
         }
 
     @classmethod

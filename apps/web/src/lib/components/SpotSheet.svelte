@@ -1,7 +1,7 @@
 <!--
   The spot sheet: the shape of the spot (a circle with its radius, or a drawn polygon with its
   corner count), the pattern (spiral or stripes with an angle), the path spacing, the speed (at
-  most 0.3 m/s), the blades (off by default: a dry run; on only when the mower allows blades
+  most 0.3 m/s), the turns at lane ends (ADR 0043), the blades (off by default: a dry run; on only when the mower allows blades
   while driving, with a second confirmation), the Planner's preview (duration, segments,
   warnings) and the start conditions as green and red rows. "Starten" is enabled only when every
   row is green and a preview exists. The flow (`$lib/mower/spot-sheet.svelte`) owns the state;
@@ -13,7 +13,9 @@
     one lamp with "6/8" (a tap opens half, scrolled to the conditions) and START; while a run
     starts, runs or has just ended, the run bar (`runBar`, with its big STOP) instead, and the
     sheet stays at peek, so STOP never needs a drag;
-  - half: shape and radius, pattern (and angle), speed;
+  - half: shape and radius, pattern (and angle), speed, turns (tiles: the mower's own setting
+    with the style it resolves to, in place, arc, multi-point; multi-point is unavailable when
+    the drive link cannot reverse);
   - full: spacing, blades with the second confirmation, every start condition, the preview's
     details, cancel.
   `snap` and `visibleHeight` are bindable: the page collapses to peek when the map is tapped and
@@ -51,6 +53,9 @@
     SPOT_SPEED_STEP_MPS,
     conditionHint,
     conditionText,
+    hasTurnKinds,
+    turnStyleHint,
+    type TurnStyle,
   } from '$lib/mower/spot-sheet';
   import type { SpotSheetFlow } from '$lib/mower/spot-sheet.svelte';
   import { m } from '$lib/paraglide/messages';
@@ -103,6 +108,22 @@
     ].join(' · '),
   );
   let conditionsEl: HTMLElement | undefined = $state();
+
+  /**
+   * A small top-down sketch of each turn (24 x 24): the lane comes up from the bottom, turns and
+   * goes back down; a dashed stroke is the reverse leg of the three-point turn.
+   */
+  const TURN_GLYPHS: Record<TurnStyle, { d: string; reverse?: boolean }[]> = {
+    // Rotating on the spot leaves square corners.
+    in_place: [{ d: 'M6 21V5h12v16' }],
+    arc: [{ d: 'M5 21V11a7 7 0 0 1 14 0v10' }],
+    multi_point: [
+      { d: 'M5 21V9a4 4 0 0 1 4-4h2' },
+      { d: 'M11 5l2 6', reverse: true },
+      { d: 'M13 11a4 4 0 0 1 6 3v7' },
+    ],
+  };
+  const showLegend = $derived(hasTurnKinds(flow.previewPath));
 
   /** The lamp in the peek: half, scrolled to the start conditions. */
   async function showConditions(): Promise<void> {
@@ -242,6 +263,50 @@
   </section>
 {/snippet}
 
+{#snippet turnSection()}
+  <section class="block" aria-labelledby="{uid}-turns">
+    <h3 class="label" id="{uid}-turns">{m.spot_turns()}</h3>
+    <div class="turns" role="radiogroup" aria-labelledby="{uid}-turns" data-testid="spot-turns">
+      {#each flow.turnOptions as option (option.value ?? 'mower')}
+        {@const value = option.value ?? 'mower'}
+        <label
+          class="turn"
+          class:mower={option.value === null}
+          data-value={value}
+          data-checked={flow.settings.turnStyle === option.value ? 'true' : 'false'}
+          data-disabled={option.disabled ? 'true' : 'false'}
+          data-testid="spot-turn-{value}"
+        >
+          <input
+            type="radio"
+            name="{uid}-turn"
+            {value}
+            checked={flow.settings.turnStyle === option.value}
+            disabled={option.disabled}
+            onchange={() => flow.setTurnStyle(option.value)}
+          />
+          <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+            {#each TURN_GLYPHS[option.resolved] as stroke (stroke.d)}
+              <path d={stroke.d} class:reverse={stroke.reverse} />
+            {/each}
+          </svg>
+          <span class="turn-text">
+            <span class="turn-label">{option.label}</span>
+            {#if option.hint}<span class="turn-hint">{option.hint}</span>{/if}
+          </span>
+        </label>
+      {/each}
+    </div>
+    {#if flow.turnFallback}
+      <p class="note" data-testid="spot-turn-fallback">
+        <Icon name="alert" size={14} />{m.spot_turn_fallback()}
+      </p>
+    {:else}
+      <p class="hint" data-testid="spot-turn-hint">{turnStyleHint(flow.turnStyle)}</p>
+    {/if}
+  </section>
+{/snippet}
+
 {#snippet bladesSection()}
   <section class="block" aria-labelledby="{uid}-blades">
     <h3 class="label" id="{uid}-blades">{m.spot_blades()}</h3>
@@ -325,6 +390,20 @@
       {m.spot_preview_hint()}
     {/if}
   </p>
+  {#if preview && showLegend}
+    <ul class="legend" data-testid="spot-legend">
+      <li><span class="swatch" data-kind="mow" aria-hidden="true"></span>{m.spot_legend_mow()}</li>
+      <li>
+        <span class="swatch" data-kind="turn" aria-hidden="true"></span>{m.spot_legend_turn()}
+      </li>
+      {#if flow.previewPath?.kinds?.includes('reverse')}
+        <li>
+          <span class="swatch" data-kind="reverse" aria-hidden="true"
+          ></span>{m.spot_legend_reverse()}
+        </li>
+      {/if}
+    </ul>
+  {/if}
   {#if preview?.warnings.length}
     <ul class="warnings" data-testid="spot-warnings">
       {#each preview.warnings as warning (warning)}
@@ -415,6 +494,7 @@
       {/if}
     </section>
     {@render speedSection()}
+    {@render turnSection()}
     <section class="block" aria-labelledby="{uid}-spacing">
       <h3 class="label" id="{uid}-spacing">{m.spot_spacing()}</h3>
       <div class="steppers">{@render spacingStepper()}</div>
@@ -469,6 +549,7 @@
         <p class="hint">{m.spot_spacing_hint({ width: formatNumber(cuttingWidth) })}</p>
       </section>
       {@render speedSection()}
+      {@render turnSection()}
       {@render bladesSection()}
       {@render conditionsSection()}
     </div>
@@ -814,5 +895,169 @@
 
   .conds-block {
     scroll-margin-top: var(--md-space-2);
+  }
+
+  /* --- turns: the mower's own setting across the top, the three styles as sketched tiles ---- */
+  .turns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--md-space-1);
+  }
+
+  .turn {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    justify-items: start;
+    gap: var(--md-space-1);
+    min-height: var(--md-target);
+    padding: var(--md-space-2);
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+    border-radius: var(--md-radius-0);
+    background: var(--md-color-surface);
+    color: var(--md-color-ink);
+    cursor: pointer;
+  }
+
+  .turn.mower {
+    grid-column: 1 / -1;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: none;
+    align-items: center;
+    gap: var(--md-space-2);
+  }
+
+  /* The radio stays in the tab order and the accessibility tree; the tile shows its state. */
+  .turn input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: inherit;
+  }
+
+  .turn[data-checked='true'] {
+    border-color: var(--md-color-focus);
+    background: var(--md-color-surface-sunken);
+    box-shadow: inset 0 0 0 1px var(--md-color-focus);
+  }
+
+  .turn:has(input:focus-visible) {
+    outline: 2px solid var(--md-color-focus);
+    outline-offset: 2px;
+  }
+
+  .turn[data-disabled='true'] {
+    border-style: dashed;
+    color: var(--md-color-ink-muted);
+    cursor: not-allowed;
+  }
+
+  .glyph {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+  }
+
+  .turn[data-checked='true'] .glyph {
+    stroke: var(--md-color-focus);
+  }
+
+  .glyph .reverse {
+    stroke-dasharray: 2 3;
+  }
+
+  .turn-text {
+    display: grid;
+    gap: var(--md-space-0_5);
+    min-width: 0;
+  }
+
+  .turn-label {
+    font-size: var(--md-font-size-13);
+    font-weight: var(--md-weight-semibold);
+    line-height: var(--md-line-16);
+  }
+
+  .turn-hint {
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-11);
+    line-height: var(--md-line-16);
+  }
+
+  .note {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--md-space-2);
+    margin: 0;
+    padding: var(--md-space-1) var(--md-space-2);
+    border-inline-start: 3px solid var(--md-state-paused);
+    background: var(--md-color-surface-sunken);
+    font-size: var(--md-font-size-12);
+    line-height: var(--md-line-16);
+  }
+
+  /* --- the preview's legend: the same strokes as the map's path ----------------------------- */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--md-space-1) var(--md-space-3);
+    margin: 0;
+    padding: 0;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-11);
+    letter-spacing: var(--md-label-tracking);
+    list-style: none;
+    text-transform: uppercase;
+  }
+
+  .legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--md-space-1);
+  }
+
+  .swatch {
+    width: 18px;
+    height: 0;
+    border-top: 2px solid var(--md-color-focus);
+  }
+
+  .swatch[data-kind='turn'] {
+    border-top-color: var(--md-state-paused);
+  }
+
+  .swatch[data-kind='reverse'] {
+    border-top: 2px dashed var(--md-state-paused);
+  }
+
+  /*
+   * The plan preview on the map (MowerMap draws each polyline as `md-mowpath--<kind>`): lane-end
+   * turns in amber so they read apart from the lanes, a three-point turn's reverse leg dashed.
+   * Only spot previews (and a spot run seeded with one) carry these kinds; the vendor's live
+   * paths keep their styles.
+   */
+  :global(.md-map path.md-mowpath.md-mowpath--turn),
+  :global(.md-map path.md-mowpath.md-mowpath--reverse) {
+    stroke: var(--md-state-paused);
+    stroke-opacity: 0.85;
+    stroke-width: 1.5;
+  }
+
+  :global(.md-map path.md-mowpath.md-mowpath--reverse) {
+    stroke-dasharray: 5 4;
+    stroke-linecap: butt;
+  }
+
+  :global(.md-map path.md-mowpath.md-mowpath--done.md-mowpath--turn),
+  :global(.md-map path.md-mowpath.md-mowpath--done.md-mowpath--reverse) {
+    stroke-opacity: 1;
+    stroke-width: 2;
   }
 </style>

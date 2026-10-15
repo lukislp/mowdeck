@@ -246,12 +246,14 @@ class MowerSpec:
 
 @dataclass(frozen=True, slots=True)
 class Segment:
-    """Drive along ``polyline`` with the blades on or off at ``speed`` m/s."""
+    """Drive along ``polyline`` with the blades on or off at ``speed`` m/s (backwards with
+    ``reverse``: part of a three-point turn, always with the blades off)."""
 
     polyline: tuple[Point, ...]
     blades_on: bool
     speed: float
     kind: SegmentKind = "mow"
+    reverse: bool = False
 
     def __post_init__(self) -> None:
         if len(self.polyline) < 2:
@@ -287,6 +289,8 @@ class MowPlan:
     pattern_chain: tuple[str, ...]
     area_m2: float = 0.0
     warnings: tuple[str, ...] = field(default=())
+    turn_style: str | None = None
+    """The turn style the lane ends were shaped with (ADR 0043); None: straight connections."""
 
     @property
     def mow_length_m(self) -> float:
@@ -316,6 +320,7 @@ class MowPlan:
                     blades_on=segment.blades_on,
                     speed_mps=min(segment.speed, 2.0),
                     kind=segment.kind,
+                    reverse=segment.reverse,
                 )
             )
         return SpotMowPlan.build(
@@ -336,6 +341,7 @@ class MowPlan:
                     blades_on=s.blades_on,
                     speed=s.speed_mps,
                     kind=s.kind,
+                    reverse=s.reverse,
                 )
                 for s in plan.segments
             ),

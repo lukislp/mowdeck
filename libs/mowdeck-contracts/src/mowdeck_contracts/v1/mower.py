@@ -26,6 +26,7 @@ from mowdeck_contracts.v1.spot import (
     SpotMowPlan,
     SpotPolygon,
     SpotRunStatus,
+    TurnStyle,
 )
 
 
@@ -178,6 +179,12 @@ class MowerState(ContractModel):
         description="The vendor's speed setting for manual driving "
         "(`MowerCapabilities.drive_speed_setting`); null when the connection has none or has "
         "not read it yet.",
+    )
+    turn_style: TurnStyle | None = Field(
+        default=None,
+        description="How the mower turns at lane ends in its own jobs, as its connection reports "
+        "the vendor setting (read only; ADR 0043). A spot run without its own `turn_style` "
+        "uses it; null when the connection does not report one.",
     )
     raw: dict[str, Any] = Field(
         default_factory=dict,
@@ -368,6 +375,12 @@ class SpotMow(ContractModel):
         default=True,
         description="Send the mower back to its charging station after the run (also after an "
         "abort that left it healthy; never after a stop).",
+    )
+    turn_style: TurnStyle | None = Field(
+        default=None,
+        description="How the run turns at lane ends (ADR 0043); null: the mower's own setting "
+        "(`MowerState.turn_style`), else `arc`. `multi_point` falls back to `arc` on a drive "
+        "link without `drive_reverse`. The plan should be computed with the same style.",
     )
 
     @model_validator(mode="after")

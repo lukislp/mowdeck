@@ -32,6 +32,7 @@ from mowdeck_contracts.v1 import (
     PrincipalKind,
     PrincipalRef,
     RtkFixStatus,
+    SegmentKind,
     SetLight,
     SpotMow,
     SpotMowPlan,
@@ -39,6 +40,7 @@ from mowdeck_contracts.v1 import (
     SpotSegment,
     SpotStop,
     StartMow,
+    TurnStyle,
 )
 from mowdeck_control import (
     DrivableSpace,
@@ -770,3 +772,147 @@ async def test_control_spot_run_retries_the_return_when_the_link_blinks() -> Non
     assert failures["left"] == 0, "the first attempt was not made"
     assert report.sent_home and report.return_problem is None, report.summary()
     await h.close()
+
+
+# --- turn styles and reverse legs (ADR 0043) -----------------------------------------------
+
+
+def turn_plan(
+    *parts: tuple[list[LocalPoint], bool, SegmentKind], blades: bool = True
+) -> SpotMowPlan:
+    """A plan of ``(points, reverse, kind)`` parts; reverse legs keep the blades off."""
+    segments = [
+        SpotSegment.from_points(
+            points, blades_on=blades and not reverse, speed_mps=0.2, kind=kind, reverse=reverse
+        )
+        for points, reverse, kind in parts
+    ]
+    return SpotMowPlan.build(segments, ["stripes"])
+
+
+def styled_run(
+    script: Scripted,
+    frames: FakeFrames,
+    plan: SpotMowPlan,
+    clock: ManualClock,
+    *,
+    style: TurnStyle,
+    reverse: bool = True,
+    blades: bool = False,
+) -> SpotMowRun:
+    return SpotMowRun(
+        run_id=uuid4(),
+        plan=plan,
+        mower_map=MAP,
+        pose_source=script,
+        frames=frames,
+        speed_mps=0.2,
+        blades=blades,
+        clock=clock,
+        sleep=script.sleep,
+        turn_style=style,
+        reverse=reverse,
+    )
+
+
+def semicircle(start: LocalPoint, radius: float) -> list[LocalPoint]:
+    """A left U-turn from ``start`` heading +x, 15 degrees per point."""
+    cx, cy = start[0], start[1] + radius
+    return [
+        (cx + radius * math.sin(math.radians(a)), cy - radius * math.cos(math.radians(a)))
+        for a in range(0, 181, 15)
+    ]
+
+
+REVERSING = turn_plan(
+    ([(3.0, 6.0), (5.0, 6.0)], False, "mow"),
+    ([(5.0, 6.0), (4.0, 6.0)], True, "turn"),
+    ([(4.0, 6.0), (6.0, 6.0)], False, "mow"),
+)
+
+
+async def test_control_spot_run_drives_reverse_legs_backwards_with_the_blades_off() -> None:
+    clock = ManualClock()
+    frames = FakeFrames()
+    poses = [(3.0 + 0.2 * i, 6.0, 0.0) for i in range(11)]  # forward to (5, 6)
+    poses += [(5.0 - 0.2 * i, 6.0, 0.0) for i in range(1, 6)]  # backwards to (4, 6)
+    poses += [(4.0 + 0.2 * i, 6.0, 0.0) for i in range(1, 11)]  # forward to (6, 6)
+    script = Scripted(clock, poses)
+    run = styled_run(script, frames, REVERSING, clock, style=TurnStyle.MULTI_POINT, blades=True)
+    assert run.prepare(script()) is None
+    report = await run.run()
+    assert report.state == "done", report.summary()
+    assert report.turn_style is TurnStyle.MULTI_POINT
+    backwards = [f for f in frames.frames if f[0] < 0]
+    assert backwards, "no frame drove backwards"
+    assert all(not blade for _, _, blade in backwards)
+    assert any(blade for linear, _, blade in frames.frames if linear > 0)
+    assert report.in_place_turns == 0
+
+
+async def test_control_spot_run_aborts_when_the_mower_moves_forwards_while_reversing() -> None:
+    clock = ManualClock()
+    frames = FakeFrames()
+    poses = [(3.0 + 0.2 * i, 6.0, 0.0) for i in range(16)]  # never reverses
+    script = Scripted(clock, poses)
+    run = styled_run(script, frames, REVERSING, clock, style=TurnStyle.MULTI_POINT)
+    assert run.prepare(script()) is None
+    report = await run.run()
+    assert (report.state, report.reason) == ("aborted", REASON_HEADING_MISMATCH)
+    assert "while reversing" in (report.detail or "")
+
+
+def test_control_spot_run_refuses_reverse_legs_without_drive_reverse() -> None:
+    clock = ManualClock()
+    script = Scripted(clock, [(3.0, 6.0, 0.0)])
+    run = styled_run(
+        script, FakeFrames(), REVERSING, clock, style=TurnStyle.MULTI_POINT, reverse=False
+    )
+    assert run.turn_style is TurnStyle.ARC  # multi-point falls back without reverse
+    problem = run.prepare(script())
+    assert problem is not None and "cannot reverse" in problem
+
+
+async def _first_frame(pose: tuple[float, float, float], style: TurnStyle) -> tuple[float, float]:
+    """The first frame on a shaped turn near the lawn's east edge for a mower at ``pose``."""
+    turn = semicircle((11.45, 6.0), 0.2)
+    plan = turn_plan((turn, False, "turn"), ([turn[-1], (9.0, 6.4)], False, "mow"))
+    clock = ManualClock()
+    frames = FakeFrames()
+    script = Scripted(clock, [pose])
+    run = styled_run(script, frames, plan, clock, style=style)
+    assert run.prepare(script()) is None
+    await run.run()  # the pose never changes: the run pauses and ends rtk_lost
+    linear, angular, _ = frames.frames[0]
+    return linear, angular
+
+
+async def test_control_spot_run_drives_a_tight_arc_instead_of_rotating_in_a_shaped_turn() -> None:
+    config = SpotRunConfig()
+    rate = config.yaw_stick(math.radians(config.turn_rate_dps))
+    # facing away from the turn, room to the west: a forward arc at the turn rate
+    linear, angular = await _first_frame((11.3, 6.05, math.pi + 0.3), TurnStyle.ARC)
+    assert linear == pytest.approx(config.min_linear)
+    assert angular == pytest.approx(rate)
+    # the same with the in-place style: a rotation on the spot
+    linear, angular = await _first_frame((11.3, 6.05, math.pi + 0.3), TurnStyle.IN_PLACE)
+    assert linear == 0 and angular != 0
+    # facing the geofence's edge: a forward arc would leave it, so it rotates in place
+    linear, angular = await _first_frame((11.6, 6.05, 0.0), TurnStyle.ARC)
+    assert linear == 0 and 0 < abs(angular) <= rate + 1e-9
+
+
+def test_control_spot_run_slows_down_on_shaped_turns() -> None:
+    clock = ManualClock()
+    script = Scripted(clock, [(3.0, 6.0, 0.0)])
+    turn = semicircle((5.0, 6.0), 0.3)
+    plan = turn_plan(
+        ([(3.0, 6.0), (5.0, 6.0)], False, "mow"),
+        (turn, False, "turn"),
+        ([turn[-1], (3.0, 6.6)], False, "mow"),
+    )
+    arc = styled_run(script, FakeFrames(), plan, clock, style=TurnStyle.ARC)
+    flat = styled_run(script, FakeFrames(), plan, clock, style=TurnStyle.IN_PLACE)
+    limit = math.radians(SpotRunConfig().turn_rate_dps) * 0.3
+    assert arc._segments[1].speed_mps == pytest.approx(limit, rel=0.05)
+    assert flat._segments[1].speed_mps == 0.2

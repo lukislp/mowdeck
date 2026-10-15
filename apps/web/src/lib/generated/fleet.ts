@@ -2509,6 +2509,8 @@ export type components = {
              * @description The spot as the user chose it (audit only).
              */
             spot?: components["schemas"]["SpotCircle"] | components["schemas"]["SpotPolygon"] | null;
+            /** @description How the run turns at lane ends (ADR 0043); null: the mower's own setting (`MowerState.turn_style`), else `arc`. `multi_point` falls back to `arc` on a drive link without `drive_reverse`. The plan should be computed with the same style. */
+            turn_style?: components["schemas"]["TurnStyle"] | null;
         };
         /**
          * SpotMowPlan
@@ -2569,7 +2571,9 @@ export type components = {
         };
         /**
          * SpotSegment
-         * @description One part of a spot plan: drive along ``path`` with the blades on or off.
+         * @description One part of a spot plan: drive along ``path`` with the blades on or off (backwards with
+         *     ``reverse``: the mower faces against the direction of travel, part of a three-point
+         *     turn).
          */
         SpotSegment: {
             /** Blades On */
@@ -2585,6 +2589,12 @@ export type components = {
              * @description Encoded polyline of local metres (x, y), centimetre precision (`encode_polyline`), at least two points.
              */
             path: string;
+            /**
+             * Reverse
+             * @description Drive the polyline backwards (negative linear speed, the mower faces against the direction of travel); always with the blades off (ADR 0043).
+             * @default false
+             */
+            reverse: boolean;
             /** Speed Mps */
             speed_mps: number;
         };
@@ -2630,6 +2640,18 @@ export type components = {
             /** @description A route computed by the Planner (spot mowing). Runs only on mowers with `custom_paths`, or natively when the plan carries a `native` job. */
             spot_plan?: components["schemas"]["SpotMowPlan"] | null;
         };
+        /**
+         * TurnStyle
+         * @description How a spot run turns at the end of a lane (ADR 0043).
+         *
+         *     ``in_place``: the mower rotates on the spot (fast, but an all-wheel-drive mower scuffs the
+         *     turf). ``arc``: a forward U-turn with a radius of at least half the lane spacing, or a bulb
+         *     turn over the neighbouring lane when the spacing is narrower than the turning radius.
+         *     ``multi_point``: a three-point turn (forward arc, reverse arc with the blades off, forward
+         *     arc); needs a drive link that can reverse (``MowerCapabilities.drive_reverse``).
+         * @enum {string}
+         */
+        TurnStyle: "in_place" | "arc" | "multi_point";
         /**
          * UiAreaDef
          * @description An area the module occupies in the web app shell.
