@@ -1,7 +1,7 @@
 /**
  * Drive calibration (ADR 0042) in the mower settings, desktop (1280 x 800), against the stack's
  * simulated mower: the joystick drives it out of the dock onto the lawn, the settings page shows
- * the start conditions (all green), START runs the
+ * the start conditions (all green, no bridge signal row without a bridge), START runs the
  * calibration and the end notice with the step table appears. With the result on the page there
  * is exactly one vertical scroller, the page's own: no box around the panel (the step table's
  * horizontal scroll box included) scrolls vertically next to it.
@@ -143,6 +143,8 @@ test('drive calibration: a finished run leaves the page with a single vertical s
   await expect(panel).toBeVisible();
   const conditions = page.getByTestId('calib-conditions');
   await expect(conditions.locator('li[data-ok="false"]')).toHaveCount(0, { timeout: 60_000 });
+  // The simulator drives over its own connection, not a Bluetooth bridge: no signal row.
+  await expect(conditions.locator('li[data-condition="signal"]')).toHaveCount(0);
   await page.getByTestId('calib-room-check').check();
   await page.getByTestId('calib-start').click();
   await expect(page.getByTestId('calib-live')).toBeVisible();

@@ -13,7 +13,8 @@
 
   import { formatDateTime, formatNumber, problemMessage } from '$lib/i18n';
   import {
-    calibConditionLabel,
+    calibConditionHint,
+    calibConditionText,
     calibrationProgress,
     calibrationReasonLabel,
     calibrationStateLabel,
@@ -38,11 +39,22 @@
     allowed: boolean;
     /** `MowerState.drive_speed_mps`, for the hint about a changed speed setting. */
     currentSpeed: number | null;
+    /** The mower drives over the Bluetooth bridge (a lost drive link names it). */
+    bridge?: boolean;
     now: number;
     onsaved?: () => void;
     onremoved?: () => void;
   }
-  let { flow, conditions, allowed, currentSpeed, now, onsaved, onremoved }: Props = $props();
+  let {
+    flow,
+    conditions,
+    allowed,
+    currentSpeed,
+    bridge = false,
+    now,
+    onsaved,
+    onremoved,
+  }: Props = $props();
 
   const uid = $props.id();
   const status = $derived(flow.status);
@@ -56,7 +68,7 @@
   const startable = $derived(canStartCalibration(conditions, flow.roomConfirmed, allowed));
   const stored = $derived(flow.stored);
   const mismatch = $derived(speedSettingDiffers(currentSpeed, stored));
-  const reason = $derived(final ? calibrationReasonLabel(final.reason) : null);
+  const reason = $derived(final ? calibrationReasonLabel(final.reason, { bridge }) : null);
   const tone = $derived(
     status?.state === 'measuring' ? 'mowing' : status?.state === 'stopping' ? 'error' : 'returning',
   );
@@ -244,11 +256,21 @@
       </h4>
       <ul class="conds" data-testid="calib-conditions">
         {#each conditions as condition (condition.id)}
-          <li data-condition={condition.id} data-ok={condition.ok ? 'true' : 'false'}>
+          {@const hint = calibConditionHint(condition)}
+          <li
+            data-condition={condition.id}
+            data-ok={condition.neutral ? 'info' : condition.ok ? 'true' : 'false'}
+          >
             <span class="lamp-sq" aria-hidden="true">
-              <Icon name={condition.ok ? 'check' : 'close'} size={12} />
+              <Icon
+                name={condition.neutral ? 'signal' : condition.ok ? 'check' : 'close'}
+                size={12}
+              />
             </span>
-            <span>{calibConditionLabel(condition.id)}</span>
+            <span>
+              {calibConditionText(condition)}
+              {#if hint}<span class="dim">{hint}</span>{/if}
+            </span>
           </li>
         {/each}
         <li data-condition="blades" data-ok="info">

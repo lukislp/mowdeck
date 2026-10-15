@@ -77,6 +77,7 @@
     valuesAgeLabel,
   } from '$lib/i18n';
   import { commands, permissions, realtime, revoked, sendCommand } from '$lib/live.svelte';
+  import { drivesOverBridge } from '$lib/mower/drive-link';
   import { formatDuration } from '$lib/mower/duration';
   import { rainNow, readoutBars, stripBars } from '$lib/mower/rain';
   import type { RainDecision } from '$lib/schedules/types';
@@ -1995,6 +1996,7 @@
         ended={spotFlow.ended}
         launching={spotFlow.launching}
         rtkFix={ms?.rtk_fix}
+        bridge={drivesOverBridge(ms ?? null)}
         stopping={spotFlow.stopping}
         onstop={() => spotFlow.stop()}
         onremow={canSpot && spotFlow.lastSpot ? () => spotFlow.remowLast() : null}

@@ -18,6 +18,13 @@ import type { components as Planner } from '$lib/generated/planner';
 import type { components as Telemetry } from '$lib/generated/telemetry';
 import { m } from '$lib/paraglide/messages';
 
+import {
+  bridgeSignal,
+  linkLostLabel,
+  signalCondition,
+  signalConditionHint,
+  signalConditionText,
+} from './drive-link';
 import type { MowPath } from './mow-path';
 import { isOnline } from './presence';
 import { isJobActivity } from './mow-path';
@@ -351,8 +358,14 @@ export function spotRunLabel(state: SpotRunState): string {
   }
 }
 
-/** Why a run ended or paused, in words (an unknown reason is shown as it came). */
-export function spotReasonLabel(reason: string | null | undefined): string | null {
+/**
+ * Why a run ended or paused, in words (an unknown reason is shown as it came). `bridge`: the
+ * mower drives over the Bluetooth bridge, so a lost drive link names it.
+ */
+export function spotReasonLabel(
+  reason: string | null | undefined,
+  { bridge = false }: { bridge?: boolean } = {},
+): string | null {
   switch (reason) {
     case null:
     case undefined:
@@ -363,7 +376,7 @@ export function spotReasonLabel(reason: string | null | undefined): string | nul
     case 'geofence':
       return m.spot_reason_geofence();
     case 'link_lost':
-      return m.spot_reason_link_lost();
+      return linkLostLabel(bridge, m.spot_reason_link_lost);
     case 'stopped_by_user':
       return m.spot_reason_stopped_by_user();
     case 'emergency_stop':
@@ -388,17 +401,21 @@ export function spotReasonLabel(reason: string | null | undefined): string | nul
 // --- start conditions ------------------------------------------------------------------------
 
 export type SpotConditionId =
-  'spot' | 'link' | 'rtk' | 'route' | 'idle' | 'free' | 'battery' | 'fresh';
+  'spot' | 'link' | 'signal' | 'rtk' | 'route' | 'idle' | 'free' | 'battery' | 'fresh';
 
 export interface SpotCondition {
   id: SpotConditionId;
   ok: boolean;
+  /** Not known yet: shown neutral, never blocks (the bridge signal without a value). */
+  neutral?: boolean;
+  /** The bridge signal in dBm (`signal`). */
+  rssi?: number | null;
 }
 
 /** The parts of a mower state the conditions read (`MowerState` of Telemetry). */
 export interface ConditionState {
   connection: string;
-  links?: Record<string, { connected: boolean } | undefined> | null;
+  links?: Record<string, { connected: boolean; rssi?: number | null } | undefined> | null;
   rtk_fix: string;
   position_source: string;
   position?: { lat: number; lon: number } | null;
@@ -461,9 +478,12 @@ export function spotConditions(input: SpotConditionInput): SpotCondition[] {
   const area = input.areaId ? (input.areas.find((a) => a.id === input.areaId) ?? null) : null;
   const fromDock = startsFromDock(s, input.undock);
   const age = s ? input.now - Date.parse(s.observed_at) : Number.POSITIVE_INFINITY;
+  const signal = bridgeSignal(s);
   return [
     { id: 'spot', ok: !!area },
     { id: 'link', ok: driveLinkUp(s, input.linksSupported) },
+    // Only when the bridge carries the driving; the gateway refuses below LINK_MIN_RSSI_DBM.
+    ...(signal ? [signalCondition(signal)] : []),
     {
       id: 'rtk',
       ok: fromDock || (!!s && s.rtk_fix === 'fixed' && s.position_source === 'rtk'),
@@ -494,6 +514,8 @@ export function conditionLabel(id: SpotConditionId): string {
       return m.spot_cond_spot();
     case 'link':
       return m.spot_cond_link();
+    case 'signal':
+      return signalConditionText({});
     case 'rtk':
       return m.spot_cond_rtk();
     case 'route':
@@ -507,6 +529,18 @@ export function conditionLabel(id: SpotConditionId): string {
     case 'fresh':
       return m.spot_cond_fresh();
   }
+}
+
+/** The words of a condition row with its value (the bridge signal shows its dBm). */
+export function conditionText(condition: SpotCondition): string {
+  return condition.id === 'signal' ? signalConditionText(condition) : conditionLabel(condition.id);
+}
+
+/** The line under a row, or null: why the bridge signal is red or neutral. */
+export function conditionHint(condition: SpotCondition): string | null {
+  return condition.id === 'signal'
+    ? signalConditionHint({ ...condition, id: 'signal', rssi: condition.rssi ?? null })
+    : null;
 }
 
 /** The polygon of a missed spot as a drawn spot. */

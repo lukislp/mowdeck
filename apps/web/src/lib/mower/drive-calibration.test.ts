@@ -4,6 +4,8 @@ import { ApiProblem } from '$lib/api/problem';
 import { setLocale } from '$lib/paraglide/runtime';
 
 import {
+  calibConditionHint,
+  calibConditionText,
   calibrationConditions,
   calibrationPayload,
   calibrationProgress,
@@ -78,6 +80,7 @@ function status(partial: Partial<DriveCalibrationStatus>): DriveCalibrationStatu
 
 function mowerState(partial: Partial<CalibConditionState> = {}): CalibConditionState {
   return {
+    connection: 'simulated',
     activity: 'idle',
     rtk_fix: 'fixed',
     position_source: 'rtk',
@@ -140,6 +143,19 @@ describe('calibration state and reasons', () => {
       'zu wenige Positionsmeldungen für ein Ergebnis (only 1 forward step)',
     );
     expect(calibrationReasonLabel('weird: thing')).toBe('weird: thing');
+  });
+
+  it('names the bridge for a lost drive link when the mower drives over it', () => {
+    expect(calibrationReasonLabel('link_lost', { bridge: true })).toBe(
+      'Bluetooth-Bridge nicht erreichbar oder zu schwaches Signal',
+    );
+    expect(calibrationReasonLabel('link_lost: failed: drive link down', { bridge: true })).toBe(
+      'Bluetooth-Bridge nicht erreichbar oder zu schwaches Signal (failed: drive link down)',
+    );
+    expect(calibrationReasonLabel('link_lost')).toBe('Fahrverbindung unterbrochen');
+    expect(calibrationReasonLabel('frame_rejected', { bridge: true })).toBe(
+      'der Mäher hat einen Fahrbefehl abgelehnt',
+    );
   });
 });
 
@@ -362,6 +378,25 @@ describe('start conditions', () => {
     expect(failing(mowerState({ drive_calibration: status({ state: 'done' }) }))).toEqual([]);
     const run = { state: 'spot_mowing' } as CalibConditionState['spot_run'];
     expect(failing(mowerState({ spot_run: run }))).toEqual(['free']);
+  });
+
+  it('adds the bridge signal on the bridge: red below -90 dBm, neutral while unknown', () => {
+    const at = (rssi: number | null): CalibConditionState =>
+      mowerState({ connection: 'cloud', links: { ble_bridge: { connected: true, rssi } } });
+    const rows = (state: CalibConditionState) =>
+      calibrationConditions({ state, manualDrive: true, now: NOW });
+    expect(rows(mowerState()).map((c) => c.id)).not.toContain('signal');
+    const weak = rows(at(-97)).find((c) => c.id === 'signal')!;
+    expect(weak.ok).toBe(false);
+    expect(calibConditionText(weak)).toBe('Bluetooth-Signal ausreichend: −97 dBm (ab −90 dBm)');
+    expect(calibConditionHint(weak)).toContain('näher an den Mäher');
+    expect(canStartCalibration(rows(at(-97)), true, true)).toBe(false);
+    expect(canStartCalibration(rows(at(-74)), true, true)).toBe(true);
+    const unknown = rows(at(null)).find((c) => c.id === 'signal')!;
+    expect(unknown).toMatchObject({ ok: true, neutral: true });
+    expect(calibConditionHint(unknown)).toContain('der Start bleibt möglich');
+    expect(canStartCalibration(rows(at(null)), true, true)).toBe(true);
+    expect(calibConditionHint({ id: 'rtk', ok: false })).toBeNull();
   });
 
   it('is all red without a state but the capability', () => {

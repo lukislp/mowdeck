@@ -57,6 +57,7 @@
     type DriveSpeedSetting,
   } from '$lib/mower/drive-calibration';
   import { DriveCalibrationFlow } from '$lib/mower/drive-calibration.svelte';
+  import { drivesOverBridge } from '$lib/mower/drive-link';
   import { m } from '$lib/paraglide/messages';
   import { mowers as states } from '$lib/stores/mowers.svelte';
   import { toasts } from '$lib/stores/ui.svelte';
@@ -453,6 +454,7 @@
             conditions={calibConditions}
             allowed={canDrive}
             currentSpeed={ms?.drive_speed_mps ?? null}
+            bridge={drivesOverBridge(ms ?? null)}
             now={clock.now}
           />
         </div>

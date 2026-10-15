@@ -8,6 +8,8 @@ import {
   SPOT_SPEED_MAX_MPS,
   allGreen,
   bladesRequested,
+  conditionHint,
+  conditionText,
   clampRadiusM,
   clampSpacingMm,
   clampSpeedMps,
@@ -380,6 +382,7 @@ describe('start conditions', () => {
     expect(conditions.map((c) => c.id)).toEqual([
       'spot',
       'link',
+      'signal',
       'rtk',
       'route',
       'idle',
@@ -475,5 +478,32 @@ describe('start conditions', () => {
     // A connection without a bridge link drives over its primary connection (the simulator).
     expect(driveLinkUp({ connection: 'simulator', links: null }, [])).toBe(true);
     expect(driveLinkUp(null, [])).toBe(false);
+  });
+
+  it('the bridge signal: a row only on the bridge, red below -90 dBm, neutral while unknown', () => {
+    const at = (rssi: number | null): ConditionState =>
+      stateAt([12, 10], { connection: 'cloud', links: { ble_bridge: { connected: true, rssi } } });
+    const signal = (state: ConditionState) =>
+      spotConditions({ ...base, state }).find((c) => c.id === 'signal');
+    expect(failing({ state: at(-97) })).toEqual(['signal']);
+    expect(failing({ state: at(-74) })).toEqual([]);
+    const weak = signal(at(-97))!;
+    expect(conditionText(weak)).toBe('Bluetooth-Signal ausreichend: −97 dBm (ab −90 dBm)');
+    expect(conditionHint(weak)).toContain('näher an den Mäher');
+    const unknown = signal(at(null))!;
+    expect(unknown).toMatchObject({ ok: true, neutral: true });
+    expect(conditionHint(unknown)).toContain('der Start bleibt möglich');
+    expect(failing({ state: at(null) })).toEqual([]);
+    // a mower that drives over its primary connection has no signal row
+    expect(signal(stateAt([12, 10], { connection: 'simulated' }))).toBeUndefined();
+    expect(conditionHint({ id: 'rtk', ok: false })).toBeNull();
+  });
+
+  it('a lost drive link names the bridge when the mower drives over it', () => {
+    expect(spotReasonLabel('link_lost', { bridge: true })).toBe(
+      'Bluetooth-Bridge nicht erreichbar oder zu schwaches Signal',
+    );
+    expect(spotReasonLabel('link_lost')).toBe('Fahrverbindung unterbrochen');
+    expect(spotReasonLabel('frame_rejected', { bridge: true })).toBe('frame_rejected');
   });
 });

@@ -49,7 +49,8 @@
     SPOT_SPEED_MAX_MPS,
     SPOT_SPEED_MIN_MPS,
     SPOT_SPEED_STEP_MPS,
-    conditionLabel,
+    conditionHint,
+    conditionText,
   } from '$lib/mower/spot-sheet';
   import type { SpotSheetFlow } from '$lib/mower/spot-sheet.svelte';
   import { m } from '$lib/paraglide/messages';
@@ -278,11 +279,21 @@
     </h3>
     <ul class="conds" data-testid="spot-conditions">
       {#each flow.conditions as condition (condition.id)}
-        <li data-condition={condition.id} data-ok={condition.ok ? 'true' : 'false'}>
+        {@const hint = conditionHint(condition)}
+        <li
+          data-condition={condition.id}
+          data-ok={condition.neutral ? 'info' : condition.ok ? 'true' : 'false'}
+        >
           <span class="lamp" aria-hidden="true">
-            <Icon name={condition.ok ? 'check' : 'close'} size={12} />
+            <Icon
+              name={condition.neutral ? 'signal' : condition.ok ? 'check' : 'close'}
+              size={12}
+            />
           </span>
-          <span>{conditionLabel(condition.id)}</span>
+          <span>
+            {conditionText(condition)}
+            {#if hint}<span class="dim">{hint}</span>{/if}
+          </span>
         </li>
       {/each}
     </ul>
@@ -662,6 +673,19 @@
 
   .conds li[data-ok='false'] {
     color: var(--md-color-ink);
+  }
+
+  /* not known yet (the bridge signal): neutral, not blocking */
+  .conds li[data-ok='info'] .lamp {
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+    background: var(--md-color-surface);
+    color: var(--md-color-ink);
+  }
+
+  .conds .dim {
+    display: block;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
   }
 
   .foot {
