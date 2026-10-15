@@ -401,7 +401,7 @@ async def test_mammotion_dual_proxy_loss_reconnects_with_backoff() -> None:
         assert state.links[LINK_BLE_BRIDGE].connected is False
         assert state.links[LINK_BLE_BRIDGE].esphome_version == "2026.1.0"  # what we last saw
         assert (await conn.capabilities()).manual_drive is False
-        with pytest.raises(CommandRejected, match=BRIDGE_NOT_CONNECTED):
+        with pytest.raises(NotConnected, match=BRIDGE_NOT_CONNECTED):
             await conn.start_drive_session()
         assert sleeps.delays[:1] == [5.0]
         sleeps.release()
@@ -424,7 +424,7 @@ async def test_mammotion_dual_without_a_bridge_stays_cloud_and_backs_off() -> No
         assert state.links[LINK_BLE_BRIDGE].connected is False
         assert state.links[LINK_BLE_BRIDGE].esphome_version is None  # never seen
         assert (await conn.capabilities()).manual_drive is False
-        with pytest.raises(CommandRejected, match=BRIDGE_NOT_CONNECTED):
+        with pytest.raises(NotConnected, match=BRIDGE_NOT_CONNECTED):
             await conn.start_drive_session()
         opener.error = None
         await _wait(lambda: conn.watcher.proxy_up)
@@ -439,7 +439,7 @@ async def test_mammotion_dual_attach_failure_keeps_the_proxy_and_refuses_the_dri
     await conn.connect()
     try:
         await _wait(lambda: conn.watcher.proxy_up)
-        with pytest.raises(CommandRejected, match="did not come up"):
+        with pytest.raises(NotConnected, match="did not come up"):
             await conn.start_drive_session()
         assert port.attached >= 1 and conn.watcher.last_error == "RuntimeError"
         assert opener.links[0].is_alive()  # the proxy link stays held

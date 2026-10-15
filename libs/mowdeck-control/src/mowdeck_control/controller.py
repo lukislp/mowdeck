@@ -16,10 +16,12 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    (:class:`~mowdeck_control.connection.TwoPhaseExecution`), the confirmation wait runs outside
    the queue, so a later command is neither delayed by it nor expires behind it. Adapters
    without the split hold the queue for the whole ``execute``.
-6. ``ManualDrive`` frames feed a drive session. Each frame re-arms a dead-man timer of
-   ``ttl_ms``; when it fires, the controller stops and closes the session. Blade rules from
-   :mod:`mowdeck_control.safety` apply to every frame. A non-drive command ends the session,
-   except ``SetLight`` (switching the light while driving at night keeps the session).
+6. ``ManualDrive`` frames feed a drive session. Each frame re-arms a dead-man timer of ``ttl_ms``;
+   when it fires, the controller stops and closes the session. Blade rules from
+   :mod:`mowdeck_control.safety` apply to every frame. A non-drive command ends the session, except
+   ``SetLight`` (switching the light while driving at night keeps the session). When the adapter has
+   no drive link (``NotConnected`` from ``start_drive_session`` or a frame) the frame is ``failed``
+   with the adapter's words and the session ends.
 7. ``SetBladeHeight`` and ``SetSpeed`` are checked against the capabilities, ``StartMow`` against
    the map (area ids must exist) and, if a pattern is given, against the native patterns. A
    ``StartMow`` with a ``spot_plan`` runs as a route only when ``capabilities.custom_paths`` is
@@ -48,40 +50,42 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    mower docked with enough battery (charging is not required), no job, no open drive session,
    no update already installing. While the mower reports ``updating`` every command but
    ``EmergencyStop`` is rejected with ``"firmware update running"``, drive frames included.
-12. A ``SpotMow`` (ADR 0039) starts a :class:`~mowdeck_control.spot_run.SpotMowRun` that drives
-   the plan with frames through this controller (``correlation_id = spot:<command_id>``): it
-   needs ``capabilities.manual_drive``, no open drive session or pending confirmation, an idle
-   mower (or a docked one when the connection has ``capabilities.undock`` and implements
-   :class:`~mowdeck_control.connection.UndockCapable`, ADR 0041) with a fresh state, enough
-   battery, a fixed RTK position (not yet for a docked mower: the run waits for it after
-   undocking), a plan inside the geofence and a transit route on the map from the mower (from
-   the dock while docked) to the plan (``no_route: ...`` otherwise); the command is answered
-   ``accepted`` at once (``rejected`` or ``failed`` when a check fails) and the run's end is
-   read with :meth:`MowerController.spot_run_result`. Blades run only with ``blades`` and
-   ``confirm_blades`` on a mower with ``manual_drive_blades``; otherwise the run is a dry run.
-   While a run is active every command except ``EmergencyStop``, ``SpotStop``, ``SetLight`` and
-   the run's own frames is rejected ("spot run active; stop it first"); ``SpotStop`` without a
-   run is rejected. An emergency stop, a sensor stop and a change of the activity end the run
-   (while undocking only an error, an update or a lost mower do). With ``SpotMow.return_to_dock``
-   the run sends ``ReturnToDock`` to the connection after it ended, unless it was stopped. A
-   spot run takes the stick scale from the drive calibration (``drive_calibration``, ADR 0042,
+12. A ``SpotMow`` (ADR 0039) starts a :class:`~mowdeck_control.spot_run.SpotMowRun` that drives the
+   plan with frames through this controller (``correlation_id = spot:<command_id>``): it needs
+   ``capabilities.manual_drive``, no open drive session or pending confirmation, an idle mower (or a
+   docked one when the connection has ``capabilities.undock`` and implements
+   :class:`~mowdeck_control.connection.UndockCapable`, ADR 0041) with a fresh state, enough battery,
+   a fixed RTK position (not yet for a docked mower: the run waits for it after undocking), a plan
+   inside the geofence and a transit route on the map from the mower (from the dock while docked) to
+   the plan (``no_route: ...`` otherwise), and no additional link reporting the mower's signal below
+   ``LINK_MIN_RSSI_DBM``; the command is answered ``accepted`` at once (``rejected`` or ``failed``
+   when a check fails) and the run's end is read with :meth:`MowerController.spot_run_result`.
+   Blades run only with ``blades`` and ``confirm_blades`` on a mower with ``manual_drive_blades``;
+   otherwise the run is a dry run. While a run is active every command except ``EmergencyStop``,
+   ``SpotStop``, ``SetLight`` and the run's own frames is rejected ("spot run active; stop it
+   first"); ``SpotStop`` without a run is rejected. An emergency stop, a sensor stop and a change of
+   the activity end the run (while undocking only an error, an update or a lost mower do); a frame
+   that cannot go out because the drive link is not available or was lost (rule 6, or refused while
+   the state reports a link down) ends it ``link_lost``. With ``SpotMow.return_to_dock`` the run
+   sends ``ReturnToDock`` to the connection after it ended, unless it was stopped. A spot run takes
+   the stick scale from the drive calibration (``drive_calibration``, ADR 0042,
    :meth:`~mowdeck_control.spot_run.SpotRunConfig.calibrated`) and the vendor's current speed
    setting (``MowerState.drive_speed_mps``).
 13. A ``DriveCalibrate`` (ADR 0042) starts a
    :class:`~mowdeck_control.calibration.DriveCalibrationRun` with frames through this controller
-   (``correlation_id = calibration:<command_id>``): it needs ``capabilities.manual_drive``, no
-   open drive session or pending confirmation, an idle mower out of its dock with a fresh state,
-   a fixed RTK position, enough battery and room ahead inside the geofence; it is answered
-   ``accepted`` at once and its end is read with :meth:`MowerController.calibration_result`.
-   Rule 12 applies while it runs ("drive calibration active; stop it first"): only
-   ``EmergencyStop``, ``SpotStop`` (which ends it) and ``SetLight`` pass. A sensor stop and a
-   change of the activity end it. While it runs, a connection implementing
-   :class:`~mowdeck_control.connection.ReportRateCapable` is asked for reports every
-   ``CalibrationConfig.report_interval_s`` (as fast as its link allows) and restored to its own
-   drive interval at the end. ``SetDriveSpeed`` needs ``capabilities.drive_speed_setting``
-   and a connection implementing :class:`~mowdeck_control.connection.DriveSpeedCapable`; the
-   value is snapped to the declared range and step. Like ``SetLight`` it keeps an open drive
-   session.
+   (``correlation_id = calibration:<command_id>``): it needs ``capabilities.manual_drive``, no open
+   drive session or pending confirmation, an idle mower out of its dock with a fresh state, a fixed
+   RTK position, enough battery, no link signal below ``LINK_MIN_RSSI_DBM`` and room ahead inside
+   the geofence; it is answered ``accepted`` at once and its end is read with
+   :meth:`MowerController.calibration_result`. Rule 12 applies while it runs ("drive calibration
+   active; stop it first"): only ``EmergencyStop``, ``SpotStop`` (which ends it) and ``SetLight``
+   pass. A sensor stop and a change of the activity end it, a lost drive link ends it ``link_lost``.
+   While it runs, a connection implementing :class:`~mowdeck_control.connection.ReportRateCapable`
+   is asked for reports every ``CalibrationConfig.report_interval_s`` (as fast as its link allows)
+   and restored to its own drive interval at the end. ``SetDriveSpeed`` needs
+   ``capabilities.drive_speed_setting`` and a connection implementing
+   :class:`~mowdeck_control.connection.DriveSpeedCapable`; the value is snapped to the declared
+   range and step. Like ``SetLight`` it keeps an open drive session.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -801,12 +805,18 @@ class MowerController:
             except CommandRejected as exc:
                 self._session = None
                 return self._result(envelope, CommandStatus.REJECTED, exc.reason)
+            except NotConnected as exc:
+                self._session = None
+                return self._result(envelope, CommandStatus.FAILED, _link_down_reason(exc))
             self._log_event(envelope, "drive session opened")
         try:
             await self._session.update(frame.linear, frame.angular, decision.blade_on)
         except CommandRejected as exc:
             await self._end_drive("drive frame rejected")
             return self._result(envelope, CommandStatus.REJECTED, exc.reason)
+        except NotConnected as exc:
+            await self._end_drive("drive link lost")
+            return self._result(envelope, CommandStatus.FAILED, _link_down_reason(exc))
         except Exception as exc:
             self._log.exception("command %s: drive frame failed", envelope.command_id)
             await self._end_drive("drive frame failed")
@@ -1103,6 +1113,10 @@ class MowerController:
         result = await self.handle(wrapped)
         if result.status is CommandStatus.ACCEPTED:
             return None
+        if result.status is CommandStatus.REJECTED and _drive_link_down(self._last_state):
+            # Refused because the link is gone (the adapter words it as a refusal): the run
+            # ends ``link_lost``, not ``frame_rejected``.
+            return f"{CommandStatus.FAILED.value}: drive link down ({result.reason})"
         return f"{result.status.value}: {result.reason}"
 
     # --- State --------------------------------------------------------------------------------
@@ -1285,6 +1299,19 @@ class _SpotActions(SpotActions):
 
 
 _log = logging.getLogger("mowdeck_control.controller")
+
+
+def _link_down_reason(exc: NotConnected) -> str:
+    """The result reason of a drive frame the adapter could not send (no link)."""
+    return str(exc) or "mower is not connected"
+
+
+def _drive_link_down(state: MowerState | None) -> bool:
+    """The state reports the mower's connection or one of its additional links (``links``,
+    where a bridge carries the driving) as down."""
+    if state is None:
+        return False
+    return not state.connected or any(not link.connected for link in state.links.values())
 
 
 def _native_start(command: StartMow) -> StartMow:

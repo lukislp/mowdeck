@@ -113,6 +113,7 @@ from mowdeck_control.spot_run import (
     refusal_reason,
     spot_start_problem,
     transit_start,
+    weak_link_problem,
 )
 from mowdeck_control.timers import AsyncioTimerFactory, Timer, TimerFactory
 from mowdeck_control.transit import (
@@ -225,4 +226,5 @@ __all__ = [
     "to_geo_position",
     "to_wgs84",
     "transit_start",
+    "weak_link_problem",
 ]

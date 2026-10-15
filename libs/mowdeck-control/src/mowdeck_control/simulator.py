@@ -38,8 +38,10 @@ What it simulates:
   with a ``ble_bridge`` entry as the Device-Gateway passes it, ADR 0038): the state reports
   ``links["ble_bridge"]`` and ``connection`` ``ble_bridge`` while the bridge is connected,
   manual driving is offered only then, and the test hook :meth:`SimulatedMower.set_bridge`
-  flips the link; :meth:`SimulatedMower.scan_bridge` answers a scan with the configured
-  device list (``bridge_devices``) or the configured error (``bridge_scan_error``);
+  flips the link (without it a drive session raises ``NotConnected``, like a real drive
+  link); ``bridge_rssi`` is the signal the link reports; :meth:`SimulatedMower.scan_bridge`
+  answers a scan with the configured device list (``bridge_devices``) or the configured error
+  (``bridge_scan_error``);
 * firmware (:class:`~mowdeck_control.connection.FirmwarePort`): :meth:`check_firmware` reports
   the installed version and ``firmware_available`` as offered; ``FirmwareUpdate`` (after the
   controller's safety rules, which the simulator applies itself too) installs it over
@@ -382,6 +384,8 @@ class SimulatedDriveSession:
 
     async def update(self, linear: float, angular: float, blade_on: bool) -> None:
         if not self._open:
+            if self._mower.config.bridge and not self._mower._bridge_connected:
+                raise NotConnected(BRIDGE_NOT_CONNECTED)  # the drive link dropped
             raise CommandRejected("drive session is closed")
         self._mower._drive_update(linear, angular, blade_on)
 
@@ -669,7 +673,7 @@ class SimulatedMower:
         self._require_connected()
         self._require_no_sensor_stop()
         if self.config.bridge and not self._bridge_connected:
-            raise CommandRejected(BRIDGE_NOT_CONNECTED)
+            raise NotConnected(BRIDGE_NOT_CONNECTED)
         status = self._status
         if status.activity is MowerActivity.UPDATING:
             raise CommandRejected(FIRMWARE_UPDATE_RUNNING)
