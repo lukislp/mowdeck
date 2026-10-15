@@ -25,3 +25,6 @@ class PlannerConfig:
     max_gaps: int = 200
     spot_tolerance_m: float = 0.05
     """How far a drawn spot may reach beyond the mower's mapped areas (drawing slack)."""
+    turn_radius_m: float = 0.3
+    """Smallest arc radius of shaped lane-end turns (ADR 0043): the bulb and three-point turns
+    use it; at least the mower's turning radius."""

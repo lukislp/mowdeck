@@ -34,6 +34,9 @@ class Settings(ServiceSettings):
     planner_turning_radius_m: float = Field(default=0.0, ge=0, le=10)
     """Turning radius checked by the validation chain (0: the mower turns on the spot)."""
 
+    planner_turn_radius_m: float = Field(default=0.3, ge=0.05, le=5)
+    """Smallest arc radius of the lane-end turns of a spot plan with a turn style (ADR 0043)."""
+
     planner_mowing_speed_mps: float = Field(default=0.4, gt=0, le=2)
     """Mowing speed of the plans (capped by the mower's ``max_speed_mps``)."""
 
@@ -73,6 +76,7 @@ class Settings(ServiceSettings):
             cutting_width_m=self.planner_cutting_width_m,
             overlap_m=self.planner_overlap_m,
             turning_radius_m=self.planner_turning_radius_m,
+            turn_radius_m=self.planner_turn_radius_m,
             mowing_speed_mps=self.planner_mowing_speed_mps,
             transfer_speed_mps=self.planner_transfer_speed_mps,
             safety_margin_m=self.planner_safety_margin_m,

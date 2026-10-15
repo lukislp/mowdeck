@@ -293,3 +293,53 @@ async def test_planner_hides_mowers_of_other_accounts_and_unknown_ones() -> None
         )
     assert response.status_code == 404
     assert mower(uuid4()).type == "mower"
+
+
+async def test_planner_shapes_lane_ends_for_a_turn_style() -> None:
+    """ADR 0043: arcs or three-point turns inside the spot run's geofence; multi-point falls
+    back to arcs for a mower whose drive link cannot reverse."""
+    from shapely.geometry import LineString
+
+    from planner.application.planning import spot_geofence
+
+    # a spot in the corner of `front`: the geofence (0.3 m from the map's edge) binds there
+    spot = {"area_id": "front", "polygon": [(0, 0), (5, 0), (5, 3), (0, 3)]}
+    async with harness() as h:
+        owner = await h.owner()
+        sim = str(await h.mower(owner))
+        luba = str(await h.mower(owner, LUBA_LIKE))
+        plain = (await h.preview(owner, mower_id=sim, area=spot, chain=STRIPES)).json()
+        arc = await h.preview(owner, mower_id=sim, area=spot, chain=STRIPES, turn_style="arc")
+        multi = await h.preview(
+            owner, mower_id=sim, area=spot, chain=STRIPES, turn_style="multi_point"
+        )
+        fallback = await h.preview(
+            owner, mower_id=luba, area=spot, chain=STRIPES, turn_style="multi_point"
+        )
+    assert arc.status_code == 200, arc.text
+    assert plain["turn_style"] is None
+    fence = spot_geofence(default_map()).buffer(1e-3)
+
+    def turns(body: dict[str, Any]) -> list[dict[str, Any]]:
+        return [f for f in body["preview"]["features"] if f["properties"]["kind"] == "turn"]
+
+    arc_body, multi_body, fallback_body = arc.json(), multi.json(), fallback.json()
+    assert arc_body["turn_style"] == "arc"
+    assert arc_body["plan_hash"] != plain["plan_hash"]
+
+    def shaped(body: dict[str, Any]) -> list[dict[str, Any]]:
+        return [f for f in turns(body) if len(f["geometry"]["coordinates"]) > 2]
+
+    assert shaped(arc_body)
+    assert not any(f["properties"]["reverse"] for f in turns(arc_body))
+    for feature in shaped(arc_body) + shaped(multi_body):
+        assert fence.covers(LineString(feature["geometry"]["coordinates"]))
+    # the lowest lane lies within 0.3 m of the map's edge: its lane end keeps turning in place
+    assert any("turn in place" in w for w in arc_body["warnings"])
+    assert multi_body["turn_style"] == "multi_point"
+    reverse = [f for f in turns(multi_body) if f["properties"]["reverse"]]
+    assert reverse
+    assert all(not f["properties"]["blades_on"] for f in reverse)
+    assert fallback_body["turn_style"] == "arc"
+    assert not any(f["properties"]["reverse"] for f in turns(fallback_body))
+    assert any("cannot reverse" in w for w in fallback_body["warnings"])

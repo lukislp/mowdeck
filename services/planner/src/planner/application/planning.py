@@ -7,6 +7,10 @@
   a spot run would drive to the plan's first point (ADR 0041), computed by the same pure
   :func:`mowdeck_control.transit.plan_transit` on the same map as the Device-Gateway's run, so
   the web app's "route found" condition and the gateway's ``no_route`` check agree.
+* With a turn style (ADR 0043) the lane ends of stripe patterns get arcs, bulb turns or
+  three-point turns inside the area and the spot run's geofence (the mapped areas inset by the
+  run's margin minus the zones); ``multi_point`` falls back to ``arc`` when the mower's drive
+  link cannot reverse (``MowerCapabilities.drive_reverse``).
 * :meth:`Planning.gaps`: the mower's position track in a time range gives the covered ground
   and the gaps left in the area, ready for a ``remow`` step.
 
@@ -29,8 +33,10 @@ from mowdeck_contracts.v1 import (
     Principal,
     SpotMowPlan,
     SpotNativeJob,
+    TurnStyle,
 )
 from mowdeck_control.geo import from_wgs84, to_wgs84
+from mowdeck_control.spot_run import SpotRunConfig
 from mowdeck_control.transit import REASON_NO_ROUTE, NoRouteError, plan_transit
 from mowdeck_patterns import (
     Area,
@@ -42,6 +48,7 @@ from mowdeck_patterns import (
     PatternRegistry,
     PlanningError,
     PlanRejected,
+    TurnOptions,
     UnknownPattern,
     check,
     coverage,
@@ -50,7 +57,8 @@ from mowdeck_patterns import (
     plan,
     preview,
 )
-from shapely.geometry import Point, Polygon
+from shapely.geometry import MultiPolygon, Point, Polygon
+from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
 from planner.application.access import CAN_CONTROL, CAN_VIEW, Access
@@ -115,6 +123,9 @@ class PlanInput:
     mower_overrides: dict[str, float] = field(default_factory=dict)
     wgs84_preview: bool = False
     transit: TransitStart | None = None
+    turn_style: TurnStyle | None = None
+    """Shape the lane ends for a spot run turning this way (ADR 0043); None keeps the
+    straight connections."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,6 +284,24 @@ class Planning:
 
     # --- plans ---------------------------------------------------------------------------
 
+    def turn_options(
+        self,
+        style: TurnStyle | None,
+        caps: MowerCapabilities | None,
+        mower_map: MowerMap | None,
+    ) -> TurnOptions | None:
+        """How the lane ends are shaped for ``style``: inside the spot run's geofence of
+        ``mower_map``, and without reverse legs unless the mower's drive link can reverse (an
+        unknown mower cannot)."""
+        if style is None:
+            return None
+        return TurnOptions(
+            style=style.value,
+            min_radius_m=self.config.turn_radius_m,
+            reverse=caps is not None and caps.drive_reverse,
+            fence=spot_geofence(mower_map) if mower_map is not None else None,
+        )
+
     def execution(
         self,
         spec: AreaSpec,
@@ -343,10 +372,11 @@ class Planning:
         mower_spec = self.mower_spec(request.mower_overrides, caps)
         area = self.area_of(request.area, mower_map)
         reference = mower_map.reference if mower_map is not None else None
+        turns = self.turn_options(request.turn_style, caps, mower_map)
 
         def work() -> tuple[MowPlan, dict[str, Any], Execution]:
             try:
-                result = plan(area, mower_spec, list(request.chain), self.registry)
+                result = plan(area, mower_spec, list(request.chain), self.registry, turns=turns)
             except InvalidSettings as exc:
                 raise InvalidInput(str(exc), exc.errors) from exc
             except PlanRejected as exc:
@@ -446,6 +476,25 @@ class Planning:
             gaps_wgs84=[[_round_geo(to_wgs84(reference, x, y)) for x, y in ring] for ring in local],
             gap_area_m2=round(sum(g.area for g in left), 2),
         )
+
+
+_FENCE_SLACK_M = 0.01
+"""Extra distance the Planner's geofence keeps, so a rounded plan point never lands on the
+run's exact geofence edge."""
+
+
+def spot_geofence(mower_map: MowerMap) -> Polygon | MultiPolygon:
+    """The spot run's geofence as a polygon: the mapped areas inset by the run's margin minus
+    every no-go zone and obstacle buffered by it (``mowdeck_control.spot_run.Geofence``)."""
+    margin = SpotRunConfig().geofence_margin_m + _FENCE_SLACK_M
+    areas = unary_union([Polygon(a.boundary).buffer(0) for a in mower_map.areas])
+    inside: BaseGeometry = areas.buffer(-margin)
+    zones = [Polygon(z.boundary).buffer(0) for z in mower_map.forbidden_zones()]
+    if zones:
+        inside = inside.difference(unary_union(zones).buffer(margin))
+    if isinstance(inside, Polygon | MultiPolygon):
+        return inside
+    return MultiPolygon([g for g in getattr(inside, "geoms", ()) if isinstance(g, Polygon)])
 
 
 def _transit(

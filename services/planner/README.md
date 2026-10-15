@@ -33,7 +33,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`); Trae
 | Method | Path | Required | Notes |
 | --- | --- | --- | --- |
 | GET | `/api/v1/planner/patterns` | a principal | not gated by the plan |
-| POST | `/api/v1/planner/plans/preview` | `spot_mowing`; `can_view` on the mower | body `{mower_id or map, area, chain or template, mower?, wgs84?, transit?}` |
+| POST | `/api/v1/planner/plans/preview` | `spot_mowing`; `can_view` on the mower | body `{mower_id or map, area, chain or template, mower?, wgs84?, transit?, turn_style?}` |
 | POST | `/api/v1/planner/plans` | `spot_mowing`; `can_control` on the mower | adds `spot_plan` and `command` |
 | POST | `/api/v1/planner/coverage/gaps` | `spot_mowing`; `can_view` on the mower | body `{mower_id, start, end, area?, min_gap_m2?, cutting_width_m?}`; without `area` the map area with the most track points |
 | GET | `/api/v1/planner/templates` | a principal of the account | by name |
@@ -43,6 +43,8 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`); Trae
 | GET | `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` | none | readiness covers the database, NATS and OpenFGA |
 
 Errors: 422 `validation` for invalid settings (`errors` per setting), plans the validation chain refused (`errors` per finding), spots outside the map, too many vertices, too large areas or plans; 409 when the mower has sent no map yet or the template limit is reached; 503 when Telemetry does not answer the track query. Request bodies refuse unknown fields.
+
+`turn_style` (`in_place`, `arc`, `multi_point`; [ADR 0043](../../docs/adr/0043-turn-styles.md)) shapes the lane ends of stripe patterns for a spot run that turns this way: arcs or bulb turns, or three-point turns with reverse segments, inside the area's safety margin and the spot run's geofence of the mower's map (the areas inset by 0.3 m minus the zones buffered by 0.3 m). `multi_point` falls back to `arc` with a warning when the mower's capabilities lack `drive_reverse` (or are unknown). Lane ends where nothing fits keep their straight connection and are counted in `warnings`. The answer carries the effective `turn_style`, and every preview feature `reverse`. Without `turn_style` the lane ends stay straight.
 
 `mower` overrides the mower data per request: `cutting_width_m`, `overlap_m`, `turning_radius_m`, `max_speed_mps`, `transfer_speed_mps`, `safety_margin_m`. Speeds are capped by the mower's `max_speed_mps`.
 
@@ -76,6 +78,7 @@ Kit settings (`MOWDECK_ENVIRONMENT`, `MOWDECK_LOG_*`, `MOWDECK_NATS_URL`, `MOWDE
 | `MOWDECK_PLANNER_CUTTING_WIDTH_M` | `0.4` | cutting width (LUBA 2: 0.4 m) unless a request overrides it |
 | `MOWDECK_PLANNER_OVERLAP_M` | `0.05` | overlap of neighbouring runs (spacing = width minus overlap) |
 | `MOWDECK_PLANNER_TURNING_RADIUS_M` | `0` | turning radius checked by the validation chain (0: turns on the spot) |
+| `MOWDECK_PLANNER_TURN_RADIUS_M` | `0.3` | smallest arc radius of shaped lane-end turns (at least the turning radius) |
 | `MOWDECK_PLANNER_MOWING_SPEED_MPS` | `0.4` | mowing speed (capped by the mower) |
 | `MOWDECK_PLANNER_TRANSFER_SPEED_MPS` | `0.6` | blades-off transfer speed (capped by the mower) |
 | `MOWDECK_PLANNER_SAFETY_MARGIN_M` | `0.15` | distance of the mower's centre from every edge, hole and zone |
