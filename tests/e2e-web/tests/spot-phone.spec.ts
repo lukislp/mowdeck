@@ -24,8 +24,26 @@ import {
 
 /** Tap the map 24 px right of the mower marker (inside its area on the simulator's map). */
 async function tapNextToMower(page: Page): Promise<void> {
-  const marker = (await page.getByTestId('mower-marker').boundingBox())!;
-  await page.touchscreen.tap(marker.x + marker.width / 2 + 24, marker.y + marker.height / 2);
+  // The map pans when the sheet changes height: wait until the marker has settled, then tap
+  // next to it, but always on the visible map above the sheet.
+  const markerLoc = page.getByTestId('mower-marker');
+  let last = '';
+  await expect
+    .poll(
+      async () => {
+        const b = await markerLoc.boundingBox();
+        const now = b ? `${Math.round(b.x)},${Math.round(b.y)}` : '';
+        const settled = now !== '' && now === last;
+        last = now;
+        return settled;
+      },
+      { intervals: [150] },
+    )
+    .toBe(true);
+  const marker = (await markerLoc.boundingBox())!;
+  const sheet = await page.getByTestId('spot-sheet').boundingBox();
+  const y = Math.min(marker.y + marker.height / 2, (sheet?.y ?? Infinity) - 40);
+  await page.touchscreen.tap(marker.x + marker.width / 2 + 24, y);
 }
 
 /** The visible part of the map above the sheet, in px. */
