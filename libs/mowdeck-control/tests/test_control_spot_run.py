@@ -51,6 +51,7 @@ from mowdeck_control import (
     to_geo_position,
 )
 from mowdeck_control.controller import SPOT_RUN_ACTIVE
+from mowdeck_control.errors import NotConnected
 from mowdeck_control.geo import segment_distance
 from mowdeck_control.spot_run import (
     REASON_EMERGENCY_STOP,
@@ -698,3 +699,29 @@ async def test_control_spot_run_closing_the_controller_never_sends_the_mower_hom
     assert report is not None and report.reason == REASON_LINK_LOST
     assert not report.sent_home and report.return_problem is None
     assert h.sim.snapshot().activity is not MowerActivity.RETURNING
+
+
+async def test_control_spot_run_retries_the_return_when_the_link_blinks() -> None:
+    """Live: the cloud reported the mower offline for a second right after the drive session
+    closed, and the single return_to_dock failed. The run tries again."""
+    h = Harness(mower_map=GARDEN, spot_config=SpotRunConfig(undock_timeout_s=20.0))
+    await h.start(idle=False)
+    h.sim.set_rtk(RtkFixStatus.FLOAT)
+    await h.settle()
+    real_dispatch = h.sim.dispatch
+    failures = {"left": 1}
+
+    async def blinking_dispatch(command: Any) -> Any:
+        if getattr(command, "kind", None) == "return_to_dock" and failures["left"] > 0:
+            failures["left"] -= 1
+            raise NotConnected("cloud reported the mower offline")
+        return await real_dispatch(command)
+
+    h.sim.dispatch = blinking_dispatch  # type: ignore[method-assign]
+    result, report = await h.run(SpotMow(plan=plan_of(spiral((5.0, 14.0), r1=1.0))))
+    assert result.status is CommandStatus.ACCEPTED, result.reason
+    assert report is not None
+    assert report.reason == REASON_RTK_LOST, report.summary()
+    assert failures["left"] == 0, "the first attempt was not made"
+    assert report.sent_home and report.return_problem is None, report.summary()
+    await h.close()
