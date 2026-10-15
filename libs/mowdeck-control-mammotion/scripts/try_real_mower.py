@@ -121,7 +121,9 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
+    DEFAULT_CALIBRATION_STEP_S,
     MAX_CALIBRATION_STEP_S,
+    MIN_CALIBRATION_STEP_S,
     CommandEnvelope,
     CommandResult,
     CommandStatus,
@@ -175,7 +177,7 @@ SAFETY: this script can start a real mowing job and drive the mower to its dock.
   * --estop sends pause, zero movement and blades off with emergency priority; the
     physical STOP button is still the only guaranteed stop."""
 
-DEFAULT_STEP_S = 2.5
+DEFAULT_STEP_S = DEFAULT_CALIBRATION_STEP_S
 """``DriveCalibrate.step_s`` when ``--step-s`` is not given."""
 TOKEN_ENV = "MOWDECK_TOKEN"  # noqa: S105 - the variable name, not a token
 """Environment variable with the bearer token for ``--save``."""
@@ -278,8 +280,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--step-s",
         type=float,
         metavar="SECONDS",
-        help=f"with --calibrate: duration of each step (1 to {MAX_CALIBRATION_STEP_S:g}, "
-        f"default {DEFAULT_STEP_S:g})",
+        help="with --calibrate: duration of each step "
+        f"({MIN_CALIBRATION_STEP_S:g} to {MAX_CALIBRATION_STEP_S:g}, default {DEFAULT_STEP_S:g})",
     )
     parser.add_argument(
         "--calibration-out",
@@ -365,8 +367,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--spot-at and --spot-area go with --from-dock")
     if (args.step_s is not None or args.calibration_out) and not args.calibrate:
         parser.error("--step-s and --calibration-out go with --calibrate")
-    if args.step_s is not None and not 1.0 <= args.step_s <= MAX_CALIBRATION_STEP_S:
-        parser.error(f"--step-s must be between 1 and {MAX_CALIBRATION_STEP_S:g} seconds")
+    if args.step_s is not None and not (
+        MIN_CALIBRATION_STEP_S <= args.step_s <= MAX_CALIBRATION_STEP_S
+    ):
+        parser.error(
+            f"--step-s must be between {MIN_CALIBRATION_STEP_S:g} and "
+            f"{MAX_CALIBRATION_STEP_S:g} seconds"
+        )
     if args.use_calibration and not (args.spot_dry_run or args.save):
         parser.error("--use-calibration goes with --spot-dry-run or --save")
     if args.save and args.calibrate == bool(args.use_calibration):
@@ -915,8 +922,9 @@ CALIBRATION_COLUMNS = (
     "measured",
     "reports",
     "interval s",
+    "window s",
     "distance/turned",
-    "skipped",
+    "outcome",
 )
 
 
@@ -929,6 +937,8 @@ def calibration_rows(steps: Sequence[DriveCalibrationStep]) -> list[list[str]]:
         measured = "-" if step.measured is None else f"{step.measured:.3f} {unit}"
         interval = "-" if step.report_interval_s is None else f"{step.report_interval_s:.2f}"
         moved = f"{step.distance_m:.2f} m" if forward else f"{step.turned_deg:+.1f} deg"
+        window = "-" if step.window_s is None else f"{step.window_s:.1f}"
+        outcome = f"{step.outcome}: {step.note}" if step.note else step.outcome
         rows.append(
             [
                 str(number),
@@ -937,8 +947,9 @@ def calibration_rows(steps: Sequence[DriveCalibrationStep]) -> list[list[str]]:
                 measured,
                 str(step.reports),
                 interval,
+                window,
                 moved,
-                "yes" if step.skipped else "no",
+                outcome,
             ]
         )
     return rows

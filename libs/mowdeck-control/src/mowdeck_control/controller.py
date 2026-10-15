@@ -75,7 +75,10 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    ``accepted`` at once and its end is read with :meth:`MowerController.calibration_result`.
    Rule 12 applies while it runs ("drive calibration active; stop it first"): only
    ``EmergencyStop``, ``SpotStop`` (which ends it) and ``SetLight`` pass. A sensor stop and a
-   change of the activity end it. ``SetDriveSpeed`` needs ``capabilities.drive_speed_setting``
+   change of the activity end it. While it runs, a connection implementing
+   :class:`~mowdeck_control.connection.ReportRateCapable` is asked for reports every
+   ``CalibrationConfig.report_interval_s`` (as fast as its link allows) and restored to its own
+   drive interval at the end. ``SetDriveSpeed`` needs ``capabilities.drive_speed_setting``
    and a connection implementing :class:`~mowdeck_control.connection.DriveSpeedCapable`; the
    value is snapped to the declared range and step. Like ``SetLight`` it keeps an open drive
    session.
@@ -145,6 +148,7 @@ from mowdeck_control.connection import (
     current_path_of,
     dispatch_of,
     drive_speed_port_of,
+    report_rate_port_of,
 )
 from mowdeck_control.errors import CommandRejected, NotConnected, UnsupportedPattern
 from mowdeck_control.safety import (
@@ -988,12 +992,34 @@ class MowerController:
         )
         self._calibration = run
         self._calibration_task = asyncio.create_task(
-            run.run(), name=f"calibration-{envelope.command_id}"
+            self._run_calibration(run, config.report_interval_s),
+            name=f"calibration-{envelope.command_id}",
         )
         self._calibration_task.add_done_callback(self._spot_done)
         detail = f"drive calibration started ({run.steps_total} steps of {config.step_s:g} s)"
         self._log_event(envelope, detail)
         return self._result(envelope, CommandStatus.ACCEPTED, detail)
+
+    async def _run_calibration(
+        self, run: DriveCalibrationRun, report_interval_s: float
+    ) -> DriveCalibrationStatus:
+        """Run the calibration with fresh reports as fast as the link allows (a connection
+        implementing :class:`~mowdeck_control.connection.ReportRateCapable`), restoring the
+        adapter's own drive interval at the end."""
+        self._set_drive_report_interval(report_interval_s)
+        try:
+            return await run.run()
+        finally:
+            self._set_drive_report_interval(None)
+
+    def _set_drive_report_interval(self, interval_s: float | None) -> None:
+        port = report_rate_port_of(self._connection)
+        if port is None:
+            return
+        try:
+            port.set_drive_report_interval(interval_s)
+        except Exception:  # never fail the calibration over a faster report rate
+            self._log.warning("could not change the drive report interval", exc_info=True)
 
     def _on_calibration_status(self, status: DriveCalibrationStatus) -> None:
         self._calibration_status = status

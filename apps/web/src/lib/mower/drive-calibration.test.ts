@@ -22,6 +22,7 @@ import {
   isResultStored,
   snapDriveSpeed,
   speedSettingDiffers,
+  stepOutcome,
   stepRows,
   storedCalibrationOf,
   type CalibConditionState,
@@ -47,13 +48,16 @@ function step(partial: Partial<DriveCalibrationStep>): DriveCalibrationStep {
   return {
     kind: 'forward',
     command: 0.3,
-    duration_s: 2.5,
+    duration_s: 6,
     measured: 0.091,
     reports: 5,
     report_interval_s: 0.5,
     distance_m: 0.23,
     turned_deg: 0,
     skipped: false,
+    outcome: 'measured',
+    note: null,
+    window_s: 4.5,
     ...partial,
   };
 }
@@ -183,10 +187,27 @@ describe('formatting and rows', () => {
   it('builds one table row per step', () => {
     const rows = stepRows([
       step({}),
-      step({ kind: 'turn', command: -0.6, measured: null, report_interval_s: null, reports: 1 }),
-      step({ command: 1, skipped: true, duration_s: 0, measured: null, reports: 0 }),
+      step({
+        kind: 'turn',
+        command: -0.6,
+        measured: null,
+        report_interval_s: null,
+        reports: 2,
+        outcome: 'invalid',
+        note: 'too few reports',
+      }),
+      step({
+        command: 1,
+        skipped: true,
+        duration_s: 0,
+        measured: null,
+        reports: 0,
+        outcome: 'skipped',
+      }),
+      step({ kind: 'turn', command: 0.3, measured: 2, outcome: 'inconsistent' }),
+      step({ command: 0.5, measured: 0, outcome: 'outlier' }),
     ]);
-    expect(rows.map((r) => r.index)).toEqual([1, 2, 3]);
+    expect(rows.map((r) => r.index)).toEqual([1, 2, 3, 4, 5]);
     expect(rows[0]).toMatchObject({
       kindLabel: 'Geradeaus',
       command: '+0,30',
@@ -194,17 +215,50 @@ describe('formatting and rows', () => {
       reports: '5',
       interval: '0,50 s',
       missing: false,
-      skipped: false,
+      outcome: 'measured',
+      outcomeLabel: '',
+      dropped: false,
     });
+    // too few reports: shown as skipped with the reason, never as 0
     expect(rows[1]).toMatchObject({
       kindLabel: 'Drehen',
       command: '−0,60',
-      measured: 'zu wenige Meldungen',
+      measured: '–',
       interval: '–',
       missing: true,
+      outcome: 'invalid',
+      outcomeLabel: 'übersprungen – zu wenige Meldungen',
+      dropped: true,
     });
-    expect(rows[2]).toMatchObject({ measured: '–', skipped: true, missing: true });
+    expect(rows[2]).toMatchObject({ measured: '–', outcomeLabel: 'übersprungen', missing: true });
+    // dropped from the fit, the value stays visible
+    expect(rows[3]).toMatchObject({
+      measured: '2,0 °/s',
+      missing: false,
+      outcomeLabel: 'verworfen – Gegenrichtung weicht ab',
+      dropped: true,
+    });
+    expect(rows[4]).toMatchObject({ outcome: 'outlier', dropped: true });
+    expect(rows[4]?.outcomeLabel).toMatch(/^verworfen/);
     expect(stepRows(undefined)).toEqual([]);
+  });
+
+  it('marks invalid and inconsistent steps in English too', () => {
+    setLocale('en', { reload: false });
+    const rows = stepRows([
+      step({ measured: null, reports: 2, outcome: 'invalid' }),
+      step({ kind: 'turn', measured: -5.2, outcome: 'inconsistent' }),
+    ]);
+    expect(rows[0]?.outcomeLabel).toBe('skipped – too few reports');
+    expect(rows[1]?.outcomeLabel).toBe('dropped – the opposite turn disagrees');
+    setLocale('de', { reload: false });
+  });
+
+  it('reads the outcome of steps from before it existed', () => {
+    expect(stepOutcome({ skipped: true, measured: null })).toBe('skipped');
+    expect(stepOutcome({ skipped: false, measured: null })).toBe('invalid');
+    expect(stepOutcome({ skipped: false, measured: 0.1 })).toBe('measured');
+    expect(stepOutcome({ skipped: false, measured: 0.1, outcome: 'outlier' })).toBe('outlier');
   });
 
   it('lists the fit with the speed setting and the distance when known', () => {

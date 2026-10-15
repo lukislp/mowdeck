@@ -96,6 +96,14 @@ export type Kind = ("forward" | "turn")
  */
 export type Measured = (number | null)
 /**
+ * Why the step is not `measured`.
+ */
+export type Note = (string | null)
+/**
+ * `measured` (used by the fit), `skipped` (not driven), `invalid` (too few reports in the steady window), `inconsistent` (the opposite turn disagrees) or `outlier` (breaks the growth with the stick); the last three are left out of the fit.
+ */
+export type Outcome = ("measured" | "skipped" | "invalid" | "inconsistent" | "outlier")
+/**
  * Mean time between those reports.
  */
 export type ReportIntervalS = (number | null)
@@ -111,6 +119,10 @@ export type Skipped = boolean
  * Heading change during the step.
  */
 export type TurnedDeg = number
+/**
+ * Length of the steady window the value was measured over (the step without its settling time at the start).
+ */
+export type WindowS = (number | null)
 /**
  * @maxItems 32
  */
@@ -584,10 +596,13 @@ distance_m?: DistanceM
 duration_s: DurationS
 kind: Kind
 measured?: Measured
+note?: Note
+outcome?: Outcome
 report_interval_s?: ReportIntervalS
 reports?: Reports
 skipped?: Skipped
 turned_deg?: TurnedDeg
+window_s?: WindowS
 }
 /**
  * The firmware state of a mower (``MowerState.firmware_info``).

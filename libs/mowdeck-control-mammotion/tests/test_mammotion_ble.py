@@ -16,7 +16,13 @@ from mowdeck_contracts.v1 import (
     PrincipalKind,
     PrincipalRef,
 )
-from mowdeck_control import CommandRejected, MowerController, NotConnected, SensorStop
+from mowdeck_control import (
+    CommandRejected,
+    MowerController,
+    NotConnected,
+    ReportRateCapable,
+    SensorStop,
+)
 from mowdeck_control.testing import ManualClock, ManualTimers
 from mowdeck_control_mammotion import base as mammotion_base
 from mowdeck_control_mammotion import ble as ble_module
@@ -388,6 +394,32 @@ async def test_mammotion_ble_drive_poll_skips_while_reports_flow() -> None:
     conn._report_at = conn._clock_s() - 2 * mammotion_base.DRIVE_POLL_S
     await conn._drive_poll()
     assert port.refreshes == refreshes + 1
+    await session.close()
+    await conn.disconnect()
+
+
+async def test_mammotion_ble_drive_report_interval_for_a_calibration() -> None:
+    """A drive calibration asks for faster reports (ReportRateCapable): the drive interval drops
+    to the request, never below the floor, and returns to the default afterwards."""
+    conn, port = ble()
+    assert isinstance(conn, ReportRateCapable)
+    await conn.connect()
+    session = await conn.start_drive_session()
+    assert conn._current_refresh_interval_s() == mammotion_base.DRIVE_POLL_S
+    conn.set_drive_report_interval(0.5)
+    assert conn.drive_poll_s == 0.5 and conn._current_refresh_interval_s() == 0.5
+    await conn._drive_poll()
+    refreshes = port.refreshes
+    conn._report_at = conn._clock_s() - 0.6  # older than 0.9 x 0.5 s, younger than 0.9 s
+    await conn._drive_poll()
+    assert port.refreshes == refreshes + 1
+    conn.set_drive_report_interval(0.05)
+    assert conn.drive_poll_s == mammotion_base.MIN_DRIVE_POLL_S
+    conn.set_drive_report_interval(None)
+    assert conn.drive_poll_s == mammotion_base.DRIVE_POLL_S
+    conn._report_at = conn._clock_s() - 0.6
+    await conn._drive_poll()
+    assert port.refreshes == refreshes + 1, "the default interval does not poll after 0.6 s"
     await session.close()
     await conn.disconnect()
 

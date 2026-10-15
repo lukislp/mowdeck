@@ -91,7 +91,7 @@
       "type": "object"
     },
     "DriveCalibrate": {
-      "description": "Measure what the stick values mean on the ground (ADR 0042).\n\nMowDeck drives a few short steps with the blades off (forward at ``linear`` 0.3, 0.5, 0.7\nand 1.0, then turns in place at ``angular`` ±0.3, ±0.6 and ±1.0, each ``step_s`` long, zero\nframes in between) and fits the full-scale ground speed, the full-scale yaw rate and the\ndead zone. Needs ``MowerCapabilities.manual_drive``, an idle mower out of its dock with a\nfixed RTK position and about 2 m of free lawn straight ahead. Progress and the result arrive\nin ``MowerState.drive_calibration``; ``SpotStop`` and ``EmergencyStop`` end it.",
+      "description": "Measure what the stick values mean on the ground (ADR 0042).\n\nMowDeck drives a few short steps with the blades off (forward at ``linear`` 0.3, 0.5, 0.7\nand 1.0, then turns in place at ``angular`` ±0.3, ±0.6 and ±1.0, each ``step_s`` long, zero\nframes in between). Each step is measured over its steady window only (without the first\n1.5 s, while the mower reacts), and MowDeck fits the full-scale ground speed, the\nfull-scale yaw rate and the dead zone. Needs ``MowerCapabilities.manual_drive``, an idle\nmower out of its dock with a fixed RTK position and about 2 m of free lawn straight ahead.\nProgress and the result arrive in ``MowerState.drive_calibration``; ``SpotStop`` and\n``EmergencyStop`` end it.",
       "properties": {
         "kind": {
           "const": "drive_calibrate",
@@ -100,10 +100,10 @@
           "type": "string"
         },
         "step_s": {
-          "default": 2.5,
+          "default": 6.0,
           "description": "Duration of each step in seconds.",
-          "maximum": 5.0,
-          "minimum": 1.0,
+          "maximum": 12.0,
+          "minimum": 5.0,
           "title": "Step S",
           "type": "number"
         }

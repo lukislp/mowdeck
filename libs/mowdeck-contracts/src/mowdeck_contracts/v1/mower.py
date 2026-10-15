@@ -12,7 +12,12 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
-from mowdeck_contracts.v1.calibration import MAX_CALIBRATION_STEP_S, DriveCalibrationStatus
+from mowdeck_contracts.v1.calibration import (
+    DEFAULT_CALIBRATION_STEP_S,
+    MAX_CALIBRATION_STEP_S,
+    MIN_CALIBRATION_STEP_S,
+    DriveCalibrationStatus,
+)
 from mowdeck_contracts.v1.firmware import FirmwareInfo
 from mowdeck_contracts.v1.links import LinkStatus
 from mowdeck_contracts.v1.spot import (
@@ -385,16 +390,18 @@ class DriveCalibrate(ContractModel):
 
     MowDeck drives a few short steps with the blades off (forward at ``linear`` 0.3, 0.5, 0.7
     and 1.0, then turns in place at ``angular`` ±0.3, ±0.6 and ±1.0, each ``step_s`` long, zero
-    frames in between) and fits the full-scale ground speed, the full-scale yaw rate and the
-    dead zone. Needs ``MowerCapabilities.manual_drive``, an idle mower out of its dock with a
-    fixed RTK position and about 2 m of free lawn straight ahead. Progress and the result arrive
-    in ``MowerState.drive_calibration``; ``SpotStop`` and ``EmergencyStop`` end it.
+    frames in between). Each step is measured over its steady window only (without the first
+    1.5 s, while the mower reacts), and MowDeck fits the full-scale ground speed, the
+    full-scale yaw rate and the dead zone. Needs ``MowerCapabilities.manual_drive``, an idle
+    mower out of its dock with a fixed RTK position and about 2 m of free lawn straight ahead.
+    Progress and the result arrive in ``MowerState.drive_calibration``; ``SpotStop`` and
+    ``EmergencyStop`` end it.
     """
 
     kind: Literal["drive_calibrate"] = "drive_calibrate"
     step_s: float = Field(
-        default=2.5,
-        ge=1.0,
+        default=DEFAULT_CALIBRATION_STEP_S,
+        ge=MIN_CALIBRATION_STEP_S,
         le=MAX_CALIBRATION_STEP_S,
         description="Duration of each step in seconds.",
     )

@@ -233,6 +233,33 @@
           "description": "Ground speed in m/s (forward) or yaw rate in degrees per second, left positive (turn); null when too few reports arrived.",
           "title": "Measured"
         },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why the step is not `measured`.",
+          "title": "Note"
+        },
+        "outcome": {
+          "default": "measured",
+          "description": "`measured` (used by the fit), `skipped` (not driven), `invalid` (too few reports in the steady window), `inconsistent` (the opposite turn disagrees) or `outlier` (breaks the growth with the stick); the last three are left out of the fit.",
+          "enum": [
+            "measured",
+            "skipped",
+            "invalid",
+            "inconsistent",
+            "outlier"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
         "report_interval_s": {
           "anyOf": [
             {
@@ -265,6 +292,20 @@
           "description": "Heading change during the step.",
           "title": "Turned Deg",
           "type": "number"
+        },
+        "window_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Length of the steady window the value was measured over (the step without its settling time at the start).",
+          "title": "Window S"
         }
       },
       "required": [

@@ -3,21 +3,35 @@ mean on the ground.
 
 A spot run (ADR 0039) steers with normalised ``linear`` and ``angular`` values; how fast a mower
 drives and turns at a given value depends on the model, the firmware and vendor settings. The
-calibration drives a few short steps over the generic drive channel and reads only the neutral
-state (position, heading, RTK fix, ``observed_at``):
+calibration drives a few steps over the generic drive channel and reads only the neutral state
+(position, heading, RTK fix, ``observed_at``):
 
-* forward at ``linear`` 0.3, 0.5, 0.7 and 1.0, each ``step_s`` (default 2.5 s);
+* forward at ``linear`` 0.3, 0.5, 0.7 and 1.0 (low to high), each up to ``step_s`` (default
+  6 s);
 * turns in place at ``angular`` +0.3, -0.3, +0.6, -0.6, +1.0 and -1.0, each ``step_s``;
-* zero frames for ``settle_s`` between two steps, so every step starts from standstill.
+* zero frames for ``pause_s`` (default 2 s) after every step, so the mower stops before the next
+  one.
 
-Per step it measures the ground speed (forward) or the yaw rate (turn) from the position
-reports: between the first and the last report of the step when there are two, else from the
-standing pose at the step's start to its only report. It then fits
+Mowers report their pose only about once a second and react one to two seconds late, so a step
+is measured over its *steady window* only: the reports from ``settle_s`` (1.5 s) after the
+step's first frame to its last frame. The ground speed is the distance between the first and the
+last report of the window divided by the time between them, the yaw rate the unwrapped heading
+change over the same reports divided by that time. A window shorter than ``min_window_s`` (3 s)
+or with fewer than ``min_reports`` (4) reports makes the step ``invalid``: it has no value and
+never counts as standing still.
+
+Before the fit the measurements are checked: a turn and its opposite turn of the same magnitude
+must have opposite signs and agree in magnitude within ``turn_pair_tolerance`` (50 %), else
+both are ``inconsistent``; speed and yaw rate must not fall as the stick grows (within
+``monotonic_tolerance``), points that break this are ``outlier``. Both are left out of the fit.
+It then fits
 
 ``speed(c) = full_speed * (c - dead_zone) / (1 - dead_zone)`` for ``c > dead_zone``
 
-by least squares over the forward steps (the same for the yaw rate over the turns, both
-directions averaged) and returns a :class:`~mowdeck_contracts.v1.DriveCalibrationResult`.
+by least squares over at least two moving forward steps (the same for the yaw rate over the
+turn magnitudes, both directions averaged) and returns a
+:class:`~mowdeck_contracts.v1.DriveCalibrationResult`; with fewer the calibration fails
+(``no_fit``, the detail says which axis and why).
 
 Safety, the same for every manufacturer:
 
@@ -26,9 +40,10 @@ Safety, the same for every manufacturer:
   (zero frames keep the drive session open while it waits, at most ``start_wait_s``) and the
   straight line of ``room_ahead_m`` along its heading must lie inside the geofence (the mapped
   areas inset by the margin, minus the no-go zones);
-* the forward steps stop once ``max_forward_m`` were covered (a step is shortened when the
-  previous speed predicts it would pass the budget, and skipped when less than a second of
-  driving would remain); every report is checked against the geofence;
+* the forward steps stop once ``max_forward_m`` were covered: a step is shortened when the
+  speeds measured so far predict it would pass the budget, skipped (with every later forward
+  step) when it would become too short for a steady window, and cut when the reported distance
+  plus the expected run-on reaches the budget; every report is checked against the geofence;
 * a stop request (``spot_stop``, emergency stop, sensor stop, a change of activity, the link)
   or a refused frame ends it; every end sends a zero frame and closes the drive session.
 """
@@ -40,11 +55,13 @@ import logging
 import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    DEFAULT_CALIBRATION_STEP_S,
+    CalibrationStepOutcome,
     DriveCalibration,
     DriveCalibrationResult,
     DriveCalibrationState,
@@ -75,6 +92,11 @@ REASON_NO_FIT: Final = "no_fit"
 REASON_TURN_DIRECTION: Final = "turn_direction"
 """``failed``: the mower turned the other way than commanded (left must be positive)."""
 
+NOTE_TOO_FEW_REPORTS: Final = "too few reports"
+NOTE_BUDGET: Final = "the forward distance budget is used up"
+NOTE_INCONSISTENT: Final = "the opposite turn disagrees"
+NOTE_OUTLIER: Final = "slower than a smaller stick value"
+
 
 @dataclass(frozen=True, slots=True)
 class CalibrationConfig:
@@ -82,11 +104,15 @@ class CalibrationConfig:
     values)."""
 
     forward_commands: tuple[float, ...] = (0.3, 0.5, 0.7, 1.0)
+    """Forward stick values, driven in this order (low to high, so the budget check can stop
+    early)."""
     turn_commands: tuple[float, ...] = (0.3, -0.3, 0.6, -0.6, 1.0, -1.0)
-    step_s: float = 2.5
-    """Duration of each step."""
+    step_s: float = DEFAULT_CALIBRATION_STEP_S
+    """Duration of each step (forward steps may be shorter, see ``max_forward_m``)."""
     settle_s: float = 1.5
-    """Zero frames between two steps."""
+    """Start of each step left out of the measurement: the mower reacts late and speeds up."""
+    pause_s: float = 2.0
+    """Zero frames after each step, so the mower stops before the next one."""
     frame_hz: float = 5.0
     ttl_ms: int = 1000
     max_forward_m: float = 1.5
@@ -98,12 +124,29 @@ class CalibrationConfig:
     """A pose older than this does not count as fresh (before the first step)."""
     start_wait_s: float = 30.0
     """Longest wait for a fresh, fixed pose before the first step (``rtk_lost``)."""
-    min_step_s: float = 1.0
-    """A forward step shorter than this is skipped instead (too short to measure)."""
+    min_reports: int = 4
+    """Reports a steady window needs; fewer make the step ``invalid``."""
+    min_window_s: float = 3.0
+    """Shortest steady window; a shorter one makes the step ``invalid``."""
     min_speed_mps: float = 0.005
     """A step slower than this counts as standing still (below the dead zone)."""
     min_yaw_dps: float = 0.2
     """A turn slower than this counts as not turning."""
+    turn_pair_tolerance: float = 0.5
+    """Largest difference of a turn and its opposite turn, relative to the larger one."""
+    monotonic_tolerance: float = 0.15
+    """How far a value may fall below a smaller stick's value (relative) before it is an
+    outlier."""
+    forward_safety: float = 1.25
+    """Factor on the predicted speed when a forward step is shortened for the budget."""
+    report_interval_s: float = 0.5
+    """Interval of fresh reports the controller asks the connection for while the calibration
+    runs (as fast as the link allows, never faster than this)."""
+
+    @property
+    def min_step_s(self) -> float:
+        """Shortest step that can still give a valid measurement."""
+        return self.settle_s + self.min_window_s
 
 
 @dataclass(slots=True)
@@ -347,31 +390,54 @@ class DriveCalibrationRun:
         assert self._last is not None  # noqa: S101 - set by _wait_for_pose
         origin = (self._last.x, self._last.y)
         covered = 0.0
-        last_speed: tuple[float, float] | None = None  # (command, measured speed)
+        moving: list[tuple[float, float]] = []  # (command, measured speed) of valid steps
         budget_spent = False
-        for command in config.forward_commands:
+        commands = config.forward_commands
+        for index, command in enumerate(commands):
             duration = config.step_s
-            if not budget_spent and last_speed is not None and last_speed[1] > 0:
-                predicted = last_speed[1] * command / last_speed[0]
-                remaining = config.max_forward_m - covered
-                duration = min(duration, remaining / predicted if predicted > 0 else duration)
-                if duration < config.min_step_s:
+            if not budget_spent:
+                predicted = _predict_speed(moving, command)
+                if predicted is not None:
+                    remaining = config.max_forward_m - covered
+                    duration = min(duration, remaining / (predicted * config.forward_safety))
+                if duration < self._shortest_step_s() - 1e-9:
                     budget_spent = True
             if budget_spent:
                 self._skip("forward", command)
                 continue
-            step = await self._step("forward", command, duration, origin=origin)
-            if step is None:
+            # an equal share of what is left for each forward step still to come: a step ends
+            # early (once its window is valid) when it would use more
+            share = (config.max_forward_m - covered) / (len(commands) - index)
+            outcome = await self._step(
+                "forward", command, duration, origin=origin, share_until_m=covered + share
+            )
+            if outcome is None:
                 return
+            step, cut = outcome
             covered = distance(origin, (self._last.x, self._last.y))
-            if step.measured is not None and step.measured > config.min_speed_mps:
-                last_speed = (command, step.measured)
-            if covered >= config.max_forward_m:
+            if (
+                step.outcome == "measured"
+                and step.measured is not None
+                and step.measured > config.min_speed_mps
+            ):
+                moving.append((command, step.measured))
+            if cut or covered >= config.max_forward_m:
                 budget_spent = True
         for command in config.turn_commands:
             if await self._step("turn", command, config.step_s, origin=None) is None:
                 return
         self._fit(covered)
+
+    def _shortest_step_s(self) -> float:
+        """The shortest forward step that can still be valid: the settling time plus a window
+        of ``min_window_s`` that also holds ``min_reports`` reports at the report interval seen
+        so far."""
+        config = self._config
+        intervals = [s.report_interval_s for s in self._steps if s.report_interval_s]
+        if not intervals:
+            return config.min_step_s
+        interval = sum(intervals) / len(intervals)
+        return config.settle_s + max(config.min_window_s, config.min_reports * interval)
 
     def _skip(self, kind: str, command: float) -> None:
         self._steps.append(
@@ -380,6 +446,8 @@ class DriveCalibrationRun:
                 command=command,
                 duration_s=0.0,
                 skipped=True,
+                outcome="skipped",
+                note=NOTE_BUDGET,
             )
         )
         self._step_index += 1
@@ -392,13 +460,16 @@ class DriveCalibrationRun:
         duration_s: float,
         *,
         origin: tuple[float, float] | None,
-    ) -> DriveCalibrationStep | None:
-        """Drive one step and settle; the measured step, or None when the run ended."""
+        share_until_m: float | None = None,
+    ) -> tuple[DriveCalibrationStep, bool] | None:
+        """Drive one step and pause; the measured step and whether the forward budget cut it
+        short, or None when the run ended. A forward step also ends once its steady window is
+        valid and it reaches ``share_until_m`` from the origin (with the expected run-on)."""
         config = self._config
-        assert self._last is not None  # noqa: S101 - set by _wait_for_pose
         start = self._clock()
-        standing = self._last
+        window_start = start + timedelta(seconds=config.settle_s)
         reports: list[_Report] = []
+        cut = False
         linear, angular = (command, 0.0) if kind == "forward" else (0.0, command)
         while (self._clock() - start).total_seconds() < duration_s - 1e-9:
             if not await self._send(linear, angular):
@@ -410,27 +481,55 @@ class DriveCalibrationRun:
                     return None
                 continue
             reports.append(report)
-            if (
-                origin is not None
-                and distance(origin, (report.x, report.y)) >= config.max_forward_m
-            ):
-                break  # the forward budget is used up
+            if origin is None:
+                continue
+            reach = self._reach(origin, reports)
+            if reach >= config.max_forward_m:
+                cut = True
+                break
+            windowed = sum(1 for r in reports if r.at >= window_start)
+            valid = (
+                windowed >= config.min_reports
+                and (self._clock() - window_start).total_seconds() >= config.min_window_s - 1e-9
+            )
+            if valid and share_until_m is not None and reach >= share_until_m:
+                break
         end = self._clock()
-        settle_start = self._clock()
-        while (self._clock() - settle_start).total_seconds() < config.settle_s - 1e-9:
+        pause_start = self._clock()
+        while (self._clock() - pause_start).total_seconds() < config.pause_s - 1e-9:
             if not await self._send(0.0, 0.0):
                 return None
             await self._sleep(1 / config.frame_hz)
             if self._new_report() is None and self._ended:
                 return None
-        in_step = [r for r in reports if start < r.at <= end]
+        in_window = [r for r in reports if window_start <= r.at <= end]
         step = _measure(
-            kind, command, (end - start).total_seconds(), standing, start, in_step, config
+            kind,
+            command,
+            duration_s=(end - start).total_seconds(),
+            window_s=max(0.0, (end - window_start).total_seconds()),
+            reports=in_window,
+            config=config,
         )
         self._steps.append(step)
         self._step_index += 1
         self._notify()
-        return step
+        return step, cut
+
+    def _reach(self, origin: tuple[float, float], reports: list[_Report]) -> float:
+        """Distance from ``origin`` the mower will have covered when it stops now: the latest
+        report plus the expected run-on (the speed between the last two reports for
+        ``settle_s``, the mower reacts that late to the stop)."""
+        last = reports[-1]
+        covered = distance(origin, (last.x, last.y))
+        run_on = 0.0
+        if len(reports) >= 2:
+            prev = reports[-2]
+            dt = (last.at - prev.at).total_seconds()
+            if dt > 0:
+                speed = distance((prev.x, prev.y), (last.x, last.y)) / dt
+                run_on = speed * self._config.settle_s
+        return covered + run_on
 
     def _new_report(self) -> _Report | None:
         """The latest report when it is new (checked against the geofence and the RTK fix);
@@ -449,15 +548,27 @@ class DriveCalibrationRun:
         self._last = report
         return report
 
+    def _mark(self, index: int, outcome: CalibrationStepOutcome, note: str) -> None:
+        self._steps[index] = self._steps[index].model_copy(
+            update={"outcome": outcome, "note": note}
+        )
+
+    def _usable(self, kind: str) -> list[tuple[int, float, DriveCalibrationStep]]:
+        """``(index, value, step)`` of the steps of ``kind`` that still count."""
+        return [
+            (i, s.measured, s)
+            for i, s in enumerate(self._steps)
+            if s.kind == kind and s.outcome == "measured" and s.measured is not None
+        ]
+
     def _fit(self, covered: float) -> None:
         config = self._config
-        forward = [
-            (s.command, s.measured)
-            for s in self._steps
-            if s.kind == "forward" and s.measured is not None and not s.skipped
+        turns = self._usable("turn")
+        inverted = [
+            s
+            for _, value, s in turns
+            if abs(value) >= config.min_yaw_dps and (s.command > 0) != (value > 0)
         ]
-        turns = [(s.command, s.measured) for s in self._steps if s.kind == "turn" and s.measured]
-        inverted = [(c, r) for c, r in turns if abs(r) >= config.min_yaw_dps and (c > 0) != (r > 0)]
         if inverted and len(inverted) * 2 > len(turns):
             self._end(
                 "failed",
@@ -465,20 +576,30 @@ class DriveCalibrationRun:
                 "the mower turned against the command (left must be positive)",
             )
             return
-        speed_fit = _fit_line([(c, v) for c, v in forward], config.min_speed_mps)
+        self._check_turn_pairs()
+        forward = self._monotonic(
+            [(s.command, value, [i]) for i, value, s in self._usable("forward")],
+            config.min_speed_mps,
+        )
+        speed_fit = _fit_line(forward, config.min_speed_mps)
         if speed_fit is None:
-            self._end("failed", REASON_NO_FIT, "the mower did not move forward measurably")
+            self._end("failed", REASON_NO_FIT, self._no_fit_detail("forward", forward))
             return
-        by_magnitude: dict[float, list[float]] = {}
-        for c, r in turns:
-            if (c > 0) == (r > 0):
-                by_magnitude.setdefault(round(abs(c), 3), []).append(abs(r))
-        yaw_fit = _fit_line(
-            [(c, sum(rs) / len(rs)) for c, rs in sorted(by_magnitude.items())],
+        by_magnitude: dict[float, list[tuple[int, float]]] = {}
+        for i, value, s in self._usable("turn"):
+            # left positive: a right turn's yaw counts with the opposite sign
+            yaw = value if s.command > 0 else -value
+            by_magnitude.setdefault(round(abs(s.command), 3), []).append((i, yaw))
+        yaw_points = self._monotonic(
+            [
+                (c, sum(y for _, y in group) / len(group), [i for i, _ in group])
+                for c, group in sorted(by_magnitude.items())
+            ],
             config.min_yaw_dps,
         )
+        yaw_fit = _fit_line(yaw_points, config.min_yaw_dps)
         if yaw_fit is None:
-            self._end("failed", REASON_NO_FIT, "the mower did not turn measurably")
+            self._end("failed", REASON_NO_FIT, self._no_fit_detail("turn", yaw_points))
             return
         full_speed, dead_zone = speed_fit
         full_yaw, turn_dead_zone = yaw_fit
@@ -495,6 +616,87 @@ class DriveCalibrationRun:
             calibration=calibration, steps=list(self._steps), forward_m=round(covered, 3)
         )
         self._end("done", None, None)
+
+    def _check_turn_pairs(self) -> None:
+        """Mark a turn and its opposite turn ``inconsistent`` when their signs do not differ or
+        their magnitudes differ by more than ``turn_pair_tolerance``. A turn whose opposite has
+        no value is kept (nothing contradicts it)."""
+        config = self._config
+        pairs: dict[float, dict[bool, tuple[int, float]]] = {}
+        for i, value, s in self._usable("turn"):
+            pairs.setdefault(round(abs(s.command), 3), {})[s.command > 0] = (i, value)
+        for pair in pairs.values():
+            if len(pair) < 2:
+                continue
+            (left, a), (right, b) = pair[True], pair[False]
+            if abs(a) < config.min_yaw_dps and abs(b) < config.min_yaw_dps:
+                continue  # both stand: consistent (below the dead zone)
+            larger = max(abs(a), abs(b))
+            opposite = a * b < 0
+            agree = abs(abs(a) - abs(b)) <= config.turn_pair_tolerance * larger
+            if opposite and agree:
+                continue
+            self._mark(left, "inconsistent", NOTE_INCONSISTENT)
+            self._mark(right, "inconsistent", NOTE_INCONSISTENT)
+
+    def _monotonic(
+        self, points: list[tuple[float, float, list[int]]], minimum: float
+    ) -> list[tuple[float, float]]:
+        """The points ``(command, value, step indexes)`` that grow with the stick (the longest
+        chain in which no value falls more than ``monotonic_tolerance`` below an earlier one,
+        of two equally long ones the faster: a mower rather stalls than speeds up by error);
+        the others are marked ``outlier``. Returns ``(command, value)`` of the kept ones."""
+        tolerance = self._config.monotonic_tolerance
+        ordered = sorted(points, key=lambda p: abs(p[0]))
+        n = len(ordered)
+        if n == 0:
+            return []
+        best = [(1, ordered[k][1]) for k in range(n)]  # (chain length, sum of its values)
+        prev = [-1] * n
+        for j in range(n):
+            for i in range(j):
+                grows = ordered[j][1] >= ordered[i][1] * (1 - tolerance) - minimum
+                candidate = (best[i][0] + 1, best[i][1] + ordered[j][1])
+                if grows and candidate > best[j]:
+                    best[j], prev[j] = candidate, i
+        j = max(range(n), key=lambda k: best[k])
+        keep: set[int] = set()
+        while j >= 0:
+            keep.add(j)
+            j = prev[j]
+        for k, (_, _, indexes) in enumerate(ordered):
+            if k not in keep:
+                for index in indexes:
+                    self._mark(index, "outlier", NOTE_OUTLIER)
+        return [(abs(ordered[k][0]), ordered[k][1]) for k in sorted(keep)]
+
+    def _no_fit_detail(self, kind: str, points: list[tuple[float, float]]) -> str:
+        """Why the axis ``kind`` has no fit: the usable steps and what became of the others."""
+        config = self._config
+        minimum = config.min_speed_mps if kind == "forward" else config.min_yaw_dps
+        steps = [s for s in self._steps if s.kind == kind]
+        axis = "forward steps" if kind == "forward" else "turns"
+        moving = sum(1 for _, v in points if v >= minimum)
+        if moving >= 2:
+            return f"the {axis} do not grow with the stick"
+        counts = {
+            outcome: sum(1 for s in steps if s.outcome == outcome)
+            for outcome in ("skipped", "invalid", "inconsistent", "outlier")
+        }
+        dropped = ", ".join(f"{n} {o}" for o, n in counts.items() if n)
+        if kind == "forward":
+            detail = f"only {moving} of {len(steps)} forward steps usable, 2 needed"
+        else:
+            magnitudes = len({round(abs(s.command), 3) for s in steps})
+            detail = f"only {moving} of {magnitudes} turn magnitudes usable, 2 needed"
+        if dropped:
+            detail += f" ({dropped})"
+        if kind == "forward" and counts["skipped"]:
+            detail += (
+                f"; too fast for the {config.max_forward_m:g} m forward budget, lower the speed "
+                "for manual driving and calibrate again"
+            )
+        return detail
 
     # --- frames and state ------------------------------------------------------------------
 
@@ -570,72 +772,85 @@ def _report_of(pose: Pose) -> _Report:
 def _measure(
     kind: str,
     command: float,
+    *,
     duration_s: float,
-    standing: _Report,
-    start: datetime,
+    window_s: float,
     reports: list[_Report],
     config: CalibrationConfig,
 ) -> DriveCalibrationStep:
-    """One step's measurement (see the module docs)."""
+    """One step's measurement over the reports of its steady window (see the module docs)."""
     intervals = [(b.at - a.at).total_seconds() for a, b in itertools.pairwise(reports)]
     interval = sum(intervals) / len(intervals) if intervals else None
-    measured: float | None = None
-    moved = 0.0
-    turned = 0.0
-    if reports:
-        chain = [standing, *reports]
-        moved = sum(distance((a.x, a.y), (b.x, b.y)) for a, b in itertools.pairwise(chain))
-        turned = sum(wrap_angle(b.theta - a.theta) for a, b in itertools.pairwise(chain))
-        if len(reports) >= 2:
-            first, last = reports[0], reports[-1]
-            dt = (last.at - first.at).total_seconds()
-            pair = [first, *reports[1:]]
-        else:
-            first, last = standing, reports[0]
-            dt = (last.at - start).total_seconds()
-            pair = [standing, reports[0]]
-        if dt > 0.2:
-            if kind == "forward":
-                measured = distance((first.x, first.y), (last.x, last.y)) / dt
-            else:
-                yaw = sum(wrap_angle(b.theta - a.theta) for a, b in itertools.pairwise(pair))
-                measured = math.degrees(yaw) / dt
-    return DriveCalibrationStep(
+    moved = sum(distance((a.x, a.y), (b.x, b.y)) for a, b in itertools.pairwise(reports))
+    turned = sum(wrap_angle(b.theta - a.theta) for a, b in itertools.pairwise(reports))
+    span = (reports[-1].at - reports[0].at).total_seconds() if reports else 0.0
+    step = DriveCalibrationStep(
         kind="forward" if kind == "forward" else "turn",
         command=command,
         duration_s=round(duration_s, 2),
-        measured=round(measured, 4) if measured is not None else None,
         reports=len(reports),
         report_interval_s=round(interval, 3) if interval is not None else None,
         distance_m=round(moved, 3),
         turned_deg=round(math.degrees(turned), 2),
+        window_s=round(window_s, 2),
     )
+    if len(reports) < config.min_reports or window_s < config.min_window_s - 1e-6 or span <= 0:
+        note = (
+            f"{NOTE_TOO_FEW_REPORTS}: {len(reports)} in {window_s:.1f} s "
+            f"({config.min_reports} in {config.min_window_s:g} s needed)"
+        )
+        return step.model_copy(update={"outcome": "invalid", "note": note})
+    first, last = reports[0], reports[-1]
+    if kind == "forward":
+        measured = distance((first.x, first.y), (last.x, last.y)) / span
+    else:
+        measured = math.degrees(turned) / span
+    return step.model_copy(update={"measured": round(measured, 4)})
+
+
+def _predict_speed(moving: list[tuple[float, float]], command: float) -> float | None:
+    """The speed expected at ``command`` from the moving forward steps so far: proportional to
+    the last one, or the line through the last two when that is faster (a dead zone makes the
+    proportional guess too low); None without a moving step."""
+    if not moving:
+        return None
+    c2, v2 = moving[-1]
+    predicted = v2 * command / c2
+    if len(moving) >= 2:
+        c1, v1 = moving[-2]
+        if c2 != c1:
+            predicted = max(predicted, v2 + (v2 - v1) / (c2 - c1) * (command - c2))
+    return predicted if predicted > 0 else None
 
 
 def _fit_line(points: list[tuple[float, float]], minimum: float) -> tuple[float, float] | None:
     """``(full, dead_zone)`` of ``value = full * (c - dz) / (1 - dz)`` through ``points``
-    (``(command, value)``); None without a moving point."""
+    (``(command, value)``) by least squares over the moving ones; None with fewer than two
+    moving points or a line that does not rise."""
     moving = [(abs(c), v) for c, v in points if v >= minimum and abs(c) > 0]
-    if not moving:
+    if len(moving) < 2:
         return None
-    if len(moving) >= 2:
-        n = len(moving)
-        mean_c = sum(c for c, _ in moving) / n
-        mean_v = sum(v for _, v in moving) / n
-        var = sum((c - mean_c) ** 2 for c, _ in moving)
-        if var > 1e-9:
-            slope = sum((c - mean_c) * (v - mean_v) for c, v in moving) / var
-            intercept = mean_v - slope * mean_c
-            if slope > 0:
-                full = slope + intercept
-                dead_zone = max(0.0, min(0.9, -intercept / slope))
-                if full > 0:
-                    return full, dead_zone
-    c, v = max(moving)
-    return v / c, 0.0
+    n = len(moving)
+    mean_c = sum(c for c, _ in moving) / n
+    mean_v = sum(v for _, v in moving) / n
+    var = sum((c - mean_c) ** 2 for c, _ in moving)
+    if var <= 1e-9:
+        return None
+    slope = sum((c - mean_c) * (v - mean_v) for c, v in moving) / var
+    if slope <= 0:
+        return None
+    intercept = mean_v - slope * mean_c
+    full = slope + intercept
+    if full <= 0:
+        return None
+    return full, max(0.0, min(0.9, -intercept / slope))
 
 
 __all__ = [
+    "NOTE_BUDGET",
+    "NOTE_INCONSISTENT",
+    "NOTE_OUTLIER",
+    "NOTE_TOO_FEW_REPORTS",
     "REASON_NO_FIT",
     "REASON_TURN_DIRECTION",
     "CalibrationConfig",
