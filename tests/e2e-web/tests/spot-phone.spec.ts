@@ -98,6 +98,20 @@ test('spot mowing on a phone: a bottom sheet with snap points keeps the map visi
   // --- Escape back to peek; a drag up on the handle opens it again --------------------------
   await page.keyboard.press('Escape');
   await expect(sheet).toHaveAttribute('data-snap', 'peek');
+  // The snap attribute flips at once while the sheet still slides down: wait until the handle
+  // has settled before aiming the drag at it.
+  let last = -1;
+  await expect
+    .poll(
+      async () => {
+        const top = (await handle.boundingBox())?.y ?? -1;
+        const settled = Math.abs(top - last) < 0.5;
+        last = top;
+        return settled;
+      },
+      { intervals: [100] },
+    )
+    .toBe(true);
   const grip = (await handle.boundingBox())!;
   const x = grip.x + grip.width / 2;
   const y = grip.y + grip.height / 2;
