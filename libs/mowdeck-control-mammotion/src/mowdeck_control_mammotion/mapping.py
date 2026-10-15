@@ -14,7 +14,8 @@ map points are copied unchanged and the reference is the RTK origin (stored in r
 
 import logging
 import math
-from collections.abc import Iterable, Mapping
+import time
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Final
@@ -30,8 +31,10 @@ from mowdeck_contracts.v1 import (
     CameraSession,
     ConnectionKind,
     DockPose,
+    FirmwareInfo,
     GeoPosition,
     GeoReference,
+    LinkStatus,
     LocalPoint,
     MapArea,
     MapPath,
@@ -44,6 +47,7 @@ from mowdeck_contracts.v1 import (
     MowPathKind,
     MowPathProgress,
     PositionSource,
+    ProxyInfo,
     RtkFixStatus,
     RtkSource,
     StartMow,
@@ -52,6 +56,8 @@ from mowdeck_control.geo import to_wgs84
 from mowdeck_control.translation import MowRequest, NativeJob, Pattern, plan_to_native_job
 
 from mowdeck_control_mammotion.port import (
+    FIRMWARE_PLACEHOLDER,
+    CheckDeviceVersion,
     CoordinateConverter,
     CuttingMode,
     DeviceType,
@@ -59,6 +65,7 @@ from mowdeck_control_mammotion.port import (
     MowerDevice,
     MowPathPacket,
     OperationSettings,
+    OTAProgress,
     PathAngleSetting,
     RTKStatus,
     StreamSubscriptionResponse,
@@ -98,6 +105,7 @@ _ACTIVITY_BY_MODE: Final[Mapping[WorkMode, MowerActivity]] = {
     WorkMode.MODE_SLEEPING: MowerActivity.OFFLINE,
     WorkMode.MODE_UNCONNECTED: MowerActivity.OFFLINE,
     WorkMode.MODE_DISABLE: MowerActivity.OFFLINE,
+    WorkMode.MODE_UPDATING: MowerActivity.UPDATING,
     **dict.fromkeys(_ERROR_MODES, MowerActivity.ERROR),
 }
 """Work modes with a fixed activity. Every other known mode is ``idle`` (or ``docked`` on the
@@ -377,13 +385,16 @@ def state_of(
     model: str = "",
     light_reported: bool = False,
     speed_setpoint_mps: float | None = None,
+    links: Mapping[str, LinkStatus] | None = None,
+    firmware_info: FirmwareInfo | None = None,
 ) -> MowerState:
     """Build the :class:`MowerState` snapshot of ``device``.
 
     ``light_reported``: the mower answered a headlamp read (see :func:`light_on_of`).
     ``speed_setpoint_mps``: the speed the next job will use (the adapter's last ``SetSpeed`` or
     its default); reported as ``speed_mps`` while the mower reports no speed (idle, docked),
-    with ``raw["speed_source"]`` ``setpoint`` instead of ``reported``.
+    with ``raw["speed_source"]`` ``setpoint`` instead of ``reported``. ``links`` and
+    ``firmware_info`` are the connection's additional links and firmware state (ADR 0038).
     """
     activity = activity_of(device, has_report=has_report)
     code, message = error_of(device, activity)
@@ -422,8 +433,221 @@ def state_of(
         error_message=message,
         firmware=firmware[:64] or None,
         light_on=light_on,
+        links=dict(links) if links else {},
+        firmware_info=firmware_info,
         raw=raw,
     )
+
+
+# --- Links and firmware (ADR 0038) ------------------------------------------------------------
+
+
+def link_status_of(
+    proxy: ProxyInfo | None, *, connected: bool, since: datetime | None, rssi: int | None
+) -> LinkStatus:
+    """The state of the bridge link for ``MowerState.links``: the link flags plus what the
+    bridge said about itself when the link opened (``proxy``, None before the first open)."""
+    return LinkStatus(
+        connected=connected,
+        since=since,
+        rssi=rssi if connected and rssi is not None and -128 <= rssi <= 20 else None,
+        esphome_version=proxy.esphome_version if proxy else None,
+        compiled_at=proxy.compiled_at if proxy else None,
+        project_version=proxy.project_version if proxy else None,
+        outdated=proxy.outdated if proxy else False,
+        outdated_reason=proxy.outdated_reason if proxy else None,
+    )
+
+
+FIRMWARE_UPDATE_MAX_S: Final = 45 * 60.0
+"""An update that neither finished nor failed within this time ends as ``unknown``."""
+
+
+def _clean_version(value: object) -> str | None:
+    text = str(value or "").strip()
+    return text[:64] if text and text != FIRMWARE_PLACEHOLDER else None
+
+
+def available_version_of(check: CheckDeviceVersion | None) -> str | None:
+    """The version the vendor offers, None when the mower is up to date (or nothing is known)."""
+    if check is None or not check.upgradeable or check.product_version_info_vo is None:
+        return None
+    return _clean_version(check.product_version_info_vo.release_version)
+
+
+def firmware_info_of(
+    check: CheckDeviceVersion | None,
+    *,
+    installed: str,
+    checked_at: datetime | None,
+    installing: bool = False,
+) -> FirmwareInfo:
+    """A :class:`FirmwareInfo` from the vendor's ``CheckDeviceVersion`` (``None``: no check yet,
+    ``update_state`` ``unknown``). ``installed`` is the adapter's firmware version, falling
+    back to the check's ``current_version``; ``installing`` (or the check's ``isupgrading``)
+    reports a running update with the check's ``progress``."""
+    available = available_version_of(check)
+    running = installing or bool(check is not None and check.isupgrading)
+    if running:
+        state = "installing"
+    elif check is None:
+        state = "unknown"
+    elif available:
+        state = "available"
+    else:
+        state = "idle"
+    notes = (
+        check.product_version_info_vo.release_note
+        if check is not None and available and check.product_version_info_vo is not None
+        else None
+    )
+    progress = check.progress if check is not None and running else None
+    return FirmwareInfo(
+        installed=_clean_version(installed)
+        or _clean_version(check.current_version if check else None),
+        available=available,
+        release_notes=str(notes)[:4000] if notes else None,
+        update_state=state,  # type: ignore[arg-type]
+        progress=progress if progress is not None and 0 <= progress <= 100 else None,
+        checked_at=checked_at,
+    )
+
+
+def _live_ota_frame(device: MowerDevice, *, since: float) -> OTAProgress | None:
+    """The device's last upgrade report (``events.ota_progress``) when one arrived in this
+    process (``ota_progress_at``, PyMammotion's monotonic stamp) and not before ``since``;
+    the default frame reads as "complete" and must not count."""
+    stamped = float(getattr(device, "ota_progress_at", 0.0) or 0.0)
+    if stamped <= 0.0 or stamped < since:
+        return None
+    frame: OTAProgress | None = getattr(getattr(device, "events", None), "ota_progress", None)
+    return frame
+
+
+@dataclass(slots=True)
+class FirmwareTracker:
+    """The firmware state of one connection: the last vendor check and the course of an update.
+
+    An update starts with :meth:`started` (or when the device reports ``isupgrading`` out of the
+    blue: someone started it in the vendor app) and ends when :meth:`observe` sees a report
+    with a new firmware version or a completed OTA frame (``idle``), a failed OTA frame
+    (``failed`` with the mower's message), or :data:`FIRMWARE_UPDATE_MAX_S` passed
+    (``unknown``). Progress comes from ``device.update_check`` (the MQTT property
+    ``otaProgress`` and the BLE ``toapp_upgrade_report`` both land there).
+    """
+
+    info: FirmwareInfo | None = None
+    started_at: float | None = None
+    """Loop time when the running update began (None: no update runs)."""
+    started_from: str | None = None
+    """The installed version when the update began."""
+    started_mono: float = 0.0
+    """``time.monotonic()`` when MowDeck requested the update: OTA frames stamped before it
+    belong to an earlier update and are ignored."""
+    check: CheckDeviceVersion | None = None
+
+    @property
+    def installing(self) -> bool:
+        return self.started_at is not None
+
+    def checked(
+        self, check: CheckDeviceVersion | None, *, installed: str, now: datetime
+    ) -> FirmwareInfo:
+        """Record a vendor check (a running update keeps its state)."""
+        self.check = check
+        self.info = firmware_info_of(
+            check, installed=installed, checked_at=now, installing=self.installing
+        )
+        if self.info.update_state == "installing" and not self.installing:
+            self.started_at = float("nan")  # started elsewhere; the clock is set on observe
+            self.started_from = _clean_version(installed)
+        return self.info
+
+    def started(self, version: str, *, installed: str, loop_time: float) -> FirmwareInfo:
+        """The vendor accepted the update request."""
+        self.started_at = loop_time
+        self.started_from = _clean_version(installed)
+        self.started_mono = time.monotonic()
+        previous = self.info or FirmwareInfo()
+        self.info = previous.model_copy(
+            update={"available": version, "update_state": "installing", "progress": 0}
+        )
+        return self.info
+
+    def observe(
+        self, device: MowerDevice, *, installed: str, loop_time: float, now: datetime
+    ) -> str | None:
+        """Fold a device update in; returns ``"finished"``, ``"failed"``, ``"unknown"`` when a
+        running update ended (the caller republishes and re-checks), ``"changed"`` when only
+        the progress moved, None otherwise."""
+        check = device.update_check
+        if not self.installing:
+            if check.isupgrading:
+                self.started_at = loop_time
+                self.started_from = _clean_version(installed)
+                self.info = firmware_info_of(
+                    self.check or check, installed=installed, checked_at=now, installing=True
+                )
+                self.info = self.info.model_copy(update={"progress": check.progress or 0})
+                return "changed"
+            return None
+        if self.started_at is not None and math.isnan(self.started_at):
+            self.started_at = loop_time
+        assert self.info is not None  # noqa: S101 - set when the update started
+        current = _clean_version(installed)
+        ota = _live_ota_frame(device, since=self.started_mono)
+        if current is not None and current != self.started_from:
+            return self._ended("finished", installed=current, now=now)
+        if ota is not None and ota.is_failed:
+            reason = (ota.message or "the mower reported an error").strip()[:500]
+            return self._ended("failed", installed=current, now=now, reason=reason)
+        complete = (ota is not None and ota.is_complete) or (
+            not check.isupgrading and (check.progress or 0) >= 100
+        )
+        if complete:
+            new_version = _clean_version(ota.version) if ota is not None else None
+            return self._ended("finished", installed=new_version or current, now=now)
+        if loop_time - (self.started_at or loop_time) > FIRMWARE_UPDATE_MAX_S:
+            return self._ended("unknown", installed=current, now=now)
+        progress = (
+            check.progress if check.progress is not None and 0 <= check.progress <= 100 else None
+        )
+        if progress is not None and progress != self.info.progress:
+            self.info = self.info.model_copy(update={"progress": progress})
+            return "changed"
+        return None
+
+    def _ended(
+        self, how: str, *, installed: str | None, now: datetime, reason: str | None = None
+    ) -> str:
+        assert self.info is not None  # noqa: S101 - set when the update started
+        self.started_at = None
+        self.started_from = None
+        self.started_mono = 0.0
+        self.check = None
+        if how == "finished":
+            self.info = self.info.model_copy(
+                update={
+                    "installed": installed or self.info.available,
+                    "available": None,
+                    "release_notes": None,
+                    "update_state": "idle",
+                    "progress": None,
+                    "failure_reason": None,
+                    "checked_at": now,
+                }
+            )
+        else:
+            self.info = self.info.model_copy(
+                update={
+                    "installed": installed or self.info.installed,
+                    "update_state": how,
+                    "progress": None,
+                    "failure_reason": reason,
+                    "checked_at": now,
+                }
+            )
+        return how
 
 
 # --- Light ------------------------------------------------------------------------------------
@@ -573,8 +797,11 @@ def capabilities_of(
     manual_drive_blades: bool,
     camera: bool = False,
     model: str = "",
+    links_supported: Sequence[str] = (),
+    firmware_update: bool = False,
 ) -> MowerCapabilities:
-    """Capabilities of one mower over one link.
+    """Capabilities of one mower over one link (``links_supported`` and ``firmware_update``
+    describe the connection, ADR 0038).
 
     Blade height and speed limits come from PyMammotion's per-model table
     (:func:`port.model_config_of`): the entry of ``mower_state.sub_model_id`` (the exact model,
@@ -605,6 +832,8 @@ def capabilities_of(
         min_speed_mps=speed[0] if speed else None,
         max_speed_mps=speed[1] if speed else None,
         connection_kinds=CONNECTION_KINDS,
+        links_supported=list(links_supported),
+        firmware_update=firmware_update,
     )
 
 

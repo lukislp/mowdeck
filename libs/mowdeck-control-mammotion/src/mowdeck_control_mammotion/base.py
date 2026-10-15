@@ -26,7 +26,22 @@ Commands (Mammotion-HA order for ``StartMow``, spike 0001 section 3.3):
                    read ``get_car_light(ids=1126)`` (PyMammotion's ``mower_api.py``); ``executed``
                    when the answer shows the wanted state, else ``accepted``; allowed during
                    an error (AI assist lights up a stuck mower)
+``FirmwareUpdate`` cloud only (ADR 0038): ``clear_version_info`` and the vendor's
+                   ``start_ota_upgrade`` (:meth:`MammotionPort.start_firmware_update`),
+                   confirmed by ``update_check.isupgrading`` or the work mode
+                   ``MODE_UPDATING``; the preconditions are the controller's rules
+                   (:func:`mowdeck_control.safety.firmware_update_problem`), applied here once
+                   more for direct callers
 =================  =========================================================================
+
+Firmware (ADR 0038): the state carries ``firmware_info`` once the vendor was asked
+(:meth:`MammotionBase.check_firmware`, cloud only) or the mower reports a running update. A
+:class:`~mowdeck_control_mammotion.mapping.FirmwareTracker` follows the update through the
+device updates (``update_check`` from the MQTT property ``otaProgress`` and the BLE
+``toapp_upgrade_report``): it ends ``idle`` on a report with a new version or a completed
+frame, ``failed`` on a failed frame (with the mower's message) and ``unknown`` after
+``FIRMWARE_UPDATE_MAX_S``. When it ended, the device information rounds run again and the
+vendor is asked once more after :data:`FIRMWARE_RECHECK_S`.
 
 Confirmation: every confirmed command is sent first and then confirmed through the reported
 state (:class:`~mowdeck_control.TwoPhaseExecution`: :meth:`MammotionBase.dispatch` sends,
@@ -81,6 +96,9 @@ from mowdeck_contracts.v1 import (
     CameraSession,
     ConnectionKind,
     EmergencyStop,
+    FirmwareInfo,
+    FirmwareUpdate,
+    LinkStatus,
     MowerActivity,
     MowerCapabilities,
     MowerMap,
@@ -108,11 +126,13 @@ from mowdeck_control import (
     StateBroadcaster,
     StateSubscription,
     UnsupportedPattern,
+    firmware_update_problem,
 )
 
 from mowdeck_control_mammotion import mapping
 from mowdeck_control_mammotion.port import (
     CommandTimeoutError,
+    FirmwareRefused,
     GenerateRouteInformation,
     MammotionPort,
     MowerDevice,
@@ -186,6 +206,10 @@ PATH_RETRY_S: Final = 30.0
 """Wait before the route of a running job is fetched again after a failed attempt."""
 PATH_ATTEMPTS: Final = 3
 """Fetches of the route of one job at most."""
+FIRMWARE_RECHECK_S: Final = 60.0
+"""Wait after an update ended before the vendor is asked again (the cloud lags the mower)."""
+FIRMWARE_CONFIRM_S: Final = 120.0
+"""Longest wait for the mower to report a requested update as running."""
 
 
 class MammotionBase:
@@ -253,6 +277,8 @@ class MammotionBase:
         self._route: GenerateRouteInformation | None = None
         """The route of the last start (used as the job settings of a later fetch)."""
         self._preview_lock = asyncio.Lock()
+        self._firmware = mapping.FirmwareTracker()
+        self._firmware_recheck: asyncio.Task[None] | None = None
 
     # --- MowerConnection: lifecycle -------------------------------------------------------
 
@@ -304,6 +330,7 @@ class MammotionBase:
             await self._stop_refresh()
             await self._stop_device_info()
             await self._stop_path_fetch()
+            await self._stop_firmware_recheck()
             if self._unsubscribe is not None:
                 self._unsubscribe()
                 self._unsubscribe = None
@@ -528,6 +555,13 @@ class MammotionBase:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 
+    async def _stop_firmware_recheck(self) -> None:
+        task, self._firmware_recheck = self._firmware_recheck, None
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
     async def _stop_refresh(self) -> None:
         task, self._refresher = self._refresher, None
         if task is not None:
@@ -547,6 +581,8 @@ class MammotionBase:
             manual_drive_blades=self._manual_blades_allowed(),
             camera=self._camera_offered(),
             model=self._port.model(),
+            links_supported=self._links_supported(),
+            firmware_update=self._firmware_offered(),
         )
 
     async def get_state(self) -> MowerState:
@@ -647,6 +683,8 @@ class MammotionBase:
                     return Dispatch.done(Outcome.accepted(f"speed {command.mps} m/s sent"))
                 case SetLight():
                     return Dispatch.done(await self._set_light(on=command.on))
+                case FirmwareUpdate():
+                    return await self._firmware_update(command.version)
         except CommandTimeoutError:
             # Only the route request waits for a reply; ``start_job`` was not sent.
             return Dispatch.done(Outcome.failed("the mower did not answer in time"))
@@ -678,6 +716,22 @@ class MammotionBase:
     def _manual_blades_allowed(self) -> bool:
         return False
 
+    def _firmware_offered(self) -> bool:
+        """Whether the vendor's firmware service is reachable (the cloud connections)."""
+        return False
+
+    def _links_supported(self) -> list[str]:
+        """Additional link kinds this connection can open (``capabilities.links_supported``)."""
+        return []
+
+    def _link_statuses(self) -> dict[str, LinkStatus]:
+        """The state of the additional links for ``MowerState.links``."""
+        return {}
+
+    def _connection_kind(self) -> ConnectionKind:
+        """The kind the state reports (the link in use right now)."""
+        return self._kind
+
     def _link_alive(self) -> bool:
         return True
 
@@ -686,6 +740,105 @@ class MammotionBase:
 
     async def _before_close(self) -> None:
         return None
+
+    # --- firmware (ADR 0038) --------------------------------------------------------------
+
+    @property
+    def firmware_info(self) -> FirmwareInfo | None:
+        """The firmware state the snapshot reports (None before a check or an update)."""
+        return self._firmware.info
+
+    async def _check_firmware(self) -> FirmwareInfo | None:
+        """Ask the vendor (:meth:`MammotionPort.check_firmware`) and store the answer."""
+        self._require_connected()
+        if not self._firmware_offered():
+            return None
+        try:
+            check = await self._port.check_firmware()
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("the Mammotion cloud session is not open") from exc
+        except Exception as exc:
+            _log.warning(
+                "firmware check of %s failed: %s", self._port.device_name, type(exc).__name__
+            )
+            raise NotConnected("the Mammotion cloud did not answer the firmware check") from exc
+        info = self._firmware.checked(check, installed=self._port.firmware(), now=self._clock())
+        _log.info(
+            "firmware of %s: installed %s, %s%s",
+            self._port.device_name,
+            info.installed,
+            info.update_state,
+            f" {info.available}" if info.available else "",
+        )
+        if self._connected:
+            self._publish(force=True)
+        return info
+
+    async def _firmware_update(self, version: str) -> Dispatch:
+        """Send the update request (``FirmwareUpdate``) after the controller's rules."""
+        if not self._firmware_offered():
+            raise CommandRejected("firmware updates need the cloud link")
+        problem = firmware_update_problem(
+            version, self._snapshot(), await self.capabilities(), drive_session_open=False
+        )
+        if problem is not None:
+            raise CommandRejected(problem)
+        try:
+            await self._port.start_firmware_update(version)
+        except FirmwareRefused as exc:
+            raise CommandRejected(str(exc)) from exc
+        self._firmware.started(version, installed=self._port.firmware(), loop_time=self._clock_s())
+        self._publish(force=True)
+        self.boost_refresh()
+
+        async def confirm() -> Outcome:
+            def running(device: MowerDevice) -> bool:
+                return (
+                    bool(device.update_check.isupgrading)
+                    or mapping.work_mode(device) is WorkMode.MODE_UPDATING
+                )
+
+            if await self._port.wait_for(running, min(self._confirm_timeout_s, FIRMWARE_CONFIRM_S)):
+                return Outcome.executed(f"firmware update to {version} is running")
+            return Outcome.accepted(
+                f"firmware update to {version} requested; the mower has not reported it yet"
+            )
+
+        return Dispatch.awaiting(f"firmware update to {version} requested", confirm)
+
+    def _track_firmware(self, device: MowerDevice) -> None:
+        """Fold the device update into the firmware tracker; an ended update republishes the
+        device information and asks the vendor again after :data:`FIRMWARE_RECHECK_S`."""
+        ended = self._firmware.observe(
+            device, installed=self._port.firmware(), loop_time=self._clock_s(), now=self._clock()
+        )
+        if ended in ("finished", "failed", "unknown"):
+            _log.info("firmware update of %s ended: %s", self._port.device_name, ended)
+            if (
+                self._connected
+                and self._device_info_task is not None
+                and self._device_info_task.done()
+            ):
+                self._device_info_task = asyncio.create_task(
+                    self._request_device_info(), name=f"device-info-{self._port.device_name}"
+                )
+            if self._connected and self._firmware_offered() and self._firmware_recheck is None:
+                self._firmware_recheck = asyncio.create_task(
+                    self._recheck_firmware_later(),
+                    name=f"firmware-recheck-{self._port.device_name}",
+                )
+
+    async def _recheck_firmware_later(self) -> None:
+        try:
+            await asyncio.sleep(FIRMWARE_RECHECK_S)
+            if self._connected:
+                await self._check_firmware()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _log.debug("firmware re-check of %s failed", self._port.device_name, exc_info=True)
+        finally:
+            self._firmware_recheck = None
 
     # --- commands -------------------------------------------------------------------------
 
@@ -997,7 +1150,7 @@ class MammotionBase:
             self._port.device(),
             mower_id=self._config.mower_id,
             account_id=self._config.account_id,
-            connection=self.kind,
+            connection=self._connection_kind(),
             device_name=self._port.device_name,
             firmware=self._port.firmware(),
             observed_at=self._clock(),
@@ -1006,6 +1159,8 @@ class MammotionBase:
             model=self._port.model(),
             light_reported=self._light_reported,
             speed_setpoint_mps=self._speed_mps or DEFAULT_SPEED_MPS,
+            links=self._link_statuses(),
+            firmware_info=self._firmware.info,
         )
 
     async def _on_device_update(self) -> None:
@@ -1014,6 +1169,7 @@ class MammotionBase:
 
     def _publish(self, *, force: bool = False) -> None:
         try:
+            self._track_firmware(self._port.device())
             state = self._snapshot()
         except Exception:
             _log.exception("cannot map the state of %s", self._config.mower_id)

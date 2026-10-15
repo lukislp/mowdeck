@@ -19,9 +19,14 @@ from dataclasses import dataclass, field
 from typing import Any, Final
 
 from mowdeck_control_mammotion.port import (
+    OTA_RESULT_IN_PROGRESS,
+    OTA_RESULT_SUCCESS,
     AreaHashNameList,
+    BridgeLink,
+    CheckDeviceVersion,
     CommandTimeoutError,
     CommDataCouple,
+    DrvUpgradeReport,
     FrameList,
     GenerateRouteInformation,
     LampInfo,
@@ -35,6 +40,7 @@ from mowdeck_control_mammotion.port import (
     PathType,
     PortClosedError,
     Priority,
+    ProductVersionInfo,
     RootHashList,
     StateListener,
     StreamSubscriptionResponse,
@@ -46,6 +52,10 @@ from mowdeck_control_mammotion.port import (
 
 SAMPLE_DEVICE_NAME: Final = "Luba-VPDRYRUN"
 SAMPLE_PRODUCT_KEY: Final = "a1iMygIwxFC"  # a Luba VP (LUBA 2 AWD X) product key
+SAMPLE_FIRMWARE: Final = "1.30.29.26"
+SAMPLE_NEWER_FIRMWARE: Final = "1.30.31.19"
+"""The release that restores movement over Wi-Fi: what the fake vendor offers."""
+SAMPLE_IOT_ID: Final = "fakeiot0001"
 SAMPLE_SUB_MODEL_ID: Final = "HM030070LB2PAWD50OMNI"
 """Sub model of a LUBA 2 AWD 5000X in PyMammotion's table: blade 25 to 70 mm, mowing speed
 0.2 to 0.6 m/s. The Luba VP product key itself is not in the table."""
@@ -239,6 +249,32 @@ def sample_device(
     return device
 
 
+def firmware_offer(
+    *,
+    current: str = SAMPLE_FIRMWARE,
+    available: str | None = SAMPLE_NEWER_FIRMWARE,
+    release_note: str = "Restores manual driving over Wi-Fi and fixes RTK dropouts.",
+    iot_id: str = SAMPLE_IOT_ID,
+    isupgrading: bool = False,
+    progress: int = 0,
+) -> CheckDeviceVersion:
+    """A ``CheckDeviceVersion`` as the vendor's version check answers it: ``upgradeable`` with
+    ``product_version_info_vo`` when ``available`` is set, else up to date."""
+    return CheckDeviceVersion(
+        device_id=iot_id,
+        device_name=SAMPLE_DEVICE_NAME,
+        current_version=current,
+        upgradeable=available is not None,
+        isupgrading=isupgrading,
+        progress=progress,
+        product_version_info_vo=ProductVersionInfo(
+            release_note=release_note, release_version=available
+        )
+        if available
+        else None,
+    )
+
+
 _MODE_AFTER: Final[dict[str, WorkMode]] = {
     "start_job": WorkMode.MODE_WORKING,
     "pause_execute_task": WorkMode.MODE_PAUSE,
@@ -341,6 +377,27 @@ class FakeMammotionPort:
         """When True, :meth:`wait_for` waits up to ``timeout_s`` for a state change
         (:meth:`emit`) that satisfies the predicate, like PyMammotion; otherwise it answers at
         once from the current state."""
+        self.ble = False
+        """Whether the BLE transport through a bridge is connected (ADR 0038)."""
+        self.bridge: BridgeLink | None = None
+        """The bridge link attached last (:meth:`attach_bridge`)."""
+        self.attach_error: Exception | None = None
+        """What :meth:`attach_bridge` raises (the Bluetooth connection failed)."""
+        self.rssi: int | None = -61
+        """The RSSI reported while the bridge is attached (``None``: unknown)."""
+        self.attached = 0
+        self.detached = 0
+        self.firmware_check: CheckDeviceVersion | None = None
+        """What :meth:`check_firmware` answers (None: the cloud API is not available)."""
+        self.firmware_check_error: Exception | None = None
+        self.firmware_checks = 0
+        self.ota_started: list[str] = []
+        """Versions :meth:`start_firmware_update` was asked for, in order."""
+        self.ota_error: Exception | None = None
+        self.firmware_update_seconds: float | None = None
+        """When set, a started update progresses by itself (real seconds) to completion with the
+        new version, like the fake cloud's mowers; None: tests deliver the progress."""
+        self._ota_task: asyncio.Task[None] | None = None
         self._emitted = asyncio.Event()
         self._listeners: list[StateListener] = []
         self._open = False
@@ -376,6 +433,10 @@ class FakeMammotionPort:
     async def close(self) -> None:
         self.closed += 1
         self._open = False
+        self.ble = False
+        task, self._ota_task = self._ota_task, None
+        if task is not None:
+            task.cancel()
 
     def device(self) -> MowerDevice:
         if not self._open:
@@ -504,7 +565,92 @@ class FakeMammotionPort:
             raise self.video_error
         return self.video
 
+    def ble_connected(self) -> bool:
+        return self._open and self.ble
+
+    def ble_rssi(self) -> int | None:
+        return self.rssi if self.ble_connected() else None
+
+    async def attach_bridge(self, link: BridgeLink) -> None:
+        if not self._open:
+            raise PortClosedError("fake port is closed")
+        self.attached += 1
+        if self.attach_error is not None:
+            raise self.attach_error
+        self.bridge = link
+        self.ble = True
+        await self.emit()
+
+    async def detach_bridge(self) -> None:
+        self.detached += 1
+        self.bridge = None
+        if self.ble:
+            self.ble = False
+            if self._open:
+                await self.emit()
+
+    async def check_firmware(self) -> CheckDeviceVersion | None:
+        if not self._open:
+            raise PortClosedError("fake port is closed")
+        self.firmware_checks += 1
+        if self.firmware_check_error is not None:
+            raise self.firmware_check_error
+        if self.firmware_check is not None:
+            self._device.apply_version_check(self.firmware_check)
+        return self.firmware_check
+
+    async def start_firmware_update(self, version: str) -> None:
+        if not self._open:
+            raise PortClosedError("fake port is closed")
+        if self.ota_error is not None:
+            raise self.ota_error
+        self._device.clear_version_info()
+        self.ota_started.append(version)
+        if self.firmware_update_seconds is not None:
+            self._ota_task = asyncio.create_task(
+                self._run_ota(version, self.firmware_update_seconds)
+            )
+
+    async def _run_ota(self, version: str, seconds: float) -> None:
+        """Progress like a mower pushing ``toapp_upgrade_report`` frames, then the new version."""
+        steps = 5
+        for step in range(1, steps + 1):
+            await asyncio.sleep(seconds / (steps + 1))
+            await self.deliver_ota_progress(step * 100 // (steps + 1), version=version)
+        await asyncio.sleep(seconds / (steps + 1))
+        await self.deliver_ota_progress(100, result=OTA_RESULT_SUCCESS, version=version)
+
     # --- test helpers ---------------------------------------------------------------------
+
+    async def deliver_ota_progress(
+        self,
+        progress: int,
+        *,
+        result: int = OTA_RESULT_IN_PROGRESS,
+        version: str = "",
+        message: str = "",
+        otaid: str = "fake-ota-1",
+    ) -> None:
+        """Fold an upgrade report into the device like PyMammotion's reducer does for the BLE
+        ``toapp_upgrade_report`` (``Device.apply_ota_progress``): a completion (``result`` 0)
+        also makes the device report ``version`` as its firmware; then notify the listeners."""
+        report = DrvUpgradeReport(
+            devname="MainCtrl",
+            otaid=otaid,
+            version=version,
+            progress=progress,
+            result=result,
+            message=message,
+        )
+        self._device.apply_ota_progress(report)
+        if result == OTA_RESULT_SUCCESS and version:
+            self._firmware = version
+            self._device.mower_state.swversion = version
+        await self.emit()
+
+    def set_work_mode_updating(self, updating: bool) -> None:
+        """Put the device into (or out of) ``MODE_UPDATING`` without notifying listeners."""
+        self.set_mode(WorkMode.MODE_UPDATING if updating else WorkMode.MODE_READY)
 
     @property
     def listener_count(self) -> int:
@@ -592,6 +738,9 @@ __all__ = [
     "OBSTACLE_HASH",
     "PATH_HASH",
     "SAMPLE_DEVICE_NAME",
+    "SAMPLE_FIRMWARE",
+    "SAMPLE_IOT_ID",
+    "SAMPLE_NEWER_FIRMWARE",
     "SAMPLE_PATH_LINES",
     "SAMPLE_PRODUCT_KEY",
     "SAMPLE_SUB_MODEL_ID",
@@ -601,6 +750,7 @@ __all__ = [
     "PathLine",
     "SentCommand",
     "dock_buffer",
+    "firmware_offer",
     "frames",
     "install_mow_path",
     "route_hash",

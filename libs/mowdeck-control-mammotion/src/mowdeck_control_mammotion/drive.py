@@ -5,6 +5,10 @@ controller owns the dead-man timer; there is no timer here). Blades are switched
 ``operate_on_device`` and only when a frame asks for them and the connection allows them;
 otherwise they are kept off. :meth:`stop` sends a zero movement and blades off; both
 :meth:`stop` and :meth:`close` are idempotent and never raise after a link loss.
+
+With a dual link (ADR 0038) the session gets ``link_up``: a frame while the Bluetooth bridge is
+down closes the session and raises :class:`~mowdeck_control.NotConnected` instead of letting
+PyMammotion route the movement over the cloud.
 """
 
 import logging
@@ -36,11 +40,13 @@ class BleDriveSession:
         blades_allowed: bool,
         blade_height_mm: int,
         sensor_stop: Callable[[], str | None],
+        link_up: Callable[[], bool] | None = None,
     ) -> None:
         self._port = port
         self._blades_allowed = blades_allowed
         self._blade_height_mm = blade_height_mm
         self._sensor_stop = sensor_stop
+        self._link_up = link_up
         self._open = True
         self._blades_on = False
 
@@ -56,6 +62,10 @@ class BleDriveSession:
     async def update(self, linear: float, angular: float, blade_on: bool) -> None:
         if not self._open:
             raise CommandRejected("drive session is closed")
+        if self._link_up is not None and not self._link_up():
+            # Dual link: the frame must never fall back to the cloud transport.
+            self._open = False
+            raise NotConnected("the Bluetooth bridge is not connected")
         reason = self._sensor_stop()
         if reason is not None:
             await self.stop()

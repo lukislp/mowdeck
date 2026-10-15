@@ -20,10 +20,22 @@ PyMammotion API names used (file references are relative to the installed packag
 * ``http.http.MammotionHTTP.get_video_resource`` and the models ``StreamSubscriptionResponse``,
   ``VideoResourceResponse`` (``http/model/camera_stream.py``); ``utility.agora_token``
   (``decode_agora_token``, claims only, never the token text).
+* Firmware (ADR 0038): ``MammotionHTTP.get_device_ota_firmware([iot_id])`` (``POST
+  /device-server/v1/devices/version/check``, model ``CheckDeviceVersion`` with
+  ``product_version_info_vo``) and ``MammotionHTTP.start_ota_upgrade(iot_id, version)`` (``POST
+  /device-server/v1/ota/device/upgrade``); ``MowerDevice.apply_version_check``,
+  ``clear_version_info`` and ``update_check`` (progress from the MQTT property ``otaProgress``
+  and the BLE ``toapp_upgrade_report``, see ``Device.apply_ota_progress``);
+  ``events.ota_progress`` (``OTAProgress`` with ``is_complete`` and ``is_failed``).
+* Dual link (ADR 0038): ``MammotionClient.add_ble_to_device(device_name, ble_device,
+  account_id, rssi)`` attaches a BLE transport to the registered cloud device,
+  ``connect_ble(device_name, account_id)`` opens it, ``DeviceHandle.set_prefer_ble`` prefers it,
+  ``disconnect_transport(TransportType.BLE)`` drops it (``client.py``, ``ble_inventory.py``).
 * ``device.handle.DeviceHandle``: ``snapshot.raw``, ``subscribe_state_changed``,
   ``has_usable_transport``, ``is_transport_connected``, ``get_transport``, ``queue.is_saga_active``,
   ``last_report_data_at``, ``firmware_version`` (fallback), ``snapshot.raw.device_firmwares``,
-  ``mqtt_properties.params.items.extMod``, ``product_key``, ``iot_id``, ``wait_for``.
+  ``mqtt_properties.params.items.extMod``, ``product_key``, ``iot_id``, ``account_id``,
+  ``wait_for``.
 * ``messaging.mow_path_saga.MowPathSaga`` (the planned route: ``generate_route_information``
   unless ``skip_planning``, the line hash list sub_cmd 3, the ``cover_path_upload`` frames into
   ``HashList.current_mow_path``), enqueued with ``DeviceHandle.enqueue_saga`` like
@@ -62,6 +74,12 @@ from pymammotion.data.model.device_capabilities import DeviceConfig
 from pymammotion.data.model.device_config import OperationSettings, build_route_information
 from pymammotion.data.model.device_info import LampInfo
 from pymammotion.data.model.enums import RTKStatus
+from pymammotion.data.model.events import (
+    OTA_RESULT_FAILED,
+    OTA_RESULT_IN_PROGRESS,
+    OTA_RESULT_SUCCESS,
+    OTAProgress,
+)
 from pymammotion.data.model.generate_route_information import GenerateRouteInformation
 from pymammotion.data.model.hash_list import (
     AreaHashNameList,
@@ -84,9 +102,10 @@ from pymammotion.http.model.camera_stream import (
     StreamSubscriptionResponse,
     VideoResourceResponse,
 )
+from pymammotion.http.model.http import CheckDeviceVersion, ProductVersionInfo
 from pymammotion.messaging.command_queue import Priority
 from pymammotion.messaging.mow_path_saga import MowPathSaga
-from pymammotion.proto import SystemUpdateBufMsg
+from pymammotion.proto import DrvUpgradeReport, SystemUpdateBufMsg
 from pymammotion.transport.base import (
     AccountInUseError,
     AuthError,
@@ -102,11 +121,16 @@ from pymammotion.utility.device_type import DeviceType
 
 __all__ = [
     "MOW_PATH_SAGA_CEILING_S",
+    "OTA_RESULT_FAILED",
+    "OTA_RESULT_IN_PROGRESS",
+    "OTA_RESULT_SUCCESS",
     "AccountInUseError",
     "AgoraTokenClaims",
     "AreaHashNameList",
     "AuthError",
+    "BridgeLink",
     "Camera",
+    "CheckDeviceVersion",
     "ClientPort",
     "CommDataCouple",
     "CommandTimeoutError",
@@ -115,6 +139,8 @@ __all__ = [
     "DeviceHandle",
     "DeviceType",
     "Dock",
+    "DrvUpgradeReport",
+    "FirmwareRefused",
     "FrameList",
     "GenerateRouteInformation",
     "HashList",
@@ -131,12 +157,14 @@ __all__ = [
     "NavGetCommData",
     "NavGetHashListData",
     "NoTransportAvailableError",
+    "OTAProgress",
     "OpenedClient",
     "OperationSettings",
     "PathAngleSetting",
     "PathType",
     "PortClosedError",
     "Priority",
+    "ProductVersionInfo",
     "RTKStatus",
     "RootHashList",
     "StateListener",
@@ -246,6 +274,25 @@ def model_of(device: object, device_name: str, product_key: str = "") -> str:
 
 class PortClosedError(TransportError):
     """The port has no open client (never opened, or closed)."""
+
+
+class FirmwareRefused(Exception):  # noqa: N818 - reads like the other outcomes
+    """The vendor's firmware service refused the request (the message is safe to show)."""
+
+
+@runtime_checkable
+class BridgeLink(Protocol):
+    """What :meth:`MammotionPort.attach_bridge` needs from an open Bluetooth bridge
+    (:class:`~mowdeck_control_mammotion.esphome.ProxyLink` satisfies it)."""
+
+    @property
+    def ble_device(self) -> Any:
+        """The bleak ``BLEDevice`` of the mower as the bridge's scanner saw it."""
+        ...
+
+    def rssi(self) -> int | None:
+        """The mower's signal strength at the bridge (dBm), if known."""
+        ...
 
 
 class MowPathFetchError(Exception):
@@ -425,6 +472,32 @@ class MammotionPort(Protocol):
         """The 4G video budget of the mower; None when unknown."""
         ...
 
+    def ble_connected(self) -> bool:
+        """True while a BLE transport (through a bridge) is connected."""
+        ...
+
+    def ble_rssi(self) -> int | None:
+        """The mower's signal strength at the attached bridge (dBm), None without one."""
+        ...
+
+    async def attach_bridge(self, link: BridgeLink) -> None:
+        """Attach the BLE transport of ``link`` to the mower's cloud device, connect it and
+        prefer it for commands (ADR 0038). Raises when the Bluetooth connection fails."""
+        ...
+
+    async def detach_bridge(self) -> None:
+        """Drop the BLE transport again (the bridge is gone); commands go over the cloud."""
+        ...
+
+    async def check_firmware(self) -> CheckDeviceVersion | None:
+        """Ask the vendor cloud for the firmware state of the mower; None when the cloud API is
+        not available (BLE only) or answered without data. Raises on a failed request."""
+        ...
+
+    async def start_firmware_update(self, version: str) -> None:
+        """Ask the vendor cloud to install ``version``; raises :class:`FirmwareRefused`."""
+        ...
+
 
 def select_handle(
     client: MammotionClient, *, device_name: str | None, iot_id: str | None
@@ -526,6 +599,7 @@ class ClientPort:
         self._client: MammotionClient | None = None
         self._handle: DeviceHandle | None = None
         self._release: Callable[[], Awaitable[None]] | None = None
+        self._bridge: BridgeLink | None = None
 
     # --- state ----------------------------------------------------------------------------
 
@@ -554,6 +628,9 @@ class ClientPort:
     def ble_connected(self) -> bool:
         """True while the handle's BLE transport is connected."""
         return self._handle is not None and self._handle.is_transport_connected(TransportType.BLE)
+
+    def ble_rssi(self) -> int | None:
+        return self._bridge.rssi() if self._bridge is not None else None
 
     def device(self) -> MowerDevice:
         raw = self._require_handle().snapshot.raw
@@ -588,6 +665,7 @@ class ClientPort:
     async def close(self) -> None:
         client, self._client, self._handle = self._client, None, None
         release, self._release = self._release, None
+        self._bridge = None
         if release is not None:
             try:
                 await release()
@@ -747,6 +825,69 @@ class ClientPort:
         response = await http.get_video_resource(handle.iot_id)
         data = getattr(response, "data", None)
         return data if isinstance(data, VideoResourceResponse) else None
+
+    # --- dual link (ADR 0038) -------------------------------------------------------------
+
+    async def attach_bridge(self, link: BridgeLink) -> None:
+        client = self._require_client()
+        handle = self._require_handle()
+        account_id = getattr(handle, "account_id", None)
+        await client.add_ble_to_device(handle.device_name, link.ble_device, account_id, link.rssi())
+        await client.connect_ble(handle.device_name, account_id)
+        if not handle.is_transport_connected(TransportType.BLE):
+            msg = f"the Bluetooth link to {handle.device_name} did not come up"
+            raise NoTransportAvailableError(msg)
+        handle.set_prefer_ble(value=True)
+        self._bridge = link
+        _log.info("BLE through the bridge attached to %s", handle.device_name)
+
+    async def detach_bridge(self) -> None:
+        self._bridge = None
+        handle = self._handle
+        if handle is None:
+            return
+        handle.set_prefer_ble(value=False)
+        try:
+            await handle.disconnect_transport(TransportType.BLE)
+        except Exception:  # the bridge is gone already; the cloud goes on
+            _log.debug("dropping the BLE transport of %s failed", handle.device_name, exc_info=True)
+
+    # --- firmware (ADR 0038) --------------------------------------------------------------
+
+    async def check_firmware(self) -> CheckDeviceVersion | None:
+        client = self._require_client()
+        handle = self._require_handle()
+        http = client.mammotion_http
+        if http is None or not handle.iot_id:
+            return None
+        response = await http.get_device_ota_firmware([handle.iot_id])
+        data = getattr(response, "data", None) or []
+        checks = [c for c in data if isinstance(c, CheckDeviceVersion)]
+        check = next((c for c in checks if c.device_id == handle.iot_id), None) or (
+            checks[0] if checks else None
+        )
+        if check is None:
+            code = getattr(response, "code", None)
+            if code not in (None, 200):
+                msg = f"the firmware check failed with code {code}"
+                raise FirmwareRefused(msg)
+            return None
+        self.device().apply_version_check(check)
+        return check
+
+    async def start_firmware_update(self, version: str) -> None:
+        client = self._require_client()
+        handle = self._require_handle()
+        http = client.mammotion_http
+        if http is None or not handle.iot_id:
+            raise FirmwareRefused("firmware updates need the cloud link")
+        self.device().clear_version_info()  # the version is fetched again after the update
+        response = await http.start_ota_upgrade(handle.iot_id, version)
+        code = getattr(response, "code", 200)
+        if code != 200:
+            msg = f"the firmware service refused the update (code {code})"
+            raise FirmwareRefused(msg)
+        _log.info("firmware update of %s to %s requested", handle.device_name, version)
 
     # --- helpers --------------------------------------------------------------------------
 

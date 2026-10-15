@@ -33,6 +33,14 @@ a :class:`~mowdeck_control_mammotion.session.CloudSessionPool` (one login per ac
 of one per mower); each connection selects its own device handle and keeps its own state,
 camera, refresh loop and device information rounds. Closing a connection releases its share;
 the last one stops the client.
+
+Firmware and links (ADR 0038): the cloud connection is the
+:class:`~mowdeck_control.FirmwarePort` of a Mammotion mower (the vendor's version check and OTA
+request go over the account's HTTPS session) and can look for the mower through a Bluetooth
+bridge (:class:`~mowdeck_control.BridgeScanCapable`, ESPHome scan in
+:mod:`mowdeck_control_mammotion.esphome`); it declares ``ble_bridge`` in
+``capabilities.links_supported``. A registration whose options carry such a link gets a
+:class:`~mowdeck_control_mammotion.dual.MammotionDualConnection` from the factory.
 """
 
 import asyncio
@@ -41,13 +49,23 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from functools import partial
-from typing import Final, cast
+from typing import Any, Final, Protocol, cast
 
-from mowdeck_contracts.v1 import CameraSession, ConnectionKind, utc_now
+from mowdeck_contracts.v1 import (
+    LINK_BLE_BRIDGE,
+    BridgeScanError,
+    BridgeScanErrorCode,
+    BridgeScanReply,
+    CameraSession,
+    ConnectionKind,
+    FirmwareInfo,
+    utc_now,
+)
 from mowdeck_control import ConnectionConfig, NotConnected
 
 from mowdeck_control_mammotion import mapping
 from mowdeck_control_mammotion.base import MammotionBase
+from mowdeck_control_mammotion.esphome import EsphomeUnavailable, scan_proxy
 from mowdeck_control_mammotion.options import CloudOptions
 from mowdeck_control_mammotion.port import (
     ClientPort,
@@ -70,6 +88,21 @@ CAMERA_REQUEST_TIMEOUT_S: Final = 10.0
 VIDEO_RESOURCE_TIMEOUT_S: Final = 3.0
 
 
+class BridgeScanner(Protocol):
+    """Scans through a Bluetooth bridge (:func:`~mowdeck_control_mammotion.esphome.scan_proxy`
+    or a fake)."""
+
+    async def __call__(
+        self,
+        *,
+        host: str,
+        port: int,
+        noise_psk: str,
+        expected_name: str | None,
+        timeout_s: float,
+    ) -> BridgeScanReply: ...
+
+
 class MammotionCloudConnection(MammotionBase):
     """A LUBA (or other Mammotion mower) through the Mammotion cloud."""
 
@@ -82,6 +115,7 @@ class MammotionCloudConnection(MammotionBase):
         options: CloudOptions,
         *,
         clock: Callable[[], datetime] = utc_now,
+        scanner: BridgeScanner | None = None,
     ) -> None:
         super().__init__(
             port,
@@ -94,12 +128,69 @@ class MammotionCloudConnection(MammotionBase):
             report_stream_s=options.report_stream_seconds,
         )
         self.options = options
+        self._scanner: BridgeScanner = scanner or scan_proxy
 
     def _link_label(self) -> str:
         return "cloud" if self._port.link_up else "cloud (no usable transport)"
 
     def _camera_offered(self) -> bool:
         return True
+
+    def _firmware_offered(self) -> bool:
+        return True
+
+    def _links_supported(self) -> list[str]:
+        return [LINK_BLE_BRIDGE]
+
+    # --- firmware (FirmwarePort, ADR 0038) ----------------------------------------------------
+
+    async def check_firmware(self) -> FirmwareInfo | None:
+        """Ask the Mammotion cloud what is installed and offered (``get_device_ota_firmware``);
+        the answer lands in ``MowerState.firmware_info`` and is published."""
+        return await self._check_firmware()
+
+    async def start_firmware_update(self, version: str) -> None:
+        """Ask the Mammotion cloud to install ``version`` (``start_ota_upgrade``) after the
+        safety rules; raises :class:`~mowdeck_control.CommandRejected` otherwise. Returns as
+        soon as the request went out; the state follows the update."""
+        self._require_connected()
+        await self._firmware_update(version)
+
+    # --- bridge scan (BridgeScanCapable, ADR 0038) ------------------------------------------
+
+    async def scan_bridge(
+        self,
+        *,
+        host: str,
+        port: int,
+        secret: str,
+        expected_name: str | None,
+        timeout_s: float,
+    ) -> BridgeScanReply:
+        """Look for the mower through the bridge at ``host``:``port`` (ESPHome native API with
+        ``secret`` as the encryption key); never raises for a bridge problem."""
+        try:
+            return await self._scanner(
+                host=host,
+                port=port,
+                noise_psk=secret,
+                expected_name=expected_name,
+                timeout_s=timeout_s,
+            )
+        except EsphomeUnavailable as exc:
+            return BridgeScanReply(
+                error=BridgeScanError(code=BridgeScanErrorCode.UNSUPPORTED, detail=str(exc)[:500])
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _log.warning("bridge scan of %s failed: %s", host, type(exc).__name__)
+            return BridgeScanReply(
+                error=BridgeScanError(
+                    code=BridgeScanErrorCode.UNREACHABLE,
+                    detail=f"scan through {host}:{port} failed: {type(exc).__name__}"[:500],
+                )
+            )
 
     async def get_camera_session(self) -> CameraSession | None:
         """A fresh Agora session for the mower's camera; None for models without a camera.
@@ -208,14 +299,30 @@ def cloud_port(options: CloudOptions, pool: CloudSessionPool | None = None) -> C
     )
 
 
+def split_link_options(options: Any) -> tuple[dict[str, Any], Any]:
+    """``(connection options, links)``: the ``links`` entry of a registration's options is not
+    a cloud option (the Device-Gateway copies ``MowerRegistration.links`` into it)."""
+    plain = dict(options)
+    return plain, plain.pop("links", None)
+
+
 def cloud_connection_factory(
     pool: CloudSessionPool,
 ) -> Callable[[ConnectionConfig], MammotionCloudConnection]:
-    """A ``ConnectionKind.CLOUD`` factory whose connections share sessions from ``pool``."""
+    """A ``ConnectionKind.CLOUD`` factory whose connections share sessions from ``pool``; a
+    registration with a ``ble_bridge`` link gets a
+    :class:`~mowdeck_control_mammotion.dual.MammotionDualConnection`."""
 
     def create(config: ConnectionConfig) -> MammotionCloudConnection:
-        options = CloudOptions.parse(config.options)
-        return MammotionCloudConnection(cloud_port(options, pool), config, options)
+        from mowdeck_control_mammotion.dual import MammotionDualConnection, dual_link_options
+
+        plain, _links = split_link_options(config.options)
+        options = CloudOptions.parse(plain)
+        link = dual_link_options(config.options)
+        port = cloud_port(options, pool)
+        if link is not None:
+            return MammotionDualConnection(port, config, options, link)
+        return MammotionCloudConnection(port, config, options)
 
     return create
 

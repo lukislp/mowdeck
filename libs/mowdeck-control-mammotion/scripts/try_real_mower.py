@@ -24,6 +24,18 @@ BLE through an ESPHome Bluetooth Proxy (later)::
 
     uv run python .../try_real_mower.py --esphome mowdeck-bridge.local,<noise_psk>,AA:BB:CC:DD:EE:FF
 
+Dual link (ADR 0038: the cloud plus the bridge, as the Device-Gateway runs it for a mower with
+a ``ble_bridge`` link; set ``MAMMOTION_BLE_ADDRESS`` or pass ``--ble-address``)::
+
+    uv run python .../try_real_mower.py --bridge mowdeck-bridge.local,<noise_psk> --wait 90
+
+The run prints the link state (``connection``, ``links.ble_bridge`` with RSSI and the bridge
+firmware) every two seconds, so the hardware questions of the design can be answered: does
+the BLE transport attach and get preferred, does the state flip to ``ble_bridge`` and back when
+the bridge is unplugged, does the cloud go on meanwhile. ``--scan HOST,KEY`` only looks through
+the bridge for mowers (what the web app's "add a bridge" dialog does) and ``--firmware-check``
+asks the Mammotion cloud what is installed and offered; neither changes anything on the mower.
+
 Without hardware or credentials (fake PyMammotion port)::
 
     uv run python .../try_real_mower.py --dry-run --start-area "Front lawn" --estop
@@ -61,10 +73,11 @@ from mowdeck_control import (
     MowerController,
     NotConnected,
     camera_session_of,
+    firmware_port_of,
 )
 from mowdeck_control_mammotion.base import MammotionBase
 from mowdeck_control_mammotion.cloud import MammotionCloudConnection, create_cloud_connection
-from mowdeck_control_mammotion.fake import SAMPLE_DEVICE_NAME, FakeMammotionPort
+from mowdeck_control_mammotion.fake import SAMPLE_DEVICE_NAME, FakeMammotionPort, firmware_offer
 from mowdeck_control_mammotion.mapping import area_summary
 from mowdeck_control_mammotion.options import CloudOptions
 from mowdeck_control_mammotion.port import Camera, StreamSubscriptionResponse
@@ -129,6 +142,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="use the BLE path through an ESPHome Bluetooth Proxy instead of the cloud",
     )
     parser.add_argument(
+        "--bridge",
+        metavar="HOST,PSK",
+        help="cloud plus a Bluetooth bridge (dual link, ADR 0038); needs --ble-address or "
+        "MAMMOTION_BLE_ADDRESS",
+    )
+    parser.add_argument(
+        "--ble-address", metavar="MAC", help="the mower's Bluetooth address for --bridge"
+    )
+    parser.add_argument(
+        "--scan",
+        metavar="HOST,PSK",
+        help="look for mowers through the bridge and exit (no cloud login needed)",
+    )
+    parser.add_argument(
+        "--firmware-check",
+        action="store_true",
+        help="ask the Mammotion cloud what firmware is installed and offered",
+    )
+    parser.add_argument(
         "--device-name", help="BLE only: the advertised name, e.g. Luba-VP... (else advertised)"
     )
     parser.add_argument(
@@ -160,6 +192,7 @@ def build_connection(args: argparse.Namespace) -> MowerConnection:
         )
         config = ConnectionConfig(mower_id=MOWER_ID, account_id=ACCOUNT_ID)
         port = FakeMammotionPort(device_name=SAMPLE_DEVICE_NAME)
+        port.firmware_check = firmware_offer()  # the fake vendor offers an update
         port.stream = StreamSubscriptionResponse(
             appid="dry-run-app",
             openEncrypt=1,
@@ -192,23 +225,65 @@ def build_connection(args: argparse.Namespace) -> MowerConnection:
     ]
     if missing:
         raise SystemExit(f"set {', '.join(missing)} (or use --dry-run)")
-    return create_cloud_connection(
-        ConnectionConfig(
-            mower_id=MOWER_ID,
-            account_id=ACCOUNT_ID,
-            options={
-                "account": os.environ["MAMMOTION_ACCOUNT"],
-                "credential_ref": "env:MAMMOTION_PASSWORD",
+    cloud_options: dict[str, Any] = {
+        "account": os.environ["MAMMOTION_ACCOUNT"],
+        "credential_ref": "env:MAMMOTION_PASSWORD",
+        "device_name": os.environ["MAMMOTION_DEVICE_NAME"],
+        "session_cache_path": str(args.session_cache),
+    }
+    if args.bridge:
+        host, psk = parse_host_key(args.bridge, "--bridge")
+        mac = args.ble_address or os.environ.get("MAMMOTION_BLE_ADDRESS")
+        if not mac:
+            raise SystemExit("--bridge needs --ble-address or MAMMOTION_BLE_ADDRESS")
+        cloud_options["links"] = {
+            "ble_bridge": {
+                "host": host,
+                "noise_psk": psk,
+                "ble_address": mac,
                 "device_name": os.environ["MAMMOTION_DEVICE_NAME"],
-                "session_cache_path": str(args.session_cache),
-            },
-        )
+            }
+        }
+    return create_cloud_connection(
+        ConnectionConfig(mower_id=MOWER_ID, account_id=ACCOUNT_ID, options=cloud_options)
     )
+
+
+def parse_host_key(value: str, flag: str) -> tuple[str, str]:
+    """``HOST,KEY`` of ``--bridge`` and ``--scan``."""
+    try:
+        host, psk = (part.strip() for part in value.split(","))
+    except ValueError:
+        raise SystemExit(f"{flag} needs HOST,KEY") from None
+    return host, psk
+
+
+async def run_scan(args: argparse.Namespace, log: JsonLog) -> int:
+    """``--scan``: look for mowers through the bridge (ADR 0038) and print the reply."""
+    from mowdeck_control_mammotion.esphome import scan_proxy
+
+    host, psk = parse_host_key(args.scan, "--scan")
+    reply = await scan_proxy(
+        host=host,
+        port=6053,
+        noise_psk=psk,
+        expected_name=os.environ.get("MAMMOTION_DEVICE_NAME") or args.device_name,
+        timeout_s=min(args.wait, 30.0),
+    )
+    data = reply.model_dump(mode="json")
+    show("bridge scan", data)
+    log.write("bridge_scan", **data)
+    return 0 if reply.ok else 1
 
 
 def state_line(state: MowerState) -> dict[str, Any]:
     """The values the spike table records."""
     return {
+        "connection": state.connection.value,
+        "links": {k: v.model_dump(mode="json") for k, v in state.links.items()},
+        "firmware_info": state.firmware_info.model_dump(mode="json")
+        if state.firmware_info
+        else None,
         "activity": state.activity.value,
         "battery_percent": state.battery_percent,
         "charging": state.charging,
@@ -259,6 +334,46 @@ async def show_camera(connection: MowerConnection, log: JsonLog) -> None:
     )
 
 
+async def show_firmware(connection: MowerConnection, log: JsonLog) -> None:
+    """``--firmware-check``: the vendor's answer as the Device-Gateway stores it."""
+    port = firmware_port_of(connection)
+    if port is None:
+        show("firmware", {"error": "this connection has no firmware service"})
+        return
+    try:
+        info = await port.check_firmware()
+    except NotConnected as exc:
+        show("firmware", {"error": str(exc)})
+        log.write("firmware", error=str(exc))
+        return
+    data = info.model_dump(mode="json") if info else None
+    show("firmware", data)
+    log.write("firmware", info=data)
+
+
+def link_text(line: dict[str, Any]) -> str:
+    """The bridge part of a state line (empty without a bridge link)."""
+    bridge = line["links"].get("ble_bridge")
+    if not bridge:
+        return ""
+    up = "up" if bridge["connected"] else "down"
+    return (
+        f" bridge={up} rssi={bridge['rssi']} esphome={bridge['esphome_version']} "
+        f"outdated={bridge['outdated_reason']}"
+    )
+
+
+async def watch_links(connection: MowerConnection, log: JsonLog, seconds: float) -> None:
+    """``--bridge`` without a command: print the link state for ``seconds`` (the dual-link
+    hardware questions: attach, flip to ``ble_bridge``, loss and reconnect)."""
+    deadline = time.perf_counter() + seconds
+    while time.perf_counter() < deadline:
+        await asyncio.sleep(2)
+        line = state_line(await connection.get_state())
+        print(f"link connection={line['connection']}{link_text(line)}")
+        log.write("link_state", **line)
+
+
 def confirm(args: argparse.Namespace, what: str) -> None:
     if args.yes or args.dry_run:
         return
@@ -275,6 +390,8 @@ def show(title: str, data: Any) -> None:
 async def run(args: argparse.Namespace) -> int:
     print(SAFETY_NOTICE)
     log = JsonLog(args.log)
+    if args.scan:
+        return await run_scan(args, log)
     connection = build_connection(args)
     log.write("start", kind=str(connection.kind), dry_run=args.dry_run)
     started = time.perf_counter()
@@ -303,7 +420,11 @@ async def run(args: argparse.Namespace) -> int:
         log.write("map", areas=areas, reference=mower_map.reference.model_dump())
         if args.camera:
             await show_camera(connection, log)
+        if args.firmware_check:
+            await show_firmware(connection, log)
         command: MowerCommand | None = None
+        if args.bridge and not (args.start_area or args.dock or args.estop or args.light):
+            await watch_links(connection, log, args.wait)
         if args.start_area:
             area_id = find_area(mower_map, args.start_area)
             command = StartMow(
@@ -343,7 +464,8 @@ async def run(args: argparse.Namespace) -> int:
             print(
                 f"state activity={line['activity']} battery={line['battery_percent']}% "
                 f"rtk={line['rtk_fix']}/{line['rtk_source']} "
-                f"position={line['position_source']} light={line['light_on']}"
+                f"position={line['position_source']} light={line['light_on']} "
+                f"connection={line['connection']}{link_text(line)}"
             )
             log.write("state_after_command", **line)
         if isinstance(connection, MammotionBase) and args.dry_run:
