@@ -32,5 +32,11 @@
   "vision_proposal.body_find_dock": "A maneuver with {steps} steps towards the dock (confidence {confidence} %). Review and approve it within {minutes} min.",
   "vision_auto_proposal.title": "AI proposal for {mower}",
   "vision_auto_proposal.body_recover": "Started automatically by error {error_code}: a maneuver with {steps} steps to free the mower (confidence {confidence} %). Nothing moves without your approval; review and approve it within {minutes} min.",
-  "vision_auto_proposal.body_find_dock": "Started automatically by error {error_code}: a maneuver with {steps} steps towards the dock (confidence {confidence} %). Nothing moves without your approval; review and approve it within {minutes} min."
+  "vision_auto_proposal.body_find_dock": "Started automatically by error {error_code}: a maneuver with {steps} steps towards the dock (confidence {confidence} %). Nothing moves without your approval; review and approve it within {minutes} min.",
+  "firmware_update_available.title": "{mower}: firmware update available",
+  "firmware_update_available.body": "Version {version} is available (installed: {installed}). Install it from the mower's settings while the mower is docked and charging.",
+  "firmware_update_finished.title": "{mower}: firmware updated",
+  "firmware_update_finished.body": "Version {version} is installed.",
+  "firmware_update_failed.title": "{mower}: firmware update failed",
+  "firmware_update_failed.body": "The update to {version} did not complete ({reason}). The mower keeps its previous version; try again from its settings."
 }

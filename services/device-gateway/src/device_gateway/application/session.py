@@ -20,10 +20,12 @@ from uuid import UUID
 from mowdeck_contracts.v1 import (
     MOWER_CONNECTED,
     MOWER_DISCONNECTED,
+    BridgeScanReply,
     CameraSession,
     CommandEnvelope,
     CommandResult,
     CommandStatus,
+    FirmwareInfo,
     MowerActivity,
     MowerCapabilitiesSnapshot,
     MowerConnectionEvent,
@@ -40,7 +42,9 @@ from mowdeck_control import (
     NotConnected,
     Photo,
     PhotoCapture,
+    bridge_scanner_of,
     camera_session_of,
+    firmware_port_of,
 )
 from mowdeck_service_kit import get_logger
 from pydantic import BaseModel
@@ -57,6 +61,7 @@ from device_gateway.domain.rules import (
     ConnectionStatus,
     backoff,
     is_significant_change,
+    links_changed,
     path_geometry_key,
     path_publish_due,
 )
@@ -70,6 +75,11 @@ _AT_REST = frozenset({MowerActivity.DOCKED, MowerActivity.CHARGING, MowerActivit
 def fingerprint(model: BaseModel) -> str:
     """A short, stable hash of a model's JSON (change detection and msg id)."""
     return hashlib.sha256(model.model_dump_json().encode("utf-8")).hexdigest()[:32]
+
+
+def _without_markers(options: Mapping[str, Any]) -> dict[str, Any]:
+    """The options without Fleet's ``credentials`` markers (the secrets take their place)."""
+    return {k: v for k, v in options.items() if not k.startswith("credentials")}
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +99,11 @@ class SessionTiming:
     path_progress_seconds: float = 5.0
     """A mow path whose only change is the progress is republished at most this often (a new
     route or a cleared one at once)."""
+    firmware_check_initial_seconds: float = 120.0
+    """Wait after a connect before the manufacturer is asked for firmware updates (after the
+    adapter's device information rounds); 0 switches the periodic check off."""
+    firmware_check_interval_seconds: float = 24 * 3600.0
+    """Then ask again this often while the connection lasts."""
 
 
 class ConnectionLost(Exception):  # noqa: N818 - reads as an event
@@ -101,6 +116,14 @@ class PhotoUnsupported(Exception):  # noqa: N818 - reads as a state
 
 class PathPreviewUnsupported(Exception):  # noqa: N818 - reads as a state
     """The adapter of the mower cannot plan a route without starting."""
+
+
+class FirmwareUnsupported(Exception):  # noqa: N818 - reads as a state
+    """The connection of the mower cannot ask the manufacturer for firmware (no cloud link)."""
+
+
+class BridgeScanUnsupported(Exception):  # noqa: N818 - reads as a state
+    """The connection of the mower cannot look through a Bluetooth bridge."""
 
 
 def snapshot_camera_uid(session: CameraSession) -> int | None:
@@ -141,6 +164,7 @@ class MowerSession:
         self._supervisor: asyncio.Task[None] | None = None
         self._commands: set[asyncio.Task[CommandResult]] = set()
         self._snapshot_tasks: set[asyncio.Task[None]] = set()
+        self._recheck_again: MowerController | None = None
         self._published_map: str | None = None
         self._published_capabilities: str | None = None
         self._published_path: tuple[str, str] | None = None
@@ -233,15 +257,19 @@ class MowerSession:
 
     async def _connected_registration(self) -> MowerRegistration:
         """The registration with the secrets Fleet withheld, fetched for this connect only
-        (ADR 0034): every (re)connect asks again, nothing is kept on the session."""
+        (ADR 0034): every (re)connect asks again, nothing is kept on the session. The secrets
+        of the additional links (ADR 0038) are merged into their link the same way."""
         registration = self.registration
         if not registration.needs_credentials:
             return registration
         secrets = await self._credentials.fetch(registration)
-        kept = registration.connection_options.items()
-        options = {k: v for k, v in kept if not k.startswith("credentials")}
-        options.update(secrets)
-        return registration.model_copy(update={"connection_options": options})
+        options = _without_markers(registration.connection_options)
+        options.update(secrets.options)
+        links = {
+            kind: {**_without_markers(link), **secrets.link_secrets.get(kind, {})}
+            for kind, link in registration.links.items()
+        }
+        return registration.model_copy(update={"connection_options": options, "links": links})
 
     async def _connect_and_run(self) -> None:
         connection = self._provider.create(await self._connected_registration())
@@ -280,6 +308,7 @@ class MowerSession:
         tasks = [
             asyncio.create_task(self._telemetry(controller)),
             asyncio.create_task(self._watch_link(connection)),
+            asyncio.create_task(self._firmware_checks(controller)),
             *(asyncio.create_task(job()) for job in self._provider.background_jobs(connection)),
         ]
         try:
@@ -295,6 +324,77 @@ class MowerSession:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _firmware_checks(self, controller: MowerController) -> None:
+        """Ask the manufacturer for firmware updates once after the connect (when the adapter's
+        device information rounds are through) and then daily (ADR 0038); nothing for a
+        connection without the capability. The adapter publishes the result in the state."""
+        initial = self._timing.firmware_check_initial_seconds
+        if initial <= 0:
+            return
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                await self._check_firmware(controller)
+            except (NotConnected, FirmwareUnsupported) as exc:
+                _log.info(
+                    "periodic firmware check skipped", mower_id=str(self.mower_id), reason=str(exc)
+                )
+            except Exception as exc:
+                _log.warning(
+                    "periodic firmware check failed", mower_id=str(self.mower_id), error=repr(exc)
+                )
+            await asyncio.sleep(self._timing.firmware_check_interval_seconds)
+
+    async def _check_firmware(self, controller: MowerController) -> FirmwareInfo | None:
+        capabilities = await controller.capabilities()
+        port = firmware_port_of(controller.connection)
+        if port is None or not capabilities.firmware_update:
+            raise FirmwareUnsupported("this connection cannot ask the manufacturer for firmware")
+        info = await port.check_firmware()
+        latest = controller.last_state
+        if latest is not None and latest.firmware_info != info:
+            latest = await controller.connection.get_state()
+            await self._publish_state(latest)
+            self.last_state = latest
+        return info
+
+    async def check_firmware(self) -> FirmwareInfo | None:
+        """Ask the manufacturer now (``gateway.mower.<id>.firmware.check``) and publish the
+        state that carries the answer.
+
+        Raises :class:`~mowdeck_control.NotConnected` while the mower is not connected (or the
+        vendor did not answer) and :class:`FirmwareUnsupported` without the capability.
+        """
+        controller = self._controller
+        if controller is None:
+            raise NotConnected("the mower is not connected")
+        return await self._check_firmware(controller)
+
+    async def scan_bridge(
+        self,
+        *,
+        host: str,
+        port: int,
+        secret: str,
+        expected_name: str | None,
+        timeout_s: float,
+    ) -> BridgeScanReply:
+        """Look for the mower through a Bluetooth bridge (``gateway.mower.<id>.bridge.scan``).
+
+        Raises :class:`~mowdeck_control.NotConnected` while the mower is not connected and
+        :class:`BridgeScanUnsupported` when the connection cannot open bridge links.
+        """
+        controller = self._controller
+        if controller is None:
+            raise NotConnected("the mower is not connected")
+        capabilities = await controller.capabilities()
+        scanner = bridge_scanner_of(controller.connection)
+        if scanner is None or "ble_bridge" not in capabilities.links_supported:
+            raise BridgeScanUnsupported("this connection cannot look through a Bluetooth bridge")
+        return await scanner.scan_bridge(
+            host=host, port=port, secret=secret, expected_name=expected_name, timeout_s=timeout_s
+        )
 
     async def _watch_link(self, connection: MowerConnection) -> None:
         # The connection protocol has no "link lost" event, so the flag is polled.
@@ -336,6 +436,10 @@ class MowerSession:
                     rechecked_at = self._recheck_due(controller, rechecked_at)
                     await self._publish_path(controller)
                 else:
+                    if links_changed(self.last_state, state):
+                        # The capabilities follow the links (manual driving needs the bridge).
+                        self._recheck_snapshots_later(controller)
+                        rechecked_at = loop.time()
                     self.last_state = state
                     self.last_activity_at = self._clock()
                     if previous_activity in _JOB_ACTIVITIES and state.activity in _AT_REST:
@@ -377,10 +481,19 @@ class MowerSession:
 
     def _snapshots_later(self, controller: MowerController, *, refresh_map: bool) -> None:
         if not refresh_map and any(not t.done() for t in self._snapshot_tasks):
+            # A recheck runs already: run once more when it is done, so a change that arrived
+            # meanwhile (a link flipped during the publish) is not lost until the next interval.
+            self._recheck_again = controller
             return
         task = asyncio.create_task(self._publish_snapshots(controller, refresh_map=refresh_map))
         self._snapshot_tasks.add(task)
-        task.add_done_callback(self._snapshot_tasks.discard)
+        task.add_done_callback(self._snapshot_done)
+
+    def _snapshot_done(self, task: "asyncio.Task[None]") -> None:
+        self._snapshot_tasks.discard(task)
+        again, self._recheck_again = self._recheck_again, None
+        if again is not None and self._controller is again:
+            self._snapshots_later(again, refresh_map=False)
 
     async def _publish_snapshots(self, controller: MowerController, *, refresh_map: bool) -> None:
         """Publish capabilities and map when they differ from what was published before.
@@ -393,15 +506,15 @@ class MowerSession:
             capabilities = await controller.capabilities(refresh=True)
             print_caps = fingerprint(capabilities)
             if print_caps != self._published_capabilities:
-                await self._publisher.capabilities_snapshot(
-                    MowerCapabilitiesSnapshot(
-                        mower_id=self.mower_id,
-                        account_id=self.registration.account_id,
-                        observed_at=now,
-                        capabilities=capabilities,
-                    ),
-                    print_caps,
+                snapshot = MowerCapabilitiesSnapshot(
+                    mower_id=self.mower_id,
+                    account_id=self.registration.account_id,
+                    observed_at=now,
+                    capabilities=capabilities,
                 )
+                # The msg id covers observed_at: a value that flips back within the stream's
+                # duplicate window (manual driving with the bridge) must not be dropped.
+                await self._publisher.capabilities_snapshot(snapshot, fingerprint(snapshot))
                 self._published_capabilities = print_caps
         except Exception as exc:
             _log.warning(
@@ -412,15 +525,13 @@ class MowerSession:
             mower_map = await controller.mower_map(refresh=refresh_map, rebuild=True)
             print_map = fingerprint(mower_map)
             if print_map != self._published_map:
-                await self._publisher.map_snapshot(
-                    MowerMapSnapshot(
-                        mower_id=self.mower_id,
-                        account_id=self.registration.account_id,
-                        observed_at=now,
-                        map=mower_map,
-                    ),
-                    print_map,
+                snapshot_map = MowerMapSnapshot(
+                    mower_id=self.mower_id,
+                    account_id=self.registration.account_id,
+                    observed_at=now,
+                    map=mower_map,
                 )
+                await self._publisher.map_snapshot(snapshot_map, fingerprint(snapshot_map))
                 self._published_map = print_map
         except Exception as exc:
             _log.warning("map snapshot failed", mower_id=str(self.mower_id), error=repr(exc))

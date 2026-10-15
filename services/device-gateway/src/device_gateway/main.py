@@ -8,7 +8,8 @@ Principals: with ``MOWDECK_AUTH_JWKS_URL`` set, bearer access tokens issued by I
 verified locally against its JWKS (``mowdeck-auth``); without it every request is 401.
 
 Start-up order: registry events, bootstrap mowers, command consumer, camera session requests,
-path preview requests, cloud discovery requests, Fleet sync (background).
+path preview requests, bridge scan and firmware check requests, cloud discovery requests, Fleet
+sync (background).
 Shutdown order: stop the command consumer, answer in-flight commands, close every connection
 (publishing ``mower.disconnected``), stop the shared cloud sessions; the kit then drains and
 closes the bus.
@@ -29,8 +30,10 @@ from mowdeck_service_kit import (
 from mowdeck_service_kit.bus import EventBus, Subscription
 
 from device_gateway.adapters.api.routes import router
+from device_gateway.adapters.bus.bridge import subscribe_bridge_scans
 from device_gateway.adapters.bus.camera import subscribe_camera_requests
 from device_gateway.adapters.bus.cloud import DiscoveryMetrics, subscribe_cloud_discovery
+from device_gateway.adapters.bus.firmware import subscribe_firmware_checks
 from device_gateway.adapters.bus.fleet import BusCredentialSource, BusFleetDirectory
 from device_gateway.adapters.bus.path_preview import subscribe_path_previews
 from device_gateway.adapters.bus.publisher import BusPublisher
@@ -117,6 +120,8 @@ def build_app(
                 reconnect_max_seconds=settings.reconnect_max_seconds,
                 connection_check_seconds=settings.connection_check_seconds,
                 path_progress_seconds=settings.path_progress_seconds,
+                firmware_check_initial_seconds=settings.firmware_check_initial_seconds,
+                firmware_check_interval_seconds=settings.firmware_check_interval_seconds,
             ),
             credentials=BusCredentialSource(
                 active_bus, timeout_seconds=settings.fleet_request_timeout_seconds
@@ -149,6 +154,12 @@ def build_app(
         )
         app.state.path_previews = await subscribe_path_previews(
             active_bus, gateway, timeout_seconds=settings.path_preview_timeout_seconds
+        )
+        app.state.bridge_scans = await subscribe_bridge_scans(
+            active_bus, gateway, registry=app.state.metrics_registry
+        )
+        app.state.firmware_checks = await subscribe_firmware_checks(
+            active_bus, gateway, registry=app.state.metrics_registry
         )
         app.state.cloud_discovery = await subscribe_cloud_discovery(
             active_bus,
@@ -186,6 +197,10 @@ def build_app(
         path_previews: Subscription | None = getattr(app.state, "path_previews", None)
         if path_previews is not None:
             await path_previews.unsubscribe()
+        for name in ("bridge_scans", "firmware_checks"):
+            subscription: Subscription | None = getattr(app.state, name, None)
+            if subscription is not None:
+                await subscription.unsubscribe()
         cloud_discovery: Subscription | None = getattr(app.state, "cloud_discovery", None)
         if cloud_discovery is not None:
             await cloud_discovery.unsubscribe()

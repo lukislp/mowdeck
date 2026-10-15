@@ -33,7 +33,18 @@ What it simulates:
 * its own planned route (:class:`~mowdeck_control.connection.MowPathSource`): every leg of the
   job is one point of the path, split into polylines at the transfers, and the progress counts
   the legs done; :meth:`SimulatedMower.preview_path` plans the same route without starting
-  (:class:`~mowdeck_control.connection.PathPreviewCapable`).
+  (:class:`~mowdeck_control.connection.PathPreviewCapable`);
+* a Bluetooth bridge as an additional link (``SimulationConfig.bridge``, or a ``links`` option
+  with a ``ble_bridge`` entry as the Device-Gateway passes it, ADR 0038): the state reports
+  ``links["ble_bridge"]`` and ``connection`` ``ble_bridge`` while the bridge is connected,
+  manual driving is offered only then, and the test hook :meth:`SimulatedMower.set_bridge`
+  flips the link; :meth:`SimulatedMower.scan_bridge` answers a scan with the configured
+  device list (``bridge_devices``) or the configured error (``bridge_scan_error``);
+* firmware (:class:`~mowdeck_control.connection.FirmwarePort`): :meth:`check_firmware` reports
+  the installed version and ``firmware_available`` as offered; ``FirmwareUpdate`` (after the
+  controller's safety rules, which the simulator applies itself too) installs it over
+  ``firmware_update_seconds`` simulated seconds with the activity ``updating`` and a progress,
+  then the mower reports the new version and ``update_state`` ``idle``.
 
 ``SimulationConfig.time_scale`` makes simulated time run faster than real time.
 """
@@ -49,15 +60,23 @@ from typing import Any, Final
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    LINK_BLE_BRIDGE,
+    BridgeScanError,
+    BridgeScanErrorCode,
+    BridgeScanReply,
     CameraAccess,
     CameraInfo,
     CameraPlacement,
     CameraProvider,
     CameraSession,
+    CommandStatus,
     ConnectionKind,
     DockPose,
     EmergencyStop,
+    FirmwareInfo,
+    FirmwareUpdate,
     GeoReference,
+    LinkStatus,
     LocalPoint,
     MapArea,
     MapPath,
@@ -71,10 +90,12 @@ from mowdeck_contracts.v1 import (
     MowPathProgress,
     PauseMow,
     PositionSource,
+    ProxyInfo,
     ResumeMow,
     ReturnToDock,
     RtkFixStatus,
     RtkSource,
+    ScannedDevice,
     SetBladeHeight,
     SetLight,
     SetSpeed,
@@ -89,6 +110,7 @@ from mowdeck_control.errors import CommandRejected, NotConnected, SensorStop, Un
 from mowdeck_control.geo import distance, point_in_polygon, to_geo_position
 from mowdeck_control.paths import stripe_path
 from mowdeck_control.photo import render_scene
+from mowdeck_control.safety import FIRMWARE_UPDATE_RUNNING, firmware_update_problem
 from mowdeck_control.translation import MowRequest, NativeJob, Pattern, plan_to_native_job
 
 _log = logging.getLogger("mowdeck_control.simulator")
@@ -115,6 +137,18 @@ _PATH_ACTIVITIES: Final = frozenset(
     {MowerActivity.MOWING, MowerActivity.PAUSED, MowerActivity.RETURNING}
 )
 """Activities in which the route of the job stays shown."""
+BRIDGE_NOT_CONNECTED: Final = "the Bluetooth bridge is not connected"
+"""Rejection of a drive session while the simulated bridge is down."""
+SIM_BRIDGE_NAME: Final = "sim-bridge"
+SIM_BRIDGE_ESPHOME: Final = "2026.1.0"
+SIM_BRIDGE_PROJECT: Final = "1"
+SIM_BRIDGE_COMPILED: Final = "Jan 1 2026, 00:00:00"
+BridgeDevice = tuple[str, str, int]
+"""One advertisement the simulated bridge sees: ``(name, address, rssi)``."""
+_PROXY_UNANSWERED: Final = frozenset(
+    {BridgeScanErrorCode.UNREACHABLE, BridgeScanErrorCode.AUTH_FAILED}
+)
+"""Scan errors after which nothing about the bridge itself is known."""
 
 
 DEFAULT_ORIGIN: Final = (48.137154, 11.576124)
@@ -194,6 +228,24 @@ class SimulationConfig:
     night: bool = False
     """Take dark photos (brightness ``NIGHT_BRIGHTNESS``) unless the light is on
     (``NIGHT_LIT_BRIGHTNESS``), so AI assist's light handling can be tried without hardware."""
+    bridge: bool = False
+    """The mower has a Bluetooth bridge as an additional link (``links["ble_bridge"]`` in the
+    state); manual driving is offered only while it is connected. Also switched on by a
+    ``links`` option with a ``ble_bridge`` entry (what the Device-Gateway passes)."""
+    bridge_connected: bool = True
+    """Initial state of the bridge link (test hook :meth:`SimulatedMower.set_bridge`)."""
+    bridge_rssi: int = -60
+    """Signal strength the bridge reports for the mower while connected."""
+    bridge_devices: tuple[BridgeDevice, ...] = (("Luba-SIM0001", "FC:23:45:67:89:AB", -62),)
+    """What a bridge scan sees: ``(name, address, rssi)`` per advertisement."""
+    bridge_scan_error: str | None = None
+    """Answer every bridge scan with this error code (``unreachable``, ``auth_failed``,
+    ``timeout``, ``busy``) instead of the device list."""
+    firmware_available: str | None = None
+    """A newer firmware the "manufacturer" offers (``FirmwareInfo.available``); None: up to
+    date. Installing it takes ``firmware_update_seconds`` simulated seconds."""
+    firmware_release_notes: str | None = None
+    firmware_update_seconds: float = 5.0
 
     @property
     def origin(self) -> tuple[float, float]:
@@ -233,6 +285,11 @@ class SimulationConfig:
         if self.confirm_timeout_s <= 0:
             msg = "confirm_timeout_s must be positive"
             raise ValueError(msg)
+        if self.firmware_update_seconds <= 0:
+            msg = "firmware_update_seconds must be positive"
+            raise ValueError(msg)
+        if self.bridge_scan_error is not None:
+            BridgeScanErrorCode(self.bridge_scan_error)  # raises ValueError for unknown codes
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,6 +410,14 @@ class SimulatedMower:
         self._path_done = 0
         self._changed = asyncio.Event()
         self._light_on = False
+        self._bridge_connected = self.config.bridge and self.config.bridge_connected
+        self._bridge_since: datetime | None = self._clock() if self.config.bridge else None
+        self._firmware_installed = self.config.firmware
+        self._firmware_available = self.config.firmware_available
+        self._firmware_checked_at: datetime | None = None
+        self._firmware_progress: int | None = None
+        self._firmware_remaining_s = 0.0
+        self._firmware_target: str | None = None
         self._capabilities = MowerCapabilities(
             model=self.config.model,
             native_patterns=frozenset({Pattern.STRIPES, Pattern.DIAGONAL, Pattern.CHECKERBOARD}),
@@ -367,6 +432,8 @@ class SimulatedMower:
             min_speed_mps=0.1,
             max_speed_mps=1.0,
             connection_kinds=frozenset({ConnectionKind.SIMULATED}),
+            links_supported=[LINK_BLE_BRIDGE],
+            firmware_update=True,
         )
 
     # --- MowerConnection ----------------------------------------------------------------------
@@ -382,6 +449,8 @@ class SimulatedMower:
     async def connect(self) -> None:
         if not self._connected:
             self._connected = True
+            if self._firmware_checked_at is None:
+                self._firmware_checked_at = self._clock()  # the "vendor" answers at connect
             self._publish()
 
     async def disconnect(self) -> None:
@@ -391,7 +460,12 @@ class SimulatedMower:
             self._broadcaster.close()
 
     async def capabilities(self) -> MowerCapabilities:
-        return self._capabilities
+        """The capabilities; with a bridge, manual driving follows the link state."""
+        if not self.config.bridge or self._bridge_connected:
+            return self._capabilities
+        return self._capabilities.model_copy(
+            update={"manual_drive": False, "manual_drive_blades": False}
+        )
 
     async def get_state(self) -> MowerState:
         self._require_connected()
@@ -450,8 +524,12 @@ class SimulatedMower:
         if self.stuck:
             return Dispatch.done(Outcome.rejected("the mower is stuck: drive it free first"))
         self._require_no_sensor_stop()
+        if self._status.activity is MowerActivity.UPDATING:
+            return Dispatch.done(Outcome.rejected(FIRMWARE_UPDATE_RUNNING))
         delayed = self.config.start_delay_s is not None
         match command:
+            case FirmwareUpdate():
+                outcome = self._firmware_update(command.version)
             case StartMow():
                 outcome = self._start_mow(command)
             case PauseMow():
@@ -494,7 +572,11 @@ class SimulatedMower:
     async def start_drive_session(self) -> SimulatedDriveSession:
         self._require_connected()
         self._require_no_sensor_stop()
+        if self.config.bridge and not self._bridge_connected:
+            raise CommandRejected(BRIDGE_NOT_CONNECTED)
         status = self._status
+        if status.activity is MowerActivity.UPDATING:
+            raise CommandRejected(FIRMWARE_UPDATE_RUNNING)
         if status.activity in (MowerActivity.MOWING, MowerActivity.RETURNING):
             raise CommandRejected("pause or end the job before driving manually")
         self._end_drive_session()
@@ -586,6 +668,153 @@ class SimulatedMower:
             return 1.0
         return NIGHT_LIT_BRIGHTNESS if self._light_on else NIGHT_BRIGHTNESS
 
+    # --- Links and firmware (ADR 0038) ------------------------------------------------------
+
+    @property
+    def bridge_connected(self) -> bool:
+        """True while the simulated bridge link is up (always False without a bridge)."""
+        return self.config.bridge and self._bridge_connected
+
+    def set_bridge(self, connected: bool) -> None:
+        """Test hook: connect or drop the Bluetooth bridge. A drop ends an open drive session
+        (frames would have nowhere to go) and manual driving disappears from the capabilities
+        until the bridge is back; both changes are published at once."""
+        if not self.config.bridge:
+            msg = "this simulated mower has no bridge (SimulationConfig.bridge)"
+            raise ValueError(msg)
+        if connected == self._bridge_connected:
+            return
+        self._bridge_connected = connected
+        self._bridge_since = self._clock()
+        if not connected:
+            self._end_drive_session()
+        self._publish()
+
+    def _link_status(self) -> dict[str, LinkStatus]:
+        if not self.config.bridge:
+            return {}
+        return {
+            LINK_BLE_BRIDGE: LinkStatus(
+                connected=self._bridge_connected,
+                since=self._bridge_since,
+                rssi=self.config.bridge_rssi if self._bridge_connected else None,
+                esphome_version=SIM_BRIDGE_ESPHOME,
+                compiled_at=SIM_BRIDGE_COMPILED,
+                project_version=SIM_BRIDGE_PROJECT,
+            )
+        }
+
+    async def scan_bridge(
+        self,
+        *,
+        host: str,
+        port: int,
+        secret: str,
+        expected_name: str | None,
+        timeout_s: float,
+    ) -> BridgeScanReply:
+        """:class:`~mowdeck_control.connection.BridgeScanCapable`: the configured device list
+        (``bridge_devices``), or the configured error. The expected name counts as seen when it
+        is in the list; otherwise the reply carries ``timeout`` and the proxy information."""
+        del port, secret, timeout_s
+        proxy = ProxyInfo(
+            proxy_name=SIM_BRIDGE_NAME,
+            esphome_version=SIM_BRIDGE_ESPHOME,
+            compiled_at=SIM_BRIDGE_COMPILED,
+            project_name="mowdeck.bridge",
+            project_version=SIM_BRIDGE_PROJECT,
+            bluetooth_mac="AA:BB:CC:DD:EE:01",
+            checked_at=self._clock(),
+        )
+        error = self.config.bridge_scan_error
+        if error is not None:
+            code = BridgeScanErrorCode(error)
+            return BridgeScanReply(
+                proxy=None if code in _PROXY_UNANSWERED else proxy,
+                error=BridgeScanError(code=code, detail=f"simulated bridge {host}: {code.value}"),
+            )
+        devices = [
+            ScannedDevice(name=name, address=address, rssi=rssi)
+            for name, address, rssi in self.config.bridge_devices
+        ]
+        if expected_name is not None and all(d.name != expected_name for d in devices):
+            return BridgeScanReply(
+                proxy=proxy,
+                devices=devices,
+                error=BridgeScanError(
+                    code=BridgeScanErrorCode.TIMEOUT,
+                    detail=f"{expected_name} did not advertise at the simulated bridge",
+                ),
+            )
+        return BridgeScanReply(proxy=proxy, devices=devices)
+
+    def firmware_info(self) -> FirmwareInfo | None:
+        """The firmware state as the next snapshot reports it (None before the first check)."""
+        if self._firmware_checked_at is None:
+            return None
+        if self._firmware_target is not None:
+            state = "installing"
+        elif self._firmware_available:
+            state = "available"
+        else:
+            state = "idle"
+        return FirmwareInfo(
+            installed=self._firmware_installed,
+            available=self._firmware_available,
+            release_notes=self.config.firmware_release_notes if self._firmware_available else None,
+            update_state=state,  # type: ignore[arg-type]
+            progress=self._firmware_progress,
+            checked_at=self._firmware_checked_at,
+        )
+
+    async def check_firmware(self) -> FirmwareInfo | None:
+        """:class:`~mowdeck_control.connection.FirmwarePort`: the "vendor" answers at once."""
+        self._require_connected()
+        self._firmware_checked_at = self._clock()
+        self._publish()
+        return self.firmware_info()
+
+    async def start_firmware_update(self, version: str) -> None:
+        """:class:`~mowdeck_control.connection.FirmwarePort`: start installing ``version``.
+
+        Direct callers get the same rules as the controller applies
+        (:func:`~mowdeck_control.safety.firmware_update_problem`)."""
+        self._require_connected()
+        outcome = self._firmware_update(version)
+        self._publish()
+        if outcome.status is not CommandStatus.EXECUTED:
+            raise CommandRejected(outcome.reason or "firmware update refused")
+
+    def _firmware_update(self, version: str) -> Outcome:
+        problem = firmware_update_problem(version, self.snapshot(), self._capabilities)
+        if problem is not None:
+            return Outcome.rejected(problem)
+        self._firmware_target = version
+        self._firmware_progress = 0
+        self._firmware_remaining_s = self.config.firmware_update_seconds
+        self._end_drive_session()
+        self._status.activity = MowerActivity.UPDATING
+        return Outcome.executed(f"firmware update to {version} started")
+
+    def _update_step(self, t: float) -> float:
+        """Advance a running firmware update by ``t`` simulated seconds."""
+        total = self.config.firmware_update_seconds
+        step = min(t, self._firmware_remaining_s)
+        self._firmware_remaining_s -= step
+        done = max(0.0, total - self._firmware_remaining_s)
+        self._firmware_progress = min(100, math.floor(100 * done / total))
+        if self._firmware_remaining_s <= 1e-9:
+            target = self._firmware_target
+            assert target is not None  # noqa: S101 - set when the update started
+            self._firmware_installed = target
+            self._firmware_available = None
+            self._firmware_target = None
+            self._firmware_progress = None
+            self._firmware_checked_at = self._clock()
+            self._status.activity = MowerActivity.DOCKED
+            _log.info("simulated mower %s installed firmware %s", self.mower_id, target)
+        return t
+
     def tick(self, dt: float) -> MowerState:
         """Advance the simulation by ``dt`` real seconds (times ``time_scale``) and publish."""
         if dt < 0:
@@ -657,19 +886,23 @@ class SimulatedMower:
             observed_at=self._clock(),
             activity=status.activity,
             battery_percent=max(0, min(100, math.floor(self._battery))),
-            charging=status.activity is MowerActivity.CHARGING,
+            charging=status.activity in (MowerActivity.CHARGING, MowerActivity.UPDATING),
             position=to_geo_position(self._map.reference, self._x, self._y, self._theta),
             rtk_fix=self._rtk_fix,
             rtk_source=self._rtk_source,
             position_source=_POSITION_SOURCE.get(self._rtk_fix, PositionSource.UNKNOWN),
-            connection=ConnectionKind.SIMULATED,
+            connection=ConnectionKind.BLE_BRIDGE
+            if self.bridge_connected
+            else ConnectionKind.SIMULATED,
             blade_height_mm=self._blade_height,
             speed_mps=round(self._moving_speed, 3),
             error_code=status.error_code,
             error_message=status.error_message,
             drive_recoverable=self.stuck,
-            firmware=self.config.firmware,
+            firmware=self._firmware_installed,
             light_on=self._light_on if self.config.light else None,
+            links=self._link_status(),
+            firmware_info=self.firmware_info(),
             raw=raw,
         )
 
@@ -1014,6 +1247,8 @@ class SimulatedMower:
         activity changed and the rest must be simulated in the new activity)."""
         status = self._status
         activity = status.activity
+        if activity is MowerActivity.UPDATING:
+            return self._update_step(t)
         if activity in (MowerActivity.MOWING, MowerActivity.RETURNING):
             if self._rtk_fix is RtkFixStatus.NONE:
                 self._blade_on = False
@@ -1155,12 +1390,22 @@ def create_simulated_connection(config: ConnectionConfig) -> SimulatedMower:
     """Connection factory for :class:`~mowdeck_contracts.v1.ConnectionKind.SIMULATED`.
 
     ``config.options`` may override any :class:`SimulationConfig` field, for example
-    ``{"time_scale": 60}``. Unknown options raise ``ValueError``.
+    ``{"time_scale": 60}``. A ``links`` option with a ``ble_bridge`` entry (the additional links
+    of the registration, as the Device-Gateway passes them) switches the simulated bridge on.
+    Unknown options raise ``ValueError``.
     """
+    options = dict(config.options)
+    links = options.pop("links", None)
     names = {f.name for f in fields(SimulationConfig)}
-    unknown = sorted(set(config.options) - names)
+    unknown = sorted(set(options) - names)
     if unknown:
         msg = f"unknown simulator options: {', '.join(unknown)}"
         raise ValueError(msg)
-    sim_config = replace(SimulationConfig(), **dict(config.options))
+    if isinstance(links, Mapping) and LINK_BLE_BRIDGE in links:
+        options.setdefault("bridge", True)  # a registered bridge link: simulate it
+    if "bridge_devices" in options:
+        options["bridge_devices"] = tuple(
+            (str(d[0]), str(d[1]), int(d[2])) for d in options["bridge_devices"]
+        )
+    sim_config = replace(SimulationConfig(), **options)
     return SimulatedMower(mower_id=config.mower_id, account_id=config.account_id, config=sim_config)

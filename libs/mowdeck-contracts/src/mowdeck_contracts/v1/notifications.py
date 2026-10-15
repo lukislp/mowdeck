@@ -50,6 +50,12 @@ class NotificationKind(StrEnum):
     VISION_AUTO_PROPOSAL = "vision_auto_proposal"
     """An automatic analysis (started by a recoverable error) proposed a maneuver; it waits for
     a user's approval like any other proposal."""
+    FIRMWARE_UPDATE_AVAILABLE = "firmware_update_available"
+    """The manufacturer offers a newer firmware for the mower (once per version, ADR 0038)."""
+    FIRMWARE_UPDATE_FINISHED = "firmware_update_finished"
+    """A firmware update ended with the new version installed."""
+    FIRMWARE_UPDATE_FAILED = "firmware_update_failed"
+    """A firmware update failed; the mower keeps its old version."""
     TEST = "test"
     """A test notification requested by the user."""
 

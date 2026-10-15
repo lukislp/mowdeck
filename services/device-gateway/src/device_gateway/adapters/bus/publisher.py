@@ -42,7 +42,9 @@ class BusPublisher:
         )
 
     async def map_snapshot(self, snapshot: MowerMapSnapshot, fingerprint: str) -> None:
-        """``device.mower.<id>.map`` (stream ``DEVICE``, msg id ``<mower>:map:<fingerprint>``)."""
+        """``device.mower.<id>.map`` (stream ``DEVICE``, msg id ``<mower>:map:<fingerprint>``;
+        the session's fingerprint covers ``observed_at``, so a snapshot that returns to an
+        earlier value within the duplicate window is not dropped)."""
         await self._bus.publish(
             device_subject(snapshot.mower_id, "map"),
             snapshot,

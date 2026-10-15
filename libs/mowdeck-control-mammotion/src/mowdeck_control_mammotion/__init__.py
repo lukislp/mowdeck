@@ -7,6 +7,8 @@ This package is GPL-3.0 because it imports PyMammotion (GPL-3.0), see ADR 0011. 
   :func:`create_cloud_connection`.
 * ``ble_bridge``: :class:`MammotionBleProxyConnection` (BLE through an ESPHome Bluetooth Proxy,
   extra ``esphome``), factory :func:`create_ble_bridge_connection`.
+* a ``cloud`` registration with a ``ble_bridge`` link (ADR 0038) gets a
+  :class:`MammotionDualConnection`: the cloud plus the bridge for manual driving.
 
 ``wifi`` is not implemented: Mammotion restores control over Wi-Fi only from firmware
 1.30.31.19 (spike 0001, section 3.1).
@@ -20,6 +22,7 @@ from mowdeck_control_mammotion.ble import (
 )
 from mowdeck_control_mammotion.cloud import MammotionCloudConnection, create_cloud_connection
 from mowdeck_control_mammotion.drive import BleDriveSession
+from mowdeck_control_mammotion.dual import BridgeWatcher, MammotionDualConnection
 from mowdeck_control_mammotion.options import BleProxyOptions, CloudOptions, OptionsError
 from mowdeck_control_mammotion.port import ClientPort, MammotionPort
 
@@ -32,11 +35,13 @@ __all__ = [
     "BleDriveSession",
     "BleProxyOptions",
     "BleProxyPort",
+    "BridgeWatcher",
     "ClientPort",
     "CloudOptions",
     "MammotionBase",
     "MammotionBleProxyConnection",
     "MammotionCloudConnection",
+    "MammotionDualConnection",
     "MammotionPort",
     "OptionsError",
     "create_ble_bridge_connection",

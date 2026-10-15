@@ -11,6 +11,7 @@ from mowdeck_contracts.v1 import (
 from mowdeck_contracts.v1.subjects import FLEET_MOWERS_CREDENTIALS, FLEET_MOWERS_LIST
 from mowdeck_service_kit.bus import EventBus
 
+from device_gateway.application.ports import MowerCredentials
 from device_gateway.domain.rules import Shard
 
 
@@ -37,8 +38,9 @@ class BusCredentialSource:
         self._bus = bus
         self._timeout = timeout_seconds
 
-    async def fetch(self, registration: MowerRegistration) -> dict[str, str]:
-        """The withheld options; ``LookupError`` when Fleet holds none for the mower."""
+    async def fetch(self, registration: MowerRegistration) -> MowerCredentials:
+        """The withheld options of the connection and its links; ``LookupError`` when Fleet
+        holds none for the mower."""
         request = MowerCredentialsRequest(
             mower_id=registration.mower_id, account_id=registration.account_id
         )
@@ -47,4 +49,7 @@ class BusCredentialSource:
         if not answer.found:
             msg = "Fleet holds no credentials for this mower"
             raise LookupError(msg)
-        return dict(answer.secret_options)
+        return MowerCredentials(
+            options=dict(answer.secret_options),
+            link_secrets={k: dict(v) for k, v in answer.link_secrets.items()},
+        )
