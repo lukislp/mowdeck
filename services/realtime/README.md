@@ -111,7 +111,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_REALTIME_DRIVE_MAX_RATE_HZ` | `10` | Joystick frames per second and session forwarded to the mower; more are dropped |
 | `MOWDECK_REALTIME_DRIVE_TTL_MS` | `1000` | Dead-man timeout of every frame (`ManualDrive.ttl_ms`, 100 to 2000) |
 | `MOWDECK_REALTIME_DRIVE_REQUEST_TIMEOUT_SECONDS` | `2` | Timeout of `fleet.drive.start` and `fleet.drive.stop` |
-| `MOWDECK_REALTIME_ALLOWED_ORIGINS` | empty | Comma separated allowed `Origin` values; empty allows all (authentication is never a cookie) |
+| `MOWDECK_REALTIME_ALLOWED_ORIGINS` | empty | Comma separated allowed `Origin` values; empty allows all (authentication is never a cookie). A refused socket is logged at info level with its origin (`websocket refused: origin not allowed`) |
 
 ## Metrics
 
@@ -177,7 +177,7 @@ The Compose block is in `compose.snippet.yml` (pasted into `infra/compose/docker
 uv run pytest services/realtime --cov=realtime
 ```
 
-`test_realtime_protocol.py` serves the app with uvicorn in-process (the production server class) and talks real WebSockets with the `websockets` client: authentication, subscriptions with allowed and denied ids, delivery, cross-account isolation, revocation by event and by the periodic re-check, token expiry and refresh, limits, overflow, oversize and binary frames, origin check and shutdown. `test_realtime_session.py` tests backpressure on a fake slow socket (coalescing, send timeout, queue overflow). `test_realtime_nats.py` runs two instances on one NATS with `MOWDECK_TEST_NATS_URL` (CI sets it):
+`test_realtime_protocol.py` serves the app with uvicorn in-process (the production server class) and talks real WebSockets with the `websockets` client: authentication, subscriptions with allowed and denied ids, delivery, cross-account isolation, revocation by event and by the periodic re-check, token expiry and refresh, limits, overflow, oversize and binary frames, origin check (a refused origin is logged) and shutdown. `test_realtime_session.py` tests backpressure on a fake slow socket (coalescing, send timeout, queue overflow). `test_realtime_nats.py` runs two instances on one NATS with `MOWDECK_TEST_NATS_URL` (CI sets it):
 
 ```bash
 docker run -d --name realtime-test-nats -p 4222:4222 public.ecr.aws/docker/library/nats:2.15.0-alpine -js

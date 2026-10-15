@@ -171,7 +171,7 @@ Traefik passes the WebSocket upgrade through without extra configuration: the ro
 | `REALTIME_PING_SECONDS` | `20` | Protocol ping interval and pong timeout |
 | `REALTIME_MAX_CONNECTIONS_PER_ACCOUNT` | `50` | Open sockets per account (close 4429 above) |
 | `REALTIME_MAX_CONNECTIONS_PER_USER` | `10` | Open sockets per user (close 4429 above) |
-| `REALTIME_ALLOWED_ORIGINS` | `http://localhost` | Comma separated allowed `Origin` values (empty allows all). The web app is served at the gateway's origin: add the address you open it with when it is not `http://localhost` |
+| `REALTIME_ALLOWED_ORIGINS` | `http://localhost` | Comma separated allowed `Origin` values (empty allows all). The web app is served at the gateway's origin: add the address you open it with when it is not `http://localhost`, such as the LAN address a phone uses (`http://localhost,http://192.168.1.20`); realtime logs each refused origin at info level |
 
 Close codes and the protocol: `services/realtime/README.md`, [ADR 0018](../../docs/adr/0018-realtime-websocket-protocol.md).
 
