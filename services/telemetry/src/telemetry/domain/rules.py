@@ -9,6 +9,10 @@ Write rules per state message (design section 2.1, with the corrections of ADR 0
    periodic row keeps gaps (a mower that went silent) visible.
 3. The position track gets a row when a position is present and it (or the RTK fix) differs from
    the last stored one.
+4. A link heartbeat (ADR 0040) repeats the last report with the same ``observed_at`` and only a
+   newer ``heartbeat_at``, and the offline state after a lost link does the same with
+   ``connected = false``: both replace the latest row and write neither history nor positions.
+   The periodic rows of rules 2 and 3 follow ``observed_at``, the mower's own reports.
 
 Bins use the same origin as ``date_bin(step, observed_at, '2000-01-01'::timestamptz)`` in
 PostgreSQL, so the memory store and the SQL store agree.
@@ -95,6 +99,9 @@ def decide(state: MowerState, latest: LatestRow | None, *, heartbeat_seconds: fl
         return Decision(latest=True, history=True, position=has_position)
     if state.observed_at < latest.observed_at:
         return Decision(latest=False, history=False, position=False)
+    if state.observed_at == latest.observed_at:
+        # the same report again: a link heartbeat, the offline state or a redelivery
+        return Decision(latest=True, history=False, position=False)
     due = (
         latest.history_written_at is None
         or latest.history_fingerprint != state_fingerprint(state)
@@ -110,6 +117,26 @@ def decide(state: MowerState, latest: LatestRow | None, *, heartbeat_seconds: fl
         position_fingerprint(state) != latest.position_fingerprint or heartbeat_due
     )
     return Decision(latest=True, history=due, position=moved)
+
+
+def link_seen_at(row: LatestRow) -> datetime:
+    """When the gateway last knew the link to the mower alive: the stored state's
+    ``heartbeat_at``, or ``observed_at`` for a state from before the field (ADR 0040)."""
+    beat = row.state.get("heartbeat_at")
+    if not isinstance(beat, str):
+        return row.observed_at
+    try:
+        seen = datetime.fromisoformat(beat)
+    except ValueError:
+        return row.observed_at
+    if seen.tzinfo is None:
+        return row.observed_at
+    return max(seen, row.observed_at)
+
+
+def link_lost(row: LatestRow) -> bool:
+    """True when the stored state is the gateway's offline state (``connected = false``)."""
+    return row.state.get("connected") is False
 
 
 def history_row(state: MowerState) -> HistoryRow:

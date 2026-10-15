@@ -1211,6 +1211,10 @@ export type components = {
         /**
          * MowerState
          * @description A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.
+         *
+         *     Two times: ``observed_at`` is when the mower reported the values, ``heartbeat_at`` when the
+         *     gateway's link to it was last alive. A docked mower reports rarely, so old values do not mean
+         *     an offline mower (ADR 0040).
          */
         MowerState: {
             /**
@@ -1228,6 +1232,12 @@ export type components = {
              * @default false
              */
             charging: boolean;
+            /**
+             * Connected
+             * @description False in the state the Device-Gateway publishes right after its connection to the mower ended: the last known values, with `heartbeat_at` the last time the link was alive. Set by the gateway, never by an adapter.
+             * @default true
+             */
+            connected: boolean;
             connection: components["schemas"]["ConnectionKind"];
             /**
              * Drive Recoverable
@@ -1243,6 +1253,11 @@ export type components = {
             firmware?: string | null;
             /** @description Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor. */
             firmware_info?: components["schemas"]["FirmwareInfo"] | null;
+            /**
+             * Heartbeat At
+             * @description When the Device-Gateway last knew its connection to the mower alive (UTC). The gateway sets it on every publish, never an adapter: it advances with each heartbeat while `observed_at` stays the time of the mower's last report. Clients judge online and offline by it (ADR 0040); null in states from before the field, then `observed_at` stands in.
+             */
+            heartbeat_at?: string | null;
             /**
              * Light On
              * @description Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).
@@ -1319,7 +1334,7 @@ export type components = {
             received_at: string;
             /**
              * Stale
-             * @description True when the state is older than the stale threshold.
+             * @description True when the mower is offline: the gateway reported its link lost (`state.connected` false) or the last link heartbeat (`state.heartbeat_at`, else `observed_at`) is older than the stale threshold. Old values of a connected mower are not stale (ADR 0040).
              */
             stale: boolean;
             state: components["schemas"]["MowerState"];

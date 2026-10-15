@@ -69,7 +69,13 @@ class Watcher:
             raise AccountMismatchError(msg)
 
     async def on_state(self, state: MowerState) -> list[NotificationEvent]:
-        """Apply a state; returns the derived events (already fanned out)."""
+        """Apply a state; returns the derived events (already fanned out).
+
+        The gateway's offline state after a lost link (``connected = false``, ADR 0040) proves
+        no contact and is skipped: ``mower.disconnected`` drives the offline timer.
+        """
+        if not state.connected:
+            return []
         await self._check_account(state.mower_id, state.account_id, "state")
         stored = await self._store.geofence(state.mower_id)
         fence = (

@@ -15,6 +15,8 @@ from telemetry.domain.rules import (
     decide,
     downsample,
     history_row,
+    link_lost,
+    link_seen_at,
     parse_step,
     position_fingerprint,
     position_row,
@@ -218,3 +220,24 @@ def test_telemetry_raw_points_are_single_samples() -> None:
     base = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
     points = raw_points([history_of(base), history_of(base + seconds(1), battery_percent=70)])
     assert [(p.samples, p.battery_min, p.battery_max) for p in points] == [(1, 80, 80), (1, 70, 70)]
+
+
+def test_decide_link_heartbeat_writes_only_the_latest_row() -> None:
+    current = latest_of({"position": (48.1, 11.5)})
+    report = make_state(MOWER, ACCOUNT, position=(48.1, 11.5))
+    beat = report.model_copy(update={"heartbeat_at": T0 + seconds(600)})
+    lost = beat.model_copy(update={"connected": False})
+    for state in (beat, lost):
+        decision = decide(state, current, heartbeat_seconds=300)
+        assert (decision.latest, decision.history, decision.position) == (True, False, False)
+
+
+def test_link_seen_at_prefers_the_heartbeat_and_falls_back_to_observed_at() -> None:
+    old = latest_of()
+    assert link_seen_at(old) == T0  # a state without heartbeat_at
+    beat = latest_of(state={"heartbeat_at": "2026-10-15T10:05:00Z"})
+    assert link_seen_at(beat) == datetime(2026, 10, 15, 10, 5, tzinfo=UTC)
+    assert link_seen_at(latest_of(state={"heartbeat_at": "garbage"})) == T0
+    assert link_seen_at(latest_of(state={"heartbeat_at": "2026-10-15T10:05:00"})) == T0
+    assert not link_lost(beat)
+    assert link_lost(latest_of(state={"connected": False}))

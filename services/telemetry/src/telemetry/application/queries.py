@@ -30,7 +30,7 @@ from telemetry.domain.models import (
     PositionRow,
     SnapshotRow,
 )
-from telemetry.domain.rules import bin_count, parse_step
+from telemetry.domain.rules import bin_count, link_lost, link_seen_at, parse_step
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,8 +78,12 @@ class Queries:
         self._clock = clock
 
     def is_stale(self, row: LatestRow) -> bool:
-        """True when the state is older than the configured threshold."""
-        return self._clock() - row.observed_at > self._config.stale_after
+        """True when the mower is offline (ADR 0040): the gateway reported the link lost, or its
+        last heartbeat (``observed_at`` for states without one) is older than the threshold.
+        Old values of a connected mower are not stale."""
+        if link_lost(row):
+            return True
+        return self._clock() - link_seen_at(row) > self._config.stale_after
 
     async def state(self, account_id: UUID, mower_id: UUID) -> LatestRow:
         """The latest state; raises :class:`NoTelemetryYetError` when none was received."""
