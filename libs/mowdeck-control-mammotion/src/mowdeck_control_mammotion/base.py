@@ -220,6 +220,17 @@ FIRMWARE_CONFIRM_S: Final = 120.0
 """Longest wait for the mower to report a requested update as running."""
 
 
+async def _cancel(task: asyncio.Task[Any] | None, what: str) -> None:
+    """Cancel ``task`` and wait for it; a task that had already failed must not stop the
+    caller (a disconnect would otherwise end before the port is closed)."""
+    if task is None:
+        return
+    task.cancel()
+    await asyncio.wait({task})
+    if not task.cancelled() and (error := task.exception()) is not None:
+        _log.debug("%s had failed before the disconnect: %r", what, error)
+
+
 class MammotionBase:
     """:class:`~mowdeck_control.MowerConnection` on a :class:`MammotionPort`.
 
@@ -274,6 +285,9 @@ class MammotionBase:
         self._monotonic = monotonic or (lambda: asyncio.get_running_loop().time())
         self._broadcaster = StateBroadcaster()
         self._connected = False
+        self._port_held = False
+        """True from the first open attempt until the port is closed again (also when the
+        connect failed or was cancelled half way): :meth:`disconnect` then still closes it."""
         self._unsubscribe: Callable[[], None] | None = None
         self._last_state: MowerState | None = None
         self._map: MowerMap | None = None
@@ -311,14 +325,16 @@ class MammotionBase:
         async with self._lock:
             if self._connected:
                 return
+            self._port_held = True
             try:
                 await self._port.open()
-            except Exception:
-                await self._port.close()
+            except BaseException:
+                # Also on cancellation: a half-open port may hold a proxy or a Bluetooth link.
+                await self._release_port()
                 raise
             device_name = self._port.device_name
             if not mapping.is_mower(device_name, self._port.product_key()):
-                await self._port.close()
+                await self._release_port()
                 msg = f"{device_name} is not a mower"
                 raise CommandRejected(msg)
             self._connected = True
@@ -335,20 +351,40 @@ class MammotionBase:
             _log.info("mammotion %s connected over %s", device_name, self.kind)
 
     async def disconnect(self) -> None:
+        """Stop the background tasks and close the port (and with it every transport).
+
+        Every step runs even when an earlier one failed, and the port is closed whenever it
+        was opened (also after a connect that failed or was cancelled half way): a port left
+        open keeps the vendor client and, over a bridge, the proxy and the Bluetooth link.
+        """
         async with self._lock:
-            if not self._connected:
+            was_connected, self._connected = self._connected, False
+            if not was_connected and not self._port_held:
                 return
-            self._connected = False
-            await self._stop_refresh()
-            await self._stop_device_info()
-            await self._stop_path_fetch()
-            await self._stop_firmware_recheck()
-            if self._unsubscribe is not None:
-                self._unsubscribe()
-                self._unsubscribe = None
-            await self._before_close()
-            await self._port.close()
-            self._broadcaster.close()
+            try:
+                if was_connected:
+                    await self._stop_refresh()
+                    await self._stop_device_info()
+                    await self._stop_path_fetch()
+                    await self._stop_firmware_recheck()
+                    unsubscribe, self._unsubscribe = self._unsubscribe, None
+                    if unsubscribe is not None:
+                        with contextlib.suppress(Exception):
+                            unsubscribe()
+                    await self._before_close()
+            finally:
+                try:
+                    await self._release_port()
+                finally:
+                    if was_connected:
+                        self._broadcaster.close()
+
+    async def _release_port(self) -> None:
+        """Close the port once (it stops the vendor client and every transport)."""
+        if not self._port_held:
+            return
+        self._port_held = False
+        await self._port.close()
 
     @property
     def refresh_interval_s(self) -> float:
@@ -576,31 +612,19 @@ class MammotionBase:
 
     async def _stop_device_info(self) -> None:
         task, self._device_info_task = self._device_info_task, None
-        if task is not None:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        await _cancel(task, "device information requests")
 
     async def _stop_path_fetch(self) -> None:
         task, self._path_task = self._path_task, None
-        if task is not None:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        await _cancel(task, "mow path fetch")
 
     async def _stop_firmware_recheck(self) -> None:
         task, self._firmware_recheck = self._firmware_recheck, None
-        if task is not None:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        await _cancel(task, "firmware re-check")
 
     async def _stop_refresh(self) -> None:
         task, self._refresher = self._refresher, None
-        if task is not None:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        await _cancel(task, "refresh loop")
 
     # --- MowerConnection: state -----------------------------------------------------------
 

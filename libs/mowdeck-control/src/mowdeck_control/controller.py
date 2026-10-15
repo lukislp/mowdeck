@@ -289,17 +289,25 @@ class MowerController:
 
     async def close(self) -> None:
         """End any spot run, drive session and confirmation wait, stop the state pump and
-        disconnect."""
-        self._interrupt_confirmations("controller close")
-        await self.stop_spot_run(REASON_LINK_LOST)
-        await self._end_drive("controller closed")
-        if self._pump is not None:
-            self._pump.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._pump
-            self._pump = None
-        await self._connection.disconnect()
-        self._broadcaster.close()
+        disconnect.
+
+        The disconnect always runs, also when ending the spot run, the drive session or the
+        pump failed: a connection that is not disconnected keeps its link (and a bridge's
+        proxy) open.
+        """
+        try:
+            self._interrupt_confirmations("controller close")
+            await self.stop_spot_run(REASON_LINK_LOST)
+            await self._end_drive("controller closed")
+            pump, self._pump = self._pump, None
+            if pump is not None:
+                pump.cancel()
+                await asyncio.wait({pump})
+        finally:
+            try:
+                await self._connection.disconnect()
+            finally:
+                self._broadcaster.close()
 
     async def __aenter__(self) -> Self:
         await self.start()

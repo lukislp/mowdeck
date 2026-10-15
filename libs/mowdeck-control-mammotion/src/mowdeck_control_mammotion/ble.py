@@ -12,6 +12,7 @@ raise :class:`~mowdeck_control.NotConnected`, so the Device-Gateway's backoff re
 new connection.
 """
 
+import logging
 from collections.abc import Callable
 from datetime import datetime
 
@@ -29,6 +30,8 @@ from mowdeck_control_mammotion.port import (
     MammotionPort,
     open_ble_client,
 )
+
+_log = logging.getLogger("mowdeck_control_mammotion.ble")
 
 
 class BleProxyPort(ClientPort):
@@ -57,16 +60,22 @@ class BleProxyPort(ClientPort):
             ble_address=options.ble_address,
             scan_timeout_s=options.scan_timeout_s,
         )
-        name = options.device_name or self._link.advertised_name
-        if not name:
-            msg = "the mower did not advertise a name; set the option 'device_name'"
-            raise CommandRejected(msg)
-        return await open_ble_client(device_name=name, ble_device=self._link.ble_device)
+        try:
+            name = options.device_name or self._link.advertised_name
+            if not name:
+                msg = "the mower did not advertise a name; set the option 'device_name'"
+                raise CommandRejected(msg)
+            return await open_ble_client(device_name=name, ble_device=self._link.ble_device)
+        except BaseException:
+            # The client never opened, so nobody would close the proxy: release it here.
+            await self._close_link()
+            raise
 
     async def _close_link(self) -> None:
         link, self._link = self._link, None
         if link is not None:
             await link.close()
+            _log.debug("proxy link of %s closed", self._options.ble_address)
 
 
 class MammotionBleProxyConnection(MammotionBase):

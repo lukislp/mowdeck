@@ -136,11 +136,14 @@ class BridgeWatcher:
     async def stop(self) -> None:
         """Cancel the task and close an open link (the BLE transport is detached)."""
         task, self._task = self._task, None
-        if task is not None:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        await self._drop(notify=False)
+        try:
+            if task is not None:
+                task.cancel()
+                await asyncio.wait({task})
+                if not task.cancelled() and (error := task.exception()) is not None:
+                    _log.debug("bridge watcher had failed: %r", error)
+        finally:
+            await self._drop(notify=False)
 
     async def run(self) -> None:
         """Open, attach and watch the bridge until cancelled; reconnect with backoff."""
@@ -263,9 +266,11 @@ class MammotionDualConnection(MammotionCloudConnection):
 
     async def _before_close(self) -> None:
         session, self._session = self._session, None
-        if session is not None:
-            await session.close()
-        await self._watcher.stop()
+        try:
+            if session is not None:
+                await session.close()
+        finally:
+            await self._watcher.stop()
 
     async def _on_bridge_change(self, connected: bool) -> None:
         if not connected:

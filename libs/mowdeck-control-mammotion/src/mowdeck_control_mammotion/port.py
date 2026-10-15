@@ -666,18 +666,22 @@ class ClientPort:
         client, self._client, self._handle = self._client, None, None
         release, self._release = self._release, None
         self._bridge = None
-        if release is not None:
-            try:
-                await release()
-            except Exception:
-                _log.exception("releasing the shared PyMammotion client failed")
-        elif client is not None:
-            try:
-                await client.stop()
-            except Exception:
-                _log.exception("stopping the PyMammotion client failed")
-        if self._on_close is not None:
-            await self._on_close()
+        try:
+            if release is not None:
+                try:
+                    await release()
+                except Exception:
+                    _log.exception("releasing the shared PyMammotion client failed")
+            elif client is not None:
+                try:
+                    await client.stop()
+                except Exception:
+                    _log.exception("stopping the PyMammotion client failed")
+        finally:
+            # Always, also when stopping the client was cancelled: the closer releases what the
+            # opener set up beside the client (the ESPHome proxy of a Bluetooth bridge).
+            if self._on_close is not None:
+                await self._on_close()
 
     def subscribe(self, listener: StateListener) -> Callable[[], None]:
         handle = self._require_handle()

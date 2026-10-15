@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -351,3 +352,149 @@ async def test_mammotion_ble_publishes_every_report_while_driving() -> None:
     task.cancel()
     await session.close()
     await conn.disconnect()
+
+
+# --- closing releases the proxy (the mower advertises again for other entries) ---------------
+
+
+class _ProxyClient(_Client):
+    """A PyMammotion client that answers sends and never the waits."""
+
+    async def send_command_with_args(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    async def send_command_and_wait(self, *_args: Any, **_kwargs: Any) -> Any:
+        raise TimeoutError("no answer")
+
+
+class _ProxyHandle(_Handle):
+    device_name = "Luba-VPDRYRUN"
+    product_key = ""
+    firmware_version = ""
+    iot_id = ""
+    last_report_data_at = 0.0
+
+    def __init__(self) -> None:
+        from mowdeck_control_mammotion.fake import sample_device
+
+        self.snapshot = SimpleNamespace(raw=sample_device())
+        self.queue = SimpleNamespace(is_saga_active=False)
+
+    def subscribe_state_changed(self, _listener: Any) -> Any:
+        return SimpleNamespace(cancel=lambda: None)
+
+
+class _Proxy:
+    """``open_proxy`` and ``open_ble_client`` of the tests: records every proxy close."""
+
+    def __init__(self) -> None:
+        self.closes = 0
+        self.client = _ProxyClient()
+        self.ble_gate: asyncio.Event | None = None
+        self.ble_started = asyncio.Event()
+
+    async def open_proxy(self, **kwargs: Any) -> ProxyLink:
+        alive = {"api": True}
+
+        async def close() -> None:
+            self.closes += 1
+            alive["api"] = False
+
+        return ProxyLink(
+            ble_device=object(),
+            advertised_name="Luba-VPDRYRUN",
+            proxy_name="mowdeck-bridge",
+            close=close,
+            is_alive=lambda: alive["api"],
+            host=kwargs["host"],
+            port=kwargs["port"],
+        )
+
+    async def open_ble_client(self, *, device_name: str, ble_device: object) -> Any:
+        self.ble_started.set()
+        if self.ble_gate is not None:
+            await self.ble_gate.wait()
+        return self.client, _ProxyHandle()
+
+
+def _proxy_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[ble_module.MammotionBleProxyConnection, ble_module.BleProxyPort, _Proxy]:
+    from mammotion_support import config
+
+    proxy = _Proxy()
+    monkeypatch.setattr(ble_module, "open_proxy", proxy.open_proxy)
+    monkeypatch.setattr(ble_module, "open_ble_client", proxy.open_ble_client)
+    conn = ble_module.create_ble_bridge_connection(config(dict(BLE_OPTIONS)))
+    assert isinstance(conn.port, ble_module.BleProxyPort)
+    return conn, conn.port, proxy
+
+
+async def test_mammotion_ble_disconnect_closes_the_proxy_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn, port, proxy = _proxy_connection(monkeypatch)
+    await conn.connect()
+    assert port.proxy_alive
+    await conn.disconnect()
+    await conn.disconnect()  # idempotent
+    assert proxy.closes == 1
+    assert proxy.client.stopped
+    assert not port.proxy_alive
+
+
+async def test_mammotion_ble_disconnect_closes_the_proxy_after_a_failed_background_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A background task that had failed must not end the disconnect before the port."""
+    conn, _, proxy = _proxy_connection(monkeypatch)
+    await conn.connect()
+
+    async def broken() -> None:
+        raise RuntimeError("device information round failed")
+
+    failed = asyncio.create_task(broken())
+    await asyncio.gather(failed, return_exceptions=True)
+    conn._device_info_task = failed  # the state a failed round leaves behind
+    await conn.disconnect()
+    assert proxy.closes == 1 and proxy.client.stopped
+
+
+async def test_mammotion_ble_cancelled_connect_closes_the_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A removal while the Bluetooth link comes up must not leave the proxy open."""
+    conn, port, proxy = _proxy_connection(monkeypatch)
+    proxy.ble_gate = asyncio.Event()  # the BLE connect hangs
+    connecting = asyncio.create_task(conn.connect())
+    await proxy.ble_started.wait()  # the proxy is open, the BLE connect waits
+    assert port.proxy_alive
+    connecting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await connecting
+    assert proxy.closes == 1
+    assert not port.proxy_alive
+    await conn.disconnect()
+    assert proxy.closes == 1
+
+
+async def test_mammotion_client_port_runs_the_closer_when_stopping_is_cancelled() -> None:
+    from mowdeck_control_mammotion.port import ClientPort
+
+    closed: list[str] = []
+
+    class _Stuck(_Client):
+        async def stop(self) -> None:
+            raise asyncio.CancelledError
+
+    async def opener() -> Any:
+        return _Stuck(), _Handle()
+
+    async def on_close() -> None:
+        closed.append("proxy")
+
+    port = ClientPort(opener, on_close=on_close)
+    await port.open()
+    with pytest.raises(asyncio.CancelledError):
+        await port.close()
+    assert closed == ["proxy"]

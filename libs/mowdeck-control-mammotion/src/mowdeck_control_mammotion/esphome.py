@@ -220,10 +220,20 @@ async def open_proxy(
     ble_device, adv = found
     advertised = getattr(adv, "local_name", None) or getattr(ble_device, "name", None)
 
+    closed = {"done": False}
+
     async def close() -> None:
+        """Remove the scanner from habluetooth, then end the API connection (the proxy drops
+        its Bluetooth connections with it). Idempotent; a failing step never skips the next."""
+        if closed["done"]:
+            return
+        closed["done"] = True
         for undo in (unregister, unsetup):
             if undo is not None:
-                undo()
+                try:
+                    undo()
+                except Exception:
+                    _log.warning("removing the scanner of proxy %s failed", host, exc_info=True)
         try:
             await api.disconnect()
         except Exception:  # closing must not fail the caller

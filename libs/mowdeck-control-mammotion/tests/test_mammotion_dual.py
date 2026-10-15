@@ -323,6 +323,44 @@ async def test_mammotion_dual_attach_failure_closes_the_link_and_retries() -> No
         await conn.disconnect()
 
 
+async def test_mammotion_dual_disconnect_closes_the_proxy_link() -> None:
+    conn, port, opener, _ = _dual()
+    await conn.connect()
+    await _wait(conn.ble_connected)
+    link = opener.links[0]
+    closes: list[str] = []
+    original = link.close
+
+    async def counted_close() -> None:
+        closes.append("proxy")
+        await original()
+
+    link.close = counted_close
+    await conn.disconnect()
+    await conn.disconnect()  # idempotent
+    assert closes == ["proxy"]
+    assert not link.is_alive()
+    assert port.detached == 1 and port.closed == 1
+    assert conn.watcher.link is None
+
+
+async def test_mammotion_dual_disconnect_closes_the_proxy_when_the_drive_session_fails() -> None:
+    """A drive session that fails to close must not keep the bridge open."""
+    conn, port, opener, _ = _dual()
+    await conn.connect()
+    await _wait(conn.ble_connected)
+    session = await conn.start_drive_session()
+
+    async def broken_close() -> None:
+        raise RuntimeError("drive session close failed")
+
+    session.close = broken_close  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError):
+        await conn.disconnect()
+    assert not opener.links[0].is_alive()
+    assert port.closed == 1
+
+
 async def test_mammotion_dual_drive_frames_never_fall_back_to_the_cloud() -> None:
     port = FakeMammotionPort()
     await port.open()
