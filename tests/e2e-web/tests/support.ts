@@ -142,3 +142,58 @@ export function watchCsp(page: Page): { assertNone(): void } {
     },
   };
 }
+
+// --- spot mowing (spot.spec.ts, spot-phone.spec.ts) ------------------------------------------
+
+/** The capabilities a spot test looks at. */
+export interface SpotCaps {
+  manual_drive?: boolean;
+  manual_drive_blades?: boolean;
+}
+
+export async function capabilities(
+  request: APIRequestContext,
+  who: Actor,
+  mowerId: string,
+): Promise<SpotCaps | null> {
+  const response = await request.get(`/api/v1/telemetry/mowers/${mowerId}/capabilities`, {
+    headers: { Authorization: `Bearer ${who.token}` },
+  });
+  return response.ok()
+    ? ((await response.json()) as { capabilities: SpotCaps }).capabilities
+    : null;
+}
+
+/**
+ * Send `spot_stop` and wait for its outcome: false when Fleet refuses the kind or the gateway
+ * answers that the connection has no spot runs.
+ */
+export async function spotRunsSupported(
+  request: APIRequestContext,
+  who: Actor,
+  mowerId: string,
+): Promise<{ supported: boolean; why: string }> {
+  const auth = { Authorization: `Bearer ${who.token}` };
+  const sent = await request.post(`/api/v1/fleet/mowers/${mowerId}/commands`, {
+    headers: auth,
+    data: { command: { kind: 'spot_stop' } },
+  });
+  if (sent.status() !== 202) return { supported: false, why: `Fleet answered ${sent.status()}` };
+  const { command_id: commandId } = (await sent.json()) as { command_id: string };
+  let record: { status: string; reason?: string | null } = { status: 'pending' };
+  await expect
+    .poll(
+      async () => {
+        const r = await request.get(`/api/v1/fleet/commands/${commandId}`, { headers: auth });
+        if (r.ok()) record = (await r.json()) as typeof record;
+        return record.status;
+      },
+      { timeout: 30_000, intervals: [500] },
+    )
+    .not.toBe('pending');
+  const reason = record.reason ?? '';
+  if (record.status === 'rejected' && /unsupported|not supported|unknown/i.test(reason)) {
+    return { supported: false, why: `gateway: ${reason}` };
+  }
+  return { supported: true, why: `${record.status} ${reason}`.trim() };
+}
