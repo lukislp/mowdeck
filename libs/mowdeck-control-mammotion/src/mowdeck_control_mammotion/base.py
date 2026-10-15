@@ -82,6 +82,14 @@ interval; PyMammotion debounces and queues it with background priority). Every d
 publishes the state when it changed, and an unchanged state again once
 ``UNCHANGED_REPUBLISH_S`` passed since the last publish, so ``observed_at`` tells honestly when
 the mower last reported, not when its state last changed.
+
+Driving (:meth:`MammotionBase._drive_active`, a link with a drive session overrides it): while
+a drive session is open the loop is in ``drive`` mode. It keeps PyMammotion's report window open
+(renewed every half window when ``report_stream_s`` > 0) and, whenever no device update arrived
+for :data:`DRIVE_POLL_S`, asks for an undebounced report (:meth:`MammotionPort.refresh`), so a
+control loop such as a spot run (ADR 0039) gets a pose about once a second even when the
+mower does not count manual driving as an active work mode. Every device update is published
+while driving, also an unchanged one, so ``observed_at`` stays fresh for a standing mower.
 """
 
 import asyncio
@@ -249,6 +257,10 @@ class MammotionBase:
             raise ValueError(msg)
         self._report_stream_s = report_stream_s
         self._boost_until = 0.0
+        self._report_at: float | None = None
+        """Loop time of the last device update (drive mode polls when it is too old)."""
+        self._stream_at: float | None = None
+        """Loop time of the last report window request in drive mode."""
         self._refresh_wake = asyncio.Event()
         self._refresher: asyncio.Task[None] | None = None
         self._device_info_retry_s = device_info_retry_s
@@ -350,7 +362,8 @@ class MammotionBase:
         return self._active_refresh_interval_s
 
     def _drive_active(self) -> bool:
-        """Whether a manual drive session is running (only the BLE link has one)."""
+        """Whether a manual drive session is running (links with a drive session override it:
+        the BLE bridge and the dual connection)."""
         return False
 
     def _is_active(self) -> bool:
@@ -382,8 +395,12 @@ class MammotionBase:
         return self._clock_s() < self._boost_until
 
     def _mode(self) -> str:
-        """``stream`` (active, window renewed), ``boost`` (command sent, not yet active: stream
-        call plus fast polls) or ``poll`` (one-shots at the activity's interval)."""
+        """``drive`` (a drive session is open: window kept open plus an undebounced poll when
+        no report arrived for :data:`DRIVE_POLL_S`), ``stream`` (active, window renewed),
+        ``boost`` (command sent, not yet active: stream call plus fast polls) or ``poll``
+        (one-shots at the activity's interval)."""
+        if self._drive_active():
+            return "drive"
         if self._report_stream_s > 0 and self._is_active():
             return "stream"
         if self._boosted() and not self._is_active():
@@ -396,6 +413,8 @@ class MammotionBase:
         the idle one) while mowing, returning, paused off the dock or driving, else the idle
         one."""
         mode = self._mode()
+        if mode == "drive":
+            return DRIVE_POLL_S
         if mode == "stream":
             return self._report_stream_s / 2
         if mode == "boost":
@@ -437,6 +456,9 @@ class MammotionBase:
                 return
             last = loop.time()
             try:
+                if mode == "drive":
+                    await self._drive_poll()
+                    continue
                 if mode == "poll":
                     # Half the interval: the answer to the previous request lands a moment after
                     # it was sent, so its age at the next tick is a little under ``interval``.
@@ -450,6 +472,17 @@ class MammotionBase:
                     await self._port.refresh()  # user path: no debounce, no queue
             except Exception:  # the loop never dies on a failed request
                 _log.debug("fresh state request failed", exc_info=True)
+
+    async def _drive_poll(self) -> None:
+        """One tick of the ``drive`` mode: renew the report window when half of it passed and
+        ask for an undebounced report when the last device update is too old."""
+        now = self._clock_s()
+        window = self._report_stream_s
+        if window > 0 and (self._stream_at is None or now - self._stream_at >= window / 2):
+            self._stream_at = now
+            await self._port.start_report_stream(max(1, round(window * 1000)))
+        if self._report_at is None or now - self._report_at >= DRIVE_POLL_S * 0.9:
+            await self._port.refresh()  # user path: no debounce, no queue
 
     async def _request_device_info(self) -> None:
         """Ask the mower for its firmware, exact model, RTK origin, dock and light state, again
@@ -1164,6 +1197,8 @@ class MammotionBase:
         )
 
     async def _on_device_update(self) -> None:
+        with contextlib.suppress(RuntimeError):  # no running loop (synchronous tests)
+            self._report_at = self._clock_s()
         if self._connected:
             self._publish()
 
@@ -1180,7 +1215,11 @@ class MammotionBase:
         if (previous is None) or previous.activity is not state.activity:
             self._refresh_wake.set()  # the refresh interval depends on the activity
         now = self._publish_clock()
-        stale = self._published_at is None or now - self._published_at >= UNCHANGED_REPUBLISH_S
+        stale = (
+            self._published_at is None
+            or now - self._published_at >= UNCHANGED_REPUBLISH_S
+            or self._drive_active()  # a control loop needs every report's observed_at
+        )
         if force or previous is None or stale or _changed(previous, state):
             self._broadcaster.publish(state)
             self._published_at = now
@@ -1202,6 +1241,8 @@ BOOST_COMMANDS: Final = frozenset(
 """Sent commands after which the refresh loop boosts (:meth:`MammotionBase.boost_refresh`)."""
 BOOST_POLL_S: Final = 3.0
 """Seconds between undebounced report requests while boosted."""
+DRIVE_POLL_S: Final = 1.0
+"""Seconds without a device update after which drive mode asks for an undebounced report."""
 BOOST_MIN_S: Final = 30.0
 """Shortest boost, seconds (it lasts at least one report stream window)."""
 ACTIVE_ACTIVITIES: Final = frozenset(

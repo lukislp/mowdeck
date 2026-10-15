@@ -110,7 +110,7 @@ class MammotionBleProxyConnection(MammotionBase):
     async def start_drive_session(self) -> DriveSession:
         self._require_connected()
         self._require_no_sensor_stop()
-        self.boost_refresh()  # no refresh loop over BLE: a no-op there
+        self.boost_refresh()
         if self._session is not None and self._session.is_open:
             await self._session.close()
         self._session = BleDriveSession(
@@ -120,6 +120,11 @@ class MammotionBleProxyConnection(MammotionBase):
             sensor_stop=self._sensor_stop_reason,
         )
         return self._session
+
+    def _drive_active(self) -> bool:
+        """An open drive session switches the refresh loop to its ``drive`` mode (report window
+        plus undebounced polls about once a second), so spot runs get a fresh pose."""
+        return self._session is not None and self._session.is_open
 
     def _sensor_stop_reason(self) -> str | None:
         state = self._snapshot()

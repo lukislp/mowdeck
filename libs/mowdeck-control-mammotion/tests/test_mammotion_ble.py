@@ -1,5 +1,6 @@
 """BLE proxy connection: drive session frames, stop, blade gating, link loss, proxy port."""
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 from uuid import uuid4
@@ -16,6 +17,7 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_control import CommandRejected, MowerController, NotConnected, SensorStop
 from mowdeck_control.testing import ManualClock, ManualTimers
+from mowdeck_control_mammotion import base as mammotion_base
 from mowdeck_control_mammotion import ble as ble_module
 from mowdeck_control_mammotion.drive import BleDriveSession
 from mowdeck_control_mammotion.esphome import ProxyLink
@@ -290,3 +292,62 @@ def test_mammotion_bleak_wrappers_route_pymammotion_through_the_proxy(
         assert bound.BleakClientWithServiceCache is usage.HaBleakClientWithServiceCache
     finally:
         usage.uninstall_multiple_bleak_catcher()
+
+
+async def test_mammotion_ble_drive_session_keeps_reports_coming(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A drive session (a spot run keeps one open) switches the refresh loop to drive mode:
+    the report window is opened and undebounced polls follow while no report arrives."""
+    monkeypatch.setattr(mammotion_base, "DRIVE_POLL_S", 0.02)
+    conn, port = ble()
+    await conn.connect()
+    assert conn._mode() == "poll"
+    session = await conn.start_drive_session()
+    assert conn._mode() == "drive"
+    async with asyncio.timeout(5):
+        while port.refreshes < 3:  # noqa: ASYNC110 - the loop runs on its own task
+            await asyncio.sleep(0.005)
+    assert port.report_stream_requests, "the report window was not opened"
+    await session.close()
+    assert conn._mode() != "drive"  # back to the boost after the session start, then poll
+    await conn.disconnect()
+
+
+async def test_mammotion_ble_drive_poll_skips_while_reports_flow() -> None:
+    conn, port = ble()
+    await conn.connect()
+    session = await conn.start_drive_session()
+    await conn._drive_poll()  # the session start already asked; a fresh report just came in
+    refreshes = port.refreshes
+    conn._report_at = conn._clock_s()
+    await conn._drive_poll()
+    assert port.refreshes == refreshes, "a fresh report must not trigger a poll"
+    conn._report_at = conn._clock_s() - 2 * mammotion_base.DRIVE_POLL_S
+    await conn._drive_poll()
+    assert port.refreshes == refreshes + 1
+    await session.close()
+    await conn.disconnect()
+
+
+async def test_mammotion_ble_publishes_every_report_while_driving() -> None:
+    conn, port = ble()
+    await conn.connect()
+    seen: list[object] = []
+    stream = conn.watch_state()
+    session = await conn.start_drive_session()
+
+    async def collect() -> None:
+        async for state in stream:
+            seen.append(state.observed_at)
+
+    task = asyncio.create_task(collect())
+    await asyncio.sleep(0)
+    before = len(seen)
+    for _ in range(3):
+        await port.emit()  # unchanged device, still published while driving
+        await asyncio.sleep(0)
+    assert len(seen) >= before + 3
+    task.cancel()
+    await session.close()
+    await conn.disconnect()

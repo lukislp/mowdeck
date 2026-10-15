@@ -1,7 +1,9 @@
 """The owner script runs end to end on the fake port (``--dry-run``)."""
 
 import importlib.util
+import itertools
 import json
+import math
 from pathlib import Path
 from types import ModuleType
 
@@ -102,3 +104,47 @@ def test_mammotion_owner_script_camera_prints_a_redacted_session(
     steps = [json.loads(line) for line in log.read_text("utf-8").splitlines()]
     (record,) = [s for s in steps if s["step"] == "camera"]
     assert record["provider"] == "agora" and record["encryption"]["mode"] == "aes-256-gcm2"
+
+
+@pytest.mark.parametrize(
+    ("flag", "step"), [("--turn-check", "turn_check"), ("--spot-dry-run", "spot_dry_run")]
+)
+def test_mammotion_owner_script_spot_checks_need_manual_driving(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], flag: str, step: str
+) -> None:
+    """The cloud link of the dry run offers no manual driving: both checks refuse cleanly."""
+    log = tmp_path / "log.jsonl"
+    assert _script().main(["--dry-run", "--log", str(log), flag]) == 1
+    assert "no manual driving" in capsys.readouterr().out
+    steps = [json.loads(line) for line in log.read_text("utf-8").splitlines()]
+    (record,) = [s for s in steps if s["step"] == step]
+    assert record["error"] == "no manual drive"
+
+
+def test_mammotion_owner_script_turn_check_summary() -> None:
+    script = _script()
+    assert script.heading_delta(10.0, 350.0) == pytest.approx(-20.0)
+    assert script.heading_delta(350.0, 10.0) == pytest.approx(20.0)
+    # (received, observed, heading): one report per second, the turn shows 1.3 s after the
+    # first frame (sent at t = 10).
+    left = [(9.0, 100.0, 90.0), (10.5, 101.0, 90.5), (11.3, 102.0, 80.0), (12.4, 103.0, 70.0)]
+    summary = script.turn_check_summary(left, 10.0)
+    assert summary["verdict"] == "ok" and summary["heading_change_deg"] == -20.0
+    assert summary["latency_s"] == 1.3
+    assert summary["report_interval_s"] == {"min": 1.0, "median": 1.0, "max": 1.0}
+    right = [(9.0, 100.0, 90.0), (11.0, 101.0, 105.0)]
+    assert script.turn_check_summary(right, 10.0)["verdict"] == "sign_error"
+    still = [(9.0, 100.0, 90.0), (11.0, 101.0, 90.5)]
+    assert script.turn_check_summary(still, 10.0)["verdict"] == "no_turn"
+    assert script.turn_check_summary([(11.0, 101.0, None)], 10.0)["verdict"] == "no_heading"
+
+
+def test_mammotion_owner_script_circle_starts_at_the_mower_and_turns_left() -> None:
+    script = _script()
+    points = script.circle_points(2.0, 3.0, math.pi / 2)  # heading +y
+    assert points[0] == pytest.approx((2.0, 3.0))
+    assert points[-1] == pytest.approx((2.0, 3.0))
+    assert points[1][0] < 2.0 and points[1][1] > 3.0  # ahead and to the left
+    center = (1.5, 3.0)
+    assert all(math.dist(p, center) == pytest.approx(0.5) for p in points)
+    assert all(math.dist(a, b) <= 0.21 for a, b in itertools.pairwise(points))

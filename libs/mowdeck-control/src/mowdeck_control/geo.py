@@ -86,6 +86,29 @@ def distance(a: LocalPoint, b: LocalPoint) -> float:
     return math.hypot(b[0] - a[0], b[1] - a[1])
 
 
+def segment_distance(p: LocalPoint, a: LocalPoint, b: LocalPoint) -> float:
+    """Distance from ``p`` to the straight segment ``a``-``b`` in metres."""
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    length = dx * dx + dy * dy
+    if length == 0:
+        return distance(p, a)
+    t = max(0.0, min(1.0, ((p[0] - ax) * dx + (p[1] - ay) * dy) / length))
+    return distance(p, (ax + t * dx, ay + t * dy))
+
+
+def boundary_distance(p: LocalPoint, polygon: Sequence[LocalPoint]) -> float:
+    """Distance from ``p`` to the nearest edge of ``polygon`` (inside or outside)."""
+    n = len(polygon)
+    return min(segment_distance(p, polygon[i], polygon[(i + 1) % n]) for i in range(n))
+
+
+def wrap_angle(angle_rad: float) -> float:
+    """Normalise an angle to ``(-pi, pi]``."""
+    return math.pi - (math.pi - angle_rad) % (2 * math.pi)
+
+
 def rotate(point: LocalPoint, angle_rad: float) -> LocalPoint:
     """Rotate ``point`` counter-clockwise around the origin."""
     c, s = math.cos(angle_rad), math.sin(angle_rad)
