@@ -14,6 +14,7 @@ import type { paths as EntitlementsPaths } from '$lib/generated/entitlements';
 import type { paths as FleetPaths } from '$lib/generated/fleet';
 import type { paths as IdentityPaths } from '$lib/generated/identity';
 import type { paths as NotificationsPaths } from '$lib/generated/notifications';
+import type { paths as PlannerPaths } from '$lib/generated/planner';
 import type { paths as SchedulerPaths } from '$lib/generated/scheduler';
 import type { paths as TelemetryPaths } from '$lib/generated/telemetry';
 import type { paths as VisionPaths } from '$lib/generated/vision';
@@ -121,6 +122,7 @@ export const schedulerApi = createClient<SchedulerPaths>({ fetch: apiFetch });
 export const entitlementsApi = createClient<EntitlementsPaths>({ fetch: apiFetch });
 export const billingApi = createClient<BillingPaths>({ fetch: apiFetch });
 export const visionApi = createClient<VisionPaths>({ fetch: apiFetch });
+export const plannerApi = createClient<PlannerPaths>({ fetch: apiFetch });
 
 /** Linking or re-reading a vendor cloud account logs in there, which can take close to a minute. */
 export const SLOW_REQUEST_TIMEOUT_MS = 90_000;

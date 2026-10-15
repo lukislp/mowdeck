@@ -14,7 +14,9 @@ export type CommandKind =
   | 'set_blade_height'
   | 'set_speed'
   | 'set_light'
-  | 'firmware_update';
+  | 'firmware_update'
+  | 'spot_mow'
+  | 'spot_stop';
 
 export type CommandOutcome =
   'pending' | 'accepted' | 'executed' | 'rejected' | 'failed' | 'expired';

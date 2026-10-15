@@ -32,6 +32,7 @@ export * from './map/grid.js';
 export * from './map/rtk.js';
 export * from './map/heat.js';
 export * from './map/mow-path.js';
+export * from './map/spot.js';
 export * from './map/fleet.js';
 export * from './map/scale.js';
 export * from './types.js';

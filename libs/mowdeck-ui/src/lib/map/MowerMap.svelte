@@ -22,6 +22,11 @@
   the part already mowed (up to `progress.index`) solid and the part ahead dimmed, in its own
   pane below the driven route, with a legend entry; `pathPreview` captions it as a preview.
 
+  The spot of a spot-mowing run (`spot`, see `spot.ts`): a circle around a tapped point or a
+  drawn polygon, in its own pane between the mow path and the route, with the corners placed so
+  far while a polygon is still being drawn. With `onmaptap` a tap on the map (not on a control)
+  reports its local metres, so the page can place or extend the spot; the cursor says so.
+
   Texts arrive translated in `labels`; area selection is reported with `onselectionchange`.
   With `onarealabel` each area label gets a small edit button (rename an area from the map).
 -->
@@ -70,6 +75,8 @@
     pathDone?: string;
     pathAhead?: string;
     pathPreview?: string;
+    /** Legend entry of the spot of a spot-mowing run. */
+    spot?: string;
   }
 
   /** An optional raster tile layer (from the installation's runtime config). */
@@ -100,6 +107,7 @@
   import { RTK_CELL_SIZES, binRtk, cellRing, type RtkAggregate, type RtkCellSize } from './rtk';
   import { gapOutlines, heatCells, heatRing, type HeatGap, type HeatLayerData } from './heat';
   import { pathLayers, type MapMowPath } from './mow-path';
+  import { spotLayer, type MapSpot } from './spot';
   import { scaleFor } from './scale';
 
   type LeafletModule = typeof import('leaflet');
@@ -119,6 +127,10 @@
     path?: MapMowPath | null;
     /** The path is a preview (planned without a start): the legend says so. */
     pathPreview?: boolean;
+    /** The spot of a spot-mowing run (local metres), or null for none. */
+    spot?: MapSpot | null;
+    /** A tap on the map (its local metres); given, the cursor becomes a crosshair. */
+    onmaptap?: (local: [number, number]) => void;
     /**
      * Points of the RTK signal map (defaults to `route`), e.g. a longer time range.
      * @deprecated Use `heat` with the `rtk` layer of the heatmap endpoint.
@@ -162,6 +174,8 @@
     highlightGap = null,
     path = null,
     pathPreview = false,
+    spot = null,
+    onmaptap,
     rtkPoints = null,
     showRtk = $bindable(false),
     rtkCellSize = $bindable(1),
@@ -197,7 +211,17 @@
   // Leaflet objects are not reactive state: effects own them.
   let lmap: Leaflet.Map | null = null;
   let groups: Record<
-    'heat' | 'gaps' | 'rtk' | 'areas' | 'zones' | 'paths' | 'mowpath' | 'route' | 'labels' | 'dock',
+    | 'heat'
+    | 'gaps'
+    | 'rtk'
+    | 'areas'
+    | 'zones'
+    | 'paths'
+    | 'mowpath'
+    | 'spot'
+    | 'route'
+    | 'labels'
+    | 'dock',
     Leaflet.LayerGroup
   > | null = null;
   let areaPolygons = new Map<string, Leaflet.Polygon>();
@@ -227,6 +251,7 @@
     highlightGap ? (gapOutlines([highlightGap], projection)[0] ?? null) : null,
   );
   const pathPieces = $derived(pathLayers(path, projection));
+  const spotDrawn = $derived(spotLayer(spot, projection));
   const pathHasProgress = $derived(!!path?.progress && pathPieces.some((piece) => piece.done));
 
   // --- Leaflet loading and the map instance -------------------------------------------------
@@ -276,6 +301,7 @@
       ['md-rtk', 390],
       ['md-gap', 440],
       ['md-mowpath', 445],
+      ['md-spot', 447],
       ['md-route', 450],
       ['md-mower', 650],
     ] as const) {
@@ -315,6 +341,7 @@
       zones: lib.layerGroup().addTo(instance),
       paths: lib.layerGroup().addTo(instance),
       mowpath: lib.layerGroup().addTo(instance),
+      spot: lib.layerGroup().addTo(instance),
       route: lib.layerGroup().addTo(instance),
       labels: lib.layerGroup().addTo(instance),
       dock: lib.layerGroup().addTo(instance),
@@ -329,6 +356,14 @@
     instance.on('dragstart', () => {
       follow = false;
       autoFit = false;
+    });
+    // A tap on the map itself (areas are not interactive while a spot is placed, so it reaches
+    // the map); the handler reads the current prop, so it needs no re-registration.
+    instance.on('click', (event: Leaflet.LeafletMouseEvent) => {
+      const report = onmaptap;
+      if (!report) return;
+      const [x, y] = projection.toLocal([event.latlng.lat, event.latlng.lng]);
+      report([Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
     });
     instance.setView([0, 0], 3);
     lmap = instance;
@@ -646,6 +681,51 @@
     }
   });
 
+  // --- the spot of a spot-mowing run: its ring, the corners placed so far, the centre -------
+
+  $effect(() => {
+    void generation;
+    const lib = L;
+    const g = groups;
+    const drawn = spotDrawn;
+    if (!lib || !g) return;
+    g.spot.clearLayers();
+    if (!drawn) return;
+    if (drawn.ring.length >= 3) {
+      lib
+        .polygon(drawn.ring, { pane: 'md-spot', interactive: false, className: 'md-spot' })
+        .addTo(g.spot);
+    } else if (drawn.corners.length >= 2) {
+      lib
+        .polyline(drawn.corners, {
+          pane: 'md-spot',
+          interactive: false,
+          className: 'md-spot md-spot--open',
+        })
+        .addTo(g.spot);
+    }
+    for (const corner of drawn.corners) {
+      lib
+        .circleMarker(corner, {
+          pane: 'md-spot',
+          interactive: false,
+          radius: 5,
+          className: 'md-spot-corner',
+        })
+        .addTo(g.spot);
+    }
+    if (drawn.center) {
+      lib
+        .circleMarker(drawn.center, {
+          pane: 'md-spot',
+          interactive: false,
+          radius: 3,
+          className: 'md-spot-center',
+        })
+        .addTo(g.spot);
+    }
+  });
+
   // --- the mower ----------------------------------------------------------------------------
 
   $effect(() => {
@@ -801,6 +881,7 @@
   class="md-map"
   class:is-geo={mode === 'geo'}
   class:is-selectable={selectable}
+  class:is-tapping={!!onmaptap}
   data-testid={testid}
   data-mode={mode}
   data-ready={L !== null && generation > 0}
@@ -812,6 +893,8 @@
   data-path-points={path ? path.points_total : undefined}
   data-path-done={path?.progress ? path.progress.index : undefined}
   data-path-preview={path && pathPreview ? 'true' : undefined}
+  data-spot={spot ? spot.kind : undefined}
+  data-spot-corners={spot?.kind === 'polygon' ? spot.points.length : undefined}
 >
   <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
     <defs>
@@ -855,6 +938,11 @@
       </li>
       {#if pathHasProgress && labels.pathDone}<li data-path="done">{labels.pathDone}</li>{/if}
       {#if labels.pathAhead}<li data-path="ahead">{labels.pathAhead}</li>{/if}
+      {#if spotDrawn?.ring.length && labels.spot}<li data-path="spot">{labels.spot}</li>{/if}
+    </ul>
+  {:else if spotDrawn?.ring.length && labels.spot}
+    <ul class="legend legend--path" data-testid="spot-legend">
+      <li data-path="spot">{labels.spot}</li>
     </ul>
   {/if}
 
@@ -1221,6 +1309,37 @@
   /* Driving between areas with the blades off: dotted, like the transfer paths of the map. */
   .md-map :global(path.md-mowpath--transfer) {
     stroke-dasharray: 2 4;
+  }
+
+  /* --- the spot: a strong accent ring with a light fill; corners while drawing ------------- */
+
+  .md-map :global(path.md-spot) {
+    fill: var(--md-color-focus);
+    fill-opacity: 0.14;
+    stroke: var(--md-color-focus);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+  }
+
+  .md-map :global(path.md-spot--open) {
+    fill: none;
+    stroke-dasharray: 4 4;
+  }
+
+  .md-map :global(path.md-spot-corner) {
+    fill: var(--md-color-surface);
+    stroke: var(--md-color-focus);
+    stroke-width: 2.5;
+  }
+
+  .md-map :global(path.md-spot-center) {
+    fill: var(--md-color-focus);
+    stroke: var(--md-color-surface);
+    stroke-width: 1.5;
+  }
+
+  .md-map.is-tapping .canvas {
+    cursor: crosshair;
   }
 
   /* --- RTK signal map --------------------------------------------------------------------- */
@@ -1603,6 +1722,17 @@
 
   .legend--path [data-path='ahead'] {
     --md-legend: color-mix(in srgb, var(--md-color-focus) 38%, var(--md-color-surface));
+  }
+
+  .legend--path [data-path='spot'] {
+    --md-legend: color-mix(in srgb, var(--md-color-focus) 14%, var(--md-color-surface));
+  }
+
+  .legend--path [data-path='spot']::before {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--md-color-focus);
+    border-radius: var(--md-radius-round);
   }
 
   .legend--path .legend-title {

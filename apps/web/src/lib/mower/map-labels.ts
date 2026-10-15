@@ -108,5 +108,6 @@ export function mapLabels(): MowerMapLabels {
     pathDone: m.map_path_done(),
     pathAhead: m.map_path_ahead(),
     pathPreview: m.map_path_preview(),
+    spot: m.map_spot(),
   };
 }
