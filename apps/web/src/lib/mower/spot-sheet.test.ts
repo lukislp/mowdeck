@@ -23,6 +23,8 @@ import {
   spotReasonLabel,
   spotRunLabel,
   spotTarget,
+  spotTransitFrom,
+  startsFromDock,
   type ConditionState,
   type PlanOut,
   type PreviewOut,
@@ -217,6 +219,82 @@ describe('planner request', () => {
     expect(path.points_total).toBe(5);
     expect(path.progress).toBeNull();
   });
+
+  it('draws a found transit first as a transfer, none without a route', () => {
+    const preview = {
+      plan_hash: 'h2',
+      preview: {
+        type: 'FeatureCollection',
+        features: [
+          {
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [5, 5],
+                [6, 5],
+              ],
+            },
+            properties: { kind: 'mow' },
+          },
+        ],
+      },
+      transit: {
+        found: true,
+        from_dock: true,
+        length_m: 7.1,
+        route: [
+          [-1, 1],
+          [0.5, 1],
+          [5, 5],
+        ],
+        reason: null,
+      },
+    } as unknown as PreviewOut;
+    const path = previewMowPath(preview, '2026-10-15T10:00:00Z');
+    expect(path.kinds).toEqual(['transfer', 'mow']);
+    expect(path.polylines?.[0]).toEqual([
+      [-1, 1],
+      [0.5, 1],
+      [5, 5],
+    ]);
+    const blocked = {
+      ...preview,
+      transit: { found: false, from_dock: true, length_m: 0, route: [], reason: 'no_route: x' },
+    } as unknown as PreviewOut;
+    expect(previewMowPath(blocked, '2026-10-15T10:00:00Z').kinds).toEqual(['mow']);
+  });
+
+  it('asks for the transit from the dock or from the rounded position', () => {
+    const settings = initialSettings(220);
+    const docked = stateAt([3, 4], { activity: 'charging' });
+    expect(spotTransitFrom(docked, reference, true)).toEqual({ from_dock: true });
+    expect(spotTransitFrom(stateAt([3.26, 4.1]), reference, true)).toEqual({
+      from_dock: false,
+      position: [3.5, 4],
+    });
+    expect(spotTransitFrom(docked, reference, false)).toEqual({
+      from_dock: false,
+      position: [3, 4],
+    });
+    expect(spotTransitFrom(null, reference, true)).toBeNull();
+    const request = planRequest({
+      mowerId: 'm1',
+      spot: circle,
+      areaId: 'front',
+      settings,
+      cuttingWidthMm: 220,
+      transitFrom: { from_dock: true },
+    });
+    expect(request?.transit).toEqual({ from_dock: true });
+    const plain = planRequest({
+      mowerId: 'm1',
+      spot: circle,
+      areaId: 'front',
+      settings,
+      cuttingWidthMm: 220,
+    });
+    expect(plain && 'transit' in plain).toBe(false);
+  });
 });
 
 describe('command', () => {
@@ -256,6 +334,13 @@ describe('run states', () => {
     expect(isSpotRunFinal(run({ state: 'aborted' }))).toBe(true);
     expect(isSpotRunActive(null)).toBe(false);
     expect(spotRunLabel('paused_rtk')).toBeTruthy();
+    for (const state of ['undocking', 'waiting_rtk', 'transit', 'returning'] as const) {
+      expect(isSpotRunActive(run({ state }))).toBe(true);
+      expect(spotRunLabel(state)).toBeTruthy();
+      expect(spotRunLabel(state)).not.toBe(spotRunLabel('spot_mowing'));
+    }
+    expect(spotReasonLabel('undock_failed')).not.toBe('undock_failed');
+    expect(spotReasonLabel('no_route')).not.toBe('no_route');
     expect(spotReasonLabel('geofence')).not.toBe('geofence');
     expect(spotReasonLabel('something_new')).toBe('something_new');
     expect(spotReasonLabel(null)).toBeNull();
@@ -271,6 +356,8 @@ describe('start conditions', () => {
     linksSupported: ['ble_bridge'],
     driveSession: false,
     now: NOW,
+    transit: { found: true } as { found: boolean } | null,
+    undock: false as boolean | null,
   };
 
   function failing(patch: Partial<typeof base> & { state?: ConditionState | null }): string[] {
@@ -285,7 +372,7 @@ describe('start conditions', () => {
       'spot',
       'link',
       'rtk',
-      'near',
+      'route',
       'idle',
       'free',
       'battery',
@@ -295,11 +382,14 @@ describe('start conditions', () => {
   });
 
   it('each condition turns red on its own', () => {
-    expect(failing({ areaId: null })).toEqual(['spot', 'near']);
+    expect(failing({ areaId: null })).toEqual(['spot', 'route']);
     expect(failing({ state: stateAt([12, 10], { connection: 'cloud' }) })).toEqual(['link']);
     expect(failing({ state: stateAt([12, 10], { rtk_fix: 'float' }) })).toEqual(['rtk']);
     expect(failing({ state: stateAt([12, 10], { position_source: 'gps' }) })).toEqual(['rtk']);
-    expect(failing({ state: stateAt([25, 10]) })).toEqual(['near']);
+    expect(failing({ transit: { found: false } })).toEqual(['route']);
+    expect(failing({ transit: null })).toEqual(['route']);
+    // no distance limit any more: a far mower with a route is fine
+    expect(failing({ state: stateAt([250, 10]) })).toEqual([]);
     expect(failing({ state: stateAt([10, 10], { activity: 'docked' }) })).toEqual(['idle']);
     expect(failing({ state: stateAt([10, 10], { activity: 'mowing' }) })).toEqual(['idle', 'free']);
     expect(failing({ driveSession: true })).toEqual(['free']);
@@ -341,12 +431,23 @@ describe('start conditions', () => {
     expect(failing({ state: null })).toEqual([
       'link',
       'rtk',
-      'near',
+      'route',
       'idle',
       'free',
       'battery',
       'fresh',
     ]);
+  });
+
+  it('a docked mower that can undock may start: ready, RTK waits until it is out', () => {
+    const docked = stateAt([10, 10], { activity: 'docked', rtk_fix: 'float' });
+    expect(failing({ state: docked, undock: true })).toEqual([]);
+    expect(failing({ state: { ...docked, activity: 'charging' }, undock: true })).toEqual([]);
+    expect(failing({ state: docked, undock: false })).toEqual(['rtk', 'idle']);
+    expect(failing({ state: docked, undock: true, transit: { found: false } })).toEqual(['route']);
+    expect(startsFromDock(docked, true)).toBe(true);
+    expect(startsFromDock(stateAt([10, 10]), true)).toBe(false);
+    expect(startsFromDock(docked, undefined)).toBe(false);
   });
 
   it('the drive link: bridge link flag first, then the connection kind', () => {

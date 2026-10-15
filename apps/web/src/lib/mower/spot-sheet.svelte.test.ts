@@ -49,6 +49,7 @@ function previewOut(hash = 'h1'): PreviewOut {
         },
       ],
     },
+    transit: { found: true, from_dock: false, length_m: 0, route: [], reason: null },
   } as unknown as PreviewOut;
 }
 

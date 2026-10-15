@@ -184,7 +184,7 @@ export type RunId = string
  */
 export type SegmentIndex = number
 export type SegmentsTotal = number
-export type State = ("preparing" | "spot_mowing" | "paused_rtk" | "stopping" | "done" | "aborted" | "failed")
+export type State = ("preparing" | "undocking" | "waiting_rtk" | "transit" | "spot_mowing" | "paused_rtk" | "returning" | "stopping" | "done" | "aborted" | "failed")
 export type Type3 = "state"
 export type MowerId2 = string
 export type At = string

@@ -996,6 +996,17 @@
             "title": "Transfer Length M",
             "type": "number"
           },
+          "transit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransitOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The transit of a spot run, when the request asked for it."
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -1088,6 +1099,17 @@
             "description": "Use the chain of a saved template instead of `chain`.",
             "title": "Template"
           },
+          "transit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransitIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Also plan the transit of a spot run from the dock or a position to the plan's first point (ADR 0041)."
+          },
           "wgs84": {
             "default": false,
             "description": "Preview coordinates as `[lon, lat]`.",
@@ -1158,6 +1180,17 @@
           "transfer_length_m": {
             "title": "Transfer Length M",
             "type": "number"
+          },
+          "transit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransitOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The transit of a spot run, when the request asked for it."
           },
           "warnings": {
             "items": {
@@ -1458,6 +1491,89 @@
           "updated_at"
         ],
         "title": "TemplateOut",
+        "type": "object"
+      },
+      "TransitIn": {
+        "additionalProperties": false,
+        "description": "Where a spot run's transit would start (ADR 0041): ``from_dock`` for a docked mower (the\nmap's dock, as the Device-Gateway plans it), else the mower's ``position`` in local\nmetres.",
+        "properties": {
+          "from_dock": {
+            "default": false,
+            "title": "From Dock",
+            "type": "boolean"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          }
+        },
+        "title": "TransitIn",
+        "type": "object"
+      },
+      "TransitOut": {
+        "description": "The transit a spot run would drive from the start to the plan's first point (blades\noff), planned by the same algorithm as the Device-Gateway's run.",
+        "properties": {
+          "found": {
+            "description": "A route exists (the web app's route condition).",
+            "title": "Found",
+            "type": "boolean"
+          },
+          "from_dock": {
+            "title": "From Dock",
+            "type": "boolean"
+          },
+          "length_m": {
+            "title": "Length M",
+            "type": "number"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`no_route: ...` without a route.",
+            "title": "Reason"
+          },
+          "route": {
+            "description": "The route, local metres or `[lon, lat]` with `wgs84`; empty without one.",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Route",
+            "type": "array"
+          }
+        },
+        "required": [
+          "found",
+          "from_dock",
+          "length_m",
+          "route"
+        ],
+        "title": "TransitOut",
         "type": "object"
       },
       "UiAreaDef": {

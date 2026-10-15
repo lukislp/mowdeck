@@ -5,8 +5,6 @@
  * `spot-sheet.test.ts`.
  */
 import {
-  containingArea,
-  distanceToSpot,
   fromWgs84,
   spotPolygon,
   thinRing,
@@ -54,8 +52,8 @@ export const SPOT_SPACING_STEP_MM = 10;
 export const FALLBACK_CUTTING_WIDTH_MM = 400;
 /** The Planner keeps this far from the area edge and the no-go zones (design, section 2). */
 export const SPOT_SAFETY_MARGIN_M = 0.4;
-/** The mower must stand within this distance of the spot. */
-export const SPOT_NEAR_M = 10;
+/** A transit start position is rounded to this grid (a new report does not re-plan each time). */
+export const SPOT_TRANSIT_GRID_M = 0.5;
 /**
  * The state must be younger than this. A standing mower on a cloud-first connection reports
  * about every 20 s, and the bridge attaches when the run opens its drive session; the gateway's
@@ -149,6 +147,8 @@ export function planRequest(input: {
   areaId: string | null;
   settings: SpotSettings;
   cuttingWidthMm: number | null | undefined;
+  /** Where the run's transit starts (`spotTransitFrom`); the Planner returns the route. */
+  transitFrom?: TransitFrom | null;
 }): PlanRequest | null {
   const polygon = spotPolygon(input.spot);
   if (polygon.length < 3 || !input.areaId) return null;
@@ -167,7 +167,36 @@ export function planRequest(input: {
       safety_margin_m: SPOT_SAFETY_MARGIN_M,
     },
     wgs84: false,
+    ...(input.transitFrom ? { transit: input.transitFrom } : {}),
   };
+}
+
+export type TransitFrom = NonNullable<PlanRequest['transit']>;
+
+/** A docked mower whose connection can leave the dock by itself (`capabilities.undock`). */
+export function startsFromDock(
+  state: Pick<ConditionState, 'activity'> | null,
+  undock: boolean | null | undefined,
+): boolean {
+  return (
+    !!state && undock === true && (state.activity === 'docked' || state.activity === 'charging')
+  );
+}
+
+/**
+ * Where a run's transit starts, as the gateway plans it: the map's dock for a docked mower that
+ * can undock, else the mower's position (rounded to `SPOT_TRANSIT_GRID_M`). Null without either.
+ */
+export function spotTransitFrom(
+  state: Pick<ConditionState, 'activity' | 'position'> | null,
+  reference: GeoReference | null,
+  undock: boolean | null | undefined,
+): TransitFrom | null {
+  if (startsFromDock(state, undock)) return { from_dock: true };
+  const here = mowerLocal(state, reference);
+  if (!here) return null;
+  const grid = (v: number) => Math.round(v / SPOT_TRANSIT_GRID_M) * SPOT_TRANSIT_GRID_M;
+  return { from_dock: false, position: [grid(here[0]), grid(here[1])] };
 }
 
 function round3(value: number): number {
@@ -199,7 +228,8 @@ interface PreviewFeature {
 /**
  * The Planner's preview (a FeatureCollection of LineStrings in local metres) as the map's mow
  * path: one polyline per segment, `mow` and `turn` as mowing, `transfer` dotted, without
- * progress. The plan hash is the path hash, so a start can seed the map with it.
+ * progress; a found transit comes first as a `transfer`. The plan hash is the path hash, so a
+ * start can seed the map with it.
  */
 export function previewMowPath(preview: PreviewOut, plannedAt: string): MowPath {
   const features = Array.isArray((preview.preview as { features?: unknown }).features)
@@ -207,6 +237,11 @@ export function previewMowPath(preview: PreviewOut, plannedAt: string): MowPath 
     : [];
   const polylines: number[][][] = [];
   const kinds: string[] = [];
+  const route = preview.transit?.found ? preview.transit.route : [];
+  if (route.length >= 2) {
+    polylines.push(route.map((p) => [Number(p[0]), Number(p[1])]));
+    kinds.push('transfer');
+  }
   for (const feature of features) {
     if (feature.geometry?.type !== 'LineString') continue;
     const coords = feature.geometry.coordinates;
@@ -293,10 +328,18 @@ export function spotRunLabel(state: SpotRunState): string {
   switch (state) {
     case 'preparing':
       return m.spot_run_preparing();
+    case 'undocking':
+      return m.spot_run_undocking();
+    case 'waiting_rtk':
+      return m.spot_run_waiting_rtk();
+    case 'transit':
+      return m.spot_run_transit();
     case 'spot_mowing':
       return m.spot_run_mowing();
     case 'paused_rtk':
       return m.spot_run_paused_rtk();
+    case 'returning':
+      return m.spot_run_returning();
     case 'stopping':
       return m.spot_run_stopping();
     case 'done':
@@ -331,6 +374,10 @@ export function spotReasonLabel(reason: string | null | undefined): string | nul
       return m.spot_reason_timeout();
     case 'heading_mismatch':
       return m.spot_reason_heading_mismatch();
+    case 'undock_failed':
+      return m.spot_reason_undock_failed();
+    case 'no_route':
+      return m.spot_reason_no_route();
     default:
       return reason;
   }
@@ -339,7 +386,7 @@ export function spotReasonLabel(reason: string | null | undefined): string | nul
 // --- start conditions ------------------------------------------------------------------------
 
 export type SpotConditionId =
-  'spot' | 'link' | 'rtk' | 'near' | 'idle' | 'free' | 'battery' | 'fresh';
+  'spot' | 'link' | 'rtk' | 'route' | 'idle' | 'free' | 'battery' | 'fresh';
 
 export interface SpotCondition {
   id: SpotConditionId;
@@ -375,6 +422,10 @@ export interface SpotConditionInput {
   driveSession: boolean;
   /** Epoch ms of now. */
   now: number;
+  /** `capabilities.undock`: the run may start at the dock (it undocks, then waits for RTK). */
+  undock?: boolean | null;
+  /** The Planner's transit for the current preview (the gateway plans the same route). */
+  transit?: { found: boolean } | null;
 }
 
 /**
@@ -406,19 +457,17 @@ export function mowerLocal(
 export function spotConditions(input: SpotConditionInput): SpotCondition[] {
   const s = input.state;
   const area = input.areaId ? (input.areas.find((a) => a.id === input.areaId) ?? null) : null;
-  const here = mowerLocal(s, input.reference);
-  const near =
-    !!area &&
-    !!here &&
-    containingArea({ kind: 'polygon', points: [here, here, here] }, [area]) === area.id &&
-    distanceToSpot(here, input.spot) <= SPOT_NEAR_M;
+  const fromDock = startsFromDock(s, input.undock);
   const age = s ? input.now - Date.parse(s.observed_at) : Number.POSITIVE_INFINITY;
   return [
     { id: 'spot', ok: !!area },
     { id: 'link', ok: driveLinkUp(s, input.linksSupported) },
-    { id: 'rtk', ok: !!s && s.rtk_fix === 'fixed' && s.position_source === 'rtk' },
-    { id: 'near', ok: near },
-    { id: 'idle', ok: s?.activity === 'idle' },
+    {
+      id: 'rtk',
+      ok: fromDock || (!!s && s.rtk_fix === 'fixed' && s.position_source === 'rtk'),
+    },
+    { id: 'route', ok: !!area && !!s && input.transit?.found === true },
+    { id: 'idle', ok: s?.activity === 'idle' || fromDock },
     {
       id: 'free',
       ok: !!s && !isJobActivity(s.activity) && !input.driveSession && !isSpotRunActive(s.spot_run),
@@ -445,8 +494,8 @@ export function conditionLabel(id: SpotConditionId): string {
       return m.spot_cond_link();
     case 'rtk':
       return m.spot_cond_rtk();
-    case 'near':
-      return m.spot_cond_near();
+    case 'route':
+      return m.spot_cond_route();
     case 'idle':
       return m.spot_cond_idle();
     case 'free':
