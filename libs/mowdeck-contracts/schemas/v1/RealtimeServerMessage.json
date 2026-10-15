@@ -105,6 +105,270 @@
       "title": "ConnectionKind",
       "type": "string"
     },
+    "DriveCalibration": {
+      "description": "The fitted drive behaviour of one mower, as stored in the drive link's options.",
+      "properties": {
+        "calibrated_at": {
+          "format": "date-time",
+          "title": "Calibrated At",
+          "type": "string"
+        },
+        "dead_zone": {
+          "default": 0.0,
+          "description": "`linear` below which the mower stands.",
+          "maximum": 0.9,
+          "minimum": 0,
+          "title": "Dead Zone",
+          "type": "number"
+        },
+        "drive_speed_setting": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 5,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vendor's manual-driving speed setting during the calibration (`MowerState.drive_speed_mps`); null when the connection has none.",
+          "title": "Drive Speed Setting"
+        },
+        "full_speed_mps": {
+          "description": "Ground speed at `linear = 1`.",
+          "exclusiveMinimum": 0,
+          "maximum": 5,
+          "title": "Full Speed Mps",
+          "type": "number"
+        },
+        "full_yaw_rate_dps": {
+          "description": "Yaw rate at `angular = ±1` in degrees per second.",
+          "exclusiveMinimum": 0,
+          "maximum": 720,
+          "title": "Full Yaw Rate Dps",
+          "type": "number"
+        },
+        "turn_dead_zone": {
+          "default": 0.0,
+          "description": "`angular` below which the mower does not turn.",
+          "maximum": 0.9,
+          "minimum": 0,
+          "title": "Turn Dead Zone",
+          "type": "number"
+        }
+      },
+      "required": [
+        "full_speed_mps",
+        "full_yaw_rate_dps",
+        "calibrated_at"
+      ],
+      "title": "DriveCalibration",
+      "type": "object"
+    },
+    "DriveCalibrationResult": {
+      "description": "What a calibration measured and fitted.",
+      "properties": {
+        "calibration": {
+          "$ref": "#/$defs/DriveCalibration"
+        },
+        "forward_m": {
+          "default": 0.0,
+          "description": "Ground covered going forward.",
+          "minimum": 0,
+          "title": "Forward M",
+          "type": "number"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/DriveCalibrationStep"
+          },
+          "maxItems": 32,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "calibration"
+      ],
+      "title": "DriveCalibrationResult",
+      "type": "object"
+    },
+    "DriveCalibrationStatus": {
+      "description": "Progress of the drive calibration on this mower (``MowerState.drive_calibration``).",
+      "properties": {
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DriveCalibrationResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The fit, once the calibration is `done`."
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "state": {
+          "enum": [
+            "preparing",
+            "measuring",
+            "stopping",
+            "done",
+            "aborted",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "step_index": {
+          "default": 0,
+          "description": "The step being driven (0-based).",
+          "minimum": 0,
+          "title": "Step Index",
+          "type": "integer"
+        },
+        "steps": {
+          "description": "The steps measured so far.",
+          "items": {
+            "$ref": "#/$defs/DriveCalibrationStep"
+          },
+          "maxItems": 32,
+          "title": "Steps",
+          "type": "array"
+        },
+        "steps_total": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Steps Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "run_id",
+        "state"
+      ],
+      "title": "DriveCalibrationStatus",
+      "type": "object"
+    },
+    "DriveCalibrationStep": {
+      "description": "One measured step of a calibration.",
+      "properties": {
+        "command": {
+          "description": "`linear` (forward) or `angular` (turn).",
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Command",
+          "type": "number"
+        },
+        "distance_m": {
+          "default": 0.0,
+          "description": "Ground covered during the step.",
+          "minimum": 0,
+          "title": "Distance M",
+          "type": "number"
+        },
+        "duration_s": {
+          "maximum": 60,
+          "minimum": 0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "forward",
+            "turn"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "measured": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ground speed in m/s (forward) or yaw rate in degrees per second, left positive (turn); null when too few reports arrived.",
+          "title": "Measured"
+        },
+        "report_interval_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mean time between those reports.",
+          "title": "Report Interval S"
+        },
+        "reports": {
+          "default": 0,
+          "description": "Position reports during the step.",
+          "minimum": 0,
+          "title": "Reports",
+          "type": "integer"
+        },
+        "skipped": {
+          "default": false,
+          "description": "Not driven: the forward distance budget was used up (room ahead).",
+          "title": "Skipped",
+          "type": "boolean"
+        },
+        "turned_deg": {
+          "default": 0.0,
+          "description": "Heading change during the step.",
+          "title": "Turned Deg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "command",
+        "duration_s"
+      ],
+      "title": "DriveCalibrationStep",
+      "type": "object"
+    },
     "DriveCapabilities": {
       "description": "What the mower offers for manual driving.",
       "properties": {
@@ -641,11 +905,38 @@
         "connection": {
           "$ref": "#/$defs/ConnectionKind"
         },
+        "drive_calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DriveCalibrationStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The drive calibration MowDeck runs on this mower (`DriveCalibrate`, ADR 0042), with its final state and result kept until the next one; null when there never was one."
+        },
         "drive_recoverable": {
           "default": false,
           "description": "With activity `error`: the error is not a safety sensor stop, so manual driving may free the mower (stuck, wheel slip). Lift, tilt and collision stops are never drive recoverable; the controller refuses drive frames for them.",
           "title": "Drive Recoverable",
           "type": "boolean"
+        },
+        "drive_speed_mps": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 5,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vendor's speed setting for manual driving (`MowerCapabilities.drive_speed_setting`); null when the connection has none or has not read it yet.",
+          "title": "Drive Speed Mps"
         },
         "error_code": {
           "anyOf": [

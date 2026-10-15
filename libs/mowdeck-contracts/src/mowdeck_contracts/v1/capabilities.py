@@ -12,6 +12,7 @@ from typing import Annotated, Self
 from pydantic import Field, PlainSerializer, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel
+from mowdeck_contracts.v1.calibration import DriveSpeedSetting
 from mowdeck_contracts.v1.mower import ConnectionKind, RtkSource
 
 
@@ -77,6 +78,12 @@ class MowerCapabilities(ContractModel):
         default=False,
         description="The connection can make the mower leave its charging station by itself "
         "(`leave_dock`), so a spot run may start from the dock (ADR 0041).",
+    )
+    drive_speed_setting: DriveSpeedSetting | None = Field(
+        default=None,
+        description="The vendor's speed setting for manual driving can be read "
+        "(`MowerState.drive_speed_mps`) and changed (`set_drive_speed`) within this range; null "
+        "when the connection cannot (ADR 0042).",
     )
     custom_paths: bool = Field(
         default=False,

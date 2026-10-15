@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The vendor's speed setting for manual driving, as far as the connection can change it\n(``MowerCapabilities.drive_speed_setting``): the accepted range and step in m/s.",
+  "properties": {
+    "max_mps": {
+      "exclusiveMinimum": 0,
+      "maximum": 5,
+      "title": "Max Mps",
+      "type": "number"
+    },
+    "min_mps": {
+      "exclusiveMinimum": 0,
+      "maximum": 5,
+      "title": "Min Mps",
+      "type": "number"
+    },
+    "step_mps": {
+      "default": 0.1,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Step Mps",
+      "type": "number"
+    }
+  },
+  "required": [
+    "min_mps",
+    "max_mps"
+  ],
+  "title": "DriveSpeedSetting",
+  "type": "object"
+}

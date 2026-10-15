@@ -276,8 +276,12 @@ fixed RTK position), ``transit`` (driving to the spot with the blades off), ``sp
 (driving the plan), ``paused_rtk`` (waiting for a fixed RTK position), ``returning`` (the mower
 was sent home), ``stopping`` (a stop was requested), then one of ``done``, ``aborted``
 (``reason`` says why, e.g. ``rtk_lost``, ``geofence``, ``link_lost``, ``stopped_by_user``,
-``emergency_stop``, ``sensor_stop``, ``timeout``, ``heading_mismatch``, ``undock_failed``,
-``no_route``) or ``failed``."""
+``emergency_stop``, ``sensor_stop``, ``timeout``, ``stalled``, ``heading_mismatch``,
+``undock_failed``, ``no_route``) or ``failed``. ``stalled`` (ADR 0042): no progress along the
+plan for a minute; ``timeout``: the generous overall cap."""
+
+SPOT_REASON_STALLED: Final = "stalled"
+"""Abort reason of a spot run that made no progress along its plan for ``stall_s``."""
 
 SPOT_RUN_FINAL_STATES: Final[frozenset[str]] = frozenset({"done", "aborted", "failed"})
 """States after which a spot run does not change any more."""
