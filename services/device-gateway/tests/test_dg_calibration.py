@@ -68,7 +68,7 @@ async def test_dg_calibration_accepted_rule_13_and_stop() -> None:
         await _leave_the_dock(bus, reg)
         calibrate = None
         for _ in range(100):  # the zero frame's drive session may still be open
-            calibrate = envelope(reg, DriveCalibrate(step_s=1.0))
+            calibrate = envelope(reg, DriveCalibrate(step_s=5.0))
             await publish_command(bus, calibrate)
             command_id = calibrate.command_id
             await wait_until(functools.partial(_results_of, bus, reg, command_id))

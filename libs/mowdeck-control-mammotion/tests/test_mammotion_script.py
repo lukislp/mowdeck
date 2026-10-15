@@ -205,14 +205,24 @@ STEPS = [
         command=0.5,
         duration_s=2.5,
         measured=0.171,
-        reports=3,
+        reports=5,
         report_interval_s=1.02,
         distance_m=0.43,
+        window_s=4.5,
     ),
     DriveCalibrationStep(
-        kind="turn", command=-0.6, duration_s=2.5, measured=-27.25, reports=2, turned_deg=-68.1
+        kind="turn",
+        command=-0.6,
+        duration_s=6.0,
+        reports=2,
+        turned_deg=-68.1,
+        window_s=4.5,
+        outcome="invalid",
+        note="too few reports",
     ),
-    DriveCalibrationStep(kind="forward", command=1.0, duration_s=0.0, skipped=True),
+    DriveCalibrationStep(
+        kind="forward", command=1.0, duration_s=0.0, skipped=True, outcome="skipped"
+    ),
 ]
 
 
@@ -220,8 +230,8 @@ def test_mammotion_owner_script_calibration_options() -> None:
     script = _script()
     args = script.parse_args(["--calibrate"])
     assert args.calibrate and args.step_s is None and not args.save
-    args = script.parse_args(["--calibrate", "--step-s", "3", "--calibration-out", "c.json"])
-    assert args.step_s == 3.0 and args.calibration_out == Path("c.json")
+    args = script.parse_args(["--calibrate", "--step-s", "8", "--calibration-out", "c.json"])
+    assert args.step_s == 8.0 and args.calibration_out == Path("c.json")
     mower = "00000000-0000-4000-8000-0000000000aa"
     args = script.parse_args(
         ["--calibrate", "--save", "--fleet-url", "http://fleet", "--mower-id", mower]
@@ -232,9 +242,9 @@ def test_mammotion_owner_script_calibration_options() -> None:
     assert script.parse_args(["--set-speed", "0.4"]).set_speed == 0.4
     assert script.parse_args(["--get-speed"]).get_speed
     for bad in (
-        ["--step-s", "2"],  # needs --calibrate
-        ["--calibrate", "--step-s", "0.5"],  # below 1 s
-        ["--calibrate", "--step-s", "6"],  # above the contract's 5 s
+        ["--step-s", "6"],  # needs --calibrate
+        ["--calibrate", "--step-s", "2.5"],  # below the contract's 5 s
+        ["--calibrate", "--step-s", "13"],  # above the contract's 12 s
         ["--calibration-out", "c.json"],
         ["--save"],  # nothing to save
         ["--calibrate", "--save", "--use-calibration", "c.json"],
@@ -250,9 +260,29 @@ def test_mammotion_owner_script_calibration_options() -> None:
 def test_mammotion_owner_script_calibration_table() -> None:
     script = _script()
     rows = script.calibration_rows(STEPS)
-    assert rows[0] == ["1", "forward", "linear +0.50", "0.171 m/s", "3", "1.02", "0.43 m", "no"]
-    assert rows[1] == ["2", "turn", "angular -0.60", "-27.250 deg/s", "2", "-", "-68.1 deg", "no"]
-    assert rows[2][3] == "-" and rows[2][7] == "yes"
+    assert rows[0] == [
+        "1",
+        "forward",
+        "linear +0.50",
+        "0.171 m/s",
+        "5",
+        "1.02",
+        "4.5",
+        "0.43 m",
+        "measured",
+    ]
+    assert rows[1] == [
+        "2",
+        "turn",
+        "angular -0.60",
+        "-",
+        "2",
+        "-",
+        "4.5",
+        "-68.1 deg",
+        "invalid: too few reports",
+    ]
+    assert rows[2][3] == "-" and rows[2][8] == "skipped"
     lines = script.calibration_table(STEPS).splitlines()
     assert lines[0].split() == [
         "#",
@@ -262,8 +292,10 @@ def test_mammotion_owner_script_calibration_table() -> None:
         "reports",
         "interval",
         "s",
+        "window",
+        "s",
         "distance/turned",
-        "skipped",
+        "outcome",
     ]
     assert set(lines[1].replace(" ", "")) == {"-"}
     assert len(lines) == 2 + len(STEPS)
@@ -440,13 +472,13 @@ async def test_mammotion_owner_script_calibrate_prints_and_writes_the_result(
     script = _script()
     out_file = tmp_path / "calibration.json"
     args = script.parse_args(
-        ["--calibrate", "--step-s", "2", "--calibration-out", str(out_file), "--save", "--yes"]
+        ["--calibrate", "--step-s", "7", "--calibration-out", str(out_file), "--save", "--yes"]
     )
     controller = _Controller()
     log = script.JsonLog(tmp_path / "log.jsonl")
     assert await script.run_calibration(controller, args, log) == 0
     assert [c.kind for c in controller.commands] == ["drive_calibrate"]
-    assert controller.commands[0].step_s == 2.0
+    assert controller.commands[0].step_s == 7.0
     out = capsys.readouterr().out
     assert "linear +0.50" in out and "angular -0.60" in out
     assert '"drive_full_speed_mps": 0.42' in out  # the options JSON to paste

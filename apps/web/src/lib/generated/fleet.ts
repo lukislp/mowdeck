@@ -1273,10 +1273,12 @@ export type components = {
          *
          *     MowDeck drives a few short steps with the blades off (forward at ``linear`` 0.3, 0.5, 0.7
          *     and 1.0, then turns in place at ``angular`` ±0.3, ±0.6 and ±1.0, each ``step_s`` long, zero
-         *     frames in between) and fits the full-scale ground speed, the full-scale yaw rate and the
-         *     dead zone. Needs ``MowerCapabilities.manual_drive``, an idle mower out of its dock with a
-         *     fixed RTK position and about 2 m of free lawn straight ahead. Progress and the result arrive
-         *     in ``MowerState.drive_calibration``; ``SpotStop`` and ``EmergencyStop`` end it.
+         *     frames in between). Each step is measured over its steady window only (without the first
+         *     1.5 s, while the mower reacts), and MowDeck fits the full-scale ground speed, the
+         *     full-scale yaw rate and the dead zone. Needs ``MowerCapabilities.manual_drive``, an idle
+         *     mower out of its dock with a fixed RTK position and about 2 m of free lawn straight ahead.
+         *     Progress and the result arrive in ``MowerState.drive_calibration``; ``SpotStop`` and
+         *     ``EmergencyStop`` end it.
          */
         DriveCalibrate: {
             /**
@@ -1287,7 +1289,7 @@ export type components = {
             /**
              * Step S
              * @description Duration of each step in seconds.
-             * @default 2.5
+             * @default 6
              */
             step_s: number;
         };

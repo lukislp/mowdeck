@@ -199,6 +199,10 @@ class SimulationConfig:
     """Initial value of the speed setting (at which ``drive_max_speed_mps`` applies)."""
     drive_speed_range: tuple[float, float, float] = (0.2, 1.0, 0.1)
     """``(min, max, step)`` of the speed setting."""
+    drive_response_delay_s: float = 0.0
+    """Simulated seconds between a drive frame and the wheels following it (a real mower
+    reacts one to two seconds late, ADR 0042); 0: at once. The blades and a session stop act
+    at once."""
     margin_m: float = 0.2
     battery_percent: float = 100.0
     drain_mowing_per_h: float = 30.0
@@ -285,6 +289,9 @@ class SimulationConfig:
             raise ValueError(msg)
         if not 0 <= self.battery_percent <= 100:
             msg = "battery_percent must be within 0..100"
+            raise ValueError(msg)
+        if not 0 <= self.drive_response_delay_s <= 10:
+            msg = "drive_response_delay_s must be within 0..10"
             raise ValueError(msg)
         if not 10 <= self.camera_session_seconds <= 86_400:
             msg = "camera_session_seconds must be within 10..86400"
@@ -429,6 +436,8 @@ class SimulatedMower:
         self._elapsed_s = 0.0
         self._drive: SimulatedDriveSession | None = None
         self._drive_cmd = _DriveCommand()
+        self._drive_pending: list[tuple[float, _DriveCommand]] = []
+        """Drive frames not yet followed (``drive_response_delay_s``): ``(due_s, command)``."""
         self._backed_off_m = 0.0
         self._pending_start: _PendingStart | None = None
         self._path: MowPath | None = None
@@ -676,6 +685,7 @@ class SimulatedMower:
         if not self.stuck:
             status.activity = MowerActivity.IDLE
         self._drive = SimulatedDriveSession(self)
+        self._drive_pending.clear()
         self._drive_cmd = _DriveCommand()
         self._publish()
         return self._drive
@@ -917,11 +927,15 @@ class SimulatedMower:
                 pending.begin()
         self._moving_speed = 0.0
         guard = 0
+        cursor = self._elapsed_s - remaining
         while remaining > 1e-9:
             guard += 1
             if guard > 1_000_000:  # pragma: no cover - defensive, never reached
                 break
-            remaining -= self._advance(remaining)
+            chunk = self._apply_due_drive(cursor, remaining)
+            used = self._advance(chunk)
+            remaining -= used
+            cursor += used
         state = self.snapshot()
         self._changed.set()
         period = self.config.state_period_s
@@ -1298,16 +1312,32 @@ class SimulatedMower:
     def _drive_update(self, linear: float, angular: float, blade_on: bool) -> None:
         self._require_no_sensor_stop()
         allowed = blade_on and self._capabilities.manual_drive_blades and not self.stuck
-        self._drive_cmd = _DriveCommand(
+        command = _DriveCommand(
             linear=max(-1.0, min(1.0, linear)),
             angular=max(-1.0, min(1.0, angular)),
             blade_on=allowed,
         )
         self._blade_on = allowed
+        delay = self.config.drive_response_delay_s
+        if delay > 0:
+            self._drive_pending.append((self._elapsed_s + delay, command))
+        else:
+            self._drive_cmd = command
 
     def _drive_stop(self) -> None:
+        self._drive_pending.clear()
         self._drive_cmd = _DriveCommand()
         self._blade_on = False
+
+    def _apply_due_drive(self, now_s: float, limit: float) -> float:
+        """Follow the delayed drive frames due at ``now_s``; returns how far the simulation may
+        advance before the next one is due (at most ``limit``)."""
+        pending = self._drive_pending
+        while pending and pending[0][0] <= now_s + 1e-9:
+            self._drive_cmd = pending.pop(0)[1]
+        if pending:
+            return max(1e-6, min(limit, pending[0][0] - now_s))
+        return limit
 
     def _drive_closed(self, session: SimulatedDriveSession) -> None:
         if self._drive is session:
@@ -1319,6 +1349,7 @@ class SimulatedMower:
         if self._drive is not None:
             self._drive._end()
             self._drive = None
+        self._drive_pending.clear()
         self._drive_cmd = _DriveCommand()
         if self._status.activity is not MowerActivity.MOWING:
             self._blade_on = False

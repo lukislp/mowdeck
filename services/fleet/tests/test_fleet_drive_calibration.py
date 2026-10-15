@@ -34,7 +34,7 @@ OPTIONS: dict[str, Any] = {
     "drive_speed_setting": 0.4,
     "calibrated_at": "2026-10-15T10:00:00+00:00",
 }
-CALIBRATE = {"command": {"kind": "drive_calibrate", "step_s": 2.0}}
+CALIBRATE = {"command": {"kind": "drive_calibrate", "step_s": 6.0}}
 SPEED = {"command": {"kind": "set_drive_speed", "speed_mps": 0.5}}
 
 

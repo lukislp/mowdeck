@@ -8,6 +8,7 @@ from mowdeck_contracts.v1 import (
     DRIVE_CALIBRATION_OPTION_KEYS,
     DriveCalibrate,
     DriveCalibration,
+    DriveCalibrationStep,
     DriveSpeedSetting,
     MowerCapabilities,
     SetDriveSpeed,
@@ -70,9 +71,16 @@ def test_contracts_drive_speed_setting_and_commands() -> None:
     adapter: TypeAdapter[DriveCalibrate | SetDriveSpeed] = TypeAdapter(
         DriveCalibrate | SetDriveSpeed
     )
-    assert adapter.validate_python({"kind": "drive_calibrate"}) == DriveCalibrate(step_s=2.5)
+    assert adapter.validate_python({"kind": "drive_calibrate"}) == DriveCalibrate(step_s=6.0)
     assert adapter.validate_python({"kind": "set_drive_speed", "speed_mps": 0.4}) == (
         SetDriveSpeed(speed_mps=0.4)
     )
-    with pytest.raises(ValidationError):
-        DriveCalibrate(step_s=10)
+    for too_short_or_long in (2.5, 4.9, 12.5):
+        with pytest.raises(ValidationError):
+            DriveCalibrate(step_s=too_short_or_long)
+    step = DriveCalibrationStep(kind="forward", command=0.5, duration_s=6.0)
+    assert step.outcome == "measured" and step.note is None and step.window_s is None
+    invalid = DriveCalibrationStep(
+        kind="turn", command=-0.3, duration_s=6.0, reports=2, outcome="invalid", note="few"
+    )
+    assert DriveCalibrationStep.model_validate_json(invalid.model_dump_json()) == invalid

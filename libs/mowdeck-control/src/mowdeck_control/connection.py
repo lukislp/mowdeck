@@ -29,7 +29,10 @@ make the mower leave its charging station by itself sets ``MowerCapabilities.und
 implements :class:`UndockCapable` (ADR 0041: a spot run may then start at the dock). An adapter
 that can read and change the vendor's speed setting for manual driving declares
 ``MowerCapabilities.drive_speed_setting``, reports the value in ``MowerState.drive_speed_mps`` and
-implements :class:`DriveSpeedCapable` (ADR 0042, see :func:`drive_speed_port_of`).
+implements :class:`DriveSpeedCapable` (ADR 0042, see :func:`drive_speed_port_of`). An adapter
+that asks the mower for its reports while driving implements :class:`ReportRateCapable`, so a
+drive calibration can ask for them as fast as the link allows (ADR 0042, see
+:func:`report_rate_port_of`).
 
 Links and firmware (ADR 0038) are optional capabilities as well, declared in the capabilities
 and implemented as protocols: an adapter whose connection can consist of several links (the
@@ -429,6 +432,24 @@ class DriveSpeedCapable(Protocol):
 def drive_speed_port_of(connection: object) -> DriveSpeedCapable | None:
     """``connection`` as a :class:`DriveSpeedCapable`, or None when it does not implement it."""
     return connection if isinstance(connection, DriveSpeedCapable) else None
+
+
+@runtime_checkable
+class ReportRateCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection` whose mower reports only when asked
+    (ADR 0042): while a drive session is open the adapter asks for a fresh report whenever the
+    last one is older than its drive interval (about a second by default). A drive calibration
+    measures from these reports and asks for them faster while it runs."""
+
+    def set_drive_report_interval(self, interval_s: float | None) -> None:
+        """Ask for reports while driving at most every ``interval_s`` seconds (the adapter
+        clamps it to what its link allows); None restores the adapter's default."""
+        ...
+
+
+def report_rate_port_of(connection: object) -> ReportRateCapable | None:
+    """``connection`` as a :class:`ReportRateCapable`, or None when it does not implement it."""
+    return connection if isinstance(connection, ReportRateCapable) else None
 
 
 @runtime_checkable

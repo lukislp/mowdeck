@@ -49,8 +49,13 @@ DRIVE_CALIBRATION_OPTION_KEYS: Final = frozenset(
 Device-Gateway takes them off the options before it opens a link (an adapter never sees them)
 and a change of only these keys does not reopen the link."""
 
-MAX_CALIBRATION_STEP_S: Final = 5.0
+MIN_CALIBRATION_STEP_S: Final = 5.0
+"""Shortest step of a calibration: the settling time at the start of a step (1.5 s) plus a
+steady measuring window of at least 3 s, with some margin."""
+MAX_CALIBRATION_STEP_S: Final = 12.0
 """Longest step of a calibration (forward or turn)."""
+DEFAULT_CALIBRATION_STEP_S: Final = 6.0
+"""Default step of a calibration (``DriveCalibrate.step_s``)."""
 
 
 class DriveSpeedSetting(ContractModel):
@@ -150,6 +155,13 @@ class DriveCalibration(ContractModel):
 
 CalibrationStepKind = Literal["forward", "turn"]
 
+CalibrationStepOutcome = Literal["measured", "skipped", "invalid", "inconsistent", "outlier"]
+"""What became of a step: ``measured`` (used by the fit), ``skipped`` (not driven, the forward
+distance budget was used up), ``invalid`` (too few reports in the steady window: no value,
+never 0), ``inconsistent`` (a turn whose opposite turn disagrees in magnitude or sign) or
+``outlier`` (breaks the rule that speed and yaw rate grow with the stick). The last two keep
+their value but are left out of the fit."""
+
 
 class DriveCalibrationStep(ContractModel):
     """One measured step of a calibration."""
@@ -171,6 +183,21 @@ class DriveCalibrationStep(ContractModel):
     skipped: bool = Field(
         default=False,
         description="Not driven: the forward distance budget was used up (room ahead).",
+    )
+    outcome: CalibrationStepOutcome = Field(
+        default="measured",
+        description="`measured` (used by the fit), `skipped` (not driven), `invalid` (too few "
+        "reports in the steady window), `inconsistent` (the opposite turn disagrees) or "
+        "`outlier` (breaks the growth with the stick); the last three are left out of the fit.",
+    )
+    note: str | None = Field(
+        default=None, max_length=120, description="Why the step is not `measured`."
+    )
+    window_s: float | None = Field(
+        default=None,
+        ge=0,
+        description="Length of the steady window the value was measured over (the step "
+        "without its settling time at the start).",
     )
 
 
@@ -223,10 +250,13 @@ def calibration_of_links(links: Mapping[str, Mapping[str, Any]]) -> DriveCalibra
 
 
 __all__ = [
+    "DEFAULT_CALIBRATION_STEP_S",
     "DRIVE_CALIBRATION_FINAL_STATES",
     "DRIVE_CALIBRATION_OPTION_KEYS",
     "MAX_CALIBRATION_STEP_S",
+    "MIN_CALIBRATION_STEP_S",
     "CalibrationStepKind",
+    "CalibrationStepOutcome",
     "DriveCalibration",
     "DriveCalibrationResult",
     "DriveCalibrationState",

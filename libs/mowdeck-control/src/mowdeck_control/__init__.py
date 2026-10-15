@@ -11,7 +11,8 @@
   (ADR 0041, :class:`UndockCapable`).
 * :class:`DriveCalibrationRun`: measures what the stick values mean on the ground (full-scale
   speed, yaw rate, dead zone) for spot runs (ADR 0042); :class:`DriveSpeedCapable` is the
-  optional vendor speed setting for manual driving.
+  optional vendor speed setting for manual driving, :class:`ReportRateCapable` lets it ask for
+  reports faster while it measures.
 * :class:`SimulatedMower`: a deterministic simulated mower (``ConnectionKind.SIMULATED``).
 * :func:`plan_to_native_job`: neutral mowing request to a native mower job.
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
@@ -47,6 +48,7 @@ from mowdeck_control.connection import (
     PathPreviewCapable,
     Photo,
     PhotoCapture,
+    ReportRateCapable,
     TwoPhaseExecution,
     UndockCapable,
     bridge_scanner_of,
@@ -173,6 +175,7 @@ __all__ = [
     "Photo",
     "PhotoCapture",
     "Pose",
+    "ReportRateCapable",
     "SensorStop",
     "SimulatedDriveSession",
     "SimulatedMower",

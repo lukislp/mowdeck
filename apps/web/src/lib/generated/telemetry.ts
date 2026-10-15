@@ -635,6 +635,18 @@ export type components = {
              */
             measured?: number | null;
             /**
+             * Note
+             * @description Why the step is not `measured`.
+             */
+            note?: string | null;
+            /**
+             * Outcome
+             * @description `measured` (used by the fit), `skipped` (not driven), `invalid` (too few reports in the steady window), `inconsistent` (the opposite turn disagrees) or `outlier` (breaks the growth with the stick); the last three are left out of the fit.
+             * @default measured
+             * @enum {string}
+             */
+            outcome: "measured" | "skipped" | "invalid" | "inconsistent" | "outlier";
+            /**
              * Report Interval S
              * @description Mean time between those reports.
              */
@@ -657,6 +669,11 @@ export type components = {
              * @default 0
              */
             turned_deg: number;
+            /**
+             * Window S
+             * @description Length of the steady window the value was measured over (the step without its settling time at the start).
+             */
+            window_s?: number | null;
         };
         /**
          * DriveSpeedSetting
