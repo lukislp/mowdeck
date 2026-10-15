@@ -52,6 +52,11 @@ class LinkNotApplicableError(ConflictError):
     by the connection-kind registry, ADR 0038)."""
 
 
+class DriveCalibrationNotApplicableError(ConflictError):
+    """The mower has nowhere to keep a drive calibration: no drive link and a connection whose
+    options take no extra keys (409 ``drive-calibration-not-applicable``, ADR 0042)."""
+
+
 class BridgeScanUnsupportedError(ConflictError):
     """The Device-Gateway cannot scan through this kind of bridge (409
     ``bridge-scan-unsupported``)."""

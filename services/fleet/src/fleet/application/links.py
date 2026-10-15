@@ -19,29 +19,34 @@ and never speaks to a bridge or a vendor cloud itself. The HTTP layer checks the
 mower (``can_manage_mowers`` for links, ``can_view`` for the firmware check).
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
+    DRIVE_CALIBRATION_OPTION_KEYS,
     MOWER_UPDATED,
     BridgeScanErrorCode,
     BridgeScanReply,
     BridgeScanRequest,
+    DriveCalibration,
     FirmwareCheckErrorCode,
     FirmwareCheckRequest,
     FirmwareInfo,
     ProxyInfo,
 )
+from mowdeck_contracts.v1.links import LINK_BLE_BRIDGE
 from mowdeck_service_kit import get_logger
 
 from fleet.application.context import Actor, FleetConfig
 from fleet.application.linked_accounts import CredentialVault
 from fleet.application.ports import BridgeScanGateway, Clock, FirmwareCheckGateway, Store, Tx
 from fleet.application.work import UnitOfWork
+from fleet.domain.connections import SCHEMAS
 from fleet.domain.errors import (
     BridgeScanUnsupportedError,
+    DriveCalibrationNotApplicableError,
     FieldProblem,
     FirmwareCheckUnsupportedError,
     InvalidInput,
@@ -52,6 +57,7 @@ from fleet.domain.models import Mower, MowerLink
 from fleet.domain.rules import (
     SECRET_MASK,
     require_link_supported,
+    validate_connection_options,
     validate_link_options,
 )
 
@@ -61,6 +67,12 @@ LINK_SET: Final = "mower.link_set"
 """Audit action: a link was created or changed (details never carry the key)."""
 LINK_REMOVED: Final = "mower.link_removed"
 """Audit action: a link was removed."""
+DRIVE_CALIBRATION_SET: Final = "mower.drive_calibration_set"
+"""Audit action: a drive calibration was stored (details: the values and where)."""
+DRIVE_CALIBRATION_REMOVED: Final = "mower.drive_calibration_removed"
+"""Audit action: the stored drive calibration was removed."""
+DRIVE_LINK: Final = LINK_BLE_BRIDGE
+"""The link that drives the mower manually and in spot runs; it carries the calibration."""
 NOT_HELD: Final = "the mower is not held by a device gateway right now"
 NO_GATEWAY: Final = "the device gateway did not answer"
 SCAN_TIMEOUT_S: Final = 30
@@ -153,7 +165,9 @@ class LinkService:
         options: Mapping[str, Any],
     ) -> MowerLink:
         """Create or replace the link of ``kind`` with ``options`` (public and secret keys
-        together; a secret sent as ``***`` keeps the stored value).
+        together; a secret sent as ``***`` keeps the stored value). The drive calibration keys
+        (``DRIVE_CALIBRATION_OPTION_KEYS``) are managed: incoming ones are dropped, stored ones
+        are kept.
 
         409 ``link-not-applicable`` when the mower's connection kind carries no such link, 422
         for options the link kind's schema refuses (fields ``links/<kind>/<key>``), 503 without
@@ -165,7 +179,11 @@ class LinkService:
             item = await self._mower(work.tx, account_id, mower_id)
             schema = require_link_supported(item.connection_kind, kind)
             existing = await self._link(work.tx, item, kind)
-            merged = dict(options)
+            # The drive calibration is managed by Fleet (PUT /drive-calibration): a client never
+            # sets it here, and a replace that does not know it keeps the stored values.
+            merged = _without_calibration(options)
+            if existing is not None:
+                merged |= _calibration_options(existing.options)
             for key in schema.secret_keys:
                 if merged.get(key) == SECRET_MASK:
                     merged[key] = self._stored_key(existing, kind) if key == "noise_psk" else None
@@ -232,6 +250,92 @@ class LinkService:
             await work.audit(actor, LINK_REMOVED, account_id, "mower", item.id, {"kind": kind})
             work.emit(MOWER_UPDATED, account_id, await self.vault.registration(work.tx, item))
         _log.info("mower link removed", mower_id=str(mower_id), kind=kind)
+
+    # --- drive calibration (ADR 0042) ---------------------------------------------------------
+
+    async def set_drive_calibration(
+        self, actor: Actor, account_id: UUID, mower_id: UUID, calibration: DriveCalibration
+    ) -> DriveCalibration:
+        """Store a measured drive calibration (the caller holds ``can_drive``): as options of the
+        mower's drive link (``ble_bridge``) when it has one, else in its connection options when
+        the connection kind takes them (``connection_takes_calibration``, e.g. the simulator).
+        Replaces a stored calibration; the link's secrets stay as they are.
+
+        409 ``drive-calibration-not-applicable`` when the mower has neither. Audits
+        ``mower.drive_calibration_set`` (the values, never a secret) and publishes
+        ``mower.updated`` with the full registration, so the Device-Gateway hands the
+        calibration to the next spot run.
+        """
+        values = calibration.to_options()
+        async with self.uow() as work:
+            item = await self._mower(work.tx, account_id, mower_id)
+            link = await self._link(work.tx, item, DRIVE_LINK)
+            now = self.clock()
+            if link is not None:
+                link.options = _without_calibration(link.options) | values
+                link.updated_at = now
+                await work.tx.mower_links.update(link)
+                stored_on = link.kind
+            elif connection_takes_calibration(item.connection_kind):
+                item.connection_options = validate_connection_options(
+                    _without_calibration(item.connection_options) | values,
+                    self.config.connection_options_max_bytes,
+                    item.connection_kind,
+                )
+                item.updated_at = now
+                await work.tx.mowers.update(item)
+                stored_on = "connection"
+            else:
+                msg = (
+                    f"a {item.connection_kind} mower without a {DRIVE_LINK} link has nowhere to "
+                    "keep a drive calibration"
+                )
+                raise DriveCalibrationNotApplicableError(msg)
+            await work.audit(
+                actor,
+                DRIVE_CALIBRATION_SET,
+                account_id,
+                "mower",
+                item.id,
+                {"stored_on": stored_on, **values},
+            )
+            work.emit(MOWER_UPDATED, account_id, await self.vault.registration(work.tx, item))
+        _log.info("drive calibration set", mower_id=str(mower_id), stored_on=stored_on)
+        return DriveCalibration.from_options(values) or calibration
+
+    async def remove_drive_calibration(
+        self, actor: Actor, account_id: UUID, mower_id: UUID
+    ) -> None:
+        """Remove the stored drive calibration from the drive link and the connection options
+        (the caller holds ``can_drive``). Nothing stored: nothing changes. Audits
+        ``mower.drive_calibration_removed`` and publishes ``mower.updated``."""
+        async with self.uow() as work:
+            item = await self._mower(work.tx, account_id, mower_id)
+            link = await self._link(work.tx, item, DRIVE_LINK)
+            now = self.clock()
+            removed: list[str] = []
+            if link is not None and _calibration_options(link.options):
+                link.options = _without_calibration(link.options)
+                link.updated_at = now
+                await work.tx.mower_links.update(link)
+                removed.append(link.kind)
+            if _calibration_options(item.connection_options):
+                item.connection_options = _without_calibration(item.connection_options)
+                item.updated_at = now
+                await work.tx.mowers.update(item)
+                removed.append("connection")
+            if not removed:
+                return
+            await work.audit(
+                actor,
+                DRIVE_CALIBRATION_REMOVED,
+                account_id,
+                "mower",
+                item.id,
+                {"stored_on": removed},
+            )
+            work.emit(MOWER_UPDATED, account_id, await self.vault.registration(work.tx, item))
+        _log.info("drive calibration removed", mower_id=str(mower_id))
 
     # --- scans -------------------------------------------------------------------------------
 
@@ -363,6 +467,39 @@ class LinkService:
         if info is None:  # pragma: no cover - the reply model guarantees one of both
             raise Unavailable("the device gateway sent no firmware information")
         return info
+
+
+def _calibration_options(options: Mapping[str, Any]) -> dict[str, Any]:
+    """The drive calibration keys of ``options``."""
+    return {k: v for k, v in options.items() if k in DRIVE_CALIBRATION_OPTION_KEYS}
+
+
+def _without_calibration(options: Mapping[str, Any]) -> dict[str, Any]:
+    """``options`` without the drive calibration keys."""
+    return {k: v for k, v in options.items() if k not in DRIVE_CALIBRATION_OPTION_KEYS}
+
+
+def connection_takes_calibration(connection_kind: str) -> bool:
+    """True when the connection options of ``connection_kind`` may carry a drive calibration:
+    its schema declares the calibration keys (``ble_bridge``), keeps keys outside its schema
+    (the simulator) or there is no schema at all."""
+    schema = SCHEMAS.get(connection_kind)
+    if schema is None or schema.extra_options:
+        return True
+    return {o.key for o in schema.options} >= DRIVE_CALIBRATION_OPTION_KEYS
+
+
+def drive_calibration_of(
+    links: Sequence[MowerLink], connection_options: Mapping[str, Any]
+) -> DriveCalibration | None:
+    """The stored drive calibration of a mower: from its drive link, else from its connection
+    options; None when there is none."""
+    for link in links:
+        if link.kind == DRIVE_LINK:
+            found = DriveCalibration.from_options(link.options)
+            if found is not None:
+                return found
+    return DriveCalibration.from_options(connection_options)
 
 
 def _same_bridge(stored: Mapping[str, Any], other: Mapping[str, Any]) -> bool:

@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 from mowdeck_authz import account, group, site
 from mowdeck_contracts.v1 import (
+    DRIVE_CALIBRATION_OPTION_KEYS,
     MOWER_REGISTERED,
     MOWER_REMOVED,
     MOWER_UPDATED,
@@ -94,6 +95,18 @@ class MowerView:
     group_ids: list[UUID]
     area_names: dict[str, str] = field(default_factory=dict)
     links: list[MowerLink] = field(default_factory=list)
+
+
+def _keep_calibration(
+    new: Mapping[str, Any], stored: Mapping[str, Any], same_kind: bool
+) -> dict[str, Any]:
+    """Connection options of a PATCH with the stored drive calibration (ADR 0042): it is set by
+    ``PUT /mowers/{id}/drive-calibration`` only, so incoming calibration keys are dropped and the
+    stored ones kept while the connection kind stays the same (a new kind starts without)."""
+    merged = {k: v for k, v in new.items() if k not in DRIVE_CALIBRATION_OPTION_KEYS}
+    if same_kind:
+        merged |= {k: v for k, v in stored.items() if k in DRIVE_CALIBRATION_OPTION_KEYS}
+    return merged
 
 
 def audited_defaults(defaults: MowDefaults | None) -> dict[str, Any] | None:
@@ -579,6 +592,10 @@ class MowerService:
                         if new_options is not None
                         else item.connection_options
                     )
+                    if new_options is not None:
+                        merged = _keep_calibration(
+                            merged, item.connection_options, kind == item.connection_kind
+                        )
                     if kind == "cloud":
                         self._legacy_cloud_patch(merged, item.connection_options)
                     item.connection_kind, item.connection_options = self._connection(kind, merged)

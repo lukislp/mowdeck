@@ -516,6 +516,165 @@ export type components = {
             y: number;
         };
         /**
+         * DriveCalibration
+         * @description The fitted drive behaviour of one mower, as stored in the drive link's options.
+         */
+        DriveCalibration: {
+            /**
+             * Calibrated At
+             * Format: date-time
+             */
+            calibrated_at: string;
+            /**
+             * Dead Zone
+             * @description `linear` below which the mower stands.
+             * @default 0
+             */
+            dead_zone: number;
+            /**
+             * Drive Speed Setting
+             * @description The vendor's manual-driving speed setting during the calibration (`MowerState.drive_speed_mps`); null when the connection has none.
+             */
+            drive_speed_setting?: number | null;
+            /**
+             * Full Speed Mps
+             * @description Ground speed at `linear = 1`.
+             */
+            full_speed_mps: number;
+            /**
+             * Full Yaw Rate Dps
+             * @description Yaw rate at `angular = ±1` in degrees per second.
+             */
+            full_yaw_rate_dps: number;
+            /**
+             * Turn Dead Zone
+             * @description `angular` below which the mower does not turn.
+             * @default 0
+             */
+            turn_dead_zone: number;
+        };
+        /**
+         * DriveCalibrationResult
+         * @description What a calibration measured and fitted.
+         */
+        DriveCalibrationResult: {
+            calibration: components["schemas"]["DriveCalibration"];
+            /**
+             * Forward M
+             * @description Ground covered going forward.
+             * @default 0
+             */
+            forward_m: number;
+            /** Steps */
+            steps?: components["schemas"]["DriveCalibrationStep"][];
+        };
+        /**
+         * DriveCalibrationStatus
+         * @description Progress of the drive calibration on this mower (``MowerState.drive_calibration``).
+         */
+        DriveCalibrationStatus: {
+            /** Reason */
+            reason?: string | null;
+            /** @description The fit, once the calibration is `done`. */
+            result?: components["schemas"]["DriveCalibrationResult"] | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "preparing" | "measuring" | "stopping" | "done" | "aborted" | "failed";
+            /**
+             * Step Index
+             * @description The step being driven (0-based).
+             * @default 0
+             */
+            step_index: number;
+            /**
+             * Steps
+             * @description The steps measured so far.
+             */
+            steps?: components["schemas"]["DriveCalibrationStep"][];
+            /**
+             * Steps Total
+             * @default 0
+             */
+            steps_total: number;
+        };
+        /**
+         * DriveCalibrationStep
+         * @description One measured step of a calibration.
+         */
+        DriveCalibrationStep: {
+            /**
+             * Command
+             * @description `linear` (forward) or `angular` (turn).
+             */
+            command: number;
+            /**
+             * Distance M
+             * @description Ground covered during the step.
+             * @default 0
+             */
+            distance_m: number;
+            /** Duration S */
+            duration_s: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "forward" | "turn";
+            /**
+             * Measured
+             * @description Ground speed in m/s (forward) or yaw rate in degrees per second, left positive (turn); null when too few reports arrived.
+             */
+            measured?: number | null;
+            /**
+             * Report Interval S
+             * @description Mean time between those reports.
+             */
+            report_interval_s?: number | null;
+            /**
+             * Reports
+             * @description Position reports during the step.
+             * @default 0
+             */
+            reports: number;
+            /**
+             * Skipped
+             * @description Not driven: the forward distance budget was used up (room ahead).
+             * @default false
+             */
+            skipped: boolean;
+            /**
+             * Turned Deg
+             * @description Heading change during the step.
+             * @default 0
+             */
+            turned_deg: number;
+        };
+        /**
+         * DriveSpeedSetting
+         * @description The vendor's speed setting for manual driving, as far as the connection can change it
+         *     (``MowerCapabilities.drive_speed_setting``): the accepted range and step in m/s.
+         */
+        DriveSpeedSetting: {
+            /** Max Mps */
+            max_mps: number;
+            /** Min Mps */
+            min_mps: number;
+            /**
+             * Step Mps
+             * @default 0.1
+             */
+            step_mps: number;
+        };
+        /**
          * EventDef
          * @description An event type a module publishes.
          */
@@ -935,6 +1094,8 @@ export type components = {
              * @description Width of the cut swath in millimetres, if known (coverage heatmaps).
              */
             cutting_width_mm?: number | null;
+            /** @description The vendor's speed setting for manual driving can be read (`MowerState.drive_speed_mps`) and changed (`set_drive_speed`) within this range; null when the connection cannot (ADR 0042). */
+            drive_speed_setting?: components["schemas"]["DriveSpeedSetting"] | null;
             /**
              * Firmware Update
              * @description The connection can ask the manufacturer's firmware service for updates and install them (`firmware_check`, `firmware_update`).
@@ -1245,12 +1406,19 @@ export type components = {
              */
             connected: boolean;
             connection: components["schemas"]["ConnectionKind"];
+            /** @description The drive calibration MowDeck runs on this mower (`DriveCalibrate`, ADR 0042), with its final state and result kept until the next one; null when there never was one. */
+            drive_calibration?: components["schemas"]["DriveCalibrationStatus"] | null;
             /**
              * Drive Recoverable
              * @description With activity `error`: the error is not a safety sensor stop, so manual driving may free the mower (stuck, wheel slip). Lift, tilt and collision stops are never drive recoverable; the controller refuses drive frames for them.
              * @default false
              */
             drive_recoverable: boolean;
+            /**
+             * Drive Speed Mps
+             * @description The vendor's speed setting for manual driving (`MowerCapabilities.drive_speed_setting`); null when the connection has none or has not read it yet.
+             */
+            drive_speed_mps?: number | null;
             /** Error Code */
             error_code?: string | null;
             /** Error Message */

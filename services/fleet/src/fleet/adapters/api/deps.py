@@ -34,6 +34,7 @@ from fleet.domain.errors import (
     BridgeScanUnsupportedError,
     CameraUnsupportedError,
     ConflictError,
+    DriveCalibrationNotApplicableError,
     FeatureNotInPlanError,
     FirmwareCheckUnsupportedError,
     FleetError,
@@ -81,6 +82,14 @@ class LinkNotApplicable(Conflict):
 
     problem_type = "link-not-applicable"
     title = "Link not applicable"
+
+
+class DriveCalibrationNotApplicable(Conflict):
+    """409 ``urn:mowdeck:problem:drive-calibration-not-applicable``: the mower has nowhere to keep
+    a drive calibration (no drive link, and its connection options take no extra keys)."""
+
+    problem_type = "drive-calibration-not-applicable"
+    title = "Drive calibration not applicable"
 
 
 class BridgeScanUnsupported(Conflict):
@@ -176,6 +185,8 @@ ViewMower = Annotated[Principal, _hide(Relation.CAN_VIEW, MOWER)]
 """``can_view`` on the mower in the path (404 otherwise)."""
 ControlMower = Annotated[Principal, _hide(Relation.CAN_CONTROL, MOWER)]
 """``can_control`` on the mower (403 when visible, else 404)."""
+DriveMower = Annotated[Principal, _hide(Relation.CAN_DRIVE, MOWER)]
+"""``can_drive`` on the mower (403 when visible, else 404)."""
 ManageMower = Annotated[Principal, _hide(Relation.CAN_MANAGE_MOWERS, MOWER)]
 """``can_manage_mowers`` on the mower (403 when visible, else 404)."""
 ViewSite = Annotated[Principal, _hide(Relation.CAN_VIEW, SITE)]
@@ -207,6 +218,8 @@ def to_service_error(exc: FleetError) -> ServiceError:
             return PathPreviewRejected(exc.message)
         case LinkNotApplicableError():
             return LinkNotApplicable(exc.message)
+        case DriveCalibrationNotApplicableError():
+            return DriveCalibrationNotApplicable(exc.message)
         case BridgeScanUnsupportedError():
             return BridgeScanUnsupported(exc.message)
         case FirmwareCheckUnsupportedError():

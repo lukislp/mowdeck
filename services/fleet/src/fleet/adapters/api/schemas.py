@@ -5,11 +5,11 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import ConnectionKind, MowPattern, ProxyInfo
+from mowdeck_contracts.v1 import ConnectionKind, DriveCalibration, MowPattern, ProxyInfo
 from pydantic import BaseModel, ConfigDict, Field
 
 from fleet.application.linked_accounts import DeviceView, LinkedAccountView
-from fleet.application.links import ScanInput, proxy_info_of
+from fleet.application.links import ScanInput, drive_calibration_of, proxy_info_of
 from fleet.application.mowers import MowerView
 from fleet.domain import models
 from fleet.domain.connections import SCHEMAS, KindSchema, OptionSpec
@@ -344,6 +344,11 @@ class MowerOut(BaseModel):
         "bridge, `PUT /mowers/{id}/links/ble_bridge`); empty for a mower with only its "
         "connection.",
     )
+    drive_calibration: DriveCalibration | None = Field(
+        default=None,
+        description="The stored drive calibration (`PUT /mowers/{id}/drive-calibration`): from "
+        "the `ble_bridge` link, else from the connection options; null until one is stored.",
+    )
     created_by: UUID
     created_at: datetime
     updated_at: datetime
@@ -366,6 +371,7 @@ class MowerOut(BaseModel):
             area_names=dict(found.area_names),
             mow_defaults=MowDefaults.of(item.mow_defaults),
             links={link.kind: LinkOut.of(link) for link in found.links},
+            drive_calibration=drive_calibration_of(found.links, item.connection_options),
             created_by=item.created_by,
             created_at=item.created_at,
             updated_at=item.updated_at,
@@ -414,7 +420,8 @@ class ConnectionOptionOut(BaseModel):
     examples: list[str]
     managed: bool = Field(
         default=False,
-        description="Set by Fleet from the linked account's device list: shown, not editable.",
+        description="Set by Fleet (from the linked account's device list, or a stored drive "
+        "calibration): shown, not editable.",
     )
 
     @classmethod

@@ -34,6 +34,8 @@ COMMAND_RELATION: Final[Mapping[str, str]] = {
     "spot_mow": CAN_DRIVE,  # MowDeck steers the mower with joystick frames
     "spot_stop": CAN_CONTROL,
     "manual_drive": CAN_DRIVE,
+    "drive_calibrate": CAN_DRIVE,  # MowDeck drives fixed steps to measure the stick scale
+    "set_drive_speed": CAN_DRIVE,  # changes how far a stick value drives the mower
     "emergency_stop": CAN_EMERGENCY_STOP,  # equals can_view in the model: whoever sees may stop
 }
 """The computed relation a principal needs on the mower to send a command of each kind."""
@@ -65,14 +67,17 @@ def command_features(kind: str) -> frozenset[str]:
     """The plan features a command of ``kind`` needs: nothing for the emergency stop, else
     ``control`` (so also ``firmware_update``) plus ``camera`` for ``set_light`` and
     ``spot_mowing`` for ``spot_mow``. A ``start_mow`` with a spot plan adds ``spot_mowing`` in
-    the use case (the kind alone does not say)."""
+    the use case (the kind alone does not say). A drive calibration and the drive speed setting
+    need ``control`` only: they are not spot mowing."""
     if kind == "emergency_stop":
         return frozenset()
     return frozenset({FEATURE_CONTROL}) | _EXTRA_FEATURES.get(kind, frozenset())
 
 
-SINGLE_MOWER_KINDS: Final = frozenset({"spot_mow"})
-"""Kinds that carry a route computed for one mower: never sent to a site or group."""
+SINGLE_MOWER_KINDS: Final = frozenset({"spot_mow", "drive_calibrate", "set_drive_speed"})
+"""Kinds that only make sense for one mower, never sent to a site or group: a route computed
+for one mower, a drive calibration (one mower in front of its user) and the per-mower vendor
+setting for manual driving."""
 
 
 def bulk_gate_relation(kind: str) -> str:
