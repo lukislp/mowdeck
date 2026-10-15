@@ -25,6 +25,16 @@ can rebuild its map from what it already holds implements :class:`MapRebuildable
 while the confirmation is pending; an adapter that knows the route the mower planned for its job
 implements :class:`MowPathSource` (see :func:`current_path_of`), and one that can ask the mower
 to plan a route without starting it implements :class:`PathPreviewCapable`.
+
+Links and firmware (ADR 0038) are optional capabilities as well, declared in the capabilities
+and implemented as protocols: an adapter whose connection can consist of several links (the
+primary one plus e.g. a Bluetooth bridge) lists the extra kinds in
+``MowerCapabilities.links_supported`` and reports each of them in ``MowerState.links``; an
+adapter that can ask the manufacturer for firmware updates sets
+``MowerCapabilities.firmware_update`` and implements :class:`FirmwarePort` (see
+:func:`firmware_port_of`); one that can look for the mower through a Bluetooth bridge implements
+:class:`BridgeScanCapable` (see :func:`bridge_scanner_of`). The safety rules of a firmware update
+live in :mod:`mowdeck_control.safety` and are enforced by the controller for every adapter.
 """
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
@@ -33,10 +43,12 @@ from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    BridgeScanReply,
     CameraSession,
     CommandStatus,
     ConnectionKind,
     EmergencyStop,
+    FirmwareInfo,
     FirmwareUpdate,
     MowerCapabilities,
     MowerMap,
@@ -369,3 +381,65 @@ class PathPreviewCapable(Protocol):
     ) -> MowPath:
         """The route the mower planned (``progress`` is None)."""
         ...
+
+
+@runtime_checkable
+class FirmwarePort(Protocol):
+    """Optional capability of a :class:`MowerConnection`: the manufacturer's firmware service
+    (ADR 0038), declared with ``MowerCapabilities.firmware_update``.
+
+    The adapter only supplies the vendor calls and keeps the resulting
+    :class:`~mowdeck_contracts.v1.FirmwareInfo` in ``MowerState.firmware_info``; the safety
+    rules of an update (:func:`mowdeck_control.safety.firmware_update_problem`) and the lock-out
+    while it runs are the controller's. Both methods raise
+    :class:`~mowdeck_control.errors.NotConnected` without a usable link to the vendor.
+    """
+
+    async def check_firmware(self) -> FirmwareInfo | None:
+        """Ask the vendor what is installed and what is offered; None when it cannot say."""
+        ...
+
+    async def start_firmware_update(self, version: str) -> None:
+        """Ask the vendor to install ``version`` (the controller checked the preconditions).
+
+        Raises :class:`~mowdeck_control.errors.CommandRejected` when the vendor refuses.
+        """
+        ...
+
+
+def firmware_port_of(connection: object) -> FirmwarePort | None:
+    """``connection`` as a :class:`FirmwarePort`, or None when it does not implement it."""
+    return connection if isinstance(connection, FirmwarePort) else None
+
+
+@runtime_checkable
+class BridgeScanCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection`: look for the mower through a
+    Bluetooth bridge (ADR 0038), offered when ``ble_bridge`` is in
+    ``MowerCapabilities.links_supported``.
+
+    The result is neutral: the bridge's own description
+    (:class:`~mowdeck_contracts.v1.ProxyInfo`), the mower advertisements it saw
+    (:class:`~mowdeck_contracts.v1.ScannedDevice`) and an error code when the bridge could not
+    be used. A connection that already holds an open link through the same bridge answers from
+    its live scanner instead of opening a second connection to it.
+    """
+
+    async def scan_bridge(
+        self,
+        *,
+        host: str,
+        port: int,
+        secret: str,
+        expected_name: str | None,
+        timeout_s: float,
+    ) -> BridgeScanReply:
+        """Scan through the bridge at ``host``:``port`` (``secret``: its API key) until
+        ``expected_name`` advertises or ``timeout_s`` passes; never raises for bridge errors
+        (they come back as ``error``)."""
+        ...
+
+
+def bridge_scanner_of(connection: object) -> BridgeScanCapable | None:
+    """``connection`` as a :class:`BridgeScanCapable`, or None when it does not implement it."""
+    return connection if isinstance(connection, BridgeScanCapable) else None

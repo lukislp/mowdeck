@@ -43,6 +43,11 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    start waits for its confirmation or a drive session is open, and its areas and pattern are
    checked like a ``StartMow``. It does not take the queue: the mower only plans, and a start
    sent meanwhile simply plans the same route again.
+11. A ``FirmwareUpdate`` (ADR 0038) needs ``capabilities.firmware_update`` and passes the rules
+   of :func:`mowdeck_control.safety.firmware_update_problem`: the offered version only, the
+   mower docked and charging with enough battery, no job, no open drive session, no update
+   already installing. While the mower reports ``updating`` every command but ``EmergencyStop``
+   is rejected with ``"firmware update running"``, drive frames included.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -66,6 +71,7 @@ from mowdeck_contracts.v1 import (
     CommandResult,
     CommandStatus,
     EmergencyStop,
+    FirmwareUpdate,
     ManualDrive,
     MowerActivity,
     MowerCapabilities,
@@ -95,7 +101,11 @@ from mowdeck_control.connection import (
     dispatch_of,
 )
 from mowdeck_control.errors import CommandRejected, NotConnected, UnsupportedPattern
-from mowdeck_control.safety import decide_manual_blade
+from mowdeck_control.safety import (
+    FIRMWARE_UPDATE_RUNNING,
+    decide_manual_blade,
+    firmware_update_problem,
+)
 from mowdeck_control.timers import AsyncioTimerFactory, Timer, TimerFactory
 from mowdeck_control.translation import MowRequest, plan_to_native_job
 
@@ -337,6 +347,14 @@ class MowerController:
                 return self._result(
                     envelope, CommandStatus.EXPIRED, "command expired while waiting in the queue"
                 )
+            if await self._updating():
+                return self._result(envelope, CommandStatus.REJECTED, FIRMWARE_UPDATE_RUNNING)
+            if isinstance(command, FirmwareUpdate) and self._session is not None:
+                return self._result(
+                    envelope,
+                    CommandStatus.REJECTED,
+                    "a manual drive session is open; stop driving first",
+                )
             if isinstance(command, ManualDrive):
                 if self._confirming:
                     return self._result(
@@ -445,7 +463,18 @@ class MowerController:
             outcome = Outcome.failed(f"adapter error: {type(exc).__name__}")
         return self._result(envelope, outcome.status, outcome.reason)
 
+    async def _updating(self) -> bool:
+        """Rule 11: the mower reports a running firmware update (the adapter's current state,
+        so a command right after the start is caught before the pushed state arrived)."""
+        try:
+            state: MowerState | None = await self._connection.get_state()
+        except NotConnected:
+            state = self._last_state
+        return state is not None and state.activity is MowerActivity.UPDATING
+
     async def _validate(self, command: JobCommand) -> str | None:
+        if isinstance(command, FirmwareUpdate):
+            return await self._validate_firmware(command)
         if isinstance(command, SetBladeHeight):
             caps = await self.capabilities()
             if not caps.blade_height_allowed(command.mm):
@@ -462,6 +491,19 @@ class MowerController:
         elif isinstance(command, StartMow) and command.area_ids:
             return await self._validate_start(command)
         return None
+
+    async def _validate_firmware(self, command: FirmwareUpdate) -> str | None:
+        """Rule 11 on the freshest state the adapter has (the last pushed one may be old)."""
+        caps = await self.capabilities()
+        try:
+            state = await self._connection.get_state()
+        except NotConnected:
+            return None  # the dispatch reports "mower is not connected"
+        if self._confirming:
+            return "a command is still waiting for its confirmation"
+        return firmware_update_problem(
+            command.version, state, caps, drive_session_open=self._session is not None
+        )
 
     async def _validate_spot(self, command: StartMow) -> str | None:
         plan = command.spot_plan

@@ -2,7 +2,9 @@
 
 * :class:`MowerConnection` and :class:`DriveSession`: the adapter interface.
 * :class:`MowerController`: expiry, de-duplication, emergency stop priority, serialization,
-  dead-man switch, blade rules and capability checks for every adapter.
+  dead-man switch, blade rules, firmware update rules and capability checks for every adapter.
+* :class:`FirmwarePort` and :class:`BridgeScanCapable`: optional capabilities of a connection
+  (firmware checks and updates, scans through a Bluetooth bridge, ADR 0038).
 * :class:`SimulatedMower`: a deterministic simulated mower (``ConnectionKind.SIMULATED``).
 * :func:`plan_to_native_job`: neutral mowing request to a native mower job.
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
@@ -16,11 +18,13 @@ from mowdeck_contracts.v1 import ConnectionKind
 
 from mowdeck_control.broadcast import StateBroadcaster, StateSubscription
 from mowdeck_control.connection import (
+    BridgeScanCapable,
     CameraCapable,
     ConfirmFn,
     ConnectionConfig,
     Dispatch,
     DriveSession,
+    FirmwarePort,
     JobCommand,
     MapRebuildable,
     MowerConnection,
@@ -30,10 +34,12 @@ from mowdeck_control.connection import (
     Photo,
     PhotoCapture,
     TwoPhaseExecution,
+    bridge_scanner_of,
     camera_session_of,
     current_map_of,
     current_path_of,
     dispatch_of,
+    firmware_port_of,
 )
 from mowdeck_control.controller import MowerController, StateCallback
 from mowdeck_control.errors import (
@@ -62,7 +68,13 @@ from mowdeck_control.registry import (
     default_registry,
     register_connection,
 )
-from mowdeck_control.safety import BladeDecision, decide_manual_blade
+from mowdeck_control.safety import (
+    FIRMWARE_MIN_BATTERY_PERCENT,
+    FIRMWARE_UPDATE_RUNNING,
+    BladeDecision,
+    decide_manual_blade,
+    firmware_update_problem,
+)
 from mowdeck_control.simulator import (
     STUCK_ERROR_CODE,
     SimulatedDriveSession,
@@ -86,9 +98,12 @@ register_connection(ConnectionKind.SIMULATED, create_simulated_connection)
 
 __all__ = [
     "ENTRY_POINT_GROUP",
+    "FIRMWARE_MIN_BATTERY_PERCENT",
+    "FIRMWARE_UPDATE_RUNNING",
     "STUCK_ERROR_CODE",
     "AsyncioTimerFactory",
     "BladeDecision",
+    "BridgeScanCapable",
     "CameraCapable",
     "CommandRejected",
     "ConfirmFn",
@@ -98,6 +113,7 @@ __all__ = [
     "ControlError",
     "Dispatch",
     "DriveSession",
+    "FirmwarePort",
     "JobCommand",
     "MapRebuildable",
     "MowOrder",
@@ -126,6 +142,7 @@ __all__ = [
     "UnknownConnectionKind",
     "UnsupportedPattern",
     "available_kinds",
+    "bridge_scanner_of",
     "camera_session_of",
     "create_connection",
     "create_simulated_connection",
@@ -135,6 +152,8 @@ __all__ = [
     "default_map",
     "default_registry",
     "dispatch_of",
+    "firmware_port_of",
+    "firmware_update_problem",
     "flat_png",
     "from_wgs84",
     "local_angle",
