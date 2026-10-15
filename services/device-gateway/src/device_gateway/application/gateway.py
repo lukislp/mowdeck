@@ -64,6 +64,7 @@ from device_gateway.domain.rules import (
     firmware_check_rejection,
     holds_bluetooth_through,
     preview_rejection,
+    same_link,
     scan_found,
 )
 
@@ -133,13 +134,7 @@ class DeviceGateway:
             return False
         existing = self._sessions.get(mower_id)
         if existing is not None:
-            old = existing.registration
-            same_link = (old.connection_kind, old.connection_options, old.links) == (
-                registration.connection_kind,
-                registration.connection_options,
-                registration.links,
-            )
-            if same_link:
+            if same_link(existing.registration, registration):
                 existing.registration = registration
                 _log.info("mower registration updated", mower_id=str(mower_id), source=source)
                 return True
