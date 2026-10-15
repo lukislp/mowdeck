@@ -27,7 +27,8 @@
   far while a polygon is still being drawn. With `onmaptap` a tap on the map (not on a control)
   reports its local metres, so the page can place or extend the spot; the cursor says so.
 
-  `insetBottom` (px) is the part of the map that something covers at its bottom (a bottom sheet
+  `insetTop` (px) is the part covered at the top left by a page overlay (a chip): the legend moves
+  below it and the fit and the spot keep clear of it. `insetBottom` (px) is the part of the map that something covers at its bottom (a bottom sheet
   on phones): the fit pads by it, the scale, the lower legend and the attribution move above it,
   and the spot with its route preview is panned (or, when larger, fitted) into the part above it
   whenever the spot, the preview or the inset changes (`viewport.ts`).
@@ -171,6 +172,8 @@
     follow?: boolean;
     /** Pixels covered at the bottom of the map (a bottom sheet); content is kept above them. */
     insetBottom?: number;
+    /** Pixels covered at the top of the map (a chip); the legend and content stay below them. */
+    insetTop?: number;
     testid?: string;
   }
 
@@ -201,6 +204,7 @@
     onexpandchange,
     follow = $bindable(false),
     insetBottom = 0,
+    insetTop = 0,
     testid = 'mower-map',
   }: Props = $props();
 
@@ -683,7 +687,7 @@
       autoFit = false;
       untrack(() => (follow = false));
       m.fitBounds(active.bounds, {
-        paddingTopLeft: [64, 64],
+        paddingTopLeft: [64, 64 + untrack(() => insetTop)],
         paddingBottomRight: [64, 64 + untrack(() => insetBottom)],
         maxZoom: mode === 'local' ? 5 : 21,
         animate: !reducedMotion(),
@@ -785,24 +789,31 @@
     const m = lmap;
     const bounds = spotDrawn?.bounds;
     const inset = insetBottom;
+    const top = insetTop;
     const pieces = pathPreview ? pathPieces : [];
     if (!m || !bounds) return;
-    untrack(() => reveal(m, [...bounds, ...pieces.flatMap((piece) => piece.points)], inset));
+    untrack(() => reveal(m, [...bounds, ...pieces.flatMap((piece) => piece.points)], inset, top));
   });
 
   /** Pan (or fit, when larger) so `coords` lie in the part of the map not covered below. */
-  function reveal(m: Leaflet.Map, coords: MapCoord[], inset: number): void {
+  function reveal(m: Leaflet.Map, coords: MapCoord[], inset: number, top: number): void {
     const size = m.getSize();
     const box = pixelBox(coords.map((c) => m.latLngToContainerPoint(c)));
     if (!box) return;
     const pad = 24;
-    const how = revealPan(box, size.x, size.y, inset, pad);
+    const how = revealPan(
+      { ...box, top: box.top - top, bottom: box.bottom - top },
+      size.x,
+      size.y - top,
+      inset,
+      pad,
+    );
     const animate = !reducedMotion();
     if (how.kind === 'pan') {
       m.panBy([how.dx, how.dy], { animate });
     } else if (how.kind === 'fit') {
       m.fitBounds(coords, {
-        paddingTopLeft: [pad, pad],
+        paddingTopLeft: [pad, pad + top],
         paddingBottomRight: [pad, pad + inset],
         maxZoom: m.getZoom(),
         animate,
@@ -842,7 +853,7 @@
     if (!m || !bounds) return;
     if (byUser) follow = false;
     m.fitBounds(bounds, {
-      paddingTopLeft: [32, 32],
+      paddingTopLeft: [32, 32 + insetTop],
       paddingBottomRight: [32, 32 + insetBottom],
       maxZoom: mode === 'local' ? 6 : 21,
       animate: animate && !reducedMotion(),
@@ -940,6 +951,7 @@
   data-spot-corners={spot?.kind === 'polygon' ? spot.points.length : undefined}
   data-inset-bottom={insetBottom > 0 ? Math.round(insetBottom) : undefined}
   style:--md-map-inset-bottom="{Math.max(0, insetBottom)}px"
+  style:--md-map-inset-top="{Math.max(0, insetTop)}px"
 >
   <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
     <defs>
@@ -1706,7 +1718,7 @@
 
   .legend {
     position: absolute;
-    top: var(--md-space-3);
+    top: calc(var(--md-space-3) + var(--md-map-inset-top, 0px));
     inset-inline-start: var(--md-space-3);
     z-index: 2;
     display: flex;

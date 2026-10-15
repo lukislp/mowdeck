@@ -15,8 +15,8 @@ export const HALF_RATIO = 0.45;
 export const FULL_RATIO = 0.9;
 /** The map (or whatever lies behind) keeps at least this many pixels above the sheet. */
 export const MIN_UNCOVERED_PX = 56;
-/** Peek never shrinks below this (handle plus one row and a 48 px action). */
-export const PEEK_MIN_PX = 96;
+/** Peek never shrinks below this (the handle, a summary row and a 48 px action, with air). */
+export const PEEK_MIN_PX = 140;
 /** A release faster than this (px/ms, about 500 px/s) is a fling. */
 export const FLING_PX_PER_MS = 0.5;
 /** A pointer that moved less than this is a tap, not a drag. */

@@ -105,6 +105,7 @@ Shared types (`Activity`, `ToastItem`, ...) are exported from `src/lib/types.ts`
 | `expanded`, `onexpandchange`                       | Full screen state, owned by the page                                                                                                                                                                                                        |
 | `follow`                                           | Keep the mower centred (bindable; the drive page starts with it on, a drag or the fit control ends it)                                                                                                                                      |
 | `insetBottom`                                      | Pixels covered at the bottom of the map (a `BottomSheet`'s `visibleHeight`): the fit pads by it, the scale, lower legend and attribution move above it, and the `spot` with its route preview is panned (or fitted) into the uncovered part |
+| `insetTop`                                         | Pixels covered at the top left by a page overlay (the spot or selection chip): the legend moves below it, and the fit and the spot reveal keep clear of it                                                                                  |
 
 The map container carries `data-testid="mower-map"` (configurable), `data-mode` (`local` or `geo`), `data-ready`, `data-route-points` and, with the RTK signal map on, `data-rtk-cells`; areas are `path[data-area="<id>"]`, the mower `[data-testid="mower-marker"]` with `data-tone`.
 
@@ -152,7 +153,7 @@ The container carries `data-ready`, `data-markers` and `data-areas`; markers are
 
 | Snap   | Height                                                                                                  | Content                                                 |
 | ------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `peek` | The measured handle plus the `peek` snippet (about 140 to 180 px; at least 96)                          | A summary and the primary action; visible at every snap |
+| `peek` | The measured handle plus the `peek` snippet (about 140 to 180 px; at least 140)                         | A summary and the primary action; visible at every snap |
 | `half` | 45 % of the space above the sheet's bottom edge                                                         | The `peek` snippet plus the top of the body             |
 | `full` | 90 % of that space, but always 56 px less than all of it, so the map never disappears; the body scrolls | Everything                                              |
 
