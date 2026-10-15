@@ -350,6 +350,9 @@
           "blade_maintenance",
           "vision_proposal",
           "vision_auto_proposal",
+          "firmware_update_available",
+          "firmware_update_finished",
+          "firmware_update_failed",
           "test"
         ],
         "title": "NotificationKind",

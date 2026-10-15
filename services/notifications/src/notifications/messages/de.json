@@ -32,5 +32,11 @@
   "vision_proposal.body_find_dock": "Ein Manöver mit {steps} Schritten in Richtung Ladestation (Sicherheit {confidence} %). Prüfen und innerhalb von {minutes} Min. freigeben.",
   "vision_auto_proposal.title": "KI-Vorschlag für {mower}",
   "vision_auto_proposal.body_recover": "Automatisch ausgelöst durch Fehler {error_code}: ein Manöver mit {steps} Schritten, um den Mäher zu befreien (Sicherheit {confidence} %). Nichts fährt ohne deine Freigabe; prüfen und innerhalb von {minutes} Min. freigeben.",
-  "vision_auto_proposal.body_find_dock": "Automatisch ausgelöst durch Fehler {error_code}: ein Manöver mit {steps} Schritten in Richtung Ladestation (Sicherheit {confidence} %). Nichts fährt ohne deine Freigabe; prüfen und innerhalb von {minutes} Min. freigeben."
+  "vision_auto_proposal.body_find_dock": "Automatisch ausgelöst durch Fehler {error_code}: ein Manöver mit {steps} Schritten in Richtung Ladestation (Sicherheit {confidence} %). Nichts fährt ohne deine Freigabe; prüfen und innerhalb von {minutes} Min. freigeben.",
+  "firmware_update_available.title": "{mower}: Firmware-Update verfügbar",
+  "firmware_update_available.body": "Version {version} ist verfügbar (installiert: {installed}). Installiere sie in den Mäher-Einstellungen, während der Mäher in der Ladestation lädt.",
+  "firmware_update_finished.title": "{mower}: Firmware aktualisiert",
+  "firmware_update_finished.body": "Version {version} ist installiert.",
+  "firmware_update_failed.title": "{mower}: Firmware-Update fehlgeschlagen",
+  "firmware_update_failed.body": "Das Update auf {version} wurde nicht abgeschlossen ({reason}). Der Mäher behält seine bisherige Version; versuche es in den Einstellungen erneut."
 }

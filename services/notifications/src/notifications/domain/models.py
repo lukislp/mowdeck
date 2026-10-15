@@ -26,6 +26,9 @@ SEVERITY: dict[NotificationKind, NotificationSeverity] = {
     NotificationKind.BLADE_MAINTENANCE: NotificationSeverity.INFO,
     NotificationKind.VISION_PROPOSAL: NotificationSeverity.WARNING,
     NotificationKind.VISION_AUTO_PROPOSAL: NotificationSeverity.WARNING,
+    NotificationKind.FIRMWARE_UPDATE_AVAILABLE: NotificationSeverity.INFO,
+    NotificationKind.FIRMWARE_UPDATE_FINISHED: NotificationSeverity.INFO,
+    NotificationKind.FIRMWARE_UPDATE_FAILED: NotificationSeverity.WARNING,
 }
 """Severity of every kind (the contract has no "low" severity: the blade reminder is ``info``)."""
 
@@ -197,6 +200,10 @@ class MowerWatch:
     """Consecutive states outside the geofence."""
     geofence_notified: bool = False
     """``geofence_exit`` went out; re-armed once the mower is inside again."""
+    firmware_state: str | None = None
+    """``firmware_info.update_state`` of the newest state (None: no firmware information)."""
+    firmware_offered: str | None = None
+    """The firmware version ``firmware_update_available`` was sent for (once per version)."""
 
     def evolve(self, **changes: Any) -> "MowerWatch":
         """A copy with ``changes``."""
@@ -226,6 +233,8 @@ class MowerWatch:
             "left_dock_at": _iso(self.left_dock_at),
             "outside_count": self.outside_count,
             "geofence_notified": self.geofence_notified,
+            "firmware_state": self.firmware_state,
+            "firmware_offered": self.firmware_offered,
         }
 
     @classmethod
@@ -261,6 +270,8 @@ class MowerWatch:
             left_dock_at=_parse(data.get("left_dock_at")),
             outside_count=int(data.get("outside_count", 0)),
             geofence_notified=bool(data.get("geofence_notified", False)),
+            firmware_state=data.get("firmware_state"),
+            firmware_offered=data.get("firmware_offered"),
         )
 
 

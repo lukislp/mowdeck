@@ -425,7 +425,7 @@ export type components = {
          * @description What a notification is about.
          * @enum {string}
          */
-        NotificationKind: "mowing_finished" | "mower_stuck" | "battery_low" | "mower_offline" | "mower_online" | "job_started" | "mower_lifted" | "mower_left_dock_unexpectedly" | "geofence_exit" | "blade_maintenance" | "vision_proposal" | "vision_auto_proposal" | "test";
+        NotificationKind: "mowing_finished" | "mower_stuck" | "battery_low" | "mower_offline" | "mower_online" | "job_started" | "mower_lifted" | "mower_left_dock_unexpectedly" | "geofence_exit" | "blade_maintenance" | "vision_proposal" | "vision_auto_proposal" | "firmware_update_available" | "firmware_update_finished" | "firmware_update_failed" | "test";
         /**
          * NotificationSeverity
          * @description How urgent a notification is; channels map it to TTL, urgency or priority.

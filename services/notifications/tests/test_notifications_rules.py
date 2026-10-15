@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from mowdeck_contracts.v1 import (
     BladeHoursThreshold,
+    FirmwareInfo,
     GeoReference,
     MowerActivity,
     NotificationKind,
@@ -543,3 +544,87 @@ def test_notifications_blade_maintenance_event_and_cooldown() -> None:
     assert watch is not None and len(events) == 1
     _, again = observe_blade_hours(watch, crossing, T0 + seconds(10), CONFIG)
     assert again == []  # normal cooldown
+
+
+def _firmware(**changes: object) -> FirmwareInfo:
+    values: dict[str, object] = {"installed": "1.30.29.26", "update_state": "idle"}
+    values.update(changes)
+    return FirmwareInfo.model_validate(values)
+
+
+def test_notifications_rules_firmware_offer_once_per_version() -> None:
+    run = Run(RuleConfig(cooldown_seconds=0))
+    offer = _firmware(update_state="available", available="1.30.31.19")
+    assert run.state(MowerActivity.DOCKED, firmware_info=offer) == []  # first sight: quiet
+    assert run.watch is not None and run.watch.firmware_offered == "1.30.31.19"
+    assert run.state(MowerActivity.DOCKED, firmware_info=offer) == []  # the same offer again
+    newer = _firmware(update_state="available", available="1.30.32.1")
+    assert run.state(MowerActivity.DOCKED, firmware_info=newer) == ["firmware_update_available"]
+    event = run.events[-1]
+    assert event.params == {"version": "1.30.32.1", "installed": "1.30.29.26"}
+    assert event.severity is NotificationSeverity.INFO
+    assert event.dedupe_key == f"firmware_update_available:{MOWER}:1.30.32.1"
+    assert event.link == f"/mowers/{MOWER}/settings"
+    assert run.state(MowerActivity.DOCKED, firmware_info=newer) == []
+    assert run.state(MowerActivity.DOCKED, firmware_info=_firmware()) == []  # withdrawn: quiet
+    # The same version offered again later notifies again (it was gone meanwhile)... only when
+    # the watch forgot it: the offer stays remembered until an update finishes.
+    assert run.state(MowerActivity.DOCKED, firmware_info=newer) == []
+
+
+def test_notifications_rules_firmware_update_finished_and_failed() -> None:
+    run = Run(RuleConfig(cooldown_seconds=0))
+    run.state(MowerActivity.DOCKED, firmware_info=_firmware())
+    offer = _firmware(update_state="available", available="1.30.31.19")
+    assert run.state(MowerActivity.CHARGING, firmware_info=offer) == ["firmware_update_available"]
+    installing = _firmware(update_state="installing", available="1.30.31.19", progress=40)
+    assert run.state(MowerActivity.UPDATING, firmware_info=installing) == []
+    assert run.state(MowerActivity.UPDATING, firmware_info=installing) == []
+    done = _firmware(installed="1.30.31.19", update_state="idle")
+    assert run.state(MowerActivity.DOCKED, firmware_info=done) == ["firmware_update_finished"]
+    assert run.events[-1].params == {"version": "1.30.31.19"}
+    assert run.watch is not None and run.watch.firmware_offered is None
+    assert run.state(MowerActivity.DOCKED, firmware_info=done) == []
+    # A failed update.
+    assert run.state(
+        MowerActivity.CHARGING,
+        firmware_info=_firmware(
+            installed="1.30.31.19", update_state="available", available="1.30.33.0"
+        ),
+    ) == ["firmware_update_available"]
+    run.state(
+        MowerActivity.UPDATING,
+        firmware_info=_firmware(
+            installed="1.30.31.19", update_state="installing", available="1.30.33.0"
+        ),
+    )
+    failed = _firmware(
+        installed="1.30.31.19", update_state="failed", failure_reason="dl fw: checksum"
+    )
+    assert run.state(MowerActivity.DOCKED, firmware_info=failed) == ["firmware_update_failed"]
+    event = run.events[-1]
+    assert event.severity is NotificationSeverity.WARNING
+    assert event.params == {"version": "1.30.33.0", "reason": "dl fw: checksum"}
+    assert run.state(MowerActivity.DOCKED, firmware_info=failed) == []
+    # An update nobody announced (started in the vendor app) still reports its end.
+    run.state(
+        MowerActivity.UPDATING,
+        firmware_info=_firmware(installed="1.30.31.19", update_state="installing"),
+    )
+    assert run.state(MowerActivity.DOCKED, firmware_info=_firmware(installed="1.30.34.0")) == [
+        "firmware_update_finished"
+    ]
+    # No firmware information at all: nothing.
+    assert run.state(MowerActivity.DOCKED) == []
+
+
+def test_notifications_rules_firmware_watch_round_trips() -> None:
+    run = Run()
+    run.state(
+        MowerActivity.DOCKED, firmware_info=_firmware(update_state="available", available="2")
+    )
+    assert run.watch is not None
+    data = run.watch.to_json()
+    assert data["firmware_state"] == "available" and data["firmware_offered"] == "2"
+    restored = MowerWatch.from_json(MOWER, ACCOUNT, data)
+    assert restored == run.watch

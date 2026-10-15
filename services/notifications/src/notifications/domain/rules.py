@@ -36,6 +36,12 @@ Kind                   Fires when
 ``vision_proposal``    Vision's ``vision.proposal.created`` (one per proposal, ``can_drive``)
 ``vision_auto_``        the same for an automatic analysis (``trigger`` ``error``, ADR 0035)
 ``proposal``
+``firmware_update_``   ``firmware_info.update_state`` is ``available`` with a version the mower
+``available``          was not notified for yet (once per offered version, ADR 0038)
+``firmware_update_``   ``firmware_info`` went from ``installing`` to ``idle`` (the new version
+``finished``           is installed) ...
+``firmware_update_``   ... or to ``failed`` (with the mower's reason)
+``failed``
 =====================  ===========================================================================
 
 A kind is sent at most once per ``cooldown_seconds`` and mower (the theft alarms: once per
@@ -56,6 +62,7 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import (
     BladeHoursThreshold,
+    FirmwareInfo,
     MowerActivity,
     MowerState,
     NotificationKind,
@@ -292,6 +299,59 @@ def _geofence_rule(
     return w.evolve(geofence_notified=True)
 
 
+def _firmware_rule(
+    w: MowerWatch,
+    info: FirmwareInfo | None,
+    observed: datetime,
+    now: datetime,
+    config: RuleConfig,
+    events: list[NotificationEvent],
+) -> MowerWatch:
+    """Firmware (ADR 0038): an offer once per version, the end of an update once."""
+    if info is None:
+        return w
+    previous = w.firmware_state
+    offered = info.available if info.update_state == "available" else None
+    if offered and offered != w.firmware_offered:
+        event = NotificationEvent.of(
+            NotificationKind.FIRMWARE_UPDATE_AVAILABLE,
+            w.mower_id,
+            w.account_id,
+            observed,
+            offered,
+            link=f"/mowers/{w.mower_id}/settings",
+            version=offered,
+            installed=info.installed or "",
+        )
+        w, _ = _emit(w, event, now, config, events)
+        w = w.evolve(firmware_offered=offered)
+    if previous == "installing" and info.update_state == "idle":
+        event = NotificationEvent.of(
+            NotificationKind.FIRMWARE_UPDATE_FINISHED,
+            w.mower_id,
+            w.account_id,
+            observed,
+            f"{info.installed or ''}:{observed.isoformat()}",
+            link=f"/mowers/{w.mower_id}/settings",
+            version=info.installed or w.firmware_offered or "",
+        )
+        w, _ = _emit(w, event, now, config, events)
+        w = w.evolve(firmware_offered=None)
+    elif previous == "installing" and info.update_state == "failed":
+        event = NotificationEvent.of(
+            NotificationKind.FIRMWARE_UPDATE_FAILED,
+            w.mower_id,
+            w.account_id,
+            observed,
+            observed.isoformat(),
+            link=f"/mowers/{w.mower_id}/settings",
+            version=w.firmware_offered or "",
+            reason=info.failure_reason or "",
+        )
+        w, _ = _emit(w, event, now, config, events)
+    return w.evolve(firmware_state=info.update_state)
+
+
 def new_watch(mower_id: UUID, account_id: UUID, now: datetime) -> MowerWatch:
     """The watch of a mower seen for the first time."""
     return MowerWatch(mower_id=mower_id, account_id=account_id, last_seen_at=now)
@@ -317,6 +377,10 @@ def observe_state(
             job_started_at=state.observed_at if state.activity is MowerActivity.MOWING else None,
             error_notified=(state.error_code or "error")
             if state.activity is MowerActivity.ERROR
+            else None,
+            firmware_state=state.firmware_info.update_state if state.firmware_info else None,
+            firmware_offered=state.firmware_info.available
+            if state.firmware_info and state.firmware_info.update_state == "available"
             else None,
         )
         return first, events
@@ -389,6 +453,9 @@ def observe_state(
     # Theft alarms: an unexplained departure from the dock, a position outside the fence.
     w = _dock_rule(w, previous, state, now, config, events)
     w = _geofence_rule(w, state, fence, now, config, events)
+
+    # Firmware: a new offer, the end of an update.
+    w = _firmware_rule(w, state.firmware_info, observed, now, config, events)
 
     # Standing still while mowing.
     position = state.position
