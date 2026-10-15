@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-15); amended by [ADR 0041](0041-spot-runs-from-the-dock-undock-transit-return.md) (2026-10-15): a run may start at the dock (undocking, a transit planned on the map instead of the straight approach of at most 10 m, the return to the dock afterwards); amended by [ADR 0042](0042-drive-calibration.md) (2026-10-15): the stick scale, steering gains and `turn_max` come from a drive calibration, and the run-time limit is progress based (`stalled` after 60 s without progress, overall cap `max(20 min, 3 × estimate)`).
+Accepted (2026-10-15); amended by [ADR 0041](0041-spot-runs-from-the-dock-undock-transit-return.md) (2026-10-15): a run may start at the dock (undocking, a transit planned on the map instead of the straight approach of at most 10 m, the return to the dock afterwards); amended by [ADR 0042](0042-drive-calibration.md) (2026-10-15): the stick scale, steering gains and `turn_max` come from a drive calibration, and the run-time limit is progress based (`stalled` after 60 s without progress, overall cap `max(20 min, 3 × estimate)`); amended by [ADR 0043](0043-turn-styles.md) (2026-10-15): the run turns at lane ends as a turn style says (`in_place`, `arc`, `multi_point` with reverse legs), follows shaped turns at 15 °/s at most and turns in place only with `in_place`, where no shaped turn applies or at the geofence's edge.
 
 ## Context
 

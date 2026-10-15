@@ -1,0 +1,47 @@
+# ADR 0043: Turn styles
+
+## Status
+
+Accepted (2026-10-15); amends [ADR 0039](0039-spot-mowing-by-mowdeck-driven-paths.md) (how a spot run turns) and [ADR 0030](0030-mowing-patterns-and-planner.md) (the Planner shapes lane ends on request).
+
+## Context
+
+A spot run (ADR 0039) follows the Planner's segments with pure pursuit and turns in place whenever the heading error exceeds 35°. The stripe patterns join two neighbouring runs with a short straight `turn` segment, one lane spacing long, so the mower rotates on the spot twice at every lane end. On an all-wheel-drive mower such as the LUBA 2 AWD that scuffs the turf; the mower's own jobs avoid it with a setting in the vendor app (zero-turn or multipoint turn). Spot runs have to respect turf-friendly turning in the same way.
+
+Two facts constrain the shapes. The lane spacing (cutting width minus overlap, 0.35 m by default) is narrower than any comfortable turning radius, so a plain U-turn of half the spacing is too tight. And not every drive link can reverse: the Bluetooth bridge's drive session takes a negative linear speed, while the owner reports that the vendor's new FPV remote control over Wi-Fi cannot drive backwards, so a future Wi-Fi drive link would not reverse.
+
+## Decision
+
+A generic turn style, chosen per spot run, shapes the lane ends in the Planner and decides how the run turns.
+
+**Contracts.** `TurnStyle` (`in_place`, `arc`, `multi_point`). `SpotMow.turn_style` (null: the mower's own setting). `MowerState.turn_style`: the mower's own setting for its jobs as its connection reports it, read only. `MowerCapabilities.drive_reverse`: the drive link that carries the joystick frames can drive backwards. `SpotSegment.reverse`: the segment is driven backwards, always with the blades off; a reverse segment adds `"reverse"` to its entry of the plan hash, so the hashes of existing plans stay the same. `resolve_turn_style(requested, mower_default, reverse)` is the one rule: the command's style, else the mower's, else `arc`; `multi_point` becomes `arc` without `drive_reverse`. The web app mirrors it.
+
+**Planner geometry** (`mowdeck_patterns.turns.shape_turns`, called by `plan(..., turns=TurnOptions)`). Only reversals between two `mow` runs (directions differing by more than 150°) are shaped; spirals and rings have none and stay as they are. The shapes are built in the frame of the lane end from arcs of at least `min_radius_m` (Planner setting `MOWDECK_PLANNER_TURN_RADIUS_M`, 0.3 m, at least the mower's turning radius) sampled every 15°:
+
+- `arc`: a semicircle of half the spacing when that reaches the radius; otherwise a *bulb turn*: a short swing away from the next lane, a large arc over it and a swing back in (three arcs of the radius). The first and the last lane lie at the area's edge, where the symmetric bulb would leave the area, so two lopsided bulbs follow: one that never swings away from the next lane and one that never reaches beyond it.
+- `multi_point`: a three-point turn, a forward arc, a reverse arc and a forward arc of the radius, the heading turning the same way throughout (a semicircle when the spacing allows one). The reverse leg is a `turn` segment with `reverse` and the blades off; the forward legs keep the blades as the straight turn had them.
+- `in_place`: the straight connection, unchanged.
+
+Every shape must lie inside the area shrunk by the safety margin and, for a mower's map, inside the spot run's geofence (the mapped areas inset by 0.3 m minus the zones buffered by 0.3 m, plus 1 cm of slack for the rounding to centimetres). A shape that does not fit at the lane end is pulled back into the lanes in steps of 5 cm (the runs get shorter, each keeps at least 10 cm; the turn's own cut covers most of the end). A lane end where nothing fits keeps its straight connection, and the plan's warnings say how many lane ends turn in place and where the first one is. Without `drive_reverse` (or with unknown capabilities) `multi_point` falls back to `arc` with a warning. The validation chain treats a change of the direction of travel as a stop, not a corner, and refuses reverse segments with the blades on. The preview marks each feature with `reverse` and reports the effective `turn_style`.
+
+**The run** (`SpotMowRun`, `turn_style` and `reverse` from the controller, which applies `resolve_turn_style` with `capabilities.drive_reverse`).
+
+- Shaped turn segments (a `turn` of three or more points) are followed with the yaw rate limited to `turn_rate_dps` (15 °/s; the angular stick comes from the calibrated full-scale yaw rate, `SpotRunConfig.yaw_stick`), and their speed drops to what the arc allows at that rate (`turn_rate × radius`).
+- A heading error above `turn_in_place_deg` rotates in place only with `in_place`, where no shaped turn applies (the start of the plan, a joint between parts, a lane end the Planner left straight) or when the forward arc the run would drive instead (lowest speed, turn rate) leaves the geofence. Inside a shaped turn and on the first leg after it, the run drives that tight arc instead of rotating. The report counts the in-place rotations (`in_place_turns`).
+- Reverse segments are driven with a negative `linear`: pure pursuit on the reversed heading, the same angular sign rule, dead reckoning with the negative speed, the geofence on every report and every dead-reckoned pose, the stall rule unchanged, and a sign-error rule of its own: three consecutive reports that move forwards while reversing end the run `heading_mismatch`. The blades are off on every reverse frame. The last point before a change of direction counts as reached within 8 cm (`cusp_radius_m`), so the short reverse leg is not skipped by the 0.25 m waypoint radius. A plan with reverse segments is refused on a drive link without `drive_reverse`.
+
+**Web app.** The spot sheet gets a "Wenden" select (as set on the mower, in place, arc, multi-point) in the half and full snap and in the desktop panel; the default shows the resolved style, multi-point is marked unavailable without `drive_reverse`. The preview asks the Planner with the resolved style, the command carries the user's choice. The plan preview draws turns distinctly. The joystick on the drive page clamps `linear` to zero and greys out the reverse half when the drive link lacks `drive_reverse`.
+
+## Manufacturer independence
+
+Generic, the same for every manufacturer: `TurnStyle`, `resolve_turn_style`, `SpotMow.turn_style`, `MowerState.turn_style`, `MowerCapabilities.drive_reverse`, `SpotSegment.reverse`, the turn shapes and their fallbacks in `mowdeck-patterns`, the Planner's geofence clipping and `multi_point` fallback, the run's turn rate limit, its in-place rule, reverse driving with its checks, the web select and the joystick clamp, and the simulator's implementation (`drive_reverse`, default on, where a negative stick stands the mower still without it, and `turn_style` reported in the state). The turn tests in `mowdeck-patterns`, `mowdeck-control` and the Planner (stripes driven per style on the simulator at 1 Hz with 2 cm noise: no in-place rotation with `arc` and `multi_point`, reverse only inside the geofence and with the blades off) import no manufacturer package.
+
+Adapter work, once per manufacturer: `drive_reverse` for its drive link, and optionally `MowerState.turn_style` from the vendor's own setting. For Mammotion, every drive session is a Bluetooth one (`send_movement` takes a negative linear speed), so `drive_reverse` follows `manual_drive`; the turn setting is PyMammotion's `mower_state.turning_mode` (read/write parameter 6, "0=zero-turn, 1=multipoint turn" in `state_reducer.py`), mapped to `in_place` and `multi_point` and never written. PyMammotion has no read request for it and starts at 0, so until the mower reports the parameter the setting reads as zero-turn; the sheet shows the resolved style, so the owner sees it and can choose another.
+
+## Consequences
+
+Easier: spot stripes turn like the mower's own jobs, without rotating an all-wheel-drive mower on the turf; the owner chooses per run, the default follows the mower. A drive link that cannot reverse still gets turf-friendly arcs, and the web app never offers what the link cannot do.
+
+Harder: arcs need room. Lanes are shortened at their ends where a turn does not fit beyond them, which costs some coverage at the lane ends (the turns cut over most of it), and lane ends where nothing fits still turn in place. Turns are slow at 15 °/s (an arc of 0.3 m at about 0.08 m/s), and at 1 Hz reports the mower may leave an arc late; the run then drives a tight arc rather than rotating. A bulb turn reaches up to about 0.8 m beyond the lane end at a radius of 0.3 m.
+
+To check on hardware: the LUBA's turning radius at low speed that does not scuff (and so `MOWDECK_PLANNER_TURN_RADIUS_M`), whether 15 °/s is reachable with the calibrated stick in arcs, how the mower reacts to a sign change of `linear` within one second (the three-point turn's cusp), and whether `turning_mode` is reported after the app's setting changed.

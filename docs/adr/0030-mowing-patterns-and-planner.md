@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-10)
+Accepted (2026-10-10); amended by [ADR 0043](0043-turn-styles.md) (2026-10-15): on request the lane ends of stripe patterns are shaped as arcs, bulb turns or three-point turns (reverse segments), clipped to the area and the spot run's geofence.
 
 ## Context
 
