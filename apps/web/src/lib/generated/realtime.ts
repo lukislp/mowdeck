@@ -275,6 +275,19 @@ export type RunId1 = string
 export type SegmentIndex = number
 export type SegmentsTotal = number
 export type State1 = ("preparing" | "undocking" | "waiting_rtk" | "transit" | "spot_mowing" | "paused_rtk" | "returning" | "stopping" | "done" | "aborted" | "failed")
+/**
+ * How a spot run turns at the end of a lane (ADR 0043).
+ * 
+ * ``in_place``: the mower rotates on the spot (fast, but an all-wheel-drive mower scuffs the
+ * turf). ``arc``: a forward U-turn with a radius of at least half the lane spacing, or a bulb
+ * turn over the neighbouring lane when the spacing is narrower than the turning radius.
+ * ``multi_point``: a three-point turn (forward arc, reverse arc with the blades off, forward
+ * arc); needs a drive link that can reverse (``MowerCapabilities.drive_reverse``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "TurnStyle".
+ */
+export type TurnStyle = ("in_place" | "arc" | "multi_point")
 export type Type3 = "state"
 export type MowerId2 = string
 export type At = string
@@ -539,6 +552,10 @@ speed_mps?: SpeedMps
  * The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one.
  */
 spot_run?: (SpotRunStatus | null)
+/**
+ * How the mower turns at lane ends in its own jobs, as its connection reports the vendor setting (read only; ADR 0043). A spot run without its own `turn_style` uses it; null when the connection does not report one.
+ */
+turn_style?: (TurnStyle | null)
 }
 /**
  * Progress of the drive calibration on this mower (``MowerState.drive_calibration``).

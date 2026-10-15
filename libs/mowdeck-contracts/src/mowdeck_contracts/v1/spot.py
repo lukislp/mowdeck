@@ -20,6 +20,7 @@ import hashlib
 import json
 import math
 from collections.abc import Iterable, Sequence
+from enum import StrEnum
 from typing import Any, Final, Literal, Self
 from uuid import UUID
 
@@ -40,6 +41,37 @@ MAX_SPOT_SPEED_MPS: Final = 2.0
 SegmentKind = Literal["mow", "turn", "transfer"]
 """``mow``: a cutting run; ``turn``: the short connection between two runs (blades may stay on);
 ``transfer``: driving to the next part of the plan, always with the blades off."""
+
+
+class TurnStyle(StrEnum):
+    """How a spot run turns at the end of a lane (ADR 0043).
+
+    ``in_place``: the mower rotates on the spot (fast, but an all-wheel-drive mower scuffs the
+    turf). ``arc``: a forward U-turn with a radius of at least half the lane spacing, or a bulb
+    turn over the neighbouring lane when the spacing is narrower than the turning radius.
+    ``multi_point``: a three-point turn (forward arc, reverse arc with the blades off, forward
+    arc); needs a drive link that can reverse (``MowerCapabilities.drive_reverse``).
+    """
+
+    IN_PLACE = "in_place"
+    ARC = "arc"
+    MULTI_POINT = "multi_point"
+
+
+DEFAULT_TURN_STYLE: Final = TurnStyle.ARC
+"""The turn style of a spot run when neither the command nor the mower names one."""
+
+
+def resolve_turn_style(
+    requested: TurnStyle | None, mower_default: TurnStyle | None, *, reverse: bool
+) -> TurnStyle:
+    """The turn style a spot run uses: ``requested``, else the mower's own setting
+    (``MowerState.turn_style``), else :data:`DEFAULT_TURN_STYLE`; ``multi_point`` falls back to
+    ``arc`` when the drive link cannot reverse (``reverse`` False)."""
+    style = requested or mower_default or DEFAULT_TURN_STYLE
+    if style is TurnStyle.MULTI_POINT and not reverse:
+        return TurnStyle.ARC
+    return style
 
 
 # --- Polyline encoding ------------------------------------------------------------------------
@@ -110,7 +142,9 @@ def decode_polyline(encoded: str, precision: int = SPOT_PRECISION) -> list[tuple
 
 
 class SpotSegment(ContractModel):
-    """One part of a spot plan: drive along ``path`` with the blades on or off."""
+    """One part of a spot plan: drive along ``path`` with the blades on or off (backwards with
+    ``reverse``: the mower faces against the direction of travel, part of a three-point
+    turn)."""
 
     kind: SegmentKind = "mow"
     blades_on: bool
@@ -121,11 +155,19 @@ class SpotSegment(ContractModel):
         description="Encoded polyline of local metres (x, y), centimetre precision "
         "(`encode_polyline`), at least two points.",
     )
+    reverse: bool = Field(
+        default=False,
+        description="Drive the polyline backwards (negative linear speed, the mower faces "
+        "against the direction of travel); always with the blades off (ADR 0043).",
+    )
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         if self.kind == "transfer" and self.blades_on:
             msg = "transfer segments must have the blades off"
+            raise ValueError(msg)
+        if self.reverse and self.blades_on:
+            msg = "reverse segments must have the blades off"
             raise ValueError(msg)
         if len(decode_polyline(self.path)) < 2:
             msg = "a segment needs at least two points"
@@ -140,6 +182,7 @@ class SpotSegment(ContractModel):
         blades_on: bool,
         speed_mps: float,
         kind: SegmentKind = "mow",
+        reverse: bool = False,
     ) -> "SpotSegment":
         """Build a segment from local points (rounded to centimetres)."""
         return cls(
@@ -147,6 +190,7 @@ class SpotSegment(ContractModel):
             blades_on=blades_on,
             speed_mps=round(speed_mps, 3),
             path=encode_polyline(points),
+            reverse=reverse,
         )
 
     def points(self) -> list[LocalPoint]:
@@ -171,11 +215,15 @@ class SpotNativeJob(ContractModel):
 
 
 def spot_plan_hash(pattern_chain: Sequence[str], segments: Sequence[SpotSegment]) -> str:
-    """SHA-256 (hex) of the canonical JSON of the chain and the segments."""
+    """SHA-256 (hex) of the canonical JSON of the chain and the segments (a reverse segment
+    adds ``"reverse"`` to its entry, so the hashes of plans without one stay the same)."""
     canonical = json.dumps(
         {
             "pattern_chain": list(pattern_chain),
-            "segments": [[s.kind, s.blades_on, round(s.speed_mps, 3), s.path] for s in segments],
+            "segments": [
+                [s.kind, s.blades_on, round(s.speed_mps, 3), s.path, *(["reverse"] * s.reverse)]
+                for s in segments
+            ],
         },
         separators=(",", ":"),
         sort_keys=True,

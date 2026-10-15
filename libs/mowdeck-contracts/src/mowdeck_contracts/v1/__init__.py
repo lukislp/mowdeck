@@ -264,6 +264,7 @@ from mowdeck_contracts.v1.scheduler import (
     TargetMower,
 )
 from mowdeck_contracts.v1.spot import (
+    DEFAULT_TURN_STYLE,
     MAX_SPOT_MOW_SPEED_MPS,
     MAX_SPOT_POLYGON_POINTS,
     MAX_SPOT_SEGMENTS,
@@ -281,8 +282,10 @@ from mowdeck_contracts.v1.spot import (
     SpotRunStatus,
     SpotSegment,
     SpotTarget,
+    TurnStyle,
     decode_polyline,
     encode_polyline,
+    resolve_turn_style,
     spot_plan_hash,
 )
 from mowdeck_contracts.v1.vision import (
@@ -315,6 +318,7 @@ __all__ = [
     "CREDENTIALS_OPTION",
     "CREDENTIALS_REV_OPTION",
     "DEFAULT_CALIBRATION_STEP_S",
+    "DEFAULT_TURN_STYLE",
     "DRIVE_CALIBRATION_FINAL_STATES",
     "DRIVE_CALIBRATION_OPTION_KEYS",
     "DRIVE_CORRELATION_PREFIX",
@@ -537,6 +541,7 @@ __all__ = [
     "SubscriptionChanged",
     "SubscriptionStatus",
     "TargetMower",
+    "TurnStyle",
     "UiAreaDef",
     "UserChanged",
     "UtcDateTime",
@@ -554,6 +559,7 @@ __all__ = [
     "drive_session_of",
     "encode_polyline",
     "is_placeholder_name",
+    "resolve_turn_style",
     "spot_plan_hash",
     "utc_now",
 ]

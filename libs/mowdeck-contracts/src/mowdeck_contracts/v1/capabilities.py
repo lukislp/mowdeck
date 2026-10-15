@@ -74,6 +74,12 @@ class MowerCapabilities(ContractModel):
         default=False,
         description="Blades may run during manual driving when a frame explicitly asks for it.",
     )
+    drive_reverse: bool = Field(
+        default=False,
+        description="The drive link that carries the joystick frames can drive backwards "
+        "(a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and "
+        "a spot run's `multi_point` turns fall back to `arc` (ADR 0043).",
+    )
     undock: bool = Field(
         default=False,
         description="The connection can make the mower leave its charging station by itself "
