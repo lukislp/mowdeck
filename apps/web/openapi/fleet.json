@@ -1507,7 +1507,7 @@
         "type": "object"
       },
       "FirmwareUpdate": {
-        "description": "Install the firmware version the vendor offers (``MowerState.firmware_info.available``).\n\nThe adapter refuses it unless ``update_state`` is ``available`` and ``version`` equals\n``available`` (a stale client), the mower is docked and charging with enough battery, no job\nor drive session runs and no update is already installing. While it runs the mower reports\nthe activity ``updating``.",
+        "description": "Install the firmware version the vendor offers (``MowerState.firmware_info.available``).\n\nThe adapter refuses it unless ``update_state`` is ``available`` and ``version`` equals\n``available`` (a stale client), the mower is docked with enough battery (it need not be\ncharging: a full mower stops charging), no job or drive session runs and no update is\nalready installing. While it runs the mower reports the activity ``updating``.",
         "properties": {
           "kind": {
             "const": "firmware_update",

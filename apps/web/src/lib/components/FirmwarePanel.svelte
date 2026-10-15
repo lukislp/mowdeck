@@ -25,7 +25,6 @@
     /** `capabilities.firmware_update`: the connection can check and install. */
     capable: boolean;
     activity: string | null;
-    charging: boolean;
     batteryPercent: number | null;
     stale: boolean;
     /** The user may control the mower. */
@@ -40,7 +39,6 @@
     reported,
     capable,
     activity,
-    charging,
     batteryPercent,
     stale,
     allowed,
@@ -57,9 +55,7 @@
   const updateState = $derived(info?.update_state ?? 'unknown');
   const progress = $derived(installProgress(info));
   const offered = $derived(updateOffered(info));
-  const blocker = $derived(
-    updateBlocker({ info, activity, charging, batteryPercent, stale, allowed }),
-  );
+  const blocker = $derived(updateBlocker({ info, activity, batteryPercent, stale, allowed }));
   const stateText = $derived.by(() => {
     switch (updateState) {
       case 'idle':
@@ -100,8 +96,6 @@
         return m.firmware_block_job();
       case 'not_docked':
         return m.firmware_block_not_docked();
-      case 'not_charging':
-        return m.firmware_block_not_charging();
       case 'battery':
         return m.firmware_block_battery({ percent: formatNumber(batteryPercent ?? 0) });
     }

@@ -2,9 +2,10 @@
  * Mower firmware (ADR 0038): the check through Fleet (`POST /mowers/{id}/firmware/check`, which
  * answers the fresh `FirmwareInfo`; a connection that cannot ask is a 409
  * `firmware-check-unsupported`, a mower or vendor that does not answer a 503) and the pure rules
- * of the "Update installieren" button. The gateway decides for real (docked and charging,
- * battery, no job, no drive session, not already installing); this only avoids offering the
- * obvious refusal and names the unmet condition.
+ * of the "Update installieren" button. The gateway decides for real (docked, battery, no job,
+ * no drive session, not already installing; charging is not required, since a full mower stops
+ * charging in its dock); this only avoids offering the obvious refusal and names the unmet
+ * condition.
  */
 import { fleetApi, unwrap } from '$lib/api/client';
 import type { ApiProblem } from '$lib/api/problem';
@@ -33,23 +34,15 @@ export function firmwareCheckProblemText(problem: ApiProblem): string {
 }
 
 /** The lowest battery the gateway installs with (design 2, firmware safety). */
-export const UPDATE_MIN_BATTERY = 50;
+export const UPDATE_MIN_BATTERY = 70;
 
 /** Why "Update installieren" is disabled; null when the update may be sent. */
 export type UpdateBlocker =
-  | 'no_permission'
-  | 'no_update'
-  | 'installing'
-  | 'offline'
-  | 'job'
-  | 'not_docked'
-  | 'not_charging'
-  | 'battery';
+  'no_permission' | 'no_update' | 'installing' | 'offline' | 'job' | 'not_docked' | 'battery';
 
 export interface UpdateConditions {
   info: FirmwareInfo | null;
   activity: string | null;
-  charging: boolean;
   batteryPercent: number | null;
   /** No live link to the mower (ADR 0040) or no state: treated as offline. */
   stale: boolean;
@@ -62,7 +55,7 @@ const JOB: ReadonlySet<string> = new Set(['mowing', 'paused', 'returning']);
 
 /**
  * The first unmet precondition, in the order the user can act on it: the right, a version,
- * no update running, the mower reachable, no job, docked, charging, battery.
+ * no update running, the mower reachable, no job, docked, battery.
  */
 export function updateBlocker(c: UpdateConditions): UpdateBlocker | null {
   if (!c.allowed) return 'no_permission';
@@ -71,7 +64,6 @@ export function updateBlocker(c: UpdateConditions): UpdateBlocker | null {
   if (c.activity === null || c.activity === 'offline' || c.stale) return 'offline';
   if (JOB.has(c.activity)) return 'job';
   if (!RESTING.has(c.activity)) return 'not_docked';
-  if (!c.charging) return 'not_charging';
   if (c.batteryPercent === null || c.batteryPercent < UPDATE_MIN_BATTERY) return 'battery';
   return null;
 }

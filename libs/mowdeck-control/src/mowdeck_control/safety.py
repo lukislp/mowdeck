@@ -13,8 +13,9 @@ Firmware updates (ADR 0038, :func:`firmware_update_problem`), the same for every
 
 * only an update the manufacturer offers right now (``update_state`` ``available``) and only
   the offered version (a stale client that asks for another one is refused);
-* the mower stands in its dock and charges (activity ``docked`` or ``charging`` with
-  ``charging`` true), with at least :data:`FIRMWARE_MIN_BATTERY_PERCENT` battery;
+* the mower stands in its dock (activity ``docked`` or ``charging``) with at least
+  :data:`FIRMWARE_MIN_BATTERY_PERCENT` battery; it need not be charging, since a mower stops
+  charging once it is full;
 * no job runs or is paused, no manual drive session is open, no update is already installing;
 * while the mower reports ``updating`` every command but the emergency stop is refused
   (:data:`FIRMWARE_UPDATE_RUNNING`).
@@ -26,7 +27,7 @@ from typing import Final
 from mowdeck_contracts.v1 import ManualDrive, MowerActivity, MowerCapabilities, MowerState
 
 _TRANSFER_ACTIVITIES = frozenset({MowerActivity.DOCKED, MowerActivity.CHARGING})
-FIRMWARE_MIN_BATTERY_PERCENT: Final = 50
+FIRMWARE_MIN_BATTERY_PERCENT: Final = 70
 """Lowest battery level at which a firmware update may start."""
 FIRMWARE_UPDATE_RUNNING: Final = "firmware update running"
 """Rejection reason of every command but the emergency stop while the mower updates."""
@@ -68,7 +69,7 @@ def firmware_update_problem(
     """Why a firmware update to ``version`` must not start now, or None when it may.
 
     The checks run in the order a user can fix them: the connection's capability, the offer
-    itself (state and version), the mower's situation (dock, charging, battery), then what else
+    itself (state and version), the mower's situation (dock, battery), then what else
     is going on (job, drive session, an update already running).
     """
     if not capabilities.firmware_update:
@@ -83,9 +84,7 @@ def firmware_update_problem(
     if version != info.available:
         return f"version {version} is not the offered one ({info.available}); check again"
     if state.activity not in _FIRMWARE_ACTIVITIES:
-        return f"the mower must be docked and charging (it is {state.activity.value})"
-    if not state.charging:
-        return "the mower must be charging in its dock"
+        return f"the mower must be docked (it is {state.activity.value})"
     if state.battery_percent < FIRMWARE_MIN_BATTERY_PERCENT:
         return (
             f"battery {state.battery_percent} % is below the "

@@ -198,18 +198,53 @@ async def test_control_firmware_update_problem_rules() -> None:
     assert "drive session" in (
         firmware_update_problem(NEW_VERSION, ok, caps, drive_session_open=True) or ""
     )
-    low = ok.model_copy(update={"battery_percent": 49})
-    assert "below the 50 %" in (firmware_update_problem(NEW_VERSION, low, caps) or "")
+    low = ok.model_copy(update={"battery_percent": 69})
+    assert "below the 70 %" in (firmware_update_problem(NEW_VERSION, low, caps) or "")
     idle = ok.model_copy(update={"activity": MowerActivity.IDLE, "charging": False})
-    assert "docked and charging" in (firmware_update_problem(NEW_VERSION, idle, caps) or "")
-    docked = ok.model_copy(update={"activity": MowerActivity.DOCKED, "charging": False})
-    assert "must be charging" in (firmware_update_problem(NEW_VERSION, docked, caps) or "")
+    assert firmware_update_problem(NEW_VERSION, idle, caps) == (
+        "the mower must be docked (it is idle)"
+    )
     installing = ok.model_copy(
         update={"firmware_info": info.model_copy(update={"update_state": "installing"})}
     )
     assert "already installing" in (firmware_update_problem(NEW_VERSION, installing, caps) or "")
     none = ok.model_copy(update={"firmware_info": info.model_copy(update={"update_state": "idle"})})
     assert firmware_update_problem(NEW_VERSION, none, caps) == "no firmware update is available"
+
+
+async def test_control_firmware_update_needs_the_dock_and_battery_not_charging() -> None:
+    """A full mower stops charging in its dock; that must not block an update."""
+    mower = _charging_mower()
+    caps = MowerCapabilities(firmware_update=True)
+    await mower.connect()
+    ok = await mower.get_state()
+    docked_full = ok.model_copy(
+        update={"activity": MowerActivity.DOCKED, "charging": False, "battery_percent": 75}
+    )
+    assert firmware_update_problem(NEW_VERSION, docked_full, caps) is None
+    docked_low = docked_full.model_copy(update={"battery_percent": 65})
+    assert firmware_update_problem(NEW_VERSION, docked_low, caps) == (
+        "battery 65 % is below the 70 % a firmware update needs"
+    )
+    mowing = docked_full.model_copy(update={"activity": MowerActivity.MOWING})
+    assert firmware_update_problem(NEW_VERSION, mowing, caps) == (
+        "the mower must be docked (it is mowing)"
+    )
+
+
+async def test_control_firmware_update_starts_on_a_full_docked_mower() -> None:
+    mower = _charging_mower()
+    controller = await _controller(mower)
+    try:
+        mower.set_battery(100)
+        mower.tick(0.1)  # full: docked, not charging
+        state = await mower.get_state()
+        assert state.activity is MowerActivity.DOCKED and not state.charging
+        full = await controller.handle(_envelope(FirmwareUpdate(version=NEW_VERSION)))
+        assert full.status is CommandStatus.EXECUTED
+        assert (await mower.get_state()).activity is MowerActivity.UPDATING
+    finally:
+        await controller.close()
 
 
 # --- firmware through the controller ----------------------------------------------------------
@@ -235,14 +270,7 @@ async def test_control_firmware_update_rejections_through_the_controller() -> No
         mower.set_battery(30)
         low = await controller.handle(_envelope(FirmwareUpdate(version=NEW_VERSION)))
         assert low.status is CommandStatus.REJECTED
-        assert low.reason is not None and "below the 50 %" in low.reason
-
-        mower.set_battery(100)
-        mower.tick(0.1)  # full: docked, not charging
-        assert (await mower.get_state()).activity is MowerActivity.DOCKED
-        full = await controller.handle(_envelope(FirmwareUpdate(version=NEW_VERSION)))
-        assert full.status is CommandStatus.REJECTED
-        assert full.reason is not None and "must be charging" in full.reason
+        assert low.reason is not None and "below the 70 %" in low.reason
 
         started = await controller.handle(_envelope(StartMow(area_ids=["front"])))
         assert started.status is CommandStatus.EXECUTED
