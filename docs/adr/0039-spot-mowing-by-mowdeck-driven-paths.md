@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-15)
+Accepted (2026-10-15); amended by [ADR 0041](0041-spot-runs-from-the-dock-undock-transit-return.md) (2026-10-15): a run may start at the dock (undocking, a transit planned on the map instead of the straight approach of at most 10 m, the return to the dock afterwards).
 
 ## Context
 

@@ -79,6 +79,9 @@ nav:
       - adr/0036-native-app-shells-with-capacitor.md
       - adr/0037-camera-panorama-calibration.md
       - adr/0038-dual-link-per-mower-and-firmware-updates.md
+      - adr/0039-spot-mowing-by-mowdeck-driven-paths.md
+      - adr/0040-link-heartbeat-for-online-status.md
+      - adr/0041-spot-runs-from-the-dock-undock-transit-return.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md

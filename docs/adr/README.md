@@ -44,3 +44,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0038](0038-dual-link-per-mower-and-firmware-updates.md) | Dual link per mower (cloud plus Bluetooth bridge) and firmware updates | Accepted |
 | [0039](0039-spot-mowing-by-mowdeck-driven-paths.md) | Spot mowing by MowDeck-driven paths | Accepted |
 | [0040](0040-link-heartbeat-for-online-status.md) | Link heartbeat for online status | Accepted |
+| [0041](0041-spot-runs-from-the-dock-undock-transit-return.md) | Spot runs from the dock: undock, transit and return | Accepted |
