@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   installProgress,
+  shownFirmwareInfo,
   updateBlocker,
   updateOffered,
   type FirmwareInfo,
@@ -75,5 +76,32 @@ describe('installProgress', () => {
     expect(installProgress({ ...offered, update_state: 'installing' })).toBe(0);
     expect(installProgress({ ...offered, update_state: 'installing', progress: 42 })).toBe(42);
     expect(installProgress({ ...offered, update_state: 'installing', progress: 140 })).toBe(100);
+  });
+});
+
+describe('shownFirmwareInfo', () => {
+  const checked: FirmwareInfo = { ...offered, checked_at: '2026-10-15T12:45:00Z' };
+
+  it('keeps the live info while installing, although the check is newer', () => {
+    const live: FirmwareInfo = {
+      ...offered,
+      update_state: 'installing',
+      progress: 61,
+      checked_at: '2026-10-15T12:40:00Z',
+    };
+    expect(shownFirmwareInfo(live, checked)).toBe(live);
+  });
+
+  it('otherwise shows the newer check, the live one on a tie', () => {
+    const older: FirmwareInfo = { ...offered, checked_at: '2026-10-15T12:40:00Z' };
+    const same: FirmwareInfo = { ...offered, checked_at: '2026-10-15T12:45:00Z' };
+    expect(shownFirmwareInfo(older, checked)).toBe(checked);
+    expect(shownFirmwareInfo(same, checked)).toBe(same);
+  });
+
+  it('falls back to whichever exists', () => {
+    expect(shownFirmwareInfo(null, checked)).toBe(checked);
+    expect(shownFirmwareInfo(offered, null)).toBe(offered);
+    expect(shownFirmwareInfo(null, null)).toBeNull();
   });
 });

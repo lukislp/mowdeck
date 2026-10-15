@@ -26,7 +26,12 @@
   } from '$lib/connection/form';
   import { loadKinds } from '$lib/connection/kinds';
   import { kindTitle } from '$lib/connection/text';
-  import { checkFirmware, firmwareCheckProblemText, type FirmwareInfo } from '$lib/fleet/firmware';
+  import {
+    checkFirmware,
+    firmwareCheckProblemText,
+    shownFirmwareInfo,
+    type FirmwareInfo,
+  } from '$lib/fleet/firmware';
   import {
     BLE_BRIDGE,
     bridgeLinkOfMower,
@@ -113,14 +118,7 @@
     bridgeLink !== null || (caps?.links_supported ?? []).includes(BLE_BRIDGE),
   );
   /** The newer of the telemetry's firmware info and the last check's answer. */
-  const firmwareInfo = $derived.by((): FirmwareInfo | null => {
-    const live = ms?.firmware_info ?? null;
-    const fresh = checkedFirmware;
-    if (!live || !fresh) return live ?? fresh;
-    const liveAt = live.checked_at ? Date.parse(live.checked_at) : 0;
-    const freshAt = fresh.checked_at ? Date.parse(fresh.checked_at) : 0;
-    return liveAt > freshAt ? live : fresh;
-  });
+  const firmwareInfo = $derived(shownFirmwareInfo(ms?.firmware_info ?? null, checkedFirmware));
 
   const bridge = new BridgeLinkFlow({
     scan: (input, signal) => scanBridge(id, input, signal),
