@@ -9,6 +9,9 @@
   its geofence and pure-pursuit steering, fed by the generic drive channel and state; it
   undocks, drives a transit planned by :func:`plan_transit` and sends the mower home
   (ADR 0041, :class:`UndockCapable`).
+* :class:`DriveCalibrationRun`: measures what the stick values mean on the ground (full-scale
+  speed, yaw rate, dead zone) for spot runs (ADR 0042); :class:`DriveSpeedCapable` is the
+  optional vendor speed setting for manual driving.
 * :class:`SimulatedMower`: a deterministic simulated mower (``ConnectionKind.SIMULATED``).
 * :func:`plan_to_native_job`: neutral mowing request to a native mower job.
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
@@ -21,6 +24,12 @@ optional extra, ``photo``, for the simulator's still images).
 from mowdeck_contracts.v1 import ConnectionKind
 
 from mowdeck_control.broadcast import StateBroadcaster, StateSubscription
+from mowdeck_control.calibration import (
+    CalibrationConfig,
+    DriveCalibrationRun,
+    calibration_start_problem,
+    room_ahead_problem,
+)
 from mowdeck_control.connection import (
     BridgeScanCapable,
     CameraCapable,
@@ -28,6 +37,7 @@ from mowdeck_control.connection import (
     ConnectionConfig,
     Dispatch,
     DriveSession,
+    DriveSpeedCapable,
     FirmwarePort,
     JobCommand,
     MapRebuildable,
@@ -44,6 +54,7 @@ from mowdeck_control.connection import (
     current_map_of,
     current_path_of,
     dispatch_of,
+    drive_speed_port_of,
     firmware_port_of,
 )
 from mowdeck_control.controller import MowerController, StateCallback
@@ -97,6 +108,7 @@ from mowdeck_control.spot_run import (
     SpotRunConfig,
     SpotRunReport,
     pose_of,
+    refusal_reason,
     spot_start_problem,
     transit_start,
 )
@@ -128,6 +140,7 @@ __all__ = [
     "AsyncioTimerFactory",
     "BladeDecision",
     "BridgeScanCapable",
+    "CalibrationConfig",
     "CameraCapable",
     "CommandRejected",
     "ConfirmFn",
@@ -137,7 +150,9 @@ __all__ = [
     "ControlError",
     "Dispatch",
     "DrivableSpace",
+    "DriveCalibrationRun",
     "DriveSession",
+    "DriveSpeedCapable",
     "FirmwarePort",
     "FrameChannel",
     "Geofence",
@@ -179,6 +194,7 @@ __all__ = [
     "UnsupportedPattern",
     "available_kinds",
     "bridge_scanner_of",
+    "calibration_start_problem",
     "camera_session_of",
     "create_connection",
     "create_simulated_connection",
@@ -188,6 +204,7 @@ __all__ = [
     "default_map",
     "default_registry",
     "dispatch_of",
+    "drive_speed_port_of",
     "firmware_port_of",
     "firmware_update_problem",
     "flat_png",
@@ -197,8 +214,10 @@ __all__ = [
     "plan_transit",
     "point_in_polygon",
     "pose_of",
+    "refusal_reason",
     "register_connection",
     "render_scene",
+    "room_ahead_problem",
     "spot_start_problem",
     "to_geo_position",
     "to_wgs84",

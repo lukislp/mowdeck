@@ -63,7 +63,22 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    the run's own frames is rejected ("spot run active; stop it first"); ``SpotStop`` without a
    run is rejected. An emergency stop, a sensor stop and a change of the activity end the run
    (while undocking only an error, an update or a lost mower do). With ``SpotMow.return_to_dock``
-   the run sends ``ReturnToDock`` to the connection after it ended, unless it was stopped.
+   the run sends ``ReturnToDock`` to the connection after it ended, unless it was stopped. A
+   spot run takes the stick scale from the drive calibration (``drive_calibration``, ADR 0042,
+   :meth:`~mowdeck_control.spot_run.SpotRunConfig.calibrated`) and the vendor's current speed
+   setting (``MowerState.drive_speed_mps``).
+13. A ``DriveCalibrate`` (ADR 0042) starts a
+   :class:`~mowdeck_control.calibration.DriveCalibrationRun` with frames through this controller
+   (``correlation_id = calibration:<command_id>``): it needs ``capabilities.manual_drive``, no
+   open drive session or pending confirmation, an idle mower out of its dock with a fresh state,
+   a fixed RTK position, enough battery and room ahead inside the geofence; it is answered
+   ``accepted`` at once and its end is read with :meth:`MowerController.calibration_result`.
+   Rule 12 applies while it runs ("drive calibration active; stop it first"): only
+   ``EmergencyStop``, ``SpotStop`` (which ends it) and ``SetLight`` pass. A sensor stop and a
+   change of the activity end it. ``SetDriveSpeed`` needs ``capabilities.drive_speed_setting``
+   and a connection implementing :class:`~mowdeck_control.connection.DriveSpeedCapable`; the
+   value is snapped to the declared range and step. Like ``SetLight`` it keeps an open drive
+   session.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -76,7 +91,7 @@ import inspect
 import logging
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from types import TracebackType
 from typing import Any, Self
@@ -86,6 +101,9 @@ from mowdeck_contracts.v1 import (
     CommandEnvelope,
     CommandResult,
     CommandStatus,
+    DriveCalibrate,
+    DriveCalibration,
+    DriveCalibrationStatus,
     EmergencyStop,
     FirmwareUpdate,
     ManualDrive,
@@ -98,6 +116,7 @@ from mowdeck_contracts.v1 import (
     ResumeMow,
     ReturnToDock,
     SetBladeHeight,
+    SetDriveSpeed,
     SetLight,
     SetSpeed,
     SpotMow,
@@ -108,6 +127,12 @@ from mowdeck_contracts.v1 import (
 )
 
 from mowdeck_control.broadcast import StateBroadcaster, StateSubscription
+from mowdeck_control.calibration import (
+    CalibrationConfig,
+    DriveCalibrationRun,
+    calibration_start_problem,
+    room_ahead_problem,
+)
 from mowdeck_control.connection import (
     Dispatch,
     DriveSession,
@@ -119,6 +144,7 @@ from mowdeck_control.connection import (
     current_map_of,
     current_path_of,
     dispatch_of,
+    drive_speed_port_of,
 )
 from mowdeck_control.errors import CommandRejected, NotConnected, UnsupportedPattern
 from mowdeck_control.safety import (
@@ -153,6 +179,12 @@ _SUPERSEDING = (StartMow, PauseMow, ResumeMow, ReturnToDock, EmergencyStop)
 """Job commands that end the confirmation wait of every earlier command (rule 9)."""
 SPOT_RUN_ACTIVE = "spot run active; stop it first"
 """Rejection reason of every other command while a spot run drives (rule 12)."""
+CALIBRATION_ACTIVE = "drive calibration active; stop it first"
+"""Rejection reason of every other command while a drive calibration drives (rule 13)."""
+DriveCalibrationSource = Callable[[], DriveCalibration | None]
+"""Where the controller finds the mower's stored drive calibration (the gateway: the link
+options of the registration)."""
+_DRIVE_SPEED_READ_TIMEOUT_S = 15.0
 _SPOT_STOP_WAIT_S = 5.0
 """How long a stop waits for the run's zero frame before the task is cancelled."""
 
@@ -181,6 +213,8 @@ class MowerController:
         logger: logging.Logger | None = None,
         spot_config: SpotRunConfig | None = None,
         spot_sleep: Callable[[float], Awaitable[None]] | None = None,
+        drive_calibration: DriveCalibrationSource | None = None,
+        calibration_config: CalibrationConfig | None = None,
     ) -> None:
         if dedup_size < 1:
             msg = "dedup_size must be at least 1"
@@ -209,6 +243,12 @@ class MowerController:
         self._spot_task: asyncio.Task[SpotRunReport] | None = None
         self._spot_status: SpotRunStatus | None = None
         self._status_tasks: set[asyncio.Task[None]] = set()
+        self._drive_calibration = drive_calibration or (lambda: None)
+        self._calibration_config = calibration_config or CalibrationConfig()
+        self._calibration: DriveCalibrationRun | None = None
+        self._calibration_task: asyncio.Task[DriveCalibrationStatus] | None = None
+        self._calibration_status: DriveCalibrationStatus | None = None
+        self._speed_read: asyncio.Task[None] | None = None
 
     # --- Lifecycle ----------------------------------------------------------------------------
 
@@ -267,6 +307,46 @@ class MowerController:
                     await task
         return run.report
 
+    @property
+    def calibration_active(self) -> bool:
+        """True while a drive calibration drives the mower (rule 13)."""
+        return self._calibration is not None and self._calibration.active
+
+    @property
+    def calibration_status(self) -> DriveCalibrationStatus | None:
+        """The status of the current or last calibration (``MowerState.drive_calibration``)."""
+        return self._calibration_status
+
+    def spot_config(self, state: MowerState | None = None) -> SpotRunConfig:
+        """The spot-run configuration with the stored drive calibration applied (ADR 0042)."""
+        speed = state.drive_speed_mps if state is not None else None
+        return self._spot_config.calibrated(self._drive_calibration(), speed)
+
+    async def calibration_result(self, run_id: UUID) -> DriveCalibrationRun | None:
+        """Wait for the end of the calibration started by the ``DriveCalibrate`` command
+        ``run_id`` and return it (``status``, ``result``, ``summary()``); None when unknown."""
+        run = self._calibration
+        if run is None or run.run_id != run_id:
+            return None
+        await run.wait()
+        return run
+
+    async def stop_calibration(self, reason: str = REASON_LINK_LOST) -> DriveCalibrationRun | None:
+        """End an active calibration with ``reason`` (zero frame, session closed)."""
+        run = self._calibration
+        if run is None or not run.active:
+            return None
+        run.request_stop(reason)
+        task = self._calibration_task
+        if task is not None:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(run.wait()), _SPOT_STOP_WAIT_S)
+            if not run.finished:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
+        return run
+
     async def end_drive_session(self, reason: str = "ended by the caller") -> None:
         """Stop and close an open manual drive session (scripts; the dead-man does it for
         clients that stop sending frames)."""
@@ -279,6 +359,12 @@ class MowerController:
         self._map = await self._connection.get_map()
         if self._pump is None or self._pump.done():
             self._pump = asyncio.create_task(self._pump_states(), name=f"state-{self._mower_id}")
+        port = drive_speed_port_of(self._connection)
+        if port is not None and self._capabilities.drive_speed_setting is not None:
+            # Best effort: the adapter reports the value in its state once the mower answers.
+            self._speed_read = asyncio.create_task(
+                self._read_drive_speed(), name=f"drive-speed-{self._mower_id}"
+            )
         self._log.info(
             "controller for mower %s started (%s)", self._mower_id, self._connection.kind
         )
@@ -293,7 +379,12 @@ class MowerController:
         """
         try:
             self._interrupt_confirmations("controller close")
+            reader, self._speed_read = self._speed_read, None
+            if reader is not None and not reader.done():
+                reader.cancel()
+                await asyncio.wait({reader})
             await self.stop_spot_run(REASON_LINK_LOST)
+            await self.stop_calibration(REASON_LINK_LOST)
             await self._end_drive("controller closed")
             pump, self._pump = self._pump, None
             if pump is not None:
@@ -427,6 +518,22 @@ class MowerController:
         while len(self._results) > self._dedup_size:
             self._results.popitem(last=False)
 
+    async def _read_drive_speed(self) -> None:
+        port = drive_speed_port_of(self._connection)
+        if port is None:
+            return
+        try:
+            async with asyncio.timeout(_DRIVE_SPEED_READ_TIMEOUT_S):
+                speed = await port.get_drive_speed()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._log.info(
+                "drive speed of mower %s not read: %s", self._mower_id, type(exc).__name__
+            )
+            return
+        self._log.info("drive speed setting of mower %s: %s", self._mower_id, speed)
+
     async def _process(self, envelope: CommandEnvelope) -> CommandResult:
         if envelope.mower_id != self._mower_id:
             return self._result(envelope, CommandStatus.REJECTED, "command is for another mower")
@@ -455,6 +562,14 @@ class MowerController:
                 )
                 if not own_frame and not isinstance(command, SetLight):
                     return self._result(envelope, CommandStatus.REJECTED, SPOT_RUN_ACTIVE)
+            calibration = self._calibration
+            if calibration is not None and calibration.active:
+                own_frame = (
+                    isinstance(command, ManualDrive)
+                    and envelope.correlation_id == calibration.correlation_id
+                )
+                if not own_frame and not isinstance(command, SetLight):
+                    return self._result(envelope, CommandStatus.REJECTED, CALIBRATION_ACTIVE)
             if await self._updating():
                 return self._result(envelope, CommandStatus.REJECTED, FIRMWARE_UPDATE_RUNNING)
             if isinstance(command, FirmwareUpdate) and self._session is not None:
@@ -473,6 +588,10 @@ class MowerController:
                 return await self._manual_drive(envelope, command)
             if isinstance(command, SpotMow):
                 return await self._spot_mow(envelope, command)
+            if isinstance(command, DriveCalibrate):
+                return await self._drive_calibrate(envelope, command)
+            if isinstance(command, SetDriveSpeed):
+                return await self._set_drive_speed(envelope, command)
             if not isinstance(command, SetLight):
                 await self._end_drive(f"ended by {command.kind}")
             problem = await self._validate(command)
@@ -495,6 +614,7 @@ class MowerController:
         self._log_event(envelope, "emergency stop: preempting queue and drive session")
         self._interrupt_confirmations(command.kind)
         await self.stop_spot_run(REASON_EMERGENCY_STOP)
+        await self.stop_calibration(REASON_EMERGENCY_STOP)
         await self._end_drive("emergency stop")
         return await self._execute(envelope, command)
 
@@ -772,7 +892,7 @@ class MowerController:
             on_status=self._on_spot_status,
             clock=self._clock,
             sleep=self._spot_sleep,
-            config=self._spot_config,
+            config=self.spot_config(state),
         )
         # The transit planning is pure geometry; a large map takes a moment, off the loop.
         problem = await asyncio.to_thread(run.prepare, state)
@@ -795,7 +915,7 @@ class MowerController:
         self._log_event(envelope, detail)
         return self._result(envelope, CommandStatus.ACCEPTED, detail)
 
-    def _spot_done(self, task: "asyncio.Task[SpotRunReport]") -> None:
+    def _spot_done(self, task: "asyncio.Task[Any]") -> None:
         if task.cancelled():
             return
         exc = task.exception()
@@ -803,7 +923,13 @@ class MowerController:
             self._log.error("spot run task failed for mower %s", self._mower_id, exc_info=exc)
 
     async def _spot_stop(self, envelope: CommandEnvelope) -> CommandResult:
-        """``SpotStop``: end the active run; rejected without one (rule 12)."""
+        """``SpotStop``: end the active run or calibration; rejected without one (rules 12
+        and 13)."""
+        if self.calibration_active:
+            self._log_event(envelope, "stopping the drive calibration")
+            stopped = await self.stop_calibration(REASON_STOPPED_BY_USER)
+            reason = stopped.summary() if stopped is not None else "calibration stopped"
+            return self._result(envelope, CommandStatus.EXECUTED, reason)
         run = self._spot_run
         if run is None or not run.active:
             return self._result(envelope, CommandStatus.REJECTED, "no spot run is active")
@@ -811,6 +937,102 @@ class MowerController:
         report = await self.stop_spot_run(REASON_STOPPED_BY_USER)
         reason = report.summary() if report is not None else "spot run stopped"
         return self._result(envelope, CommandStatus.EXECUTED, reason)
+
+    # --- Drive calibration (ADR 0042) ------------------------------------------------------------
+
+    async def _drive_calibrate(
+        self, envelope: CommandEnvelope, command: DriveCalibrate
+    ) -> CommandResult:
+        """Rule 13: check the preconditions and start the calibration; ``accepted`` at once."""
+        caps = await self.capabilities()
+        if not caps.manual_drive:
+            return self._result(
+                envelope,
+                CommandStatus.REJECTED,
+                "manual driving is not supported on this connection",
+            )
+        if self._session is not None:
+            return self._result(
+                envelope,
+                CommandStatus.REJECTED,
+                "a manual drive session is open; stop driving first",
+            )
+        if self._confirming:
+            return self._result(
+                envelope, CommandStatus.REJECTED, "a command is still waiting for its confirmation"
+            )
+        try:
+            state = await self._connection.get_state()
+        except NotConnected:
+            return self._result(envelope, CommandStatus.FAILED, "mower is not connected")
+        problem = calibration_start_problem(state, now=self._clock())
+        mower_map = await self.mower_map()
+        config = replace(self._calibration_config, step_s=command.step_s)
+        problem = problem or room_ahead_problem(
+            state, mower_map, room_m=config.room_ahead_m, margin_m=config.geofence_margin_m
+        )
+        if problem is not None:
+            return self._result(envelope, CommandStatus.REJECTED, problem)
+        run = DriveCalibrationRun(
+            run_id=envelope.command_id,
+            mower_map=mower_map,
+            pose_source=lambda: self._last_state,
+            frames=_SpotFrames(self, envelope, run_id=envelope.command_id, prefix="calibration"),
+            drive_speed_setting=lambda: (
+                self._last_state.drive_speed_mps if self._last_state is not None else None
+            ),
+            on_status=self._on_calibration_status,
+            clock=self._clock,
+            sleep=self._spot_sleep,
+            config=config,
+        )
+        self._calibration = run
+        self._calibration_task = asyncio.create_task(
+            run.run(), name=f"calibration-{envelope.command_id}"
+        )
+        self._calibration_task.add_done_callback(self._spot_done)
+        detail = f"drive calibration started ({run.steps_total} steps of {config.step_s:g} s)"
+        self._log_event(envelope, detail)
+        return self._result(envelope, CommandStatus.ACCEPTED, detail)
+
+    def _on_calibration_status(self, status: DriveCalibrationStatus) -> None:
+        self._calibration_status = status
+        state = self._last_state
+        if state is None or state.drive_calibration == status:
+            return
+        self._last_state = state.model_copy(update={"drive_calibration": status})
+        task = asyncio.create_task(self._emit_spot_status(), name=f"cal-status-{self._mower_id}")
+        self._status_tasks.add(task)
+        task.add_done_callback(self._status_tasks.discard)
+
+    async def _set_drive_speed(
+        self, envelope: CommandEnvelope, command: SetDriveSpeed
+    ) -> CommandResult:
+        """``SetDriveSpeed``: the vendor's speed setting for manual driving (rule 13)."""
+        caps = await self.capabilities()
+        port = drive_speed_port_of(self._connection)
+        setting = caps.drive_speed_setting
+        if setting is None or port is None:
+            return self._result(
+                envelope,
+                CommandStatus.REJECTED,
+                "this connection cannot change the speed for manual driving",
+            )
+        value = setting.clamp(command.speed_mps)
+        try:
+            await port.set_drive_speed(value)
+        except CommandRejected as exc:
+            return self._result(envelope, CommandStatus.REJECTED, exc.reason)
+        except NotConnected:
+            return self._result(envelope, CommandStatus.FAILED, "mower is not connected")
+        except Exception as exc:
+            self._log.exception("command %s: set_drive_speed failed", envelope.command_id)
+            return self._result(
+                envelope, CommandStatus.FAILED, f"adapter error: {type(exc).__name__}"
+            )
+        return self._result(
+            envelope, CommandStatus.EXECUTED, f"speed for manual driving set to {value:g} m/s"
+        )
 
     def _on_spot_status(self, status: SpotRunStatus) -> None:
         self._spot_status = status
@@ -828,22 +1050,28 @@ class MowerController:
         state = self._last_state
         if state is None:
             return
+        update: dict[str, Any] = {}
         if state.spot_run != self._spot_status:
-            state = state.model_copy(update={"spot_run": self._spot_status})
+            update["spot_run"] = self._spot_status
+        if state.drive_calibration != self._calibration_status:
+            update["drive_calibration"] = self._calibration_status
+        if update:
+            state = state.model_copy(update=update)
             self._last_state = state
         await self._emit(state)
 
     async def _send_spot_frame(
-        self, envelope: CommandEnvelope, run_id: UUID, frame: ManualDrive
+        self, envelope: CommandEnvelope, correlation_id: str, frame: ManualDrive
     ) -> str | None:
-        """Send one frame of the run through :meth:`handle` (all drive rules apply)."""
+        """Send one frame of a spot run or calibration through :meth:`handle` (all drive rules
+        apply)."""
         wrapped = CommandEnvelope.create(
             mower_id=self._mower_id,
             account_id=envelope.account_id,
             issued_by=envelope.issued_by,
             command=frame,
             ttl=timedelta(milliseconds=frame.ttl_ms),
-            correlation_id=f"spot:{run_id}",
+            correlation_id=correlation_id,
             now=self._clock(),
         )
         result = await self.handle(wrapped)
@@ -863,8 +1091,13 @@ class MowerController:
             self._log.exception("state stream of mower %s failed", self._mower_id)
 
     async def _on_state_received(self, state: MowerState) -> None:
+        merged: dict[str, Any] = {}
         if self._spot_status is not None:
-            state = state.model_copy(update={"spot_run": self._spot_status})
+            merged["spot_run"] = self._spot_status
+        if self._calibration_status is not None:
+            merged["drive_calibration"] = self._calibration_status
+        if merged:
+            state = state.model_copy(update=merged)
         self._last_state = state
         run = self._spot_run
         if run is not None and run.ends_on(state.activity):
@@ -872,6 +1105,16 @@ class MowerController:
                 run.request_stop(REASON_SENSOR_STOP, state.error_code)
             else:
                 run.request_stop(REASON_ACTIVITY_CHANGE, state.activity.value)
+        calibration = self._calibration
+        if (
+            calibration is not None
+            and calibration.active
+            and state.activity is not MowerActivity.IDLE
+        ):
+            if state.activity is MowerActivity.ERROR:
+                calibration.request_stop(REASON_SENSOR_STOP, state.error_code)
+            else:
+                calibration.request_stop(REASON_ACTIVITY_CHANGE, state.activity.value)
         if (
             state.activity is MowerActivity.ERROR
             and not state.drive_recoverable
@@ -947,11 +1190,17 @@ class _SpotFrames:
     :meth:`MowerController.handle`, the close ends the drive session."""
 
     def __init__(
-        self, controller: MowerController, envelope: CommandEnvelope, *, run_id: UUID
+        self,
+        controller: MowerController,
+        envelope: CommandEnvelope,
+        *,
+        run_id: UUID,
+        prefix: str = "spot",
     ) -> None:
         self._controller = controller
         self._envelope = envelope
         self._run_id = run_id
+        self._prefix = prefix
 
     async def send(
         self, *, linear: float, angular: float, blade_on: bool, ttl_ms: int
@@ -959,10 +1208,12 @@ class _SpotFrames:
         frame = ManualDrive(
             linear=round(linear, 4), angular=round(angular, 4), blade_on=blade_on, ttl_ms=ttl_ms
         )
-        return await self._controller._send_spot_frame(self._envelope, self._run_id, frame)
+        return await self._controller._send_spot_frame(
+            self._envelope, f"{self._prefix}:{self._run_id}", frame
+        )
 
     async def close(self) -> None:
-        await self._controller._end_drive("spot run ended")
+        await self._controller._end_drive(f"{self._prefix} ended")
 
 
 class _SpotActions(SpotActions):

@@ -26,7 +26,10 @@ while the confirmation is pending; an adapter that knows the route the mower pla
 implements :class:`MowPathSource` (see :func:`current_path_of`), and one that can ask the mower
 to plan a route without starting it implements :class:`PathPreviewCapable`. An adapter that can
 make the mower leave its charging station by itself sets ``MowerCapabilities.undock`` and
-implements :class:`UndockCapable` (ADR 0041: a spot run may then start at the dock).
+implements :class:`UndockCapable` (ADR 0041: a spot run may then start at the dock). An adapter
+that can read and change the vendor's speed setting for manual driving declares
+``MowerCapabilities.drive_speed_setting``, reports the value in ``MowerState.drive_speed_mps`` and
+implements :class:`DriveSpeedCapable` (ADR 0042, see :func:`drive_speed_port_of`).
 
 Links and firmware (ADR 0038) are optional capabilities as well, declared in the capabilities
 and implemented as protocols: an adapter whose connection can consist of several links (the
@@ -400,6 +403,32 @@ class UndockCapable(Protocol):
     async def leave_dock(self) -> None:
         """Send the mower out of its charging station."""
         ...
+
+
+@runtime_checkable
+class DriveSpeedCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection`, declared with
+    ``MowerCapabilities.drive_speed_setting`` (ADR 0042): the vendor's speed setting for manual
+    driving, by which the mower scales the stick. It is a setting, not a drive frame: adapters
+    send it over their command channel (for a dual link the cloud).
+
+    Both raise :class:`~mowdeck_control.errors.NotConnected` without a link and
+    :class:`~mowdeck_control.errors.CommandRejected` when the mower refuses.
+    """
+
+    async def get_drive_speed(self) -> float | None:
+        """Ask the mower for the current setting (m/s); None when it does not answer. The
+        adapter also reports the value in ``MowerState.drive_speed_mps``."""
+        ...
+
+    async def set_drive_speed(self, speed_mps: float) -> None:
+        """Change the setting (the controller checked the range)."""
+        ...
+
+
+def drive_speed_port_of(connection: object) -> DriveSpeedCapable | None:
+    """``connection`` as a :class:`DriveSpeedCapable`, or None when it does not implement it."""
+    return connection if isinstance(connection, DriveSpeedCapable) else None
 
 
 @runtime_checkable

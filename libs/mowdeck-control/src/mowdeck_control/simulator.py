@@ -73,6 +73,7 @@ from mowdeck_contracts.v1 import (
     CommandStatus,
     ConnectionKind,
     DockPose,
+    DriveSpeedSetting,
     EmergencyStop,
     FirmwareInfo,
     FirmwareUpdate,
@@ -187,7 +188,17 @@ class SimulationConfig:
     mowing_speed_mps: float = 0.4
     transfer_speed_mps: float = 0.6
     drive_max_speed_mps: float = 0.5
+    """Ground speed at ``linear = 1`` while the drive speed setting is ``drive_speed_mps``
+    (the full-scale speed a drive calibration measures)."""
     drive_max_turn_rad_s: float = 1.0
+    """Yaw rate at ``angular = 1`` (the full-scale yaw rate a drive calibration measures)."""
+    drive_speed_setting: bool = True
+    """Offer the vendor-style speed setting for manual driving (capability
+    ``drive_speed_setting``, ADR 0042): the full-scale speed scales with it."""
+    drive_speed_mps: float = 0.5
+    """Initial value of the speed setting (at which ``drive_max_speed_mps`` applies)."""
+    drive_speed_range: tuple[float, float, float] = (0.2, 1.0, 0.1)
+    """``(min, max, step)`` of the speed setting."""
     margin_m: float = 0.2
     battery_percent: float = 100.0
     drain_mowing_per_h: float = 30.0
@@ -451,7 +462,17 @@ class SimulatedMower:
             links_supported=[LINK_BLE_BRIDGE],
             firmware_update=True,
             undock=self.config.undock,
+            drive_speed_setting=(
+                DriveSpeedSetting(
+                    min_mps=self.config.drive_speed_range[0],
+                    max_mps=self.config.drive_speed_range[1],
+                    step_mps=self.config.drive_speed_range[2],
+                )
+                if self.config.drive_speed_setting
+                else None
+            ),
         )
+        self._drive_speed = self.config.drive_speed_mps
         self._undock_target: LocalPoint | None = None
 
     # --- MowerConnection ----------------------------------------------------------------------
@@ -586,6 +607,30 @@ class SimulatedMower:
             except TimeoutError:
                 continue
         return Outcome.executed("mower is mowing")
+
+    async def get_drive_speed(self) -> float | None:
+        """:class:`~mowdeck_control.connection.DriveSpeedCapable`: the speed setting."""
+        self._require_connected()
+        if not self.config.drive_speed_setting:
+            raise CommandRejected("this mower has no speed setting for manual driving")
+        return self._drive_speed
+
+    async def set_drive_speed(self, speed_mps: float) -> None:
+        """:class:`~mowdeck_control.connection.DriveSpeedCapable`: change the speed setting
+        (the full-scale drive speed scales with it)."""
+        self._require_connected()
+        setting = self._capabilities.drive_speed_setting
+        if setting is None:
+            raise CommandRejected("this mower has no speed setting for manual driving")
+        self._drive_speed = setting.clamp(speed_mps)
+        self._publish()
+
+    @property
+    def drive_full_speed_mps(self) -> float:
+        """Ground speed at ``linear = 1`` with the current speed setting."""
+        if not self.config.drive_speed_setting or self.config.drive_speed_mps <= 0:
+            return self.config.drive_max_speed_mps
+        return self.config.drive_max_speed_mps * self._drive_speed / self.config.drive_speed_mps
 
     async def leave_dock(self) -> None:
         """:class:`~mowdeck_control.connection.UndockCapable`: drive ``undock_distance_m``
@@ -956,6 +1001,7 @@ class SimulatedMower:
             light_on=self._light_on if self.config.light else None,
             links=self._link_status(),
             firmware_info=self.firmware_info(),
+            drive_speed_mps=self._drive_speed if self.config.drive_speed_setting else None,
             raw=raw,
         )
 
@@ -1418,7 +1464,7 @@ class SimulatedMower:
         if self.stuck:
             return self._stuck_step(step, cmd)
         self._theta += cmd.angular * self.config.drive_max_turn_rad_s * step
-        speed = cmd.linear * self.config.drive_max_speed_mps
+        speed = cmd.linear * self.drive_full_speed_mps
         nx = self._x + math.cos(self._theta) * speed * step
         ny = self._y + math.sin(self._theta) * speed * step
         zones = self._map.forbidden_zones()
@@ -1435,7 +1481,7 @@ class SimulatedMower:
         self._drain(step, self.config.drain_moving_per_h)
         if cmd.linear >= 0:
             return step  # wheels spin, the mower does not move or turn
-        speed = cmd.linear * self.config.drive_max_speed_mps
+        speed = cmd.linear * self.drive_full_speed_mps
         nx = self._x + math.cos(self._theta) * speed * step
         ny = self._y + math.sin(self._theta) * speed * step
         if any(point_in_polygon((nx, ny), z.boundary) for z in self._map.forbidden_zones()):
@@ -1480,5 +1526,8 @@ def create_simulated_connection(config: ConnectionConfig) -> SimulatedMower:
         options["bridge_devices"] = tuple(
             (str(d[0]), str(d[1]), int(d[2])) for d in options["bridge_devices"]
         )
+    if "drive_speed_range" in options:
+        low, high, step = options["drive_speed_range"]
+        options["drive_speed_range"] = (float(low), float(high), float(step))
     sim_config = replace(SimulationConfig(), **options)
     return SimulatedMower(mower_id=config.mower_id, account_id=config.account_id, config=sim_config)
