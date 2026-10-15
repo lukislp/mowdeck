@@ -274,6 +274,44 @@ describe('spot sheet flow', () => {
     stop();
   });
 
+  it('after a start the run is "launching" until it shows up in the state', async () => {
+    const { flow, timers, fire, stop } = setup();
+    flow.begin();
+    flow.mapTap([10, 10]);
+    flushSync();
+    await fire();
+    await flow.start();
+    expect(flow.launching).toBe(true);
+    expect(timers).toHaveLength(1);
+    flow.observe({
+      run_id: 'r1',
+      state: 'preparing',
+      progress_percent: 0,
+      segment_index: 0,
+      segments_total: 2,
+      planned_points: 10,
+      driven_points: 0,
+      dry_run: true,
+      reason: null,
+    });
+    expect(flow.launching).toBe(false);
+    expect(timers).toHaveLength(0);
+    stop();
+  });
+
+  it('a launch that never shows up ends after the wait', async () => {
+    const { flow, fire, stop } = setup();
+    flow.begin();
+    flow.mapTap([10, 10]);
+    flushSync();
+    await fire();
+    await flow.start();
+    expect(flow.launching).toBe(true);
+    await fire();
+    expect(flow.launching).toBe(false);
+    stop();
+  });
+
   it('a final run already there when the page opens is not announced', () => {
     const { flow, stop } = setup();
     flow.observe({

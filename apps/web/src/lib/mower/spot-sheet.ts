@@ -62,6 +62,8 @@ export const SPOT_NEAR_M = 10;
  */
 export const SPOT_FRESH_MS = 60_000;
 export const SPOT_BATTERY_MIN_PERCENT = 20;
+/** After a start, the run bar says "starting" this long at most until the run shows up. */
+export const SPOT_LAUNCH_WAIT_MS = 20_000;
 /** The preview is asked for this long after the last change. */
 export const SPOT_PREVIEW_DEBOUNCE_MS = 400;
 

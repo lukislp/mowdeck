@@ -1726,5 +1726,13 @@
   "spot_reason_timeout": "Zeitlimit erreicht",
   "spot_reason_heading_mismatch": "Fahrtrichtung passt nicht zum Kompass",
   "spot_radius_value": "{value} m",
-  "spot_speed_value": "{value} m/s"
+  "spot_speed_value": "{value} m/s",
+  "spot_sheet_handle": "Spot-Einstellungen",
+  "spot_size_area": "{area} m²",
+  "spot_peek_duration": "≈ {duration}",
+  "spot_peek_computing": "Route …",
+  "spot_peek_no_route": "Keine Route",
+  "spot_conditions_summary": "Startbedingungen: {ok} von {total} erfüllt",
+  "spot_preview_title": "Vorschau",
+  "spot_launching": "Wartet auf Live-Positionen, dann fährt der Mäher los."
 }

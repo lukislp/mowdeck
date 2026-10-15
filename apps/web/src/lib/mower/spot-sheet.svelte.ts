@@ -22,6 +22,7 @@ import {
 import type { MowPath } from './mow-path';
 import {
   SPOT_CORNERS_MAX,
+  SPOT_LAUNCH_WAIT_MS,
   SPOT_PREVIEW_DEBOUNCE_MS,
   SPOT_RADIUS_DEFAULT_M,
   allGreen,
@@ -107,11 +108,18 @@ export class SpotSheetFlow {
   ended = $state.raw<SpotRunStatus | null>(null);
   /** The spot of the last run started here, for "Nachmähen" again. */
   lastSpot = $state.raw<MapSpot | null>(null);
+  /**
+   * A run was started here and its first status has not arrived yet: the run bar says it is
+   * starting (and waits for live positions) and already offers STOP. Ends when the run shows up
+   * in the state, or after `SPOT_LAUNCH_WAIT_MS` without it (the command result says why).
+   */
+  launching = $state(false);
 
   #previewAbort: AbortController | null = null;
   #cancelDebounce: (() => void) | null = null;
   /** A final run already shown (or present at page load) is not announced again. */
   #ignoredRunId: string | null | undefined = undefined;
+  #cancelLaunch: (() => void) | null = null;
 
   constructor(private readonly deps: SpotSheetDeps) {}
 
@@ -191,13 +199,28 @@ export class SpotSheetFlow {
       return;
     }
     if (this.preview.kind !== 'idle' && this.preview.key === key) return;
-    const schedule =
-      this.deps.schedule ??
-      ((fn, ms) => {
-        const timer = setTimeout(fn, ms);
-        return () => clearTimeout(timer);
-      });
-    this.#cancelDebounce = schedule(() => void this.computePreview(), SPOT_PREVIEW_DEBOUNCE_MS);
+    this.#cancelDebounce = this.#schedule(
+      () => void this.computePreview(),
+      SPOT_PREVIEW_DEBOUNCE_MS,
+    );
+  }
+
+  #schedule(fn: () => void, ms: number): () => void {
+    if (this.deps.schedule) return this.deps.schedule(fn, ms);
+    const timer = setTimeout(fn, ms);
+    return () => clearTimeout(timer);
+  }
+
+  #launch(): void {
+    this.#cancelLaunch?.();
+    this.launching = true;
+    this.#cancelLaunch = this.#schedule(() => this.#endLaunch(), SPOT_LAUNCH_WAIT_MS);
+  }
+
+  #endLaunch(): void {
+    this.#cancelLaunch?.();
+    this.#cancelLaunch = null;
+    if (this.launching) this.launching = false;
   }
 
   /** The Planner computes the route for the current spot and settings without starting. */
@@ -224,6 +247,7 @@ export class SpotSheetFlow {
 
   /** "Spot mähen": the next tap on the map places a circle. */
   begin(): void {
+    this.#endLaunch();
     this.settings = initialSettings(untrack(() => this.cuttingWidthMm));
     this.radiusM = SPOT_RADIUS_DEFAULT_M;
     this.spot = null;
@@ -358,6 +382,7 @@ export class SpotSheetFlow {
       this.deps.paths.replace(seed);
       this.#ignoredRunId = null;
       this.cancel();
+      this.#launch();
     } catch (error) {
       this.startError = problemMessage(asProblem(error));
     } finally {
@@ -386,11 +411,13 @@ export class SpotSheetFlow {
       this.#ignoredRunId = isSpotRunFinal(run) ? run!.run_id : null;
     if (!run) return;
     if (isSpotRunActive(run)) {
+      this.#endLaunch();
       this.#ignoredRunId = null;
       if (this.ended) this.ended = null;
       return;
     }
     if (run.run_id === this.#ignoredRunId) return;
+    this.#endLaunch();
     if (this.ended?.run_id !== run.run_id) this.ended = run;
   }
 
@@ -402,6 +429,7 @@ export class SpotSheetFlow {
   /** Another mower: the spot, the preview and the run belong to the old one. */
   reset(): void {
     this.cancel();
+    this.#endLaunch();
     this.lastSpot = null;
     this.ended = null;
     this.#ignoredRunId = undefined;

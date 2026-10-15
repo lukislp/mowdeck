@@ -6,9 +6,24 @@
   warnings) and the start conditions as green and red rows. "Starten" is enabled only when every
   row is green and a preview exists. The flow (`$lib/mower/spot-sheet.svelte`) owns the state;
   this file is markup.
+
+  Desktop: the side sheet with everything and the start row in its footer. Phones (`phone`): a
+  `BottomSheet` over the full-screen map, which stays visible and tappable above it:
+  - peek: pattern and size ("Spirale · 1,5 m"), the estimated duration, the start conditions as
+    one lamp with "6/8" (a tap opens half, scrolled to the conditions) and START; while a run
+    starts, runs or has just ended, the run bar (`runBar`, with its big STOP) instead, and the
+    sheet stays at peek, so STOP never needs a drag;
+  - half: shape and radius, pattern (and angle), speed;
+  - full: spacing, blades with the second confirmation, every start condition, the preview's
+    details, cancel.
+  `snap` and `visibleHeight` are bindable: the page collapses to peek when the map is tapped and
+  pads the map by the covered height, so the spot and its route stay above the sheet.
 -->
 <script lang="ts">
+  import { tick, type Snippet } from 'svelte';
+
   import {
+    BottomSheet,
     Button,
     Icon,
     SegmentedControl,
@@ -17,10 +32,11 @@
     Switch,
     polygonAreaM2,
     spotPolygon,
+    type SnapPoint,
   } from '@mowdeck/ui';
 
   import { formatNumber } from '$lib/i18n';
-  import { formatDuration } from '$lib/mower/duration';
+  import { formatSpotDuration } from '$lib/mower/duration';
   import { ANGLE_MAX, ANGLE_STEP } from '$lib/mower/mow-pattern';
   import {
     FALLBACK_CUTTING_WIDTH_MM,
@@ -42,8 +58,23 @@
     flow: SpotSheetFlow;
     /** The display name of a mapped area. */
     areaName: (id: string) => string;
+    /** Narrow viewport: the bottom sheet instead of the side sheet. */
+    phone?: boolean;
+    /** The bottom sheet's snap point (bindable). */
+    snap?: SnapPoint;
+    /** Pixels the bottom sheet covers (bindable, read only). */
+    visibleHeight?: number;
+    /** The run bar (starting, running, ended) for the bottom sheet's peek. */
+    runBar?: Snippet;
   }
-  let { flow, areaName }: Props = $props();
+  let {
+    flow,
+    areaName,
+    phone = false,
+    snap = $bindable('peek'),
+    visibleHeight = $bindable(0),
+    runBar,
+  }: Props = $props();
 
   const uid = $props.id();
   const areaM2 = $derived(polygonAreaM2(spotPolygon(flow.spot)));
@@ -57,251 +88,394 @@
     { value: 'stripes', label: m.spot_pattern_stripes() },
   ]);
   const preview = $derived(flow.previewReady);
-  const duration = $derived(preview ? formatDuration(preview.estimated_duration_s / 60) : '');
+  const duration = $derived(preview ? formatSpotDuration(preview.estimated_duration_s) : '');
   const green = $derived(flow.conditions.filter((c) => c.ok).length);
+  const allOk = $derived(green === flow.conditions.length);
+  /** The run owns the peek: starting, running or just ended. */
+  const runShown = $derived(!!runBar && (flow.launching || flow.running || flow.ended !== null));
+  const summary = $derived(
+    [
+      flow.settings.pattern === 'stripes' ? m.spot_pattern_stripes() : m.spot_pattern_spiral(),
+      flow.spot?.kind === 'polygon'
+        ? m.spot_size_area({ area: formatNumber(areaM2, 1) })
+        : m.spot_radius_value({ value: formatNumber(flow.radiusM, 1) }),
+    ].join(' · '),
+  );
+  let conditionsEl: HTMLElement | undefined = $state();
+
+  /** The lamp in the peek: half, scrolled to the start conditions. */
+  async function showConditions(): Promise<void> {
+    snap = 'half';
+    await tick();
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    conditionsEl?.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+  }
 </script>
 
-<Sheet
-  open={flow.open}
-  title={m.spot_title()}
-  closeLabel={m.close()}
-  onclose={() => flow.close()}
-  testid="spot-sheet"
->
-  <div class="spot">
-    <section class="block" aria-labelledby="{uid}-shape">
-      <h3 class="label" id="{uid}-shape">{m.spot_shape()}</h3>
-      <SegmentedControl
-        label={m.spot_shape()}
-        options={shapeOptions}
-        value={flow.mode === 'polygon' ? 'polygon' : 'circle'}
-        onchange={(value) => (value === 'polygon' ? flow.drawShape() : flow.useCircle())}
-        testid="spot-shape"
-      />
-      {#if flow.mode === 'circle'}
-        <label class="slider">
-          <span class="slider-head">
-            <span>{m.spot_radius()}</span>
-            <output class="mono" data-testid="spot-radius-value"
-              >{m.spot_radius_value({ value: formatNumber(flow.radiusM, 1) })}</output
-            >
-          </span>
-          <input
-            type="range"
-            min={SPOT_RADIUS_MIN_M}
-            max={SPOT_RADIUS_MAX_M}
-            step={SPOT_RADIUS_STEP_M}
-            value={flow.radiusM}
-            data-testid="spot-radius"
-            oninput={(event) => flow.setRadius(Number(event.currentTarget.value))}
-          />
-        </label>
-      {:else}
-        <div class="corners">
-          <span class="mono" data-testid="spot-corners">
-            {m.spot_corners({ n: flow.corners, max: SPOT_CORNERS_MAX })}
-          </span>
-          <button
-            type="button"
-            class="act"
-            disabled={flow.corners === 0}
-            data-testid="spot-undo"
-            onclick={() => flow.undoCorner()}>{m.spot_undo_corner()}</button
-          >
-          <button
-            type="button"
-            class="act"
-            data-testid="spot-redraw"
-            onclick={() => flow.drawShape()}>{m.spot_redraw()}</button
-          >
-        </div>
-      {/if}
-      <p class="where" data-testid="spot-area" data-ok={flow.areaId ? 'true' : 'false'}>
-        {#if flow.areaId}
-          <Icon name="check" size={14} />
-          {m.spot_in_area({ name: areaName(flow.areaId), area: formatNumber(areaM2, 1) })}
-        {:else if flow.complete}
-          <Icon name="alert" size={14} />
-          {m.spot_outside()}
-        {:else}
-          {m.spot_more_corners()}
-        {/if}
-      </p>
-    </section>
-
-    <section class="block" aria-labelledby="{uid}-pattern">
-      <h3 class="label" id="{uid}-pattern">{m.spot_pattern()}</h3>
-      <SegmentedControl
-        label={m.spot_pattern()}
-        options={patternOptions}
-        value={flow.settings.pattern}
-        onchange={(value) =>
-          (flow.settings = {
-            ...flow.settings,
-            pattern: value === 'stripes' ? 'stripes' : 'spiral',
-          })}
-        testid="spot-pattern"
-      />
-      <div class="steppers">
-        {#if flow.settings.pattern === 'stripes'}
-          <Stepper
-            id="spot-angle"
-            label={m.start_angle()}
-            value={flow.settings.angleDeg}
-            min={0}
-            max={ANGLE_MAX}
-            step={ANGLE_STEP}
-            unit="°"
-            decreaseLabel={m.start_angle_lower()}
-            increaseLabel={m.start_angle_raise()}
-            immediate
-            oncommit={(angleDeg) => (flow.settings = { ...flow.settings, angleDeg })}
-          />
-        {/if}
-        <Stepper
-          id="spot-spacing"
-          label={m.spot_spacing()}
-          value={flow.settings.spacingMm}
-          min={SPOT_SPACING_MIN_MM}
-          max={cuttingWidth}
-          step={SPOT_SPACING_STEP_MM}
-          unit="mm"
-          decreaseLabel={m.start_spacing_narrower()}
-          increaseLabel={m.start_spacing_wider()}
-          immediate
-          oncommit={(mm) => flow.setSpacing(mm)}
-        />
-      </div>
-      <p class="hint">{m.spot_spacing_hint({ width: formatNumber(cuttingWidth) })}</p>
-    </section>
-
-    <section class="block" aria-labelledby="{uid}-speed">
-      <h3 class="label" id="{uid}-speed">{m.spot_speed()}</h3>
+{#snippet shapeSection()}
+  <section class="block" aria-labelledby="{uid}-shape">
+    <h3 class="label" id="{uid}-shape">{m.spot_shape()}</h3>
+    <SegmentedControl
+      label={m.spot_shape()}
+      options={shapeOptions}
+      value={flow.mode === 'polygon' ? 'polygon' : 'circle'}
+      onchange={(value) => (value === 'polygon' ? flow.drawShape() : flow.useCircle())}
+      testid="spot-shape"
+    />
+    {#if flow.mode === 'circle'}
       <label class="slider">
         <span class="slider-head">
-          <span>{m.spot_speed()}</span>
-          <output class="mono" data-testid="spot-speed-value"
-            >{m.spot_speed_value({ value: formatNumber(flow.settings.speedMps, 2) })}</output
+          <span>{m.spot_radius()}</span>
+          <output class="mono" data-testid="spot-radius-value"
+            >{m.spot_radius_value({ value: formatNumber(flow.radiusM, 1) })}</output
           >
         </span>
         <input
           type="range"
-          min={SPOT_SPEED_MIN_MPS}
-          max={SPOT_SPEED_MAX_MPS}
-          step={SPOT_SPEED_STEP_MPS}
-          value={flow.settings.speedMps}
-          data-testid="spot-speed"
-          oninput={(event) => flow.setSpeed(Number(event.currentTarget.value))}
+          min={SPOT_RADIUS_MIN_M}
+          max={SPOT_RADIUS_MAX_M}
+          step={SPOT_RADIUS_STEP_M}
+          value={flow.radiusM}
+          data-testid="spot-radius"
+          oninput={(event) => flow.setRadius(Number(event.currentTarget.value))}
         />
       </label>
-      <p class="hint">{m.spot_speed_cap({ max: formatNumber(SPOT_SPEED_MAX_MPS, 1) })}</p>
-    </section>
+    {:else}
+      <div class="corners">
+        <span class="mono" data-testid="spot-corners">
+          {m.spot_corners({ n: flow.corners, max: SPOT_CORNERS_MAX })}
+        </span>
+        <button
+          type="button"
+          class="act"
+          disabled={flow.corners === 0}
+          data-testid="spot-undo"
+          onclick={() => flow.undoCorner()}>{m.spot_undo_corner()}</button
+        >
+        <button type="button" class="act" data-testid="spot-redraw" onclick={() => flow.drawShape()}
+          >{m.spot_redraw()}</button
+        >
+      </div>
+    {/if}
+    <p class="where" data-testid="spot-area" data-ok={flow.areaId ? 'true' : 'false'}>
+      {#if flow.areaId}
+        <Icon name="check" size={14} />
+        {m.spot_in_area({ name: areaName(flow.areaId), area: formatNumber(areaM2, 1) })}
+      {:else if flow.complete}
+        <Icon name="alert" size={14} />
+        {m.spot_outside()}
+      {:else}
+        {m.spot_more_corners()}
+      {/if}
+    </p>
+  </section>
+{/snippet}
 
-    <section class="block" aria-labelledby="{uid}-blades">
-      <h3 class="label" id="{uid}-blades">{m.spot_blades()}</h3>
-      <Switch
-        id="spot-blades"
-        label={m.spot_blades_switch()}
-        hint={flow.bladesAllowed ? m.spot_blades_dry() : m.spot_blades_unsupported()}
-        checked={flow.bladesAllowed && flow.settings.blades}
-        states={{ on: m.switch_on(), off: m.switch_off() }}
-        disabled={!flow.bladesAllowed}
-        testid="spot-blades"
-        onchange={(on) => flow.setBlades(on)}
+{#snippet patternPicker()}
+  <SegmentedControl
+    label={m.spot_pattern()}
+    options={patternOptions}
+    value={flow.settings.pattern}
+    onchange={(value) =>
+      (flow.settings = {
+        ...flow.settings,
+        pattern: value === 'stripes' ? 'stripes' : 'spiral',
+      })}
+    testid="spot-pattern"
+  />
+{/snippet}
+
+{#snippet angleStepper()}
+  <Stepper
+    id="spot-angle"
+    label={m.start_angle()}
+    value={flow.settings.angleDeg}
+    min={0}
+    max={ANGLE_MAX}
+    step={ANGLE_STEP}
+    unit="°"
+    decreaseLabel={m.start_angle_lower()}
+    increaseLabel={m.start_angle_raise()}
+    immediate
+    oncommit={(angleDeg) => (flow.settings = { ...flow.settings, angleDeg })}
+  />
+{/snippet}
+
+{#snippet spacingStepper()}
+  <Stepper
+    id="spot-spacing"
+    label={m.spot_spacing()}
+    value={flow.settings.spacingMm}
+    min={SPOT_SPACING_MIN_MM}
+    max={cuttingWidth}
+    step={SPOT_SPACING_STEP_MM}
+    unit="mm"
+    decreaseLabel={m.start_spacing_narrower()}
+    increaseLabel={m.start_spacing_wider()}
+    immediate
+    oncommit={(mm) => flow.setSpacing(mm)}
+  />
+{/snippet}
+
+{#snippet speedSection()}
+  <section class="block" aria-labelledby="{uid}-speed">
+    <h3 class="label" id="{uid}-speed">{m.spot_speed()}</h3>
+    <label class="slider">
+      <span class="slider-head">
+        <span>{m.spot_speed()}</span>
+        <output class="mono" data-testid="spot-speed-value"
+          >{m.spot_speed_value({ value: formatNumber(flow.settings.speedMps, 2) })}</output
+        >
+      </span>
+      <input
+        type="range"
+        min={SPOT_SPEED_MIN_MPS}
+        max={SPOT_SPEED_MAX_MPS}
+        step={SPOT_SPEED_STEP_MPS}
+        value={flow.settings.speedMps}
+        data-testid="spot-speed"
+        oninput={(event) => flow.setSpeed(Number(event.currentTarget.value))}
       />
-      {#if flow.bladesAllowed && flow.settings.blades}
-        <label class="confirm" data-testid="spot-blades-confirm">
-          <input
-            type="checkbox"
-            checked={flow.settings.confirmBlades}
-            onchange={(event) =>
-              (flow.settings = { ...flow.settings, confirmBlades: event.currentTarget.checked })}
-          />
-          <span>{m.spot_blades_confirm()}</span>
-        </label>
-      {/if}
-    </section>
+    </label>
+    <p class="hint">{m.spot_speed_cap({ max: formatNumber(SPOT_SPEED_MAX_MPS, 1) })}</p>
+  </section>
+{/snippet}
 
-    <section class="block" aria-labelledby="{uid}-conds">
-      <h3 class="label" id="{uid}-conds">
-        {m.spot_conditions()}
-        <span class="mono count" data-testid="spot-conditions-count"
-          >{green}/{flow.conditions.length}</span
-        >
-      </h3>
-      <ul class="conds" data-testid="spot-conditions">
-        {#each flow.conditions as condition (condition.id)}
-          <li data-condition={condition.id} data-ok={condition.ok ? 'true' : 'false'}>
-            <span class="lamp" aria-hidden="true">
-              <Icon name={condition.ok ? 'check' : 'close'} size={12} />
-            </span>
-            <span>{conditionLabel(condition.id)}</span>
-          </li>
-        {/each}
-      </ul>
-      <p class="hint" data-testid="spot-fresh-hint">{m.spot_cond_fresh_hint()}</p>
-    </section>
-  </div>
+{#snippet bladesSection()}
+  <section class="block" aria-labelledby="{uid}-blades">
+    <h3 class="label" id="{uid}-blades">{m.spot_blades()}</h3>
+    <Switch
+      id="spot-blades"
+      label={m.spot_blades_switch()}
+      hint={flow.bladesAllowed ? m.spot_blades_dry() : m.spot_blades_unsupported()}
+      checked={flow.bladesAllowed && flow.settings.blades}
+      states={{ on: m.switch_on(), off: m.switch_off() }}
+      disabled={!flow.bladesAllowed}
+      testid="spot-blades"
+      onchange={(on) => flow.setBlades(on)}
+    />
+    {#if flow.bladesAllowed && flow.settings.blades}
+      <label class="confirm" data-testid="spot-blades-confirm">
+        <input
+          type="checkbox"
+          checked={flow.settings.confirmBlades}
+          onchange={(event) =>
+            (flow.settings = { ...flow.settings, confirmBlades: event.currentTarget.checked })}
+        />
+        <span>{m.spot_blades_confirm()}</span>
+      </label>
+    {/if}
+  </section>
+{/snippet}
 
-  {#snippet footer()}
-    {@const state = flow.preview}
-    <div class="foot">
-      <p
-        class="preview"
-        role="status"
-        data-testid="spot-preview"
-        data-state={state.kind === 'idle' ? 'idle' : preview ? 'ready' : state.kind}
+{#snippet conditionsSection()}
+  <section class="block conds-block" aria-labelledby="{uid}-conds" bind:this={conditionsEl}>
+    <h3 class="label" id="{uid}-conds">
+      {m.spot_conditions()}
+      <span class="mono count" data-testid="spot-conditions-count"
+        >{green}/{flow.conditions.length}</span
       >
-        {#if preview}
-          <span class="mono">
-            {m.spot_preview_ready({
-              duration,
-              segments: formatNumber(preview.segment_count),
-              area: formatNumber(preview.covered_area_m2, 1),
-            })}
+    </h3>
+    <ul class="conds" data-testid="spot-conditions">
+      {#each flow.conditions as condition (condition.id)}
+        <li data-condition={condition.id} data-ok={condition.ok ? 'true' : 'false'}>
+          <span class="lamp" aria-hidden="true">
+            <Icon name={condition.ok ? 'check' : 'close'} size={12} />
           </span>
-        {:else if state.kind === 'loading'}
-          {m.spot_preview_loading()}
-        {:else if state.kind === 'error' && state.key === flow.key}
-          <span class="bad">{m.spot_preview_failed({ reason: state.reason })}</span>
-        {:else}
-          {m.spot_preview_hint()}
-        {/if}
-      </p>
-      {#if preview?.warnings.length}
-        <ul class="warnings" data-testid="spot-warnings">
-          {#each preview.warnings as warning (warning)}
-            <li><Icon name="alert" size={14} />{warning}</li>
-          {/each}
-        </ul>
-      {/if}
-      {#if flow.startError}
-        <p class="bad" role="alert" data-testid="spot-start-error">{flow.startError}</p>
-      {/if}
-      <div class="buttons">
-        <Button variant="ghost" onclick={() => flow.cancel()} testid="spot-cancel"
-          >{m.cancel()}</Button
+          <span>{conditionLabel(condition.id)}</span>
+        </li>
+      {/each}
+    </ul>
+    <p class="hint" data-testid="spot-fresh-hint">{m.spot_cond_fresh_hint()}</p>
+  </section>
+{/snippet}
+
+{#snippet previewDetails()}
+  {@const state = flow.preview}
+  <p
+    class="preview"
+    role="status"
+    data-testid="spot-preview"
+    data-state={state.kind === 'idle' ? 'idle' : preview ? 'ready' : state.kind}
+  >
+    {#if preview}
+      <span class="mono">
+        {m.spot_preview_ready({
+          duration,
+          segments: formatNumber(preview.segment_count),
+          area: formatNumber(preview.covered_area_m2, 1),
+        })}
+      </span>
+    {:else if state.kind === 'loading'}
+      {m.spot_preview_loading()}
+    {:else if state.kind === 'error' && state.key === flow.key}
+      <span class="bad">{m.spot_preview_failed({ reason: state.reason })}</span>
+    {:else}
+      {m.spot_preview_hint()}
+    {/if}
+  </p>
+  {#if preview?.warnings.length}
+    <ul class="warnings" data-testid="spot-warnings">
+      {#each preview.warnings as warning (warning)}
+        <li><Icon name="alert" size={14} />{warning}</li>
+      {/each}
+    </ul>
+  {/if}
+{/snippet}
+
+{#snippet startError()}
+  {#if flow.startError}
+    <p class="bad" role="alert" data-testid="spot-start-error">{flow.startError}</p>
+  {/if}
+{/snippet}
+
+{#snippet startButton()}
+  <Button
+    variant="primary"
+    full
+    icon="play"
+    disabled={!flow.canStart}
+    pending={flow.starting}
+    onclick={() => flow.start()}
+    testid="spot-start"
+    >{flow.starting
+      ? m.spot_starting()
+      : flow.bladesOn
+        ? m.spot_start()
+        : m.spot_start_dry()}</Button
+  >
+{/snippet}
+
+{#snippet peek()}
+  {#if runShown && runBar}
+    {@render runBar()}
+  {:else}
+    <div class="peek" data-testid="spot-peek">
+      <div class="summary">
+        <span class="sum-shape mono" data-testid="spot-peek-summary">{summary}</span>
+        <span
+          class="sum-time mono"
+          data-testid="spot-peek-duration"
+          data-state={preview ? 'ready' : flow.preview.kind}
         >
-        <div class="go">
-          <Button
-            variant="primary"
-            full
-            icon="play"
-            disabled={!flow.canStart}
-            pending={flow.starting}
-            onclick={() => flow.start()}
-            testid="spot-start"
-            >{flow.starting
-              ? m.spot_starting()
-              : flow.bladesOn
-                ? m.spot_start()
-                : m.spot_start_dry()}</Button
+          {#if preview}
+            {m.spot_peek_duration({ duration })}
+          {:else if flow.preview.kind === 'loading'}
+            {m.spot_peek_computing()}
+          {:else if flow.preview.kind === 'error' && flow.preview.key === flow.key}
+            <span class="bad">{m.spot_peek_no_route()}</span>
+          {:else}
+            –
+          {/if}
+        </span>
+      </div>
+      <div class="peek-row">
+        <button
+          type="button"
+          class="conds-lamp"
+          data-ok={allOk ? 'true' : 'false'}
+          aria-label={m.spot_conditions_summary({
+            ok: String(green),
+            total: String(flow.conditions.length),
+          })}
+          data-testid="spot-peek-conditions"
+          onclick={showConditions}
+        >
+          <span class="lamp" aria-hidden="true">
+            <Icon name={allOk ? 'check' : 'close'} size={12} />
+          </span>
+          <span class="mono">{green}/{flow.conditions.length}</span>
+        </button>
+        <div class="go">{@render startButton()}</div>
+      </div>
+      {@render startError()}
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet body()}
+  <div class="spot">
+    {@render shapeSection()}
+    <section class="block" aria-labelledby="{uid}-pattern">
+      <h3 class="label" id="{uid}-pattern">{m.spot_pattern()}</h3>
+      {@render patternPicker()}
+      {#if flow.settings.pattern === 'stripes'}
+        <div class="steppers">{@render angleStepper()}</div>
+      {/if}
+    </section>
+    {@render speedSection()}
+    <section class="block" aria-labelledby="{uid}-spacing">
+      <h3 class="label" id="{uid}-spacing">{m.spot_spacing()}</h3>
+      <div class="steppers">{@render spacingStepper()}</div>
+      <p class="hint">{m.spot_spacing_hint({ width: formatNumber(cuttingWidth) })}</p>
+    </section>
+    {@render bladesSection()}
+    {@render conditionsSection()}
+    <section class="block" aria-labelledby="{uid}-preview">
+      <h3 class="label" id="{uid}-preview">{m.spot_preview_title()}</h3>
+      {@render previewDetails()}
+    </section>
+    <div class="buttons">
+      <Button variant="ghost" onclick={() => flow.cancel()} testid="spot-cancel"
+        >{m.cancel()}</Button
+      >
+    </div>
+  </div>
+{/snippet}
+
+{#if phone}
+  <BottomSheet
+    open={flow.open || runShown}
+    bind:snap
+    bind:visibleHeight
+    snaps={runShown ? ['peek'] : undefined}
+    label={m.spot_title()}
+    handleLabel={m.spot_sheet_handle()}
+    safeArea={false}
+    {peek}
+    children={runShown ? undefined : body}
+    testid="spot-sheet"
+  />
+{:else}
+  <Sheet
+    open={flow.open}
+    title={m.spot_title()}
+    closeLabel={m.close()}
+    onclose={() => flow.close()}
+    testid="spot-sheet"
+  >
+    <div class="spot">
+      {@render shapeSection()}
+      <section class="block" aria-labelledby="{uid}-pattern">
+        <h3 class="label" id="{uid}-pattern">{m.spot_pattern()}</h3>
+        {@render patternPicker()}
+        <div class="steppers">
+          {#if flow.settings.pattern === 'stripes'}
+            {@render angleStepper()}
+          {/if}
+          {@render spacingStepper()}
+        </div>
+        <p class="hint">{m.spot_spacing_hint({ width: formatNumber(cuttingWidth) })}</p>
+      </section>
+      {@render speedSection()}
+      {@render bladesSection()}
+      {@render conditionsSection()}
+    </div>
+
+    {#snippet footer()}
+      <div class="foot">
+        {@render previewDetails()}
+        {@render startError()}
+        <div class="buttons">
+          <Button variant="ghost" onclick={() => flow.cancel()} testid="spot-cancel"
+            >{m.cancel()}</Button
           >
+          <div class="go">{@render startButton()}</div>
         </div>
       </div>
-    </div>
-  {/snippet}
-</Sheet>
+    {/snippet}
+  </Sheet>
+{/if}
 
 <style>
   .spot {
@@ -543,5 +717,78 @@
 
   .go {
     flex: 1 1 10rem;
+  }
+
+  /* --- the phone peek: the summary row, then the conditions lamp and START ----------------- */
+  .peek {
+    display: grid;
+    gap: var(--md-space-2);
+  }
+
+  .summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--md-space-3);
+    min-width: 0;
+  }
+
+  .sum-shape {
+    overflow: hidden;
+    font-size: var(--md-font-size-16);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .sum-time {
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-14);
+    white-space: nowrap;
+  }
+
+  .sum-time[data-state='ready'] {
+    color: var(--md-color-ink);
+  }
+
+  .peek-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--md-space-2);
+  }
+
+  .peek-row .go {
+    flex: 1 1 auto;
+  }
+
+  /* One square lamp for all start conditions with the green count; a tap shows the list. */
+  .conds-lamp {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--md-space-2);
+    min-height: var(--md-target);
+    padding: 0 var(--md-space-3);
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+    border-radius: var(--md-radius-0);
+    background: var(--md-color-surface-sunken);
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-14);
+    cursor: pointer;
+  }
+
+  .conds-lamp[data-ok='true'] .lamp {
+    background: var(--md-state-mowing);
+  }
+
+  .conds-lamp:focus-visible {
+    outline: 2px solid var(--md-color-focus);
+    outline-offset: 2px;
+  }
+
+  .conds-block {
+    scroll-margin-top: var(--md-space-2);
   }
 </style>
