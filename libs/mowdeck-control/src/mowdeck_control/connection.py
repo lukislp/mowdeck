@@ -24,7 +24,9 @@ can rebuild its map from what it already holds implements :class:`MapRebuildable
 :class:`TwoPhaseExecution` (see :func:`dispatch_of`), so the controller can release its queue
 while the confirmation is pending; an adapter that knows the route the mower planned for its job
 implements :class:`MowPathSource` (see :func:`current_path_of`), and one that can ask the mower
-to plan a route without starting it implements :class:`PathPreviewCapable`.
+to plan a route without starting it implements :class:`PathPreviewCapable`. An adapter that can
+make the mower leave its charging station by itself sets ``MowerCapabilities.undock`` and
+implements :class:`UndockCapable` (ADR 0041: a spot run may then start at the dock).
 
 Links and firmware (ADR 0038) are optional capabilities as well, declared in the capabilities
 and implemented as protocols: an adapter whose connection can consist of several links (the
@@ -380,6 +382,23 @@ class PathPreviewCapable(Protocol):
         self, area_ids: Sequence[str], pattern: Mapping[str, Any] | None
     ) -> MowPath:
         """The route the mower planned (``progress`` is None)."""
+        ...
+
+
+@runtime_checkable
+class UndockCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection`, declared with
+    ``MowerCapabilities.undock`` (ADR 0041): the mower leaves its charging station by itself and
+    stops a short way in front of it, then reports ``idle``.
+
+    Only the send: :meth:`leave_dock` returns once the command went out (it does not wait for
+    the mower); the spot run watches the state. Raises
+    :class:`~mowdeck_control.errors.CommandRejected` when the mower cannot leave now and
+    :class:`~mowdeck_control.errors.NotConnected` without a link.
+    """
+
+    async def leave_dock(self) -> None:
+        """Send the mower out of its charging station."""
         ...
 
 

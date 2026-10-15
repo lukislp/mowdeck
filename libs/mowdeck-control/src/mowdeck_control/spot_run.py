@@ -23,9 +23,16 @@ Control loop (5 Hz frames, ``ttl_ms`` 1000):
   (within ``min_linear`` .. ``max_linear``) so the measured ground speed meets the segment
   speed (the stick-to-speed scale of a mower is unknown). A waypoint counts as reached within
   ``waypoint_radius_m``.
-* **Approach**: a straight leg from the current pose to the first plan point is prepended when
-  it is shorter than ``approach_max_m`` and clear within the geofence; otherwise the run is
-  refused before it starts.
+* **Undocking** (ADR 0041): a docked mower on a connection with ``capabilities.undock`` is sent
+  ``leave_dock`` through :class:`SpotActions` (``undocking``, no frames); the run waits until it
+  stands idle out of the dock, then for a fixed RTK position (``waiting_rtk``), at most
+  ``undock_timeout_s`` (``undock_failed`` or ``rtk_lost``). The drive session opens with the
+  first transit frame, after undocking.
+* **Transit**: a route from the current pose to the first plan point, planned on the map by
+  :func:`mowdeck_control.transit.plan_transit` (paths, areas, no-go zones), is prepended as a
+  blades-off leg at ``transit_speed_mps`` (at most 0.3 m/s); its geofence is the drivable space
+  (areas, path corridors, the dock apron). No route refuses the run before it moves
+  (``no_route``); after undocking the route is planned again from the real pose.
 * **Pauses**: a pose older than ``max_pose_age_s`` or an RTK fix other than ``fixed`` pauses the
   run (``paused_rtk``, zero frames at ``pause_frame_hz`` keep the session open); after
   ``rtk_wait_s`` without a usable pose the run aborts ``rtk_lost``.
@@ -36,7 +43,12 @@ Control loop (5 Hz frames, ``ttl_ms`` 1000):
   ``min(2 x estimated + 60 s, 20 min)`` end it as well. Every end sends a zero frame, switches
   the blades off and closes the drive session (:meth:`FrameChannel.close`).
 * **Blades**: on only for ``mow`` and ``turn`` segments that ask for them and only when the
-  run was started with blades allowed; otherwise the whole run is a ``dry_run``.
+  run was started with blades allowed; otherwise the whole run is a ``dry_run``. Never during
+  undocking, transit or the return.
+* **Return**: with ``return_to_dock`` the run sends the generic ``return_to_dock`` through
+  :class:`SpotActions` after ``done`` and after an abort that left the mower healthy (never
+  after a stop by the user, an emergency stop, a sensor stop or a change of activity), and the
+  mower navigates home by itself (``returning``, then the final state).
 
 The run publishes :class:`~mowdeck_contracts.v1.SpotRunStatus` through its status callback
 (the controller merges it into ``MowerState.spot_run``) and ends with a :class:`SpotRunReport`.
@@ -47,7 +59,7 @@ import contextlib
 import logging
 import math
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final, Protocol
 from uuid import UUID
@@ -56,6 +68,7 @@ from mowdeck_contracts.v1 import (
     MAX_SPOT_MOW_SPEED_MPS,
     CommandStatus,
     LocalPoint,
+    MowerActivity,
     MowerMap,
     MowerState,
     MowPath,
@@ -77,6 +90,14 @@ from mowdeck_control.geo import (
     segment_distance,
     wrap_angle,
 )
+from mowdeck_control.transit import (
+    REASON_NO_ROUTE,
+    DrivableSpace,
+    NoRouteError,
+    TransitConfig,
+    TransitRoute,
+    plan_transit,
+)
 
 _log = logging.getLogger("mowdeck_control.spot_run")
 
@@ -92,11 +113,38 @@ REASON_TIMEOUT: Final = "timeout"
 REASON_HEADING_MISMATCH: Final = "heading_mismatch"
 REASON_ACTIVITY_CHANGE: Final = "activity_change"
 REASON_FRAME_REJECTED: Final = "frame_rejected"
+REASON_UNDOCK_FAILED: Final = "undock_failed"
 PAUSE_POSITION_STALE: Final = "position_stale"
 """``SpotRunStatus.reason`` while paused because no fresh pose arrived."""
 
+NO_RETURN_REASONS: Final = frozenset(
+    {
+        REASON_STOPPED_BY_USER,
+        REASON_EMERGENCY_STOP,
+        REASON_SENSOR_STOP,
+        REASON_ACTIVITY_CHANGE,
+        "internal_error",
+    }
+)
+"""Ends after which a run never sends the mower home: the user stopped it, a safety stop, or
+the mower does something else now."""
+
+DOCKED_ACTIVITIES: Final = frozenset({MowerActivity.DOCKED, MowerActivity.CHARGING})
+"""Activities of a mower standing in its charging station."""
+_UNDOCK_ENDING: Final = frozenset(
+    {MowerActivity.ERROR, MowerActivity.UPDATING, MowerActivity.OFFLINE}
+)
+"""Activities that end a run while it undocks (a mower leaving the dock may report others)."""
+_RETURN_KEEPS: Final = frozenset(
+    {MowerActivity.RETURNING, MowerActivity.DOCKED, MowerActivity.CHARGING, MowerActivity.IDLE}
+)
+"""Activities that do not end a run while it sends the mower home."""
+_DRIVE_KEEPS: Final = frozenset({MowerActivity.IDLE})
+"""Activities that do not end a run while it drives (transit and the plan)."""
+
 MAX_RUN_S: Final = 20 * 60.0
-"""Longest spot run, whatever the plan estimates."""
+"""Longest spot mowing part of a run, whatever the plan estimates (the transit adds its own
+share, see :attr:`SpotMowRun.max_run_s`)."""
 RUN_TIME_SLACK_S: Final = 60.0
 """Added to twice the estimated duration for the run-time limit."""
 
@@ -132,8 +180,24 @@ class SpotRunConfig:
     """A pose older than this pauses the run."""
     rtk_wait_s: float = 30.0
     """A pause longer than this aborts the run (``rtk_lost``)."""
-    approach_max_m: float = 10.0
-    """Longest approach leg from the mower to the first plan point."""
+    transit: TransitConfig = field(default_factory=TransitConfig)
+    """The transit planner (drivable space, ``max_length_m`` of a transit)."""
+    transit_speed_mps: float = MAX_SPOT_MOW_SPEED_MPS
+    """Speed of the transit (blades off), capped at ``MAX_SPOT_MOW_SPEED_MPS``."""
+    undock_timeout_s: float = 90.0
+    """Longest wait from ``leave_dock`` until the mower stands out of the dock with a fixed RTK
+    position (``undock_failed`` or ``rtk_lost``)."""
+    undock_poll_s: float = 0.5
+    """How often the undocking wait looks at the state."""
+    undock_pose_age_s: float = 10.0
+    """Oldest pose that ends the undocking wait (a mower out of its dock and without a drive
+    session may report only every few seconds; the transit pauses until reports are fresh)."""
+    undock_settle_s: float = 3.0
+    """The mower must report idle out of the dock this long before the run goes on."""
+    settle_m: float = 0.15
+    """Two consecutive reports closer than this count as standing still."""
+    return_timeout_s: float = 30.0
+    """Longest wait for the answer to ``return_to_dock``."""
     geofence_margin_m: float = 0.3
     max_linear: float = 0.5
     """Highest ``linear`` stick value the governor may command."""
@@ -243,6 +307,19 @@ class FrameChannel(Protocol):
         ...
 
 
+class SpotActions(Protocol):
+    """The mower's own manoeuvres a run asks for (the controller's connection): leaving the
+    dock (``capabilities.undock``) and the generic return to the dock."""
+
+    async def leave_dock(self) -> str | None:
+        """Ask the mower to leave its charging station; None when sent, else why not."""
+        ...
+
+    async def return_to_dock(self) -> str | None:
+        """Send the mower home (``ReturnToDock``); None when sent, else why not."""
+        ...
+
+
 # --- results ------------------------------------------------------------------------------------
 
 
@@ -262,6 +339,14 @@ class SpotRunReport:
     dry_run: bool
     frames_sent: int
     paused_s: float
+    transit_m: float = 0.0
+    """Length of the planned transit (0 without one)."""
+    undocked: bool = False
+    """The run started at the dock and sent ``leave_dock``."""
+    sent_home: bool = False
+    """``return_to_dock`` went out after the run."""
+    return_problem: str | None = None
+    """Why the return was not sent although it was due."""
 
     @property
     def command_status(self) -> CommandStatus:
@@ -276,10 +361,18 @@ class SpotRunReport:
             head += f": {self.reason}"
         if self.detail:
             head += f" ({self.detail})"
+        tail = ""
+        if self.transit_m > 0:
+            tail += f", transit {self.transit_m:.0f} m"
+        if self.sent_home:
+            tail += ", sent home"
+        elif self.return_problem:
+            tail += f", not sent home: {self.return_problem}"
         return (
             f"{head}; {self.driven_points}/{self.planned_points} points, "
             f"{self.coverage_percent:.0f} % coverage, {self.duration_s:.0f} s"
             + (", dry run" if self.dry_run else ", blades used")
+            + tail
         )
 
 
@@ -293,7 +386,9 @@ class _Segment:
     blades_on: bool
     speed_mps: float
     planned: bool = True
-    """False for the approach leg (its points do not count as plan points)."""
+    """False for the transit and the joining legs (their points are not plan points)."""
+    transit: bool = False
+    """The transit to the spot: its geofence is the drivable space."""
 
 
 @dataclass(slots=True)
@@ -308,8 +403,20 @@ PoseSource = Callable[[], MowerState | None]
 Sleep = Callable[[float], Awaitable[None]]
 
 
+def transit_start(state: MowerState | None, mower_map: MowerMap) -> LocalPoint | None:
+    """Where a transit starts: the dock of the map for a docked mower (the Planner's preview
+    uses the same point), otherwise the mower's reported position; None without either."""
+    docked = state is not None and state.activity in DOCKED_ACTIVITIES
+    if docked and mower_map.dock is not None:
+        return (mower_map.dock.x, mower_map.dock.y)
+    if state is None or state.position is None:
+        return None
+    return from_wgs84(mower_map, state.position.lat, state.position.lon)
+
+
 class SpotMowRun:
-    """One spot run: drives ``plan`` from the mower's current pose (see the module docs)."""
+    """One spot run: (undocks,) drives the transit and ``plan`` from the mower's current pose
+    and sends it home (see the module docs)."""
 
     def __init__(
         self,
@@ -321,6 +428,9 @@ class SpotMowRun:
         frames: FrameChannel,
         speed_mps: float = 0.2,
         blades: bool = False,
+        actions: SpotActions | None = None,
+        undock: bool = False,
+        return_to_dock: bool = False,
         on_status: StatusCallback | None = None,
         clock: Callable[[], datetime] = utc_now,
         sleep: Sleep | None = None,
@@ -335,11 +445,15 @@ class SpotMowRun:
         self._pose_source = pose_source
         self._frames = frames
         self._blades = blades
+        self._actions = actions
+        self._undock_available = undock and actions is not None
+        self._return_to_dock = return_to_dock and actions is not None
         self._on_status = on_status
         self._clock = clock
         self._sleep: Sleep = sleep or self._wait
         self._config = config or SpotRunConfig()
         self._fence = Geofence.of(mower_map, self._config.geofence_margin_m)
+        self._space = DrivableSpace.of(mower_map, self._config.transit)
         self._segments = _segments_of(plan, speed_mps, self._config.waypoint_radius_m)
         self._planned_points = sum(len(s.points) for s in self._segments if s.planned)
         self._mow_points = sum(
@@ -350,11 +464,15 @@ class SpotMowRun:
         self._state: SpotRunState = "preparing"
         self._reason: str | None = None
         self._detail: str | None = None
+        self._outcome: SpotRunState | None = None
+        self._outcome_reason: str | None = None
         self._driven = 0
         self._mow_driven = 0
+        self._transit_driven = 0
         self._frames_sent = 0
         self._paused_s = 0.0
         self._started_at: datetime | None = None
+        self._driving_since: datetime | None = None
         self._ended_at: datetime | None = None
         self._stop_reason: str | None = None
         self._stop_detail: str | None = None
@@ -362,17 +480,17 @@ class SpotMowRun:
         self._wake = asyncio.Event()
         self._report: SpotRunReport | None = None
         self._prepared = False
+        self._undock = False
+        self._transit: TransitRoute | None = None
+        self._sent_home = False
+        self._return_problem: str | None = None
         # control state
         self._last_report: Pose | None = None
         self._previous_report: Pose | None = None
         self._last_cmd: tuple[float, float] = (0.0, 0.0)
         self._cmd_at: datetime | None = None
         self._moving_since: datetime | None = None
-        self._linear = self._clamp(
-            speed_mps / self._config.assumed_full_speed_mps,
-            self._config.min_linear,
-            self._config.max_linear,
-        )
+        self._linear = self._linear_for(speed_mps)
         self._measured_speed: float | None = None
         self._turning = False
         self._turn_errors: list[float] = []
@@ -405,6 +523,16 @@ class SpotMowRun:
         return self._prepared and not self.finished
 
     @property
+    def undocks(self) -> bool:
+        """True when the run starts by sending the mower out of its dock."""
+        return self._undock
+
+    @property
+    def transit(self) -> TransitRoute | None:
+        """The planned transit (from the dock while the run has not undocked yet)."""
+        return self._transit
+
+    @property
     def report(self) -> SpotRunReport | None:
         """The final report; None while the run goes on."""
         return self._report
@@ -426,38 +554,64 @@ class SpotMowRun:
             reason=self._reason,
         )
 
+    def ends_on(self, activity: MowerActivity) -> bool:
+        """True when a reported ``activity`` ends the run: while undocking only an error, an
+        update or a lost mower do (a mower leaving its dock may report anything else); while
+        the mower is sent home only what is not on its way there; while driving everything but
+        ``idle``."""
+        if not self.active or self._ended_at is not None:
+            return False
+        if self._state in ("preparing", "undocking", "waiting_rtk"):
+            return activity in _UNDOCK_ENDING
+        if self._state == "returning":
+            return activity not in _RETURN_KEEPS
+        return activity not in _DRIVE_KEEPS
+
     def mow_path(self) -> MowPath:
-        """The plan as a :class:`~mowdeck_contracts.v1.MowPath` with the progress (for the
-        gateway's path snapshot, so clients draw it with the mow-path layer)."""
-        planned = [s for s in self._segments if s.planned]
+        """The transit and the plan as a :class:`~mowdeck_contracts.v1.MowPath` with the
+        progress (for the gateway's path snapshot, so clients draw it with the mow-path layer;
+        the transit is a ``transfer``)."""
+        shown = [s for s in self._segments if s.planned or s.transit]
+        if self._undock and self._transit is not None and not self._transit.is_trivial:
+            shown = [_transit_segment(self._transit, 0.0), *shown]  # planned from the dock
+        polylines = [list(s.points) for s in shown]
         return MowPath(
             path_hash=self.plan.plan_hash[:32],
-            polylines=[list(s.points) for s in planned],
-            kinds=[_PATH_KINDS.get(s.kind, "other") for s in planned],
-            points_total=self._planned_points,
-            progress=MowPathProgress(index=self._driven),
+            polylines=polylines,
+            kinds=["transfer" if s.transit else _PATH_KINDS.get(s.kind, "other") for s in shown],
+            points_total=sum(len(p) for p in polylines),
+            progress=MowPathProgress(index=self._transit_driven + self._driven),
             planned_at=self._planned_at,
         )
 
     @property
     def max_run_s(self) -> float:
-        """The run-time limit: ``min(2 x estimated + 60 s, 20 min)``."""
+        """The run-time limit from the start of the transit: ``min(2 x estimated + 60 s,
+        20 min)`` for the plan plus twice the transit's driving time."""
         estimated = self.plan.estimated_duration_s
         if estimated <= 0:
             estimated = sum(
                 distance(a, b) / max(s.speed_mps, 0.05)
                 for s in self._segments
+                if not s.transit
                 for a, b in zip(s.points, s.points[1:], strict=False)
             )
-        return min(2 * estimated + RUN_TIME_SLACK_S, MAX_RUN_S)
+        transit = self._transit.length_m if self._transit is not None else 0.0
+        return min(2 * estimated + RUN_TIME_SLACK_S, MAX_RUN_S) + 2 * transit / self._transit_speed
+
+    @property
+    def _transit_speed(self) -> float:
+        return max(0.05, min(self._config.transit_speed_mps, MAX_SPOT_MOW_SPEED_MPS))
 
     # --- pre-flight ------------------------------------------------------------------------------
 
     def prepare(self, state: MowerState | None) -> str | None:
-        """Check the plan and the mower's pose before the first frame; None when the run may
-        start, else why not (the controller rejects the command with it).
+        """Check the plan and the mower before anything moves; None when the run may start,
+        else why not (the controller rejects the command with it).
 
-        Prepends the approach leg when the mower does not stand at the first plan point.
+        A docked mower (with ``undock``) gets its transit planned from the dock now and again
+        from its real pose after undocking; any other mower needs a fixed RTK position and gets
+        the transit prepended now. No route returns ``no_route: ...``.
         """
         for segment in self._segments:
             for point in segment.points:
@@ -465,43 +619,54 @@ class SpotMowRun:
                 if problem is not None:
                     where = f"({point[0]:.2f}, {point[1]:.2f})"
                     return f"the plan leaves the geofence at {where}: {problem}"
+        docked = state is not None and state.activity in DOCKED_ACTIVITIES
+        if docked:
+            if not self._undock_available:
+                return "the mower is docked and this connection cannot undock it"
+            start = transit_start(state, self._map)
+            if start is None:
+                return "the map has no dock and the mower reports no position"
+            try:
+                self._transit = self._plan_transit(start)
+            except NoRouteError as exc:
+                return f"{REASON_NO_ROUTE}: {exc}"
+            self._undock = True
+            self._prepared = True
+            return None
         pose = pose_of(state, self._map)
         if pose is None:
             return "the mower reports no position or heading"
         if pose.rtk_fix is not RtkFixStatus.FIXED:
             return f"no fixed RTK position (the fix is {pose.rtk_fix.value})"
-        problem = self._fence.violation(pose.point)
-        if problem is not None:
-            return f"the mower stands {problem}"
-        first = self._segments[0].points[0]
-        gap = distance(pose.point, first)
-        if gap > self._config.approach_max_m:
-            return (
-                f"the mower is {gap:.1f} m from the start of the plan "
-                f"(at most {self._config.approach_max_m:g} m)"
-            )
-        if gap > self._config.waypoint_radius_m:
-            if not self._fence.segment_clear(pose.point, first):
-                return "no clear straight approach from the mower to the start of the plan"
-            self._segments.insert(
-                0,
-                _Segment(
-                    points=[pose.point, first],
-                    kind="transfer",
-                    blades_on=False,
-                    speed_mps=self._segments[0].speed_mps,
-                    planned=False,
-                ),
-            )
+        try:
+            self._insert_transit(pose.point)
+        except NoRouteError as exc:
+            return f"{REASON_NO_ROUTE}: {exc}"
         self._prepared = True
         return None
+
+    def _plan_transit(self, start: LocalPoint) -> TransitRoute:
+        first = self._segments[0].points[0]
+        if distance(start, first) <= self._config.waypoint_radius_m:
+            return TransitRoute((start, first), 0.0)
+        return plan_transit(self._map, start, first, self._config.transit)
+
+    def _insert_transit(self, start: LocalPoint) -> None:
+        """Plan the transit from ``start`` and put it in front of the plan (raises
+        :class:`NoRouteError`)."""
+        route = self._plan_transit(start)
+        self._transit = route
+        if route.is_trivial or route.length_m <= self._config.waypoint_radius_m:
+            return
+        self._segments.insert(0, _transit_segment(route, self._transit_speed))
 
     # --- control ---------------------------------------------------------------------------------
 
     def request_stop(self, reason: str, detail: str | None = None) -> None:
         """Ask the run to end with ``reason`` (``stopped_by_user``, ``emergency_stop``, ...);
-        the next loop iteration sends the zero frame and closes."""
-        if self.finished or self._stop_reason is not None:
+        the next loop iteration sends the zero frame and closes. Ignored once the run's end is
+        decided (also while it sends the mower home)."""
+        if self.finished or self._stop_reason is not None or self._ended_at is not None:
             return
         self._stop_reason = reason
         self._stop_detail = detail
@@ -516,15 +681,18 @@ class SpotMowRun:
         return self._report
 
     async def run(self) -> SpotRunReport:
-        """Drive the plan; returns when the run ended (see the module docs)."""
+        """Undock, drive the transit and the plan, send the mower home; returns when the run
+        ended (see the module docs)."""
         if not self._prepared:
             msg = "prepare() must succeed before run()"
             raise RuntimeError(msg)
         self._started_at = self._clock()
-        self._set_state(self._driving_state(), None)
-        self._notify()
         try:
-            await self._loop()
+            if await self._undock_phase():
+                self._driving_since = self._clock()
+                self._set_state(self._driving_state(), None)
+                self._notify()
+                await self._loop()
         except asyncio.CancelledError:
             self._end("aborted", REASON_LINK_LOST, "the controller closed")
             await self._frames.close()
@@ -534,9 +702,108 @@ class SpotMowRun:
             _log.exception("spot run %s failed", self.run_id)
             self._end("failed", "internal_error", type(exc).__name__)
         await self._frames.close()
+        try:
+            await self._send_home()
+        except asyncio.CancelledError:
+            self._finish()
+            raise
+        except Exception as exc:
+            _log.exception("spot run %s: return to dock failed", self.run_id)
+            self._return_problem = type(exc).__name__
         self._finish()
         assert self._report is not None  # noqa: S101 - set by _finish
         return self._report
+
+    # --- undocking -------------------------------------------------------------------------------
+
+    async def _undock_phase(self) -> bool:
+        """Leave the dock and wait for a usable pose out of it; plan the transit from there.
+        True when the run may drive; False when it ended (``_end`` was called)."""
+        if not self._undock:
+            return True
+        config = self._config
+        assert self._actions is not None  # noqa: S101 - checked by _undock_available
+        self._set_state("undocking", None)
+        refusal = await self._actions.leave_dock()
+        if refusal is not None:
+            self._end("aborted", REASON_UNDOCK_FAILED, refusal)
+            return False
+        began = self._clock()
+        idle_since: datetime | None = None
+        last: Pose | None = None
+        still = False
+        while True:
+            now = self._clock()
+            if self._stop_reason is not None:
+                self._end("aborted", self._stop_reason, self._stop_detail)
+                return False
+            state = self._pose_source()
+            out = state is not None and state.activity is MowerActivity.IDLE
+            idle_since = (idle_since or now) if out else None
+            pose = pose_of(state, self._map)
+            if pose is not None and (last is None or pose.observed_at != last.observed_at):
+                still = last is not None and distance(last.point, pose.point) < config.settle_m
+                last = pose
+            settled = (
+                idle_since is not None
+                and (now - idle_since).total_seconds() >= config.undock_settle_s
+                and still
+            )
+            if settled and self._state == "undocking":
+                self._set_state("waiting_rtk", None)
+            fresh = (
+                pose is not None
+                and pose.rtk_fix is RtkFixStatus.FIXED
+                and (now - pose.observed_at).total_seconds() <= config.undock_pose_age_s
+            )
+            if settled and fresh and pose is not None:
+                try:
+                    self._insert_transit(pose.point)
+                except NoRouteError as exc:
+                    self._end("aborted", REASON_NO_ROUTE, str(exc))
+                    return False
+                return True
+            if (now - began).total_seconds() > config.undock_timeout_s:
+                if self._state == "waiting_rtk":
+                    fix = pose.rtk_fix.value if pose is not None else "unknown"
+                    self._end("aborted", REASON_RTK_LOST, f"no fixed RTK position ({fix})")
+                else:
+                    self._end(
+                        "aborted",
+                        REASON_UNDOCK_FAILED,
+                        f"the mower did not stand out of the dock within "
+                        f"{config.undock_timeout_s:.0f} s",
+                    )
+                return False
+            await self._sleep(config.undock_poll_s)
+
+    # --- the return ------------------------------------------------------------------------------
+
+    async def _send_home(self) -> None:
+        """After the end: ``return_to_dock`` when it is due (see the module docs)."""
+        if not self._return_to_dock or self._outcome is None or self._outcome == "failed":
+            return
+        if self._outcome_reason in NO_RETURN_REASONS or self._stop_reason is not None:
+            return  # a stop from outside (user, safety, the controller closing) never sends home
+        state = self._pose_source()
+        if state is not None and state.activity in DOCKED_ACTIVITIES:
+            return  # still (or again) in the dock
+        assert self._actions is not None  # noqa: S101 - checked in __init__
+        self._state = "returning"
+        self._notify()
+        _log.info("spot run %s: sending the mower home", self.run_id)
+        try:
+            async with asyncio.timeout(self._config.return_timeout_s):
+                refusal = await self._actions.return_to_dock()
+        except TimeoutError:
+            refusal = f"no answer within {self._config.return_timeout_s:.0f} s"
+        if refusal is None:
+            self._sent_home = True
+        else:
+            self._return_problem = refusal
+            _log.warning("spot run %s: return to dock not sent: %s", self.run_id, refusal)
+
+    # --- driving ---------------------------------------------------------------------------------
 
     async def _loop(self) -> None:
         config = self._config
@@ -546,8 +813,8 @@ class SpotMowRun:
             if self._stop_reason is not None:
                 self._end("aborted", self._stop_reason, self._stop_detail)
                 return
-            assert self._started_at is not None  # noqa: S101 - set in run()
-            if (now - self._started_at).total_seconds() > self.max_run_s:
+            assert self._driving_since is not None  # noqa: S101 - set in run()
+            if (now - self._driving_since).total_seconds() > self.max_run_s:
                 self._end("aborted", REASON_TIMEOUT, f"longer than {self.max_run_s:.0f} s")
                 return
             pose = pose_of(self._pose_source(), self._map)
@@ -578,7 +845,7 @@ class SpotMowRun:
             if new_report and not self._on_report(pose):
                 return
             estimate = self._estimate(now)
-            violation = self._fence.violation(estimate)
+            violation = self._fence_violation(estimate)
             if violation is not None:
                 self._end("aborted", REASON_GEOFENCE, violation)
                 return
@@ -587,7 +854,7 @@ class SpotMowRun:
                 return
             linear, angular = self._steer(estimate, now)
             segment = self._segments[self._progress.segment]
-            blade_on = self._blades and segment.blades_on
+            blade_on = self._blades and segment.blades_on and not segment.transit
             if not await self._send(linear, angular, blade_on=blade_on):
                 return
             self._last_cmd = (linear, angular)
@@ -597,6 +864,13 @@ class SpotMowRun:
             else:
                 self._moving_since = None
             await self._sleep(1 / config.frame_hz)
+
+    def _fence_violation(self, point: LocalPoint) -> str | None:
+        """The geofence of the current segment: the drivable space during the transit, the
+        spot's geofence otherwise."""
+        if self._segments[self._progress.segment].transit:
+            return self._space.violation(point)
+        return self._fence.violation(point)
 
     def _usable(self, pose: Pose, now: datetime) -> bool:
         age = (now - pose.observed_at).total_seconds()
@@ -608,8 +882,7 @@ class SpotMowRun:
         return PAUSE_POSITION_STALE
 
     def _driving_state(self) -> SpotRunState:
-        approach = self._progress.segment == 0 and not self._segments[0].planned
-        return "preparing" if approach else "spot_mowing"
+        return "transit" if self._segments[self._progress.segment].transit else "spot_mowing"
 
     async def _send(self, linear: float, angular: float, *, blade_on: bool) -> bool:
         """Send one frame; False (and the run ended) when it was refused."""
@@ -636,7 +909,7 @@ class SpotMowRun:
         the run ended."""
         previous = self._last_report
         self._previous_report, self._last_report = previous, pose
-        violation = self._fence.violation(pose.point)
+        violation = self._fence_violation(pose.point)
         if violation is not None:
             self._end("aborted", REASON_GEOFENCE, f"reported position {violation}")
             return False
@@ -681,6 +954,12 @@ class SpotMowRun:
         step = config.governor_gain * (target - measured) / config.assumed_full_speed_mps
         self._linear = self._clamp(self._linear + step, config.min_linear, config.max_linear)
 
+    def _linear_for(self, speed_mps: float) -> float:
+        config = self._config
+        return self._clamp(
+            speed_mps / config.assumed_full_speed_mps, config.min_linear, config.max_linear
+        )
+
     # --- geometry of the plan -------------------------------------------------------------------
 
     def _leg(self) -> tuple[LocalPoint, LocalPoint]:
@@ -709,6 +988,8 @@ class SpotMowRun:
                 if self._progress.target == 1:
                     self._count_point(segment)  # the segment's start point
                 self._count_point(segment)
+            elif segment.transit:
+                self._transit_driven += 2 if self._progress.target == 1 else 1
             if self._progress.target + 1 < len(segment.points):
                 self._progress.target += 1
             else:
@@ -718,6 +999,9 @@ class SpotMowRun:
                 self._progress.segment += 1
                 self._progress.target = 1
                 self._measured_speed = None
+                if segment.transit:
+                    following = self._segments[self._progress.segment]
+                    self._linear = self._linear_for(following.speed_mps)
                 self._set_state(self._driving_state(), None)
             self._notify()
 
@@ -727,7 +1011,8 @@ class SpotMowRun:
             self._mow_driven += 1
 
     def _planned_index(self) -> int:
-        """Index of the current segment within the plan (the approach leg does not count)."""
+        """Index of the current segment within the plan (transit and joining legs do not
+        count)."""
         return sum(1 for s in self._segments[: self._progress.segment] if s.planned)
 
     def _lookahead(self, estimate: LocalPoint) -> LocalPoint:
@@ -798,19 +1083,31 @@ class SpotMowRun:
         self._notify()
 
     def _end(self, state: SpotRunState, reason: str | None, detail: str | None) -> None:
+        """Decide how the run ends; the final state is published by :meth:`_finish` (after the
+        mower was sent home, if it is)."""
         if self._ended_at is not None:
             return
         self._ended_at = self._clock()
         self._detail = detail
-        self._set_state(state, reason)
-        if detail:
-            _log.info("spot run %s: %s", self.run_id, detail)
+        self._outcome = state
+        self._outcome_reason = reason
+        self._reason = reason
+        _log.info(
+            "spot run %s ends %s%s%s",
+            self.run_id,
+            state,
+            f" ({reason})" if reason else "",
+            f": {detail}" if detail else "",
+        )
 
     def _finish(self) -> None:
         if self._report is not None:
             return
         if self._ended_at is None:
             self._end("failed", "internal_error", "the run ended without a result")
+        assert self._outcome is not None  # noqa: S101 - set by _end
+        self._state = self._outcome
+        self._reason = self._outcome_reason
         started = self._started_at or self._planned_at
         assert self._ended_at is not None  # noqa: S101 - set by _end
         coverage = 100.0 * self._mow_driven / self._mow_points if self._mow_points else 0.0
@@ -826,7 +1123,12 @@ class SpotMowRun:
             dry_run=self.dry_run,
             frames_sent=self._frames_sent,
             paused_s=self._paused_s,
+            transit_m=self._transit.length_m if self._transit is not None else 0.0,
+            undocked=self._undock,
+            sent_home=self._sent_home,
+            return_problem=self._return_problem,
         )
+        _log.info("spot run %s: %s", self.run_id, self._report.summary())
         self._finished.set()
         self._notify()
 
@@ -849,6 +1151,17 @@ class SpotMowRun:
     @staticmethod
     def _clamp(value: float, low: float, high: float) -> float:
         return max(low, min(high, value))
+
+
+def _transit_segment(route: TransitRoute, speed_mps: float) -> _Segment:
+    return _Segment(
+        points=list(route.points),
+        kind="transfer",
+        blades_on=False,
+        speed_mps=speed_mps,
+        planned=False,
+        transit=True,
+    )
 
 
 def _segments_of(plan: SpotMowPlan, speed_mps: float, join_m: float) -> list[_Segment]:
@@ -894,14 +1207,22 @@ def spot_start_problem(
     state: MowerState,
     *,
     now: datetime,
+    undock: bool = False,
     max_state_age_s: float = SPOT_START_MAX_STATE_AGE_S,
     min_battery_percent: int = 20,
 ) -> str | None:
-    """Why a spot run must not start from ``state``, or None: the mower stands idle (not docked,
-    no job, no error), its state is at most ``max_state_age_s`` old and the battery is above
-    ``min_battery_percent``. Live positions are the run's job (it waits for them)."""
-    if state.activity.value != "idle":
-        return f"the mower is {state.activity.value}; a spot run needs it idle on the lawn"
+    """Why a spot run must not start from ``state``, or None: the mower stands idle (no job, no
+    error), or docked when the connection can undock it (``undock``, ADR 0041), its state is at
+    most ``max_state_age_s`` old and the battery is above ``min_battery_percent``. Live
+    positions are the run's job (it waits for them)."""
+    docked_ok = undock and state.activity in DOCKED_ACTIVITIES
+    if state.activity is not MowerActivity.IDLE and not docked_ok:
+        if state.activity in DOCKED_ACTIVITIES:
+            return (
+                f"the mower is {state.activity.value} and this connection cannot undock it; "
+                "drive it out first"
+            )
+        return f"the mower is {state.activity.value}; a spot run needs it idle or docked"
     age = (now - state.observed_at).total_seconds()
     if age > max_state_age_s:
         return f"the mower's state is {age:.0f} s old; wait for a fresh report"
@@ -911,7 +1232,9 @@ def spot_start_problem(
 
 
 __all__ = [
+    "DOCKED_ACTIVITIES",
     "MAX_RUN_S",
+    "NO_RETURN_REASONS",
     "PAUSE_POSITION_STALE",
     "REASON_ACTIVITY_CHANGE",
     "REASON_EMERGENCY_STOP",
@@ -923,14 +1246,17 @@ __all__ = [
     "REASON_SENSOR_STOP",
     "REASON_STOPPED_BY_USER",
     "REASON_TIMEOUT",
+    "REASON_UNDOCK_FAILED",
     "RUN_TIME_SLACK_S",
     "SPOT_START_MAX_STATE_AGE_S",
     "FrameChannel",
     "Geofence",
     "Pose",
+    "SpotActions",
     "SpotMowRun",
     "SpotRunConfig",
     "SpotRunReport",
     "pose_of",
     "spot_start_problem",
+    "transit_start",
 ]

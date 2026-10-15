@@ -39,6 +39,7 @@ from mowdeck_contracts.v1 import (
     StartMow,
 )
 from mowdeck_control import (
+    DrivableSpace,
     Geofence,
     MowerController,
     SimulatedMower,
@@ -46,6 +47,7 @@ from mowdeck_control import (
     SpotMowRun,
     SpotRunConfig,
     SpotRunReport,
+    default_map,
     to_geo_position,
 )
 from mowdeck_control.controller import SPOT_RUN_ACTIVE
@@ -62,6 +64,7 @@ from mowdeck_control.spot_run import (
     spot_start_problem,
 )
 from mowdeck_control.testing import ManualClock, ManualTimers
+from mowdeck_control.transit import REASON_NO_ROUTE
 
 ISSUER = PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER)
 MAP = MowerMap(
@@ -127,6 +130,16 @@ class Harness:
         )
         self.track: list[LocalPoint] = []
         self.blade_seen = False
+        # every status the run reports, also those a quicker one replaced before it was emitted
+        self.run_states: list[str] = []
+        publish = self.controller._on_spot_status
+
+        def record(status: SpotRunStatus) -> None:
+            if not self.run_states or self.run_states[-1] != status.state:
+                self.run_states.append(status.state)
+            publish(status)
+
+        self.controller._on_spot_status = record  # type: ignore[method-assign]
 
     def _on_state(self, state: MowerState) -> None:
         if state.spot_run is not None and (
@@ -183,7 +196,9 @@ class Harness:
         result = await self.send(command)
         if result.status is not CommandStatus.ACCEPTED:
             return result, None
-        return result, await self.controller.spot_run_result(result.command_id)
+        report = await self.controller.spot_run_result(result.command_id)
+        await self.settle()  # the final status is published by a task
+        return result, report
 
     def max_deviation(self, lines: list[list[LocalPoint]]) -> float:
         legs = [(a, b) for line in lines for a, b in itertools.pairwise(line)]
@@ -211,8 +226,10 @@ async def test_control_spot_run_converges_on_a_spiral_at_1hz_with_noise() -> Non
     assert report.dry_run and not h.blade_seen
     assert h.max_deviation([approach, line]) < 0.5, "the true track left the planned path"
     assert 60 < report.duration_s < 20 * 60
-    states = [s.state for s in h.statuses]
-    assert states[0] == "preparing" and "spot_mowing" in states and states[-1] == "done"
+    states = h.run_states
+    assert states[0] == "transit" and "spot_mowing" in states and states[-1] == "done"
+    assert states[-2] == "returning" and report.sent_home, "the mower was not sent home"
+    assert h.statuses[-1].state == "done"
     assert h.statuses[-1].progress_percent == 100
     assert not h.controller.drive_session_active and not h.controller.spot_run_active
     final = h.controller.last_state
@@ -286,7 +303,8 @@ async def test_control_spot_run_aborts_on_the_time_limit() -> None:
     _, report = await h.run(SpotMow(plan=plan))
     assert report is not None
     assert (report.state, report.reason) == ("aborted", REASON_TIMEOUT)
-    assert report.duration_s == pytest.approx(2 * (0.5 + 1.5) / 0.2 + 60, abs=1.0)
+    # the plan's share (2 x 1.5 m / 0.2 m/s + 60 s) plus twice the transit's 0.5 m at 0.3 m/s
+    assert report.duration_s == pytest.approx(2 * 1.5 / 0.2 + 60 + 2 * 0.5 / 0.3, abs=1.0)
     await h.close()
 
 
@@ -349,10 +367,11 @@ async def test_control_spot_run_rule_12_rejects_other_commands_while_a_run_is_ac
 
 
 async def test_control_spot_run_start_checks() -> None:
-    docked = Harness()
+    docked = Harness(config=SimulationConfig(state_period_s=1.0, undock=False))
     await docked.start(idle=False)
     refused = await docked.send(SpotMow(plan=plan_of([(3.0, 6.0), (4.0, 6.0)])))
     assert refused.status is CommandStatus.REJECTED and "docked" in (refused.reason or "")
+    assert "cannot undock" in (refused.reason or "")
     await docked.close()
 
     h = Harness()
@@ -362,8 +381,6 @@ async def test_control_spot_run_start_checks() -> None:
     assert "leaves the geofence" in (outside.reason or "")
     near_pond = await h.send(SpotMow(plan=plan_of([(3.0, 6.0), (8.9, 8.9)])))
     assert "no-go zone" in (near_pond.reason or "")
-    far = await h.send(SpotMow(plan=plan_of([(11.6, 0.4), (11.6, 1.4)])))
-    assert far.status is CommandStatus.REJECTED and "m from the start" in (far.reason or "")
     h.sim.set_rtk(RtkFixStatus.FLOAT)
     await h.settle()
     unfixed = await h.send(SpotMow(plan=plan_of([(3.0, 6.0), (4.0, 6.0)])))
@@ -569,3 +586,115 @@ async def test_control_spot_run_waits_for_a_fresh_pose_when_the_first_is_stale()
     assert frames.frames[0] == (0.0, 0.0, False), "no movement while the pose is stale"
     assert report.state == "done", report.summary()
     assert 0 < report.paused_s < 5
+
+
+# --- undock, transit and return (ADR 0041) ------------------------------------------------------
+
+
+GARDEN = default_map()
+"""Front lawn, back lawn behind it, the side path between both, the dock left of the front."""
+
+
+async def test_control_spot_run_full_cycle_from_the_dock() -> None:
+    h = Harness(mower_map=GARDEN)
+    await h.start(idle=False)
+    assert h.sim.snapshot().activity in (MowerActivity.DOCKED, MowerActivity.CHARGING)
+    line = spiral((5.0, 14.0), r1=1.0)
+    result, report = await h.run(SpotMow(plan=plan_of(line), speed_mps=0.2))
+    assert result.status is CommandStatus.ACCEPTED, result.reason
+    assert "leaving the dock" in (result.reason or "") and "transit" in (result.reason or "")
+    assert report is not None
+    assert report.state == "done", report.summary()
+    assert report.undocked and report.sent_home and report.transit_m > 10
+    assert report.dry_run and not h.blade_seen, "blades ran during the cycle"
+    order = ["undocking", "waiting_rtk", "transit", "spot_mowing", "returning", "done"]
+    assert [s for s in h.run_states if s in order] == order, h.run_states
+    # the true track stayed in the drivable space (transit) and the spot's geofence
+    space = DrivableSpace.of(GARDEN)
+    outside = [p for p in h.track if not space.contains(p)]
+    assert not outside, f"left the drivable space at {outside[:3]}"
+    assert not h.controller.spot_run_active and not h.controller.drive_session_active
+    # the mower drives home by itself
+    await h.until(
+        lambda: (
+            h.sim.snapshot().activity
+            in (MowerActivity.RETURNING, MowerActivity.DOCKED, MowerActivity.CHARGING)
+        ),
+        5,
+        "the mower was not sent home",
+    )
+    await h.close()
+
+
+async def test_control_spot_run_publishes_the_transit_as_a_transfer_path() -> None:
+    h = Harness(mower_map=GARDEN)
+    await h.start(idle=False)
+    started = await h.send(SpotMow(plan=plan_of(spiral((5.0, 14.0), r1=1.0))))
+    assert started.status is CommandStatus.ACCEPTED, started.reason
+    path = h.controller.current_path()
+    assert path is not None and path.kinds is not None and GARDEN.dock is not None
+    assert path.kinds[0] == "transfer" and path.kinds[1] == "mow"
+    assert path.polylines[0][0] == pytest.approx((GARDEN.dock.x, GARDEN.dock.y))
+    stopped = await h.send(SpotStop())
+    assert stopped.status is CommandStatus.EXECUTED
+    report = await h.controller.spot_run_result(started.command_id)
+    assert report is not None and report.reason == REASON_STOPPED_BY_USER
+    assert not report.sent_home, "a stop must not send the mower home"
+    await h.close()
+
+
+async def test_control_spot_run_aborts_when_rtk_never_fixes_after_undocking() -> None:
+    h = Harness(mower_map=GARDEN, spot_config=SpotRunConfig(undock_timeout_s=20.0))
+    await h.start(idle=False)
+    h.sim.set_rtk(RtkFixStatus.FLOAT)
+    await h.settle()
+    result, report = await h.run(SpotMow(plan=plan_of(spiral((5.0, 14.0), r1=1.0))))
+    assert result.status is CommandStatus.ACCEPTED, result.reason
+    assert report is not None
+    assert (report.state, report.reason) == ("aborted", REASON_RTK_LOST), report.summary()
+    assert report.undocked and report.frames_sent == 0, "frames went out without RTK"
+    assert "waiting_rtk" in h.run_states
+    assert report.sent_home, "a healthy mower is sent home after an abort"
+    assert not h.blade_seen and not h.controller.drive_session_active
+    await h.close()
+
+
+async def test_control_spot_run_without_a_route_is_rejected_before_it_moves() -> None:
+    far = GARDEN.model_copy(update={"paths": []})  # the back lawn has no connection any more
+    h = Harness(mower_map=far)
+    await h.start(idle=False)
+    refused = await h.send(SpotMow(plan=plan_of(spiral((5.0, 14.0), r1=1.0))))
+    assert refused.status is CommandStatus.REJECTED
+    assert (refused.reason or "").startswith(f"{REASON_NO_ROUTE}:"), refused.reason
+    assert h.sim.snapshot().activity in (MowerActivity.DOCKED, MowerActivity.CHARGING)
+    assert not h.controller.spot_run_active
+    await h.close()
+
+
+async def test_control_spot_run_far_transit_from_the_lawn() -> None:
+    """No 10 m limit any more: from the front lawn's far corner to the back lawn."""
+    h = Harness(mower_map=GARDEN)
+    await h.start()
+    assert h.sim.snapshot().activity is MowerActivity.IDLE
+    result, report = await h.run(
+        SpotMow(plan=plan_of(spiral((5.0, 14.0), r1=0.8)), return_to_dock=False)
+    )
+    assert result.status is CommandStatus.ACCEPTED, result.reason
+    assert report is not None
+    assert report.state == "done", report.summary()
+    assert not report.undocked and not report.sent_home and report.transit_m > 10
+    await h.close()
+
+
+async def test_control_spot_run_closing_the_controller_never_sends_the_mower_home() -> None:
+    h = Harness(mower_map=GARDEN)
+    await h.start()
+    started = await h.send(SpotMow(plan=plan_of(spiral((5.0, 14.0), r1=0.8))))
+    assert started.status is CommandStatus.ACCEPTED, started.reason
+    await h.until(lambda: h.controller.drive_session_active, 10, "the run never drove")
+    waiter = asyncio.ensure_future(h.controller.spot_run_result(started.command_id))
+    await h.close()
+    report = await waiter
+    assert report is not None and report.reason == REASON_LINK_LOST
+    assert not report.sent_home and report.return_problem is None
+    assert h.sim.snapshot().activity is not MowerActivity.RETURNING

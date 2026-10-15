@@ -256,6 +256,10 @@ class SimulationConfig:
     date. Installing it takes ``firmware_update_seconds`` simulated seconds."""
     firmware_release_notes: str | None = None
     firmware_update_seconds: float = 5.0
+    undock: bool = True
+    """Offer ``leave_dock`` (capability ``undock``): from the dock the mower drives
+    ``undock_distance_m`` straight out along the dock's heading and stands idle there."""
+    undock_distance_m: float = 1.0
 
     @property
     def origin(self) -> tuple[float, float]:
@@ -446,7 +450,9 @@ class SimulatedMower:
             connection_kinds=frozenset({ConnectionKind.SIMULATED}),
             links_supported=[LINK_BLE_BRIDGE],
             firmware_update=True,
+            undock=self.config.undock,
         )
+        self._undock_target: LocalPoint | None = None
 
     # --- MowerConnection ----------------------------------------------------------------------
 
@@ -580,6 +586,30 @@ class SimulatedMower:
             except TimeoutError:
                 continue
         return Outcome.executed("mower is mowing")
+
+    async def leave_dock(self) -> None:
+        """:class:`~mowdeck_control.connection.UndockCapable`: drive ``undock_distance_m``
+        straight out of the dock along its heading (blades off), then stand ``idle``."""
+        self._require_connected()
+        self._require_no_sensor_stop()
+        if not self.config.undock:
+            raise CommandRejected("this mower cannot leave its dock by itself")
+        status = self._status
+        if status.activity not in (MowerActivity.DOCKED, MowerActivity.CHARGING):
+            raise CommandRejected(f"the mower is {status.activity.value}, not in its dock")
+        dock = self._map.dock
+        assert dock is not None  # noqa: S101 - checked in __init__
+        heading = math.radians(dock.heading_deg)
+        distance_m = self.config.undock_distance_m
+        self._undock_target = (
+            dock.x + math.cos(heading) * distance_m,
+            dock.y + math.sin(heading) * distance_m,
+        )
+        self._theta = heading
+        self._blade_on = False
+        status.activity = MowerActivity.IDLE
+        status.emergency_stopped = False
+        self._publish()
 
     async def start_drive_session(self) -> SimulatedDriveSession:
         self._require_connected()
@@ -1239,6 +1269,7 @@ class SimulatedMower:
         self._publish()
 
     def _end_drive_session(self) -> None:
+        self._undock_target = None  # a stop, an error or a new command ends the undocking
         if self._drive is not None:
             self._drive._end()
             self._drive = None
@@ -1280,6 +1311,8 @@ class SimulatedMower:
             return self._follow_route(t)
         if activity in (MowerActivity.DOCKED, MowerActivity.CHARGING):
             return self._charge(t)
+        if self._undock_target is not None and activity is MowerActivity.IDLE:
+            return self._undock_step(t)
         if self._drive is not None and (activity is MowerActivity.IDLE or self.stuck):
             return self._drive_step(t)
         self._drain(t, self.config.drain_idle_per_h)
@@ -1358,6 +1391,23 @@ class SimulatedMower:
                 self._theta = math.radians(dock.heading_deg)
                 return t  # docking takes the rest of this tick; charging starts with the next
         return t - budget
+
+    def _undock_step(self, t: float) -> float:
+        target = self._undock_target
+        assert target is not None  # noqa: S101 - checked by the caller
+        speed = self.config.transfer_speed_mps
+        remaining = distance((self._x, self._y), target)
+        needed = remaining / speed
+        self._drain(min(t, needed), self.config.drain_moving_per_h)
+        self._moving_speed = speed
+        if needed <= t:
+            self._x, self._y = target
+            self._undock_target = None
+            return needed
+        fraction = t / needed
+        self._x += (target[0] - self._x) * fraction
+        self._y += (target[1] - self._y) * fraction
+        return t
 
     def _drive_step(self, t: float) -> float:
         step = min(t, _DRIVE_STEP_S)

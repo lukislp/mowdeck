@@ -6,7 +6,9 @@
 * :class:`FirmwarePort` and :class:`BridgeScanCapable`: optional capabilities of a connection
   (firmware checks and updates, scans through a Bluetooth bridge, ADR 0038).
 * :class:`SpotMowRun`: spot mowing driven by MowDeck along a Planner route (ADR 0039), with
-  its geofence and pure-pursuit steering, fed by the generic drive channel and state.
+  its geofence and pure-pursuit steering, fed by the generic drive channel and state; it
+  undocks, drives a transit planned by :func:`plan_transit` and sends the mower home
+  (ADR 0041, :class:`UndockCapable`).
 * :class:`SimulatedMower`: a deterministic simulated mower (``ConnectionKind.SIMULATED``).
 * :func:`plan_to_native_job`: neutral mowing request to a native mower job.
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
@@ -36,6 +38,7 @@ from mowdeck_control.connection import (
     Photo,
     PhotoCapture,
     TwoPhaseExecution,
+    UndockCapable,
     bridge_scanner_of,
     camera_session_of,
     current_map_of,
@@ -89,13 +92,22 @@ from mowdeck_control.spot_run import (
     FrameChannel,
     Geofence,
     Pose,
+    SpotActions,
     SpotMowRun,
     SpotRunConfig,
     SpotRunReport,
     pose_of,
     spot_start_problem,
+    transit_start,
 )
 from mowdeck_control.timers import AsyncioTimerFactory, Timer, TimerFactory
+from mowdeck_control.transit import (
+    DrivableSpace,
+    NoRouteError,
+    TransitConfig,
+    TransitRoute,
+    plan_transit,
+)
 from mowdeck_control.translation import (
     MowOrder,
     MowRequest,
@@ -124,6 +136,7 @@ __all__ = [
     "ConnectionRegistry",
     "ControlError",
     "Dispatch",
+    "DrivableSpace",
     "DriveSession",
     "FirmwarePort",
     "FrameChannel",
@@ -136,6 +149,7 @@ __all__ = [
     "MowerConnection",
     "MowerController",
     "NativeJob",
+    "NoRouteError",
     "NotConnected",
     "Outcome",
     "PathPreviewCapable",
@@ -148,6 +162,7 @@ __all__ = [
     "SimulatedDriveSession",
     "SimulatedMower",
     "SimulationConfig",
+    "SpotActions",
     "SpotMowRun",
     "SpotRunConfig",
     "SpotRunReport",
@@ -156,7 +171,10 @@ __all__ = [
     "StateSubscription",
     "Timer",
     "TimerFactory",
+    "TransitConfig",
+    "TransitRoute",
     "TwoPhaseExecution",
+    "UndockCapable",
     "UnknownConnectionKind",
     "UnsupportedPattern",
     "available_kinds",
@@ -176,6 +194,7 @@ __all__ = [
     "from_wgs84",
     "local_angle",
     "plan_to_native_job",
+    "plan_transit",
     "point_in_polygon",
     "pose_of",
     "register_connection",
@@ -183,4 +202,5 @@ __all__ = [
     "spot_start_problem",
     "to_geo_position",
     "to_wgs84",
+    "transit_start",
 ]
