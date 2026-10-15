@@ -148,7 +148,7 @@ flowchart LR
 | `geo` | local metres to WGS84 and back, point in polygon |
 | `testing` | `ManualClock` and `ManualTimers` to test timing without sleeping |
 | `SpotMowRun` | spot mowing driven by MowDeck ([ADR 0039](../adr/0039-spot-mowing-by-mowdeck-driven-paths.md)): drives a Planner plan with joystick frames through the controller (`SpotMow`, rule 12), with a `Geofence` from the map, pure-pursuit steering, RTK pauses and aborts; reads only the neutral state; uses a drive calibration (`SpotRunConfig.calibrated`) and ends `stalled` without progress ([ADR 0042](../adr/0042-drive-calibration.md)) |
-| `DriveCalibrationRun` | drive calibration ([ADR 0042](../adr/0042-drive-calibration.md)): forward and turn steps over the drive channel (`DriveCalibrate`, rule 13), fits full-scale speed, yaw rate and dead zones; blades off, room check, 1.5 m forward budget |
+| `DriveCalibrationRun` | drive calibration ([ADR 0042](../adr/0042-drive-calibration.md)): forward and turn steps over the drive channel (`DriveCalibrate`, rule 13), measures each step over its steady window (without the first 1.5 s, at least 4 reports in 3 s, else `invalid`), drops inconsistent turn pairs and outliers, fits full-scale speed, yaw rate and dead zones from at least two points per axis; blades off, room check, 1.5 m forward budget |
 
 ```python
 from mowdeck_control import MowerController, SimulatedMower
