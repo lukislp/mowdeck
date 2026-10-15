@@ -142,6 +142,11 @@ test('spot mowing on a phone: a bottom sheet with snap points keeps the map visi
   await expect(start).toBeInViewport();
 
   // --- a tap on the map moves the spot and collapses the sheet to peek ----------------------
+  // A fling may have reached full (only a thin strip of map left): go to half first.
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveAttribute('data-snap', 'peek');
+  await handle.tap();
+  await expect(sheet).toHaveAttribute('data-snap', 'half');
   await tapNextToMower(page);
   await expect(sheet).toHaveAttribute('data-snap', 'peek');
   await expect(map).toHaveAttribute('data-spot', 'circle');
