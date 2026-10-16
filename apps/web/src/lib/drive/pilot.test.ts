@@ -122,3 +122,119 @@ describe('reverse driving', () => {
     expect(frames.at(0)?.frame.linear).toBe(-0.4);
   });
 });
+
+describe('hold while the picture stands', () => {
+  it('stops at once and sends only zero frames, at the idle cadence, while held', () => {
+    const { pilot, frames, advance } = setup();
+    pilot.speedLimit = 100;
+    pilot.sample({ linear: 0.8, angular: 0.2 });
+    pilot.hold(true);
+    expect(pilot.holding).toBe(true);
+    expect(frames.at(-1)).toEqual({
+      frame: { linear: 0, angular: 0, blade_on: false },
+      force: true,
+    });
+    const before = frames.length;
+    for (let i = 0; i < 10; i++) {
+      advance(100);
+      pilot.sample({ linear: 1, angular: -1 });
+    }
+    const held = frames.slice(before);
+    // The stick is ignored: zero frames only, two in a second keep the session open.
+    expect(held).toHaveLength(2);
+    expect(held.every((f) => f.frame.linear === 0 && f.frame.angular === 0)).toBe(true);
+    // A second hold(true) sends nothing extra.
+    const count = frames.length;
+    pilot.hold(true);
+    expect(frames).toHaveLength(count);
+  });
+
+  it('never sends blades while holding', () => {
+    const { pilot, frames, advance } = setup();
+    pilot.bladeOn = true;
+    pilot.hold(true);
+    advance(600);
+    pilot.sample({ linear: 0, angular: 0 });
+    expect(frames.every((f) => f.frame.blade_on === false)).toBe(true);
+  });
+
+  it('keeps a held stick latched after the picture returns until it is centred', () => {
+    const { pilot, frames, advance } = setup();
+    pilot.speedLimit = 100;
+    pilot.sample({ linear: 1, angular: 0 });
+    pilot.hold(true);
+    advance(100);
+    pilot.sample({ linear: 1, angular: 0 });
+    pilot.hold(false);
+    expect(pilot.holding).toBe(true);
+    for (let i = 0; i < 5; i++) {
+      advance(600);
+      pilot.sample({ linear: 1, angular: 0 });
+    }
+    expect(frames.slice(1).every((f) => f.frame.linear === 0)).toBe(true);
+    // Centred: free again, the next deflection drives.
+    advance(600);
+    pilot.sample({ linear: 0, angular: 0 });
+    expect(pilot.holding).toBe(false);
+    advance(100);
+    pilot.sample({ linear: 0.5, angular: 0 });
+    expect(frames.at(-1)?.frame.linear).toBe(0.5);
+  });
+
+  it('frees a held stick that is let go and touched again', () => {
+    const { pilot, frames, advance } = setup();
+    pilot.speedLimit = 100;
+    pilot.sample({ linear: 1, angular: 0 });
+    pilot.hold(true);
+    pilot.hold(false);
+    advance(100);
+    pilot.sample({ linear: 1, angular: 0 });
+    expect(frames.at(-1)?.frame.linear).toBe(0);
+    pilot.release();
+    expect(pilot.holding).toBe(false);
+    advance(100);
+    pilot.sample({ linear: 0.7, angular: 0 });
+    expect(frames.at(-1)?.frame.linear).toBe(0.7);
+  });
+
+  it('keeps the latch when the stick is let go during the hold and touched again before it ends', () => {
+    const { pilot, frames, advance } = setup();
+    pilot.speedLimit = 100;
+    pilot.hold(true);
+    pilot.release();
+    expect(pilot.holding).toBe(true);
+    advance(100);
+    pilot.sample({ linear: 1, angular: 0 });
+    pilot.hold(false);
+    advance(600);
+    pilot.sample({ linear: 1, angular: 0 });
+    expect(frames.at(-1)?.frame.linear).toBe(0);
+  });
+
+  it('frees a stick nobody holds as soon as the picture returns', () => {
+    const { pilot, frames, advance } = setup();
+    pilot.speedLimit = 100;
+    pilot.sample({ linear: 0.4, angular: 0 });
+    pilot.release();
+    pilot.hold(true);
+    pilot.hold(false);
+    expect(pilot.holding).toBe(false);
+    advance(100);
+    pilot.sample({ linear: 0.4, angular: 0 });
+    expect(frames.at(-1)?.frame.linear).toBe(0.4);
+  });
+
+  it('a new session keeps holding while the picture still stands', () => {
+    const { pilot, frames } = setup();
+    pilot.hold(true);
+    pilot.reset();
+    expect(pilot.holding).toBe(true);
+    pilot.sample({ linear: 1, angular: 0 });
+    expect(frames.every((f) => f.frame.linear === 0)).toBe(true);
+    // The stick was held through the end of the hold: latched until it is let go.
+    pilot.hold(false);
+    expect(pilot.holding).toBe(true);
+    pilot.release();
+    expect(pilot.holding).toBe(false);
+  });
+});

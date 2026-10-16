@@ -1829,5 +1829,19 @@
   "calib_reason_link_lost": "drive link lost",
   "calib_reason_frame_rejected": "the mower refused a drive command",
   "calib_reason_no_fit": "too few position reports for a fit",
-  "calib_reason_turn_direction": "the mower turned the other way than commanded"
+  "calib_reason_turn_direction": "the mower turned the other way than commanded",
+  "camera_frozen": "Picture frozen",
+  "camera_frozen_hint": "The mower holds until the picture runs again. Then centre the stick or touch it again.",
+  "drive_view": "View",
+  "drive_view_camera": "Camera",
+  "drive_view_map": "Map",
+  "drive_camera_unavailable": "Camera unavailable – map",
+  "drive_map_thumb_show": "Show map",
+  "drive_map_thumb_hide": "Hide map",
+  "drive_camera_both": "Both cameras",
+  "drive_delay": "Latency",
+  "drive_details": "Session details",
+  "drive_held": "Held: picture frozen",
+  "drive_recentre": "Centre the stick or touch it again",
+  "drive_hud": "Drive readout"
 }

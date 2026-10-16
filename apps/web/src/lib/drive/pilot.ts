@@ -9,6 +9,14 @@
  * armed and switched them on, and never in the release frame. Backwards frames go out only when
  * the drive link can reverse (`reverseAllowed`, `clampReverse`). The pilot also counts frames sent
  * and acknowledged in the last second for the session strip.
+ *
+ * Hold (ADR 0044): while the drive view's camera picture stands (`hold(true)`), the pilot sends
+ * one forced zero frame at once and then turns every sample into a zero frame (at the idle
+ * cadence, so the session stays open but the mower stands; never with the blades). When the
+ * picture runs again
+ * (`hold(false)`) a stick that is still held stays latched at zero until it is centred or let
+ * go and touched again, so the mower never jumps to a deflection the driver made blind; a stick
+ * that nobody holds is free at once.
  */
 import { isZero, limitVector, type StickVector } from '@mowdeck/ui';
 
@@ -49,15 +57,45 @@ export class DrivePilot {
   #lastSentAt = -Infinity;
   #sent: number[] = [];
   #acked: number[] = [];
+  /** The picture stands: every sample is a zero frame. */
+  #held = false;
+  /** After a hold: zero until the stick is centred or let go. */
+  #latched = false;
+  /** The stick is held (samples arrive, no release since). */
+  #stickHeld = false;
 
   constructor(link: DriveLink, now: () => number = Date.now) {
     this.#link = link;
     this.#now = now;
   }
 
+  /** The pilot holds the mower (the picture stands) or is latched after a hold. */
+  get holding(): boolean {
+    return this.#held || this.#latched;
+  }
+
+  /**
+   * Hold the mower while the picture stands (`true`): a forced zero frame now, zero frames for
+   * every sample after it. Releasing the hold (`false`) frees a stick nobody holds at once and
+   * latches a held one until it is centred or let go.
+   */
+  hold(on: boolean): void {
+    if (on === this.#held) return;
+    this.#held = on;
+    if (on) {
+      this.#latched = true;
+      this.#send({ linear: 0, angular: 0 }, true);
+    } else if (!this.#stickHeld) {
+      this.#latched = false;
+    }
+  }
+
   /** One sample of the held stick; returns whether a frame went out. */
   sample(vector: StickVector): boolean {
-    const limited = limitVector(clampReverse(vector, this.reverseAllowed), this.speedLimit / 100);
+    this.#stickHeld = true;
+    let limited = limitVector(clampReverse(vector, this.reverseAllowed), this.speedLimit / 100);
+    if (this.#latched && !this.#held && isZero(limited)) this.#latched = false;
+    if (this.#held || this.#latched) limited = { linear: 0, angular: 0 };
     const now = this.#now();
     if (isZero(limited) && now - this.#lastSentAt < IDLE_FRAME_MS) return false;
     return this.#send(limited, false);
@@ -65,6 +103,8 @@ export class DrivePilot {
 
   /** The stick was let go: one zero frame, then silence. */
   release(): boolean {
+    this.#stickHeld = false;
+    if (!this.#held) this.#latched = false;
     return this.#send({ linear: 0, angular: 0 }, true);
   }
 
@@ -87,10 +127,13 @@ export class DrivePilot {
     this.#sent = [];
     this.#acked = [];
     this.bladeOn = false;
+    this.#stickHeld = false;
+    this.#latched = this.#held;
   }
 
   #send(vector: StickVector, force: boolean): boolean {
-    const frame: DriveFrame = { ...vector, blade_on: this.bladeOn && !force };
+    // Never blades in the release frame, nor while the pilot holds the mower.
+    const frame: DriveFrame = { ...vector, blade_on: this.bladeOn && !force && !this.holding };
     if (!this.#link.sendFrame(frame, force)) return false;
     const now = this.#now();
     this.#lastSentAt = now;

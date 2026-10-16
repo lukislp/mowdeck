@@ -82,7 +82,10 @@ export type CanvasTarget = HTMLCanvasElement | ((slot: number) => HTMLCanvasElem
 /** Interval of the test pattern (10 frames per second keeps it cheap). */
 export const FAKE_FRAME_MS = 100;
 
-/** The player of `fake` sessions: the test pattern on a canvas per tile. */
+/**
+ * The player of `fake` sessions: the test pattern on a canvas per tile. A canvas marked
+ * `data-freeze="true"` stops drawing (its frame counter stands) until the mark is removed.
+ */
 export class FakePlayer implements CameraPlayer {
   private timer: ReturnType<typeof setInterval> | null = null;
   private tick = 0;
@@ -155,6 +158,9 @@ export class FakePlayer implements CameraPlayer {
     this.slots.forEach((uid, slot) => {
       const canvas = this.canvasOf(slot);
       if (!canvas || (this.known.length && !this.delivers(uid))) return;
+      // Simulator hook: a canvas marked `data-freeze="true"` keeps its last frame, like a
+      // stream whose picture stands (the drive view's freeze warning is tested with it).
+      if (canvas.dataset.freeze === 'true') return;
       const ctx = canvas.getContext('2d') as PatternContext | null;
       if (!ctx) return;
       canvas.dataset.frames = String(this.tick);
