@@ -249,6 +249,20 @@ Installing the PWA reliably and Web Push (Phase 2, Task 12) need HTTPS. At home 
 
 and run `docker compose up -d`.
 
+#### Behind your own reverse proxy
+
+When a reverse proxy you already run (Nginx Proxy Manager, Caddy, nginx, HAProxy, ...) terminates TLS and forwards to this stack's port 80, configure it and the stack as follows. The examples use `192.0.2.10` for the proxy and `https://mowdeck.example.org` for the public origin; put in your own.
+
+- **Forward to plain HTTP** on the host's `GATEWAY_HTTP_PORT` (for example `http://192.168.1.10:80`) and pass the original `Host` header.
+- **WebSocket upgrade.** The live status runs over `/api/v1/realtime/ws`; the proxy must pass `Upgrade` and `Connection` (in Nginx Proxy Manager: "Websockets Support"; in nginx: `proxy_http_version 1.1`, `proxy_set_header Upgrade $http_upgrade`, `proxy_set_header Connection "upgrade"`).
+- **Long read timeout.** Keep the proxy's read timeout well above `REALTIME_PING_SECONDS` (20 s) and above the longest API call (path previews take up to `GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS`, 75 s): for nginx for example `proxy_read_timeout 3600s` and `proxy_send_timeout 3600s`.
+- **Forwarded headers.** The proxy sets `X-Forwarded-For` (`$proxy_add_x_forwarded_for`) and `X-Forwarded-Proto` (`$scheme`, so `https`). Most proxies do this by default.
+- **Trust the proxy.** Set `GATEWAY_TRUSTED_PROXIES` in `.env` to the proxy's address (comma separated IPs or CIDRs, for example `GATEWAY_TRUSTED_PROXIES=192.0.2.10`). Traefik then keeps the proxy's `X-Forwarded-For` and `X-Forwarded-Proto` instead of replacing them with the proxy's own address, so Identity's per-IP login throttling, `login_attempts` and the audit log see each user's real address. Without it every request appears to come from the proxy and all users share one throttling bucket. Empty (the default) trusts no one: a client's own `X-Forwarded-*` headers are discarded. List only proxies you control, never a range that ordinary clients connect from, or they can fake their address.
+- **HTTPS settings.** `IDENTITY_REFRESH_COOKIE_SECURE=true` and `REALTIME_ALLOWED_ORIGINS` with the HTTPS origin (for example `https://mowdeck.example.org`), as in the table above.
+- **Restrict port 80.** The stack speaks plain HTTP on `GATEWAY_HTTP_PORT`; allow it only from the proxy (and, if you want direct access, your LAN) in the host firewall, so nobody bypasses TLS. For example with ufw: `ufw allow from 192.0.2.10 to any port 80 proto tcp` and `ufw allow from 192.168.1.0/24 to any port 80 proto tcp`. Note that Docker's published ports bypass ufw's `INPUT` rules; filter in the `DOCKER-USER` chain, or bind the port to one interface with a host address in `GATEWAY_HTTP_PORT` (for example `192.168.1.10:80`).
+
+Then `docker compose up -d` (Traefik restarts with the new flag).
+
 ### Phase 1 acceptance test
 
 `pnpm e2e:stack up` and `pnpm e2e:stack acceptance` run `tests/e2e` (registration, sub-user with the Operator role, a simulated mower, start and dock with live status over the WebSocket, a foreign account and a Viewer rejected, an idle socket through Traefik) against a throwaway test stack, never this one. See `tests/e2e/README.md` and "Test stack" below; CI runs it in the job `e2e`.

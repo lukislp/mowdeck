@@ -23,6 +23,11 @@ services:
       - --providers.docker.constraints=Label(`com.docker.compose.project`,`${MOWDECK_TRAEFIK_PROJECT:-mowdeck}`)
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
+      # Your own reverse proxy in front of this Traefik (comma separated IPs/CIDRs): only from these
+      # addresses are incoming X-Forwarded-For/-Proto/-Host kept, so Identity sees the real client
+      # IP. Empty (default): Traefik trusts no one and sets the headers from the TCP peer itself.
+      - --entrypoints.web.forwardedHeaders.trustedIPs=${GATEWAY_TRUSTED_PROXIES:-}
+      - --entrypoints.websecure.forwardedHeaders.trustedIPs=${GATEWAY_TRUSTED_PROXIES:-}
       - --api.dashboard=false
       - --ping=true
       - --log.level=INFO
@@ -235,7 +240,8 @@ services:
       # Plans (ADR 0028): the token's plan claim comes from Entitlements; this switch only
       # decides the fallback while Entitlements does not answer.
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
-      # Only Traefik reaches the service, so its X-Forwarded-For is trusted.
+      # Only Traefik reaches the service, so its X-Forwarded-For is trusted. Traefik itself keeps a
+      # client's X-Forwarded-For only from GATEWAY_TRUSTED_PROXIES and overwrites it otherwise.
       MOWDECK_IDENTITY_TRUST_FORWARDED_FOR: "true"
       # Plain HTTP in development; set to true behind HTTPS.
       MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE: ${IDENTITY_REFRESH_COOKIE_SECURE:-false}

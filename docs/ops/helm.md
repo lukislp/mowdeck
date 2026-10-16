@@ -176,7 +176,7 @@ spec:
 #   traefik.ingress.kubernetes.io/router.middlewares: mowdeck-identity-ratelimit@kubernetescrd
 ```
 
-The Compose stack uses a looser limit for the refresh path (`identity-session-ratelimit`, 60/min); with Traefik, split it into its own Ingress through `ingress.auth.annotations` per path if you need the difference. Identity trusts `X-Forwarded-For` (`MOWDECK_IDENTITY_TRUST_FORWARDED_FOR=true`), so only the ingress controller may reach it; do not expose the Services otherwise.
+The Compose stack uses a looser limit for the refresh path (`identity-session-ratelimit`, 60/min); with Traefik, split it into its own Ingress through `ingress.auth.annotations` per path if you need the difference. Identity trusts `X-Forwarded-For` (`MOWDECK_IDENTITY_TRUST_FORWARDED_FOR=true`), so only the ingress controller may reach it; do not expose the Services otherwise. The chart has no counterpart of the Compose variable `GATEWAY_TRUSTED_PROXIES`: when another proxy or load balancer sits in front of the ingress controller, tell the controller to trust its forwarded headers (for Traefik `--entrypoints.<name>.forwardedHeaders.trustedIPs`, or `proxyProtocol.trustedIPs` for a TCP load balancer), otherwise Identity sees that proxy's address for every user.
 
 **WebSockets.** The Realtime socket `/api/v1/realtime/ws` needs no annotation with Traefik. Controllers with short idle timeouts need a read timeout above `REALTIME_PING_SECONDS` (20 s); for example HAProxy or nginx-based controllers default to 60 s, which is enough. (The community ingress-nginx controller is retired; see the [Kubernetes announcement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/).)
 
