@@ -22,18 +22,21 @@ The tests carry the marker `e2e` and are excluded from `uv run poe test` (`addop
 
 ## Run locally
 
+The test creates users, accounts and mowers, so it runs against the throwaway test stack (Compose project `mowdeck-e2e` at `http://localhost:8480`, see [tests/e2e-web/README.md](../e2e-web/README.md)), never against the stack you use. It refuses a stack without the e2e marker of `infra/compose/docker-compose.e2e.yml`.
+
 ```bash
 uv sync
-cp infra/compose/.env.example infra/compose/.env
-docker compose -f infra/compose/docker-compose.yml up -d --build --wait
-uv run poe e2e                      # all tests, about two minutes
-uv run poe e2e -m "e2e and not slow"  # without the 90 s idle check
-docker compose -f infra/compose/docker-compose.yml down -v
+pnpm install
+pnpm e2e:stack up
+pnpm e2e:stack acceptance                         # all tests, about two minutes (uv run poe e2e)
+pnpm e2e:stack acceptance -m "e2e and not slow"   # without the 90 s idle check
+pnpm e2e:stack down
 ```
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `MOWDECK_E2E_BASE_URL` | `http://localhost` | Traefik (`GATEWAY_HTTP_PORT`) |
+| `MOWDECK_E2E_BASE_URL` | `http://localhost:8480` | Traefik of the test stack (`MOWDECK_E2E_PORT`) |
+| `MOWDECK_E2E_ALLOW_ANY_STACK` | unset | `1` runs against a stack without the e2e marker (on purpose only) |
 | `MOWDECK_E2E_WS_URL` | derived | `ws://.../api/v1/realtime/ws` |
 | `MOWDECK_E2E_HTTP_TIMEOUT` | `10` | per request and handshake |
 | `MOWDECK_E2E_READY_TIMEOUT` | `30` | mower until `docked` |
@@ -47,7 +50,8 @@ CI runs the same in the job `e2e` (`.github/workflows/ci.yml`) and uploads `dock
 
 | Symptom | Likely cause and check |
 | --- | --- |
-| `stack not reachable` | Traefik not on port 80 (`GATEWAY_HTTP_PORT` in `.env`; then set `MOWDECK_E2E_BASE_URL=http://localhost:<port>`), or a service not healthy: `docker compose -f infra/compose/docker-compose.yml ps` |
+| `stack not reachable` | The test stack is not up (`pnpm e2e:stack up`), or a service is not healthy: `pnpm e2e:stack ps` |
+| `refusing to run against ...` | The base URL is not a test stack (no e2e marker): start one with `pnpm e2e:stack up`; never point the test at the stack you use |
 | `register` answers 403 | Identity runs with `IDENTITY_REGISTRATION=closed`; the test needs `open` (the default in `.env.example`) |
 | `register` or `session` answers 429 | Traefik's rate limit on the Identity auth routes (10 per minute, burst 20) after many runs in a row: wait a minute |
 | Mower never `docked` | `docker compose logs device-gateway` (mower registered, loaded from fleet), `docker compose logs telemetry` (consumer running, no account mismatch warnings); Fleet answered 503 (OpenFGA) |

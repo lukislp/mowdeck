@@ -251,11 +251,15 @@ and run `docker compose up -d`.
 
 ### Phase 1 acceptance test
 
-With the stack up, `uv run poe e2e` runs `tests/e2e` (registration, sub-user with the Operator role, a simulated mower, start and dock with live status over the WebSocket, a foreign account and a Viewer rejected, an idle socket through Traefik). See `tests/e2e/README.md`; CI runs it in the job `e2e`.
+`pnpm e2e:stack up` and `pnpm e2e:stack acceptance` run `tests/e2e` (registration, sub-user with the Operator role, a simulated mower, start and dock with live status over the WebSocket, a foreign account and a Viewer rejected, an idle socket through Traefik) against a throwaway test stack, never this one. See `tests/e2e/README.md` and "Test stack" below; CI runs it in the job `e2e`.
 
 ### Phase 2 gate (web app)
 
-With the stack up, `pnpm install` and `pnpm --filter e2e-web test` run the Playwright suite `tests/e2e-web` against `http://localhost` (`MOWDECK_E2E_BASE_URL`); `pnpm --filter e2e-web screens` writes review screenshots. CI runs it in the job `e2e-web`.
+`pnpm install`, `pnpm e2e:stack up` and `pnpm e2e:stack test` run the Playwright suite `tests/e2e-web` against the test stack at `http://localhost:8480`; `pnpm e2e:stack screens` writes review screenshots and `pnpm e2e:stack down` deletes the stack. CI runs it in the job `e2e-web`.
+
+### Test stack
+
+`docker-compose.e2e.yml` is an override for throwaway test stacks: it only adds the service `e2e-marker` (`GET /api/v1/e2e-stack` answers with the Compose project name), and both test suites refuse a stack without it. `tests/e2e-web/scripts/stack.mjs` (`pnpm e2e:stack`) starts `docker-compose.yml` plus this override as the project `mowdeck-e2e` with its own network, Traefik scope, volumes, image tag (`mowdeck/<service>:mowdeck-e2e`) and host ports from 8480 on (all on 127.0.0.1), reading only `.env.example` and `tests/e2e-web/stack.env`, never this directory's `.env`. Details and variables: `tests/e2e-web/README.md`.
 
 ### Device-Gateway
 

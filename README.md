@@ -89,7 +89,7 @@ Roadmap and what is done: [docs/phases.md](docs/phases.md).
 | `templates/` | Service template (later) |
 | `tools/` | Repository tooling, e.g. `repo-checks` (including the OpenAPI export for the web app) |
 | `tools/ts-codegen/` | Generates the web app's TypeScript API types from the OpenAPI documents and contracts JSON Schemas |
-| `tests/e2e/`, `tests/e2e-web/` | Acceptance tests (pytest and Playwright) against the Compose stack |
+| `tests/e2e/`, `tests/e2e-web/` | Acceptance tests (pytest and Playwright) against a throwaway Compose stack (`pnpm e2e:stack`, [tests/e2e-web/README.md](tests/e2e-web/README.md)) |
 | `docs/` | MkDocs site: arc42 architecture, ADRs, guides, original plan |
 
 ## Quick start
@@ -117,6 +117,14 @@ uv run poe lint          # ruff + mypy
 uv run poe test          # pytest with coverage
 uv run poe docs          # build the documentation (strict)
 pnpm install && pnpm dev # web app dev server at http://localhost:5173, proxies /api to the stack
+```
+
+End-to-end tests (Playwright and the pytest acceptance test) create users, accounts and mowers, so they run against a throwaway second stack with its own project, volumes and ports, never against the one you use; both suites refuse any stack without its e2e marker ([tests/e2e-web/README.md](tests/e2e-web/README.md)):
+
+```bash
+pnpm e2e:stack up        # Compose project mowdeck-e2e at http://localhost:8480
+pnpm e2e:stack test      # Playwright; `pnpm e2e:stack acceptance` runs tests/e2e
+pnpm e2e:stack down      # delete it again (`pnpm e2e:stack run`: up, test, down)
 ```
 
 More: [getting started](docs/dev/getting-started.md), [compose stack](infra/compose/README.md), [web app guide](docs/dev/web-app.md), [contributing](CONTRIBUTING.md).

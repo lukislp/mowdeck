@@ -102,9 +102,11 @@ The Scheduler fires mowing schedules (weekly or every N days, for a mower or a g
 
 ## Acceptance test
 
-`uv run poe e2e` runs the Phase 1 acceptance test (`tests/e2e`) against the running stack through Traefik, about two minutes including a 90 s idle WebSocket. Base URL: `MOWDECK_E2E_BASE_URL` (default `http://localhost`). CI runs it in the job `e2e` and uploads the Compose logs when it fails.
+The test suites create users, accounts and mowers, so they run against a throwaway second stack, never the one you use: `pnpm e2e:stack up` starts the Compose project `mowdeck-e2e` from the same `docker-compose.yml` plus `docker-compose.e2e.yml`, with its own volumes, network, image tag and host ports (web at `http://localhost:8480`, everything bound to 127.0.0.1), configured only from `.env.example` and `tests/e2e-web/stack.env`; `pnpm e2e:stack down` deletes it again. Both suites refuse a stack without the e2e marker that the override adds (`MOWDECK_E2E_ALLOW_ANY_STACK=1` overrides that on purpose). Details: [tests/e2e-web/README.md](https://github.com/lukislp/mowdeck/blob/main/tests/e2e-web/README.md).
 
-The Phase 2 gate for the web app is a Playwright suite (`tests/e2e-web`): with the stack up, `pnpm install` and `pnpm --filter e2e-web test` (same base URL variable). CI runs it in the job `e2e-web` and uploads the Playwright report and the Compose logs when it fails.
+`pnpm e2e:stack acceptance` runs the Phase 1 acceptance test (`tests/e2e`, `uv run poe e2e`) against the test stack through Traefik, about two minutes including a 90 s idle WebSocket. CI runs it in the job `e2e` and uploads the Compose logs when it fails.
+
+The Phase 2 gate for the web app is a Playwright suite (`tests/e2e-web`): `pnpm install`, then `pnpm e2e:stack test` (or `pnpm e2e:stack run`: up, test, down). CI runs it in the job `e2e-web` and uploads the Playwright report and the Compose logs when it fails.
 
 ## Device-Gateway
 
