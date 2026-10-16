@@ -1,9 +1,23 @@
 <!--
-  Manual drive (ADR 0026): a session over the Realtime socket, the joystick, the speed limit, the
-  two-step blade switch, the session strip and a small live map that follows the mower. Safety
-  stays with the Device-Gateway's dead-man timer: this page only stops sending. It ends the
-  session when it is left, when the tab is hidden and when the socket drops (the client reports
-  `connection_lost`), and the emergency stop (`StopBar`) is always in view.
+  Manual drive (ADR 0026) with the live camera (ADR 0044): a session over the Realtime socket,
+  the joystick, the speed limit, the two-step blade switch, the session readouts and either the
+  mower's camera (with the map as a corner thumbnail) or a live map that follows the mower. The
+  view is decided from the capabilities only (`lib/drive/layout.ts`): a mower with a `camera`
+  capability starts on the camera, the "Camera | Map" switch is remembered per browser, and a
+  mower without a camera, or a camera that failed, gets the map.
+
+  Three layouts: phones upright (camera 16:9 on top, a one-line readout, the stick, speed limit
+  and session Stop, the details folded), phones sideways (`(orientation: landscape) and
+  (max-height: 520px)`: the picture full-bleed with a translucent stick for the right thumb, the
+  emergency stop and the session Stop in a rail on the left, nothing scrolls) and desktops (the
+  picture fills the centre, the console column on the right).
+
+  Safety stays with the Device-Gateway's dead-man timer: this page only stops sending. It ends
+  the session when it is left, when the tab is hidden and when the socket drops (the client
+  reports `connection_lost`), and the emergency stop (`StopBar`) is always in view. While the
+  camera picture stands (`CameraStage` reports it frozen) the pilot holds the mower: zero frames
+  only, the blades locked, the session open; when the picture runs again the stick drives only
+  after it was centred or touched again.
 -->
 <script lang="ts">
   import {
@@ -25,17 +39,31 @@
     type StickVector,
   } from '@mowdeck/ui';
   import { onDestroy, untrack } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
 
   import { page } from '$app/state';
 
   import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
   import { asProblem, type ApiProblem } from '$lib/api/problem';
+  import type { CameraViewer } from '$lib/camera/viewer.svelte';
   import { clock } from '$lib/clock.svelte';
+  import CameraStage from '$lib/components/CameraStage.svelte';
   import LiveStatus from '$lib/components/LiveStatus.svelte';
   import SlowLoading from '$lib/components/SlowLoading.svelte';
   import StopBar from '$lib/components/StopBar.svelte';
   import { loadConfig, type MapTilesConfig } from '$lib/config';
   import { driveEndLabel, driveErrorLabel } from '$lib/drive/labels';
+  import {
+    driveView,
+    hasCamera,
+    loadDriveCameraLayout,
+    loadThumb,
+    loadView,
+    saveDriveCameraLayout,
+    saveThumb,
+    saveView,
+    type DriveView,
+  } from '$lib/drive/layout';
   import { DrivePilot, SPEED_LIMITS, clampReverse, type SpeedLimit } from '$lib/drive/pilot';
   import type { components as Fleet } from '$lib/generated/fleet';
   import { activityLabel, formatNumber, problemMessage } from '$lib/i18n';
@@ -52,6 +80,7 @@
     manual_drive?: boolean;
     manual_drive_blades?: boolean;
     drive_reverse?: boolean;
+    camera?: string | null;
   };
 
   // Units are not translated.
@@ -82,6 +111,22 @@
   let rates = $state({ sent: 0, acked: 0 });
   let now = $state(Date.now());
   let barHeight = $state(120);
+
+  // The view: camera or map (remembered per browser), the map thumbnail over the camera.
+  let storedView = $state<DriveView | null>(loadView());
+  let thumbShown = $state(loadThumb());
+  /** The camera failed during this visit: the map until the driver asks for the camera again. */
+  let cameraFailed = $state(false);
+  let viewer = $state<CameraViewer | null>(null);
+  /** The camera picture stands (or went away after it was live). */
+  let stalled = $state(false);
+  /** The pilot holds the mower or keeps the stick latched after a hold. */
+  let pilotHeld = $state(false);
+  const driveCameraLayout = loadDriveCameraLayout();
+
+  // A phone held sideways: the cockpit (picture full-bleed, the stop rail on the left).
+  const sideways = new MediaQuery('(orientation: landscape) and (max-height: 520px)');
+  const wide = new MediaQuery('(min-width: 1024px)');
 
   const pilot = new DrivePilot(realtime);
 
@@ -170,6 +215,56 @@
   const canStart = $derived(
     !live && !starting && blocker === null && caps?.manual_drive === true && canDrive === true,
   );
+
+  const cameraCapable = $derived(hasCamera(caps));
+  const view = $derived(driveView(caps, storedView, cameraFailed));
+  const cameraView = $derived(caps !== null && view === 'camera');
+  const cockpit = $derived(sideways.current);
+  /** Phones upright with the camera: the one-line readout and the folded details. */
+  const compactConsole = $derived(cameraView && !cockpit && !wide.current);
+  const holding = $derived(cameraView && stalled);
+
+  function chooseView(next: DriveView): void {
+    if (next === 'camera') cameraFailed = false;
+    storedView = next;
+    saveView(next);
+  }
+
+  function toggleThumb(): void {
+    thumbShown = !thumbShown;
+    saveThumb(thumbShown);
+  }
+
+  function toggleBoth(): void {
+    const pair = viewer?.pair;
+    if (!viewer || !pair) return;
+    if (viewer.both) void viewer.select(pair.left.uid);
+    else void viewer.showBoth();
+  }
+
+  // A camera error falls back to the map (with a note) for the rest of the visit.
+  $effect(() => {
+    if (viewer?.phase === 'error') cameraFailed = true;
+  });
+
+  // The picture stands: hold the mower (zero frames, session open) and lock the blades.
+  $effect(() => {
+    pilot.hold(holding);
+    pilotHeld = pilot.holding;
+    if (holding) untrack(disarm);
+  });
+
+  // The stick moves between the console and the picture when the phone turns: a stick that
+  // was held there is let go (one zero frame), never carried over.
+  $effect(() => {
+    void cockpit;
+    untrack(() => {
+      if (!engaged) return;
+      engaged = false;
+      if (realtime.drive) pilot.release();
+      pilotHeld = pilot.holding;
+    });
+  });
 
   function start(): void {
     startError = null;
@@ -265,6 +360,7 @@
     }
     const timer = setInterval(() => {
       rates = pilot.rates();
+      pilotHeld = pilot.holding;
       now = Date.now();
     }, 250);
     return () => clearInterval(timer);
@@ -282,11 +378,13 @@
 
   function onsample(vector: StickVector): void {
     if (live) pilot.sample(vector);
+    pilotHeld = pilot.holding;
   }
 
   function onengage(value: boolean): void {
     engaged = value;
     if (!value && live) pilot.release();
+    pilotHeld = pilot.holding;
   }
 
   const interval = $derived(session ? Math.round(1000 / Math.max(1, session.maxRateHz)) : 100);
@@ -297,9 +395,10 @@
   });
   const output = $derived.by(() => {
     const sent = clampReverse(stick, reverseCapable);
+    const moving = engaged && !pilotHeld;
     return {
-      linear: engaged ? Math.round(sent.linear * speedLimit) / 100 : 0,
-      angular: engaged ? sent.angular : 0,
+      linear: moving ? Math.round(sent.linear * speedLimit) / 100 : 0,
+      angular: moving ? sent.angular : 0,
     };
   });
   const stateWord = $derived(
@@ -314,6 +413,13 @@
   const stateKey = $derived(live ? 'live' : starting ? 'starting' : blocker ? 'off' : 'idle');
   const speedOptions = $derived(SPEED_LIMITS.map((v) => ({ value: String(v), label: `${v} %` })));
   const labels = $derived(mapLabels());
+  const delay = $derived.by(() => {
+    const value = viewer?.tracks[0]?.delayMs;
+    return value == null ? '—' : formatNumber(value);
+  });
+  const batteryText = $derived(ms ? `${formatNumber(ms.battery_percent)} %` : '—');
+  const speedText = $derived(ms?.speed_mps != null ? formatNumber(ms.speed_mps, 2) : '—');
+  const heldText = $derived(stalled && cameraView ? m.drive_held() : m.drive_recentre());
   const areaName = $derived(areaNamer(mowerMap?.areas, mower?.area_names));
 </script>
 
@@ -334,219 +440,405 @@
     />
   </div>
 {:else if mower}
-  <div class="drive" style:--bar-height="{barHeight}px" data-testid="drive-page">
-    <div class="top">
-      <TopBar
-        title={m.drive_title()}
-        meta={mower.name}
-        backHref="/mowers/{id}"
-        backLabel={m.back()}
-      >
-        {#snippet status()}
-          <LiveStatus phase={realtime.phase} tooMany={realtime.tooMany} />
-        {/snippet}
-      </TopBar>
-    </div>
-
-    <section class="map" aria-label={m.map_region()}>
-      {#if mowerMap && !mapFailed}
-        <MowerMap
-          map={mowerMap}
-          state={ms}
-          {route}
-          {stale}
-          {tiles}
-          {labels}
-          {areaName}
-          bind:follow
-          onfail={() => (mapFailed = true)}
-          testid="drive-map"
-        />
-      {:else}
-        <div class="map-empty"><span>{m.drive_map_empty()}</span></div>
-      {/if}
-    </section>
-
-    <section class="console">
-      <div class="strip" data-testid="drive-strip" data-state={stateKey}>
-        <span class="lamp" aria-hidden="true"></span>
+  {#snippet lamp(withTestid: boolean)}
+    <span class="lamp-cell" data-state={stateKey}>
+      <span class="lamp" aria-hidden="true"></span>
+      {#if withTestid}
         <span class="state" data-testid="drive-state">{stateWord}</span>
-        <dl class="cells">
-          <div>
-            <dt>{m.drive_session()}</dt>
-            <dd class="mono" data-testid="drive-session-id">
-              {session ? session.sessionId.slice(0, 8) : '—'}
-            </dd>
+      {:else}
+        <span class="state">{stateWord}</span>
+      {/if}
+    </span>
+  {/snippet}
+
+  {#snippet cells()}
+    <dl class="cells">
+      <div>
+        <dt>{m.drive_session()}</dt>
+        <dd class="mono" data-testid="drive-session-id">
+          {session ? session.sessionId.slice(0, 8) : '—'}
+        </dd>
+      </div>
+      <div>
+        <dt>{m.drive_rate_sent()}</dt>
+        <dd class="mono" data-testid="drive-rate-sent">
+          {rates.sent}<small>{PER_SECOND}</small>
+        </dd>
+      </div>
+      <div>
+        <dt>{m.drive_rate_acked()}</dt>
+        <dd class="mono" data-testid="drive-rate-acked">
+          {rates.acked}<small>{PER_SECOND}</small>
+        </dd>
+      </div>
+      <div>
+        <dt>{m.drive_ttl()}</dt>
+        <dd class="mono">
+          {session ? formatNumber(session.ttlMs) : '—'}<small>{MILLIS}</small>
+        </dd>
+      </div>
+      <div>
+        <dt>{m.drive_max_rate()}</dt>
+        <dd class="mono">
+          {session ? formatNumber(session.maxRateHz) : '—'}<small>{HERTZ}</small>
+        </dd>
+      </div>
+      <div>
+        <dt>{m.drive_time_left()}</dt>
+        <dd class="mono">{timeLeft ?? '—'}</dd>
+      </div>
+    </dl>
+  {/snippet}
+
+  {#snippet sessionButton()}
+    {#if live}
+      <Button variant="danger" full icon="stop" testid="drive-stop" onclick={end}
+        >{m.drive_stop()}</Button
+      >
+    {:else}
+      <Button
+        variant="primary"
+        full
+        icon="joystick"
+        pending={starting}
+        disabled={!canStart}
+        testid="drive-start"
+        onclick={start}>{m.drive_start()}</Button
+      >
+    {/if}
+  {/snippet}
+
+  {#snippet speedControl()}
+    <SegmentedControl
+      label={m.drive_speed_limit()}
+      options={speedOptions}
+      value={String(speedLimit)}
+      onchange={(value) => (speedLimit = Number(value) as SpeedLimit)}
+      testid="drive-speed-limit"
+    />
+  {/snippet}
+
+  {#snippet pad(overlay: boolean)}
+    <div
+      class="stick-pad"
+      class:overlay
+      data-reverse={reverseCapable ? 'true' : 'false'}
+      data-held={pilotHeld ? 'true' : 'false'}
+      data-testid="drive-pad"
+    >
+      <Joystick
+        label={m.drive_pad()}
+        hint={overlay || compactConsole ? undefined : m.drive_pad_hint()}
+        disabled={!live}
+        {overlay}
+        {interval}
+        bind:value={stick}
+        {onsample}
+        {onengage}
+        testid="joystick"
+      />
+      {#if !reverseCapable && !overlay}
+        <p class="no-reverse" data-testid="drive-no-reverse">
+          <Icon name="alert" size={14} />{m.drive_no_reverse()}
+        </p>
+      {/if}
+    </div>
+  {/snippet}
+
+  {#snippet notices()}
+    {#if startError}
+      <div class="notice" data-testid="drive-error">
+        <ProblemNotice title={startError} />
+      </div>
+    {:else if blocker && !live}
+      <div class="notice" data-testid="drive-blocked">
+        <ProblemNotice tone="info" title={blocker} />
+      </div>
+    {/if}
+  {/snippet}
+
+  <div
+    class="drive"
+    class:cockpit
+    class:camera-view={cameraView}
+    class:compact-console={compactConsole}
+    style:--bar-height="{barHeight}px"
+    data-testid="drive-page"
+    data-view={caps === null ? 'pending' : view}
+    data-layout={cockpit ? 'sideways' : wide.current ? 'desktop' : 'upright'}
+  >
+    {#if !cockpit}
+      <div class="top">
+        <TopBar
+          title={m.drive_title()}
+          meta={mower.name}
+          backHref="/mowers/{id}"
+          backLabel={m.back()}
+        >
+          {#snippet status()}
+            <LiveStatus phase={realtime.phase} tooMany={realtime.tooMany} />
+          {/snippet}
+        </TopBar>
+      </div>
+    {/if}
+
+    <section class="view" aria-label={cameraView ? m.camera_title() : m.map_region()}>
+      <div class="screen">
+        {#if caps === null}
+          <div class="map-empty"><span><SlowLoading /></span></div>
+        {:else if cameraView}
+          <CameraStage
+            mowerId={id}
+            mowerName={mower.name}
+            position={ms?.position ?? null}
+            compact
+            frontLeft
+            layout={driveCameraLayout}
+            saveLayout={saveDriveCameraLayout}
+            bind:viewer
+            bind:stalled
+          />
+          {#if mowerMap && !mapFailed}
+            {#if thumbShown}
+              <div class="thumb" data-testid="drive-map-thumb">
+                <MowerMap
+                  map={mowerMap}
+                  state={ms}
+                  {route}
+                  {stale}
+                  {tiles}
+                  {labels}
+                  {areaName}
+                  follow
+                  onfail={() => (mapFailed = true)}
+                  testid="drive-map"
+                />
+                <button
+                  type="button"
+                  class="thumb-hit"
+                  aria-label={m.drive_map_thumb_hide()}
+                  data-testid="drive-map-thumb-hide"
+                  onclick={toggleThumb}
+                ></button>
+              </div>
+            {:else}
+              <button
+                type="button"
+                class="thumb-show"
+                data-testid="drive-map-thumb-show"
+                onclick={toggleThumb}
+              >
+                <Icon name="layers" size={16} />{m.drive_map_thumb_show()}
+              </button>
+            {/if}
+          {/if}
+        {:else if mowerMap && !mapFailed}
+          <MowerMap
+            map={mowerMap}
+            state={ms}
+            {route}
+            {stale}
+            {tiles}
+            {labels}
+            {areaName}
+            bind:follow
+            onfail={() => (mapFailed = true)}
+            testid="drive-map"
+          />
+        {:else}
+          <div class="map-empty"><span>{m.drive_map_empty()}</span></div>
+        {/if}
+
+        {#if cameraCapable || cameraFailed}
+          <div class="tools">
+            {#if cameraFailed}
+              <p class="camera-note" role="status" data-testid="drive-camera-unavailable">
+                <Icon name="alert" size={14} />{m.drive_camera_unavailable()}
+              </p>
+            {/if}
+            {#if cameraCapable}
+              <SegmentedControl
+                label={m.drive_view()}
+                options={[
+                  { value: 'camera', label: m.drive_view_camera() },
+                  { value: 'map', label: m.drive_view_map() },
+                ]}
+                value={view}
+                onchange={(value) => chooseView(value === 'map' ? 'map' : 'camera')}
+                testid="drive-view"
+              />
+            {/if}
+            {#if cameraView && viewer?.pair}
+              <button
+                type="button"
+                class="tool"
+                aria-pressed={viewer.both}
+                data-testid="drive-camera-both"
+                aria-label={m.drive_camera_both()}
+                onclick={toggleBoth}
+                ><Icon name="camera" size={16} /><span class="tool-text"
+                  >{m.drive_camera_both()}</span
+                ></button
+              >
+            {/if}
           </div>
-          <div>
-            <dt>{m.drive_rate_sent()}</dt>
-            <dd class="mono" data-testid="drive-rate-sent">
-              {rates.sent}<small>{PER_SECOND}</small>
-            </dd>
+        {/if}
+
+        {#if cockpit}
+          <div class="cockpit-foot">
+            {@render speedControl()}
           </div>
-          <div>
-            <dt>{m.drive_rate_acked()}</dt>
-            <dd class="mono" data-testid="drive-rate-acked">
-              {rates.acked}<small>{PER_SECOND}</small>
-            </dd>
+          <div class="cockpit-stick">
+            {@render pad(true)}
           </div>
-          <div>
-            <dt>{m.drive_ttl()}</dt>
-            <dd class="mono">
-              {session ? formatNumber(session.ttlMs) : '—'}<small>{MILLIS}</small>
-            </dd>
-          </div>
-          <div>
-            <dt>{m.drive_max_rate()}</dt>
-            <dd class="mono">
-              {session ? formatNumber(session.maxRateHz) : '—'}<small>{HERTZ}</small>
-            </dd>
-          </div>
-          <div>
-            <dt>{m.drive_time_left()}</dt>
-            <dd class="mono">{timeLeft ?? '—'}</dd>
-          </div>
-        </dl>
+        {/if}
       </div>
 
-      {#if startError}
-        <div class="notice" data-testid="drive-error">
-          <ProblemNotice title={startError} />
-        </div>
-      {:else if blocker && !live}
-        <div class="notice" data-testid="drive-blocked">
-          <ProblemNotice tone="info" title={blocker} />
+      {#if cameraView || cockpit}
+        <div class="hud" role="group" aria-label={m.drive_hud()} data-testid="drive-hud">
+          {#if cockpit}
+            <Button variant="ghost" icon="back" href="/mowers/{id}" label={m.back()} />
+          {/if}
+          {#if cockpit || compactConsole}
+            {@render lamp(true)}
+          {:else}
+            {@render lamp(false)}
+          {/if}
+          <span class="hud-cell" data-testid="drive-hud-battery">
+            <small>{m.detail_battery()}</small><b class="mono">{batteryText}</b>
+          </span>
+          <span class="hud-cell" data-testid="drive-hud-speed">
+            <small>{m.drive_speed()}</small><b class="mono">{speedText}<i>m/s</i></b>
+          </span>
+          {#if cameraView}
+            <span class="hud-cell" data-testid="drive-hud-delay">
+              <small>{m.drive_delay()}</small><b class="mono">{delay}<i>{MILLIS}</i></b>
+            </span>
+          {/if}
+          {#if armed && bladesOn}
+            <button type="button" class="blades-on" data-testid="drive-hud-blades" onclick={disarm}
+              ><Icon name="blade" size={14} />{m.drive_blades_disarm()}</button
+            >
+          {/if}
         </div>
       {/if}
-
-      <div class="stick">
-        <div
-          class="stick-pad"
-          data-reverse={reverseCapable ? 'true' : 'false'}
-          data-testid="drive-pad"
-        >
-          <Joystick
-            label={m.drive_pad()}
-            hint={m.drive_pad_hint()}
-            disabled={!live}
-            {interval}
-            bind:value={stick}
-            {onsample}
-            {onengage}
-            testid="joystick"
-          />
-          {#if !reverseCapable}
-            <p class="no-reverse" data-testid="drive-no-reverse">
-              <Icon name="alert" size={14} />{m.drive_no_reverse()}
-            </p>
-          {/if}
-        </div>
-        <SegmentedControl
-          label={m.drive_speed_limit()}
-          options={speedOptions}
-          value={String(speedLimit)}
-          onchange={(value) => (speedLimit = Number(value) as SpeedLimit)}
-          testid="drive-speed-limit"
-        />
-        <div class="session-actions">
-          {#if live}
-            <Button variant="danger" full icon="stop" testid="drive-stop" onclick={end}
-              >{m.drive_stop()}</Button
-            >
-            <p class="hint">{m.drive_stop_hint()}</p>
-          {:else}
-            <Button
-              variant="primary"
-              full
-              icon="joystick"
-              pending={starting}
-              disabled={!canStart}
-              testid="drive-start"
-              onclick={start}>{m.drive_start()}</Button
-            >
-          {/if}
-        </div>
-      </div>
-
-      <div class="status">
-        {#if activity}
-          <StatusBadge {activity} label={activityLabel(activity)} {stale} />
-        {:else}
-          <StatusBadge activity="unknown" label={m.activity_no_telemetry()} />
-        {/if}
-        <div class="readouts">
-          <Readout
-            label={m.drive_speed()}
-            value={ms?.speed_mps != null ? formatNumber(ms.speed_mps, 2) : null}
-            unit="m/s"
-            emptyText={m.no_data()}
-            testid="drive-speed"
-          />
-          <Readout
-            label={m.detail_battery()}
-            value={ms ? formatNumber(ms.battery_percent) : null}
-            unit="%"
-            emptyText={m.no_data()}
-          >
-            <BatteryBar percent={ms?.battery_percent ?? null} charging={ms?.charging} />
-          </Readout>
-          <Readout
-            label={m.drive_linear()}
-            value={formatNumber(output.linear, 2)}
-            emptyText={m.no_data()}
-            size="inline"
-            testid="drive-out-linear"
-          />
-          <Readout
-            label={m.drive_angular()}
-            value={formatNumber(output.angular, 2)}
-            emptyText={m.no_data()}
-            size="inline"
-            testid="drive-out-angular"
-          />
-        </div>
-      </div>
-
-      <div class="controls">
-        <Panel label={m.drive_blades()} testid="drive-blades">
-          {#if bladesCapable}
-            <div class="arm" data-armed={armed}>
-              <span class="arm-state">
-                <Icon name={armed ? 'alert' : 'blade'} size={18} />
-                {armed ? m.drive_blades_armed() : m.drive_blades_locked()}
-              </span>
-              <Button
-                variant={armed ? 'ghost' : 'secondary'}
-                icon={armed ? 'close' : 'blade'}
-                disabled={!live || session?.bladeOnAllowed !== true}
-                testid="drive-blades-arm"
-                onclick={() => (armed ? disarm() : (armed = true))}
-                >{armed ? m.drive_blades_disarm() : m.drive_blades_arm()}</Button
-              >
-            </div>
-            <Switch
-              id="drive-blades"
-              testid="drive-blades-switch"
-              label={m.drive_blades_switch()}
-              hint={live ? m.drive_blades_switch_hint() : m.drive_blades_session()}
-              states={{ on: m.switch_on(), off: m.switch_off() }}
-              disabled={!live || !armed}
-              bind:checked={bladesOn}
-            />
-          {:else}
-            <p class="hint">{m.drive_blades_unsupported()}</p>
-          {/if}
-        </Panel>
-
-        <Panel label={m.drive_safety_title()}>
-          <p class="hint">
-            {m.drive_safety({ ttl: formatNumber(session?.ttlMs ?? 1000) })}
-          </p>
-        </Panel>
-      </div>
+      {#if pilotHeld && live}
+        <p class="held" role="alert" data-testid="drive-held">
+          <Icon name="pause" size={16} />{heldText}
+        </p>
+      {/if}
+      {#if cockpit}
+        <div class="cockpit-notices">{@render notices()}</div>
+      {/if}
     </section>
 
-    <StopBar mowerId={id} onbeforestop={end} bind:height={barHeight} />
+    {#if !cockpit}
+      <section class="console">
+        {#if compactConsole}
+          <details class="details" data-testid="drive-details">
+            <summary>{m.drive_details()}</summary>
+            {@render cells()}
+          </details>
+        {:else}
+          <div class="strip" data-testid="drive-strip" data-state={stateKey}>
+            {@render lamp(true)}
+            {@render cells()}
+          </div>
+        {/if}
+
+        {@render notices()}
+
+        <div class="stick">
+          {@render pad(false)}
+          {@render speedControl()}
+          <div class="session-actions">
+            {@render sessionButton()}
+            {#if live && !compactConsole}<p class="hint">{m.drive_stop_hint()}</p>{/if}
+          </div>
+        </div>
+
+        <div class="status">
+          {#if activity}
+            <StatusBadge {activity} label={activityLabel(activity)} {stale} />
+          {:else}
+            <StatusBadge activity="unknown" label={m.activity_no_telemetry()} />
+          {/if}
+          <div class="readouts">
+            <Readout
+              label={m.drive_speed()}
+              value={ms?.speed_mps != null ? formatNumber(ms.speed_mps, 2) : null}
+              unit="m/s"
+              emptyText={m.no_data()}
+              testid="drive-speed"
+            />
+            <Readout
+              label={m.detail_battery()}
+              value={ms ? formatNumber(ms.battery_percent) : null}
+              unit="%"
+              emptyText={m.no_data()}
+            >
+              <BatteryBar percent={ms?.battery_percent ?? null} charging={ms?.charging} />
+            </Readout>
+            <Readout
+              label={m.drive_linear()}
+              value={formatNumber(output.linear, 2)}
+              emptyText={m.no_data()}
+              size="inline"
+              testid="drive-out-linear"
+            />
+            <Readout
+              label={m.drive_angular()}
+              value={formatNumber(output.angular, 2)}
+              emptyText={m.no_data()}
+              size="inline"
+              testid="drive-out-angular"
+            />
+          </div>
+        </div>
+
+        <div class="controls">
+          <Panel label={m.drive_blades()} testid="drive-blades">
+            {#if bladesCapable}
+              <div class="arm" data-armed={armed}>
+                <span class="arm-state">
+                  <Icon name={armed ? 'alert' : 'blade'} size={18} />
+                  {armed ? m.drive_blades_armed() : m.drive_blades_locked()}
+                </span>
+                <Button
+                  variant={armed ? 'ghost' : 'secondary'}
+                  icon={armed ? 'close' : 'blade'}
+                  disabled={!live || session?.bladeOnAllowed !== true || pilotHeld}
+                  testid="drive-blades-arm"
+                  onclick={() => (armed ? disarm() : (armed = true))}
+                  >{armed ? m.drive_blades_disarm() : m.drive_blades_arm()}</Button
+                >
+              </div>
+              <Switch
+                id="drive-blades"
+                testid="drive-blades-switch"
+                label={m.drive_blades_switch()}
+                hint={live ? m.drive_blades_switch_hint() : m.drive_blades_session()}
+                states={{ on: m.switch_on(), off: m.switch_off() }}
+                disabled={!live || !armed}
+                bind:checked={bladesOn}
+              />
+            {:else}
+              <p class="hint">{m.drive_blades_unsupported()}</p>
+            {/if}
+          </Panel>
+
+          <Panel label={m.drive_safety_title()}>
+            <p class="hint">
+              {m.drive_safety({ ttl: formatNumber(session?.ttlMs ?? 1000) })}
+            </p>
+          </Panel>
+        </div>
+      </section>
+    {/if}
+
+    <StopBar mowerId={id} onbeforestop={end} rail={cockpit} bind:height={barHeight}>
+      {@render sessionButton()}
+    </StopBar>
   </div>
 {:else}
   <p class="pad quiet" role="status"><SlowLoading /></p>
@@ -566,7 +858,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Phones: header, a short map, the console; the command bar with the stop is fixed. */
+  /* Phones upright: header, the view (camera 16:9 or a short map), the console; the bar is fixed. */
   .drive {
     display: flex;
     flex-direction: column;
@@ -578,11 +870,26 @@
     display: contents;
   }
 
-  .map {
+  .view {
     position: relative;
-    height: min(30dvh, 260px);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .screen {
+    position: relative;
+    height: min(calc(var(--md-viewport-height) * 0.3), 260px);
     min-height: 180px;
+    overflow: hidden;
     border-block: var(--md-hairline) solid var(--md-color-line);
+  }
+
+  .camera-view .screen {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 16 / 9;
+    border-block: 0;
+    background: var(--md-hud-glass-strong);
   }
 
   .map-empty {
@@ -596,39 +903,194 @@
     text-align: center;
   }
 
-  .console {
+  /* --- the tools over the picture: view switch, both cameras, camera note ------------------- */
+
+  .tools {
+    position: absolute;
+    top: var(--md-space-2);
+    right: var(--md-space-2);
+    z-index: 5;
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--md-space-1);
+    max-width: calc(100% - var(--md-space-4));
+    pointer-events: none;
+  }
+
+  .tools > :global(*) {
+    pointer-events: auto;
+  }
+
+  .tools :global(.md-segmented) {
     background: var(--md-color-surface);
   }
 
-  .strip {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+  .tool,
+  .thumb-show {
+    display: inline-flex;
     align-items: center;
-    gap: var(--md-space-1) var(--md-space-2);
-    padding: var(--md-space-3) var(--md-gutter);
+    gap: var(--md-space-1);
+    min-height: var(--md-target);
+    padding: 0 var(--md-space-3);
+    border: var(--md-hairline) solid var(--md-hud-line);
+    border-radius: var(--md-radius-2);
+    background: var(--md-hud-glass);
+    color: var(--md-hud-ink);
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-12);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .tool[aria-pressed='true'] {
+    border-color: var(--md-hud-ink);
+    background: var(--md-hud-ink);
+    color: var(--md-color-ink);
+  }
+
+  .camera-note {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--md-space-1);
+    margin: 0;
+    padding: var(--md-space-1) var(--md-space-2);
+    border: var(--md-hairline) solid var(--md-state-paused);
+    border-radius: var(--md-radius-1);
+    background: var(--md-color-surface);
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-12);
+  }
+
+  /* --- the map thumbnail in a corner of the picture ------------------------------------------ */
+
+  .thumb {
+    position: absolute;
+    right: var(--md-space-2);
+    bottom: var(--md-space-2);
+    z-index: 4;
+    width: clamp(112px, 32%, 240px);
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border: var(--md-border-control) solid var(--md-hud-ink);
+    border-radius: var(--md-radius-2);
+    box-shadow: var(--md-shadow-float);
+  }
+
+  .thumb :global(.controls),
+  .thumb :global(.legend),
+  .thumb :global(.layers),
+  .thumb :global(.scale),
+  .thumb :global(.north),
+  .thumb :global(.chip),
+  .thumb :global(.attribution) {
+    display: none;
+  }
+
+  .thumb-hit {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .thumb-hit:focus-visible {
+    outline: 3px solid var(--md-color-focus);
+    outline-offset: -3px;
+  }
+
+  .thumb-show {
+    position: absolute;
+    right: var(--md-space-2);
+    bottom: var(--md-space-2);
+    z-index: 4;
+  }
+
+  /* --- the one-line readout (under the picture upright, glass over it otherwise) ------------- */
+
+  .hud {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--md-space-1) var(--md-space-3);
+    min-height: 40px;
+    padding: var(--md-space-1) var(--md-gutter);
     border-bottom: var(--md-hairline) solid var(--md-color-line);
     background: var(--md-color-surface-sunken);
+  }
+
+  .hud-cell {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--md-space-1);
+    min-width: 0;
+  }
+
+  .hud-cell small {
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-11);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+  }
+
+  .hud-cell b {
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-14);
+    font-weight: var(--md-weight-semibold);
+  }
+
+  .hud-cell i {
+    margin-inline-start: var(--md-space-0_5);
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-11);
+    font-style: normal;
+  }
+
+  .blades-on {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--md-space-1);
+    min-height: 32px;
+    padding: 0 var(--md-space-2);
+    border: 0;
+    border-radius: var(--md-radius-1);
+    background: var(--md-state-paused);
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-12);
+    font-weight: var(--md-weight-semibold);
+    cursor: pointer;
+  }
+
+  .lamp-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--md-space-2);
   }
 
   .lamp {
     width: 10px;
     height: 10px;
+    flex: none;
     border: var(--md-border-control) solid var(--md-state-unknown);
     background: transparent;
   }
 
-  .strip[data-state='live'] .lamp {
+  .lamp-cell[data-state='live'] .lamp {
     border-color: var(--md-state-mowing);
     background: var(--md-state-mowing);
   }
 
-  .strip[data-state='starting'] .lamp {
+  .lamp-cell[data-state='starting'] .lamp {
     border-color: var(--md-state-returning);
   }
 
-  .strip[data-state='off'] .lamp {
+  .lamp-cell[data-state='off'] .lamp {
     border-style: dashed;
     border-color: var(--md-state-offline);
   }
@@ -641,12 +1103,104 @@
     text-transform: uppercase;
   }
 
-  .strip[data-state='live'] .state {
+  .lamp-cell[data-state='live'] .state {
     color: var(--md-state-mowing);
   }
 
+  /* The pilot holds the mower (picture frozen) or waits for the stick to be centred. */
+  .held {
+    display: flex;
+    align-items: center;
+    gap: var(--md-space-2);
+    margin: 0;
+    padding: var(--md-space-2) var(--md-gutter);
+    background: var(--md-state-error);
+    color: var(--md-color-ink-inverse);
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-13);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+  }
+
+  /*
+   * Phones upright with the camera: the tools shrink to small glass chips so the picture stays
+   * readable, and the readout is one line.
+   */
+  .compact-console .tools :global(.md-segmented button) {
+    min-height: 36px;
+    padding: 0 var(--md-space-2);
+    font-size: var(--md-font-size-12);
+  }
+
+  .compact-console .tool {
+    min-height: 36px;
+    padding: 0 var(--md-space-2);
+  }
+
+  .compact-console .tool-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .compact-console .hud {
+    flex-wrap: nowrap;
+    gap: var(--md-space-2) var(--md-space-3);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .compact-console .hud-cell small {
+    font-size: var(--md-font-size-11);
+  }
+
+  .compact-console .hud-cell b {
+    font-size: var(--md-font-size-13);
+  }
+
+  /* --- the console ---------------------------------------------------------------------------- */
+
+  .console {
+    display: flex;
+    flex-direction: column;
+    background: var(--md-color-surface);
+  }
+
+  .strip {
+    display: grid;
+    gap: var(--md-space-2);
+    padding: var(--md-space-3) var(--md-gutter);
+    border-bottom: var(--md-hairline) solid var(--md-color-line);
+    background: var(--md-color-surface-sunken);
+  }
+
+  .details {
+    border-bottom: var(--md-hairline) solid var(--md-color-line);
+    background: var(--md-color-surface-sunken);
+  }
+
+  .details summary {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 var(--md-gutter);
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .details .cells {
+    padding: 0 var(--md-gutter) var(--md-space-3);
+  }
+
   .cells {
-    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--md-space-2) var(--md-space-3);
@@ -704,7 +1258,16 @@
     background: var(--md-color-bg);
   }
 
-  .stick > :global(.md-segmented) {
+  .compact-console .stick {
+    --md-stick-size: 240px;
+
+    gap: var(--md-space-2);
+    padding-block: var(--md-space-3);
+    border-top: 0;
+  }
+
+  .stick > :global(.md-segmented),
+  .cockpit-foot > :global(.md-segmented) {
     width: 100%;
   }
 
@@ -727,8 +1290,18 @@
     pointer-events: none;
   }
 
+  .stick-pad.overlay[data-reverse='false'] :global(.md-joystick)::before {
+    background: repeating-linear-gradient(-45deg, var(--md-hud-line) 0 2px, transparent 2px 9px);
+  }
+
   .stick-pad[data-reverse='false'] :global(.md-joystick path:nth-of-type(2)) {
     visibility: hidden;
+  }
+
+  /* Held: the pad is ringed in the error colour, so the stick's silence is visible. */
+  .stick-pad[data-held='true'] :global(.md-joystick) {
+    outline: 3px solid var(--md-state-error);
+    outline-offset: 3px;
   }
 
   .no-reverse {
@@ -786,13 +1359,130 @@
     line-height: var(--md-line-20);
   }
 
-  /* Desktop: the map fills the centre, the console is the instrument column. */
+  /*
+   * A phone held sideways: the cockpit. The page covers the screen (and the bottom navigation),
+   * the picture or the map fills it, the stop rail takes the left edge, the stick floats over
+   * the right; nothing scrolls.
+   */
+  .cockpit {
+    position: fixed;
+    inset: var(--md-safe-top) 0 0;
+    z-index: 21;
+    display: block;
+    height: var(--md-viewport-height);
+    padding: 0 0 0 calc(var(--md-stop-rail, 112px) + env(safe-area-inset-left, 0px));
+    overflow: hidden;
+    background: var(--md-hud-glass-strong);
+  }
+
+  .cockpit .view {
+    height: 100%;
+  }
+
+  .cockpit .screen,
+  .cockpit.camera-view .screen {
+    height: 100%;
+    min-height: 0;
+    aspect-ratio: auto;
+    border: 0;
+  }
+
+  .cockpit .hud {
+    position: absolute;
+    top: var(--md-space-2);
+    left: var(--md-space-2);
+    z-index: 6;
+    max-width: calc(100% - var(--md-space-4));
+    min-height: 0;
+    padding: var(--md-space-1) var(--md-space-3) var(--md-space-1) var(--md-space-1);
+    border: var(--md-hairline) solid var(--md-hud-line);
+    border-radius: var(--md-radius-2);
+    background: var(--md-hud-glass);
+  }
+
+  .cockpit .hud :global(.md-button) {
+    min-height: 40px;
+    color: var(--md-hud-ink);
+  }
+
+  .cockpit .hud-cell small,
+  .cockpit .hud-cell i {
+    color: var(--md-hud-ink-muted);
+  }
+
+  .cockpit .hud-cell b,
+  .cockpit .lamp-cell .state {
+    color: var(--md-hud-ink);
+  }
+
+  .cockpit .tools {
+    top: calc(var(--md-space-2) + 52px);
+  }
+
+  .cockpit .thumb,
+  .cockpit .thumb-show {
+    right: auto;
+    left: var(--md-space-2);
+    bottom: calc(var(--md-space-2) + var(--md-target) + var(--md-space-2));
+    width: clamp(112px, 24%, 180px);
+  }
+
+  .cockpit .thumb-show {
+    width: auto;
+  }
+
+  .cockpit-foot {
+    position: absolute;
+    bottom: calc(var(--md-space-2) + env(safe-area-inset-bottom, 0px));
+    left: var(--md-space-2);
+    z-index: 5;
+    width: min(252px, 42%);
+  }
+
+  .cockpit-foot :global(.md-segmented button) {
+    white-space: nowrap;
+  }
+
+  .cockpit-foot :global(.md-segmented) {
+    background: var(--md-color-surface);
+  }
+
+  .cockpit-stick {
+    --md-stick-size: min(calc(var(--md-viewport-height) * 0.56), 210px);
+
+    position: absolute;
+    right: calc(var(--md-space-4) + env(safe-area-inset-right, 0px));
+    bottom: calc(var(--md-space-3) + env(safe-area-inset-bottom, 0px));
+    z-index: 6;
+  }
+
+  .cockpit .held {
+    position: absolute;
+    top: calc(var(--md-space-2) + 52px);
+    left: var(--md-space-2);
+    z-index: 7;
+    border-radius: var(--md-radius-2);
+  }
+
+  .cockpit-notices {
+    position: absolute;
+    top: calc(var(--md-space-2) + 52px);
+    left: var(--md-space-2);
+    z-index: 6;
+    width: min(360px, 55%);
+  }
+
+  .cockpit-notices .notice {
+    padding: 0;
+  }
+
+  /* Desktop: the view fills the centre, the console is the instrument column. */
   @media (min-width: 1024px) {
-    .drive {
+    .drive:not(.cockpit) {
       display: grid;
       grid-template-columns: minmax(0, 1fr) var(--md-instrument-column);
       grid-template-rows: auto minmax(0, 1fr);
-      grid-template-areas: 'top top' 'map console';
+      grid-template-areas: 'top top' 'view console';
       height: var(--md-viewport-height);
       padding-bottom: 0;
       overflow: hidden;
@@ -803,11 +1493,60 @@
       grid-area: top;
     }
 
-    .map {
-      grid-area: map;
+    .view {
+      grid-area: view;
+      min-height: 0;
+    }
+
+    .drive:not(.cockpit) .screen {
+      flex: 1;
       height: auto;
       min-height: 0;
+      aspect-ratio: auto;
       border-block: 0;
+    }
+
+    /* The readout floats over the picture, glass, top left. */
+    .camera-view:not(.cockpit) .hud {
+      position: absolute;
+      top: var(--md-space-3);
+      left: var(--md-space-3);
+      z-index: 6;
+      min-height: 0;
+      padding: var(--md-space-2) var(--md-space-3);
+      border: var(--md-hairline) solid var(--md-hud-line);
+      border-radius: var(--md-radius-2);
+      background: var(--md-hud-glass);
+    }
+
+    .camera-view:not(.cockpit) .hud-cell small,
+    .camera-view:not(.cockpit) .hud-cell i {
+      color: var(--md-hud-ink-muted);
+    }
+
+    .camera-view:not(.cockpit) .hud-cell b,
+    .camera-view:not(.cockpit) .hud .state {
+      color: var(--md-hud-ink);
+    }
+
+    .camera-view:not(.cockpit) .held {
+      position: absolute;
+      bottom: var(--md-space-3);
+      left: 50%;
+      z-index: 7;
+      border-radius: var(--md-radius-2);
+      transform: translateX(-50%);
+    }
+
+    .camera-view:not(.cockpit) .thumb,
+    .camera-view:not(.cockpit) .thumb-show {
+      right: var(--md-space-3);
+      bottom: var(--md-space-3);
+    }
+
+    .camera-view:not(.cockpit) .tools {
+      top: var(--md-space-3);
+      right: var(--md-space-3);
     }
 
     .console {
@@ -818,7 +1557,7 @@
       border-inline-start: var(--md-hairline) solid var(--md-color-line);
     }
 
-    .stick :global(.md-joystick) {
+    .stick {
       --md-stick-size: 232px;
     }
 

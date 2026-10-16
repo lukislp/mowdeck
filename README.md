@@ -47,6 +47,7 @@ What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extr
 **Cameras** (where the mower has them)
 
 - Both front cameras live in the browser, single or side by side.
+- Drive manually with the camera: on a phone held sideways the picture fills the screen with a translucent joystick and the emergency stop on a side rail; the map shrinks to a corner. A frozen picture is marked and holds the mower until it runs again.
 - Camera headlamp switch; stereo frames and automatic analysis for the AI assistant.
 
 **AI assistant (optional, your own model key)**

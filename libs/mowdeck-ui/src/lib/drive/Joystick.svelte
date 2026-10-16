@@ -5,6 +5,10 @@
   dead zone) through `onsample` at a fixed cadence (`interval`, the first sample at once); letting
   go, Escape, blur or `disabled` end the hold (`onengage(false)`). The pad never sends anything
   itself: the page turns samples into drive frames.
+
+  Size: the CSS variable `--md-stick-size` (set on the pad or any ancestor; default
+  `min(78vw, 300px)`). `overlay` is the variant that floats over a camera picture: a translucent,
+  blurred face with light rings, so the picture stays readable under the thumb's travel.
 -->
 <script lang="ts">
   import { onDestroy } from 'svelte';
@@ -33,6 +37,8 @@
     value?: StickVector;
     onsample?: (vector: StickVector) => void;
     onengage?: (engaged: boolean) => void;
+    /** Floats over a picture (translucent face, light marks). */
+    overlay?: boolean;
     testid?: string;
   }
   let {
@@ -44,6 +50,7 @@
     value = $bindable({ ...STICK_ZERO }),
     onsample,
     onengage,
+    overlay = false,
     testid = 'joystick',
   }: Props = $props();
 
@@ -157,6 +164,7 @@
   class="md-joystick"
   class:engaged
   class:disabled
+  class:overlay
   role="application"
   aria-roledescription="joystick"
   aria-label={label}
@@ -164,6 +172,7 @@
   aria-disabled={disabled}
   tabindex={disabled ? -1 : 0}
   data-testid={testid}
+  data-variant={overlay ? 'overlay' : 'pad'}
   data-engaged={engaged}
   data-linear={value.linear}
   data-angular={value.angular}
@@ -198,11 +207,11 @@
 
 <style>
   .md-joystick {
-    --md-stick-size: min(78vw, 300px);
     --md-stick-thumb: 72px;
+    --stick: var(--md-stick-size, min(78vw, 300px));
 
     position: relative;
-    width: var(--md-stick-size);
+    width: var(--stick);
     aspect-ratio: 1;
     margin-inline: auto;
     border: var(--md-border-control) solid var(--md-color-line-strong);
@@ -277,8 +286,8 @@
       0 0 0 var(--md-border-control) var(--md-color-ink),
       var(--md-shadow-float);
     transform: translate(
-      calc(-50% + var(--md-stick-x) * (var(--md-stick-size) / 2 - var(--md-stick-thumb) / 2)),
-      calc(-50% + var(--md-stick-y) * (var(--md-stick-size) / 2 - var(--md-stick-thumb) / 2))
+      calc(-50% + var(--md-stick-x) * (var(--stick) / 2 - var(--md-stick-thumb) / 2)),
+      calc(-50% + var(--md-stick-y) * (var(--stick) / 2 - var(--md-stick-thumb) / 2))
     );
     transition: transform var(--md-motion-fast) var(--md-ease);
     pointer-events: none;
@@ -296,6 +305,56 @@
   .disabled .thumb {
     border-color: var(--md-color-surface-sunken);
     background: var(--md-color-ink-muted);
+    box-shadow: none;
+  }
+
+  /*
+   * Over a camera picture: the face is a translucent, blurred disc with light marks; the thumb
+   * keeps its solid ink so the deflection reads at a glance. The picture shows through.
+   */
+  .overlay {
+    --md-stick-thumb: 64px;
+
+    border-color: var(--md-hud-line);
+    background: var(--md-hud-glass);
+    backdrop-filter: blur(3px);
+  }
+
+  .overlay .ring,
+  .overlay .dead {
+    stroke: var(--md-hud-line);
+  }
+
+  .overlay .dead {
+    fill: var(--md-hud-glass);
+  }
+
+  .overlay .axis {
+    stroke: var(--md-hud-line);
+  }
+
+  .overlay .mark,
+  .overlay.engaged .mark {
+    fill: var(--md-hud-ink);
+  }
+
+  .overlay .vector {
+    stroke: var(--md-hud-ink);
+  }
+
+  .overlay.engaged {
+    border-color: var(--md-hud-ink);
+  }
+
+  .overlay .thumb {
+    border-color: var(--md-hud-ink);
+    background: var(--md-hud-glass-strong);
+    box-shadow: var(--md-shadow-float);
+  }
+
+  .overlay.disabled .thumb {
+    border-color: var(--md-hud-ink-muted);
+    background: var(--md-hud-glass);
     box-shadow: none;
   }
 

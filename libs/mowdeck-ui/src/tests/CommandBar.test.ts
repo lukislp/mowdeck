@@ -66,4 +66,34 @@ describe('CommandBar', () => {
     });
     expect(screen.getByRole('status')).toHaveTextContent('sent');
   });
+
+  it('is a horizontal bar by default with the stop in its row form', () => {
+    renderBar([start]);
+    const bar = screen.getByRole('toolbar', { name: 'Commands' });
+    expect(bar).toHaveAttribute('data-variant', 'bar');
+    expect(bar).toHaveAttribute('aria-orientation', 'horizontal');
+    expect(screen.getByTestId('emergency-stop')).not.toHaveClass('upright');
+  });
+
+  it('has a vertical rail form that still always carries the stop', async () => {
+    const onstop = vi.fn();
+    render(CommandBar, {
+      props: {
+        actions: [start],
+        onaction: vi.fn(),
+        onstop,
+        stopLabel: 'Stop',
+        label: 'C',
+        rail: true,
+      },
+    });
+    const bar = screen.getByRole('toolbar', { name: 'C' });
+    expect(bar).toHaveAttribute('data-variant', 'rail');
+    expect(bar).toHaveAttribute('aria-orientation', 'vertical');
+    const stop = screen.getByTestId('emergency-stop');
+    expect(stop).toHaveClass('upright');
+    expect(stop).toBeEnabled();
+    await fireEvent.click(stop);
+    expect(onstop).toHaveBeenCalledOnce();
+  });
 });

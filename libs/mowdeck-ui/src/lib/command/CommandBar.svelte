@@ -1,7 +1,8 @@
 <!--
   The command bar of a mower: the commands the caller may use and, always, the emergency stop.
   Actions the caller lacks the permission for are not passed in at all; disabled actions stay
-  visible and say why. The stop cannot be hidden by any prop.
+  visible and say why. The stop cannot be hidden by any prop. `rail` is the narrow vertical form
+  for a phone held sideways: actions stacked, the stop upright at the foot, no bar chrome.
 -->
 <script lang="ts">
   import Icon from '../icons/Icon.svelte';
@@ -17,6 +18,8 @@
     onstop: () => void;
     /** Accessible name of the toolbar. */
     label: string;
+    /** Narrow vertical rail instead of the bottom bar. */
+    rail?: boolean;
   }
   let {
     actions,
@@ -26,10 +29,18 @@
     stopState = 'idle',
     onstop,
     label,
+    rail = false,
   }: Props = $props();
 </script>
 
-<div class="md-command-bar" role="toolbar" aria-label={label}>
+<div
+  class="md-command-bar"
+  class:rail
+  role="toolbar"
+  aria-label={label}
+  aria-orientation={rail ? 'vertical' : 'horizontal'}
+  data-variant={rail ? 'rail' : 'bar'}
+>
   {#if actions.length}
     <div class="actions">
       {#each actions as action (action.id)}
@@ -51,7 +62,13 @@
     </div>
   {/if}
   <div class="stop">
-    <EmergencyStop label={stopLabel} status={stopStatus} state={stopState} {onstop} />
+    <EmergencyStop
+      label={stopLabel}
+      status={stopStatus}
+      state={stopState}
+      upright={rail}
+      {onstop}
+    />
   </div>
 </div>
 
@@ -111,6 +128,17 @@
   .command.pending {
     border-style: solid;
     cursor: progress;
+  }
+
+  .rail {
+    align-content: end;
+    height: 100%;
+    padding: var(--md-space-2);
+    border-top: 0;
+  }
+
+  .rail .actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   @media (min-width: 1024px) {

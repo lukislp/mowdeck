@@ -255,6 +255,26 @@ describe('FakePlayer', () => {
     }
   });
 
+  it('keeps the last frame of a canvas marked to freeze', () => {
+    const ctx = recordingContext();
+    const canvas = document.createElement('canvas');
+    canvas.getContext = (() => ctx) as unknown as HTMLCanvasElement['getContext'];
+    const player = new FakePlayer(
+      canvas,
+      { label: () => '', position: () => null, colors: () => COLORS },
+      { onLive() {}, onWaiting() {}, onTokenExpiring() {}, onFailed() {} },
+    );
+    player.draw();
+    expect(canvas.dataset.frames).toBe('1');
+    canvas.dataset.freeze = 'true';
+    player.draw();
+    player.draw();
+    expect(canvas.dataset.frames).toBe('1');
+    delete canvas.dataset.freeze;
+    player.draw();
+    expect(canvas.dataset.frames).toBe('4');
+  });
+
   it('does nothing without a 2D context', () => {
     const canvas = document.createElement('canvas');
     canvas.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];

@@ -47,3 +47,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0041](0041-spot-runs-from-the-dock-undock-transit-return.md) | Spot runs from the dock: undock, transit and return | Accepted |
 | [0042](0042-drive-calibration.md) | Drive calibration | Accepted |
 | [0043](0043-turn-styles.md) | Turn styles | Accepted |
+| [0044](0044-drive-view-with-camera.md) | Drive view with camera | Accepted |

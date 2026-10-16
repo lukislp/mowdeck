@@ -1829,5 +1829,19 @@
   "calib_reason_link_lost": "Fahrverbindung unterbrochen",
   "calib_reason_frame_rejected": "der Mäher hat einen Fahrbefehl abgelehnt",
   "calib_reason_no_fit": "zu wenige Positionsmeldungen für ein Ergebnis",
-  "calib_reason_turn_direction": "der Mäher hat sich in die falsche Richtung gedreht"
+  "calib_reason_turn_direction": "der Mäher hat sich in die falsche Richtung gedreht",
+  "camera_frozen": "Bild steht",
+  "camera_frozen_hint": "Der Mäher hält an, bis das Bild wieder läuft. Danach den Hebel zur Mitte führen oder neu ansetzen.",
+  "drive_view": "Ansicht",
+  "drive_view_camera": "Kamera",
+  "drive_view_map": "Karte",
+  "drive_camera_unavailable": "Kamera nicht verfügbar – Karte",
+  "drive_map_thumb_show": "Karte einblenden",
+  "drive_map_thumb_hide": "Karte ausblenden",
+  "drive_camera_both": "Beide Kameras",
+  "drive_delay": "Latenz",
+  "drive_details": "Sitzungsdetails",
+  "drive_held": "Angehalten: Bild steht",
+  "drive_recentre": "Hebel zur Mitte oder neu ansetzen",
+  "drive_hud": "Fahranzeige"
 }
