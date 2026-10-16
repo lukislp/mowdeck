@@ -8,10 +8,22 @@
 
 html {
   text-size-adjust: 100%;
+
+  /* The page itself never rubber-bands or pulls to refresh: the iOS bounce (Safari and the app
+     shell's WKWebView) would drag the pinned top bar and the fixed bars along with it. Scroll
+     boxes inside the page keep their own behaviour. */
+  overscroll-behavior-y: none;
+
+  /* Anchors and scrollIntoView stop below the pinned top bar. */
+  scroll-padding-top: var(--md-sticky-top);
 }
 
 body {
   margin: 0;
+
+  /* Edge to edge the content starts below the status bar and clear of the notch in landscape. */
+  padding-top: var(--md-safe-top);
+  padding-inline: env(safe-area-inset-left, 0) env(safe-area-inset-right, 0);
   background: var(--md-color-bg);
   color: var(--md-color-ink);
   font-family: var(--md-font-sans);
@@ -19,6 +31,17 @@ body {
   line-height: var(--md-line-24);
   font-weight: var(--md-weight-regular);
   -webkit-font-smoothing: antialiased;
+}
+
+/* The status bar strip stays covered while the page scrolls underneath (0 high in a browser). */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 50;
+  height: var(--md-safe-top);
+  background: var(--md-color-surface);
+  pointer-events: none;
 }
 
 h1,

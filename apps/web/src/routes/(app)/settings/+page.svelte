@@ -159,10 +159,10 @@
     letter-spacing: 0;
   }
 
-  /* Phones: the index is a strip under the top bar that scrolls sideways on its own. */
+  /* Phones: the index is a strip under the pinned top bar that scrolls sideways on its own. */
   .index {
     position: sticky;
-    top: 0;
+    top: var(--md-sticky-top);
     z-index: 5;
     border-bottom: var(--md-hairline) solid var(--md-color-line);
     background: var(--md-color-surface);

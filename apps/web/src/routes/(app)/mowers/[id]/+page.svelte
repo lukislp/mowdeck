@@ -2097,8 +2097,10 @@
     padding-bottom: calc(var(--md-commandbar-height) + var(--md-spot-sheet-height));
   }
 
+  /* Phones: the wrapper steps aside, so the top bar is a child of the whole page and stays
+     pinned while the page scrolls (a sticky box never leaves its parent). */
   .top {
-    order: 0;
+    display: contents;
   }
 
   .side {
@@ -2210,7 +2212,7 @@
   /* Full-screen map on phones: everything but the command bar (and its stop) is covered. */
   .plan.expanded {
     position: fixed;
-    inset: 0 0 var(--md-commandbar-height);
+    inset: var(--md-safe-top) 0 var(--md-commandbar-height);
     z-index: 24;
     height: auto;
     min-height: 0;
@@ -2633,12 +2635,13 @@
       grid-template-columns: minmax(0, 1fr) var(--md-instrument-column);
       grid-template-rows: auto minmax(0, 1fr);
       grid-template-areas: 'top top' 'plan side';
-      height: 100dvh;
+      height: var(--md-viewport-height);
       padding-bottom: 0;
       overflow: hidden;
     }
 
     .top {
+      display: block;
       grid-area: top;
     }
 

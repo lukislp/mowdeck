@@ -573,6 +573,11 @@
     padding-bottom: var(--bar-height);
   }
 
+  /* Phones: the wrapper steps aside, so the top bar stays pinned while the page scrolls. */
+  .top {
+    display: contents;
+  }
+
   .map {
     position: relative;
     height: min(30dvh, 260px);
@@ -788,12 +793,13 @@
       grid-template-columns: minmax(0, 1fr) var(--md-instrument-column);
       grid-template-rows: auto minmax(0, 1fr);
       grid-template-areas: 'top top' 'map console';
-      height: 100dvh;
+      height: var(--md-viewport-height);
       padding-bottom: 0;
       overflow: hidden;
     }
 
     .top {
+      display: block;
       grid-area: top;
     }
 

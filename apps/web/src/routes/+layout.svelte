@@ -46,7 +46,7 @@
 <style>
   .update {
     position: sticky;
-    top: 0;
+    top: var(--md-safe-top);
     z-index: 40;
     display: flex;
     align-items: center;

@@ -9,7 +9,7 @@
   "Kalibrierung löschen", and with a hint when the driving speed changed since it was measured.
 -->
 <script lang="ts">
-  import { Button, Icon, ProblemNotice } from '@mowdeck/ui';
+  import { Button, Icon, ProblemNotice, TableScroll } from '@mowdeck/ui';
 
   import { formatDateTime, formatNumber, problemMessage } from '$lib/i18n';
   import {
@@ -83,7 +83,7 @@
 </script>
 
 {#snippet stepTable(caption: string)}
-  <div class="table-wrap">
+  <TableScroll label={caption}>
     <table class="steps" data-testid="calib-steps">
       <caption class="sr">{caption}</caption>
       <thead>
@@ -122,7 +122,7 @@
         {/each}
       </tbody>
     </table>
-  </div>
+  </TableScroll>
   {#if rows.some((row) => row.dropped && row.outcome !== 'skipped')}
     <p class="hint" data-testid="calib-outcome-hint">{m.calib_outcome_hint()}</p>
   {/if}
@@ -546,12 +546,7 @@
 
   /* --- the step table: monospace numbers, the kind as a tag ------------------------------- */
 
-  /* A wide table scrolls sideways in its own box, never up and down: overflow-x alone would
-     make overflow-y auto as well, and the collapsed bottom border may stick out a pixel. */
-  .table-wrap {
-    overflow: auto hidden;
-  }
-
+  /* The table scrolls sideways in its own box (TableScroll), never up and down. */
   .steps {
     width: 100%;
     border-collapse: collapse;

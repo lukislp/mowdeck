@@ -112,7 +112,7 @@
     place-content: center;
     justify-items: center;
     gap: var(--md-space-2);
-    min-height: 100dvh;
+    min-height: var(--md-viewport-height);
     color: var(--md-color-ink-muted);
   }
 

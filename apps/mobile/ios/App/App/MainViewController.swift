@@ -33,6 +33,10 @@ class MainViewController: CAPBridgeViewController {
         view.backgroundColor = background
         webView?.backgroundColor = background
         webView?.scrollView.backgroundColor = background
+        // The page itself never rubber-bands (also `overscroll-behavior-y: none` in the web
+        // app): the bounce dragged the pinned top bar and the fixed bars along. Scroll boxes
+        // inside the page are separate scroll views and keep their bounce.
+        webView?.scrollView.bounces = false
     }
 }
 

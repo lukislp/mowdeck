@@ -56,7 +56,7 @@
     z-index: 25;
     display: flex;
     flex-direction: column;
-    max-height: calc(100dvh - var(--md-sheet-bottom, 0px) - 64px);
+    max-height: calc(var(--md-viewport-height) - var(--md-sheet-bottom, 0px) - 64px);
     border-top: var(--md-border-control) solid var(--md-color-ink);
     background: var(--md-color-surface);
     box-shadow: var(--md-shadow-float);

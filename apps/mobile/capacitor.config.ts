@@ -23,9 +23,12 @@ const config: CapacitorConfig = {
     errorPath: 'offline.html',
   },
   ios: {
-    // The web view keeps clear of the notch and the home indicator; the web app needs no
-    // safe-area changes.
-    contentInset: 'always',
+    // Edge to edge: the web view fills the screen and the web app keeps clear of the status bar,
+    // the notch and the home indicator itself (viewport-fit=cover and env(safe-area-inset-*):
+    // body padding, the pinned top bar, the bottom bars). 'always' insets the scroll view
+    // instead, which gives the page a scroll range of the inset height even when its content
+    // fits, so a drag pulled the top bar under the status bar.
+    contentInset: 'never',
   },
   android: {
     allowMixedContent: false,

@@ -24,7 +24,7 @@
 
 <style>
   .md-shell {
-    min-height: 100dvh;
+    min-height: var(--md-viewport-height);
   }
 
   .nav {
@@ -47,7 +47,7 @@
     .md-shell {
       display: grid;
       grid-template-columns: 88px minmax(0, 1fr);
-      height: 100dvh;
+      height: var(--md-viewport-height);
       min-height: 0;
       overflow: hidden;
     }
@@ -56,13 +56,13 @@
     .phone-nav .nav {
       display: block;
       position: static;
-      height: 100dvh;
+      height: var(--md-viewport-height);
       min-height: 0;
       overflow: hidden;
     }
 
     .main {
-      height: 100dvh;
+      height: var(--md-viewport-height);
       min-height: 0;
       overflow-y: auto;
       overscroll-behavior: contain;

@@ -460,7 +460,7 @@
     .screen {
       display: flex;
       flex-direction: column;
-      height: 100dvh;
+      height: var(--md-viewport-height);
     }
 
     .body {
