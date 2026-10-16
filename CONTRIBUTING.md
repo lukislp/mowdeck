@@ -56,11 +56,23 @@ pnpm --filter ts-codegen check
 pnpm --filter web build
 ```
 
-`pnpm -r test` includes the Playwright suite of `tests/e2e-web`, which needs the running Compose stack; without it, run `pnpm -r --filter '!e2e-web' test`. After changing a service route or a contract, regenerate the API types: `uv run poe openapi` (checked by `uv run poe openapi-check` and `uv run poe test`), then `pnpm codegen`, and commit the results with the change. Details: [docs/dev/web-app.md](docs/dev/web-app.md).
+`pnpm -r test` includes the Playwright suite of `tests/e2e-web`, which needs the throwaway test stack (below); without it, run `pnpm -r --filter '!e2e-web' test`. After changing a service route or a contract, regenerate the API types: `uv run poe openapi` (checked by `uv run poe openapi-check` and `uv run poe test`), then `pnpm codegen`, and commit the results with the change. Details: [docs/dev/web-app.md](docs/dev/web-app.md).
+
+### End-to-end tests
+
+The e2e suites (`tests/e2e-web`, `tests/e2e`) create users, accounts and mowers. Run them **only against the throwaway test stack**, never against the stack you or the household use (`http://localhost`, the LAN address):
+
+```bash
+pnpm e2e:stack up          # Compose project mowdeck-e2e at http://localhost:8480, own volumes and ports
+pnpm e2e:stack test        # Playwright (args go to playwright test); `acceptance` runs tests/e2e
+pnpm e2e:stack down        # delete it again; `pnpm e2e:stack run` does up, test, down
+```
+
+Both suites refuse a target without the e2e marker (`infra/compose/docker-compose.e2e.yml`). Do not bypass the guard with `MOWDECK_E2E_ALLOW_ANY_STACK=1` against a stack with real data, do not append `tests/e2e-web/stack.env` to `infra/compose/.env`, and in a second worktree pick another `MOWDECK_E2E_PROJECT` and `MOWDECK_E2E_PORT`. Details: [tests/e2e-web/README.md](tests/e2e-web/README.md).
 
 ### UI pull requests
 
-A pull request that touches `apps/web` or `libs/mowdeck-ui` attaches screenshots in light and dark theme at phone (390 x 844) and desktop (1280 x 800) width: with the stack up, `pnpm --filter e2e-web screens` writes the main pages (login, mower list, mower detail in light and dark, mower settings) to `apps/web/screenshots/`; add the changed pages that it does not cover. Its description carries this checklist:
+A pull request that touches `apps/web` or `libs/mowdeck-ui` attaches screenshots in light and dark theme at phone (390 x 844) and desktop (1280 x 800) width: with the test stack up (`pnpm e2e:stack up`), `pnpm e2e:stack screens` writes the main pages (login, mower list, mower detail in light and dark, mower settings) to `apps/web/screenshots/`; add the changed pages that it does not cover. Its description carries this checklist:
 
 - [ ] Only tokens used; no new colours, radii or fonts outside `tokens.css`
 - [ ] Colour is used only for state; every state also has text or a glyph

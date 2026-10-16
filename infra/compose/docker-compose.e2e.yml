@@ -1,0 +1,25 @@
+# Override for throwaway test stacks (the Playwright suite tests/e2e-web and the acceptance test
+# tests/e2e). Use it on top of docker-compose.yml, never on its own:
+#
+#   docker compose -p mowdeck-e2e -f docker-compose.yml -f docker-compose.e2e.yml ...
+#
+# Locally `pnpm e2e:stack up` does this with its own project name, host ports, network, image tag
+# and env files (tests/e2e-web/scripts/stack.mjs); CI adds the file to its stack.
+#
+# It adds one thing: a marker that the test suites check before they create any data. The marker
+# answers at /api/v1/e2e-stack with the Compose project name as its host name, so a suite pointed
+# at a stack without this override (the stack you actually use) refuses to run, and the suite
+# knows which project to `docker exec` into.
+
+services:
+  e2e-marker:
+    image: ${WHOAMI_IMAGE:-ghcr.io/traefik/whoami:v1.10.3}
+    hostname: ${COMPOSE_PROJECT_NAME}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.e2e-marker.rule=PathPrefix(`/api/v1/e2e-stack`)
+      - traefik.http.routers.e2e-marker.entrypoints=web
+      - traefik.http.routers.e2e-marker.middlewares=e2e-marker-strip
+      - traefik.http.middlewares.e2e-marker-strip.stripprefix.prefixes=/api/v1/e2e-stack
+      - traefik.http.services.e2e-marker.loadbalancer.server.port=80
+    networks: [mowdeck]
