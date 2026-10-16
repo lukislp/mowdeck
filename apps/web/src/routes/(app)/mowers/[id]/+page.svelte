@@ -88,6 +88,7 @@
     displayModel,
     speedRange as speedLimits,
   } from '$lib/mower/limits';
+  import { lightCapable as isLightCapable, setLight } from '$lib/mower/light';
   import { areaNamer, mapLabels } from '$lib/mower/map-labels';
   import {
     offeredPatterns,
@@ -1154,7 +1155,7 @@
     return !!last && !['executed', 'rejected', 'failed', 'expired'].includes(last.status);
   });
   const speedPending = $derived(commands.pending(id, 'set_speed'));
-  const lightCapable = $derived(caps?.light === true);
+  const lightCapable = $derived(isLightCapable(caps));
   const lightPending = $derived(commands.pending(id, 'set_light'));
   const controlsEnabled = $derived(activity !== null && activity !== 'offline');
 
@@ -1186,7 +1187,7 @@
     online={controlsEnabled}
     allowed={canControl}
     pending={lightPending}
-    onchange={(on) => void sendCommand(id, { kind: 'set_light', on })}
+    onchange={(on) => void sendCommand(id, setLight(on))}
   />
 {/snippet}
 

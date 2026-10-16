@@ -7,12 +7,25 @@ import type { Activity, RtkFix } from '@mowdeck/ui';
 
 import type { ApiProblem } from '$lib/api/problem';
 import type { components } from '$lib/generated/telemetry';
+import type { LightReason } from '$lib/mower/light';
 import { angleApplies, minLaps, type MowPattern, type PatternName } from '$lib/mower/mow-pattern';
 import { isOnline, linkSeenAt, oldValuesAge } from '$lib/mower/presence';
 import { m } from '$lib/paraglide/messages';
 import { planProblemText } from '$lib/plan/problems';
 import { getLocale } from '$lib/paraglide/runtime';
 import type { CommandKind, CommandOutcome } from '$lib/stores/commands.svelte';
+
+/** Why the light switch cannot be used (`lib/mower/light.ts`). */
+export function lightReasonText(reason: LightReason): string {
+  switch (reason) {
+    case 'unsupported':
+      return m.light_unsupported();
+    case 'offline':
+      return m.light_offline();
+    case 'no_permission':
+      return m.light_no_permission();
+  }
+}
 
 export function activityLabel(activity: Activity): string {
   switch (activity) {

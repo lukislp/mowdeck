@@ -3,37 +3,24 @@
   reports (on, off or unknown) and one switch. The switch shows the reported state, never an
   optimistic one: while a `set_light` command is on its way the readout turns to the pending
   style and the switch waits. Disabled without the capability, while the mower is offline and
-  without the right to control it; the reason is written below.
+  without the right to control it; the reason is written below. The rules live in
+  `lib/mower/light.ts`, shared with the drive view's `LightChip`.
 -->
 <script lang="ts">
+  import { lightReasonText } from '$lib/i18n';
+  import { lightView, type LightInput } from '$lib/mower/light';
   import { m } from '$lib/paraglide/messages';
 
-  interface Props {
-    /** What the mower reports: true on, false off, null not reported. */
-    on: boolean | null;
-    /** The mower has a switchable light (`capabilities.light`). */
-    capable: boolean;
-    online: boolean;
-    /** The user may control the mower. */
-    allowed: boolean;
-    /** A `set_light` command is on its way. */
-    pending: boolean;
+  interface Props extends LightInput {
     onchange: (on: boolean) => void;
   }
   let { on, capable, online, allowed, pending, onchange }: Props = $props();
 
-  const reason = $derived(
-    !capable
-      ? m.light_unsupported()
-      : !online
-        ? m.light_offline()
-        : !allowed
-          ? m.light_no_permission()
-          : null,
-  );
-  const disabled = $derived(reason !== null || pending);
+  const view = $derived(lightView({ on, capable, online, allowed, pending }));
+  const reason = $derived(view.reason ? lightReasonText(view.reason) : null);
+  const disabled = $derived(view.disabled);
   const readout = $derived(on === true ? m.light_on() : on === false ? m.light_off() : '—');
-  const state = $derived(on === true ? 'on' : on === false ? 'off' : 'unknown');
+  const state = $derived(view.state);
 </script>
 
 <div
@@ -65,7 +52,7 @@
       aria-busy={pending}
       {disabled}
       data-testid="light-toggle"
-      onclick={() => onchange(on !== true)}
+      onclick={() => onchange(view.next)}
     >
       <span class="track" aria-hidden="true"><span class="knob"></span></span>
       <span class="action">{on === true ? m.light_switch_off() : m.light_switch_on()}</span>

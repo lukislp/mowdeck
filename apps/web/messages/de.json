@@ -1353,6 +1353,7 @@
   "light_unsupported": "Dieser Mäher hat kein schaltbares Kameralicht.",
   "light_offline": "Der Mäher ist offline.",
   "light_no_permission": "Du darfst diesen Mäher nicht steuern.",
+  "light_chip": "Licht",
   "vision_light_used": "Aufnahme mit Kameralicht",
   "vision_light_used_hint": "Das Bild war zu dunkel; das Kameralicht des Mähers wurde dafür eingeschaltet und danach wieder ausgeschaltet.",
   "nav_linked_accounts": "Verbundene Konten",

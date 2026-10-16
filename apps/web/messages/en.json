@@ -1353,6 +1353,7 @@
   "light_unsupported": "This mower has no switchable camera light.",
   "light_offline": "The mower is offline.",
   "light_no_permission": "You may not control this mower.",
+  "light_chip": "Light",
   "vision_light_used": "Taken with the camera light on",
   "vision_light_used_hint": "The picture was too dark; the mower's camera light was switched on for it and off again afterwards.",
   "nav_linked_accounts": "Linked accounts",

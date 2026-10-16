@@ -9,6 +9,12 @@
  * was let go and touched again. Leaving the page ends the drive session (`client_stop`) and the
  * camera: exactly one camera session request per visit. A simulated mower without a camera
  * (`connection_options.camera: false`) gets the map and no camera session.
+ * The camera light: in every layout the light chip lies fully inside the viewport over the camera,
+ * clear of the emergency stop, the session Start/Stop, the readout and the stick; it
+ * switches the simulated mower's light (`data-state` follows what the mower reports, as on the
+ * mower page) while the drive session stays open and the stick keeps driving, stays usable while
+ * the picture stands, and is absent in the map view and for a mower without the `light`
+ * capability (`connection_options.light: false`).
  * Writes drive-camera-desktop.png, drive-camera-frozen-desktop.png, drive-camera-phone.png and
  * drive-camera-sideways.png to apps/web/screenshots (or MOWDECK_E2E_SHOTS).
  */
@@ -63,14 +69,15 @@ function metres(a: { lat: number; lon: number }, b: { lat: number; lon: number }
   return Math.hypot(dx, (b.lat - a.lat) * k);
 }
 
-async function createMowerWithoutCamera(
+async function createSimulatedMower(
   request: APIRequestContext,
   owner: Actor,
   name: string,
+  options: Record<string, unknown>,
 ): Promise<string> {
   const response = await request.post('/api/v1/fleet/mowers', {
     headers: { Authorization: `Bearer ${owner.token}` },
-    data: { name, connection_kind: 'simulated', connection_options: { camera: false } },
+    data: { name, connection_kind: 'simulated', connection_options: options },
   });
   expect(response.status(), await response.text()).toBe(201);
   return ((await response.json()) as { id: string }).id;
@@ -105,6 +112,45 @@ async function expectInViewport(page: Page, locator: Locator, what: string): Pro
     return hit !== null && (node === hit || node.contains(hit));
   });
   expect(reachable, `${what}: not covered`).toBe(true);
+}
+
+/** The two elements do not overlap. */
+async function expectApart(a: Locator, b: Locator, what: string): Promise<void> {
+  const one = (await a.boundingBox())!;
+  const two = (await b.boundingBox())!;
+  const overlap =
+    one.x < two.x + two.width &&
+    two.x < one.x + one.width &&
+    one.y < two.y + two.height &&
+    two.y < one.y + one.height;
+  expect(overlap, `${what}: apart`).toBe(false);
+}
+
+/** The light chip over the camera: in view, reachable, clear of the stop controls (and stick). */
+async function expectLightPlaced(page: Page, layout: string, stick?: Locator): Promise<Locator> {
+  const light = page.getByTestId('drive-light');
+  await expectInViewport(page, light, `light (${layout})`);
+  await expectApart(
+    light,
+    page.getByTestId('emergency-stop'),
+    `light vs emergency stop (${layout})`,
+  );
+  const session = page.getByTestId('drive-stop').or(page.getByTestId('drive-start'));
+  await expectApart(light, session.first(), `light vs session button (${layout})`);
+  await expectApart(light, page.getByTestId('drive-hud'), `light vs readout (${layout})`);
+  if (stick) await expectApart(light, stick, `light vs stick (${layout})`);
+  return light;
+}
+
+/** One tap on the light chip; the state the mower reports follows. */
+async function switchLight(page: Page, to: 'on' | 'off'): Promise<void> {
+  const light = page.getByTestId('drive-light');
+  await expect(light).toHaveAttribute('data-pending', 'false', { timeout: 15_000 });
+  await expect(light).toBeEnabled();
+  await light.click();
+  await expect(light).toHaveAttribute('data-state', to, { timeout: 15_000 });
+  await expect(light).toHaveAttribute('data-pending', 'false', { timeout: 15_000 });
+  await expect(light).toHaveAttribute('aria-checked', to === 'on' ? 'true' : 'false');
 }
 
 async function expectNoSidewaysOverflow(page: Page): Promise<void> {
@@ -149,10 +195,16 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   const csp = watchCsp(page);
   const owner = await registerByApi(request, actor('drivecam'));
   const mowerId = await createMowerByApi(request, owner, `Luba drivecam ${RUN}`);
-  const blindId = await createMowerWithoutCamera(request, owner, `Luba blind ${RUN}`);
+  const blindId = await createSimulatedMower(request, owner, `Luba blind ${RUN}`, {
+    camera: false,
+  });
+  const unlitId = await createSimulatedMower(request, owner, `Luba unlit ${RUN}`, {
+    light: false,
+  });
   await waitForMap(request, owner, mowerId);
   await waitForCaps(request, owner, mowerId);
   await waitForCaps(request, owner, blindId);
+  await waitForCaps(request, owner, unlitId);
   await expect
     .poll(async () => (await mowerState(request, owner, mowerId))?.position ?? null, {
       timeout: 60_000,
@@ -220,6 +272,9 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await expectInViewport(page, page.getByTestId('emergency-stop'), 'emergency stop');
   await expectInViewport(page, page.getByTestId('drive-start'), 'session start');
   await expectNoSidewaysOverflow(page);
+  // The camera light, as the simulator reports it: off.
+  const light = await expectLightPlaced(page, 'desktop');
+  await expect(light).toHaveAttribute('data-state', 'off', { timeout: 30_000 });
 
   // "Both": the stereo pair side by side, and back to the left camera.
   await page.getByTestId('drive-camera-both').click();
@@ -238,6 +293,10 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await page.getByTestId('drive-start').click();
   await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   await expectInViewport(page, page.getByTestId('drive-stop'), 'session stop');
+  // The light switches while the session is open; the session stays and the stick drives after.
+  await expectLightPlaced(page, 'desktop, driving');
+  await switchLight(page, 'on');
+  await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   const pad = page.getByTestId('joystick');
   const start = (await mowerState(request, owner, mowerId))!;
   await pushForward(page, pad);
@@ -261,6 +320,9 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await expect(page.getByTestId('camera-status')).toContainText('Bild steht');
   await expect(page.getByTestId('drive-held')).toBeVisible();
   await expect(page.getByTestId('drive-pad')).toHaveAttribute('data-held', 'true');
+  // "Bild steht" does not hide the light.
+  await expectLightPlaced(page, 'desktop, frozen');
+  await expect(light).toBeEnabled();
   const frozenAt = Date.now();
   await page.screenshot({ path: `${OUT}drive-camera-frozen-desktop.png`, animations: 'disabled' });
   await page.waitForTimeout(1_500);
@@ -308,6 +370,9 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await expectInViewport(page, page.getByTestId('drive-stop'), 'session stop (upright)');
   await expectInViewport(page, pad, 'joystick (upright)');
   await expectNoSidewaysOverflow(page);
+  await expectLightPlaced(page, 'upright', pad);
+  await switchLight(page, 'off');
+  await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}drive-camera-phone.png`, animations: 'disabled' });
 
@@ -326,6 +391,10 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   }));
   expect(scroll.x).toBeLessThanOrEqual(0);
   expect(scroll.y).toBeLessThanOrEqual(0);
+  // The light in reach of the right thumb, above the overlay stick, clear of the stop rail.
+  await expectLightPlaced(page, 'sideways', pad);
+  await switchLight(page, 'on');
+  await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   // The overlay stick drives over the picture.
   const sidewaysAt = Date.now();
   await pushForward(page, pad);
@@ -341,6 +410,13 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await expect(drive).toHaveAttribute('data-layout', 'desktop');
   // Exactly one camera session for the whole visit, through every layout.
   expect((sessions.get(mowerId) ?? 0) - before).toBe(1);
+  // The light belongs to the camera view: none over the map.
+  await page.getByTestId('drive-view').getByText('Karte').click();
+  await expect(drive).toHaveAttribute('data-view', 'map');
+  await expect(page.getByTestId('drive-light')).toHaveCount(0);
+  await page.getByTestId('drive-view').getByText('Kamera').click();
+  await expect(drive).toHaveAttribute('data-view', 'camera');
+  await expect(page.getByTestId('drive-light')).toBeVisible();
   await page.getByRole('link', { name: 'Zurück' }).first().click();
   await page.waitForURL(new RegExp(`/mowers/${mowerId}$`));
   await expect(page.getByTestId('drive-page')).toHaveCount(0);
@@ -369,5 +445,18 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await expectInViewport(page, page.getByTestId('emergency-stop'), 'emergency stop (no camera)');
   await page.waitForTimeout(1_000);
   expect(sessions.get(blindId) ?? 0).toBe(0);
+  // The light needs the camera view: the blind mower has a light but shows the map.
+  await expect(page.getByTestId('drive-light')).toHaveCount(0);
+
+  // --- a mower without a switchable light: the camera, but no light chip --------------------
+  await page.goto(`/mowers/${unlitId}/drive`);
+  await expect(page.getByTestId('drive-page')).toHaveAttribute('data-view', 'camera', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('camera-stage')).toHaveAttribute('data-phase', 'live', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('drive-view')).toBeVisible();
+  await expect(page.getByTestId('drive-light')).toHaveCount(0);
   csp.assertNone();
 });
