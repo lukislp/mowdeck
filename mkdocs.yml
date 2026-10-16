@@ -84,6 +84,7 @@ nav:
       - adr/0041-spot-runs-from-the-dock-undock-transit-return.md
       - adr/0042-drive-calibration.md
       - adr/0043-turn-styles.md
+      - adr/0044-drive-view-with-camera.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
