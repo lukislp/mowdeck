@@ -1,6 +1,8 @@
 <!--
   The emergency stop: a red actuator on a yellow ring (machine stop convention), the only element
   using the "Signal stop" colours. One tap sends; no confirmation, never disabled, never animated.
+  `upright` stacks the actuator over the label for a narrow vertical rail (a phone held
+  sideways); the target stays at least as tall as the row form.
 -->
 <script lang="ts">
   import type { StopState } from '../types.js';
@@ -11,9 +13,11 @@
     /** Feedback under the label (e.g. "gesendet"), empty when idle. */
     status?: string;
     state?: StopState;
+    /** Actuator above the label (narrow vertical rail). */
+    upright?: boolean;
     onstop: () => void;
   }
-  let { label, status = '', state = 'idle', onstop }: Props = $props();
+  let { label, status = '', state = 'idle', upright = false, onstop }: Props = $props();
 
   function press(): void {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30);
@@ -24,6 +28,7 @@
 <button
   type="button"
   class="md-stop"
+  class:upright
   data-state={state}
   data-testid="emergency-stop"
   aria-describedby={status ? 'md-stop-status' : undefined}
@@ -98,5 +103,38 @@
     font-family: var(--md-font-mono);
     font-size: var(--md-font-size-12);
     line-height: var(--md-line-16);
+  }
+
+  .upright {
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--md-space-1);
+    min-height: calc(var(--md-target-stop) + var(--md-space-8));
+    padding: var(--md-space-2) var(--md-space-1);
+    text-align: center;
+  }
+
+  .upright .actuator {
+    width: 56px;
+    height: 56px;
+  }
+
+  .upright .cap {
+    width: 36px;
+    height: 36px;
+  }
+
+  .upright .text {
+    align-items: center;
+  }
+
+  .upright .label {
+    font-size: var(--md-font-size-13);
+    line-height: var(--md-line-16);
+    overflow-wrap: anywhere;
+  }
+
+  .upright .status {
+    font-size: var(--md-font-size-11);
   }
 </style>

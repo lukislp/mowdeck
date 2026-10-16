@@ -98,6 +98,16 @@
   --md-shadow-float: 0 8px 24px rgb(0 0 0 / 18%);
   --md-scrim: rgb(17 20 18 / 40%);
 
+  /*
+   * Instrument glass over a camera picture (drive view): the same in both themes, because the
+   * video is never themed. Light ink on a dark, translucent plate.
+   */
+  --md-hud-glass: rgb(10 12 13 / 58%);
+  --md-hud-glass-strong: rgb(10 12 13 / 84%);
+  --md-hud-ink: #f4f5f2;
+  --md-hud-ink-muted: rgb(244 245 242 / 74%);
+  --md-hud-line: rgb(244 245 242 / 42%);
+
   /* Targets */
   --md-target: 48px;
   --md-target-command: 56px;

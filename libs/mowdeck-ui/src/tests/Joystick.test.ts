@@ -144,4 +144,23 @@ describe('Joystick', () => {
     await fireEvent.blur(pad);
     expect(engage).toHaveBeenLastCalledWith(false);
   });
+
+  it('is the plain pad by default', () => {
+    const { pad } = setup();
+    expect(pad).toHaveAttribute('data-variant', 'pad');
+    expect(pad).not.toHaveClass('overlay');
+  });
+
+  it('has an overlay variant that drives exactly like the pad', async () => {
+    const { pad, samples, engage } = setup({ overlay: true, hint: undefined });
+    expect(pad).toHaveAttribute('data-variant', 'overlay');
+    expect(pad).toHaveClass('overlay');
+    // No hint paragraph under a floating pad.
+    expect(pad).not.toHaveAttribute('aria-describedby');
+    await fireEvent.pointerDown(pad, { pointerId: 3, clientX: 100, clientY: 0 });
+    expect(engage).toHaveBeenLastCalledWith(true);
+    expect(samples.at(-1)).toEqual({ linear: 1, angular: 0 });
+    await fireEvent.pointerUp(pad, { pointerId: 3 });
+    expect(engage).toHaveBeenLastCalledWith(false);
+  });
 });
