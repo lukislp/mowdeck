@@ -250,7 +250,7 @@
 
   .day {
     position: sticky;
-    top: 0;
+    top: var(--md-sticky-top);
     z-index: 1;
     margin: 0;
     padding: var(--md-space-2) var(--md-gutter);

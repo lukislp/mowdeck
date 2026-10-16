@@ -1,4 +1,10 @@
-<!-- Page header: optional back link, title, a short monospaced meta line and actions. -->
+<!--
+  Page header: optional back link, title, a short monospaced meta line and actions.
+
+  On phones the bar is pinned under the status bar while the page scrolls (sticky against the
+  document; a page that wraps it in a smaller box must let that box span the page, for example
+  with `display: contents`). On the desktop it scrolls with the shell's content area.
+-->
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import Icon from '../icons/Icon.svelte';
@@ -28,13 +34,22 @@
 
 <style>
   .md-top {
+    position: sticky;
+    top: var(--md-safe-top);
+    z-index: 15;
     display: flex;
     align-items: center;
     gap: var(--md-space-2);
-    min-height: 64px;
+    min-height: var(--md-topbar-height);
     padding: var(--md-space-2) var(--md-gutter);
     border-bottom: var(--md-hairline) solid var(--md-color-line);
     background: var(--md-color-surface);
+  }
+
+  @media (min-width: 1024px) {
+    .md-top {
+      position: static;
+    }
   }
 
   .back {

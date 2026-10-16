@@ -26,7 +26,7 @@
   .frame {
     display: grid;
     grid-template-rows: auto 1fr;
-    min-height: 100dvh;
+    min-height: var(--md-viewport-height);
     background: var(--md-color-surface);
   }
 

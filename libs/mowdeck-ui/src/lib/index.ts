@@ -20,6 +20,7 @@ export { default as AppShell } from './layout/AppShell.svelte';
 export { default as NavRail } from './layout/NavRail.svelte';
 export { default as TopBar } from './layout/TopBar.svelte';
 export { default as Panel } from './layout/Panel.svelte';
+export { default as TableScroll } from './layout/TableScroll.svelte';
 export { default as Sheet } from './layout/Sheet.svelte';
 export { default as BottomSheet } from './layout/BottomSheet.svelte';
 export * from './layout/bottom-sheet.js';

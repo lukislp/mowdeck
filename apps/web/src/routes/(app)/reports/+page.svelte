@@ -16,6 +16,7 @@
     Readout,
     SegmentedControl,
     Select,
+    TableScroll,
     TopBar,
   } from '@mowdeck/ui';
 
@@ -319,7 +320,7 @@
   <div class="grid">
     <Panel label={m.reports_per_mower()} flush testid="report-rows">
       {#if rows.length}
-        <div class="scroll">
+        <TableScroll label={m.reports_per_mower()}>
           <table>
             <thead>
               <tr>
@@ -371,7 +372,7 @@
               </tr>
             </tfoot>
           </table>
-        </div>
+        </TableScroll>
       {:else}
         <p class="pad quiet">{m.reports_no_mowers()}</p>
       {/if}
@@ -494,15 +495,12 @@
 
   .grid {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .aside {
     display: grid;
     align-content: start;
-  }
-
-  .scroll {
-    overflow-x: auto;
   }
 
   table {

@@ -104,6 +104,15 @@
   --md-target-stop: 64px;
   --md-instrument-column: 360px;
 
+  /* Page frame. Edge to edge (viewport-fit=cover, the iOS app shell) the page starts below the
+     status bar: the body is padded by --md-safe-top (0 without insets), so full-height frames
+     use --md-viewport-height instead of 100dvh. On phones the top bar is pinned; content that
+     sticks to the top as well (section strips, day headers) starts at --md-sticky-top. */
+  --md-safe-top: env(safe-area-inset-top, 0px);
+  --md-viewport-height: calc(100dvh - var(--md-safe-top));
+  --md-topbar-height: 64px;
+  --md-sticky-top: calc(var(--md-safe-top) + var(--md-topbar-height));
+
   /* Motion */
   --md-motion-fast: 120ms;
   --md-motion-base: 200ms;
@@ -114,6 +123,13 @@
 @media (min-width: 768px) {
   :root {
     --md-gutter: 24px;
+  }
+}
+
+/* Desktop: the top bar scrolls with the content area (the shell is viewport-bound). */
+@media (min-width: 1024px) {
+  :root {
+    --md-sticky-top: 0px;
   }
 }
 

@@ -7,6 +7,16 @@ body {
   color: var(--md-color-ink);
 }
 
+/* The mowing lanes run up behind the status bar (the band pads itself), so the body does not
+   take the safe area off the top and needs no status bar strip. */
+body {
+  padding-top: 0;
+}
+
+body::before {
+  display: none;
+}
+
 .page {
   display: grid;
   grid-template-rows: auto 1fr;
