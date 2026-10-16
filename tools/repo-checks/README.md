@@ -4,7 +4,7 @@ Pytest tests that guard repository conventions. They run as part of `uv run poe 
 
 | Check | What it guards |
 | --- | --- |
-| compose | `infra/compose/docker-compose.yml` parses as YAML and `docker compose config -q` passes (skipped if Docker is missing) |
+| compose | `infra/compose/docker-compose.yml` parses as YAML and `docker compose config -q` passes (skipped if Docker is missing); Traefik trusts forwarded headers only from `GATEWAY_TRUSTED_PROXIES` (empty by default) on both entry points |
 | ADRs | every file in `docs/adr/` named `NNNN-*.md` has Status, Context, Decision, Consequences headings |
 | packages | every directory under `services/` and `libs/` has `README.md` and `pyproject.toml` |
 | docs | `mkdocs build --strict` succeeds (skipped if mkdocs is not importable) |

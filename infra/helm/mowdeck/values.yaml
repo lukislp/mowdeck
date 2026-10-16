@@ -207,7 +207,10 @@ config:
 # Host ports of the Compose stack have no counterpart: services are reached through the Ingress
 # (GATEWAY_HTTP_PORT, GATEWAY_HTTPS_PORT) and cluster-internal Services (POSTGRES_PORT,
 # NATS_CLIENT_PORT, NATS_MONITOR_PORT, OPENFGA_HTTP_PORT, OPENFGA_GRPC_PORT, MOWDECK_NETWORK for the Compose network name, MOWDECK_TRAEFIK_PROJECT for the Compose project its Traefik routes); use
-# `kubectl port-forward` for local access.
+# `kubectl port-forward` for local access. GATEWAY_TRUSTED_PROXIES (the reverse proxy whose
+# X-Forwarded-* headers the Compose Traefik keeps) has none either: the chart ships no proxy, so
+# trusted forwarded headers are a setting of your Ingress controller (for Traefik
+# `--entrypoints.<name>.forwardedHeaders.trustedIPs`, see docs/ops/helm.md).
 
 # --- Secrets ---
 # Never commit real values. Either give them at install time (--set-file / --set, or a values file
