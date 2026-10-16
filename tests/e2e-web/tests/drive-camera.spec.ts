@@ -1,0 +1,373 @@
+/**
+ * The drive view with the camera (ADR 0044) against the stack's simulated mower, whose camera
+ * sessions are `fake` (the test pattern): on the desktop (1280 x 800), a phone upright (390 x 844)
+ * and a phone held sideways (844 x 390) the drive page shows the camera, the emergency stop and
+ * the session Start/Stop lie fully inside the viewport and nothing overflows sideways (sideways
+ * nothing scrolls at all). The joystick drives with the camera shown. A frozen picture (the
+ * simulator hook `data-freeze` on the pattern canvas) shows "Bild steht", the mower is held (only
+ * zero frames go out while the stick is held forward) and the stick drives again only after it
+ * was let go and touched again. Leaving the page ends the drive session (`client_stop`) and the
+ * camera: exactly one camera session request per visit. A simulated mower without a camera
+ * (`connection_options.camera: false`) gets the map and no camera session.
+ * Writes drive-camera-desktop.png, drive-camera-frozen-desktop.png, drive-camera-phone.png and
+ * drive-camera-sideways.png to apps/web/screenshots (or MOWDECK_E2E_SHOTS).
+ */
+import { fileURLToPath } from 'node:url';
+
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+
+import {
+  RUN,
+  actor,
+  createMowerByApi,
+  loginByUi,
+  registerByApi,
+  waitForMap,
+  watchCsp,
+  type Actor,
+} from './support';
+
+const OUT =
+  process.env.MOWDECK_E2E_SHOTS ??
+  fileURLToPath(new URL('../../../apps/web/screenshots/', import.meta.url));
+
+const DESKTOP = { width: 1280, height: 800 };
+const UPRIGHT = { width: 390, height: 844 };
+const SIDEWAYS = { width: 844, height: 390 };
+
+interface LiveState {
+  speed_mps: number | null;
+  position: { lat: number; lon: number } | null;
+}
+
+interface SentFrame {
+  at: number;
+  linear: number;
+  angular: number;
+}
+
+async function mowerState(
+  request: APIRequestContext,
+  who: Actor,
+  mowerId: string,
+): Promise<LiveState | null> {
+  const response = await request.get(`/api/v1/telemetry/mowers/${mowerId}/state`, {
+    headers: { Authorization: `Bearer ${who.token}` },
+  });
+  return response.ok() ? ((await response.json()) as { state: LiveState }).state : null;
+}
+
+function metres(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const k = 111_320;
+  const dx = (b.lon - a.lon) * k * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dx, (b.lat - a.lat) * k);
+}
+
+async function createMowerWithoutCamera(
+  request: APIRequestContext,
+  owner: Actor,
+  name: string,
+): Promise<string> {
+  const response = await request.post('/api/v1/fleet/mowers', {
+    headers: { Authorization: `Bearer ${owner.token}` },
+    data: { name, connection_kind: 'simulated', connection_options: { camera: false } },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  return ((await response.json()) as { id: string }).id;
+}
+
+async function waitForCaps(request: APIRequestContext, owner: Actor, mowerId: string) {
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(`/api/v1/telemetry/mowers/${mowerId}/capabilities`, {
+          headers: { Authorization: `Bearer ${owner.token}` },
+        });
+        return response.ok() ? (await response.json()).capabilities : null;
+      },
+      { timeout: 60_000 },
+    )
+    .not.toBeNull();
+}
+
+/** The element lies completely inside the viewport (and is not covered at its centre). */
+async function expectInViewport(page: Page, locator: Locator, what: string): Promise<void> {
+  await expect(locator, what).toBeVisible();
+  const box = (await locator.boundingBox())!;
+  const view = page.viewportSize()!;
+  expect(box.x, `${what}: left`).toBeGreaterThanOrEqual(0);
+  expect(box.y, `${what}: top`).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width, `${what}: right`).toBeLessThanOrEqual(view.width + 0.5);
+  expect(box.y + box.height, `${what}: bottom`).toBeLessThanOrEqual(view.height + 0.5);
+  const reachable = await locator.evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return hit !== null && (node === hit || node.contains(hit));
+  });
+  expect(reachable, `${what}: not covered`).toBe(true);
+}
+
+async function expectNoSidewaysOverflow(page: Page): Promise<void> {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+}
+
+/** The test pattern keeps drawing: its frame counter grows. */
+async function expectPatternRunning(page: Page): Promise<void> {
+  const pattern = page.getByTestId('camera-pattern');
+  await expect(pattern).toBeVisible();
+  const frames = async () => Number(await pattern.getAttribute('data-frames'));
+  const first = await frames();
+  await expect.poll(frames, { timeout: 5_000 }).toBeGreaterThan(first);
+}
+
+async function freeze(page: Page, on: boolean): Promise<void> {
+  await page.getByTestId('camera-pattern').evaluate((node, value) => {
+    if (value) (node as HTMLElement).dataset.freeze = 'true';
+    else delete (node as HTMLElement).dataset.freeze;
+  }, on);
+}
+
+/** Press the pad at its centre and push it forward (real pointer events). */
+async function pushForward(page: Page, pad: Locator): Promise<void> {
+  const box = (await pad.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx, cy - box.height * 0.45, { steps: 5 });
+  await expect(pad).toHaveAttribute('data-engaged', 'true');
+}
+
+test('drive view: camera in three layouts, freeze holds the mower, one camera session per visit', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(300_000);
+  const csp = watchCsp(page);
+  const owner = await registerByApi(request, actor('drivecam'));
+  const mowerId = await createMowerByApi(request, owner, `Luba drivecam ${RUN}`);
+  const blindId = await createMowerWithoutCamera(request, owner, `Luba blind ${RUN}`);
+  await waitForMap(request, owner, mowerId);
+  await waitForCaps(request, owner, mowerId);
+  await waitForCaps(request, owner, blindId);
+  await expect
+    .poll(async () => (await mowerState(request, owner, mowerId))?.position ?? null, {
+      timeout: 60_000,
+    })
+    .not.toBeNull();
+
+  // Camera session requests per mower, and every drive frame the page sends.
+  const sessions = new Map<string, number>();
+  page.on('request', (req) => {
+    const match = /\/fleet\/mowers\/([^/]+)\/camera\/session$/.exec(req.url());
+    if (match && req.method() === 'POST')
+      sessions.set(match[1]!, (sessions.get(match[1]!) ?? 0) + 1);
+  });
+  const frames: SentFrame[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      try {
+        const message = JSON.parse(String(event.payload)) as {
+          type?: string;
+          linear?: number;
+          angular?: number;
+        };
+        if (message.type === 'drive_frame') {
+          frames.push({
+            at: Date.now(),
+            linear: message.linear ?? 0,
+            angular: message.angular ?? 0,
+          });
+        }
+      } catch {
+        // not JSON
+      }
+    });
+  });
+
+  await page.setViewportSize(DESKTOP);
+  await loginByUi(page, owner);
+  await page.goto(`/mowers/${mowerId}`);
+  await page.getByTestId('mower-drive').click();
+  await page.waitForURL(new RegExp(`/mowers/${mowerId}/drive$`));
+  // The mower page's camera panel had its own session; count the drive visit from here.
+  await expect(page.getByTestId('camera-panel')).toHaveCount(0);
+  const before = sessions.get(mowerId) ?? 0;
+
+  // --- desktop -------------------------------------------------------------------------------
+  const drive = page.getByTestId('drive-page');
+  await expect(drive).toHaveAttribute('data-view', 'camera', { timeout: 30_000 });
+  await expect(drive).toHaveAttribute('data-layout', 'desktop');
+  const stage = page.getByTestId('camera-stage');
+  await expect(stage).toHaveAttribute('data-phase', 'live', { timeout: 30_000 });
+  await expectPatternRunning(page);
+  // The front left camera by default.
+  await expect(page.getByTestId('camera-tile')).toHaveAttribute('data-side', 'left');
+  await expect(page.getByTestId('drive-map-thumb')).toBeVisible();
+  await expect(page.getByTestId('drive-view')).toBeVisible();
+  // The picture never takes the pointer from what floats above it.
+  expect(
+    await page
+      .getByTestId('camera-pattern')
+      .evaluate((node) => getComputedStyle(node).pointerEvents),
+  ).toBe('none');
+  expect(
+    await page.getByTestId('camera-video').evaluate((node) => getComputedStyle(node).pointerEvents),
+  ).toBe('none');
+  await expectInViewport(page, page.getByTestId('emergency-stop'), 'emergency stop');
+  await expectInViewport(page, page.getByTestId('drive-start'), 'session start');
+  await expectNoSidewaysOverflow(page);
+
+  // "Both": the stereo pair side by side, and back to the left camera.
+  await page.getByTestId('drive-camera-both').click();
+  await expect(page.getByTestId('camera-tile-right')).toHaveAttribute('data-status', 'live');
+  await page.getByTestId('drive-camera-both').click();
+  await expect(page.getByTestId('camera-tile-right')).toBeHidden();
+  await expect(page.getByTestId('camera-tile')).toHaveAttribute('data-side', 'left');
+
+  // The map thumbnail hides on a tap and comes back.
+  await page.getByTestId('drive-map-thumb-hide').click();
+  await expect(page.getByTestId('drive-map-thumb')).toHaveCount(0);
+  await page.getByTestId('drive-map-thumb-show').click();
+  await expect(page.getByTestId('drive-map-thumb')).toBeVisible();
+
+  // Start and drive with the camera on screen.
+  await page.getByTestId('drive-start').click();
+  await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
+  await expectInViewport(page, page.getByTestId('drive-stop'), 'session stop');
+  const pad = page.getByTestId('joystick');
+  const start = (await mowerState(request, owner, mowerId))!;
+  await pushForward(page, pad);
+  await expect
+    .poll(
+      async () => {
+        const now = await mowerState(request, owner, mowerId);
+        return now?.position ? metres(start.position!, now.position) : 0;
+      },
+      { timeout: 6_000, intervals: [250] },
+    )
+    .toBeGreaterThan(0.3);
+  await expect(stage).toHaveAttribute('data-frozen', 'false');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${OUT}drive-camera-desktop.png`, animations: 'disabled' });
+
+  // --- freeze: the picture stands while the stick is held forward ----------------------------
+  await freeze(page, true);
+  await expect(page.getByTestId('camera-frozen')).toBeVisible({ timeout: 3_000 });
+  await expect(stage).toHaveAttribute('data-frozen', 'true');
+  await expect(page.getByTestId('camera-status')).toContainText('Bild steht');
+  await expect(page.getByTestId('drive-held')).toBeVisible();
+  await expect(page.getByTestId('drive-pad')).toHaveAttribute('data-held', 'true');
+  const frozenAt = Date.now();
+  await page.screenshot({ path: `${OUT}drive-camera-frozen-desktop.png`, animations: 'disabled' });
+  await page.waitForTimeout(1_500);
+  const whileFrozen = frames.filter((f) => f.at > frozenAt);
+  // The session stays open (zero frames keep it alive), but nothing moves.
+  expect(whileFrozen.length).toBeGreaterThan(0);
+  expect(whileFrozen.every((f) => f.linear === 0 && f.angular === 0)).toBe(true);
+  await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
+  await expect
+    .poll(async () => (await mowerState(request, owner, mowerId))?.speed_mps ?? null, {
+      timeout: 3_000,
+      intervals: [200],
+    })
+    .toBe(0);
+
+  // The picture runs again; the stick, still held forward, stays latched at zero.
+  await freeze(page, false);
+  await expect(page.getByTestId('camera-frozen')).toHaveCount(0, { timeout: 3_000 });
+  await expect(page.getByTestId('drive-held')).toContainText('neu ansetzen');
+  const thawedAt = Date.now();
+  await page.waitForTimeout(1_200);
+  expect(frames.filter((f) => f.at > thawedAt).every((f) => f.linear === 0)).toBe(true);
+  // Let go and touch again: it drives.
+  await page.mouse.up();
+  await expect(page.getByTestId('drive-held')).toHaveCount(0);
+  const retouchAt = Date.now();
+  await pushForward(page, pad);
+  await expect
+    .poll(() => frames.filter((f) => f.at > retouchAt && f.linear > 0).length, { timeout: 3_000 })
+    .toBeGreaterThan(0);
+  await page.mouse.up();
+  await expect(pad).toHaveAttribute('data-engaged', 'false');
+
+  // --- a phone upright -----------------------------------------------------------------------
+  await page.setViewportSize(UPRIGHT);
+  await expect(drive).toHaveAttribute('data-layout', 'upright');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(stage).toHaveAttribute('data-phase', 'live');
+  await expectPatternRunning(page);
+  const camBox = (await stage.boundingBox())!;
+  expect(Math.abs(camBox.width / camBox.height - 16 / 9)).toBeLessThan(0.05);
+  await expect(page.getByTestId('drive-hud')).toBeVisible();
+  await expect(page.getByTestId('drive-details')).toBeVisible();
+  await expectInViewport(page, page.getByTestId('emergency-stop'), 'emergency stop (upright)');
+  await expectInViewport(page, page.getByTestId('drive-stop'), 'session stop (upright)');
+  await expectInViewport(page, pad, 'joystick (upright)');
+  await expectNoSidewaysOverflow(page);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${OUT}drive-camera-phone.png`, animations: 'disabled' });
+
+  // --- a phone held sideways -----------------------------------------------------------------
+  await page.setViewportSize(SIDEWAYS);
+  await expect(drive).toHaveAttribute('data-layout', 'sideways');
+  await expect(page.getByTestId('stop-bar')).toHaveAttribute('data-variant', 'rail');
+  await expectPatternRunning(page);
+  await expectInViewport(page, page.getByTestId('emergency-stop'), 'emergency stop (sideways)');
+  await expectInViewport(page, page.getByTestId('drive-stop'), 'session stop (sideways)');
+  await expect(pad).toHaveAttribute('data-variant', 'overlay');
+  await expectInViewport(page, pad, 'joystick (sideways)');
+  const scroll = await page.evaluate(() => ({
+    x: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    y: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+  }));
+  expect(scroll.x).toBeLessThanOrEqual(0);
+  expect(scroll.y).toBeLessThanOrEqual(0);
+  // The overlay stick drives over the picture.
+  const sidewaysAt = Date.now();
+  await pushForward(page, pad);
+  await expect
+    .poll(() => frames.filter((f) => f.at > sidewaysAt && f.linear > 0).length, { timeout: 3_000 })
+    .toBeGreaterThan(0);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${OUT}drive-camera-sideways.png`, animations: 'disabled' });
+  await page.mouse.up();
+
+  // --- leaving ends the drive session and the camera -----------------------------------------
+  await page.setViewportSize(DESKTOP);
+  await expect(drive).toHaveAttribute('data-layout', 'desktop');
+  // Exactly one camera session for the whole visit, through every layout.
+  expect((sessions.get(mowerId) ?? 0) - before).toBe(1);
+  await page.getByRole('link', { name: 'Zurück' }).first().click();
+  await page.waitForURL(new RegExp(`/mowers/${mowerId}$`));
+  await expect(page.getByTestId('drive-page')).toHaveCount(0);
+  // Only the mower page's own panel is left: no second viewer of the same mower.
+  await expect(page.getByTestId('camera-stage')).toHaveCount(1);
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(`/api/v1/fleet/mowers/${mowerId}/drive-sessions`, {
+          headers: auth,
+        });
+        const body = (await response.json()) as { items: { end_reason?: string | null }[] };
+        return body.items[0]?.end_reason ?? null;
+      },
+      { timeout: 10_000 },
+    )
+    .toBe('client_stop');
+
+  // --- a mower without a camera gets the map ------------------------------------------------
+  await page.goto(`/mowers/${blindId}/drive`);
+  const blind = page.getByTestId('drive-page');
+  await expect(blind).toHaveAttribute('data-view', 'map', { timeout: 30_000 });
+  await expect(page.getByTestId('drive-view')).toHaveCount(0);
+  await expect(page.getByTestId('camera-stage')).toHaveCount(0);
+  await expectInViewport(page, page.getByTestId('emergency-stop'), 'emergency stop (no camera)');
+  await page.waitForTimeout(1_000);
+  expect(sessions.get(blindId) ?? 0).toBe(0);
+  csp.assertNone();
+});
