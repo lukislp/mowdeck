@@ -15,7 +15,8 @@
     "build": "pnpm --filter web build",
     "dev": "pnpm --filter web dev",
     "format": "prettier --write . && eslint --fix .",
-    "codegen": "pnpm --filter ts-codegen gen"
+    "codegen": "pnpm --filter ts-codegen gen",
+    "e2e:stack": "node tests/e2e-web/scripts/stack.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -3,7 +3,6 @@
  * UI login, and a guard that fails a test on any Content Security Policy violation.
  */
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
@@ -87,27 +86,49 @@ export async function waitForMap(
 
 /**
  * Operator admins exist only through Identity's CLI (`grant-platform-admin`, a tuple in OpenFGA).
- * The suite runs it in the stack's identity container with `docker compose exec`, so it needs the
- * Docker CLI next to the stack: `MOWDECK_E2E_COMPOSE_FILE` names the Compose file (default: this
- * checkout's `infra/compose/docker-compose.yml`), `MOWDECK_E2E_PLATFORM_ADMIN=off` skips the specs
- * that need an operator admin (a stack without local Docker access).
+ * The suite runs it in the stack's identity container with `docker exec`, so it needs the Docker
+ * CLI next to the stack. The container is looked up by its Compose labels in the project
+ * `MOWDECK_E2E_COMPOSE_PROJECT`, which the global setup takes from the stack's e2e marker (so the
+ * grant always lands in the stack the browser tests, never in another stack on the same host).
+ * `MOWDECK_E2E_PLATFORM_ADMIN=off` skips the specs that need an operator admin (a stack without
+ * local Docker access).
  */
 export const PLATFORM_ADMIN_ENABLED = process.env.MOWDECK_E2E_PLATFORM_ADMIN !== 'off';
 
-const COMPOSE_FILE =
-  process.env.MOWDECK_E2E_COMPOSE_FILE ??
-  fileURLToPath(new URL('../../../infra/compose/docker-compose.yml', import.meta.url));
+function identityContainer(): string {
+  const project = process.env.MOWDECK_E2E_COMPOSE_PROJECT;
+  if (!project) {
+    throw new Error(
+      'MOWDECK_E2E_COMPOSE_PROJECT is not set: name the Compose project of the stack under test ' +
+        'or set MOWDECK_E2E_PLATFORM_ADMIN=off',
+    );
+  }
+  const ids = execFileSync(
+    'docker',
+    [
+      'ps',
+      '-q',
+      '--filter',
+      `label=com.docker.compose.project=${project}`,
+      '--filter',
+      'label=com.docker.compose.service=identity',
+    ],
+    { encoding: 'utf-8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] },
+  )
+    .split(/\s+/)
+    .filter(Boolean);
+  if (ids.length === 0) {
+    throw new Error(`no running identity container in the Compose project ${project}`);
+  }
+  return ids[0];
+}
 
 export function grantPlatformAdmin(who: Actor): void {
   const output = execFileSync(
     'docker',
     [
-      'compose',
-      '-f',
-      COMPOSE_FILE,
       'exec',
-      '-T',
-      'identity',
+      identityContainer(),
       'python',
       '-m',
       'identity.cli',

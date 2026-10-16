@@ -4,7 +4,8 @@ Configuration from the environment:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| ``MOWDECK_E2E_BASE_URL`` | ``http://localhost`` | Traefik's entry point |
+| ``MOWDECK_E2E_BASE_URL`` | ``http://localhost:8480`` | Traefik (``pnpm e2e:stack up``) |
+| ``MOWDECK_E2E_ALLOW_ANY_STACK`` | unset | ``1`` runs against a stack without the e2e marker |
 | ``MOWDECK_E2E_WS_URL`` | base URL with ``ws://`` + ``/api/v1/realtime/ws`` | Realtime socket |
 | ``MOWDECK_E2E_HTTP_TIMEOUT`` | ``10`` | seconds per HTTP request and socket handshake |
 | ``MOWDECK_E2E_READY_TIMEOUT`` | ``30`` | new mower until Telemetry reports ``docked`` |
@@ -16,6 +17,7 @@ Configuration from the environment:
 import asyncio
 import json
 import os
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -29,6 +31,8 @@ from websockets.exceptions import ConnectionClosed
 IDENTITY = "/api/v1/identity"
 FLEET = "/api/v1/fleet"
 TELEMETRY = "/api/v1/telemetry"
+# The marker of infra/compose/docker-compose.e2e.yml (whoami with the Compose project as host name).
+E2E_MARKER = "/api/v1/e2e-stack"
 
 Message = dict[str, Any]
 
@@ -50,7 +54,8 @@ class E2EConfig:
     def from_env(cls) -> "E2EConfig":
         """Read the ``MOWDECK_E2E_*`` variables."""
         env = os.environ
-        base = env.get("MOWDECK_E2E_BASE_URL", "http://localhost").rstrip("/")
+        default_base = f"http://localhost:{env.get('MOWDECK_E2E_PORT', '8480')}"
+        base = env.get("MOWDECK_E2E_BASE_URL", default_base).rstrip("/")
         ws_base = base.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
         return cls(
             base_url=base,
@@ -62,6 +67,28 @@ class E2EConfig:
             idle_seconds=float(env.get("MOWDECK_E2E_IDLE_SECONDS", "90")),
             run_id=uuid4().hex[:8],
         )
+
+
+async def isolated_stack_problem(client: httpx.AsyncClient) -> str | None:
+    """Why the test must not run against the client's stack, or None for a throwaway e2e stack.
+
+    The test creates users, accounts and mowers: it only runs against a stack with the e2e marker
+    (``pnpm e2e:stack up``), unless ``MOWDECK_E2E_ALLOW_ANY_STACK=1``. A stack without the marker
+    serves the web app's index.html at the marker path, so the whoami body decides.
+    """
+    if os.environ.get("MOWDECK_E2E_ALLOW_ANY_STACK") == "1":
+        return None
+    try:
+        response = await client.get(E2E_MARKER)
+    except httpx.HTTPError as exc:
+        return f"stack not reachable at {client.base_url}: {exc!r} (pnpm e2e:stack up?)"
+    if response.status_code == 200 and re.search(r"^Hostname:\s*\S+\s*$", response.text, re.M):
+        return None
+    return (
+        f"refusing to run against {client.base_url}: not an isolated test stack (no e2e marker at "
+        f"{E2E_MARKER}). Start one with `pnpm e2e:stack up` and run `pnpm e2e:stack acceptance`; "
+        "set MOWDECK_E2E_ALLOW_ANY_STACK=1 to target another stack on purpose."
+    )
 
 
 @dataclass

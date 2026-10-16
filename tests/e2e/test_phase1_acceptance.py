@@ -1,4 +1,4 @@
-"""Phase 1 gate (docs/phases.md): run with ``uv run poe e2e`` against ``docker compose up --wait``.
+"""Phase 1 gate (docs/phases.md): run with ``pnpm e2e:stack acceptance`` (throwaway stack).
 
 The criterion, step by step (usernames are unique per run):
 
@@ -34,6 +34,7 @@ from e2e_support import (
     create_subuser,
     describe,
     is_type,
+    isolated_stack_problem,
     login,
     open_socket,
     register_owner,
@@ -53,6 +54,9 @@ def cfg() -> E2EConfig:
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def http(cfg: E2EConfig) -> AsyncIterator[httpx.AsyncClient]:
     async with httpx.AsyncClient(base_url=cfg.base_url, timeout=cfg.http_timeout) as client:
+        problem = await isolated_stack_problem(client)
+        if problem:
+            pytest.exit(problem, returncode=2)
         try:
             response = await client.get(f"{IDENTITY}/.well-known/jwks.json")
         except httpx.HTTPError as exc:

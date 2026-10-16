@@ -182,6 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - run: docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env.example config -q
+      - run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml --env-file infra/compose/.env.example config -q
 
   # The Helm chart without a cluster (about a minute): lint, template with the default values and
   # both overlays, kubeconform -strict, the required-secret checks and the Compose drift test
@@ -461,15 +462,17 @@ jobs:
         run: |
           cp infra/compose/.env.example infra/compose/.env
           sh infra/mirror-env.sh >> infra/compose/.env
+      # docker-compose.e2e.yml adds the e2e marker the suites require (they refuse any stack
+      # without it, so a local run never writes into the stack people use).
       - name: Start the stack
-        run: docker compose -f infra/compose/docker-compose.yml up -d --build --wait --wait-timeout 600
+        run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml up -d --build --wait --wait-timeout 600
       - name: Acceptance test (including the slow idle WebSocket check)
         run: uv run poe e2e
         env:
           MOWDECK_E2E_BASE_URL: http://localhost
       - name: Collect logs on failure
         if: failure()
-        run: docker compose -f infra/compose/docker-compose.yml logs --no-color --timestamps > e2e-logs.txt
+        run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml logs --no-color --timestamps > e2e-logs.txt
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v7.0.2
@@ -478,7 +481,7 @@ jobs:
           path: e2e-logs.txt
       - name: Stop the stack
         if: always()
-        run: docker compose -f infra/compose/docker-compose.yml down -v
+        run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml down -v
 
   # Phase 2 gate (docs/phases.md): the Playwright suite tests/e2e-web against the full Compose
   # stack including the web app at /, on a phone (gate) and a desktop viewport.
@@ -556,14 +559,14 @@ jobs:
           sh infra/mirror-env.sh >> infra/compose/.env
           grep '^[A-Z_]*=' tests/e2e-web/stack.env >> infra/compose/.env
       - name: Start the stack
-        run: docker compose -f infra/compose/docker-compose.yml up -d --build --wait --wait-timeout 600
+        run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml up -d --build --wait --wait-timeout 600
       - name: Phase 2 gate (Playwright)
         run: pnpm --filter e2e-web test
         env:
           MOWDECK_E2E_BASE_URL: http://localhost
       - name: Collect logs on failure
         if: failure()
-        run: docker compose -f infra/compose/docker-compose.yml logs --no-color --timestamps > e2e-web-logs.txt
+        run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml logs --no-color --timestamps > e2e-web-logs.txt
       - name: Upload report on failure
         if: failure()
         uses: actions/upload-artifact@v7.0.2
@@ -575,4 +578,4 @@ jobs:
             e2e-web-logs.txt
       - name: Stop the stack
         if: always()
-        run: docker compose -f infra/compose/docker-compose.yml down -v
+        run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml down -v

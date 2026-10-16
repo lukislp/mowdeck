@@ -148,7 +148,8 @@ fmt = ["_fmt-fix", "_fmt-format"]
 _fmt-fix = "ruff check --fix ."
 _fmt-format = "ruff format ."
 test = "pytest --cov --cov-report=term-missing"
-# Phase 1 acceptance test against `docker compose up -d --wait` (base URL MOWDECK_E2E_BASE_URL).
+# Phase 1 acceptance test against the throwaway test stack (`pnpm e2e:stack up`, then
+# `pnpm e2e:stack acceptance`); it refuses a stack without the e2e marker.
 e2e = "pytest tests/e2e -m e2e -p no:cacheprovider"
 docs = "mkdocs build --strict"
 wiki = "wiki-sync build --docs docs --mkdocs mkdocs.yml --out build/wiki"
