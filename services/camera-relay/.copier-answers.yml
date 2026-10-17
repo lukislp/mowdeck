@@ -1,0 +1,9 @@
+# Changes here will be overwritten by Copier; do not edit by hand.
+_src_path: templates/service
+description: 'Shared camera sessions per account and mower: leases, grace, tickets
+    and lifecycle events (ADR 0045).'
+http_port: 8000
+needs_db: false
+package_name: camera_relay
+permissions: {}
+service_name: camera-relay

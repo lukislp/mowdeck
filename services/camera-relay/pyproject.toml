@@ -1,0 +1,32 @@
+[project]
+name = "camera-relay"
+version = "0.1.0"
+description = "Shared camera sessions per account and mower: leases, grace, tickets and lifecycle events (ADR 0045)."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "AGPL-3.0-only"
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "cryptography>=44.0.0",
+  "mowdeck-contracts",
+  "mowdeck-service-kit",
+]
+
+[project.scripts]
+camera-relay = "camera_relay.main:main"
+
+[tool.uv.sources]
+mowdeck-contracts = { workspace = true }
+mowdeck-service-kit = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/camera_relay"]
