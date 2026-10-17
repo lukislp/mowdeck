@@ -38,7 +38,7 @@ export default defineConfig({
     {
       name: 'desktop',
       testMatch:
-        /(desktop|notifications|connection|schedules|drive|calibration|health|fleet|operator|camera|camera-freeze|vision|spot)\.spec\.ts/,
+        /(desktop|notifications|connection|schedules|drive|calibration|health|fleet|operator|camera|camera-freeze|camera-relay|vision|spot)\.spec\.ts/,
       use: { browserName: 'chromium', viewport: { width: 1280, height: 800 } },
     },
     // Safari's engine (ADR 0044 amendment 2026-10-17): the camera's freeze detection and the

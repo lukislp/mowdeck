@@ -323,15 +323,16 @@ sequenceDiagram
     participant D as Device-Gateway
     participant M as Mammotion cloud
     participant G as Agora
-    A->>F: POST /fleet/mowers/{id}/camera/session
+    A->>F: POST /fleet/mowers/{id}/camera/session {transport: direct}
     F->>O: can_view on mower:<id> (404 semantics)
     F->>E: feature camera (cached; no: 403 feature-not-in-plan)
+    Note over F: auto (default) tries relay.camera.attach first and takes this path only<br/>on unsupported_provider or when no relay answers (ADR 0045)
     F->>D: gateway.mower.<id>.camera.session (core NATS, the shard's instance answers)
     D->>D: account owns the mower? connection CameraCapable?
     D->>M: get_stream_subscription (PyMammotion; the mower starts publishing)
     M-->>D: appid, channel, token, uid, cameras, key and salt
     D-->>F: CameraSessionReply(session)
-    F->>F: audit mower.camera_opened (never the token)
+    F->>F: audit mower.camera_opened (transport direct, never the token)
     F-->>A: CameraSession (Cache-Control: no-store)
     A->>G: join channel as audience (Agora Web SDK, encryption first)
     G-->>A: video of the mower's camera

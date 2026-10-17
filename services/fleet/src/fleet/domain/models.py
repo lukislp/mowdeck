@@ -242,3 +242,5 @@ class AuditEntry:
     actor_kind: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
     correlation_id: str | None = None
+    event_id: UUID | None = None
+    """Id of the event this row records (unique): a redelivered event writes no second row."""

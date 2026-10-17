@@ -9,8 +9,9 @@ readers to end.
 
 from mowdeck_service_kit import get_logger
 
-from camera_relay.application.ports import SourceUnavailableError
+from camera_relay.application.ports import SourceOffer, SourceUnavailableError
 from camera_relay.domain.effects import StartVendorSession, StopVendorSession, UpdateCameras
+from camera_relay.domain.models import RelayKey
 
 _log = get_logger("camera_relay.sources")
 
@@ -21,7 +22,17 @@ NO_DRIVER_DETAIL = (
 
 
 class NoSourceDriver:
-    """The ``VendorSessions`` port without any driver: every start is ``unavailable``."""
+    """The ``VendorSessions`` port without any driver: every offer and start is
+    ``unavailable`` (a relay without a media plane is misconfigured, not a missing driver)."""
+
+    async def offer(self, key: RelayKey) -> SourceOffer:
+        """Refuse: no driver can start a source."""
+        del key
+        raise SourceUnavailableError(NO_DRIVER_DETAIL)
+
+    async def discard(self, key: RelayKey) -> None:
+        """Nothing was offered."""
+        del key
 
     async def start(self, command: StartVendorSession) -> None:
         """Refuse: no driver can start a source yet."""

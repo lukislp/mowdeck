@@ -27,6 +27,14 @@ from mowdeck_contracts.v1 import (
     PathPreviewGatewayRequest,
     PathPreviewReply,
 )
+from mowdeck_contracts.v1.relay import (
+    RelayAttachReply,
+    RelayAttachRequest,
+    RelayDetachReply,
+    RelayDetachRequest,
+    RelayRenewReply,
+    RelayRenewRequest,
+)
 from pydantic import BaseModel
 
 from fleet.domain.models import (
@@ -190,6 +198,24 @@ class CommandPublisher(Protocol):
 
     async def publish(self, envelope: CommandEnvelope) -> None:
         """Publish with ``msg id = command_id``; raises when the bus cannot take it."""
+        ...
+
+
+class CameraRelay(Protocol):
+    """Asks the camera relay for, renews and ends a lease (ADR 0045). Raises the bus errors
+    (``NoRespondersError`` when no relay is deployed, ``RequestTimeoutError``,
+    ``BusNotConnectedError``)."""
+
+    async def attach(self, request: RelayAttachRequest) -> RelayAttachReply:
+        """``relay.camera.attach``."""
+        ...
+
+    async def renew(self, request: RelayRenewRequest) -> RelayRenewReply:
+        """``relay.camera.renew``."""
+        ...
+
+    async def detach(self, request: RelayDetachRequest) -> RelayDetachReply:
+        """``relay.camera.detach``."""
         ...
 
 

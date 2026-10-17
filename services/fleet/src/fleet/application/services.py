@@ -34,6 +34,7 @@ from fleet.application.path_preview import PathPreviewService
 from fleet.application.ports import (
     BridgeScanGateway,
     CameraGateway,
+    CameraRelay,
     Clock,
     CloudDiscovery,
     CommandPublisher,
@@ -78,6 +79,7 @@ def build_services(
     caches: Sequence[SupportsInvalidate] = (),
     entitlements: Entitlements | None = None,
     camera_gateway: CameraGateway | None = None,
+    camera_relay: CameraRelay | None = None,
     path_preview_gateway: PathPreviewGateway | None = None,
     cloud_discovery: CloudDiscovery | None = None,
     cipher: SecretCipher | None = None,
@@ -97,7 +99,9 @@ def build_services(
         area_names=AreaNameService(uow, store, clock),
         commands=CommandService(store, access, commands, config, clock, entitlements),
         drive=DriveService(store, access, clock),
-        camera=CameraService(store, camera_gateway or _NoCameraGateway(), clock, entitlements),
+        camera=CameraService(
+            store, camera_gateway or _NoCameraGateway(), clock, entitlements, camera_relay
+        ),
         path_preview=PathPreviewService(
             store, path_preview_gateway or _NoPathPreviewGateway(), entitlements
         ),

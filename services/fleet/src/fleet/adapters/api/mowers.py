@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Path, Query, Request, Response
+from fastapi import APIRouter, Body, Path, Query, Request, Response
 from mowdeck_authz import mower
 from mowdeck_authz.fastapi import authorize
 from mowdeck_contracts.v1 import (
@@ -37,6 +37,7 @@ from fleet.adapters.api.schemas import (
     AreaNamesOut,
     BridgeLinkIn,
     BridgeScanIn,
+    CameraSessionIn,
     ConnectionKindList,
     ConnectionKindOut,
     LinkOut,
@@ -290,8 +291,15 @@ async def list_drive_sessions(
     responses={
         403: {"description": "The plan does not include the feature `camera`."},
         404: {"description": "The mower does not exist or is not visible to the caller."},
-        409: {"description": "`camera-unsupported`: the mower's connection has no camera."},
-        503: {"description": "The Device-Gateway or the vendor cloud did not answer."},
+        409: {
+            "description": "`camera-unsupported`: the mower's connection has no camera; "
+            "`camera-relay-unsupported`: `transport` `relay`, but the relay has no source for "
+            "the mower's camera provider; `camera-budget`: a camera limit refused the stream."
+        },
+        503: {
+            "description": "The Device-Gateway, the vendor cloud or (`transport` `relay`) the "
+            "camera relay did not answer, or the mower is offline."
+        },
     },
 )
 async def open_camera_session(
@@ -300,15 +308,69 @@ async def open_camera_session(
     account_id: CurrentAccountId,
     services: ServicesDep,
     response: Response,
+    body: Annotated[CameraSessionIn | None, Body()] = None,
 ) -> CameraSession:
-    """A short-lived live camera session (ADR 0032): ``can_view`` on the mower (hidden
-    otherwise) and the plan feature ``camera``. Fleet relays the request to the Device-Gateway
-    that holds the mower and audits it (``mower.camera_opened``). The browser joins the video
-    itself (``provider`` ``agora``: Agora Web SDK; ``fake``: a test pattern); no media passes
-    through MowDeck. The token is a secret: the response is never cached; ask again before
-    ``expires_at``."""
+    """A short-lived live camera session: ``can_view`` on the mower (hidden otherwise) and the
+    plan feature ``camera``; audited as ``mower.camera_opened`` with the transport used.
+
+    ``transport`` (ADR 0045, default ``auto``): ``relay`` opens a lease on MowDeck's camera
+    relay and answers its session (``provider`` ``relay``: WHEP URLs per camera, a ticket,
+    ``lease_id``; renew it every ``heartbeat_seconds``, delete it when the page goes away).
+    ``direct`` asks the Device-Gateway for the vendor session (ADR 0032; ``provider``
+    ``agora``: the browser joins with the Agora Web SDK, ``fake``: a test pattern). ``auto``
+    uses the relay and falls back to ``direct`` only when the relay cannot serve the mower's
+    camera provider or is not deployed. The token or ticket is a secret: the response is never
+    cached; ask again before ``expires_at``."""
     response.headers["Cache-Control"] = "no-store"
-    return await services.camera.open(actor_of(principal), account_id, mower_id)
+    transport = (body or CameraSessionIn()).transport
+    return await services.camera.open(actor_of(principal), account_id, mower_id, transport)
+
+
+@router.post(
+    "/mowers/{mower_id}/camera/session/{lease_id}/renew",
+    responses={
+        403: {"description": "The plan does not include the feature `camera`."},
+        404: {
+            "description": "The mower is not visible, or the lease is unknown, expired, "
+            "detached or not the caller's account's."
+        },
+        503: {"description": "The camera relay is not deployed or did not answer."},
+    },
+)
+async def renew_camera_session(
+    mower_id: UUID,
+    lease_id: UUID,
+    principal: ViewMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    response: Response,
+) -> CameraSession:
+    """The heartbeat of a relay camera lease (ADR 0045): extends it and answers the same session
+    with a fresh ticket (for reconnects). ``can_view`` on the mower and the plan feature
+    ``camera``; never cached."""
+    response.headers["Cache-Control"] = "no-store"
+    return await services.camera.renew(actor_of(principal), account_id, mower_id, lease_id)
+
+
+@router.delete(
+    "/mowers/{mower_id}/camera/session/{lease_id}",
+    status_code=204,
+    responses={
+        404: {"description": "The mower is not visible, or the lease is another account's."},
+        503: {"description": "The camera relay did not answer in time."},
+    },
+)
+async def close_camera_session(
+    mower_id: UUID,
+    lease_id: UUID,
+    principal: ViewMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> None:
+    """End a relay camera lease (ADR 0045): the page was left or hidden. Idempotent: an unknown
+    or already closed lease, or no relay at all, is 204 as well. ``can_view`` on the mower;
+    no plan check (ending a stream is always allowed)."""
+    await services.camera.detach(actor_of(principal), account_id, mower_id, lease_id)
 
 
 @router.post(

@@ -153,7 +153,10 @@ def test_attach_request_round_trips_and_validates_camera_ids() -> None:
     assert request.purpose is RelayPurpose.VIEWER
     assert RelayAttachRequest.model_validate_json(request.model_dump_json()) == request
     base = {"account_id": uuid4(), "mower_id": uuid4(), "requested_by": REF}
-    for camera_ids in ([], ["0", "0"], [""], ["x" * 65], [str(i) for i in range(9)]):
+    every = RelayAttachRequest.model_validate(base)
+    assert every.camera_ids == []  # empty: every camera the mower offers
+    assert RelayAttachRequest.model_validate({**base, "camera_ids": []}) == every
+    for camera_ids in (["0", "0"], [""], ["x" * 65], [str(i) for i in range(9)]):
         with pytest.raises(ValidationError):
             RelayAttachRequest.model_validate({**base, "camera_ids": camera_ids})
     vision = RelayAttachRequest.model_validate({**base, "camera_ids": ["0"], "purpose": "vision"})
@@ -221,8 +224,16 @@ def test_events_validate_and_wrap_in_an_envelope() -> None:
         stopped_at=EXPIRES,
     )
     assert stopped.vision_seconds == 0
+    assert (stopped.trigger, stopped.peak_viewers) == (None, 0)  # optional, older producers
+    assert (started.trigger, started.started_by) == (None, None)
     with pytest.raises(ValidationError):
         CameraRelayStopped.model_validate({**stopped.model_dump(), "vision_seconds": -1})
+    with pytest.raises(ValidationError):
+        CameraRelayStopped.model_validate({**stopped.model_dump(), "peak_viewers": -1})
+    rich = CameraRelayStopped.model_validate(
+        {**stopped.model_dump(), "trigger": "viewer", "peak_viewers": 3}
+    )
+    assert (rich.trigger, rich.peak_viewers) == (RelayPurpose.VIEWER, 3)
     opened = CameraRelayLeaseOpened(
         lease_id=lease,
         relay_session_id=session_id,

@@ -68,6 +68,10 @@ class Settings(ServiceSettings):
     camera_request_timeout_seconds: float = Field(default=15.0, ge=1, le=60)
     """How long Fleet waits for the Device-Gateway's camera session (503 after)."""
 
+    camera_relay_timeout_seconds: float = Field(default=15.0, ge=1, le=60)
+    """How long Fleet waits for the camera relay (ADR 0045): a little longer than the relay's
+    own gateway timeout. ``auto`` takes the direct path after it, ``relay`` answers 503."""
+
     path_preview_request_timeout_seconds: float = Field(default=85.0, ge=5, le=120)
     """How long Fleet waits for a route the mower plans for a preview (504 after); a little
     longer than the gateway's ``MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS``."""

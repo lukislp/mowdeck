@@ -211,7 +211,7 @@ class MemoryStore:
             mower_groups=MemoryTable("id", [("pair_key",)]),
             area_names=MemoryTable("pair_key"),
             commands=MemoryTable("command_id"),
-            audit=MemoryTable("id", id_factory=lambda: next(audit_ids)),
+            audit=MemoryTable("id", [("event_id",)], id_factory=lambda: next(audit_ids)),
             drive_sessions=MemoryTable("id"),
             linked_accounts=MemoryTable("id", [("account_id", "email_key")]),
             mower_links=MemoryTable("id", [("pair_key",)]),

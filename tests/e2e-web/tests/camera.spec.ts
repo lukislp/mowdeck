@@ -87,9 +87,11 @@ test('camera: the simulated mower shows the test pattern; a viewer can open it',
   const mowerId = await createMowerByApi(request, owner, `Luba camera ${RUN}`);
   await waitForMap(request, owner, mowerId);
 
-  // The API: a fake session for the simulated mower, never cached.
+  // The API: a fake session for the simulated mower, never cached (`direct`: the vendor path;
+  // the test stack runs the camera relay, which `auto` would use, see camera-relay.spec.ts).
   const session = await request.post(`/api/v1/fleet/mowers/${mowerId}/camera/session`, {
     headers: { Authorization: `Bearer ${owner.token}` },
+    data: { transport: 'direct' },
   });
   expect(session.status(), await session.text()).toBe(200);
   expect(session.headers()['cache-control']).toBe('no-store');

@@ -32,6 +32,8 @@ from fleet.application.services import Services
 from fleet.application.throttle import TooManyLoginAttempts as LoginThrottled
 from fleet.domain.errors import (
     BridgeScanUnsupportedError,
+    CameraBudgetError,
+    CameraRelayUnsupportedError,
     CameraUnsupportedError,
     ConflictError,
     DriveCalibrationNotApplicableError,
@@ -58,6 +60,22 @@ class CameraUnsupported(Conflict):
 
     problem_type = "camera-unsupported"
     title = "Camera not supported"
+
+
+class CameraRelayUnsupported(Conflict):
+    """409 ``urn:mowdeck:problem:camera-relay-unsupported``: ``transport`` ``relay`` was asked
+    for, but the camera relay has no source for the mower's camera provider (ADR 0045)."""
+
+    problem_type = "camera-relay-unsupported"
+    title = "Camera relay not supported for this mower"
+
+
+class CameraBudget(Conflict):
+    """409 ``urn:mowdeck:problem:camera-budget``: a camera limit (video budget, battery, daily
+    minutes) refused the stream (ADR 0045)."""
+
+    problem_type = "camera-budget"
+    title = "Camera limit reached"
 
 
 class PathPreviewUnsupported(Conflict):
@@ -212,6 +230,10 @@ def to_service_error(exc: FleetError) -> ServiceError:
             return Forbidden(exc.message)
         case CameraUnsupportedError():
             return CameraUnsupported(exc.message)
+        case CameraRelayUnsupportedError():
+            return CameraRelayUnsupported(exc.message)
+        case CameraBudgetError():
+            return CameraBudget(exc.message)
         case PathPreviewUnsupportedError():
             return PathPreviewUnsupported(exc.message)
         case PathPreviewRejectedError():

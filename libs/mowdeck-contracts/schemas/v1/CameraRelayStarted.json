@@ -9,6 +9,74 @@
       ],
       "title": "CameraProvider",
       "type": "string"
+    },
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    },
+    "RelayPurpose": {
+      "description": "Why a lease holds the session.",
+      "enum": [
+        "viewer",
+        "vision"
+      ],
+      "title": "RelayPurpose",
+      "type": "string"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -48,6 +116,30 @@
       "format": "date-time",
       "title": "Started At",
       "type": "string"
+    },
+    "started_by": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PrincipalRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Who opened the lease that started the session."
+    },
+    "trigger": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RelayPurpose"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Purpose of the lease that started the session."
     }
   },
   "required": [

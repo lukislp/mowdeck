@@ -48,8 +48,8 @@ async def test_fleet_build_app_defaults_to_openfga_and_postgres(
     async with lifespan_client(in_memory) as client:
         assert (await client.get("/healthz")).status_code == 200
         # list, credentials, issue, resolve, drive start, drive stop, results, accounts,
-        # grants, plans
-        assert len(in_memory.state.subscriptions) == 10
+        # camera relay events, grants, plans
+        assert len(in_memory.state.subscriptions) == 11
 
 
 async def test_fleet_every_survives_failures_and_the_retention_task_starts() -> None:

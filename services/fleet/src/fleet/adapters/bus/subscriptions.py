@@ -9,6 +9,10 @@
   updates the command records.
 * ``event.identity.account.created`` (JetStream ``EVENTS``, durable ``fleet-accounts``):
   creates the default site of the account.
+* ``camera.mower.*.relay.*`` (JetStream ``CAMERA``, durable ``fleet-camera-relay``): the camera
+  relay's stream starts and stops become audit rows of the event's account
+  (``mower.camera_stream_started``, ``mower.camera_stream_stopped``), once per event id; the
+  lease events are acknowledged and ignored (ADR 0045).
 * ``event.identity.grants.changed`` (JetStream ``EVENTS``, every instance): drops cached
   authorization decisions.
 * ``fleet.commands.issue`` (core NATS request, queue ``fleet``, internal): a command on behalf
@@ -27,6 +31,8 @@ Handler rules: return to acknowledge, raise to get a redelivery, raise ``DropMes
 discard a poison message.
 """
 
+from typing import Any
+
 from mowdeck_authz.events import subscribe_cache_invalidation
 from mowdeck_authz.writer import SupportsInvalidate
 from mowdeck_contracts.v1 import (
@@ -44,6 +50,7 @@ from mowdeck_contracts.v1 import (
     ResolveTargetRequest,
 )
 from mowdeck_contracts.v1.subjects import (
+    ALL_CAMERA_RELAY_EVENTS,
     ALL_COMMAND_RESULTS,
     FLEET_COMMANDS_ISSUE,
     FLEET_DRIVE_START,
@@ -52,6 +59,7 @@ from mowdeck_contracts.v1.subjects import (
     FLEET_MOWERS_LIST,
     FLEET_TARGETS_RESOLVE,
     event_subject_for_type,
+    parse_camera_relay_event_subject,
 )
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.bus import (
@@ -74,6 +82,8 @@ RESULTS_CONSUMER = "fleet-command-results"
 """Durable consumer (and deliver group) of the command results, shared by all replicas."""
 ACCOUNTS_CONSUMER = "fleet-accounts"
 """Durable consumer (and deliver group) of ``identity.account.created``."""
+CAMERA_RELAY_CONSUMER = "fleet-camera-relay"
+"""Durable consumer (and deliver group) of the camera relay's events (stream ``CAMERA``)."""
 
 
 def credentials_handler(services: Services) -> MessageHandler:
@@ -140,6 +150,31 @@ def account_handler(services: Services) -> MessageHandler:
             raise DropMessage(f"invalid account.created event: {exc.error_count()} errors") from exc
         created = await services.sites.ensure_default(event.payload.account_id)
         _log.info("default site ready", account_id=str(created.account_id), site_id=str(created.id))
+
+    return handle
+
+
+def camera_relay_handler(services: Services) -> MessageHandler:
+    """Audit a camera relay stream start or stop (idempotent: a redelivery writes nothing)."""
+
+    async def handle(message: BusMessage) -> None:
+        try:
+            _, kind = parse_camera_relay_event_subject(message.subject)
+        except ValueError as exc:
+            raise DropMessage(f"not a camera relay event: {message.subject}") from exc
+        if kind not in ("started", "stopped"):
+            return
+        try:
+            event = message.model(EventEnvelope[dict[str, Any]])
+            written = await services.camera.record_relay_event(event)
+        except (ValidationError, ValueError) as exc:
+            raise DropMessage(f"invalid camera relay {kind} event: {exc}") from exc
+        _log.info(
+            "camera relay event audited",
+            kind=kind,
+            event_id=str(event.id),
+            written=written,
+        )
 
     return handle
 
@@ -297,6 +332,12 @@ async def subscribe_all(
             account_handler(services),
             durable=ACCOUNTS_CONSUMER,
             queue=ACCOUNTS_CONSUMER,
+        ),
+        await bus.subscribe(
+            ALL_CAMERA_RELAY_EVENTS,
+            camera_relay_handler(services),
+            durable=CAMERA_RELAY_CONSUMER,
+            queue=CAMERA_RELAY_CONSUMER,
         ),
     ]
     if cache is not None:

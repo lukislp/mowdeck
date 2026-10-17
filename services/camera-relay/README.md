@@ -6,7 +6,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 
 ## Status
 
-Steps 3 and 4 of ADR 0045: the session domain, tickets, the request responders and the media plane with the simulator's `fake` source. A viewer that attaches gets WHEP URLs and a ticket and plays real H.264 through MediaMTX. Sources without a driver yet (Agora, step 7) are answered with `unavailable`; Fleet's camera endpoint (step 5) and the web player (step 6) follow. The service is off by default (Compose profile `relay`, Helm `services.cameraRelay.enabled: false`); the test stacks (`docker-compose.e2e.yml`) always run it.
+Steps 3 to 5 of ADR 0045: the session domain, tickets, the request responders and the media plane with the simulator's `fake` source; Fleet's camera endpoint is the front door (`transport` `auto`, `relay`, `direct`). A viewer that attaches gets WHEP URLs and a ticket and plays real H.264 through MediaMTX. Sources without a driver yet (Agora, step 7) are answered with `unsupported_provider`, so Fleet's `auto` falls back to the direct path; the web player (step 6) follows. The service is off by default (Compose profile `relay`, Helm `services.cameraRelay.enabled: false`); the test stacks (`docker-compose.e2e.yml`) always run it.
 
 Licence of the image: the relay is AGPL-3.0; it runs Debian's `ffmpeg` with libx264 (GPL), which is fine for this image (the relay only executes the binary). MediaMTX is a separate, MIT licensed container.
 
@@ -56,7 +56,8 @@ vendor source --RTSP--> r/<rid>/<cam>/src --transcoder--> r/<rid>/<cam>   (H.265
 camera-relay --API every 2 s (readers, paths, kicks)--> MediaMTX :9997
 ```
 
-- **Start.** The first lease of a key starts the source: the relay asks the Device-Gateway for the camera session (`gateway.mower.<id>.camera.session`, service principal, the lease's account) and hands it to the driver of its `CameraProvider`. `fake` starts one ffmpeg per camera: `testsrc2` 640x480 at 10 fps with an overlay (mower id short, camera id, wall clock in ms), H.264 Constrained Baseline, no B-frames, 1 s GOP, `-fps_mode passthrough`. It is paced by the `realtime` filter instead of `-re`, so a paused source resumes at 10 fps instead of catching up in a burst. A provider without a driver is `unavailable` and its session is released at once. The session goes `LIVE` when the reconcile loop sees a camera's path ready.
+- **Offer.** Before the first lease of an idle key the relay asks the Device-Gateway for the camera session (`gateway.mower.<id>.camera.session`, service principal, the lease's account) and reads its provider and cameras (`VendorSessions.offer`). **A provider without a source driver is answered with `unsupported_provider`** before any lease, event or start exists and **without releasing** that vendor session: a client in `auto` (Fleet) falls back to the direct path, and that viewer needs the mower's stream. No backoff follows; the next attach asks again. An attach without `camera_ids` gets every offered camera; named cameras the mower does not offer are left out (none left: `unavailable`, and the offered vendor session is released, since nothing starts). Replies carry the lease's cameras as `CameraInfo` (`cameras`).
+- **Start.** The first lease of a key starts the source with the offered session (fetched again when it is older than 30 s, `OFFER_REUSE_SECONDS`) through the driver of its `CameraProvider`. `fake` starts one ffmpeg per camera: `testsrc2` 640x480 at 10 fps with an overlay (mower id short, camera id, wall clock in ms), H.264 Constrained Baseline, no B-frames, 1 s GOP, `-fps_mode passthrough`. It is paced by the `realtime` filter instead of `-re`, so a paused source resumes at 10 fps instead of catching up in a burst. A provider that lost its driver between offer and start fails the session without a release. The session goes `LIVE` when the reconcile loop sees a camera's path ready.
 - **Transcoder** (generic, for source drivers that deliver to `.../src`): `ffmpeg -fflags nobuffer -flags low_delay -i rtsp://.../src -an -c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline -bf 0 -g 10 -fps_mode passthrough -f rtsp .../r/<rid>/<cam>`. It never repeats a frame, and a stalled input produces no frame: a frozen source is a frozen picture.
 - **Who may do what** (MediaMTX `authMethod: http`): a WHEP read of `r/<rid>/<cam>` only with a relay ticket (bearer token) that is valid, unexpired, names that path and belongs to a live lease of a running session; the reader's MediaMTX session id is bound to the lease. Publishing, RTSP reads (the transcoder) and the API only with the internal publisher credential (`MOWDECK_RELAY_PUBLISHER_USER` and `_SECRET`, a random secret per process by default). Metrics, playback and pprof are off and denied; every other path is refused (there is no `all_others`). No ticket or password is logged.
 - **Reconcile loop** (every 2 s, `/v3/webrtcsessions/list` and `/v3/paths/list`): a bound reader whose `bytesSent` grows confirms its lease's media (`media_confirmed`); one that stalls for three polls or disappears is `media_lost` (the lease may reconnect within its binding deadline); an unbound reader is kicked. A closed lease kicks its reader (`/v3/webrtcsessions/kick/<id>`).
@@ -94,17 +95,17 @@ No public HTTP routes.
 
 | Direction | Subject | Payload |
 | --- | --- | --- |
-| answered (core NATS, queue `camera-relay`) | `relay.camera.attach` | `RelayAttachRequest` / `RelayAttachReply` |
+| answered (core NATS, queue `camera-relay`) | `relay.camera.attach` | `RelayAttachRequest` / `RelayAttachReply` (empty `camera_ids`: every offered camera; no driver for the provider: `unsupported_provider`, nothing released) |
 | answered | `relay.camera.renew` | `RelayRenewRequest` / `RelayRenewReply` (another account: `forbidden`; unknown or another mower: `not_found`) |
 | answered | `relay.camera.detach` | `RelayDetachRequest` / `RelayDetachReply` (idempotent; another account: `forbidden`) |
 | requested (core NATS) | `gateway.mower.<id>.camera.session` | `CameraSessionRequest` / `CameraSessionReply` (service principal, the lease's account) |
 | requested | `gateway.mower.<id>.camera.release` | `CameraReleaseRequest` / `CameraReleaseReply` (after the grace) |
-| produced (stream `CAMERA`) | `camera.mower.<id>.relay.started` | `EventEnvelope[CameraRelayStarted]` |
-| produced | `camera.mower.<id>.relay.stopped` | `EventEnvelope[CameraRelayStopped]` (reason, `started_at`, `vision_seconds`) |
+| produced (stream `CAMERA`) | `camera.mower.<id>.relay.started` | `EventEnvelope[CameraRelayStarted]` (`trigger`: the purpose of the starting lease, `started_by`) |
+| produced | `camera.mower.<id>.relay.stopped` | `EventEnvelope[CameraRelayStopped]` (reason, `started_at`, `vision_seconds`, `trigger`, `peak_viewers`) |
 | produced | `camera.mower.<id>.relay.lease_opened` | `EventEnvelope[CameraRelayLeaseOpened]` |
 | produced | `camera.mower.<id>.relay.lease_closed` | `EventEnvelope[CameraRelayLeaseClosed]` (reason) |
 
-The sender (Fleet, later Vision) has authorized the principal; a request that does not validate is dropped without a reply. Media confirmations and source readiness come from the reconcile loop; mower states (`mower_status_changed`) are a use case without a subscription yet.
+The sender (Fleet, later Vision) has authorized the principal; Fleet turns `started` and `stopped` into its audit rows `mower.camera_stream_started` and `mower.camera_stream_stopped`; a request that does not validate is dropped without a reply. Media confirmations and source readiness come from the reconcile loop; mower states (`mower_status_changed`) are a use case without a subscription yet.
 
 ## Settings
 

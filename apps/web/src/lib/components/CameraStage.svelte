@@ -148,6 +148,9 @@
       unwrap(
         fleetApi.POST('/api/v1/fleet/mowers/{mower_id}/camera/session', {
           params: { path: { mower_id: id } },
+          // The vendor session (Agora or the test pattern) until the WHEP player plays relay
+          // sessions (ADR 0045 step 6); `auto` would hand this player a relay session.
+          body: { transport: 'direct' },
         }),
       ),
     createPlayer: (session, events): Promise<CameraPlayer> => factory.create(session, events),
