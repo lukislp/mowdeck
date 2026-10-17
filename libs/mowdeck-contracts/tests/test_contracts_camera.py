@@ -10,6 +10,8 @@ from mowdeck_contracts.v1 import (
     CameraPlacement,
     CameraProvider,
     CameraQuota,
+    CameraReleaseReply,
+    CameraReleaseRequest,
     CameraSession,
     CameraSessionError,
     CameraSessionErrorCode,
@@ -20,8 +22,11 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_contracts.v1.camera import REDACTED
 from mowdeck_contracts.v1.subjects import (
+    ALL_CAMERA_RELEASES,
     ALL_CAMERA_SESSIONS,
+    camera_release_subject,
     camera_session_subject,
+    parse_camera_release_subject,
     parse_camera_session_subject,
     stream_for_subject,
     subject_matches,
@@ -114,3 +119,41 @@ def test_camera_session_subject_is_outside_every_stream() -> None:
     assert parse_camera_session_subject(subject) == mower_id
     with pytest.raises(ValueError, match="not a camera session subject"):
         parse_camera_session_subject(f"device.mower.{mower_id}.map")
+
+
+def test_camera_release_request_round_trips_with_an_optional_channel() -> None:
+    ref = PrincipalRef(subject=uuid4(), kind=PrincipalKind.SERVICE)
+    request = CameraReleaseRequest(
+        mower_id=uuid4(), account_id=uuid4(), requested_by=ref, channel="chan"
+    )
+    assert CameraReleaseRequest.model_validate_json(request.model_dump_json()) == request
+    bare = CameraReleaseRequest(mower_id=uuid4(), account_id=uuid4(), requested_by=ref)
+    assert bare.channel is None
+    with pytest.raises(ValidationError):
+        CameraReleaseRequest(
+            mower_id=uuid4(), account_id=uuid4(), requested_by=ref, channel="x" * 65
+        )
+
+
+def test_camera_release_reply_never_releases_with_an_error() -> None:
+    assert CameraReleaseReply(released=True).error is None
+    unsupported = CameraReleaseReply()
+    assert unsupported.released is False and unsupported.error is None
+    error = CameraSessionError(code=CameraSessionErrorCode.FORBIDDEN, detail="no")
+    refused = CameraReleaseReply(error=error)
+    assert CameraReleaseReply.model_validate_json(refused.model_dump_json()) == refused
+    with pytest.raises(ValidationError, match="cannot be released"):
+        CameraReleaseReply(released=True, error=error)
+
+
+def test_camera_release_subject_is_outside_every_stream() -> None:
+    mower_id = uuid4()
+    subject = camera_release_subject(mower_id)
+    assert subject == f"gateway.mower.{mower_id}.camera.release"
+    assert stream_for_subject(subject) is None
+    assert stream_for_subject(ALL_CAMERA_RELEASES) is None
+    assert subject_matches(ALL_CAMERA_RELEASES, subject)
+    assert not subject_matches(ALL_CAMERA_SESSIONS, subject)
+    assert parse_camera_release_subject(subject) == mower_id
+    with pytest.raises(ValueError, match="not a camera release subject"):
+        parse_camera_release_subject(camera_session_subject(mower_id))

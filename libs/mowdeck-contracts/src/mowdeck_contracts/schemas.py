@@ -76,6 +76,8 @@ V1_MODELS: Mapping[str, type[BaseModel]] = {
     "CameraSession": v1.CameraSession,
     "CameraSessionRequest": v1.CameraSessionRequest,
     "CameraSessionReply": v1.CameraSessionReply,
+    "CameraReleaseRequest": v1.CameraReleaseRequest,
+    "CameraReleaseReply": v1.CameraReleaseReply,
     "RelayAttachRequest": v1.RelayAttachRequest,
     "RelayAttachReply": v1.RelayAttachReply,
     "RelayRenewRequest": v1.RelayRenewRequest,

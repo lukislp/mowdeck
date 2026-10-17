@@ -267,3 +267,44 @@ class CameraSessionReply(ContractModel):
             msg = "exactly one of session or error must be given"
             raise ValueError(msg)
         return self
+
+
+class CameraReleaseRequest(ContractModel):
+    """Request on ``gateway.mower.<id>.camera.release`` (internal, the camera relay to the
+    Device-Gateway, ADR 0045): tell the mower to stop publishing its camera stream.
+
+    Sent after the last viewer left a source session; the mower does not stop by itself.
+    Idempotent: releasing a stream that no longer runs is harmless.
+    """
+
+    mower_id: UUID
+    account_id: UUID = Field(description="The mower's account as the caller knows it.")
+    requested_by: PrincipalRef
+    channel: str | None = Field(
+        default=None,
+        max_length=64,
+        description=(
+            "`CameraSession.channel` of the session to release, when known. Adapters that stop "
+            "the stream per mower ignore it; null releases whatever the mower publishes."
+        ),
+    )
+
+
+class CameraReleaseReply(ContractModel):
+    """Reply to :class:`CameraReleaseRequest`.
+
+    ``released`` true: the stop went out to the mower. ``released`` false without ``error``:
+    the connection cannot release a stream (the adapter has no release port); nothing was
+    sent and nothing is wrong. ``error`` (``not_found``, ``forbidden``, ``unavailable``): the
+    request was refused or the stop could not be sent; ``released`` is then false.
+    """
+
+    released: bool = False
+    error: CameraSessionError | None = None
+
+    @model_validator(mode="after")
+    def _error_is_not_released(self) -> Self:
+        if self.error is not None and self.released:
+            msg = "a reply with an error cannot be released"
+            raise ValueError(msg)
+        return self
