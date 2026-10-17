@@ -1,6 +1,7 @@
-# Compose block for camera-relay: the entry below "services:" is part of
+# Compose block for camera-relay and its media server: the entries below "services:" are part of
 # infra/compose/docker-compose.yml (profile "relay", off by default). Build context is the
-# repository root. Internal only: no Traefik route.
+# repository root. The relay itself is internal; Traefik routes only MediaMTX's WHEP endpoints
+# (/media/whep/r/...).
 services:
 
   camera-relay:
@@ -20,6 +21,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_RELAY_MEDIAMTX_API_URL: http://mediamtx:9997
+      MOWDECK_RELAY_MEDIAMTX_RTSP_URL: rtsp://mediamtx:8554
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
       interval: 5s
@@ -30,4 +33,41 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      mediamtx:
+        condition: service_started
+    networks: [mowdeck]
+
+  # MediaMTX (MIT): the relay's data plane, only with `--profile relay`. The relay publishes over
+  # RTSP (:8554, internal); browsers read over WHEP: Traefik routes /media/whep/r/... to :8889
+  # (prefix stripped) and nothing else of it. Media flows on the ICE port RELAY_ICE_PORT (UDP and
+  # TCP, published on RELAY_ICE_BIND) to the addresses RELAY_ICE_HOSTS; clients in the LAN must
+  # reach that port. The API (:9997) is reachable inside this network only and every request is
+  # authorized by camera-relay; metrics, playback and pprof are off. Config:
+  # infra/compose/mediamtx/mediamtx.yml. The image has no shell, so it has no health check.
+  mediamtx:
+    image: ${MEDIAMTX_IMAGE:-bluenviron/mediamtx:1.21.2}
+    profiles: [relay]
+    restart: unless-stopped
+    read_only: true
+    user: "65534:65534"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      MTX_AUTHHTTPADDRESS: http://camera-relay:8000/internal/mediamtx/auth
+      MTX_WEBRTCADDITIONALHOSTS: ${RELAY_ICE_HOSTS:-127.0.0.1}
+      MTX_WEBRTCLOCALUDPADDRESS: :${RELAY_ICE_PORT:-8189}
+      MTX_WEBRTCLOCALTCPADDRESS: :${RELAY_ICE_PORT:-8189}
+    ports:
+      - "${RELAY_ICE_BIND:-0.0.0.0}:${RELAY_ICE_PORT:-8189}:${RELAY_ICE_PORT:-8189}/udp"
+      - "${RELAY_ICE_BIND:-0.0.0.0}:${RELAY_ICE_PORT:-8189}:${RELAY_ICE_PORT:-8189}/tcp"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mediamtx-whep.rule=PathPrefix(`/media/whep/r/`)
+      - traefik.http.routers.mediamtx-whep.entrypoints=web
+      - traefik.http.routers.mediamtx-whep.middlewares=mediamtx-whep-strip
+      - traefik.http.middlewares.mediamtx-whep-strip.stripprefix.prefixes=/media/whep
+      - traefik.http.services.mediamtx-whep.loadbalancer.server.port=8889
+    stop_grace_period: 5s
     networks: [mowdeck]

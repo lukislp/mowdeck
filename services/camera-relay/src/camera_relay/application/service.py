@@ -76,7 +76,7 @@ PRODUCER = "camera-relay"
 class RelayConfig:
     """Settings of the use cases."""
 
-    whep_base_url: str = "/whep"
+    whep_base_url: str = "/media/whep"
     """Prefix of the WHEP URLs: ``<prefix>/r/<relay_id>/<camera>/whep``."""
     heartbeat_seconds: int = RELAY_HEARTBEAT_SECONDS
 
@@ -201,9 +201,12 @@ class RelayService:
             lease_id, lambda s, now: s.media_confirmed(lease_id, whep_session, now).effects
         )
 
-    async def media_lost(self, lease_id: UUID) -> bool:
-        """The reader of a viewer ended or stopped receiving media."""
-        return await self._on_lease(lease_id, lambda s, now: s.media_lost(lease_id, now).effects)
+    async def media_lost(self, lease_id: UUID, whep_session: str | None = None) -> bool:
+        """The reader ``whep_session`` (any reader without it) of a viewer ended or stopped
+        receiving media."""
+        return await self._on_lease(
+            lease_id, lambda s, now: s.media_lost(lease_id, now, whep_session).effects
+        )
 
     async def source_started(
         self, key: RelayKey, session_id: UUID, source: CameraProvider, publishing: list[str]

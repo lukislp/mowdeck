@@ -13,6 +13,8 @@ classifiers = [
 ]
 dependencies = [
   "cryptography>=44.0.0",
+  # Control API of the media server (MediaMTX).
+  "httpx>=0.28.1",
   "mowdeck-contracts",
   "mowdeck-service-kit",
 ]

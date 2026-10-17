@@ -1,0 +1,71 @@
+# Test stack of the camera relay's media plane (test_camera_relay_media.py): NATS, MediaMTX with
+# the shipped configuration and the relay image with its test hooks. Started and removed by the
+# test module's fixture as its own Compose project; every port is bound to 127.0.0.1:
+#
+#   RELAY_TEST_NATS_PORT  NATS (the test answers the gateway's camera requests and attaches)
+#   RELAY_TEST_HTTP_PORT  camera-relay (freeze hook)
+#   RELAY_TEST_WHEP_PORT  MediaMTX's WebRTC server (what Traefik routes to /media/whep/r/)
+#   RELAY_TEST_API_PORT   MediaMTX's control API (the test inspects the readers)
+#   RELAY_TEST_ICE_PORT   the ICE port (UDP and TCP)
+#
+# The publisher secret is fixed (test only) so the test can use the API and probe the streams.
+name: camera-relay-media-test
+
+services:
+  nats:
+    image: ${NATS_IMAGE:-public.ecr.aws/docker/library/nats:2.15.0-alpine}
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "127.0.0.1:${RELAY_TEST_NATS_PORT:-14322}:4222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  mediamtx:
+    image: ${MEDIAMTX_IMAGE:-bluenviron/mediamtx:1.21.2}
+    read_only: true
+    user: "65534:65534"
+    volumes:
+      - ../../../../infra/compose/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      MTX_AUTHHTTPADDRESS: http://camera-relay:8000/internal/mediamtx/auth
+      MTX_WEBRTCADDITIONALHOSTS: 127.0.0.1
+      MTX_WEBRTCLOCALUDPADDRESS: :${RELAY_TEST_ICE_PORT:-18189}
+      MTX_WEBRTCLOCALTCPADDRESS: :${RELAY_TEST_ICE_PORT:-18189}
+    ports:
+      - "127.0.0.1:${RELAY_TEST_WHEP_PORT:-18889}:8889"
+      - "127.0.0.1:${RELAY_TEST_API_PORT:-18997}:9997"
+      - "127.0.0.1:${RELAY_TEST_ICE_PORT:-18189}:${RELAY_TEST_ICE_PORT:-18189}/udp"
+      - "127.0.0.1:${RELAY_TEST_ICE_PORT:-18189}:${RELAY_TEST_ICE_PORT:-18189}/tcp"
+
+  camera-relay:
+    image: ${RELAY_TEST_IMAGE:-mowdeck/camera-relay:dev}
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: test
+      MOWDECK_LOG_LEVEL: INFO
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_RELAY_MEDIAMTX_API_URL: http://mediamtx:9997
+      MOWDECK_RELAY_MEDIAMTX_RTSP_URL: rtsp://mediamtx:8554
+      MOWDECK_RELAY_PUBLISHER_SECRET: media-test-publisher-secret
+      MOWDECK_RELAY_TEST_HOOKS: "true"
+      MOWDECK_RELAY_GATEWAY_TIMEOUT_SECONDS: "3"
+    volumes:
+      - ./:/opt/media-tests:ro
+      - ../../../../integrations/agora-bridge/spike/fixtures:/opt/fixtures:ro
+    ports:
+      - "127.0.0.1:${RELAY_TEST_HTTP_PORT:-18321}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      nats:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started

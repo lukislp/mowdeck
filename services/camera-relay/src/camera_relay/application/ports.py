@@ -1,10 +1,10 @@
 """Ports: what the use cases need from the outside world, as protocols.
 
-* :class:`VendorSessions` starts, updates and stops the source of a session. Later steps of ADR
-  0045 implement it with the Device-Gateway's camera session and release requests and a source
-  driver per ``CameraProvider``; until then the service runs with an adapter that answers
-  ``unavailable``.
-* :class:`MediaPlane` ends a viewer's reader session (later: MediaMTX).
+* :class:`VendorSessions` starts, updates and stops the source of a session: the
+  Device-Gateway's camera session and release requests and a source driver per
+  ``CameraProvider`` (``adapters/gateway.py``); without a media server the service runs with an
+  adapter that answers ``unavailable``.
+* :class:`MediaPlane` ends a viewer's reader session (MediaMTX's control API).
 * :class:`EventPublisher` publishes the lifecycle events (stream ``CAMERA``).
 * :class:`TicketSigner` signs and verifies tickets.
 * :class:`RelayRepository` keeps the sessions (in memory: one replica, lost on restart).
@@ -49,6 +49,12 @@ class UnsupportedProviderError(SourceError):
     """No source driver for the mower's ``CameraProvider`` (a client in ``auto`` falls back)."""
 
     code = RelayErrorCode.UNSUPPORTED_PROVIDER
+
+
+class ForbiddenSourceError(SourceError):
+    """The gateway refused the session: the account does not own the mower."""
+
+    code = RelayErrorCode.FORBIDDEN
 
 
 class VendorSessions(Protocol):
