@@ -4,6 +4,7 @@ requires-python = "==3.13.*"
 
 [manifest]
 members = [
+    "agora-bridge",
     "billing",
     "camera-relay",
     "device-gateway",
@@ -27,6 +28,11 @@ members = [
     "telemetry",
     "vision",
 ]
+
+[[package]]
+name = "agora-bridge"
+version = "0.1.0"
+source = { editable = "integrations/agora-bridge" }
 
 [[package]]
 name = "aioesphomeapi"
@@ -1845,6 +1851,7 @@ source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
+    { name = "agora-bridge" },
     { name = "aiortc" },
     { name = "billing" },
     { name = "camera-relay" },
@@ -1885,6 +1892,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "agora-bridge", editable = "integrations/agora-bridge" },
     { name = "aiortc", specifier = ">=1.15.0" },
     { name = "billing", editable = "services/billing" },
     { name = "camera-relay", editable = "services/camera-relay" },

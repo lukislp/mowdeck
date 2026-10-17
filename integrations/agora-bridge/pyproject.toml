@@ -1,0 +1,28 @@
+[project]
+name = "agora-bridge"
+version = "0.1.0"
+description = "Camera source bridge for Agora channels: the camera relay's stdio protocol over Agora's Linux server SDK (ADR 0045)."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+# Standard library only. The Agora wrapper (agora-python-server-sdk, MIT) and the native SDK
+# (proprietary) are never a dependency of this package: the operator's image build places them
+# (Dockerfile), and tests use a fake SDK.
+dependencies = []
+
+[project.scripts]
+agora-bridge = "agora_bridge.__main__:main"
+agora-bridge-server = "agora_bridge.server:main"
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agora_bridge"]
