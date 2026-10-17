@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-11). Amends [ADR 0033](0033-vision-assisted-recovery-with-approval.md) (images of a real mower, the trigger of an analysis) and [ADR 0032](0032-live-camera-over-agora.md) (a second Agora viewer besides the browser).
+Accepted (2026-10-11). Amends [ADR 0033](0033-vision-assisted-recovery-with-approval.md) (images of a real mower, the trigger of an analysis) and [ADR 0032](0032-live-camera-over-agora.md) (a second Agora viewer besides the browser). Amended by [ADR 0045](0045-camera-relay.md) (proposed, 2026-10-17): in a later phase Vision takes frames from the camera relay (a `vision` lease with its limits) and the capture worker is retired.
 
 ## Context
 
