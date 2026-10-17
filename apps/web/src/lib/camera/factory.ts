@@ -14,6 +14,8 @@ export interface PlayerTargets {
   canvas(slot?: number): HTMLCanvasElement | null;
   video(slot?: number): HTMLVideoElement | null;
   source: FakeFrameSource;
+  /** The test pattern also plays through the tile's `<video>` (debug switch `camfakevideo`). */
+  fakeVideo?: () => boolean;
   /** Loads the Agora player module (replaced in tests). */
   loadAgora?: () => Promise<{
     createAgoraPlayer(video: VideoTarget, events: PlayerEvents): CameraPlayer;
@@ -27,7 +29,16 @@ export class CameraPlayerFactory {
     if (session.provider === 'fake') {
       if (!this.targets.canvas(0))
         throw new CameraError('failed', 'no canvas for the test pattern');
-      return new FakePlayer((slot) => this.targets.canvas(slot), this.targets.source, events);
+      const video = this.targets.fakeVideo?.()
+        ? (slot: number) => this.targets.video(slot)
+        : undefined;
+      return new FakePlayer(
+        (slot) => this.targets.canvas(slot),
+        this.targets.source,
+        events,
+        undefined,
+        video,
+      );
     }
     if (!this.targets.video(0)) throw new CameraError('failed', 'no video element');
     const load = this.targets.loadAgora ?? (() => import('./agora-player'));

@@ -275,6 +275,37 @@ describe('FakePlayer', () => {
     expect(canvas.dataset.frames).toBe('4');
   });
 
+  it('plays the pattern through the tile video as a stream when asked', async () => {
+    const ctx = recordingContext();
+    const canvas = document.createElement('canvas');
+    canvas.getContext = (() => ctx) as unknown as HTMLCanvasElement['getContext'];
+    const stopped: string[] = [];
+    const stream = { getTracks: () => [{ stop: () => void stopped.push('v') }] };
+    let captures = 0;
+    canvas.captureStream = (() => {
+      captures += 1;
+      return stream;
+    }) as unknown as HTMLCanvasElement['captureStream'];
+    const video = document.createElement('video');
+    video.play = async () => undefined;
+    const player = new FakePlayer(
+      canvas,
+      { label: () => '', position: () => null, colors: () => COLORS },
+      { onLive() {}, onWaiting() {}, onTokenExpiring() {}, onFailed() {} },
+      undefined,
+      (slot) => (slot ? null : video),
+    );
+    player.draw();
+    player.draw();
+    // One stream per canvas, however often it draws.
+    expect(captures).toBe(1);
+    expect(video.srcObject).toBe(stream);
+    expect(video.muted).toBe(true);
+    await player.stop();
+    expect(video.srcObject).toBeNull();
+    expect(stopped).toEqual(['v']);
+  });
+
   it('does nothing without a 2D context', () => {
     const canvas = document.createElement('canvas');
     canvas.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];
@@ -487,7 +518,12 @@ function track(id: string): TrackSource & { media: MediaStreamTrack } {
 function fakeVideo(failPlay = false) {
   const calls: string[] = [];
   const attributes: Record<string, string> = {};
+  const listeners = new Map<string, (() => void)[]>();
   const video = {
+    addEventListener: (name: string, listener: () => void) =>
+      listeners.set(name, [...(listeners.get(name) ?? []), listener]),
+    fire: (name: string) => listeners.get(name)?.forEach((listener) => listener()),
+    listeners,
     muted: false,
     playsInline: false,
     srcObject: null as MediaStream | null,
@@ -526,6 +562,37 @@ describe('media attach and detach', () => {
     detachTracks(el);
     expect(video.srcObject).toBeNull();
     expect(calls).toEqual(['play', 'pause']);
+  });
+
+  it('resumes a live picture the browser paused, at most once a second', async () => {
+    const { video, el, calls } = fakeVideo();
+    let now = 10_000;
+    await attachTracks(el, [track('v1')], true, stream, () => now);
+    // A second attach does not add a second listener.
+    await attachTracks(el, [track('v1')], true, stream, () => now);
+    expect(video.listeners.get('pause')).toHaveLength(1);
+    calls.length = 0;
+    video.fire('pause');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toEqual(['play']);
+    now += 500;
+    video.fire('pause');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toEqual(['play']);
+    now += 600;
+    video.fire('pause');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toEqual(['play', 'play']);
+    // Our own pause on detach is never undone.
+    now += 5_000;
+    detachTracks(el);
+    video.fire('pause');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toEqual(['play', 'play', 'pause']);
   });
 
   it('lists the uids that publish video', () => {

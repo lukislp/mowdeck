@@ -16,6 +16,41 @@ export type StreamFactory = (tracks: MediaStreamTrack[]) => MediaStream;
 
 export const browserStream: StreamFactory = (tracks) => new MediaStream(tracks);
 
+/** Clones made for a tile (debug experiment `camclone`): stopped when the tile empties. */
+const clones = new WeakSet<object>();
+
+/** A clone of `track` that the tile owns (stopped by {@link detachTracks}). */
+export function cloneTrack(track: MediaStreamTrack): MediaStreamTrack {
+  const clone = track.clone();
+  clones.add(clone);
+  return clone;
+}
+
+/** Elements that resume by themselves, with the time of their last resume. */
+const resumed = new WeakMap<HTMLVideoElement, number>();
+/** A paused live picture is resumed at most this often. */
+export const RESUME_MS = 1_000;
+
+/**
+ * Resume `video` when something other than {@link detachTracks} pauses it while it still has a
+ * stream (WebKit pauses media on its own, e.g. after an interruption, and a muted live picture
+ * that stands looks exactly like a frozen stream). At most once per {@link RESUME_MS}, so a
+ * browser that insists on pausing does not get a loop.
+ */
+function keepPlaying(video: HTMLVideoElement, now: () => number): void {
+  if (resumed.has(video)) return;
+  resumed.set(video, -Infinity);
+  video.addEventListener('pause', () => {
+    if (!video.srcObject) return;
+    const at = now();
+    if (at - (resumed.get(video) ?? -Infinity) < RESUME_MS) return;
+    resumed.set(video, at);
+    void Promise.resolve()
+      .then(() => video.play())
+      .catch(() => undefined);
+  });
+}
+
 /**
  * Show `sources` in `video`: a new stream of their browser tracks, `muted` as asked, inline
  * on phones. Resolves when playback started (or the browser refused autoplay, which a muted
@@ -26,10 +61,16 @@ export async function attachTracks(
   sources: (TrackSource | null | undefined)[],
   muted: boolean,
   stream: StreamFactory = browserStream,
+  now: () => number = () => Date.now(),
 ): Promise<void> {
+  keepPlaying(video, now);
   const tracks = sources
     .filter((source): source is TrackSource => !!source)
     .map((source) => source.getMediaStreamTrack());
+  const previous = video.srcObject as { getTracks?: () => MediaStreamTrack[] } | null;
+  for (const track of previous?.getTracks?.() ?? []) {
+    if (clones.has(track) && !tracks.includes(track)) track.stop();
+  }
   video.muted = muted;
   video.playsInline = true;
   video.setAttribute('playsinline', '');
@@ -48,6 +89,8 @@ export function detachTracks(video: HTMLVideoElement): void {
   } catch {
     // jsdom and detached elements
   }
+  const stream = video.srcObject as { getTracks?: () => MediaStreamTrack[] } | null;
+  for (const track of stream?.getTracks?.() ?? []) if (clones.has(track)) track.stop();
   video.srcObject = null;
 }
 

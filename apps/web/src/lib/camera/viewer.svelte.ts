@@ -43,6 +43,7 @@ import {
   type CameraOptions,
 } from './options';
 import type { CameraPlayer, PlayerEvents } from './player';
+import type { PlayerDebugReport } from './probe';
 import {
   CameraError,
   cameraErrorOf,
@@ -299,6 +300,20 @@ export class CameraViewer {
     this.diagWatched = watched;
     if (!watched && !this.debugOn()) this.diagnostics = null;
     this.pollDiagnostics();
+  }
+
+  /** The player's receiver readings for the debug overlay (null: none or not a real camera). */
+  async debugReport(): Promise<PlayerDebugReport | null> {
+    try {
+      return (await this.player?.debugReport?.()) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Statistics and the debug overlay are on (`?camdebug=1`, `localStorage`). */
+  get debugging(): boolean {
+    return this.debugOn();
   }
 
   /** Leave the channel and stop renewing. */

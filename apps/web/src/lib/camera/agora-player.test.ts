@@ -21,8 +21,29 @@ class FakeTrack {
   getUserId(): number {
     return this.uid;
   }
+  clones = 0;
   getMediaStreamTrack(): MediaStreamTrack {
-    return { id: `track-${this.uid}` } as unknown as MediaStreamTrack;
+    const id = `track-${this.uid}`;
+    return {
+      id,
+      clone: () => {
+        this.clones += 1;
+        return { id: `${id}-clone`, stop: () => undefined };
+      },
+    } as unknown as MediaStreamTrack;
+  }
+  getRTCRtpTransceiver(): { receiver: { transform: null; getStats(): Promise<unknown> } } {
+    const uid = this.uid;
+    return {
+      receiver: {
+        transform: null,
+        getStats: async () =>
+          new Map<string, unknown>([
+            ['c', { id: 'c', type: 'codec', mimeType: 'video/H264' }],
+            ['i', { type: 'inbound-rtp', kind: 'video', codecId: 'c', framesReceived: 90 + uid }],
+          ]),
+      },
+    };
   }
 }
 
@@ -64,13 +85,19 @@ class FakeClient {
 }
 
 let client: FakeClient;
+let clientConfig: unknown = null;
+const sdkParams: [string, unknown][] = [];
 
 vi.mock('agora-rtc-sdk-ng', () => ({
   default: {
     setLogLevel: () => undefined,
     disableLogUpload: () => undefined,
     checkSystemRequirements: () => true,
-    createClient: () => client,
+    createClient: (config: unknown) => {
+      clientConfig = config;
+      return client;
+    },
+    setParameter: (name: string, value: unknown) => void sdkParams.push([name, value]),
     onAutoplayFailed: undefined,
   },
 }));
@@ -219,5 +246,66 @@ describe('agora player with two tiles', () => {
     expect(streamIds(videos[0]!)).toEqual([]);
     expect(log.active.at(-1)).toBeNull();
     expect(log.waiting).toBeGreaterThan(1);
+  });
+});
+
+describe('agora player debugging', () => {
+  let video: HTMLVideoElement;
+
+  beforeEach(() => {
+    client = new FakeClient();
+    clientConfig = null;
+    sdkParams.length = 0;
+    vi.stubGlobal('MediaStream', FakeStream);
+    video = document.createElement('video');
+    video.play = async () => undefined;
+    video.pause = () => undefined;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function startWith(experiments: Parameters<typeof createAgoraPlayer>[2]) {
+    const player = createAgoraPlayer((slot) => (slot ? null : video), events(), experiments);
+    await player.start(SESSION, null, DEFAULT_OPTIONS);
+    const user = { uid: 1, hasVideo: true };
+    client.remoteUsers = [user];
+    client.emit('user-published', user, 'video');
+    await settle();
+    return player;
+  }
+
+  it('creates a vp8 client and plays the track itself without experiments', async () => {
+    const player = await startWith({ codec: null, clone: false, fakeVideo: false, params: {} });
+    expect(clientConfig).toEqual({ mode: 'rtc', codec: 'vp8' });
+    expect(sdkParams).toEqual([]);
+    expect(streamIds(video)).toEqual(['track-1']);
+    client.stats = { '1': { codecType: 'H264', receiveFrameRate: 15, decodeFrameRate: 0 } };
+    const report = await player.debugReport?.();
+    expect(report?.codec).toBe('vp8');
+    expect(report?.experiments).toBe('none');
+    expect(report?.tracks).toHaveLength(1);
+    const [track] = report!.tracks;
+    expect(track?.uid).toBe(1);
+    expect(track?.agora.codecType).toBe('H264');
+    expect(track?.agora.decodeFrameRate).toBe(0);
+    expect(track?.inbound?.codec).toBe('video/H264');
+    expect(track?.inbound?.framesReceived).toBe(91);
+    expect(track?.transform).toBe(false);
+  });
+
+  it('applies the codec, SDK parameters and the clone of the experiments', async () => {
+    const player = await startWith({
+      codec: 'h264',
+      clone: true,
+      fakeVideo: false,
+      params: { ENABLE_ENCODED_TRANSFORM: false },
+    });
+    expect(clientConfig).toEqual({ mode: 'rtc', codec: 'h264' });
+    expect(sdkParams).toEqual([['ENABLE_ENCODED_TRANSFORM', false]]);
+    expect(streamIds(video)).toEqual(['track-1-clone']);
+    const report = await player.debugReport?.();
+    expect(report?.experiments).toBe('codec=h264 clone ENABLE_ENCODED_TRANSFORM=false');
   });
 });

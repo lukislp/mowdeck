@@ -38,8 +38,15 @@ export default defineConfig({
     {
       name: 'desktop',
       testMatch:
-        /(desktop|notifications|connection|schedules|drive|calibration|health|fleet|operator|camera|vision|spot)\.spec\.ts/,
+        /(desktop|notifications|connection|schedules|drive|calibration|health|fleet|operator|camera|camera-freeze|vision|spot)\.spec\.ts/,
       use: { browserName: 'chromium', viewport: { width: 1280, height: 800 } },
+    },
+    // Safari's engine (ADR 0044 amendment 2026-10-17): the camera's freeze detection and the
+    // drive view's hold over a frozen picture also in WebKit.
+    {
+      name: 'webkit',
+      testMatch: /(camera-freeze|drive-camera)\.spec\.ts/,
+      use: { browserName: 'webkit', viewport: { width: 1280, height: 800 } },
     },
     {
       name: 'screens',

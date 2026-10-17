@@ -41,11 +41,13 @@ import AgoraRTC, {
   type IRemoteVideoTrack,
 } from 'agora-rtc-sdk-ng';
 
+import { describeExperiments, loadExperiments, type CameraExperiments } from './debug';
 import { buildSnapshot, EventLog, type DiagnosticsSnapshot } from './diagnostics';
 import type { VideoTarget } from './factory';
-import { attachTracks, detachTracks, videoPublishers } from './media';
+import { attachTracks, cloneTrack, detachTracks, videoPublishers } from './media';
 import { DEFAULT_OPTIONS, RECONNECTING_LIMIT_MS, type CameraOptions } from './options';
 import { slotsOf, type CameraChoice, type CameraPlayer, type PlayerEvents } from './player';
+import { agoraDebugFields, receiverStats, type PlayerDebugReport, type TrackDebug } from './probe';
 import { CameraError, decodeSalt, type CameraSession } from './session';
 
 let configured = false;
@@ -59,13 +61,28 @@ function configureSdk(): void {
   AgoraRTC.onAutoplayFailed = () => undefined;
 }
 
+/** Debug experiments (`debug.ts`): SDK parameters before the client exists. */
+function applyParams(experiments: CameraExperiments): void {
+  // `setParameter` exists at runtime but is not in the SDK's typings (Agora support hands out
+  // parameter names for workarounds).
+  const sdk = AgoraRTC as unknown as { setParameter?: (name: string, value: unknown) => void };
+  for (const [name, value] of Object.entries(experiments.params)) {
+    try {
+      sdk.setParameter?.(name, value);
+    } catch {
+      // an unknown parameter: the experiment simply does nothing
+    }
+  }
+}
+
 /** Create the Agora player on our tiles' elements (the SDK injects nothing visible). */
 export function createAgoraPlayer(
   video: VideoTarget | HTMLVideoElement,
   events: PlayerEvents,
+  experiments: CameraExperiments = loadExperiments(),
 ): CameraPlayer {
   const target: VideoTarget = typeof video === 'function' ? video : (slot) => (slot ? null : video);
-  return new AgoraPlayer(target, events);
+  return new AgoraPlayer(target, events, experiments);
 }
 
 /** One tile: the camera it asks for (null: the first publisher) and what it shows. */
@@ -97,6 +114,7 @@ class AgoraPlayer implements CameraPlayer {
   constructor(
     private readonly video: VideoTarget,
     private readonly events: PlayerEvents,
+    private readonly experiments: CameraExperiments,
   ) {}
 
   async start(
@@ -109,7 +127,8 @@ class AgoraPlayer implements CameraPlayer {
     this.tiles = slotsOf(choice).map(tile);
     this.options = options;
     this.log = new EventLog();
-    const client = AgoraRTC.createClient({ mode: options.profile, codec: 'vp8' });
+    applyParams(this.experiments);
+    const client = AgoraRTC.createClient({ mode: options.profile, codec: this.codec });
     this.client = client;
     if (session.encryption) {
       const { mode, key, salt } = session.encryption;
@@ -172,6 +191,45 @@ class AgoraPlayer implements CameraPlayer {
       log: this.log,
       tracks: shown.map((u) => ({ uid: u, remote: stats[String(u)] })),
     });
+  }
+
+  async debugReport(): Promise<PlayerDebugReport | null> {
+    const client = this.client;
+    if (!client) return null;
+    let stats: Record<string, Record<string, unknown>> = {};
+    try {
+      stats = client.getRemoteVideoStats() as unknown as Record<string, Record<string, unknown>>;
+    } catch {
+      // statistics exist only while connected
+    }
+    const tracks: TrackDebug[] = [];
+    for (const [slot, current] of this.tiles.entries()) {
+      if (current.shown === null || !current.track) continue;
+      let receiver: RTCRtpReceiver | undefined;
+      try {
+        receiver = current.track.getRTCRtpTransceiver()?.receiver;
+      } catch {
+        receiver = undefined;
+      }
+      tracks.push({
+        slot,
+        uid: current.shown,
+        agora: agoraDebugFields(stats[String(current.shown)]),
+        inbound: await receiverStats(receiver),
+        transform: receiver ? 'transform' in receiver && !!receiver.transform : null,
+      });
+    }
+    return {
+      state: this.state,
+      codec: this.codec,
+      experiments: describeExperiments(this.experiments),
+      tracks,
+    };
+  }
+
+  /** The codec of the client (`vp8` unless the debug experiment says otherwise). */
+  private get codec(): 'vp8' | 'h264' {
+    return this.experiments.codec ?? 'vp8';
   }
 
   async select(choice: CameraChoice): Promise<void> {
@@ -361,6 +419,11 @@ class AgoraPlayer implements CameraPlayer {
       return;
     }
     const audio = slot === 0 ? this.audioTrack : null;
-    await attachTracks(element, [current.track, audio], slot === 0 ? this.muted : true);
+    const track = current.track;
+    // Debug experiment `camclone`: the tile plays its own clone of the remote track.
+    const video = this.experiments.clone
+      ? { getMediaStreamTrack: () => cloneTrack(track.getMediaStreamTrack()) }
+      : track;
+    await attachTracks(element, [video, audio], slot === 0 ? this.muted : true);
   }
 }
