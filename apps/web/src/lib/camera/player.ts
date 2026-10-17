@@ -1,6 +1,7 @@
 /**
  * Camera players: what the viewer needs from a video source. `fake` sessions draw the test
- * pattern on a canvas; `agora` sessions load the Agora Web SDK lazily (`agora-player.ts`, its own
+ * pattern on a canvas; `relay` sessions play MowDeck's camera relay over WHEP
+ * (`whep-player.ts`); `agora` sessions load the Agora Web SDK lazily (`agora-player.ts`, its own
  * chunk) and join the channel as audience.
  *
  * A player fills one or more tiles: a {@link CameraChoice} is one camera (its uid), the first
@@ -47,6 +48,8 @@ export interface PlayerEvents {
   onActive?(uid: number | null): void;
   /** The uids whose picture is attached to a tile right now, tile order. */
   onTracks?(uids: number[]): void;
+  /** The player renewed its session itself (the relay lease's heartbeat, a fresh ticket). */
+  onRenewed?(session: CameraSession): void;
 }
 
 export interface CameraPlayer {

@@ -20,6 +20,15 @@
  * {@link MAX_REJOIN_ATTEMPTS} times in a row. Statistics are read every 2 s while a player can
  * measure: `tracks` (resolution and frame rate per tile) always, the full `diagnostics` while
  * watched (the panel's Diagnose line, or `localStorage.mowdeck.cameraDebug === "1"`).
+ *
+ * Transport (ADR 0045): every session request names the browser's `options.transport` (`auto`
+ * by default). The first session of an `open` pins the path it took (`relay` or `direct`): a
+ * rejoin, a refresh or a return to the page asks for exactly that path, so `auto` never
+ * switches between the relay and the vendor path while a drive runs. A relay session renews
+ * its lease in the player (heartbeat); the viewer never requests a new session for it before
+ * its ticket expires. A hidden page (`suspend`) stops a relay session at once (the player
+ * detaches its lease, the relay stops the source after its grace) and `resume` requests a new
+ * one when the page is visible again; the direct path keeps playing as before.
  */
 import { asProblem } from '$lib/api/problem';
 
@@ -42,11 +51,13 @@ import {
   saveOptions,
   type CameraOptions,
 } from './options';
+import type { CameraTransport } from './options';
 import type { CameraPlayer, PlayerEvents } from './player';
 import type { PlayerDebugReport } from './probe';
 import {
   CameraError,
   cameraErrorOf,
+  isRelay,
   renewDelayMs,
   sameChannel,
   stereoPair,
@@ -60,8 +71,8 @@ export type ViewerPhase =
   'idle' | 'requesting' | 'connecting' | 'live' | 'waiting' | 'error' | 'closed';
 
 export interface ViewerDeps {
-  /** `POST /mowers/{id}/camera/session`; throws an `ApiProblem` when refused. */
-  request(mowerId: string): Promise<CameraSession>;
+  /** `POST /mowers/{id}/camera/session` with `transport`; throws an `ApiProblem` when refused. */
+  request(mowerId: string, transport: CameraTransport): Promise<CameraSession>;
   /** The player for the session's provider. */
   createPlayer(session: CameraSession, events: PlayerEvents): Promise<CameraPlayer>;
   /** The page runs in a secure context (HTTPS or localhost); WebRTC needs it. */
@@ -113,6 +124,10 @@ export class CameraViewer {
   stalled = $state.raw<number[]>([]);
   /** Receive numbers per shown camera (resolution and frame rate on every tile). */
   tracks = $state.raw<TrackDiagnostics[]>([]);
+  /** The path the current `open` took (pinned for its rejoins; null: none yet). */
+  transport = $state<'relay' | 'direct' | null>(null);
+  /** A relay session is paused while the page is hidden. */
+  suspended = $state(false);
 
   private player: CameraPlayer | null = null;
   private mowerId: string | null = null;
@@ -183,10 +198,12 @@ export class CameraViewer {
     this.correlationId = null;
     this.attempts = 0;
     this.rejoins = 0;
+    this.transport = null;
+    this.suspended = false;
     this.phase = 'requesting';
     let session: CameraSession;
     try {
-      session = await this.deps.request(mowerId);
+      session = await this.deps.request(mowerId, this.wantedTransport());
     } catch (error) {
       if (generation === this.generation) this.fail(error);
       return;
@@ -203,7 +220,7 @@ export class CameraViewer {
     const generation = this.generation;
     let next: CameraSession;
     try {
-      next = await this.deps.request(mowerId);
+      next = await this.deps.request(mowerId, this.wantedTransport());
     } catch (error) {
       if (generation === this.generation) this.fail(error);
       return;
@@ -222,6 +239,45 @@ export class CameraViewer {
     }
     await this.release(false);
     await this.play(next, generation);
+  }
+
+  /** The transport of the next request: the pinned path, else the browser's option. */
+  private wantedTransport(): CameraTransport {
+    return this.transport ?? this.options.transport;
+  }
+
+  /**
+   * The page went hidden: a relay session (or one still being requested) ends at once; the
+   * player detaches its lease. The direct path is left as it is.
+   */
+  async suspend(): Promise<void> {
+    if (this.suspended || this.phase === 'closed' || this.phase === 'error' || !this.mowerId) {
+      return;
+    }
+    const pending = this.session === null && this.wantedTransport() !== 'direct';
+    if (!isRelay(this.session) && !pending) return;
+    this.suspended = true;
+    this.generation += 1;
+    await this.release(false);
+    this.phase = 'connecting';
+  }
+
+  /** The page is visible again: a suspended relay session is requested anew. */
+  async resume(): Promise<void> {
+    const mowerId = this.mowerId;
+    if (!this.suspended || !mowerId) return;
+    this.suspended = false;
+    const generation = ++this.generation;
+    this.phase = 'requesting';
+    let session: CameraSession;
+    try {
+      session = await this.deps.request(mowerId, this.wantedTransport());
+    } catch (error) {
+      if (generation === this.generation) this.fail(error);
+      return;
+    }
+    if (generation !== this.generation) return;
+    await this.play(session, generation);
   }
 
   /** Show one camera of the session (the single layout). */
@@ -285,6 +341,7 @@ export class CameraViewer {
     this.options = next;
     (this.deps.saveOptions ?? saveOptions)(next);
     const rejoin =
+      next.transport !== previous.transport ||
       next.profile !== previous.profile ||
       (next.profile === 'live' && next.latency !== previous.latency);
     const mowerId = this.mowerId;
@@ -319,6 +376,7 @@ export class CameraViewer {
   /** Leave the channel and stop renewing. */
   async close(): Promise<void> {
     this.generation += 1;
+    this.suspended = false;
     await this.release();
     this.phase = 'closed';
   }
@@ -330,6 +388,7 @@ export class CameraViewer {
       if (generation !== this.generation) return;
     }
     this.session = session;
+    this.transport ??= session.provider === 'relay' ? 'relay' : 'direct';
     this.phase = 'connecting';
     const events: PlayerEvents = {
       onLive: () => {
@@ -354,6 +413,11 @@ export class CameraViewer {
       },
       onActive: (uid) => {
         if (generation === this.generation) this.activeUid = uid;
+      },
+      onRenewed: (next) => {
+        if (generation !== this.generation) return;
+        this.session = next;
+        this.renewals += 1;
       },
       onTracks: (uids) => {
         if (generation !== this.generation) return;
@@ -431,7 +495,7 @@ export class CameraViewer {
     let session: CameraSession;
     this.rejoining = true;
     try {
-      session = await this.deps.request(mowerId);
+      session = await this.deps.request(mowerId, this.wantedTransport());
     } catch (error) {
       this.rejoining = false;
       if (generation !== this.generation) return;
@@ -453,6 +517,9 @@ export class CameraViewer {
 
   private schedule(session: CameraSession): void {
     if (this.timer !== null) this.clearTimer(this.timer);
+    this.timer = null;
+    // A relay lease is renewed by its player's heartbeat (a fresh ticket every 15 s).
+    if (isRelay(session)) return;
     this.timer = this.setTimer(
       () => {
         this.timer = null;

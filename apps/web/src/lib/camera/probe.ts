@@ -235,6 +235,22 @@ export interface TrackDebug {
   inbound: InboundVideo | null;
   /** An encoded transform sits on the receiver (frames pass through script; null: unknown). */
   transform: boolean | null;
+  /** The relay path (WHEP): the HTTP status of the offer and the ICE state of the tile. */
+  whep?: { status: number | null; ice: string };
+}
+
+/** The relay rows of the overlay (ADR 0045): the lease, never its ticket. */
+export interface RelayDebug {
+  transport: 'relay';
+  /** The first 8 characters of the lease id. */
+  lease: string;
+  heartbeatSeconds: number | null;
+  /** Successful and failed heartbeats since the start. */
+  beats: number;
+  beatFailures: number;
+  lastBeatAgoMs: number | null;
+  /** Seconds until the current ticket expires (negative: expired). */
+  ticketExpiresInS: number | null;
 }
 
 /** What a player reports to the debug overlay. */
@@ -245,6 +261,8 @@ export interface PlayerDebugReport {
   /** The active experiments (`describeExperiments`). */
   experiments: string;
   tracks: TrackDebug[];
+  /** Set for the relay player. */
+  relay?: RelayDebug;
 }
 
 /** The Agora fields the overlay shows (everything else in the stats is left out). */
@@ -298,6 +316,8 @@ export interface DebugInput {
   frozen: boolean;
   tiles: TileDebug[];
   report: PlayerDebugReport | null;
+  /** The transport option of this browser and the path the session took. */
+  transport?: { requested: string; used: string | null };
 }
 
 const show = (value: unknown): string =>
@@ -306,8 +326,17 @@ const show = (value: unknown): string =>
 /** The overlay's text, a few short lines per tile. */
 export function debugLines(input: DebugInput): string[] {
   const lines = [`${input.at} phase=${input.phase} frozen=${input.frozen}`, input.userAgent];
+  if (input.transport) {
+    lines.push(`transport ${input.transport.requested} > ${show(input.transport.used)}`);
+  }
   const report = input.report;
-  if (report) {
+  const relay = report?.relay;
+  if (report && relay) {
+    lines.push(
+      `relay state=${report.state} codec=${report.codec} lease=${relay.lease}`,
+      `relay heartbeat=${show(relay.heartbeatSeconds)}s ok=${relay.beats} failed=${relay.beatFailures} last=${show(relay.lastBeatAgoMs)}ms ticket=${show(relay.ticketExpiresInS)}s`,
+    );
+  } else if (report) {
     lines.push(`agora state=${report.state} codec=${report.codec} exp=${report.experiments}`);
   }
   for (const tile of input.tiles) {
@@ -329,12 +358,16 @@ export function debugLines(input: DebugInput): string[] {
       );
     }
     const track = report?.tracks.find((t) => t.slot === tile.slot);
+    if (track?.whep) {
+      lines.push(` whep status=${show(track.whep.status)} ice=${track.whep.ice}`);
+    }
     if (track) {
       const a = track.agora;
-      lines.push(
-        ` agora ${show(a.codecType)} ${show(a.receiveResolutionWidth)}x${show(a.receiveResolutionHeight)} fps rx=${show(a.receiveFrameRate)} dec=${show(a.decodeFrameRate)} render=${show(a.renderFrameRate)}`,
-        ` agora pkts=${show(a.receivePackets)} lost=${show(a.receivePacketsLost)} kbps=${show(typeof a.receiveBitrate === 'number' ? Math.round(a.receiveBitrate / 1000) : null)} freeze=${show(a.freezeRate)} (${show(a.totalFreezeTime)} s)`,
-      );
+      if (!track.whep)
+        lines.push(
+          ` agora ${show(a.codecType)} ${show(a.receiveResolutionWidth)}x${show(a.receiveResolutionHeight)} fps rx=${show(a.receiveFrameRate)} dec=${show(a.decodeFrameRate)} render=${show(a.renderFrameRate)}`,
+          ` agora pkts=${show(a.receivePackets)} lost=${show(a.receivePacketsLost)} kbps=${show(typeof a.receiveBitrate === 'number' ? Math.round(a.receiveBitrate / 1000) : null)} freeze=${show(a.freezeRate)} (${show(a.totalFreezeTime)} s)`,
+        );
       const r = track.inbound;
       if (r) {
         lines.push(

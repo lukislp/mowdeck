@@ -6,8 +6,9 @@
   mower page's collapse toggle) or leaving the page leaves the channel. The picker lists only
   cameras that publish video; with two front cameras (a stereo pair) it also offers "Both". The
   data note reminds that the video goes through Mammotion's and Agora's servers and counts
-  against the 4G allowance. Two collapsible lines follow for real cameras: "Diagnose" (receive
-  statistics every 2 s) and "Advanced" (connection options stored per browser).
+  against the 4G allowance. Two collapsible lines follow: "Diagnose" (receive statistics every
+  2 s, real cameras) and "Advanced" (options stored per browser: the transport, `auto`, `relay`
+  or `direct` (ADR 0045), and the Agora options of the direct path).
 -->
 <script lang="ts">
   import { Button, SegmentedControl, Switch } from '@mowdeck/ui';
@@ -133,7 +134,7 @@
           {/each}
         </div>
       {/if}
-      {#if v.session && !fake}
+      {#if v.session && !fake && v.session.provider !== 'relay'}
         <Button
           variant="ghost"
           icon={v.muted ? 'mute' : 'sound'}
@@ -218,51 +219,71 @@
           <p class="hint mono">{m.camera_diag_none()}</p>
         {/if}
       </details>
+    {/if}
+    {#if v.session || v.phase === 'error'}
       <details class="fold" data-testid="camera-advanced">
         <summary>{m.camera_advanced()}</summary>
         <div class="options">
-          <p class="hint">{m.camera_opt_profile()}: {m.camera_opt_profile_hint()}</p>
+          <p class="hint">{m.camera_opt_transport()}: {m.camera_opt_transport_hint()}</p>
           <SegmentedControl
-            label={m.camera_opt_profile()}
+            label={m.camera_opt_transport()}
             options={[
-              { value: 'rtc', label: m.camera_opt_profile_rtc() },
-              { value: 'live', label: m.camera_opt_profile_live() },
+              { value: 'auto', label: m.camera_opt_transport_auto() },
+              { value: 'relay', label: m.camera_opt_transport_relay() },
+              { value: 'direct', label: m.camera_opt_transport_direct() },
             ]}
-            value={v.options.profile}
-            onchange={(value) => void v.setOptions({ profile: value === 'live' ? 'live' : 'rtc' })}
-            testid="camera-opt-profile"
+            value={v.options.transport}
+            onchange={(value) =>
+              void v.setOptions({
+                transport: value === 'relay' || value === 'direct' ? value : 'auto',
+              })}
+            testid="camera-opt-transport"
           />
-          {#if v.options.profile === 'live'}
-            <p class="hint">{m.camera_opt_latency()}: {m.camera_opt_latency_hint()}</p>
+          {#if v.session?.provider === 'agora'}
+            <p class="hint">{m.camera_opt_profile()}: {m.camera_opt_profile_hint()}</p>
             <SegmentedControl
-              label={m.camera_opt_latency()}
+              label={m.camera_opt_profile()}
               options={[
-                { value: '1', label: m.camera_opt_latency_low() },
-                { value: '2', label: m.camera_opt_latency_ultra() },
+                { value: 'rtc', label: m.camera_opt_profile_rtc() },
+                { value: 'live', label: m.camera_opt_profile_live() },
               ]}
-              value={String(v.options.latency)}
-              onchange={(value) => void v.setOptions({ latency: value === '2' ? 2 : 1 })}
-              testid="camera-opt-latency"
+              value={v.options.profile}
+              onchange={(value) =>
+                void v.setOptions({ profile: value === 'live' ? 'live' : 'rtc' })}
+              testid="camera-opt-profile"
+            />
+            {#if v.options.profile === 'live'}
+              <p class="hint">{m.camera_opt_latency()}: {m.camera_opt_latency_hint()}</p>
+              <SegmentedControl
+                label={m.camera_opt_latency()}
+                options={[
+                  { value: '1', label: m.camera_opt_latency_low() },
+                  { value: '2', label: m.camera_opt_latency_ultra() },
+                ]}
+                value={String(v.options.latency)}
+                onchange={(value) => void v.setOptions({ latency: value === '2' ? 2 : 1 })}
+                testid="camera-opt-latency"
+              />
+            {/if}
+            <Switch
+              id="camera-opt-fallback"
+              label={m.camera_opt_fallback()}
+              hint={m.camera_opt_fallback_hint()}
+              states={{ on: m.switch_on(), off: m.switch_off() }}
+              checked={v.options.fallback}
+              onchange={(checked) => void v.setOptions({ fallback: checked })}
+              testid="camera-opt-fallback"
+            />
+            <Switch
+              id="camera-opt-saver"
+              label={m.camera_opt_saver()}
+              hint={m.camera_opt_saver_hint()}
+              states={{ on: m.switch_on(), off: m.switch_off() }}
+              checked={v.options.dataSaver}
+              onchange={(checked) => void v.setOptions({ dataSaver: checked })}
+              testid="camera-opt-saver"
             />
           {/if}
-          <Switch
-            id="camera-opt-fallback"
-            label={m.camera_opt_fallback()}
-            hint={m.camera_opt_fallback_hint()}
-            states={{ on: m.switch_on(), off: m.switch_off() }}
-            checked={v.options.fallback}
-            onchange={(checked) => void v.setOptions({ fallback: checked })}
-            testid="camera-opt-fallback"
-          />
-          <Switch
-            id="camera-opt-saver"
-            label={m.camera_opt_saver()}
-            hint={m.camera_opt_saver_hint()}
-            states={{ on: m.switch_on(), off: m.switch_off() }}
-            checked={v.options.dataSaver}
-            onchange={(checked) => void v.setOptions({ dataSaver: checked })}
-            testid="camera-opt-saver"
-          />
           <Switch
             id="camera-opt-rejoin"
             label={m.camera_opt_rejoin()}
