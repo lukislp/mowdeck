@@ -9,7 +9,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 - Keep a **volatile registry** of the mowers of this instance's shard: which mowers exist, their account, connection kind and options. Nothing is stored; the registry is rebuilt on every start.
 - For each mower, create the connection through the `mowdeck-control` registry, wrap it in a `MowerController` (expiry, de-duplication, emergency stop priority, dead-man switch, blade rules) and reconnect with backoff when the link drops.
 - Execute commands from `command.mower.<id>` and publish their results; publish telemetry and connection events, and the map and capabilities of every mower as snapshots.
-- Answer live camera session requests for its mowers (credentials only; the video never passes through MowDeck).
+- Answer live camera session requests for its mowers (credentials only; the video never passes through MowDeck) and camera release requests that tell a mower to stop publishing its stream (ADR 0045).
 - Log in to linked Mammotion accounts and list their devices for Fleet (`gateway.cloud.discover`), and keep **one cloud session per Mammotion account** that its mowers and the discovery share ([ADR 0034](../../docs/adr/0034-linked-cloud-accounts-and-device-discovery.md)).
 - Scales with the number of connected mowers: one instance per shard.
 
@@ -47,6 +47,7 @@ Payload models live in `mowdeck_contracts.v1` (JSON Schemas in `libs/mowdeck-con
 | produced | `event.mower.connected`, `event.mower.disconnected` | JetStream `EVENTS` | `EventEnvelope[MowerConnectionEvent]` | `mower_id`, `account_id`, `connection_kind`, `at`, `reason` (disconnect only) |
 | consumed | `event.mower.registered`, `event.mower.updated`, `event.mower.removed` | JetStream `EVENTS`, ephemeral per instance | `EventEnvelope[MowerRegistration]` | from Fleet; add, update (reconnect if the link changed) or close a mower: removal, a link change and a replacement close the old connection exactly once (`connection for mower closed` in the log) |
 | reply | `gateway.mower.<id>.camera.session` | core NATS request/reply, every instance (no queue group) | `CameraSessionRequest` / `CameraSessionReply` | only the instance whose shard holds the mower answers; see [Camera sessions](#camera-sessions) |
+| reply | `gateway.mower.<id>.camera.release` | core NATS request/reply, every instance (no queue group) | `CameraReleaseRequest` / `CameraReleaseReply` | only the instance whose shard holds the mower answers; see [Camera release](#camera-release) |
 | reply | `gateway.mower.<id>.path.preview` | core NATS request/reply, every instance (no queue group) | `PathPreviewGatewayRequest` / `PathPreviewReply` | only the instance whose shard holds the mower answers, each request in its own task; see [Mow path](#mow-path) |
 | reply | `gateway.mower.<id>.bridge.scan` | core NATS request/reply, every instance (no queue group) | `BridgeScanRequest` / `BridgeScanReply` | only the instance whose shard holds the mower answers, each request in its own task; see [Bluetooth bridges and firmware](#bluetooth-bridges-and-firmware) |
 | reply | `gateway.mower.<id>.firmware.check` | core NATS request/reply, every instance (no queue group) | `FirmwareCheckRequest` / `FirmwareCheckReply` | only the instance whose shard holds the mower answers; see [Bluetooth bridges and firmware](#bluetooth-bridges-and-firmware) |
@@ -107,6 +108,20 @@ Commands are acknowledged once admitted. The controller serializes the ordinary 
 | otherwise | `session`: from `get_camera_session()` of the connection (`agora` for Mammotion cloud mowers, `fake` for the simulator) |
 
 The session holds a short-lived token: it is sent, never logged. Answered requests are counted in `mowdeck_device_gateway_camera_sessions_total{outcome}` (`issued` or the error code). The subject lives below `gateway.` because the stream `DEVICE` captures `device.>`, and a request on a stream subject would also be stored and acknowledged by JetStream.
+
+### Camera release
+
+`gateway.mower.<id>.camera.release` ([ADR 0045](../../docs/adr/0045-camera-relay.md)): the camera relay (from phase 3 on; nothing calls it yet) sends a `CameraReleaseRequest{mower_id, account_id, requested_by, channel}` after it left a source session, because a mower keeps publishing its camera stream after the last viewer left (4G volume and battery). `channel` is the `CameraSession.channel` when known; adapters that stop per mower ignore it. Subscriptions, shards and dropped mismatched subjects work as for camera sessions; the subject lives outside every stream. The owner answers a `CameraReleaseReply`:
+
+| Case | Answer |
+| --- | --- |
+| unknown mower in this shard | `error` `not_found` |
+| the request's account does not own the mower (as for commands) | `error` `forbidden` (logged as a warning) |
+| mower not connected, the stop could not be sent, adapter error | `error` `unavailable`; the mower's session stays open |
+| the connection has no release port (`mowdeck_control.release_camera_session_of` gives `False`: the BLE bridge, adapters without it) | `released: false` without an error: nothing to stop, nothing sent |
+| otherwise | `released: true`: `release_camera_session(channel)` of the connection sent the stop (Mammotion: PyMammotion's `stop_stream`; the simulator records it) |
+
+The release is idempotent: a second request, or one without a running stream, sends a harmless stop again. Answered requests are counted in `mowdeck_device_gateway_camera_releases_total{outcome}` (`released`, `unsupported` or the error code).
 
 ### Credentials
 
@@ -191,7 +206,7 @@ Limitation (fine for Phase 1): changing the shard count moves mowers between ins
 | --- | --- |
 | `domain/rules.py` | `Shard`, `ConnectionStatus`, `command_rejection`, the request rejections, `bridge_in_use`, `links_changed`, `is_significant_change`, `backoff` (pure) |
 | `application/` | `DeviceGateway` (registry, admission, bridge scans, firmware checks, Fleet sync, shutdown), `MowerSession` (link supervision, telemetry, periodic firmware checks, commands), `CloudDiscoveryService`, ports |
-| `adapters/bus/` | command consumer, registry events, camera session responder (`camera.py`), bridge scan responder (`bridge.py`), firmware check responder (`firmware.py`), cloud discovery responder (`cloud.py`), Fleet request, publisher |
+| `adapters/bus/` | command consumer, registry events, camera session and release responders (`camera.py`), bridge scan responder (`bridge.py`), firmware check responder (`firmware.py`), cloud discovery responder (`cloud.py`), Fleet request, publisher |
 | `adapters/control/` | `RegistryConnectionProvider`: connections from the `mowdeck-control` registry (simulated, `ble_bridge` from `mowdeck-control-mammotion`) and `cloud` from the shared session pool; `cloud_accounts.py`: pool, cloud factory and discovery (real or fake); simulator clock |
 | `adapters/api/` | `GET /api/v1/device-gateway/mowers` |
 | `main.py` | wiring (`build_app`) and `main()` |

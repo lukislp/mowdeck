@@ -20,6 +20,8 @@ Subject scheme:
 ``entitlements.plan.set``             core NATS request: Billing sets the plan of an account
 ``tracks.positions.query``            core NATS request: the position track of a mower (Telemetry)
 ``gateway.mower.<id>.camera.session``  core NATS request: a live camera session (Device-Gateway)
+``gateway.mower.<id>.camera.release``  core NATS request: stop the mower's camera stream
+                                      (Device-Gateway, ADR 0045)
 ``gateway.mower.<id>.path.preview``   core NATS request: plan a route without starting (Gateway)
 ``gateway.mower.<id>.bridge.scan``    core NATS request: look for the mower through a Bluetooth
                                       bridge (Device-Gateway)
@@ -224,6 +226,29 @@ def parse_camera_session_subject(subject: str) -> UUID:
     return UUID(parts[2])
 
 
+def camera_release_subject(mower_id: UUID) -> str:
+    """Core NATS request subject of a camera release: ``gateway.mower.<id>.camera.release``.
+
+    ``CameraReleaseRequest`` in, ``CameraReleaseReply`` out (ADR 0045); answered by the gateway
+    instance that holds the mower (other shards stay silent). Outside every stream, like the
+    camera session request.
+    """
+    return f"{GATEWAY_PREFIX}.{mower_id}.camera.release"
+
+
+def parse_camera_release_subject(subject: str) -> UUID:
+    """The mower id of a ``gateway.mower.<id>.camera.release`` subject."""
+    parts = subject.split(".")
+    if (
+        len(parts) != 5
+        or ".".join(parts[:2]) != GATEWAY_PREFIX
+        or parts[3:] != ["camera", "release"]
+    ):
+        msg = f"not a camera release subject: {subject!r}"
+        raise ValueError(msg)
+    return UUID(parts[2])
+
+
 def path_preview_subject(mower_id: UUID) -> str:
     """Core NATS request subject of a path preview: ``gateway.mower.<id>.path.preview``.
 
@@ -314,6 +339,8 @@ ALL_DEVICE_SNAPSHOTS = f"{DEVICE_PREFIX}.>"
 """Wildcard for every device snapshot of any mower."""
 ALL_CAMERA_SESSIONS = f"{GATEWAY_PREFIX}.*.camera.session"
 """Wildcard the Device-Gateway subscribes to for camera session requests (core NATS)."""
+ALL_CAMERA_RELEASES = f"{GATEWAY_PREFIX}.*.camera.release"
+"""Wildcard the Device-Gateway subscribes to for camera release requests (core NATS)."""
 ALL_PATH_PREVIEWS = f"{GATEWAY_PREFIX}.*.path.preview"
 """Wildcard the Device-Gateway subscribes to for path preview requests (core NATS)."""
 ALL_BRIDGE_SCANS = f"{GATEWAY_PREFIX}.*.bridge.scan"

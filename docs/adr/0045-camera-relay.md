@@ -107,7 +107,7 @@ Harder: two more moving parts (relay and MediaMTX) and an optional bridge the op
 Phased plan, one PR each:
 
 1. ADR and contracts (this decision).
-2. Release port in the adapters (simulator and Mammotion) and the gateway request.
+2. Release port in the adapters (simulator and Mammotion) and the gateway request. Implemented: `mowdeck_control.CameraSessionRelease` (`release_camera_session(channel)`, `release_camera_session_of`), the simulator records releases, the Mammotion cloud connection calls PyMammotion's `stop_stream`, and the Device-Gateway answers `gateway.mower.<id>.camera.release` (`CameraReleaseRequest` / `CameraReleaseReply`).
 3. Relay domain: sessions, leases, grace, account separation, fully tested with two accounts.
 4. Media plane with the `fake` source: MediaMTX, auth callback, transcoder, gateway route, Compose and Helm.
 5. Fleet: the camera endpoint through the relay, `transport`, renew and detach, audit.

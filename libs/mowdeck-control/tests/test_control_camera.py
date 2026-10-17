@@ -1,4 +1,4 @@
-"""The optional camera capability and the simulator's fake camera (ADR 0032)."""
+"""The optional camera capabilities and the simulator's fake camera (ADR 0032, ADR 0045)."""
 
 from datetime import timedelta
 
@@ -6,11 +6,13 @@ import pytest
 from mowdeck_contracts.v1 import CameraAccess, CameraPlacement, CameraProvider, CameraSession
 from mowdeck_control import (
     CameraCapable,
+    CameraSessionRelease,
     MowerConnection,
     NotConnected,
     SimulatedMower,
     SimulationConfig,
     camera_session_of,
+    release_camera_session_of,
 )
 from mowdeck_control.testing import ManualClock
 
@@ -62,3 +64,48 @@ async def test_camera_session_of_answers_none_for_connections_without_the_capabi
 def test_camera_capable_is_separate_from_mower_connection() -> None:
     assert "get_camera_session" not in dir(MowerConnection)
     assert CameraSession.model_fields["token"].repr is False
+
+
+async def test_simulator_records_camera_releases_and_stops_publishing() -> None:
+    sim = SimulatedMower(clock=ManualClock())
+    await sim.connect()
+    assert isinstance(sim, CameraSessionRelease)
+    assert sim.camera_publishing is False
+    session = await camera_session_of(sim)
+    assert session is not None
+    assert sim.camera_publishing is True
+    assert await release_camera_session_of(sim, session.channel) is True
+    assert sim.camera_publishing is False
+    # Idempotent: a second release (and one without a channel) is harmless.
+    assert await release_camera_session_of(sim) is True
+    assert sim.camera_releases == [session.channel, None]
+    assert sim.camera_publishing is False
+
+
+async def test_simulator_release_without_camera_is_a_harmless_no_op() -> None:
+    sim = SimulatedMower(config=SimulationConfig(camera=False), clock=ManualClock())
+    await sim.connect()
+    await sim.release_camera_session()
+    assert sim.camera_releases == [None]
+
+
+async def test_simulator_camera_release_needs_a_connection() -> None:
+    sim = SimulatedMower(clock=ManualClock())
+    with pytest.raises(NotConnected):
+        await sim.release_camera_session()
+    assert sim.camera_releases == []
+
+
+async def test_release_camera_session_of_answers_false_without_the_capability() -> None:
+    class NoRelease:
+        async def get_camera_session(self) -> None:
+            return None
+
+    assert isinstance(NoRelease(), CameraCapable)
+    assert not isinstance(NoRelease(), CameraSessionRelease)
+    assert await release_camera_session_of(NoRelease(), "chan") is False
+
+
+def test_camera_session_release_is_separate_from_the_other_protocols() -> None:
+    assert "release_camera_session" not in dir(MowerConnection)
+    assert "release_camera_session" not in dir(CameraCapable)

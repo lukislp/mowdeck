@@ -12,6 +12,7 @@ from mowdeck_contracts.v1 import (
     BridgeScanErrorCode,
     BridgeScanReply,
     BridgeScanRequest,
+    CameraReleaseRequest,
     CameraSessionErrorCode,
     CameraSessionRequest,
     CommandEnvelope,
@@ -76,9 +77,10 @@ def command_rejection(
 
 
 def camera_rejection(
-    registration: MowerRegistration | None, request: CameraSessionRequest
+    registration: MowerRegistration | None, request: CameraSessionRequest | CameraReleaseRequest
 ) -> tuple[CameraSessionErrorCode, str] | None:
-    """Why a camera session must not be given, or None if it may (the command account rule)."""
+    """Why a camera session must not be given or released, or None if it may (the command
+    account rule)."""
     if registration is None:
         return CameraSessionErrorCode.NOT_FOUND, "unknown mower"
     if registration.account_id != request.account_id:

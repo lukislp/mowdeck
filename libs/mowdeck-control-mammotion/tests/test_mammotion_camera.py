@@ -10,7 +10,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from mammotion_support import NOW, ble, cloud
 from mowdeck_contracts.v1 import CameraAccess, CameraPlacement, CameraProvider
-from mowdeck_control import CameraCapable, NotConnected, camera_session_of
+from mowdeck_control import (
+    CameraCapable,
+    CameraSessionRelease,
+    NotConnected,
+    camera_session_of,
+    release_camera_session_of,
+)
 from mowdeck_control_mammotion import mapping
 from mowdeck_control_mammotion.fake import FakeMammotionPort
 from mowdeck_control_mammotion.port import (
@@ -162,6 +168,66 @@ async def test_mammotion_ble_bridge_answers_no_camera() -> None:
     assert (await conn.capabilities()).camera is CameraAccess.NONE
     assert await conn.get_camera_session() is None
     assert port.stream_requests == 0
+
+
+async def test_mammotion_cloud_release_stops_the_stream_and_is_idempotent() -> None:
+    port = FakeMammotionPort()
+    port.stream = subscription()
+    conn, _ = cloud(port)
+    await conn.connect()
+    assert isinstance(conn, CameraSessionRelease)
+    # Safe before any session: the stop goes out and is harmless.
+    assert await release_camera_session_of(conn) is True
+    session = await conn.get_camera_session()
+    assert session is not None
+    assert await release_camera_session_of(conn, session.channel) is True
+    assert await release_camera_session_of(conn, session.channel) is True
+    assert port.stream_stops == 3
+
+
+async def test_mammotion_cloud_release_maps_failures_to_not_connected() -> None:
+    port = FakeMammotionPort()
+    conn, _ = cloud(port)
+    await conn.connect()
+    port.stop_error = NoTransportAvailableError("down")
+    with pytest.raises(NotConnected, match="not open"):
+        await conn.release_camera_session()
+    port.stop_error = RuntimeError("MQTT said no, with secrets")
+    with pytest.raises(NotConnected, match="stop failed") as caught:
+        await conn.release_camera_session()
+    assert "secrets" not in str(caught.value)
+    port.stop_error = TimeoutError()
+    with pytest.raises(NotConnected, match="in time"):
+        await conn.release_camera_session()
+    assert port.stream_stops == 0
+    # The connection survives a failed stop.
+    port.stop_error = None
+    await conn.release_camera_session()
+    assert port.stream_stops == 1
+
+
+async def test_mammotion_cloud_release_needs_a_connection() -> None:
+    port = FakeMammotionPort()
+    conn, _ = cloud(port)
+    with pytest.raises(NotConnected):
+        await conn.release_camera_session()
+    assert port.stream_stops == 0
+
+
+async def test_mammotion_luba1_release_sends_nothing() -> None:
+    port = FakeMammotionPort(device_name="Luba-ABCDEF", product_key="a1UBFdq6nNz")
+    conn, _ = cloud(port)
+    await conn.connect()
+    await conn.release_camera_session()
+    assert port.stream_stops == 0
+
+
+async def test_mammotion_ble_bridge_cannot_release() -> None:
+    conn, port = ble(FakeMammotionPort())
+    await conn.connect()
+    assert not isinstance(conn, CameraSessionRelease)
+    assert await release_camera_session_of(conn) is False
+    assert port.stream_stops == 0
 
 
 def test_mammotion_camera_expiry_falls_back_for_unreadable_tokens() -> None:

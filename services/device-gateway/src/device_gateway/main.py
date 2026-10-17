@@ -7,9 +7,9 @@ bus, principal resolver and connection provider.
 Principals: with ``MOWDECK_AUTH_JWKS_URL`` set, bearer access tokens issued by Identity are
 verified locally against its JWKS (``mowdeck-auth``); without it every request is 401.
 
-Start-up order: registry events, bootstrap mowers, command consumer, camera session requests,
-path preview requests, bridge scan and firmware check requests, cloud discovery requests, Fleet
-sync (background).
+Start-up order: registry events, bootstrap mowers, command consumer, camera session and release
+requests, path preview requests, bridge scan and firmware check requests, cloud discovery
+requests, Fleet sync (background).
 Shutdown order: stop the command consumer, answer in-flight commands, close every connection
 (publishing ``mower.disconnected``), stop the shared cloud sessions; the kit then drains and
 closes the bus.
@@ -31,7 +31,7 @@ from mowdeck_service_kit.bus import EventBus, Subscription
 
 from device_gateway.adapters.api.routes import router
 from device_gateway.adapters.bus.bridge import subscribe_bridge_scans
-from device_gateway.adapters.bus.camera import subscribe_camera_requests
+from device_gateway.adapters.bus.camera import subscribe_camera_releases, subscribe_camera_requests
 from device_gateway.adapters.bus.cloud import DiscoveryMetrics, subscribe_cloud_discovery
 from device_gateway.adapters.bus.firmware import subscribe_firmware_checks
 from device_gateway.adapters.bus.fleet import BusCredentialSource, BusFleetDirectory
@@ -152,6 +152,9 @@ def build_app(
         app.state.camera_requests = await subscribe_camera_requests(
             active_bus, gateway, registry=app.state.metrics_registry
         )
+        app.state.camera_releases = await subscribe_camera_releases(
+            active_bus, gateway, registry=app.state.metrics_registry
+        )
         app.state.path_previews = await subscribe_path_previews(
             active_bus, gateway, timeout_seconds=settings.path_preview_timeout_seconds
         )
@@ -197,7 +200,7 @@ def build_app(
         path_previews: Subscription | None = getattr(app.state, "path_previews", None)
         if path_previews is not None:
             await path_previews.unsubscribe()
-        for name in ("bridge_scans", "firmware_checks"):
+        for name in ("camera_releases", "bridge_scans", "firmware_checks"):
             subscription: Subscription | None = getattr(app.state, name, None)
             if subscription is not None:
                 await subscription.unsubscribe()

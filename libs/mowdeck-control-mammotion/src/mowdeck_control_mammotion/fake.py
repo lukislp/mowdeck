@@ -370,6 +370,10 @@ class FakeMammotionPort:
         self.stream_requests = 0
         self.stream_all_cameras: list[bool] = []
         """``all_cameras`` of every :meth:`stream_subscription` call, in order."""
+        self.stream_stops = 0
+        """Number of :meth:`stop_stream` calls that went out."""
+        self.stop_error: Exception | None = None
+        """What :meth:`stop_stream` raises."""
         self.video: VideoResourceResponse | None = None
         self.video_error: Exception | None = None
         self.path_lines: tuple[PathLine, ...] | None = SAMPLE_PATH_LINES
@@ -598,6 +602,13 @@ class FakeMammotionPort:
         if self.stream_error is not None:
             raise self.stream_error
         return self.stream
+
+    async def stop_stream(self) -> None:
+        if not self._open:
+            raise PortClosedError("fake port is closed")
+        if self.stop_error is not None:
+            raise self.stop_error
+        self.stream_stops += 1
 
     async def video_resource(self) -> VideoResourceResponse | None:
         if self.video_error is not None:

@@ -22,7 +22,8 @@ What it simulates:
 * a camera: :meth:`SimulatedMower.get_camera_session` returns a session with ``provider``
   ``fake`` (no video; the web app draws a test pattern) and two front cameras (``front_left``
   uid 1, ``front_right`` uid 2, a stereo pair like a LUBA 2 AWD X), so the camera path runs end
-  to end;
+  to end; :meth:`SimulatedMower.release_camera_session` records every release in
+  ``camera_releases`` and clears ``camera_publishing`` (ADR 0045);
 * still images of its surroundings drawn from the map (:meth:`SimulatedMower.capture_photo`);
 * a slow job start (``SimulationConfig.start_delay_s``): ``StartMow`` and ``ResumeMow`` are sent
   at once and the mower reports ``mowing`` only after the delay, confirmed through the state like
@@ -494,6 +495,11 @@ class SimulatedMower:
         )
         self._drive_speed = self.config.drive_speed_mps
         self._undock_target: LocalPoint | None = None
+        self.camera_publishing = False
+        """True between a camera session and its release (``release_camera_session``), like a
+        mower that keeps publishing until it is told to stop (ADR 0045)."""
+        self.camera_releases: list[str | None] = []
+        """The ``channel`` of every :meth:`release_camera_session` call, in order."""
 
     # --- MowerConnection ----------------------------------------------------------------------
 
@@ -543,6 +549,7 @@ class SimulatedMower:
         self._require_connected()
         if not self.config.camera:
             return None
+        self.camera_publishing = True
         return CameraSession(
             provider=CameraProvider.FAKE,
             app_id="",
@@ -566,6 +573,13 @@ class SimulatedMower:
             expires_at=self._clock() + timedelta(seconds=self.config.camera_session_seconds),
             quota=None,
         )
+
+    async def release_camera_session(self, channel: str | None = None) -> None:
+        """:class:`~mowdeck_control.connection.CameraSessionRelease`: record the release and
+        stop "publishing"; idempotent, also without a camera or a session."""
+        self._require_connected()
+        self.camera_releases.append(channel)
+        self.camera_publishing = False
 
     async def execute(self, command: JobCommand) -> Outcome:
         return await (await self.dispatch(command)).settle()

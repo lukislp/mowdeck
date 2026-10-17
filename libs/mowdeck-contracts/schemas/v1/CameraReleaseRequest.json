@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``gateway.mower.<id>.camera.release`` (internal, the camera relay to the\nDevice-Gateway, ADR 0045): tell the mower to stop publishing its camera stream.\n\nSent after the last viewer left a source session; the mower does not stop by itself.\nIdempotent: releasing a stream that no longer runs is harmless.",
+  "properties": {
+    "account_id": {
+      "description": "The mower's account as the caller knows it.",
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "channel": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "`CameraSession.channel` of the session to release, when known. Adapters that stop the stream per mower ignore it; null releases whatever the mower publishes.",
+      "title": "Channel"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "requested_by": {
+      "$ref": "#/$defs/PrincipalRef"
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id",
+    "requested_by"
+  ],
+  "title": "CameraReleaseRequest",
+  "type": "object"
+}
