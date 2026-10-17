@@ -55,6 +55,7 @@ def _dockerfiles(repo_root: Path) -> list[Path]:
         *sorted((repo_root / "services").glob("*/Dockerfile")),
         repo_root / "apps" / "web" / "Dockerfile",
         repo_root / "infra" / "openfga" / "bootstrap" / "Dockerfile",
+        repo_root / "integrations" / "agora-bridge" / "Dockerfile",
         *sorted((repo_root / "templates").rglob("Dockerfile*.jinja")),
     ]
     return [f for f in files if f.is_file() and "dockerignore" not in f.name]
@@ -129,7 +130,8 @@ def test_compose_defaults_use_listed_images(repo_root: Path) -> None:
                 f"({images.get(name, 'not listed')})"
             )
         for image in IMAGE_LINE_RE.findall(text):
-            if image.startswith(("mowdeck/", "${")):
+            # mowdeck-local/: built on the operator's machine only (agora-bridge), never pulled.
+            if image.startswith(("mowdeck/", "mowdeck-local/", "${")):
                 continue
             assert image in sources, f"{path}: image {image} is not pinned in .env.example"
 

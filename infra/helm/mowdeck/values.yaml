@@ -595,6 +595,23 @@ services:
     extraEnv: {}
     extraVolumes: []
     extraVolumeMounts: []
+    # -- The optional Agora source (ADR 0045 step 7): agora-bridge as a second container of the
+    # relay's pod, on the pod's loopback (127.0.0.1:7700). Off (or without the container),
+    # agora mowers use the direct path. The image contains Agora's proprietary SDK: MowDeck
+    # publishes none. Build it yourself from integrations/agora-bridge (building it means
+    # accepting Agora's licence), push it to a registry you control and set image.repository;
+    # enabled without a repository fails the render. x86_64 nodes only.
+    agoraBridge:
+      enabled: false
+      image:
+        repository: ""
+        tag: local
+        pullPolicy: IfNotPresent
+      # Concurrent bridge processes (one per running camera session of an agora mower).
+      maxSessions: 4
+      resources:
+        requests: {cpu: 20m, memory: 96Mi}
+        limits: {memory: 384Mi}
     # MediaMTX (MIT): one replica (the hostPort allows one pod per node), uid 65534, read-only,
     # config files/mediamtx.yml. Its API and RTSP stay cluster-internal; metrics, playback and
     # pprof are off.

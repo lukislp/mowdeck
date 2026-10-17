@@ -924,8 +924,9 @@ services:
   # lifecycle events (stream CAMERA). The service itself is internal: it answers
   # relay.camera.attach|renew|detach on NATS and MediaMTX's auth callback, and has no Traefik
   # route. It asks the Device-Gateway for the camera session, runs the source pipeline (ffmpeg:
-  # the simulator's fake source today, the transcoder for vendor sources) and publishes into
-  # MediaMTX. Sources without a driver yet (Agora) are answered with "unavailable". Single
+  # the simulator's fake source, the agora-bridge muxer and the transcoder for vendor sources)
+  # and publishes into MediaMTX. Sources without an available driver (Agora without the
+  # agora-bridge below) are answered with "unsupported_provider". Single
   # replica, state in memory. Tickets are signed with a key of the process unless
   # MOWDECK_RELAY_TICKET_SIGNING_KEY(_FILE) is set; the internal publisher credential is a
   # random secret of the process unless MOWDECK_RELAY_PUBLISHER_SECRET(_FILE) is set.
@@ -948,6 +949,9 @@ services:
       MOWDECK_NATS_URL: nats://nats:4222
       MOWDECK_RELAY_MEDIAMTX_API_URL: http://mediamtx:9997
       MOWDECK_RELAY_MEDIAMTX_RTSP_URL: rtsp://mediamtx:8554
+      # The optional agora-bridge (profile agora) on this container's loopback; while nothing
+      # listens there, agora mowers are unsupported_provider (direct path).
+      MOWDECK_RELAY_AGORA_BRIDGE_URL: tcp://127.0.0.1:7700
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
       interval: 5s
@@ -996,6 +1000,39 @@ services:
       - traefik.http.services.mediamtx-whep.loadbalancer.server.port=8889
     stop_grace_period: 5s
     networks: [mowdeck]
+
+  # agora-bridge (ADR 0045 step 7): the optional Agora source of the camera relay, only with
+  # `--profile relay --profile agora`. Its code is Apache-2.0, but the image contains Agora's
+  # proprietary SDK: it is built here from integrations/agora-bridge and never pulled or
+  # published (pull_policy: build); building it downloads the SDK from Agora (pinned and hash
+  # checked) and means accepting Agora's licence, see integrations/agora-bridge/README.md. It
+  # shares camera-relay's network namespace and listens on its loopback only (127.0.0.1:7700,
+  # MOWDECK_RELAY_AGORA_BRIDGE_URL); vendor tokens never leave that namespace. Without it the
+  # relay answers agora mowers with unsupported_provider, so the web app uses the direct path.
+  # x86_64 hosts only (the pinned native SDK).
+  agora-bridge:
+    image: mowdeck-local/agora-bridge:local
+    profiles: [agora]
+    pull_policy: build
+    build:
+      context: ../../integrations/agora-bridge
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+    platform: linux/amd64
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    network_mode: "service:camera-relay"
+    environment:
+      AGORA_BRIDGE_LISTEN: 127.0.0.1:7700
+      AGORA_BRIDGE_MAX_SESSIONS: "4"
+    depends_on:
+      camera-relay:
+        condition: service_started
+        restart: true
+    stop_grace_period: 15s
 
   # --- Billing (ADR 0031): only with `--profile billing` -----------------------------------
   # billing.enabled=false (the default) means these two services are not started at all: no

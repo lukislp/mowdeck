@@ -30,6 +30,7 @@ REPLACED = {
     "postgres": "CloudNativePG (templates/postgresql.yaml) or an external PostgreSQL",
     "openfga": "the official OpenFGA subchart",
     "openfga-migrate": "the OpenFGA subchart's migrate init container",
+    "agora-bridge": "a second container of the camera-relay pod (cameraRelay.agoraBridge)",
 }
 
 # Compose services the chart runs with a template of their own instead of mowdeck.workload.

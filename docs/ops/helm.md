@@ -34,6 +34,7 @@ kubectl -n mowdeck create secret docker-registry ghcr-pull \
 | device-gateway | StatefulSet + Service + headless Service | one shard per replica ([ADR 0013](../adr/0013-device-gateway-registry-and-sharding.md)) |
 | web | Deployment (nginx, uid 101, port 8080) | `/healthz`, runtime config from `WEB_MAP_*` |
 | camera-relay, mediamtx | Deployment each (`services.cameraRelay.enabled`) + a third Ingress `mowdeck-media` | off by default, see [Camera relay](#camera-relay-media-plane) |
+| agora-bridge | a second container of the camera-relay pod (`services.cameraRelay.agoraBridge`, your own image) | off by default, see [Agora source](#agora-source) |
 
 Every MowDeck pod runs as a non-root user with a read-only root file system, `allowPrivilegeEscalation: false`, all capabilities dropped, the `RuntimeDefault` seccomp profile, a memory-backed `/tmp` and no service account token. Settings come from a ConfigMap per service; secrets are mounted as files under `/run/secrets/mowdeck` and passed as the services' `MOWDECK_<NAME>_FILE` settings (database URL, OpenFGA token, Identity's key encryption key, the VAPID private key), so they never appear in the environment. Database services wait in an init container (`wait-for-schema`) until their database carries the newest migration of their image; services using OpenFGA wait (`wait-for-model`) until the store's latest model is the one of their release.
 
@@ -189,7 +190,7 @@ The Compose stack uses a looser limit for the refresh path (`identity-session-ra
 
 The camera relay ([ADR 0045](../adr/0045-camera-relay.md)) shares one camera session per account and mower among every viewer and serves it to browsers over WebRTC ([WHEP](https://datatracker.ietf.org/doc/draft-ietf-wish-whep/)). `services.cameraRelay.enabled: true` renders two Deployments, like the Compose profile `relay`:
 
-- **camera-relay** (one replica, its sessions live in memory): answers `relay.camera.*` on NATS, runs the source pipeline (ffmpeg: the simulator's fake source today, the transcoder for vendor sources), publishes into MediaMTX over RTSP (`MOWDECK_RELAY_MEDIAMTX_RTSP_URL=rtsp://mowdeck-mediamtx:8554`) and drives it through its API (`MOWDECK_RELAY_MEDIAMTX_API_URL=http://mowdeck-mediamtx:9997`). Sources without a driver yet (Agora) are answered with `unavailable`. It has no Ingress route.
+- **camera-relay** (one replica, its sessions live in memory): answers `relay.camera.*` on NATS, runs the source pipeline (ffmpeg: the simulator's fake source, the agora-bridge muxer and the transcoder for vendor sources), publishes into MediaMTX over RTSP (`MOWDECK_RELAY_MEDIAMTX_RTSP_URL=rtsp://mowdeck-mediamtx:8554`) and drives it through its API (`MOWDECK_RELAY_MEDIAMTX_API_URL=http://mowdeck-mediamtx:9997`). Sources without an available driver are answered with `unsupported_provider` (Agora without the optional [agora-bridge](#agora-source)). It has no Ingress route.
 - **mediamtx** ([MediaMTX](https://github.com/bluenviron/mediamtx), MIT, `services.cameraRelay.mediamtx.image`, the `MEDIAMTX_IMAGE` of the Compose stack): one replica with the `Recreate` strategy, uid 65534, read-only root file system, all capabilities dropped, no service account token, TCP probes on the WHEP port. Its config is the ConfigMap built from `files/mediamtx.yml`, an identical copy of `infra/compose/mediamtx/mediamtx.yml` (a repository test fails when they differ). Every publish, read and API call is authorized by camera-relay (`MTX_AUTHHTTPADDRESS=http://mowdeck-camera-relay:8000/internal/mediamtx/auth`): a viewer needs a ticket of a live lease. The Service `mowdeck-mediamtx` exposes WHEP (8889), the API (9997) and RTSP (8554) inside the cluster only; metrics, playback, pprof, RTMP, HLS and SRT are off.
 
 **The ICE port.** The signalling goes through the Ingress, the media does not: MediaMTX sends it on one ICE port for UDP and TCP (`config.RELAY_ICE_PORT`, default 8189), which the chart publishes on the node as a `hostPort` (`services.cameraRelay.mediamtx.hostPort: true`; `hostIP` binds it to one node address like the Compose variable `RELAY_ICE_BIND`). ICE candidates carry the listener port, so the container listens on the same port. MediaMTX announces the addresses of `config.RELAY_ICE_HOSTS` (comma separated, the IPs clients reach the node under, for example its LAN IP); the chart default is empty and must be set, otherwise no candidate reaches the browser. There is no STUN or TURN: open UDP **and** TCP of the ICE port in the node's firewall for the clients in the LAN, and pin the pod to the node whose address you announce (`services.cameraRelay.mediamtx.nodeSelector`). A `hostPort` needs a CNI with the portmap plugin (k3s has it; kind needs an `extraPortMappings` entry); with `hostPort: false` expose the port yourself, for example with a `LoadBalancer` Service whose port equals `RELAY_ICE_PORT`.
@@ -231,6 +232,26 @@ ingress:
       nginx.ingress.kubernetes.io/use-regex: "true"
       nginx.ingress.kubernetes.io/rewrite-target: /$1
 ```
+
+### Agora source
+
+The camera of a Mammotion mower comes from Agora's media cloud; the relay plays it with the optional agora-bridge ([ADR 0045](../adr/0045-camera-relay.md) step 7, `integrations/agora-bridge/README.md`). `services.cameraRelay.agoraBridge.enabled: true` adds it as a second container (`agora-bridge`) of the camera-relay pod: it listens on the pod's loopback (`127.0.0.1:7700`, which the relay always names in `MOWDECK_RELAY_AGORA_BRIDGE_URL`), so the vendor token never crosses the pod network. It runs with the shared security context (uid 10001, read-only root file system, no capabilities), an in-memory `/tmp` of its own and TCP probes on 7700. Without it Agora mowers are answered with `unsupported_provider` and the web app keeps the direct path.
+
+The image contains Agora's proprietary SDK, so **MowDeck publishes none**: build it yourself (`docker build --platform linux/amd64 -t <your registry>/agora-bridge:<tag> integrations/agora-bridge`; building it means accepting Agora's licence), push it to a registry you control (private) and name it:
+
+```yaml
+services:
+  cameraRelay:
+    enabled: true
+    agoraBridge:
+      enabled: true
+      image:
+        repository: registry.home.example/mowdeck/agora-bridge   # your own, private
+        tag: "2026-10-18"
+      maxSessions: 4
+```
+
+`enabled: true` with an empty `image.repository` fails the render with a message saying so. The image is x86_64 only: schedule the relay on an amd64 node.
 
 ## Upgrades and migrations
 

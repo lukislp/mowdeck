@@ -38,6 +38,7 @@ docker compose down -v          # reset, deletes all data
 | vision-migrate | `mowdeck/vision:dev`, built from the repository | one-shot, no port |
 | vision | `mowdeck/vision:dev`, built from the repository | via Traefik at `/api/v1/vision` |
 | camera-relay (profile `relay`) | `mowdeck/camera-relay:dev`, built from the repository (with ffmpeg) | none (internal: NATS requests `relay.camera.*` and MediaMTX's auth callback; [ADR 0045](../adr/0045-camera-relay.md)) |
+| agora-bridge (profile `agora`, with `relay`) | `mowdeck-local/agora-bridge:local`, built locally from `integrations/agora-bridge` (contains Agora's SDK, never pulled or published) | none (listens on camera-relay's loopback `127.0.0.1:7700`, shares its network namespace; [Agora source](#agora-source-profile-agora)) |
 | mediamtx (profile `relay`) | `bluenviron/mediamtx:1.21.2` (MIT) | via Traefik at `/media/whep/r/` (WHEP only, `/media/whep` stripped); `RELAY_ICE_BIND:RELAY_ICE_PORT` UDP and TCP (ICE media, default 8189) |
 | web | `mowdeck/web:dev`, built from `apps/web/Dockerfile` | via Traefik at `/` (the web app; router priority 1, behind every `/api/v1` route) |
 
@@ -123,9 +124,25 @@ The service runs as non-root with a read-only root file system (tmpfs at `/tmp`)
 - **Signalling** runs through Traefik on the MowDeck origin: `/media/whep/r/<session>/<camera>/whep` is routed to MediaMTX's WebRTC server with `/media/whep` stripped. Nothing else of MediaMTX is routed: its API (`:9997`) and RTSP (`:8554`) are reachable inside the Compose network only, metrics, playback and pprof are off, and every read, publish and API call is decided by the relay (a viewer needs a relay ticket of a live lease).
 - **Media** leaves on one ICE port for UDP and TCP, `RELAY_ICE_PORT` (default 8189), published on `RELAY_ICE_BIND` (default all interfaces). The container listens on the same port it is published on, because ICE candidates carry the listener port. Set `RELAY_ICE_HOSTS` to the address(es) clients reach the host under (the LAN IP, comma separated); there is no STUN and no TURN.
 - **Firewall:** UDP and TCP `RELAY_ICE_PORT` must be reachable from the LAN clients (phones in the Wi-Fi). Without UDP, browsers fall back to TCP on the same port.
-- The relay holds at most one source per account and mower and stops it 15 s after the last viewer, then asks the gateway to release the stream. The simulator's `fake` camera is played as a generated test pattern; sources without a driver yet (Agora) are answered with `unsupported_provider`, and Fleet's camera endpoint (`transport` `auto`, the default) then hands out the direct vendor session as before. Without the profile `auto` takes the direct path as well (no relay answers).
+- The relay holds at most one source per account and mower and stops it 15 s after the last viewer, then asks the gateway to release the stream. The simulator's `fake` camera is played as a generated test pattern; Agora mowers (Mammotion) need the optional agora-bridge (next section). Sources without an available driver are answered with `unsupported_provider`, and Fleet's camera endpoint (`transport` `auto`, the default) then hands out the direct vendor session as before. Without the profile `auto` takes the direct path as well (no relay answers).
 
 The test stacks (`docker-compose.e2e.yml`, `pnpm e2e:stack`) always run the relay, with its test hook `POST /internal/v1/test/freeze` (pauses the fake source) and the ICE port on `127.0.0.1:<MOWDECK_E2E_PORT>+9`.
+
+## Agora source (profile `agora`)
+
+A Mammotion mower's camera comes from Agora's media cloud. The relay plays it once `agora-bridge` runs next to it ([ADR 0045](../adr/0045-camera-relay.md) step 7, details in `integrations/agora-bridge/README.md`): the bridge joins the mower's channel with Agora's Linux server SDK as a receive-only member and hands the H.265 frames to the relay, which transcodes them to H.264 for every viewer. One 4G stream per mower and account however many people watch, ended 15 s after the last viewer, and the vendor token and the viewers' IP addresses stay on the server.
+
+**Licence first.** The image contains Agora's proprietary native SDK. MowDeck never publishes it: the stack builds it on your server (`pull_policy: build`), downloading the SDK from Agora with a pinned SHA-256. **Building it means accepting Agora's SDK licence terms.** Never push the image to a public registry. x86_64 hosts only.
+
+Enable it on a home server (the stack in `infra/compose`, an existing `.env`):
+
+1. Make sure the relay works: `RELAY_ICE_HOSTS` is the server's LAN IP and UDP and TCP `RELAY_ICE_PORT` (8189) are open in its firewall (previous section).
+2. Add both profiles to `.env`: `COMPOSE_PROFILES=relay,agora` (keep the profiles you already use, for example `COMPOSE_PROFILES=billing,relay,agora`).
+3. Build and start: `docker compose build agora-bridge && docker compose up -d`. The build prints `verified ... (33340805 bytes, sha256 66f8a30d...)` for the SDK and `{"ok": true, ... "tls_verification": true}` for the offline import check; it fails on any other download.
+4. Check it: `docker compose ps agora-bridge` is `healthy`, and `docker compose logs agora-bridge` shows `listening on 127.0.0.1:7700`. Open a Mammotion mower's camera in the web app: the debug overlay (`?camdebug=1`) shows `transport auto > relay`; the relay's log has `agora channel joined` and `muxer started` per camera.
+5. Updates: `git pull`, then `docker compose build camera-relay agora-bridge && docker compose up -d` (a bridge update is rare; the SDK pin changes only with a reviewed pull request).
+
+Nothing else changes: the relay always looks for the bridge on its own loopback (`MOWDECK_RELAY_AGORA_BRIDGE_URL=tcp://127.0.0.1:7700`), and while nothing listens there (profile off, image missing, container restarting) Agora mowers are answered with `unsupported_provider`, so `auto` uses the direct path. To switch it off again, remove `agora` from `COMPOSE_PROFILES` and remove the container: `docker compose --profile agora rm -sf agora-bridge`. The bridge has no port and no network of its own: it shares `camera-relay`'s network namespace (`network_mode: service:camera-relay`), so the vendor token travels only over that loopback; Compose restarts it with the relay.
 
 ## Notes
 

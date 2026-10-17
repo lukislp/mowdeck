@@ -75,6 +75,21 @@ helm template mowdeck "$chart" --set secrets.existingSecret=mowdeck-app \
   > /dev/null
 echo "ok: secrets.existingSecret renders without secret values"
 
+step "optional agora-bridge (ADR 0045 step 7)"
+# No image is published: enabling it without the operator's own image must fail.
+expect_failure "agoraBridge.image.repository is required" -f "$test_values" \
+  --set services.cameraRelay.agoraBridge.enabled=true
+helm template mowdeck "$chart" --namespace mowdeck -f "$test_values" \
+  --set services.cameraRelay.agoraBridge.enabled=true \
+  --set services.cameraRelay.agoraBridge.image.repository=registry.example.org/me/agora-bridge \
+  > "$out/agora-bridge.yaml"
+grep -q "image: registry.example.org/me/agora-bridge:local" "$out/agora-bridge.yaml"
+kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION" \
+  -schema-location default \
+  -schema-location "$CRDS_CATALOG/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+  "$out/agora-bridge.yaml"
+echo "ok: the agora-bridge container renders only with an image of the operator's own"
+
 if [ -z "${SKIP_DRIFT:-}" ] && command -v uv > /dev/null 2>&1; then
   step "drift checks (tools/repo-checks/tests/test_helm.py)"
   (cd "$root" && uv run pytest tools/repo-checks/tests/test_helm.py -q -p no:cacheprovider)
