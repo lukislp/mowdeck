@@ -190,9 +190,16 @@ async function pushForward(page: Page, pad: Locator): Promise<void> {
 test('drive view: camera in three layouts, freeze holds the mower, one camera session per visit', async ({
   page,
   request,
+  browserName,
 }) => {
   test.setTimeout(300_000);
   const csp = watchCsp(page);
+  // The screenshots come from Chromium. In WebKit (the webkit project) they would overwrite them,
+  // and Playwright's own stylesheet that stops animations is refused by the CSP there.
+  const shot = async (name: string): Promise<void> => {
+    if (browserName === 'webkit') return;
+    await page.screenshot({ path: `${OUT}${name}.png`, animations: 'disabled' });
+  };
   const owner = await registerByApi(request, actor('drivecam'));
   const mowerId = await createMowerByApi(request, owner, `Luba drivecam ${RUN}`);
   const blindId = await createSimulatedMower(request, owner, `Luba blind ${RUN}`, {
@@ -311,7 +318,7 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
     .toBeGreaterThan(0.3);
   await expect(stage).toHaveAttribute('data-frozen', 'false');
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${OUT}drive-camera-desktop.png`, animations: 'disabled' });
+  await shot('drive-camera-desktop');
 
   // --- freeze: the picture stands while the stick is held forward ----------------------------
   await freeze(page, true);
@@ -324,7 +331,7 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await expectLightPlaced(page, 'desktop, frozen');
   await expect(light).toBeEnabled();
   const frozenAt = Date.now();
-  await page.screenshot({ path: `${OUT}drive-camera-frozen-desktop.png`, animations: 'disabled' });
+  await shot('drive-camera-frozen-desktop');
   await page.waitForTimeout(1_500);
   const whileFrozen = frames.filter((f) => f.at > frozenAt);
   // The session stays open (zero frames keep it alive), but nothing moves.
@@ -374,7 +381,7 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await switchLight(page, 'off');
   await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${OUT}drive-camera-phone.png`, animations: 'disabled' });
+  await shot('drive-camera-phone');
 
   // --- a phone held sideways -----------------------------------------------------------------
   await page.setViewportSize(SIDEWAYS);
@@ -402,7 +409,7 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
     .poll(() => frames.filter((f) => f.at > sidewaysAt && f.linear > 0).length, { timeout: 3_000 })
     .toBeGreaterThan(0);
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${OUT}drive-camera-sideways.png`, animations: 'disabled' });
+  await shot('drive-camera-sideways');
   await page.mouse.up();
 
   // --- leaving ends the drive session and the camera -----------------------------------------
