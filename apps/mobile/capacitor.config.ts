@@ -16,7 +16,10 @@ const config: CapacitorConfig = {
   appName: 'MowDeck',
   webDir: 'www',
   // Lets the server and its logs tell the shells from a browser (the web app detects the shell
-  // through the injected `window.Capacitor` bridge, not through this).
+  // through the injected `window.Capacitor` bridge, not through this). On iOS the shell puts
+  // Safari's `Version/x.y Mobile/15E148 Safari/604.1` in front of it (`ShellUserAgent` in
+  // `ios/App/App/MainViewController.swift`): the live camera's Agora SDK classifies the browser
+  // by the user agent and treats a plain WKWebView as an unknown browser (ADR 0032).
   appendUserAgent: 'MowDeckApp',
   server: {
     androidScheme: 'https',

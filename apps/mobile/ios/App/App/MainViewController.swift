@@ -1,5 +1,6 @@
 import Capacitor
 import UIKit
+import WebKit
 
 /// The shell's bridge view controller (ADR 0036).
 ///
@@ -15,6 +16,20 @@ class MainViewController: CAPBridgeViewController {
             descriptor.allowedNavigationHostnames = descriptor.allowedNavigationHostnames + [host]
         }
         return descriptor
+    }
+
+    /// The web view looks like Mobile Safari to the web app's libraries (see ``ShellUserAgent``).
+    override func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
+        let configuration = super.webViewConfiguration(for: instanceConfiguration)
+        configuration.applicationNameForUserAgent = ShellUserAgent.applicationName(
+            systemVersion: UIDevice.current.systemVersion,
+            appToken: instanceConfiguration.appendedUserAgentString
+        )
+        // Capacitor's defaults, stated here because the live camera depends on them: the muted
+        // camera <video> plays inline (not fullscreen) and starts without a tap.
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        return configuration
     }
 
     override func capacitorDidLoad() {
@@ -56,5 +71,32 @@ enum ShellSettings {
                 UserDefaults.standard.removeObject(forKey: key)
             }
         }
+    }
+}
+
+/// The application name WebKit puts at the end of the web view's user agent.
+///
+/// A plain WKWebView reports `... (KHTML, like Gecko) Mobile/15E148`, without Safari's
+/// `Version/x.y` and `Safari/604.1` tokens. The Agora Web SDK of the live camera (ADR 0032)
+/// classifies the browser from the user agent (its bundled ua-parser-js) and then sees an unknown
+/// "WebKit" browser: a third capability profile that neither Safari nor Chrome on iOS get
+/// (no data channel, no encoded transform, no dual-stream encoding), although the engine and its
+/// WebRTC stack are exactly Safari's. With Safari's tokens the shell gets Safari's profile, the
+/// one the web app is tested with. `MowDeckApp` (Capacitor's `appendUserAgent`) stays at the end,
+/// so the server can still tell the app from a browser.
+/// `apps/mobile/src/user-agent.test.ts` checks the template below against ua-parser-js.
+enum ShellUserAgent {
+    /// Safari's version is the system's major.minor (iOS 18.6.2 runs Safari 18.6).
+    static func safariVersion(_ systemVersion: String) -> String {
+        let parts = systemVersion.split(separator: ".").map(String.init)
+        let major = parts.first.flatMap { Int($0) } ?? 18
+        let minor = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+        return "\(major).\(minor)"
+    }
+
+    static func applicationName(systemVersion: String, appToken: String?) -> String {
+        let safari = "Version/\(safariVersion(systemVersion)) Mobile/15E148 Safari/604.1"
+        guard let token = appToken, !token.isEmpty else { return safari }
+        return "\(safari) \(token)"
     }
 }

@@ -42,6 +42,7 @@ Options considered:
 
 - Server updates reach the apps at once; the app only changes for native changes (plugins, icons, permissions).
 - The app needs the server: without a connection it shows the offline page, not a cached web app (the web app's service worker may serve cached assets on Android; on iOS a WKWebView service worker needs App-Bound Domains and is not used).
+- The iOS shell reports Safari's user agent (`Version/<iOS major.minor> Mobile/15E148 Safari/604.1`) followed by `MowDeckApp`, not the plain WKWebView one: libraries that branch on the user agent, the live camera's Agora SDK in particular, otherwise treat the app as an unknown browser although its engine is Safari's (ADR 0032). App-Bound Domains stay off (`WKAppBoundDomains` is not set), so the web view keeps the APIs Safari has.
 - The server must present a certificate the phone trusts for login (the refresh cookie is `Secure`): a public CA, or a private CA installed and trusted on the phone; Android trusts user-installed CAs for this app (`network_security_config.xml`). Plain HTTP is allowed in the LAN but login fails there.
 - iOS background notifications need the owner's APNs auth key on the server and `MOWDECK_APNS_ENVIRONMENT=development`, because a build installed from Xcode with a development profile registers with the APNs sandbox. Android background notifications need the ntfy app and a topic; while the app is open, it notifies by itself.
 - A paid developer account is required for APNs on iOS; the profiles are renewed once a year by running `provision.sh` again.
