@@ -64,7 +64,7 @@ A spike (PR #32, run against the LUBA 2 AWD X on 2026-10-17) joined the channel 
 
 ### Vision limits (later phase)
 
-A vision lease without a viewer: a single frame holds the session at most 30 s; a frame stream lease lasts at most 5 minutes and is renewed by pulling frames; at most 20 minutes per mower and UTC day; refused (`budget`) below 10 % of the video budget or below 15 % battery unless the mower charges; never on an offline mower. A configured Vision holds nothing open by itself.
+A vision lease without a viewer: a single frame holds the session at most 30 s; a frame stream lease lasts at most 5 minutes and is renewed by pulling frames; at most 20 minutes per account, mower and UTC day (counted per account, so one account never uses up another's minutes); refused (`budget`) below 10 % of the video budget or below 15 % battery unless the mower charges; never on an offline mower. A configured Vision holds nothing open by itself.
 
 ## Manufacturer independence
 
