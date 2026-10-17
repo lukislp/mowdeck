@@ -47,7 +47,7 @@ from mowdeck_service_kit.entitlements import (
 from fleet.adapters.api.deps import install_error_mapping
 from fleet.adapters.api.routes import ROUTERS
 from fleet.adapters.bus.bridge import BusBridgeScanGateway
-from fleet.adapters.bus.camera import BusCameraGateway
+from fleet.adapters.bus.camera import BusCameraGateway, BusCameraRelay
 from fleet.adapters.bus.cloud import BusCloudDiscovery
 from fleet.adapters.bus.firmware import BusFirmwareCheckGateway
 from fleet.adapters.bus.path_preview import BusPathPreviewGateway
@@ -133,6 +133,9 @@ def build_app(
             entitlements=plans,
             camera_gateway=BusCameraGateway(
                 active_bus, timeout_seconds=settings.camera_request_timeout_seconds
+            ),
+            camera_relay=BusCameraRelay(
+                active_bus, timeout_seconds=settings.camera_relay_timeout_seconds
             ),
             path_preview_gateway=BusPathPreviewGateway(
                 active_bus, timeout_seconds=settings.path_preview_request_timeout_seconds

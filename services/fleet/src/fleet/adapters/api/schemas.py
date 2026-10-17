@@ -5,7 +5,13 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import ConnectionKind, DriveCalibration, MowPattern, ProxyInfo
+from mowdeck_contracts.v1 import (
+    CameraTransport,
+    ConnectionKind,
+    DriveCalibration,
+    MowPattern,
+    ProxyInfo,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from fleet.application.linked_accounts import DeviceView, LinkedAccountView
@@ -384,6 +390,19 @@ class MowerOut(BaseModel):
             created_at=item.created_at,
             updated_at=item.updated_at,
         )
+
+
+class CameraSessionIn(In):
+    """``POST /mowers/{id}/camera/session`` (optional body): how the client wants the video."""
+
+    transport: CameraTransport = Field(
+        default=CameraTransport.AUTO,
+        description=(
+            "`auto` (default): the camera relay, the direct vendor path only when the relay "
+            "cannot serve the mower's camera provider or is not deployed; `relay`: only the "
+            "relay, its errors are answered; `direct`: the vendor session (ADR 0032)."
+        ),
+    )
 
 
 class AreaNameIn(In):

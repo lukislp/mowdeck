@@ -557,3 +557,31 @@ async def test_fleet_db_mower_links_contract(kind: str, monkeypatch: pytest.Monk
             await tx.mowers.delete(id=mower.id)
         async with store.transaction() as tx:
             assert await tx.mower_links.count(account_id=acc) == 0
+
+
+@pytest.mark.parametrize("kind", STORES)
+async def test_fleet_db_audit_event_id_is_unique(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Migration 0011: rows written from events carry the event id, at most one row per event;
+    rows without one (from requests) never collide."""
+    acc, event_id = uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        async with store.transaction() as tx:
+            row = AuditEntry(
+                NOW, "mower.camera_stream_started", acc, "mower", "m", event_id=event_id
+            )
+            await tx.audit.add(row)
+            with pytest.raises(ConflictError):
+                await tx.audit.add(
+                    AuditEntry(
+                        NOW, "mower.camera_stream_started", acc, "mower", "m", event_id=event_id
+                    )
+                )
+            await tx.audit.add(AuditEntry(NOW, "mower.camera_opened", acc, "mower", "m"))
+            await tx.audit.add(AuditEntry(NOW, "mower.camera_opened", acc, "mower", "m"))
+        async with store.transaction() as tx:
+            assert await tx.audit.count(event_id=event_id) == 1
+            assert await tx.audit.count(account_id=acc, event_id=None) == 2
+            (found,) = await tx.audit.find(event_id=event_id)
+            assert found.event_id == event_id

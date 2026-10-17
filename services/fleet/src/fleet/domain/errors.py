@@ -47,6 +47,16 @@ class CameraUnsupportedError(ConflictError):
     """The mower's connection has no camera (409 ``camera-unsupported``)."""
 
 
+class CameraRelayUnsupportedError(ConflictError):
+    """The camera relay has no source for the mower's camera provider and the caller asked for
+    the relay only (409 ``camera-relay-unsupported``, ADR 0045)."""
+
+
+class CameraBudgetError(ConflictError):
+    """A camera limit refused the stream: the video budget, the battery or the daily minutes
+    (409 ``camera-budget``, ADR 0045)."""
+
+
 class LinkNotApplicableError(ConflictError):
     """The mower's connection kind carries no such link (409 ``link-not-applicable``, decided
     by the connection-kind registry, ADR 0038)."""

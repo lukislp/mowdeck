@@ -250,5 +250,8 @@ audit_log = Table(
     Column("actor_kind", String(20)),
     Column("details", JSONB, nullable=False),
     Column("correlation_id", String(128)),
+    # Rows written from events (camera relay, ADR 0045) carry the event id: one row per event.
+    Column("event_id", Uuid),
     Index("ix_audit_log_account_id_id", "account_id", "id"),
+    Index("uq_audit_log_event_id", "event_id", unique=True),
 )
