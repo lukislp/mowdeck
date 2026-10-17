@@ -1,0 +1,83 @@
+# MediaMTX of the MowDeck camera relay (ADR 0045): the data plane only.
+#
+# camera-relay publishes every camera into this server over RTSP (inside the Compose network or
+# the cluster) and browsers read it over WebRTC (WHEP) through Traefik: /media/whep/r/... is
+# routed to :8889 with /media/whep stripped, nothing else of this server is routed. Every
+# publish, read and API call is decided by camera-relay (authMethod http): a viewer needs a relay
+# ticket of a live lease, the relay's own pipeline the internal publisher credential, and
+# metrics, playback and pprof are off and denied.
+#
+# Media leaves on one ICE port for UDP and TCP (8189 here). ICE candidates carry the listener
+# port, so the container port must equal the published host port: Compose and Helm set
+# MTX_WEBRTCLOCALUDPADDRESS / MTX_WEBRTCLOCALTCPADDRESS from RELAY_ICE_PORT and
+# MTX_WEBRTCADDITIONALHOSTS from RELAY_ICE_HOSTS (the addresses clients reach the host under).
+# No interface addresses (they are the container's), no STUN, no TURN: in a home network the
+# media port has to be reachable from the clients (UDP and TCP).
+#
+# Any value can be overridden with MTX_<KEY> (upper case), e.g. MTX_AUTHHTTPADDRESS. A copy of
+# this file is infra/helm/mowdeck/files/mediamtx.yml (tools/repo-checks keeps them identical).
+
+logLevel: info
+logDestinations: [stdout]
+logStructured: true
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 512
+udpMaxPayloadSize: 1200
+
+# --- Authentication: every action is asked of camera-relay -------------------------------------
+authMethod: http
+authHTTPAddress: http://camera-relay:8000/internal/mediamtx/auth
+authHTTPExclude: []
+
+# --- Control API: the relay's reconcile loop and kicks (internal network only) -----------------
+api: true
+apiAddress: :9997
+apiAllowOrigins: []
+apiTrustedProxies: []
+
+# --- Off: metrics, pprof, playback, RTMP, HLS, SRT, MoQ ---------------------------------------
+metrics: false
+pprof: false
+playback: false
+rtmp: false
+hls: false
+srt: false
+moq: false
+
+# --- RTSP: the relay's pipeline publishes and reads here (internal network only) ---------------
+rtsp: true
+rtspTransports: [tcp]
+rtspEncryption: "no"
+rtspAddress: :8554
+rtspAuthMethods: [basic]
+
+# --- WebRTC: WHEP readers (signalling through Traefik, media on the ICE port) -------------------
+webrtc: true
+webrtcAddress: :8889
+webrtcEncryption: false
+# Same origin through Traefik: no CORS.
+webrtcAllowOrigins: []
+webrtcTrustedProxies: []
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: false
+webrtcIPsFromInterfacesList: []
+webrtcAdditionalHosts: []
+webrtcICEServers2: []
+webrtcHandshakeTimeout: 10s
+webrtcTrackGatherTimeout: 2s
+
+# --- Paths: only the relay's random session paths ----------------------------------------------
+# r/<relay_id>/<camera>      H.264 for the viewers (WHEP)
+# r/<relay_id>/<camera>/src  the vendor's stream before transcoding (RTSP, the relay only)
+# There is no "all_others" entry: any other path is refused.
+pathDefaults:
+  source: publisher
+  overridePublisher: true
+  maxReaders: 0
+  record: false
+
+paths:
+  "~^r/[0-9a-f]{32}/[A-Za-z0-9_-]{1,64}(/src)?$":
+    source: publisher

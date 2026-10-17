@@ -34,6 +34,25 @@ Stripe webhook of Billing when it is enabled), so a rate limit can be attached t
 {{- end }}
 {{- $ingresses = append $ingresses (dict "suffix" "-auth" "annotations" (merge (dict) $ing.auth.annotations $ing.annotations) "routes" $auth) }}
 {{- end }}
+{{- if .Values.services.cameraRelay.enabled }}
+{{- $media := list (dict "path" $ing.media.path "type" $ing.media.pathType "component" "mediamtx" "portName" "webrtc") }}
+{{- $strip := dict }}
+{{- if $ing.media.traefikStripPrefix }}
+{{- $_ := set $strip "traefik.ingress.kubernetes.io/router.middlewares" (printf "%s-%s-media-strip@kubernetescrd" .Release.Namespace (include "mowdeck.fullname" .)) }}
+---
+# Traefik: strips /media/whep before the request reaches MediaMTX (ingress.media.traefikStripPrefix).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "mowdeck.fullname" . }}-media-strip
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "ingress") | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes: [/media/whep]
+{{- end }}
+{{- $ingresses = append $ingresses (dict "suffix" "-media" "annotations" (merge (dict) $ing.media.annotations $strip $ing.annotations) "routes" $media) }}
+{{- end }}
 {{- range $ingresses }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -67,7 +86,7 @@ spec:
               service:
                 name: {{ include "mowdeck.serviceName" (dict "ctx" $ "component" .component) }}
                 port:
-                  name: http
+                  name: {{ .portName | default "http" }}
           {{- end }}
 {{- end }}
 {{- end }}

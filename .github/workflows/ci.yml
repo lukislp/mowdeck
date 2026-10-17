@@ -361,6 +361,47 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
+  # The camera relay's media plane (ADR 0045) against a real MediaMTX and the relay image
+  # (services/camera-relay/tests/media): WHEP with aiortc, tickets, the freeze hook, the grace
+  # and the release, and the transcoder on the recorded H.265 stream. About two minutes after the
+  # cached image build.
+  camera-relay-media:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    needs: [docker]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - *ghcr-login
+      - *mirror-env
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - run: uv sync
+      - uses: docker/setup-buildx-action@v4.4.1
+      - name: Build the camera-relay image (cached)
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/camera-relay/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/camera-relay:ci
+          cache-from: type=gha,scope=camera-relay
+      - name: Media plane integration tests
+        run: uv run pytest services/camera-relay/tests/media -v -p no:cacheprovider
+        env:
+          MOWDECK_TEST_RELAY_MEDIA: "1"
+          RELAY_TEST_IMAGE: mowdeck/camera-relay:ci
+          RELAY_TEST_LOGS: camera-relay-media-logs.txt
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: camera-relay-media-logs
+          path: camera-relay-media-logs.txt
+
   # Phase 1 acceptance test (docs/phases.md) against the full Compose stack.
   # The service images are built first with the GitHub Actions cache of the docker
   # job (same scopes); `compose up --build` then finds every layer in the builder.
@@ -462,6 +503,14 @@ jobs:
       - uses: docker/build-push-action@v7.4.0
         with:
           context: .
+          file: services/camera-relay/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/camera-relay:dev
+          cache-from: type=gha,scope=camera-relay
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
           file: apps/web/Dockerfile
           build-args: *web-build-args
           load: true
@@ -554,6 +603,14 @@ jobs:
           load: true
           tags: mowdeck/realtime:dev
           cache-from: type=gha,scope=realtime
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/camera-relay/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/camera-relay:dev
+          cache-from: type=gha,scope=camera-relay
       - uses: docker/build-push-action@v7.4.0
         with:
           context: .

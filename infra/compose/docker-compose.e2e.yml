@@ -6,10 +6,10 @@
 # Locally `pnpm e2e:stack up` does this with its own project name, host ports, network, image tag
 # and env files (tests/e2e-web/scripts/stack.mjs); CI adds the file to its stack.
 #
-# It adds one thing: a marker that the test suites check before they create any data. The marker
-# answers at /api/v1/e2e-stack with the Compose project name as its host name, so a suite pointed
-# at a stack without this override (the stack you actually use) refuses to run, and the suite
-# knows which project to `docker exec` into.
+# It adds a marker that the test suites check before they create any data. The marker answers at
+# /api/v1/e2e-stack with the Compose project name as its host name, so a suite pointed at a stack
+# without this override (the stack you actually use) refuses to run, and the suite knows which
+# project to `docker exec` into. It also enables the camera relay (ADR 0045) with its test hooks.
 
 services:
   e2e-marker:
@@ -23,3 +23,14 @@ services:
       - traefik.http.middlewares.e2e-marker-strip.stripprefix.prefixes=/api/v1/e2e-stack
       - traefik.http.services.e2e-marker.loadbalancer.server.port=80
     networks: [mowdeck]
+
+  # The camera relay and its media server run in every test stack (they are the "relay"
+  # profile otherwise), with the test hooks of the relay (POST /internal/v1/test/freeze pauses
+  # the fake source), so the suites can play the simulator's cameras through the relay.
+  camera-relay:
+    profiles: !reset []
+    environment:
+      MOWDECK_RELAY_TEST_HOOKS: "true"
+
+  mediamtx:
+    profiles: !reset []
