@@ -229,6 +229,11 @@
   });
 
   const fake = $derived(cam.session?.provider === 'fake');
+  /**
+   * A relay tile is live at its first presented frame, and WebKit (Safari) presents no frame of
+   * a `<video>` that is not rendered: the relay's video stays rendered while it connects.
+   */
+  const relay = $derived(cam.session?.provider === 'relay');
   /** The tile shows its canvas (the simulator's pattern, unless it plays through the video). */
   const onCanvas = $derived(fake && !throughVideo);
   const tiles = $derived(cam.tiles);
@@ -391,7 +396,7 @@
         <video
           bind:this={videos[slot]}
           class="picture"
-          class:hidden={onCanvas || !cam.session || !live || !shownTile}
+          class:hidden={onCanvas || !cam.session || !shownTile || (!live && !relay)}
           autoplay
           muted
           playsinline
