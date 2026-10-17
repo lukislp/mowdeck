@@ -1,5 +1,14 @@
 {
   "$defs": {
+    "RelayPurpose": {
+      "description": "Why a lease holds the session.",
+      "enum": [
+        "viewer",
+        "vision"
+      ],
+      "title": "RelayPurpose",
+      "type": "string"
+    },
     "RelayStopReason": {
       "description": "Why a relay session ended.",
       "enum": [
@@ -25,6 +34,13 @@
       "format": "uuid",
       "title": "Mower Id",
       "type": "string"
+    },
+    "peak_viewers": {
+      "default": 0,
+      "description": "Most viewer leases open at the same time.",
+      "minimum": 0,
+      "title": "Peak Viewers",
+      "type": "integer"
     },
     "reason": {
       "$ref": "#/$defs/RelayStopReason"
@@ -52,6 +68,18 @@
       "format": "date-time",
       "title": "Stopped At",
       "type": "string"
+    },
+    "trigger": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RelayPurpose"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Purpose of the lease that started the session."
     },
     "vision_seconds": {
       "default": 0,

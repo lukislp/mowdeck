@@ -114,9 +114,12 @@ class RelayAttachRequest(ContractModel):
     account_id: UUID = Field(description="The mower's account as Fleet knows it.")
     mower_id: UUID
     camera_ids: list[CameraId] = Field(
-        min_length=1,
+        default_factory=list,
         max_length=8,
-        description="`CameraInfo.id` of each wanted camera; one tile per camera.",
+        description=(
+            "`CameraInfo.id` of each wanted camera; one tile per camera. Empty: every camera "
+            "the mower offers (the sender does not know the camera list, e.g. Fleet)."
+        ),
     )
     requested_by: PrincipalRef
     purpose: RelayPurpose = RelayPurpose.VIEWER
@@ -233,6 +236,12 @@ class CameraRelayStarted(ContractModel):
     source: CameraProvider = Field(description="The provider of the source (not `relay`).")
     camera_ids: list[CameraId] = Field(max_length=8, description="The cameras that publish.")
     started_at: UtcDateTime
+    trigger: RelayPurpose | None = Field(
+        default=None, description="Purpose of the lease that started the session."
+    )
+    started_by: PrincipalRef | None = Field(
+        default=None, description="Who opened the lease that started the session."
+    )
 
     @model_validator(mode="after")
     def _source_is_not_the_relay(self) -> Self:
@@ -256,6 +265,12 @@ class CameraRelayStopped(ContractModel):
     stopped_at: UtcDateTime
     vision_seconds: float = Field(
         default=0, ge=0, description="Seconds held by Vision leases alone (daily limit)."
+    )
+    trigger: RelayPurpose | None = Field(
+        default=None, description="Purpose of the lease that started the session."
+    )
+    peak_viewers: int = Field(
+        default=0, ge=0, description="Most viewer leases open at the same time."
     )
 
 

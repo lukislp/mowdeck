@@ -79,14 +79,13 @@
       "type": "string"
     },
     "camera_ids": {
-      "description": "`CameraInfo.id` of each wanted camera; one tile per camera.",
+      "description": "`CameraInfo.id` of each wanted camera; one tile per camera. Empty: every camera the mower offers (the sender does not know the camera list, e.g. Fleet).",
       "items": {
         "maxLength": 64,
         "minLength": 1,
         "type": "string"
       },
       "maxItems": 8,
-      "minItems": 1,
       "title": "Camera Ids",
       "type": "array"
     },
@@ -106,7 +105,6 @@
   "required": [
     "account_id",
     "mower_id",
-    "camera_ids",
     "requested_by"
   ],
   "title": "RelayAttachRequest",
