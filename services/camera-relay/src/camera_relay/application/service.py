@@ -236,10 +236,12 @@ class RelayService:
 
     # --- Reports of the media plane and the source --------------------------------------------
 
-    async def media_confirmed(self, lease_id: UUID, whep_session: str) -> bool:
-        """The reader ``whep_session`` of a viewer receives media. True when the lease exists."""
+    async def media_confirmed(self, lease_id: UUID, whep_session: str, camera: str = "") -> bool:
+        """The reader ``whep_session`` of a viewer receives media on the path of ``camera``.
+        True when the lease exists."""
         return await self._on_lease(
-            lease_id, lambda s, now: s.media_confirmed(lease_id, whep_session, now).effects
+            lease_id,
+            lambda s, now: s.media_confirmed(lease_id, whep_session, now, camera).effects,
         )
 
     async def media_lost(self, lease_id: UUID, whep_session: str | None = None) -> bool:

@@ -1,6 +1,6 @@
 """Keys, states and leases of the relay."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
@@ -53,7 +53,8 @@ class Lease:
     """One holder of a session: a viewer (a person) or Vision.
 
     A viewer lease is *present* only while its media is confirmed (a WHEP reader bound to it
-    receives bytes) and its heartbeat is fresh. Until it is confirmed it lives at most
+    receives bytes; one reader per camera, so a viewer with both front cameras side by side has
+    two) and its heartbeat is fresh. Until it is confirmed it lives at most
     ``bind_deadline``; without a heartbeat it ends at ``expires_at``. A Vision lease ends at
     ``expires_at`` (its cap) or when its request ends (detach).
     """
@@ -68,8 +69,9 @@ class Lease:
     """Heartbeat deadline of a viewer, cap of a Vision lease."""
     bind_deadline: datetime | None = None
     """Viewer without confirmed media: closed at this time unless media is confirmed."""
-    whep_session: str | None = None
-    """The media plane's reader session bound to this viewer (None while unconfirmed)."""
+    readers: dict[str, str] = field(default_factory=dict)
+    """The media plane's reader session per camera (tile) bound to this viewer (empty while
+    unconfirmed). A new reader of the same camera replaces the old one (a reconnect)."""
     was_bound: bool = False
     """The viewer had confirmed media once (its later loss closes it as ``media_lost``)."""
     vision_mode: VisionMode | None = None
@@ -85,9 +87,14 @@ class Lease:
         return self.purpose is RelayPurpose.VISION
 
     @property
+    def whep_session(self) -> str | None:
+        """The first bound reader session (None while unconfirmed)."""
+        return next(iter(self.readers.values()), None)
+
+    @property
     def present(self) -> bool:
         """A viewer with confirmed media (its heartbeat is fresh while the lease exists)."""
-        return self.is_viewer and self.whep_session is not None
+        return self.is_viewer and bool(self.readers)
 
     def deadline(self) -> tuple[datetime, RelayLeaseCloseReason]:
         """When this lease ends unless something happens, and why."""

@@ -74,12 +74,14 @@ class FakeApi:
 @dataclass
 class FakeReports:
     confirmed: list[tuple[UUID, str]] = field(default_factory=list)
+    cameras: list[str] = field(default_factory=list)
     lost: list[tuple[UUID, str | None]] = field(default_factory=list)
     leases: set[UUID] = field(default_factory=set)
     started: list[tuple[UUID, list[str]]] = field(default_factory=list)
 
-    async def media_confirmed(self, lease_id: UUID, whep_session: str) -> bool:
+    async def media_confirmed(self, lease_id: UUID, whep_session: str, camera: str = "") -> bool:
         self.confirmed.append((lease_id, whep_session))
+        self.cameras.append(camera)
         return lease_id in self.leases
 
     async def media_lost(self, lease_id: UUID, whep_session: str | None = None) -> bool:
@@ -129,6 +131,7 @@ async def test_growing_bytes_confirm_a_bound_reader_once() -> None:
     api.sessions = [_reader("w1", 5000)]
     await reconciler.run_once()
     assert reports.confirmed == [(lease, "w1")]
+    assert reports.cameras == ["front_left"]  # the camera of the reader's path
     assert api.kicked == []
 
 
