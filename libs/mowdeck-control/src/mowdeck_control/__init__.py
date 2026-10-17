@@ -34,6 +34,7 @@ from mowdeck_control.calibration import (
 from mowdeck_control.connection import (
     BridgeScanCapable,
     CameraCapable,
+    CameraSessionRelease,
     ConfirmFn,
     ConnectionConfig,
     Dispatch,
@@ -58,6 +59,7 @@ from mowdeck_control.connection import (
     dispatch_of,
     drive_speed_port_of,
     firmware_port_of,
+    release_camera_session_of,
 )
 from mowdeck_control.controller import MowerController, StateCallback
 from mowdeck_control.errors import (
@@ -145,6 +147,7 @@ __all__ = [
     "BridgeScanCapable",
     "CalibrationConfig",
     "CameraCapable",
+    "CameraSessionRelease",
     "CommandRejected",
     "ConfirmFn",
     "ConnectionConfig",
@@ -220,6 +223,7 @@ __all__ = [
     "pose_of",
     "refusal_reason",
     "register_connection",
+    "release_camera_session_of",
     "render_scene",
     "room_ahead_problem",
     "spot_start_problem",

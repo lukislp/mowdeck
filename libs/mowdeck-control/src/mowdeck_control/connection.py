@@ -17,22 +17,23 @@ Rules for adapters:
 * Adapters that can take a still image also implement :class:`PhotoCapture`
   (``capture_photo``); callers check with ``isinstance(connection, PhotoCapture)``.
 
-Optional capabilities are separate protocols checked with ``isinstance``: an adapter with a
-camera also implements :class:`CameraCapable` (see :func:`camera_session_of`); an adapter that
-can rebuild its map from what it already holds implements :class:`MapRebuildable` (see
-:func:`current_map_of`); an adapter that confirms commands through the mower's state implements
-:class:`TwoPhaseExecution` (see :func:`dispatch_of`), so the controller can release its queue
-while the confirmation is pending; an adapter that knows the route the mower planned for its job
-implements :class:`MowPathSource` (see :func:`current_path_of`), and one that can ask the mower
-to plan a route without starting it implements :class:`PathPreviewCapable`. An adapter that can
-make the mower leave its charging station by itself sets ``MowerCapabilities.undock`` and
-implements :class:`UndockCapable` (ADR 0041: a spot run may then start at the dock). An adapter
-that can read and change the vendor's speed setting for manual driving declares
-``MowerCapabilities.drive_speed_setting``, reports the value in ``MowerState.drive_speed_mps`` and
-implements :class:`DriveSpeedCapable` (ADR 0042, see :func:`drive_speed_port_of`). An adapter
-that asks the mower for its reports while driving implements :class:`ReportRateCapable`, so a
-drive calibration can ask for them as fast as the link allows (ADR 0042, see
-:func:`report_rate_port_of`).
+Optional capabilities are separate protocols checked with ``isinstance``: an adapter with a camera
+also implements :class:`CameraCapable` (see :func:`camera_session_of`), and one that can tell the
+mower to stop publishing its camera stream implements :class:`CameraSessionRelease` (see
+:func:`release_camera_session_of`, ADR 0045); an adapter that can rebuild its map from what it
+already holds implements :class:`MapRebuildable` (see :func:`current_map_of`); an adapter that
+confirms commands through the mower's state implements :class:`TwoPhaseExecution` (see
+:func:`dispatch_of`), so the controller can release its queue while the confirmation is pending; an
+adapter that knows the route the mower planned for its job implements :class:`MowPathSource` (see
+:func:`current_path_of`), and one that can ask the mower to plan a route without starting it
+implements :class:`PathPreviewCapable`. An adapter that can make the mower leave its charging
+station by itself sets ``MowerCapabilities.undock`` and implements :class:`UndockCapable` (ADR 0041:
+a spot run may then start at the dock). An adapter that can read and change the vendor's speed
+setting for manual driving declares ``MowerCapabilities.drive_speed_setting``, reports the value in
+``MowerState.drive_speed_mps`` and implements :class:`DriveSpeedCapable` (ADR 0042, see
+:func:`drive_speed_port_of`). An adapter that asks the mower for its reports while driving
+implements :class:`ReportRateCapable`, so a drive calibration can ask for them as fast as the link
+allows (ADR 0042, see :func:`report_rate_port_of`).
 
 Links and firmware (ADR 0038) are optional capabilities as well, declared in the capabilities
 and implemented as protocols: an adapter whose connection can consist of several links (the
@@ -324,6 +325,39 @@ async def camera_session_of(connection: object) -> CameraSession | None:
     if not isinstance(connection, CameraCapable):
         return None
     return await connection.get_camera_session()
+
+
+@runtime_checkable
+class CameraSessionRelease(Protocol):
+    """Optional capability of a :class:`MowerConnection`: tell the mower to stop publishing its
+    camera stream (ADR 0045).
+
+    Some mowers keep publishing after the last viewer left, which costs mobile data and battery
+    until they are told to stop. The camera relay calls this once it left the source session.
+    Rules:
+
+    * Idempotent and safe without a running stream: releasing twice, or before any session was
+      requested, sends at most a harmless stop and never raises for that.
+    * ``channel`` is the :attr:`~mowdeck_contracts.v1.CameraSession.channel` of the session to
+      release when the caller knows it; adapters that stop the stream per mower ignore it, and
+      None releases whatever the mower publishes.
+    * Raises :class:`~mowdeck_control.errors.NotConnected` when the stop could not be sent (the
+      link or the vendor cloud is down, the vendor refused); never anything else for a vendor
+      failure.
+    """
+
+    async def release_camera_session(self, channel: str | None = None) -> None:
+        """Tell the mower to stop publishing its camera stream."""
+        ...
+
+
+async def release_camera_session_of(connection: object, channel: str | None = None) -> bool:
+    """Release the camera stream of ``connection``; False (nothing sent) when it does not
+    implement :class:`CameraSessionRelease`, True once the stop went out."""
+    if not isinstance(connection, CameraSessionRelease):
+        return False
+    await connection.release_camera_session(channel)
+    return True
 
 
 @runtime_checkable
