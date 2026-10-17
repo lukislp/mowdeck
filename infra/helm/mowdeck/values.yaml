@@ -203,6 +203,16 @@ config:
   CAPTURE_MAX_CONCURRENCY: "2"
   # Empty: Playwright's Chromium headless shell; "chrome" needs an image with Google Chrome.
   CAPTURE_BROWSER_CHANNEL: ""
+  # --- Camera relay (services.cameraRelay, ADR 0045) ---
+  # MediaMTX sends the camera media on one ICE port for UDP and TCP, published on the node as a
+  # hostPort (services.cameraRelay.mediamtx.hostPort; Compose RELAY_ICE_BIND is
+  # services.cameraRelay.mediamtx.hostIP). Both protocols of that port must be reachable from
+  # the clients in the LAN: open them in the node's firewall.
+  # The addresses clients reach the node under, comma separated (IPs, e.g. the node's LAN IP
+  # 192.168.1.20). Empty: MediaMTX announces none and WebRTC finds no route; set it.
+  RELAY_ICE_HOSTS: ""
+  # The ICE port; the container listens on the same port (ICE candidates carry it).
+  RELAY_ICE_PORT: "8189"
 
 # Host ports of the Compose stack have no counterpart: services are reached through the Ingress
 # (GATEWAY_HTTP_PORT, GATEWAY_HTTPS_PORT) and cluster-internal Services (POSTGRES_PORT,
@@ -363,6 +373,24 @@ ingress:
   #   traefik.ingress.kubernetes.io/router.middlewares: mowdeck-identity-ratelimit@kubernetescrd
   auth:
     enabled: true
+    annotations: {}
+  # WHEP signalling of the camera relay's MediaMTX as a third Ingress (-media), rendered with
+  # services.cameraRelay.enabled. MediaMTX serves /r/<relay>/<camera>/whep, so the controller
+  # must strip /media/whep (the Compose middleware mediamtx-whep-strip). The annotations are
+  # merged over ingress.annotations. Traefik: traefikStripPrefix renders the Middleware
+  # <fullname>-media-strip and its annotation (traefik.io/v1alpha1, needs Traefik's CRDs), or
+  # reference your own:
+  #   traefik.ingress.kubernetes.io/router.middlewares: <namespace>-<middleware>@kubernetescrd
+  # NGINX-based controllers rewrite with a regex path instead:
+  #   path: /media/whep(/r/.*)
+  #   pathType: ImplementationSpecific
+  #   annotations:
+  #     nginx.ingress.kubernetes.io/use-regex: "true"
+  #     nginx.ingress.kubernetes.io/rewrite-target: /$1
+  media:
+    path: /media/whep/r/
+    pathType: Prefix
+    traefikStripPrefix: false
     annotations: {}
 
 # --- Settings shared by every MowDeck pod ---
@@ -551,8 +579,10 @@ services:
     extraEnv: {}
     extraVolumes: []
     extraVolumeMounts: []
-  # Camera relay (ADR 0045): shared camera sessions per account and mower. Off by default (the
-  # media plane and the source drivers follow in later steps; Compose: the "relay" profile).
+  # Camera relay (ADR 0045): shared camera sessions per account and mower, served to browsers
+  # over WebRTC (WHEP) by its media server MediaMTX, which comes with it (templates/mediamtx.yaml,
+  # the -media Ingress). Off by default (Compose: the "relay" profile). Enabled, set
+  # config.RELAY_ICE_HOSTS and let the Ingress controller strip /media/whep (ingress.media).
   # State lives in memory: keep one replica and no autoscaling.
   cameraRelay:
     enabled: false
@@ -565,6 +595,26 @@ services:
     extraEnv: {}
     extraVolumes: []
     extraVolumeMounts: []
+    # MediaMTX (MIT): one replica (the hostPort allows one pod per node), uid 65534, read-only,
+    # config files/mediamtx.yml. Its API and RTSP stay cluster-internal; metrics, playback and
+    # pprof are off.
+    mediamtx:
+      # Same image as MEDIAMTX_IMAGE in infra/compose/.env.example.
+      image: bluenviron/mediamtx:1.21.2
+      pullPolicy: IfNotPresent
+      # -- Publish the ICE port (config.RELAY_ICE_PORT, UDP and TCP) on the node. Needs a CNI
+      # with hostPort support (portmap; k3s has it). false: expose the port yourself.
+      hostPort: true
+      # -- Node address the ICE port is bound to (Compose RELAY_ICE_BIND); empty: every address.
+      hostIP: ""
+      resources:
+        requests: {cpu: 20m, memory: 32Mi}
+        limits: {memory: 128Mi}
+      # Scheduling of the MediaMTX pod (default: the shared values). Pin it to the node whose
+      # address is in config.RELAY_ICE_HOSTS, e.g. nodeSelector: {kubernetes.io/hostname: pi5}.
+      nodeSelector: {}
+      tolerations: []
+      affinity: {}
   # Subscriptions and payments (ADR 0031). Off by default: billing.enabled=false means nothing
   # of it is rendered (Compose: the "billing" profile). Add <fullname>-billing to Identity's
   # module URLs via services.identity.extraEnv only when enabled (docs/ops/billing.md).

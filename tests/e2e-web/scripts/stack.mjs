@@ -9,7 +9,8 @@
  * configured only from infra/compose/.env.example and tests/e2e-web/stack.env (never from an
  * infra/compose/.env), as the Compose project MOWDECK_E2E_PROJECT (default mowdeck-e2e) with its
  * own network, volumes, image tag and host ports from MOWDECK_E2E_PORT (default 8480, bound to
- * 127.0.0.1): web at http://localhost:<port>, PostgreSQL at <port>+2 and so on.
+ * 127.0.0.1): web at http://localhost:<port>, PostgreSQL at <port>+2 and so on, the camera
+ * relay's ICE port (UDP and TCP) at <port>+9.
  */
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -74,6 +75,10 @@ Object.assign(composeEnv, {
   NATS_MONITOR_PORT: String(port + 4),
   OPENFGA_HTTP_PORT: String(port + 5),
   OPENFGA_GRPC_PORT: String(port + 6),
+  // The camera relay's ICE port (UDP and TCP): container port = host port, see mediamtx.yml.
+  RELAY_ICE_BIND: '127.0.0.1',
+  RELAY_ICE_PORT: String(port + 9),
+  RELAY_ICE_HOSTS: '127.0.0.1',
   REALTIME_ALLOWED_ORIGINS: `${baseURL},http://127.0.0.1:${port}`,
 });
 

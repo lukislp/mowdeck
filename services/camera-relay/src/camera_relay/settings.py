@@ -6,11 +6,17 @@ limits of sessions and leases are the defaults of ADR 0045 (``mowdeck_contracts.
 not configurable.
 """
 
+from typing import Self
+from uuid import UUID
+
 from mowdeck_service_kit import ServiceSettings
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 
 from camera_relay.application.service import RelayConfig
 from camera_relay.domain.policy import MAX_LEASES_PER_SESSION, RelayPolicy
+
+SERVICE_SUBJECT = UUID("5d2c7a8e-3f0b-4c61-9a3e-0c6f1b7d2e45")
+"""Default subject of the relay's service principal in gateway requests (stable, not secret)."""
 
 
 class Settings(ServiceSettings):
@@ -25,11 +31,11 @@ class Settings(ServiceSettings):
     """Port the HTTP server listens on."""
 
     relay_whep_base_url: str = Field(
-        default="/whep", min_length=1, max_length=256, pattern=r"^(/|https?://)[^\s]*$"
+        default="/media/whep", min_length=1, max_length=256, pattern=r"^(/|https?://)[^\s]*$"
     )
     """Prefix of the WHEP URLs handed to clients (``<prefix>/r/<relay_id>/<camera>/whep``):
-    an absolute path on the MowDeck origin or an ``http(s)`` URL. The route itself comes with
-    the media plane."""
+    an absolute path on the MowDeck origin or an ``http(s)`` URL. Traefik routes
+    ``/media/whep/r/`` to the media server and strips ``/media/whep``."""
 
     relay_ticket_signing_key: SecretStr | None = None
     """Ed25519 key that signs the tickets: PEM (PKCS#8) or the base64 encoded 32-byte seed.
@@ -42,6 +48,65 @@ class Settings(ServiceSettings):
 
     relay_max_leases_per_session: int = Field(default=MAX_LEASES_PER_SESSION, ge=1, le=1000)
     """Open leases per account and mower; one more is answered with ``unavailable``."""
+
+    relay_mediamtx_api_url: str | None = Field(
+        default=None, max_length=256, pattern=r"^https?://[^\s]+$"
+    )
+    """Control API of the media server (MediaMTX), e.g. ``http://mediamtx:9997``. Unset: no
+    media plane and no source drivers; every attach is answered with ``unavailable``."""
+
+    relay_mediamtx_rtsp_url: str = Field(
+        default="rtsp://mediamtx:8554", max_length=256, pattern=r"^rtsp://[^\s@/]+$"
+    )
+    """RTSP server of the media server the source pipeline publishes to and reads from
+    (inside the cluster only), without credentials."""
+
+    relay_publisher_user: str = Field(
+        default="relay", min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"
+    )
+    """User name of the relay's own pipeline towards the media server (publish, internal
+    reads, control API)."""
+
+    relay_publisher_secret: SecretStr | None = None
+    """Password of that user, usually as ``_FILE``. Unset: a random secret per process (the
+    media server asks this process for every publish, so nothing else needs to know it)."""
+
+    relay_reconcile_seconds: float = Field(default=2.0, gt=0, le=30)
+    """How often the relay reads the media server's readers (media confirmation, lost
+    readers, source readiness)."""
+
+    relay_media_stall_polls: int = Field(default=3, ge=1, le=30)
+    """A bound reader whose sent bytes do not grow for this many polls counts as lost."""
+
+    relay_gateway_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    """Timeout of the Device-Gateway's camera session and release requests."""
+
+    relay_service_subject: UUID = SERVICE_SUBJECT
+    """Subject of the relay's service principal in the gateway requests."""
+
+    relay_ffmpeg_path: str = Field(default="ffmpeg", min_length=1, max_length=256)
+    """The ffmpeg binary of the source pipeline (fake source, transcoder)."""
+
+    relay_fake_font: str = Field(
+        default="/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", max_length=256
+    )
+    """Font of the fake source's overlay (mower, camera, wall clock in ms)."""
+
+    relay_test_hooks: bool = False
+    """Serve ``POST /internal/v1/test/freeze`` (pauses the fake source) for the test stacks.
+    Refused with ``MOWDECK_ENVIRONMENT=prod``."""
+
+    @model_validator(mode="after")
+    def _no_test_hooks_in_production(self) -> Self:
+        if self.relay_test_hooks and self.environment == "prod":
+            msg = "MOWDECK_RELAY_TEST_HOOKS must not be enabled with MOWDECK_ENVIRONMENT=prod"
+            raise ValueError(msg)
+        return self
+
+    @property
+    def media_enabled(self) -> bool:
+        """True when a media server is configured (media plane and source drivers)."""
+        return self.relay_mediamtx_api_url is not None
 
     def to_config(self) -> RelayConfig:
         """The configuration of the use cases."""

@@ -8,6 +8,9 @@ secrets:
   BILLING_STRIPE_SECRET_KEY: sk_test_ci_placeholder
   BILLING_STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
   CAPTURE_TOKEN: ci-placeholder-capture-token
+# Documentation address (RFC 5737): renders MediaMTX's MTX_WEBRTCADDITIONALHOSTS.
+config:
+  RELAY_ICE_HOSTS: 192.0.2.10
 # Billing, the capture worker and the camera relay are off by default; the CI render enables
 # them so their templates are linted and checked.
 services:
@@ -19,6 +22,9 @@ services:
     enabled: true
 ingress:
   host: mowdeck.example.org
+  # Renders the Traefik Middleware of the -media Ingress, so kubeconform checks it too.
+  media:
+    traefikStripPrefix: true
   tls:
     - secretName: mowdeck-tls
       hosts: [mowdeck.example.org]

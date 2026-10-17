@@ -79,7 +79,8 @@ async def test_attach_returns_a_relay_session_with_a_valid_ticket() -> None:
     session = h.repository.get(relay_key)
     assert session is not None and session.relay_id is not None
     assert [t.whep_url for t in relay.tiles] == [
-        f"/whep/{camera_path(session.relay_id, c)}/whep" for c in ("front_left", "front_right")
+        f"/media/whep/{camera_path(session.relay_id, c)}/whep"
+        for c in ("front_left", "front_right")
     ]
     assert str(relay_key.mower_id) not in relay.tiles[0].whep_url
     claims = h.signer.verify(relay.ticket, h.clock())

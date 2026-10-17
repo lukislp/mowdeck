@@ -1,0 +1,151 @@
+{{- /* MediaMTX (MIT, Compose service mediamtx): the data plane of the camera relay (ADR 0045).
+Rendered with services.cameraRelay.enabled, it has no switch of its own. camera-relay publishes
+every camera over RTSP (:8554) and drives it through the API (:9997), both cluster-internal;
+browsers read over WHEP: the -media Ingress routes /media/whep/r/ to :8889 (the controller
+strips /media/whep). Every publish, read and API call is authorized by camera-relay
+(authHTTPAddress); metrics, playback and pprof are off. The config is files/mediamtx.yml, an
+identical copy of infra/compose/mediamtx/mediamtx.yml (the image's /mediamtx reads /mediamtx.yml).
+
+Media leaves on one ICE port for UDP and TCP (config.RELAY_ICE_PORT). ICE candidates carry the
+listener port, so the container listens on the port it is published on: a hostPort on the node
+(services.cameraRelay.mediamtx.hostPort, optional hostIP), announced under the addresses of
+config.RELAY_ICE_HOSTS. The hostPort allows one pod per node, hence one replica and Recreate. */ -}}
+{{- if .Values.services.cameraRelay.enabled }}
+{{- $m := .Values.services.cameraRelay.mediamtx }}
+{{- $c := .Values.config }}
+{{- $name := include "mowdeck.serviceName" (dict "ctx" . "component" "mediamtx") }}
+{{- $icePort := int $c.RELAY_ICE_PORT }}
+{{- if or (lt $icePort 1) (gt $icePort 65535) }}
+{{- fail "config.RELAY_ICE_PORT must be a port number (1-65535)" }}
+{{- end }}
+{{- $config := .Files.Get "files/mediamtx.yml" }}
+{{- $authUrl := printf "%s/internal/mediamtx/auth" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "camera-relay")) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "mediamtx") | nindent 4 }}
+data:
+  mediamtx.yml: |
+    {{- $config | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "mediamtx") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "mowdeck.selectorLabels" (dict "ctx" . "component" "mediamtx") | nindent 4 }}
+  ports:
+    # WHEP signalling (the -media Ingress); the media itself takes the ICE port on the node.
+    - name: webrtc
+      port: 8889
+      targetPort: webrtc
+      protocol: TCP
+    # Control API and RTSP: camera-relay only.
+    - name: api
+      port: 9997
+      targetPort: api
+      protocol: TCP
+    - name: rtsp
+      port: 8554
+      targetPort: rtsp
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "mediamtx") | nindent 4 }}
+spec:
+  replicas: 1
+  # The hostPort is taken until the old pod is gone.
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "mowdeck.selectorLabels" (dict "ctx" . "component" "mediamtx") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "mediamtx") | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ printf "%s|%s|%v" $config $c.RELAY_ICE_HOSTS $icePort | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "mowdeck.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- include "mowdeck.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml (merge (dict "runAsUser" 65534 "runAsGroup" 65534 "fsGroup" 65534) .Values.podSecurityContext) | nindent 8 }}
+      terminationGracePeriodSeconds: 10
+      {{- include "mowdeck.scheduling" (dict "ctx" . "values" $m "component" "mediamtx") | nindent 6 }}
+      containers:
+        - name: mediamtx
+          image: {{ $m.image }}
+          imagePullPolicy: {{ $m.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: MTX_AUTHHTTPADDRESS
+              value: {{ $authUrl | quote }}
+            {{- with $c.RELAY_ICE_HOSTS }}
+            # The addresses clients reach the node under (comma separated).
+            - name: MTX_WEBRTCADDITIONALHOSTS
+              value: {{ . | quote }}
+            {{- end }}
+            - name: MTX_WEBRTCLOCALUDPADDRESS
+              value: {{ printf ":%d" $icePort | quote }}
+            - name: MTX_WEBRTCLOCALTCPADDRESS
+              value: {{ printf ":%d" $icePort | quote }}
+          ports:
+            - name: webrtc
+              containerPort: 8889
+              protocol: TCP
+            - name: api
+              containerPort: 9997
+              protocol: TCP
+            - name: rtsp
+              containerPort: 8554
+              protocol: TCP
+            {{- range list "UDP" "TCP" }}
+            - name: ice-{{ lower . }}
+              containerPort: {{ $icePort }}
+              protocol: {{ . }}
+              {{- if $m.hostPort }}
+              hostPort: {{ $icePort }}
+              {{- with $m.hostIP }}
+              hostIP: {{ . | quote }}
+              {{- end }}
+              {{- end }}
+            {{- end }}
+          securityContext:
+            {{- toYaml (merge (dict "runAsUser" 65534 "runAsGroup" 65534) .Values.securityContext) | nindent 12 }}
+          # The image has no shell: TCP probes on the WHEP listener.
+          readinessProbe:
+            tcpSocket: {port: webrtc}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket: {port: webrtc}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml $m.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /mediamtx.yml, subPath: mediamtx.yml, readOnly: true}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}
+{{- end }}

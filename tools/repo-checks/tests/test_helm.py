@@ -1,12 +1,14 @@
 """The Helm chart (infra/helm/mowdeck) and the Compose stack cannot drift apart.
 
 * Every service of infra/compose/docker-compose.yml has a template in the chart (a workload, a
-  migration Job or the authorization bootstrap), or is replaced by a named alternative.
+  migration Job, the authorization bootstrap or a named third-party workload), or is replaced by
+  a named alternative.
 * Every variable of infra/compose/.env.example appears in values.yaml, and every `config` and
   `secrets` key of values.yaml is a variable of .env.example (same names on both sides).
 * The third-party images of values.yaml are the ones pinned in infra/compose/.env.example.
 * Rendered (when helm and the chart dependencies are available): every MOWDECK_* variable a
-  Compose service receives reaches the same Kubernetes container, directly or as a _FILE secret.
+  Compose service receives reaches the same Kubernetes container, directly or as a _FILE secret
+  (the MTX_* variables for MediaMTX).
 """
 
 import re
@@ -28,6 +30,11 @@ REPLACED = {
     "postgres": "CloudNativePG (templates/postgresql.yaml) or an external PostgreSQL",
     "openfga": "the official OpenFGA subchart",
     "openfga-migrate": "the OpenFGA subchart's migrate init container",
+}
+
+# Compose services the chart runs with a template of their own instead of mowdeck.workload.
+THIRD_PARTY = {
+    "mediamtx": "MediaMTX, a third-party image with its own config (files/mediamtx.yml)",
 }
 
 
@@ -69,8 +76,11 @@ def test_every_compose_service_has_a_template(repo_root: Path) -> None:
             continue
         path = templates / f"{name}.yaml"
         assert path.is_file(), f"Compose service {name} has no template {path.name} in the chart"
-        if name != "authz-bootstrap":
-            assert "mowdeck.workload" in path.read_text("utf-8"), f"{name}: no workload"
+        text = path.read_text("utf-8")
+        if name in THIRD_PARTY:
+            assert "kind: Deployment" in text, f"{name}: no Deployment"
+        elif name != "authz-bootstrap":
+            assert "mowdeck.workload" in text, f"{name}: no workload"
 
 
 def test_env_example_variables_appear_in_values(repo_root: Path) -> None:
@@ -102,6 +112,8 @@ def test_chart_images_come_from_the_image_list(repo_root: Path) -> None:
     assert values["nats"]["container"]["image"]["fullImageName"] == images["NATS_IMAGE"]
     openfga = values["openfga"]["image"]
     assert f"{openfga['repository']}:{openfga['tag']}" == images["OPENFGA_IMAGE"]
+    mediamtx = values["services"]["cameraRelay"]["mediamtx"]["image"]
+    assert mediamtx == images["MEDIAMTX_IMAGE"]
 
 
 def test_service_template_has_no_helm_values(repo_root: Path) -> None:
@@ -130,6 +142,16 @@ def test_chart_prices_file_is_the_repository_prices_file(repo_root: Path) -> Non
     )
 
 
+def test_chart_mediamtx_file_is_the_compose_mediamtx_file(repo_root: Path) -> None:
+    """files/mediamtx.yml (MediaMTX's config) must be an identical copy as well."""
+    source = repo_root / "infra" / "compose" / "mediamtx" / "mediamtx.yml"
+    copy = _chart(repo_root) / "files" / "mediamtx.yml"
+    assert copy.read_bytes() == source.read_bytes(), (
+        "infra/helm/mowdeck/files/mediamtx.yml differs from infra/compose/mediamtx/mediamtx.yml: "
+        "copy the file again"
+    )
+
+
 def test_billing_is_off_by_default_and_a_compose_profile(repo_root: Path) -> None:
     """billing.enabled=false: Compose starts it only with the profile, Helm renders nothing."""
     compose = _compose(repo_root)
@@ -142,14 +164,26 @@ def test_billing_is_off_by_default_and_a_compose_profile(repo_root: Path) -> Non
 
 
 def test_camera_relay_is_off_by_default_and_a_compose_profile(repo_root: Path) -> None:
-    """cameraRelay.enabled=false and the "relay" profile until the media plane exists
-    (ADR 0045); internal only, so no Traefik route either."""
-    service = _compose(repo_root)["camera-relay"]
-    assert service.get("profiles") == ["relay"]
-    assert not any("traefik" in label for label in service.get("labels", []))
+    """cameraRelay.enabled=false and the "relay" profile (ADR 0045). camera-relay is internal
+    (no Traefik route); of MediaMTX only the WHEP signalling is routed, with /media/whep
+    stripped, like the -media Ingress of the chart."""
+    compose = _compose(repo_root)
+    relay, mediamtx = compose["camera-relay"], compose["mediamtx"]
+    assert relay.get("profiles") == ["relay"]
+    assert mediamtx.get("profiles") == ["relay"]
+    assert not any("traefik" in label for label in relay.get("labels", []))
+    assert set(mediamtx.get("labels", [])) == {
+        "traefik.enable=true",
+        "traefik.http.routers.mediamtx-whep.rule=PathPrefix(`/media/whep/r/`)",
+        "traefik.http.routers.mediamtx-whep.entrypoints=web",
+        "traefik.http.routers.mediamtx-whep.middlewares=mediamtx-whep-strip",
+        "traefik.http.middlewares.mediamtx-whep-strip.stripprefix.prefixes=/media/whep",
+        "traefik.http.services.mediamtx-whep.loadbalancer.server.port=8889",
+    }
     assert _values(repo_root)["services"]["cameraRelay"]["enabled"] is False
-    traefik = _compose(repo_root)["traefik"].get("depends_on", {})
-    assert "camera-relay" not in traefik, "traefik must not wait for an optional profile service"
+    traefik = compose["traefik"].get("depends_on", {})
+    for name in ("camera-relay", "mediamtx"):
+        assert name not in traefik, "traefik must not wait for an optional profile service"
 
 
 def _render(repo_root: Path) -> list[dict[str, Any]]:
@@ -199,8 +233,9 @@ def test_rendered_containers_get_the_compose_settings(repo_root: Path) -> None:
         container = workload["spec"]["template"]["spec"]["containers"][0]
         rendered = set(config_maps.get(f"mowdeck-{name}", {}))
         rendered |= {e["name"] for e in container.get("env", [])}
+        prefix = "MTX_" if name in THIRD_PARTY else "MOWDECK_"
         for var in service.get("environment", {}):
-            if not var.startswith("MOWDECK_"):
+            if not var.startswith(prefix):
                 continue
             assert var in rendered or f"{var}_FILE" in rendered, (
                 f"{name}: Compose sets {var}, the chart does not"

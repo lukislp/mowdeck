@@ -40,7 +40,10 @@ def test_settings_defaults() -> None:
     settings = _settings()
     assert settings.service_name == "camera-relay"
     assert settings.http_port == 8000
-    assert settings.relay_whep_base_url == "/whep"
+    assert settings.relay_whep_base_url == "/media/whep"
+    assert settings.relay_mediamtx_api_url is None
+    assert not settings.media_enabled
+    assert settings.relay_test_hooks is False
     assert settings.relay_ticket_signing_key is None
     assert settings.to_policy().max_leases_per_session == 32
 

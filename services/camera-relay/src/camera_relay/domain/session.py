@@ -248,13 +248,20 @@ class RelaySession:
         self._settle(now, out)
         return LeaseDecision(lease, out)
 
-    def media_lost(self, lease_id: UUID, now: datetime) -> LeaseDecision:
+    def media_lost(
+        self, lease_id: UUID, now: datetime, whep_session: str | None = None
+    ) -> LeaseDecision:
         """The viewer's reader ended or stopped receiving media: it may reconnect (with a fresh
-        ticket from a renew) until the binding deadline, else it closes as ``media_lost``."""
+        ticket from a renew) until the binding deadline, else it closes as ``media_lost``.
+
+        With ``whep_session`` only that reader counts: the loss of another reader of the same
+        lease (an attempt that never played, a reader already replaced) changes nothing."""
         out: list[Effect] = []
         self._advance(now, out)
         lease = self.leases.get(lease_id)
         if lease is None or not lease.is_viewer or lease.whep_session is None:
+            return LeaseDecision(lease, out)
+        if whep_session is not None and lease.whep_session != whep_session:
             return LeaseDecision(lease, out)
         lease.whep_session = None
         lease.bind_deadline = now + self.policy.unbound_lease

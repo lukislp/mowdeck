@@ -23,13 +23,34 @@ def test_compose_file_parses(repo_root: Path) -> None:
         assert not image.endswith(":latest"), f"image {image!r} must not use :latest"
 
 
-def test_e2e_override_only_adds_the_marker(repo_root: Path) -> None:
-    """The e2e override adds the marker the suites check and changes no service of the stack."""
+class _ComposeLoader(yaml.SafeLoader):
+    """Reads Compose's ``!reset`` tag (it drops a value of the base file)."""
+
+
+def _reset(loader: yaml.SafeLoader, node: yaml.SequenceNode) -> dict[str, list[object]]:
+    return {"!reset": loader.construct_sequence(node)}
+
+
+_ComposeLoader.add_constructor("!reset", _reset)
+
+
+def test_e2e_override_adds_the_marker_and_the_relay_with_test_hooks(repo_root: Path) -> None:
+    """The e2e override adds the marker the suites check and enables the camera relay with its
+    test hooks; it changes no other service of the stack."""
     compose_dir = _compose_dir(repo_root)
     base = yaml.safe_load((compose_dir / "docker-compose.yml").read_text("utf-8"))
-    override = yaml.safe_load((compose_dir / "docker-compose.e2e.yml").read_text("utf-8"))
+    text = (compose_dir / "docker-compose.e2e.yml").read_text("utf-8")
+    override = yaml.load(text, Loader=_ComposeLoader)  # noqa: S506 - a SafeLoader subclass
     assert set(override) == {"services"}
-    assert set(override["services"]) == {"e2e-marker"}
+    assert set(override["services"]) == {"e2e-marker", "camera-relay", "mediamtx"}
+    relay, mediamtx = override["services"]["camera-relay"], override["services"]["mediamtx"]
+    assert relay == {
+        "profiles": {"!reset": []},
+        "environment": {"MOWDECK_RELAY_TEST_HOOKS": "true"},
+    }
+    assert mediamtx == {"profiles": {"!reset": []}}
+    # The regular stack never serves the test hooks.
+    assert "MOWDECK_RELAY_TEST_HOOKS" not in base["services"]["camera-relay"]["environment"]
     assert "e2e-marker" not in base["services"]
     marker = override["services"]["e2e-marker"]
     assert marker["hostname"] == "${COMPOSE_PROJECT_NAME}"
@@ -109,3 +130,42 @@ def test_trusted_proxies_reach_the_traefik_command(
     command = json.loads(result.stdout)["services"]["traefik"]["command"]
     for entrypoint in ("web", "websecure"):
         assert f"--entrypoints.{entrypoint}.forwardedHeaders.trustedIPs={expected}" in command
+
+
+def test_only_the_whep_endpoints_of_mediamtx_are_routed(repo_root: Path) -> None:
+    """Traefik routes /media/whep/r/ (prefix stripped) to MediaMTX's WebRTC server and nothing
+    else of it: no API, metrics, playback or RTSP route, and no host port but the ICE port."""
+    data = yaml.safe_load((_compose_dir(repo_root) / "docker-compose.yml").read_text("utf-8"))
+    mediamtx = data["services"]["mediamtx"]
+    labels = mediamtx["labels"]
+    assert labels == [
+        "traefik.enable=true",
+        "traefik.http.routers.mediamtx-whep.rule=PathPrefix(`/media/whep/r/`)",
+        "traefik.http.routers.mediamtx-whep.entrypoints=web",
+        "traefik.http.routers.mediamtx-whep.middlewares=mediamtx-whep-strip",
+        "traefik.http.middlewares.mediamtx-whep-strip.stripprefix.prefixes=/media/whep",
+        "traefik.http.services.mediamtx-whep.loadbalancer.server.port=8889",
+    ]
+    ice = "${RELAY_ICE_BIND:-0.0.0.0}:${RELAY_ICE_PORT:-8189}:${RELAY_ICE_PORT:-8189}"
+    assert mediamtx["ports"] == [f"{ice}/udp", f"{ice}/tcp"]
+    env = mediamtx["environment"]
+    assert env["MTX_AUTHHTTPADDRESS"] == "http://camera-relay:8000/internal/mediamtx/auth"
+    assert env["MTX_WEBRTCLOCALUDPADDRESS"] == env["MTX_WEBRTCLOCALTCPADDRESS"]
+    assert env["MTX_WEBRTCLOCALUDPADDRESS"] == ":${RELAY_ICE_PORT:-8189}"
+    assert mediamtx["profiles"] == ["relay"]
+    assert "ports" not in data["services"]["camera-relay"]
+
+
+def test_the_mediamtx_config_asks_the_relay_and_serves_nothing_else(repo_root: Path) -> None:
+    config = yaml.safe_load(
+        (_compose_dir(repo_root) / "mediamtx" / "mediamtx.yml").read_text("utf-8")
+    )
+    assert config["authMethod"] == "http"
+    assert config["authHTTPExclude"] == []
+    for server in ("metrics", "pprof", "playback", "rtmp", "hls", "srt", "moq"):
+        assert config[server] is False, server
+    assert config["webrtcIPsFromInterfaces"] is False
+    assert config["webrtcICEServers2"] == []
+    assert config["rtspTransports"] == ["tcp"]
+    assert list(config["paths"]) == ["~^r/[0-9a-f]{32}/[A-Za-z0-9_-]{1,64}(/src)?$"]
+    assert "all_others" not in config["paths"]

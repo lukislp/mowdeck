@@ -30,6 +30,8 @@ dev = [
   # Phase 1 acceptance test (tests/e2e): HTTP and WebSocket clients.
   "httpx>=0.28.1",
   "websockets>=17.2",
+  # camera-relay media integration tests (services/camera-relay/tests/media): the WHEP client.
+  "aiortc>=1.15.0",
   # Workspace libraries, installed editable so their tests and type checks run from the root.
   "mowdeck-auth",
   "mowdeck-authz[fastapi]",

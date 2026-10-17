@@ -1,9 +1,14 @@
 {{- /* Camera relay (ADR 0045): shared camera sessions per account and mower, leases with a
 grace period, tickets and the lifecycle events on the stream CAMERA (Compose service
-camera-relay, profile "relay"). Off by default (services.cameraRelay.enabled=false): the media
-plane and the source drivers follow in later steps, until then every attach is "unavailable".
-Internal only: answers relay.camera.* on NATS, no Ingress route. State lives in memory, so it
-runs as a single replica. */ -}}
-{{- $env := include "mowdeck.commonEnv" . | fromJson }}
+camera-relay, profile "relay"). Off by default (services.cameraRelay.enabled=false); enabled, it
+comes with its media server (templates/mediamtx.yaml). The service itself is internal: it
+answers relay.camera.* on NATS and MediaMTX's auth callback, and has no Ingress route. It runs
+the source pipeline, publishes into MediaMTX over RTSP and drives it through its API; sources
+without a driver yet (Agora) are answered with "unavailable". State lives in memory, so it runs
+as a single replica. */ -}}
+{{- $mediamtx := include "mowdeck.serviceName" (dict "ctx" . "component" "mediamtx") }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (dict
+  "MOWDECK_RELAY_MEDIAMTX_API_URL" (printf "http://%s:9997" $mediamtx)
+  "MOWDECK_RELAY_MEDIAMTX_RTSP_URL" (printf "rtsp://%s:8554" $mediamtx)) }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "camera-relay" "key" "cameraRelay" "image" "camera-relay"
   "env" $env) }}
