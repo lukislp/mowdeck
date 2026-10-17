@@ -13,4 +13,4 @@ Why: the services and apps are a network service, so AGPL-3.0 ensures that modif
 
 Third-party components (Traefik, NATS, PostgreSQL, OpenFGA and so on) keep their own licenses; they are used as unmodified container images.
 
-The Agora SDK (proprietary) is never part of this repository or of a published image: `integrations/agora-bridge` downloads it while the operator builds that image, which means accepting Agora's terms ([ADR 0045](docs/adr/0045-camera-relay.md), [agora-bridge README](integrations/agora-bridge/README.md)).
+The Agora SDK (proprietary) is never part of this repository or of a published image: `integrations/agora-bridge` downloads it while the operator builds that image, which means accepting Agora's terms. It is not part of MowDeck and has to be built by each operator; Agora's terms exclude GPLv3/LGPLv3/AGPLv3 code from the applications that use the SDK, which is why the bridge is a separate Apache-2.0 program ([ADR 0045](docs/adr/0045-camera-relay.md), [agora-bridge README](integrations/agora-bridge/README.md)).

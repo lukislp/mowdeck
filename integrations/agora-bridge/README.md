@@ -2,6 +2,8 @@
 
 The optional Agora source of MowDeck's camera relay ([ADR 0045](../../docs/adr/0045-camera-relay.md), step 7). It joins a mower's Agora channel with Agora's Linux server SDK as a receive-only member and hands the encoded camera frames to `camera-relay` over the [camera source bridge protocol](../../docs/dev/camera-relay-bridge-protocol.md). Without it the relay answers Agora mowers (Mammotion) with `unsupported_provider`, and the web app keeps using the direct path of ADR 0032.
 
+> **Not part of MowDeck: you build it yourself.** The Agora SDK this bridge needs is proprietary. It is not included in this repository, in any MowDeck release or in any published image. Whoever wants the Agora source builds the image themselves on their own server; the build downloads the SDK from Agora, and building it means accepting Agora's SDK licence terms. MowDeck only provides the bridge code (Apache-2.0) and the instructions.
+
 Licence of this directory: **Apache-2.0** (`LICENSE`), unlike the rest of `integrations/` (AGPL-3.0). The Agora SDK is **not** part of it, see [Licence](#licence).
 
 ## What is in here
@@ -70,6 +72,7 @@ Further:
 
 - The code here is Apache-2.0. It loads the SDK at run time only and links nothing of MowDeck's AGPL services; the relay talks to it over the documented protocol.
 - `agora-python-server-sdk` is MIT. The native Agora SDK is proprietary and ships no licence file; it is governed by Agora's terms. **MowDeck never redistributes it**: no published image contains it, and the image is built by the operator, who accepts Agora's terms by building it.
+- Agora's licence forbids using code licensed under GPLv3, LGPLv3 or AGPLv3 "in your Applications". The bridge is therefore a separate Apache-2.0 program in its own process and container; it links nothing of MowDeck's AGPL or GPL code and talks to the relay only over the open protocol. Whether that separation meets Agora's terms for your use is for you to judge; this is not legal advice.
 - The bridge joins with the app id and the short-lived tokens the vendor issues for the mower's owner, the same session the browser uses on the direct path (ADR 0032).
 
 ## Tests
