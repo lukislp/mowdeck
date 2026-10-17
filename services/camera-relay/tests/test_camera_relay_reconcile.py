@@ -312,6 +312,10 @@ class FakeDriver:
     updated: list[tuple[str, ...]] = field(default_factory=list)
     stopped: list[RunningSource] = field(default_factory=list)
     fail: bool = False
+    up: bool = True
+
+    async def available(self) -> bool:
+        return self.up
 
     async def start(self, source: RunningSource) -> None:
         self.started.append(source)

@@ -1,0 +1,6 @@
+# Build context: integrations/agora-bridge. Only the bridge's sources and the build step.
+*
+!docker/install_sdk.py
+!src/
+**/__pycache__
+**/*.pyc

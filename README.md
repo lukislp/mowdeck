@@ -49,6 +49,7 @@ What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extr
 - Both front cameras live in the browser, single or side by side.
 - Drive manually with the camera: on a phone held sideways the picture fills the screen with a translucent joystick and the emergency stop on a side rail; the map shrinks to a corner. A frozen picture is marked and holds the mower until it runs again.
 - Camera headlamp switch; stereo frames and automatic analysis for the AI assistant.
+- Optional camera relay: the home server receives the mower's stream once and shares it with every viewer of your account, in a format every browser and the app play the same way. For mowers that stream through Agora (Mammotion) it needs the optional `agora-bridge`, which is **not part of MowDeck**: you build it yourself, which downloads Agora's proprietary SDK and means accepting Agora's licence (see [integrations/agora-bridge](integrations/agora-bridge/README.md)). Without it the cameras keep working over the direct path.
 
 **AI assistant (optional, your own model key)**
 

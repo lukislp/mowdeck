@@ -21,6 +21,7 @@ Call with a dict:
   volumeMounts   extra container volumeMounts
   command        container command (list); default: the image's CMD
   tmpSizeLimit   size of the in-memory /tmp (default 64Mi; a browser needs more)
+  sidecars       further containers of the pod (full container specs, after the main one)
 */}}
 {{- define "mowdeck.workload" -}}
 {{- $ctx := .ctx }}
@@ -237,6 +238,9 @@ spec:
             {{- with $v.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+        {{- with .sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       volumes:
         # The root file system is read-only; /tmp is the only scratch space.
         - name: tmp

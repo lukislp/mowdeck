@@ -156,6 +156,36 @@ def test_only_the_whep_endpoints_of_mediamtx_are_routed(repo_root: Path) -> None
     assert "ports" not in data["services"]["camera-relay"]
 
 
+def test_the_agora_bridge_is_built_locally_and_lives_in_the_relays_namespace(
+    repo_root: Path,
+) -> None:
+    """agora-bridge contains Agora's proprietary SDK (ADR 0045 step 7): opt-in profile, built
+    from integrations/agora-bridge and never pulled, no port and no network of its own (it
+    listens on camera-relay's loopback, which the relay always names)."""
+    data = yaml.safe_load((_compose_dir(repo_root) / "docker-compose.yml").read_text("utf-8"))
+    bridge = data["services"]["agora-bridge"]
+    assert bridge["profiles"] == ["agora"]
+    assert bridge["pull_policy"] == "build"
+    assert bridge["image"].startswith("mowdeck-local/")
+    assert bridge["build"]["context"] == "../../integrations/agora-bridge"
+    assert bridge["network_mode"] == "service:camera-relay"
+    assert "ports" not in bridge and "networks" not in bridge and "labels" not in bridge
+    assert bridge["read_only"] is True and bridge["cap_drop"] == ["ALL"]
+    assert bridge["environment"]["AGORA_BRIDGE_LISTEN"] == "127.0.0.1:7700"
+    relay = data["services"]["camera-relay"]["environment"]
+    assert relay["MOWDECK_RELAY_AGORA_BRIDGE_URL"] == "tcp://127.0.0.1:7700"
+    assert "agora-bridge" not in yaml.safe_dump(data["services"]["traefik"])
+
+
+def test_no_workflow_builds_or_pushes_the_agora_bridge(repo_root: Path) -> None:
+    """The bridge image is never built in CI or published (it would contain Agora's SDK)."""
+    for workflow in (repo_root / ".github" / "workflows").glob("*.yml"):
+        text = workflow.read_text("utf-8")
+        assert "integrations/agora-bridge/Dockerfile" not in text, workflow.name
+        assert "context: integrations/agora-bridge" not in text, workflow.name
+        assert "agora-bridge:local" not in text, workflow.name
+
+
 def test_the_mediamtx_config_asks_the_relay_and_serves_nothing_else(repo_root: Path) -> None:
     config = yaml.safe_load(
         (_compose_dir(repo_root) / "mediamtx" / "mediamtx.yml").read_text("utf-8")

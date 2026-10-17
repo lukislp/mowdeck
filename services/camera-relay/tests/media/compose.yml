@@ -9,6 +9,11 @@
 #   RELAY_TEST_ICE_PORT   the ICE port (UDP and TCP)
 #
 # The publisher secret is fixed (test only) so the test can use the API and probe the streams.
+#
+# agora-bridge is the bridge server of integrations/agora-bridge run from source in the relay
+# image (it has Python; no Agora SDK anywhere): it starts tests/media/fake_bridge.py per
+# connection, which replays the spike's recorded H.265 stream through the bridge protocol. The
+# relay reaches it over TCP (in the Compose stack and Helm it shares the relay's loopback).
 name: camera-relay-media-test
 
 services:
@@ -54,6 +59,7 @@ services:
       MOWDECK_RELAY_PUBLISHER_SECRET: media-test-publisher-secret
       MOWDECK_RELAY_TEST_HOOKS: "true"
       MOWDECK_RELAY_GATEWAY_TIMEOUT_SECONDS: "3"
+      MOWDECK_RELAY_AGORA_BRIDGE_URL: tcp://agora-bridge:7700
     volumes:
       - ./:/opt/media-tests:ro
       - ../../../../integrations/agora-bridge/spike/fixtures:/opt/fixtures:ro
@@ -69,3 +75,28 @@ services:
         condition: service_healthy
       mediamtx:
         condition: service_started
+
+  agora-bridge:
+    image: ${RELAY_TEST_IMAGE:-mowdeck/camera-relay:dev}
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      PYTHONPATH: /opt/agora-bridge-src
+      PYTHONDONTWRITEBYTECODE: "1"
+    command:
+      - python
+      - -m
+      - agora_bridge.server
+      - --listen
+      - 0.0.0.0:7700
+      - --command
+      - python /opt/media-tests/fake_bridge.py /opt/fixtures/luba-uid1.h265
+    volumes:
+      - ../../../../integrations/agora-bridge/src:/opt/agora-bridge-src:ro
+      - ./:/opt/media-tests:ro
+      - ../../../../integrations/agora-bridge/spike/fixtures:/opt/fixtures:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 7700), 2).close()"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

@@ -10,7 +10,7 @@ license = { text = "AGPL-3.0-only" }
 package = false
 
 [tool.uv.workspace]
-members = ["libs/*/", "services/*/", "tools/*/"]
+members = ["libs/*/", "services/*/", "tools/*/", "integrations/agora-bridge/"]
 # pnpm packages of the web frontend (pnpm-workspace.yaml), not Python packages.
 exclude = ["libs/mowdeck-ui", "tools/ts-codegen"]
 
@@ -41,6 +41,9 @@ dev = [
   "mowdeck-patterns",
   "mowdeck-service-kit[db,otel,testing]",
   "mowdeck-wiki-sync",
+  # The Agora camera source bridge (Apache-2.0, standard library only; the SDK is never
+  # installed here, its tests use a fake SDK).
+  "agora-bridge",
   # Services, installed editable for their tests and type checks.
   "billing",
   "camera-relay",
@@ -65,6 +68,7 @@ mowdeck-control-mammotion = { workspace = true }
 mowdeck-patterns = { workspace = true }
 mowdeck-service-kit = { workspace = true }
 mowdeck-wiki-sync = { workspace = true }
+agora-bridge = { workspace = true }
 billing = { workspace = true }
 camera-relay = { workspace = true }
 device-gateway = { workspace = true }
@@ -84,7 +88,7 @@ target-version = "py313"
 # templates/service/template holds Jinja sources; the generated services are linted instead.
 extend-exclude = ["site", "templates/service/template"]
 # Service packages are first-party everywhere (their tests and scripts import them).
-src = [".", "services/*/src"]
+src = [".", "services/*/src", "integrations/agora-bridge/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "S", "C4", "SIM", "RUF", "ASYNC"]
@@ -108,6 +112,8 @@ files = [
   "libs/mowdeck-patterns",
   "libs/mowdeck-service-kit",
   "services",
+  "integrations/agora-bridge/src",
+  "integrations/agora-bridge/tests",
   "tests/e2e",
 ]
 # Alembic environments and revisions are scripts, not importable modules.
@@ -118,6 +124,16 @@ exclude = ["/migrations/"]
 [[tool.mypy.overrides]]
 module = ["pymammotion.*"]
 ignore_missing_imports = true
+
+# The Agora SDK wrapper (agora-python-server-sdk) is installed only in the operator-built
+# agora-bridge image; its adapter subclasses the wrapper's untyped observer classes.
+[[tool.mypy.overrides]]
+module = ["agora.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["agora_bridge.agora_sdk"]
+disallow_subclassing_any = false
 
 # Playwright drives the headless browser of the Vision capture worker (optional extra
 # vision[capture], ADR 0035); it is not installed in the default environment.
@@ -133,7 +149,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["tools", "libs", "services"]
+testpaths = ["tools", "libs", "services", "integrations/agora-bridge/tests"]
 # The Phase 1 acceptance test (tests/e2e, marker e2e) needs the Compose stack: `poe e2e`.
 addopts = "-ra -m 'not e2e'"
 markers = [

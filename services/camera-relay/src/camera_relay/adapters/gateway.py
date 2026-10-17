@@ -9,9 +9,10 @@ gateway checks the account like for commands, so a session of account A's key is
 started with account A. ``stop`` stops the driver and, with ``release``, sends
 ``gateway.mower.<id>.camera.release``: the mower does not stop publishing by itself.
 
-A provider without a driver (Agora until step 7 of ADR 0045) is answered with
-``unsupported_provider`` and the vendor session is **not** released: a client in ``auto`` falls
-back to the direct path (ADR 0032), and its viewer needs the mower's stream.
+A provider without a driver, or whose driver is not available (``agora`` without a configured or
+reachable agora-bridge, step 7 of ADR 0045), is answered with ``unsupported_provider`` and the
+vendor session is **not** released: a client in ``auto`` falls back to the direct path
+(ADR 0032), and its viewer needs the mower's stream.
 
 Media arrives later: the reconciler reports ``source_started`` once a camera's path is ready;
 a driver whose processes fail for good reports ``source_failed``. Both reports run as tasks,
@@ -59,6 +60,10 @@ class SourceDriver(Protocol):
     """Runs the media of one provider for a started vendor session."""
 
     provider: CameraProvider
+
+    async def available(self) -> bool:
+        """Whether the driver can serve its provider now (a bridge may be missing)."""
+        ...
 
     async def start(self, source: RunningSource) -> None:
         """Start publishing the source's cameras."""
@@ -122,7 +127,8 @@ class GatewayVendorSessions:
         (``UnsupportedProviderError`` without releasing the session)."""
         self._offers.pop(key, None)
         session = await self._camera_session(key)
-        if session.provider not in self.drivers:
+        driver = self.drivers.get(session.provider)
+        if driver is None or not await driver.available():
             raise _unsupported(session.provider)
         self._offers[key] = (self._monotonic(), session)
         return SourceOffer(provider=session.provider, cameras=tuple(session.cameras))
@@ -152,6 +158,7 @@ class GatewayVendorSessions:
             provider=session.provider,
             cameras=cameras,
             channel=session.channel or None,
+            session=session,
         )
         try:
             await driver.start(source)
@@ -209,6 +216,10 @@ class GatewayVendorSessions:
         )
 
     # --- Gateway requests ---------------------------------------------------------------------
+
+    async def camera_session(self, key: RelayKey) -> CameraSession:
+        """A fresh vendor session for ``key`` (the drivers' renewals); raises ``SourceError``."""
+        return await self._camera_session(key)
 
     def _take_offer(self, key: RelayKey) -> CameraSession | None:
         offered = self._offers.pop(key, None)
@@ -283,7 +294,7 @@ class GatewayVendorSessions:
 
 def _unsupported(provider: CameraProvider) -> UnsupportedProviderError:
     return UnsupportedProviderError(
-        f"the relay has no source driver for camera provider {provider.value} (ADR 0045)"
+        f"the relay has no available source driver for camera provider {provider.value} (ADR 0045)"
     )
 
 

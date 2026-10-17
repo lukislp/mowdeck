@@ -4,11 +4,41 @@ camera-relay, profile "relay"). Off by default (services.cameraRelay.enabled=fal
 comes with its media server (templates/mediamtx.yaml). The service itself is internal: it
 answers relay.camera.* on NATS and MediaMTX's auth callback, and has no Ingress route. It runs
 the source pipeline, publishes into MediaMTX over RTSP and drives it through its API; sources
-without a driver yet (Agora) are answered with "unavailable". State lives in memory, so it runs
-as a single replica. */ -}}
+without an available driver are answered with "unsupported_provider". State lives in memory, so
+it runs as a single replica.
+
+The Agora source (ADR 0045 step 7) is optional: services.cameraRelay.agoraBridge.enabled adds
+agora-bridge (Compose service agora-bridge, profile "agora") as a second container of this pod.
+It listens on the pod's loopback (127.0.0.1:7700), which the relay always names
+(MOWDECK_RELAY_AGORA_BRIDGE_URL): without the container nothing listens there and agora mowers
+are answered with "unsupported_provider" (the direct path). The image contains Agora's
+proprietary SDK, so MowDeck publishes none: the operator builds it (integrations/agora-bridge)
+and names it in agoraBridge.image.repository; the chart refuses to render without one. */ -}}
 {{- $mediamtx := include "mowdeck.serviceName" (dict "ctx" . "component" "mediamtx") }}
 {{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (dict
   "MOWDECK_RELAY_MEDIAMTX_API_URL" (printf "http://%s:9997" $mediamtx)
-  "MOWDECK_RELAY_MEDIAMTX_RTSP_URL" (printf "rtsp://%s:8554" $mediamtx)) }}
+  "MOWDECK_RELAY_MEDIAMTX_RTSP_URL" (printf "rtsp://%s:8554" $mediamtx)
+  "MOWDECK_RELAY_AGORA_BRIDGE_URL" "tcp://127.0.0.1:7700") }}
+{{- $sidecars := list }}
+{{- $volumes := list }}
+{{- $bridge := .Values.services.cameraRelay.agoraBridge }}
+{{- if and .Values.services.cameraRelay.enabled $bridge.enabled }}
+{{- if not $bridge.image.repository }}
+{{- fail "services.cameraRelay.agoraBridge.image.repository is required: MowDeck publishes no agora-bridge image (it contains Agora's proprietary SDK). Build it from integrations/agora-bridge, push it to a registry you control and name it here." }}
+{{- end }}
+{{- $sidecars = list (dict
+  "name" "agora-bridge"
+  "image" (printf "%s:%s" $bridge.image.repository $bridge.image.tag)
+  "imagePullPolicy" $bridge.image.pullPolicy
+  "env" (list
+    (dict "name" "AGORA_BRIDGE_LISTEN" "value" "127.0.0.1:7700")
+    (dict "name" "AGORA_BRIDGE_MAX_SESSIONS" "value" (toString $bridge.maxSessions)))
+  "securityContext" .Values.securityContext
+  "startupProbe" (dict "tcpSocket" (dict "port" 7700) "periodSeconds" 2 "failureThreshold" 60)
+  "livenessProbe" (dict "tcpSocket" (dict "port" 7700) "periodSeconds" 10)
+  "resources" $bridge.resources
+  "volumeMounts" (list (dict "name" "agora-tmp" "mountPath" "/tmp"))) }}
+{{- $volumes = list (dict "name" "agora-tmp" "emptyDir" (dict "medium" "Memory" "sizeLimit" "64Mi")) }}
+{{- end }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "camera-relay" "key" "cameraRelay" "image" "camera-relay"
-  "env" $env) }}
+  "env" $env "sidecars" $sidecars "volumes" $volumes) }}
