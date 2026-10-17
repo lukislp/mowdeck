@@ -336,6 +336,17 @@ jobs:
           tags: mowdeck/vision:ci
           cache-from: type=gha,scope=vision
           cache-to: type=gha,mode=max,scope=vision
+      - name: Build camera-relay image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: services/camera-relay/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/camera-relay:ci
+          cache-from: type=gha,scope=camera-relay
+          cache-to: type=gha,mode=max,scope=camera-relay
       - name: Build web image
         uses: docker/build-push-action@v7.4.0
         with:

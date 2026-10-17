@@ -8,12 +8,14 @@ secrets:
   BILLING_STRIPE_SECRET_KEY: sk_test_ci_placeholder
   BILLING_STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
   CAPTURE_TOKEN: ci-placeholder-capture-token
-# Billing and the capture worker are off by default; the CI render enables them so their
-# templates are linted and checked.
+# Billing, the capture worker and the camera relay are off by default; the CI render enables
+# them so their templates are linted and checked.
 services:
   billing:
     enabled: true
   visionCapture:
+    enabled: true
+  cameraRelay:
     enabled: true
 ingress:
   host: mowdeck.example.org

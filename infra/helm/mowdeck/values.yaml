@@ -551,6 +551,20 @@ services:
     extraEnv: {}
     extraVolumes: []
     extraVolumeMounts: []
+  # Camera relay (ADR 0045): shared camera sessions per account and mower. Off by default (the
+  # media plane and the source drivers follow in later steps; Compose: the "relay" profile).
+  # State lives in memory: keep one replica and no autoscaling.
+  cameraRelay:
+    enabled: false
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+    autoscaling: {enabled: false, minReplicas: 1, maxReplicas: 1, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
   # Subscriptions and payments (ADR 0031). Off by default: billing.enabled=false means nothing
   # of it is rendered (Compose: the "billing" profile). Add <fullname>-billing to Identity's
   # module URLs via services.identity.extraEnv only when enabled (docs/ops/billing.md).

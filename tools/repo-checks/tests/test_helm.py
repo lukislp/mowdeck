@@ -141,6 +141,17 @@ def test_billing_is_off_by_default_and_a_compose_profile(repo_root: Path) -> Non
     assert "billing" not in traefik, "traefik must not wait for an optional profile service"
 
 
+def test_camera_relay_is_off_by_default_and_a_compose_profile(repo_root: Path) -> None:
+    """cameraRelay.enabled=false and the "relay" profile until the media plane exists
+    (ADR 0045); internal only, so no Traefik route either."""
+    service = _compose(repo_root)["camera-relay"]
+    assert service.get("profiles") == ["relay"]
+    assert not any("traefik" in label for label in service.get("labels", []))
+    assert _values(repo_root)["services"]["cameraRelay"]["enabled"] is False
+    traefik = _compose(repo_root)["traefik"].get("depends_on", {})
+    assert "camera-relay" not in traefik, "traefik must not wait for an optional profile service"
+
+
 def _render(repo_root: Path) -> list[dict[str, Any]]:
     chart = _chart(repo_root)
     result = subprocess.run(  # noqa: S603

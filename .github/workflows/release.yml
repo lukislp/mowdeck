@@ -98,6 +98,7 @@ jobs:
           - {image: billing, context: ., file: services/billing/Dockerfile, kind: python}
           - {image: planner, context: ., file: services/planner/Dockerfile, kind: python}
           - {image: vision, context: ., file: services/vision/Dockerfile, kind: python}
+          - {image: camera-relay, context: ., file: services/camera-relay/Dockerfile, kind: python}
           - {image: web, context: ., file: apps/web/Dockerfile, kind: web}
           - {image: authz-bootstrap, context: infra/openfga, file: infra/openfga/bootstrap/Dockerfile, kind: bootstrap}
     env:
