@@ -64,7 +64,7 @@ A spike (PR #32, run against the LUBA 2 AWD X on 2026-10-17) joined the channel 
 
 ### Vision limits (later phase)
 
-A vision lease without a viewer: a single frame holds the session at most 30 s; a frame stream lease lasts at most 5 minutes and is renewed by pulling frames; at most 20 minutes per mower and UTC day; refused (`budget`) below 10 % of the video budget or below 15 % battery unless the mower charges; never on an offline mower. A configured Vision holds nothing open by itself.
+A vision lease without a viewer: a single frame holds the session at most 30 s; a frame stream lease lasts at most 5 minutes and is renewed by pulling frames; at most 20 minutes per account, mower and UTC day (counted per account, so one account never uses up another's minutes); refused (`budget`) below 10 % of the video budget or below 15 % battery unless the mower charges; never on an offline mower. A configured Vision holds nothing open by itself.
 
 ## Manufacturer independence
 
@@ -108,7 +108,7 @@ Phased plan, one PR each:
 
 1. ADR and contracts (this decision).
 2. Release port in the adapters (simulator and Mammotion) and the gateway request. Implemented: `mowdeck_control.CameraSessionRelease` (`release_camera_session(channel)`, `release_camera_session_of`), the simulator records releases, the Mammotion cloud connection calls PyMammotion's `stop_stream`, and the Device-Gateway answers `gateway.mower.<id>.camera.release` (`CameraReleaseRequest` / `CameraReleaseReply`).
-3. Relay domain: sessions, leases, grace, account separation, fully tested with two accounts.
+3. Relay domain: sessions, leases, grace, account separation, fully tested with two accounts. **Implemented** in `services/camera-relay` (Compose profile `relay`, Helm `services.cameraRelay.enabled`, both off by default): the session state machine as a pure core that returns effects, leases with heartbeat, a 30 s binding deadline for a viewer whose media is not yet confirmed and the Vision caps and daily minutes, a 30 s start timeout, Ed25519 tickets and the `relay.camera.*` responders. Until step 4 the source port has no driver, so every attach is answered with `unavailable`.
 4. Media plane with the `fake` source: MediaMTX, auth callback, transcoder, gateway route, Compose and Helm.
 5. Fleet: the camera endpoint through the relay, `transport`, renew and detach, audit.
 6. Web and app: WHEP player, diagnostics, tab hiding detaches; e2e in Chromium, Firefox and WebKit.

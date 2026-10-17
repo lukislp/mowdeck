@@ -919,6 +919,42 @@ services:
     stop_grace_period: 20s
     networks: [mowdeck]
 
+  # --- Camera relay (ADR 0045): only with `--profile relay` ---------------------------------
+  # Shared camera sessions per account and mower, leases with a grace period, tickets and the
+  # lifecycle events (stream CAMERA). Internal only: answers relay.camera.attach|renew|detach on
+  # NATS, no route through Traefik. Until the media plane and the source drivers follow (later
+  # steps of ADR 0045) every attach is answered with "unavailable". Single replica, state in
+  # memory. Tickets are signed with a key of the process unless
+  # MOWDECK_RELAY_TICKET_SIGNING_KEY(_FILE) is set.
+  camera-relay:
+    image: mowdeck/camera-relay:${MOWDECK_VERSION:-dev}
+    profiles: [relay]
+    build:
+      context: ../..
+      dockerfile: services/camera-relay/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks: [mowdeck]
+
   # --- Billing (ADR 0031): only with `--profile billing` -----------------------------------
   # billing.enabled=false (the default) means these two services are not started at all: no
   # route, the web app's probe of /api/v1/billing/status gets 404 and shows nothing. Enable it

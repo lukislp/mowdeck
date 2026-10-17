@@ -1,0 +1,33 @@
+# Compose block for camera-relay: the entry below "services:" is part of
+# infra/compose/docker-compose.yml (profile "relay", off by default). Build context is the
+# repository root. Internal only: no Traefik route.
+services:
+
+  camera-relay:
+    image: mowdeck/camera-relay:${MOWDECK_VERSION:-dev}
+    profiles: [relay]
+    build:
+      context: ../..
+      dockerfile: services/camera-relay/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_LOG_FORMAT: json
+      MOWDECK_NATS_URL: nats://nats:4222
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    stop_grace_period: 20s
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks: [mowdeck]

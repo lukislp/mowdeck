@@ -4,6 +4,7 @@ Deployable MowDeck services, one uv workspace package per service (AGPL-3.0-only
 
 | Service | Status | Purpose |
 | --- | --- | --- |
+| [`camera-relay`](camera-relay) | 0.1.0 | Optional (Compose profile `relay`): shared camera sessions per account and mower, leases with a grace period, signed tickets and lifecycle events (ADR 0045); answers `unavailable` until the media plane and the source drivers follow |
 | [`billing`](billing) | 0.1.0 | Optional (Compose profile `billing`): subscriptions with Stripe Checkout and the customer portal, signed webhooks processed once that set plan statuses in Entitlements |
 | [`device-gateway`](device-gateway) | 0.1.0 | Mower connections (simulated in Phase 1), commands, telemetry, connection events |
 | [`entitlements`](entitlements) | 0.1.0 | Plans, limits and feature gates: answers whether an account may use a feature (`entitlements.check`); Billing sets plans with `entitlements.plan.set` |
