@@ -13,7 +13,9 @@ With ``MOWDECK_RELAY_MEDIAMTX_API_URL`` set, the media plane is wired (ADR 0045 
 gateway's camera sessions through :class:`~camera_relay.adapters.gateway.GatewayVendorSessions`
 with the ``fake`` source driver, MediaMTX's auth callback (``/internal/mediamtx/auth``), the
 reconcile loop (every ``MOWDECK_RELAY_RECONCILE_SECONDS``) and, with
-``MOWDECK_RELAY_TEST_HOOKS=true``, the freeze hook. Without it the source port is
+``MOWDECK_RELAY_TEST_HOOKS=true``, the freeze hook. With ``MOWDECK_RELAY_AGORA_BRIDGE_URL``
+also the ``agora`` source driver (step 7: the optional agora-bridge next to the relay; while it
+is not reachable, ``agora`` mowers are ``unsupported_provider``). Without it the source port is
 :class:`~camera_relay.adapters.sources.NoSourceDriver`: every attach is answered with
 ``unavailable``. The relay keeps its state in memory and runs as a single replica.
 """
@@ -32,8 +34,14 @@ from mowdeck_service_kit.bus import EventBus
 
 from camera_relay.adapters.bus.events import BusEventPublisher
 from camera_relay.adapters.bus.subscriptions import subscribe_all
-from camera_relay.adapters.gateway import GatewayVendorSessions, service_principal
+from camera_relay.adapters.gateway import GatewayVendorSessions, SourceDriver, service_principal
 from camera_relay.adapters.http.routes import auth_router, hooks_router
+from camera_relay.adapters.media.bridge_source import (
+    BridgeEndpoint,
+    BridgeSourceDriver,
+    StdinSpawn,
+    spawn_stdin_process,
+)
 from camera_relay.adapters.media.mediamtx import MediaMtxApi, MediaMtxPlane
 from camera_relay.adapters.media.pipeline import FakeSourceDriver, MediaServer, RunningSource
 from camera_relay.adapters.media.process import Spawn, spawn_process
@@ -76,6 +84,7 @@ class MediaStack:
     api: MediaMtxApi
     plane: MediaMtxPlane
     fake: FakeSourceDriver
+    agora: BridgeSourceDriver | None
     vendor: GatewayVendorSessions
     reconciler: Reconciler
 
@@ -87,6 +96,7 @@ def _media_stack(
     secret: str,
     *,
     spawn: Spawn,
+    spawn_stdin: StdinSpawn,
     transport: httpx.AsyncBaseTransport | None,
 ) -> MediaStack:
     assert settings.relay_mediamtx_api_url is not None  # noqa: S101 - media_enabled
@@ -107,9 +117,22 @@ def _media_stack(
         on_failure=failed,
         spawn=spawn,
     )
+    drivers: list[SourceDriver] = [fake]
+    agora = None
+    if settings.agora_bridge_url is not None:
+        agora = BridgeSourceDriver(
+            endpoint=BridgeEndpoint.parse(settings.agora_bridge_url),
+            server=server,
+            ffmpeg=settings.relay_ffmpeg_path,
+            on_failure=failed,
+            fetch_session=lambda key: vendors[0].camera_session(key),
+            spawn=spawn,
+            spawn_stdin=spawn_stdin,
+        )
+        drivers.append(agora)
     vendor = GatewayVendorSessions(
         lambda: app.state.bus,
-        [fake],
+        drivers,
         reports=lambda: app.state.relay,
         principal=service_principal(settings.relay_service_subject),
         timeout_seconds=settings.relay_gateway_timeout_seconds,
@@ -122,7 +145,7 @@ def _media_stack(
         reports=lambda: app.state.relay,
         stall_polls=settings.relay_media_stall_polls,
     )
-    return MediaStack(api, MediaMtxPlane(api, bindings), fake, vendor, reconciler)
+    return MediaStack(api, MediaMtxPlane(api, bindings), fake, agora, vendor, reconciler)
 
 
 def build_app(
@@ -135,6 +158,7 @@ def build_app(
     signer: TicketSigner | None = None,
     background_tasks: bool = True,
     spawn: Spawn = spawn_process,
+    spawn_stdin: StdinSpawn = spawn_stdin_process,
     media_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     """Build the app. Without a media server (``MOWDECK_RELAY_MEDIAMTX_API_URL``) and without
@@ -201,7 +225,13 @@ def build_app(
     secret = _publisher_secret(settings)
     if settings.media_enabled and vendor is None and media is None:
         stack = _media_stack(
-            settings, app, bindings, secret, spawn=spawn, transport=media_transport
+            settings,
+            app,
+            bindings,
+            secret,
+            spawn=spawn,
+            spawn_stdin=spawn_stdin,
+            transport=media_transport,
         )
     app.state.media = stack
     app.state.relay = RelayService(

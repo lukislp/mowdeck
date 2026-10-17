@@ -3,7 +3,7 @@
 Paths on the media server (MediaMTX, RTSP inside the cluster only):
 
 * ``r/<relay_id>/<camera>/src``: what a vendor source delivers (for Agora: H.265 from the
-  bridge, step 7 of ADR 0045);
+  bridge, :mod:`~camera_relay.adapters.media.bridge_source`);
 * ``r/<relay_id>/<camera>``: the H.264 stream viewers read over WHEP.
 
 The fake source (``CameraProvider.fake``, the simulator) publishes H.264 straight to the viewer
@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from urllib.parse import quote
 from uuid import UUID
 
+from mowdeck_contracts.v1 import CameraSession
 from mowdeck_contracts.v1.camera import CameraProvider
 from mowdeck_service_kit import get_logger
 
@@ -169,6 +170,8 @@ class RunningSource:
     cameras: tuple[str, ...]
     channel: str | None = None
     """The vendor session's channel (sent with the release)."""
+    session: CameraSession | None = field(default=None, repr=False)
+    """The vendor session the source started with (credentials: never logged)."""
     started_reported: bool = False
     """``source_started`` was reported to the use cases."""
     processes: dict[str, SupervisedProcess] = field(default_factory=dict)
@@ -217,6 +220,10 @@ class FakeSourceDriver:
             max_restarts=self._max_restarts,
         )
 
+    async def available(self) -> bool:
+        """The fake source needs nothing but ffmpeg."""
+        return True
+
     async def start(self, source: RunningSource) -> None:
         """Start one process per camera."""
         self.sources[source.relay_id] = source
@@ -256,8 +263,8 @@ class FakeSourceDriver:
 
 class Transcoder:
     """The generic transcoder of one camera: ``.../src`` (any codec ffmpeg reads) to the
-    H.264 viewer path. Source drivers that deliver to ``.../src`` (Agora in step 7) start one
-    per camera."""
+    H.264 viewer path. Source drivers that deliver to ``.../src`` (the agora bridge source)
+    start one per camera."""
 
     def __init__(
         self,

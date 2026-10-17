@@ -92,6 +92,14 @@ class Settings(ServiceSettings):
     )
     """Font of the fake source's overlay (mower, camera, wall clock in ms)."""
 
+    relay_agora_bridge_url: str | None = Field(
+        default=None, max_length=256, pattern=r"^(tcp://[^\s/]+:[0-9]{1,5}/?)?$"
+    )
+    """The agora-bridge server (``tcp://127.0.0.1:7700`` next to the relay, ADR 0045 step 7).
+    Unset or empty: no ``agora`` source driver. Set but not reachable (the optional bridge is
+    not built or not running): ``agora`` mowers are answered with ``unsupported_provider``, so
+    clients in ``auto`` use the direct path."""
+
     relay_test_hooks: bool = False
     """Serve ``POST /internal/v1/test/freeze`` (pauses the fake source) for the test stacks.
     Refused with ``MOWDECK_ENVIRONMENT=prod``."""
@@ -102,6 +110,11 @@ class Settings(ServiceSettings):
             msg = "MOWDECK_RELAY_TEST_HOOKS must not be enabled with MOWDECK_ENVIRONMENT=prod"
             raise ValueError(msg)
         return self
+
+    @property
+    def agora_bridge_url(self) -> str | None:
+        """The configured bridge server, None when unset or empty."""
+        return (self.relay_agora_bridge_url or "").strip() or None
 
     @property
     def media_enabled(self) -> bool:
