@@ -37,6 +37,7 @@ docker compose down -v          # reset, deletes all data
 | scheduler | `mowdeck/scheduler:dev`, built from the repository | via Traefik at `/api/v1/scheduler` |
 | vision-migrate | `mowdeck/vision:dev`, built from the repository | one-shot, no port |
 | vision | `mowdeck/vision:dev`, built from the repository | via Traefik at `/api/v1/vision` |
+| camera-relay (profile `relay`) | `mowdeck/camera-relay:dev`, built from the repository | none (internal, NATS requests `relay.camera.*`; [ADR 0045](../adr/0045-camera-relay.md), answers `unavailable` until the media plane follows) |
 | web | `mowdeck/web:dev`, built from `apps/web/Dockerfile` | via Traefik at `/` (the web app; router priority 1, behind every `/api/v1` route) |
 
 PostgreSQL creates the databases `identity`, `fleet`, `telemetry`, `scheduler`, `notifications`, `entitlements`, `billing`, `vision`, `openfga`, each with a role of the same name.
