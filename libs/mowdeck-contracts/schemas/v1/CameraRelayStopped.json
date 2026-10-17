@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "RelayStopReason": {
+      "description": "Why a relay session ended.",
+      "enum": [
+        "idle",
+        "failed",
+        "budget",
+        "mower_offline",
+        "shutdown"
+      ],
+      "title": "RelayStopReason",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``camera.relay.stopped`` on ``camera.mower.<id>.relay.stopped``: the relay\nleft the source and asked the gateway to stop the stream.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "reason": {
+      "$ref": "#/$defs/RelayStopReason"
+    },
+    "relay_session_id": {
+      "format": "uuid",
+      "title": "Relay Session Id",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When media began; null when the session never went live.",
+      "title": "Started At"
+    },
+    "stopped_at": {
+      "format": "date-time",
+      "title": "Stopped At",
+      "type": "string"
+    },
+    "vision_seconds": {
+      "default": 0,
+      "description": "Seconds held by Vision leases alone (daily limit).",
+      "minimum": 0,
+      "title": "Vision Seconds",
+      "type": "number"
+    }
+  },
+  "required": [
+    "relay_session_id",
+    "account_id",
+    "mower_id",
+    "reason",
+    "stopped_at"
+  ],
+  "title": "CameraRelayStopped",
+  "type": "object"
+}

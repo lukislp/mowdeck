@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "RelayError": {
+      "description": "The error of a relay reply.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/RelayErrorCode"
+        },
+        "detail": {
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "RelayError",
+      "type": "object"
+    },
+    "RelayErrorCode": {
+      "description": "Why the relay gave no lease.",
+      "enum": [
+        "unsupported_provider",
+        "unavailable",
+        "budget",
+        "forbidden",
+        "not_found"
+      ],
+      "title": "RelayErrorCode",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`RelayDetachRequest`. Idempotent: ``detached`` is false when the lease\nwas already closed; ``error`` only for ``forbidden``.",
+  "properties": {
+    "detached": {
+      "title": "Detached",
+      "type": "boolean"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RelayError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "detached"
+  ],
+  "title": "RelayDetachReply",
+  "type": "object"
+}

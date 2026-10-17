@@ -1,0 +1,355 @@
+{
+  "$defs": {
+    "CameraEncryption": {
+      "description": "Channel encryption the client must configure before joining (Agora\n``setEncryptionConfig``).",
+      "properties": {
+        "key": {
+          "description": "The secret, used verbatim.",
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "mode": {
+          "description": "Agora encryption mode, for Mammotion `aes-256-gcm2`.",
+          "maxLength": 32,
+          "title": "Mode",
+          "type": "string"
+        },
+        "salt": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Base64 salt (32 bytes decoded) for the `gcm2` modes; null when not sent.",
+          "title": "Salt"
+        }
+      },
+      "required": [
+        "mode",
+        "key"
+      ],
+      "title": "CameraEncryption",
+      "type": "object"
+    },
+    "CameraInfo": {
+      "description": "One camera of the mower.",
+      "properties": {
+        "id": {
+          "description": "Camera id as the vendor names it.",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "description": "A short display name, e.g. `Front left`.",
+          "maxLength": 100,
+          "title": "Name",
+          "type": "string"
+        },
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraPlacement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the camera sits, if known. A `front_left` and a `front_right` camera form a stereo pair the client may show side by side."
+        },
+        "uid": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Agora uid the mower publishes this camera under, if known. Clients fall back to the first remote user that publishes video.",
+          "title": "Uid"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "CameraInfo",
+      "type": "object"
+    },
+    "CameraPlacement": {
+      "description": "Where a camera sits on the mower. Clients pair ``front_left`` and ``front_right`` for the\nside-by-side view and stereo frames (both front cameras of a LUBA 2 AWD X).",
+      "enum": [
+        "front_left",
+        "front_right",
+        "front",
+        "rear"
+      ],
+      "title": "CameraPlacement",
+      "type": "string"
+    },
+    "CameraProvider": {
+      "description": "Who delivers the video.",
+      "enum": [
+        "agora",
+        "fake",
+        "relay"
+      ],
+      "title": "CameraProvider",
+      "type": "string"
+    },
+    "CameraQuota": {
+      "description": "The vendor's video budget (Mammotion meters video over 4G only).",
+      "properties": {
+        "total_minutes": {
+          "minimum": 0,
+          "title": "Total Minutes",
+          "type": "number"
+        },
+        "used_minutes": {
+          "minimum": 0,
+          "title": "Used Minutes",
+          "type": "number"
+        }
+      },
+      "required": [
+        "used_minutes",
+        "total_minutes"
+      ],
+      "title": "CameraQuota",
+      "type": "object"
+    },
+    "CameraSession": {
+      "description": "Credentials for one viewer to join the live video of one mower.\n\nProvider ``relay`` needs the ``relay`` endpoint and carries no vendor secrets (``token``\nand ``app_id`` empty, no ``encryption``); ``expires_at`` is then the ticket's expiry. Every\nother provider has no ``relay`` endpoint.",
+      "properties": {
+        "app_id": {
+          "description": "Agora app id (empty for `fake`).",
+          "maxLength": 128,
+          "title": "App Id",
+          "type": "string"
+        },
+        "cameras": {
+          "items": {
+            "$ref": "#/$defs/CameraInfo"
+          },
+          "maxItems": 8,
+          "title": "Cameras",
+          "type": "array"
+        },
+        "channel": {
+          "description": "Agora channel name (64 bytes at most).",
+          "maxLength": 64,
+          "title": "Channel",
+          "type": "string"
+        },
+        "encryption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraEncryption"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set when the channel is encrypted."
+        },
+        "expires_at": {
+          "description": "When the token stops working; clients request a new session before.",
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/CameraProvider"
+        },
+        "quota": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraQuota"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The video budget, when the vendor reports one."
+        },
+        "relay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelayEndpoint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set exactly when `provider` is `relay` (ADR 0045)."
+        },
+        "token": {
+          "description": "Short-lived Agora token. Never log it.",
+          "maxLength": 2048,
+          "title": "Token",
+          "type": "string"
+        },
+        "uid": {
+          "description": "The viewer's Agora uid (bound to the token).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Uid",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "provider",
+        "app_id",
+        "channel",
+        "token",
+        "uid",
+        "expires_at"
+      ],
+      "title": "CameraSession",
+      "type": "object"
+    },
+    "RelayEndpoint": {
+      "description": "Where and with what a client plays a relay session (``provider`` ``relay``).",
+      "properties": {
+        "heartbeat_seconds": {
+          "default": 15,
+          "description": "How often the client renews the lease while the page is visible.",
+          "maximum": 60,
+          "minimum": 5,
+          "title": "Heartbeat Seconds",
+          "type": "integer"
+        },
+        "lease_id": {
+          "description": "The viewer's lease; renew and detach name it.",
+          "format": "uuid",
+          "title": "Lease Id",
+          "type": "string"
+        },
+        "ticket": {
+          "description": "Short-lived ticket signed by the relay, bound to account, mower, lease and paths. Sent as the WHEP bearer token. Never log it.",
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Ticket",
+          "type": "string"
+        },
+        "tiles": {
+          "items": {
+            "$ref": "#/$defs/RelayTile"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Tiles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tiles",
+        "ticket",
+        "lease_id"
+      ],
+      "title": "RelayEndpoint",
+      "type": "object"
+    },
+    "RelayError": {
+      "description": "The error of a relay reply.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/RelayErrorCode"
+        },
+        "detail": {
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "RelayError",
+      "type": "object"
+    },
+    "RelayErrorCode": {
+      "description": "Why the relay gave no lease.",
+      "enum": [
+        "unsupported_provider",
+        "unavailable",
+        "budget",
+        "forbidden",
+        "not_found"
+      ],
+      "title": "RelayErrorCode",
+      "type": "string"
+    },
+    "RelayTile": {
+      "description": "One camera as the relay serves it: a WHEP endpoint per camera.",
+      "properties": {
+        "camera_id": {
+          "description": "The `CameraInfo.id` this endpoint shows.",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Camera Id",
+          "type": "string"
+        },
+        "whep_url": {
+          "description": "WHEP endpoint of this camera: an absolute path on the MowDeck origin or an `http(s)` URL. The path carries a random session token, never the mower id.",
+          "maxLength": 512,
+          "minLength": 2,
+          "pattern": "^(/|https?://)[^\\s]*$",
+          "title": "Whep Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "camera_id",
+        "whep_url"
+      ],
+      "title": "RelayTile",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`RelayRenewRequest`: the same lease with a fresh ticket, or an error.",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RelayError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "session": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CameraSession"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "RelayRenewReply",
+  "type": "object"
+}

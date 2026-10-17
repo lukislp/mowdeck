@@ -84,7 +84,7 @@ def test_subject_matches(pattern: str, subject: str, expected: bool) -> None:
 
 
 def test_streams() -> None:
-    assert [s.name for s in STREAMS] == ["COMMANDS", "TELEMETRY", "EVENTS", "DEVICE"]
+    assert [s.name for s in STREAMS] == ["COMMANDS", "TELEMETRY", "EVENTS", "DEVICE", "CAMERA"]
     assert COMMANDS.subjects == ("command.>",)
     assert TELEMETRY.subjects == ("telemetry.>",)
     assert EVENTS.subjects == ("event.>",)
