@@ -10,7 +10,10 @@
   and session Stop, the details folded), phones sideways (`(orientation: landscape) and
   (max-height: 520px)`: the picture full-bleed with a translucent stick for the right thumb, the
   emergency stop and the session Stop in a rail on the left, nothing scrolls) and desktops (the
-  picture fills the centre, the console column on the right).
+  picture fills the centre, the console column on the right). Over the camera, with the view
+  switch, sits the light chip (`LightChip`) when the mower has the `light` capability: the same
+  rules, permission (`can_control`) and command (`set_light`) as the tile on the mower page; the
+  controller keeps the drive session open while the light is switched.
 
   Safety stays with the Device-Gateway's dead-man timer: this page only stops sending. It ends
   the session when it is left, when the tab is hidden and when the socket drops (the client
@@ -48,6 +51,7 @@
   import type { CameraViewer } from '$lib/camera/viewer.svelte';
   import { clock } from '$lib/clock.svelte';
   import CameraStage from '$lib/components/CameraStage.svelte';
+  import LightChip from '$lib/components/LightChip.svelte';
   import LiveStatus from '$lib/components/LiveStatus.svelte';
   import SlowLoading from '$lib/components/SlowLoading.svelte';
   import StopBar from '$lib/components/StopBar.svelte';
@@ -67,7 +71,8 @@
   import { DrivePilot, SPEED_LIMITS, clampReverse, type SpeedLimit } from '$lib/drive/pilot';
   import type { components as Fleet } from '$lib/generated/fleet';
   import { activityLabel, formatNumber, problemMessage } from '$lib/i18n';
-  import { permissions, realtime, revoked } from '$lib/live.svelte';
+  import { commands, permissions, realtime, revoked, sendCommand } from '$lib/live.svelte';
+  import { lightCapable as isLightCapable, setLight } from '$lib/mower/light';
   import { areaNamer, mapLabels } from '$lib/mower/map-labels';
   import { appendLive } from '$lib/mower/route';
   import { m } from '$lib/paraglide/messages';
@@ -81,6 +86,7 @@
     manual_drive_blades?: boolean;
     drive_reverse?: boolean;
     camera?: string | null;
+    light?: boolean;
   };
 
   // Units are not translated.
@@ -95,6 +101,8 @@
   let notFound = $state(false);
   let caps = $state<DriveCaps | null>(null);
   let canDrive = $state<boolean | null>(null);
+  /** The viewer may command the mower (the light switch). */
+  let canControl = $state(false);
   let mowerMap = $state.raw<MapSnapshot | null>(null);
   let mapFailed = $state(false);
   let follow = $state(true);
@@ -138,6 +146,7 @@
     notFound = false;
     caps = null;
     canDrive = null;
+    canControl = false;
     mowerMap = null;
     try {
       mower = await unwrap(
@@ -162,8 +171,11 @@
       .then((snap) => (mowerMap = snap.map))
       .catch(() => undefined);
     void permissions
-      .check(mowerId, ['can_drive'])
-      .then((result) => (canDrive = result.can_drive))
+      .check(mowerId, ['can_drive', 'can_control'])
+      .then((result) => {
+        canDrive = result.can_drive;
+        canControl = result.can_control;
+      })
       .catch(() => (canDrive = false));
   }
 
@@ -223,6 +235,9 @@
   /** Phones upright with the camera: the one-line readout and the folded details. */
   const compactConsole = $derived(cameraView && !cockpit && !wide.current);
   const holding = $derived(cameraView && stalled);
+  // The camera light: only over the camera, only with the capability (never decided by vendor).
+  const lightShown = $derived(cameraView && isLightCapable(caps));
+  const lightPending = $derived(commands.pending(id, 'set_light'));
 
   function chooseView(next: DriveView): void {
     if (next === 'camera') cameraFailed = false;
@@ -681,6 +696,20 @@
                 ></button
               >
             {/if}
+            {#if lightShown}
+              <div class="light-slot">
+                <LightChip
+                  on={ms?.light_on ?? null}
+                  capable
+                  online={activity !== null && !offline}
+                  allowed={canControl}
+                  pending={lightPending}
+                  compact={compactConsole}
+                  testid="drive-light"
+                  onchange={(on) => void sendCommand(id, setLight(on))}
+                />
+              </div>
+            {/if}
           </div>
         {/if}
 
@@ -944,6 +973,30 @@
     text-transform: uppercase;
     cursor: pointer;
     touch-action: manipulation;
+  }
+
+  /*
+   * The light chip takes a row of its own at the right edge, under the view switch: clear of the
+   * readout on the desktop and, sideways, right above the stick (in reach of the right thumb).
+   * Phones upright keep one row of small chips.
+   */
+  .light-slot {
+    display: flex;
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+
+  /* The row itself lets taps through to the picture; only the chip takes them. */
+  .tools > .light-slot {
+    pointer-events: none;
+  }
+
+  .light-slot > :global(*) {
+    pointer-events: auto;
+  }
+
+  .compact-console .light-slot {
+    display: contents;
   }
 
   .tool[aria-pressed='true'] {
