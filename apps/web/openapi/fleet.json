@@ -618,6 +618,29 @@
         "title": "CameraSession",
         "type": "object"
       },
+      "CameraSessionIn": {
+        "additionalProperties": false,
+        "description": "``POST /mowers/{id}/camera/session`` (optional body): how the client wants the video.",
+        "properties": {
+          "transport": {
+            "$ref": "#/components/schemas/CameraTransport",
+            "default": "auto",
+            "description": "`auto` (default): the camera relay, the direct vendor path only when the relay cannot serve the mower's camera provider or is not deployed; `relay`: only the relay, its errors are answered; `direct`: the vendor session (ADR 0032)."
+          }
+        },
+        "title": "CameraSessionIn",
+        "type": "object"
+      },
+      "CameraTransport": {
+        "description": "How a client wants to reach the camera (ADR 0045). Chosen per browser; Fleet decides.",
+        "enum": [
+          "auto",
+          "relay",
+          "direct"
+        ],
+        "title": "CameraTransport",
+        "type": "string"
+      },
       "CommandAccepted": {
         "description": "Answer (202) to a command for one mower: Fleet published it; results follow.",
         "properties": {
@@ -5234,7 +5257,7 @@
     },
     "/api/v1/fleet/mowers/{mower_id}/camera/session": {
       "post": {
-        "description": "A short-lived live camera session (ADR 0032): ``can_view`` on the mower (hidden\notherwise) and the plan feature ``camera``. Fleet relays the request to the Device-Gateway\nthat holds the mower and audits it (``mower.camera_opened``). The browser joins the video\nitself (``provider`` ``agora``: Agora Web SDK; ``fake``: a test pattern); no media passes\nthrough MowDeck. The token is a secret: the response is never cached; ask again before\n``expires_at``.",
+        "description": "A short-lived live camera session: ``can_view`` on the mower (hidden otherwise) and the\nplan feature ``camera``; audited as ``mower.camera_opened`` with the transport used.\n\n``transport`` (ADR 0045, default ``auto``): ``relay`` opens a lease on MowDeck's camera\nrelay and answers its session (``provider`` ``relay``: WHEP URLs per camera, a ticket,\n``lease_id``; renew it every ``heartbeat_seconds``, delete it when the page goes away).\n``direct`` asks the Device-Gateway for the vendor session (ADR 0032; ``provider``\n``agora``: the browser joins with the Agora Web SDK, ``fake``: a test pattern). ``auto``\nuses the relay and falls back to ``direct`` only when the relay cannot serve the mower's\ncamera provider or is not deployed. The token or ticket is a secret: the response is never\ncached; ask again before ``expires_at``.",
         "operationId": "open_camera_session_api_v1_fleet_mowers__mower_id__camera_session_post",
         "parameters": [
           {
@@ -5244,6 +5267,142 @@
             "schema": {
               "format": "uuid",
               "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CameraSessionIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The plan does not include the feature `camera`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "`camera-unsupported`: the mower's connection has no camera; `camera-relay-unsupported`: `transport` `relay`, but the relay has no source for the mower's camera provider; `camera-budget`: a camera limit refused the stream."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The Device-Gateway, the vendor cloud or (`transport` `relay`) the camera relay did not answer, or the mower is offline."
+          }
+        },
+        "summary": "Open Camera Session",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/camera/session/{lease_id}": {
+      "delete": {
+        "description": "End a relay camera lease (ADR 0045): the page was left or hidden. Idempotent: an unknown\nor already closed lease, or no relay at all, is 204 as well. ``can_view`` on the mower;\nno plan check (ending a stream is always allowed).",
+        "operationId": "close_camera_session_api_v1_fleet_mowers__mower_id__camera_session__lease_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "The mower is not visible, or the lease is another account's."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "The camera relay did not answer in time."
+          }
+        },
+        "summary": "Close Camera Session",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
+    "/api/v1/fleet/mowers/{mower_id}/camera/session/{lease_id}/renew": {
+      "post": {
+        "description": "The heartbeat of a relay camera lease (ADR 0045): extends it and answers the same session\nwith a fresh ticket (for reconnects). ``can_view`` on the mower and the plan feature\n``camera``; never cached.",
+        "operationId": "renew_camera_session_api_v1_fleet_mowers__mower_id__camera_session__lease_id__renew_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
               "type": "string"
             }
           }
@@ -5263,10 +5422,7 @@
             "description": "The plan does not include the feature `camera`."
           },
           "404": {
-            "description": "The mower does not exist or is not visible to the caller."
-          },
-          "409": {
-            "description": "`camera-unsupported`: the mower's connection has no camera."
+            "description": "The mower is not visible, or the lease is unknown, expired, detached or not the caller's account's."
           },
           "422": {
             "content": {
@@ -5279,10 +5435,10 @@
             "description": "Validation Error"
           },
           "503": {
-            "description": "The Device-Gateway or the vendor cloud did not answer."
+            "description": "The camera relay is not deployed or did not answer."
           }
         },
-        "summary": "Open Camera Session",
+        "summary": "Renew Camera Session",
         "tags": [
           "mowers"
         ]
