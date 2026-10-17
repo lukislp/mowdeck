@@ -393,6 +393,75 @@ async def test_renew_and_detach_of_another_accounts_mower_are_404_without_asking
         assert relay.renews == [] and relay.detaches == []
 
 
+class StrictRelay(FakeRelay):
+    """Leases belong to the principal that opened them, like camera-relay (strict leases)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.owner: PrincipalRef | None = None
+
+    def _foreign(self, by: PrincipalRef) -> bool:
+        owner = self.owner
+        return owner is not None and (owner.kind, owner.subject) != (by.kind, by.subject)
+
+    async def on_attach(self, message: BusMessage) -> None:
+        self.owner = message.model(RelayAttachRequest).requested_by
+        await super().on_attach(message)
+
+    async def on_renew(self, message: BusMessage) -> None:
+        request = message.model(RelayRenewRequest)
+        self.renew_reply = (
+            RelayRenewReply(error=_error(RelayErrorCode.FORBIDDEN))
+            if self._foreign(request.requested_by)
+            else RelayRenewReply(session=_relay_session(self.lease_id))
+        )
+        await super().on_renew(message)
+
+    async def on_detach(self, message: BusMessage) -> None:
+        request = message.model(RelayDetachRequest)
+        self.detach_reply = (
+            RelayDetachReply(detached=False, error=_error(RelayErrorCode.FORBIDDEN))
+            if self._foreign(request.requested_by)
+            else RelayDetachReply(detached=True)
+        )
+        await super().on_detach(message)
+
+
+async def test_another_user_of_the_same_account_can_neither_renew_nor_detach_a_lease() -> None:
+    bus = InMemoryBus()
+    async with harness(bus=bus) as h:
+        relay = StrictRelay()
+        await bus.subscribe(RELAY_CAMERA_ATTACH, relay.on_attach)
+        await bus.subscribe(RELAY_CAMERA_RENEW, relay.on_renew)
+        await bus.subscribe(RELAY_CAMERA_DETACH, relay.on_detach)
+        await bus.subscribe(ALL_CAMERA_SESSIONS, FakeGateway().handle)
+        owner = await h.owner()
+        housemate = await h.member(owner, "viewer")
+        created = await h.register(owner)
+        opened = await h.client.post(_url(created["id"]), headers=owner.headers)
+        assert opened.status_code == 200, opened.text
+        lease_id = opened.json()["relay"]["lease_id"]
+
+        renew = await h.client.post(
+            _url(created["id"], UUID(lease_id), "/renew"), headers=housemate.headers
+        )
+        detach = await h.client.delete(
+            _url(created["id"], UUID(lease_id)), headers=housemate.headers
+        )
+        assert (renew.status_code, detach.status_code) == (404, 404)
+        assert renew.json()["type"] == "urn:mowdeck:problem:not-found"
+        # Fleet sent the housemate's principal, never the owner's.
+        assert [r.requested_by.subject for r in relay.renews] == [housemate.principal.subject]
+        assert [r.requested_by.subject for r in relay.detaches] == [housemate.principal.subject]
+
+        mine = await h.client.post(
+            _url(created["id"], UUID(lease_id), "/renew"), headers=owner.headers
+        )
+        assert mine.status_code == 200, mine.text
+        ended = await h.client.delete(_url(created["id"], UUID(lease_id)), headers=owner.headers)
+        assert ended.status_code == 204
+
+
 async def test_renew_without_a_relay_is_503() -> None:
     bus = InMemoryBus()
     async with harness(bus=bus) as h:

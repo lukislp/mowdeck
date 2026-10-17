@@ -9,6 +9,8 @@
  * and offers "Beide", which shows both side by side (stacked on a phone), each tile live with
  * its own name, the right pattern mirrored so the two pictures differ, and no "same picture"
  * notice.
+ * The browser forces the direct path (the camera option `transport: direct`): the test stack runs
+ * the camera relay, which `auto` would use (camera-relay-web.spec.ts).
  * Writes apps/web/screenshots/camera-phone.png and camera-both-phone.png.
  */
 import { fileURLToPath } from 'node:url';
@@ -19,6 +21,7 @@ import {
   RUN,
   actor,
   createMowerByApi,
+  forceCameraTransport,
   loginByUi,
   registerByApi,
   waitForMap,
@@ -105,6 +108,9 @@ test('camera: the simulated mower shows the test pattern; a viewer can open it',
     [2, 'front_right'],
   ]);
 
+  // The vendor path (the simulator's test pattern on a canvas); the relay path of the web app is
+  // camera-relay-web.spec.ts.
+  await forceCameraTransport(page, 'direct');
   await loginByUi(page, owner);
   await page.goto(`/mowers/${mowerId}`);
   // No header button any more: the panel is inline and open by default.
@@ -215,6 +221,7 @@ test('camera: the simulated mower shows the test pattern; a viewer can open it',
   const viewer = await createViewer(request, owner);
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const viewerPage = await context.newPage();
+  await forceCameraTransport(viewerPage, 'direct');
   await loginByUi(viewerPage, viewer);
   await viewerPage.goto(`/mowers/${mowerId}`);
   await expect(viewerPage.getByTestId('camera-panel')).toHaveAttribute('data-phase', 'live');

@@ -394,7 +394,8 @@ export type paths = {
          * Close Camera Session
          * @description End a relay camera lease (ADR 0045): the page was left or hidden. Idempotent: an unknown
          *     or already closed lease, or no relay at all, is 204 as well. ``can_view`` on the mower;
-         *     no plan check (ending a stream is always allowed).
+         *     only the user who opened the lease ends it (another user's lease is 404 and keeps
+         *     running); no plan check (ending a stream is always allowed).
          */
         delete: operations["close_camera_session_api_v1_fleet_mowers__mower_id__camera_session__lease_id__delete"];
         options?: never;
@@ -415,7 +416,7 @@ export type paths = {
          * Renew Camera Session
          * @description The heartbeat of a relay camera lease (ADR 0045): extends it and answers the same session
          *     with a fresh ticket (for reconnects). ``can_view`` on the mower and the plan feature
-         *     ``camera``; never cached.
+         *     ``camera``; only the user who opened the lease renews it; never cached.
          */
         post: operations["renew_camera_session_api_v1_fleet_mowers__mower_id__camera_session__lease_id__renew_post"];
         delete?: never;
@@ -3748,7 +3749,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description The mower is not visible, or the lease is another account's. */
+            /** @description The mower is not visible, or the lease is another account's or was opened by another user. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3801,7 +3802,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description The mower is not visible, or the lease is unknown, expired, detached or not the caller's account's. */
+            /** @description The mower is not visible, or the lease is unknown, expired, detached, of another account or opened by another user. */
             404: {
                 headers: {
                     [name: string]: unknown;

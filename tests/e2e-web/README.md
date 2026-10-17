@@ -6,7 +6,7 @@ The suite drives the web app in Chromium against a full Compose stack. It regist
 
 ```bash
 pnpm install
-pnpm --filter e2e-web exec playwright install chromium   # once
+pnpm --filter e2e-web exec playwright install chromium webkit firefox   # once
 pnpm e2e:stack up        # build and start the test stack, wait until healthy (first build takes a while)
 pnpm e2e:stack test      # projects phone and desktop; extra arguments go to `playwright test`
 pnpm e2e:stack down      # stop it and delete its volumes
@@ -15,6 +15,22 @@ pnpm e2e:stack down      # stop it and delete its volumes
 `pnpm e2e:stack run` does all three in one go (`MOWDECK_E2E_KEEP=1` keeps the stack afterwards). More commands: `screens` (review screenshots), `acceptance` (the Phase 1 pytest acceptance test `tests/e2e` against the same stack), `ps`, `logs [service]` and `compose <args>` (any `docker compose` command for the test stack). Single specs: `pnpm e2e:stack test tests/drive.spec.ts`, or `--project=desktop -g "fleet"`.
 
 `pnpm --filter e2e-web test` and `pnpm --filter e2e-web screens` also work while the test stack is up: their default base URL is the test stack (`http://localhost:8480`).
+
+## Browsers of the camera relay
+
+`camera-relay-web.spec.ts` runs in Chromium, Firefox and WebKit. The relay sends H.264 only (ADR 0045).
+
+- **Firefox on Linux** decodes H.264 only with Cisco's OpenH264 plugin, which a normal Firefox downloads by itself and Playwright's Firefox does not; without it the offer has no H.264, MediaMTX answers 400 ("codecs not supported by client") and the spec fails with that reason. CI fetches the plugin build that Firefox's update service names (pinned sha512, `.github/workflows/ci.yml`, step "OpenH264 for Firefox") and sets `MOZ_GMP_PATH`. Locally on Linux:
+
+  ```bash
+  dir=$HOME/.cache/mowdeck-gmp/gmp-gmpopenh264/2.6.0 && mkdir -p "$dir"
+  curl -fsSL -o /tmp/openh264.zip https://ciscobinary.openh264.org/openh264-linux64-652bdb7719f30b52b08e506645a7322ff1b2cc6f.zip
+  echo "f5246bf14d038adf4ce0c4360262ab722bc3de4220f047c3d542b4c564074b4877dc8659e3125c5171c749e7ce93f20cc63777eb5e1539e960670cbc5f30ac85  /tmp/openh264.zip" | sha512sum -c -
+  unzip -q /tmp/openh264.zip -d "$dir" && export MOZ_GMP_PATH=$dir
+  ```
+
+  Firefox on Windows and macOS decodes H.264 through the system and needs nothing. The plugin is downloaded from Cisco at test time, never committed or redistributed.
+- **WebKit** on Linux has WebRTC and H.264; Playwright's WebKit on Windows has no WebRTC, so the spec is skipped there with that reason.
 
 ## The test stack
 

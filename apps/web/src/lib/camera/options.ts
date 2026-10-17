@@ -10,9 +10,15 @@
  * * `dataSaver`: `setRemoteVideoStreamType(uid, 1)`: always the low-quality stream (works only
  *   when the publisher sends two streams).
  * * `autoRejoin`: rejoin with a fresh session after a lost connection.
+ * * `transport` (ADR 0045): `auto` (default) lets Fleet choose, the camera relay where it can
+ *   serve the mower and the direct vendor path otherwise; `relay` and `direct` force one path
+ *   for debugging (`relay` shows the relay's errors and never falls back). The profile,
+ *   latency, fallback and data saver options belong to the direct Agora path only.
  */
 export type CameraProfile = 'rtc' | 'live';
 export type LatencyLevel = 1 | 2;
+/** How this browser wants the camera: Fleet's `CameraTransport`. */
+export type CameraTransport = 'auto' | 'relay' | 'direct';
 
 export interface CameraOptions {
   profile: CameraProfile;
@@ -20,6 +26,7 @@ export interface CameraOptions {
   fallback: boolean;
   dataSaver: boolean;
   autoRejoin: boolean;
+  transport: CameraTransport;
 }
 
 export const OPTIONS_KEY = 'mowdeck.cameraOptions';
@@ -31,6 +38,7 @@ export const DEFAULT_OPTIONS: CameraOptions = {
   fallback: true,
   dataSaver: false,
   autoRejoin: true,
+  transport: 'auto',
 };
 
 /** Backoff of the automatic rejoin after `DISCONNECTED`; the last delay repeats. */
@@ -58,6 +66,10 @@ export function parseOptions(raw: unknown): CameraOptions {
     fallback: flag(o.fallback, DEFAULT_OPTIONS.fallback),
     dataSaver: flag(o.dataSaver, DEFAULT_OPTIONS.dataSaver),
     autoRejoin: flag(o.autoRejoin, DEFAULT_OPTIONS.autoRejoin),
+    transport:
+      o.transport === 'relay' || o.transport === 'direct' || o.transport === 'auto'
+        ? o.transport
+        : DEFAULT_OPTIONS.transport,
   };
 }
 

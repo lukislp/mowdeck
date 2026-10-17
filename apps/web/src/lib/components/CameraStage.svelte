@@ -1,8 +1,9 @@
 <!--
   The picture of a mower's live camera (ADR 0032, ADR 0044): it owns the viewer (one camera
   session while it is mounted; unmounting or leaving the page leaves the channel) and draws its
-  tiles. A `fake` session (the simulator) draws the test pattern on a canvas, an `agora` session
-  plays the mower's video in our own muted <video> element. With both front cameras the tiles
+  tiles. A `fake` session (the simulator) draws the test pattern on a canvas, a `relay` session
+  (ADR 0045) plays MowDeck's camera relay over WHEP and an `agora` session the vendor's channel,
+  both in our own muted <video> elements. With both front cameras the tiles
   sit side by side (stacked when the stage is narrow); a tile whose camera delivers nothing
   within 8 s says so instead of showing another camera, and two tiles with the same picture say
   so. Every live tile is marked (`data-camera-video`, name, side) for AI assist's frame capture.
@@ -14,6 +15,11 @@
   never look live) and reports it through the bindable `stalled`. The viewer is bindable too, so
   the hosts (`CameraPanel` with its picker and diagnostics, the drive page's HUD) read the same
   session.
+
+  Transport: the session request names the browser's camera option (`auto` unless forced to
+  `relay` or `direct`). A hidden page suspends a relay session (its lease is detached at once,
+  the relay stops the stream after its grace) and requests a new one when the page is visible
+  again; leaving the page closes it.
 
   Debugging (`?camdebug=1`): an overlay with the readings of every tile (`CameraDebug`).
 
@@ -130,6 +136,23 @@
     canvas: (slot = 0) => canvases[slot] ?? null,
     video: (slot = 0) => videos[slot] ?? null,
     fakeVideo: () => throughVideo,
+    lease: {
+      renew: (leaseId) =>
+        unwrap(
+          fleetApi.POST('/api/v1/fleet/mowers/{mower_id}/camera/session/{lease_id}/renew', {
+            params: { path: { mower_id: mowerId, lease_id: leaseId } },
+          }),
+        ),
+      detach: async (leaseId) => {
+        await unwrap(
+          fleetApi.DELETE('/api/v1/fleet/mowers/{mower_id}/camera/session/{lease_id}', {
+            params: { path: { mower_id: mowerId, lease_id: leaseId } },
+            // Sent while the page goes away (pagehide) as well.
+            keepalive: true,
+          }),
+        );
+      },
+    },
     source: {
       label: (uid: number | null): string => {
         const camera = cam.cameras.find((c: CameraInfo) => c.uid === uid);
@@ -144,13 +167,11 @@
   // Created once per mounted stage: one session per stage (the props are read at creation).
   const initial = (() => ({ layout, saveLayout, cameraUid }))();
   const cam: CameraViewer = new CameraViewer({
-    request: (id) =>
+    request: (id, transport) =>
       unwrap(
         fleetApi.POST('/api/v1/fleet/mowers/{mower_id}/camera/session', {
           params: { path: { mower_id: id } },
-          // The vendor session (Agora or the test pattern) until the WHEP player plays relay
-          // sessions (ADR 0045 step 6); `auto` would hand this player a relay session.
-          body: { transport: 'direct' },
+          body: { transport },
         }),
       ),
     createPlayer: (session, events): Promise<CameraPlayer> => factory.create(session, events),
@@ -177,8 +198,21 @@
     if (viewer !== cam) viewer = cam;
     void cam.open(mowerId);
     const leave = () => void cam.close();
+    // Back from the back/forward cache: the session was closed on pagehide.
+    const back = (event: PageTransitionEvent) => {
+      if (event.persisted) void cam.open(mowerId);
+    };
+    // A hidden tab or app holds no relay stream (ADR 0045): detach now, reconnect on return.
+    const visibility = () =>
+      void (document.visibilityState === 'hidden' ? cam.suspend() : cam.resume());
     window.addEventListener('pagehide', leave);
-    return () => window.removeEventListener('pagehide', leave);
+    window.addEventListener('pageshow', back);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('pageshow', back);
+      document.removeEventListener('visibilitychange', visibility);
+    };
   });
   onDestroy(() => {
     probes.forEach((probe) => probe.detach());
@@ -195,6 +229,11 @@
   });
 
   const fake = $derived(cam.session?.provider === 'fake');
+  /**
+   * A relay tile is live at its first presented frame, and WebKit (Safari) presents no frame of
+   * a `<video>` that is not rendered: the relay's video stays rendered while it connects.
+   */
+  const relay = $derived(cam.session?.provider === 'relay');
   /** The tile shows its canvas (the simulator's pattern, unless it plays through the video). */
   const onCanvas = $derived(fake && !throughVideo);
   const tiles = $derived(cam.tiles);
@@ -267,6 +306,7 @@
       userAgent: navigator.userAgent,
       phase: cam.phase,
       frozen: stalled,
+      transport: { requested: cam.options.transport, used: cam.transport },
       tiles: shown.map((tile, slot) => ({
         slot,
         status: tile.status,
@@ -305,6 +345,8 @@
   data-testid="camera-stage"
   data-layout={layoutName}
   data-phase={cam.phase}
+  data-provider={cam.session?.provider ?? ''}
+  data-transport={cam.transport ?? ''}
   data-frozen={stalled && !failed ? 'true' : 'false'}
 >
   {#if cam.phase === 'error' && cam.error}
@@ -354,7 +396,7 @@
         <video
           bind:this={videos[slot]}
           class="picture"
-          class:hidden={onCanvas || !cam.session || !live || !shownTile}
+          class:hidden={onCanvas || !cam.session || !shownTile || (!live && !relay)}
           autoplay
           muted
           playsinline

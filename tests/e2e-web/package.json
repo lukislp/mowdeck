@@ -6,7 +6,7 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
-    "test": "playwright test --project=phone --project=desktop --project=webkit",
+    "test": "playwright test --project=phone --project=desktop --project=webkit --project=firefox",
     "screens": "playwright test --project=screens",
     "stack": "node scripts/stack.mjs",
     "lint": "eslint . && prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",

@@ -558,7 +558,18 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter e2e-web
-      - run: pnpm --filter e2e-web exec playwright install --with-deps chromium webkit
+      - run: pnpm --filter e2e-web exec playwright install --with-deps chromium webkit firefox
+      # Firefox on Linux decodes H.264 (the camera relay's codec) only with Cisco's OpenH264
+      # plugin, which a normal Firefox downloads by itself and Playwright's build does not. Fetch
+      # the same build Firefox's update service names (pinned sha512) and point Firefox at it.
+      - name: OpenH264 for Firefox
+        run: |
+          dir="$RUNNER_TEMP/gmp/gmp-gmpopenh264/2.6.0"
+          mkdir -p "$dir"
+          curl -fsSL -o "$RUNNER_TEMP/openh264.zip" https://ciscobinary.openh264.org/openh264-linux64-652bdb7719f30b52b08e506645a7322ff1b2cc6f.zip
+          echo "f5246bf14d038adf4ce0c4360262ab722bc3de4220f047c3d542b4c564074b4877dc8659e3125c5171c749e7ce93f20cc63777eb5e1539e960670cbc5f30ac85  $RUNNER_TEMP/openh264.zip" | sha512sum -c -
+          unzip -q "$RUNNER_TEMP/openh264.zip" -d "$dir"
+          echo "MOZ_GMP_PATH=$dir" >> "$GITHUB_ENV"
       - *ghcr-login
       - *mirror-env
       - uses: docker/setup-buildx-action@v4.4.1

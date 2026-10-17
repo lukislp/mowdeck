@@ -26,6 +26,7 @@ import {
   RUN,
   actor,
   createMowerByApi,
+  forceCameraTransport,
   loginByUi,
   registerByApi,
   waitForMap,
@@ -248,6 +249,9 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   });
 
   await page.setViewportSize(DESKTOP);
+  // The pattern canvas and its freeze hook are the direct path; the drive view over the relay is
+  // camera-relay-web.spec.ts.
+  await forceCameraTransport(page, 'direct');
   await loginByUi(page, owner);
   await page.goto(`/mowers/${mowerId}`);
   await page.getByTestId('mower-drive').click();

@@ -16,6 +16,7 @@ import {
   RUN,
   actor,
   createMowerByApi,
+  forceCameraTransport,
   loginByUi,
   registerByApi,
   waitForMap,
@@ -45,6 +46,9 @@ test('camera freeze: a real video stream that stops shows "Bild steht", the debu
   const owner = await registerByApi(request, actor('camfreeze'));
   const mowerId = await createMowerByApi(request, owner, `Luba freeze ${RUN}`);
   await waitForMap(request, owner, mowerId);
+  // The simulator's pattern through a <video> needs the direct path (the relay's own freeze is
+  // camera-relay-web.spec.ts).
+  await forceCameraTransport(page, 'direct');
   await loginByUi(page, owner);
 
   const throughVideo = await page.evaluate(

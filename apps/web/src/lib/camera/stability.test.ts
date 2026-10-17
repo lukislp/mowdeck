@@ -98,13 +98,14 @@ function harness(live = true, overrides: Partial<ViewerDeps> = {}) {
 }
 
 describe('camera options', () => {
-  it('defaults to rtc, fallback on, data saver off, rejoin on', () => {
+  it('defaults to rtc, fallback on, data saver off, rejoin on, transport auto', () => {
     expect(DEFAULT_OPTIONS).toEqual({
       profile: 'rtc',
       latency: 1,
       fallback: true,
       dataSaver: false,
       autoRejoin: true,
+      transport: 'auto',
     });
   });
 
@@ -115,9 +116,14 @@ describe('camera options', () => {
       fallback: false,
       dataSaver: false,
       autoRejoin: true,
+      transport: 'auto',
     });
     expect(parseOptions(null)).toEqual(DEFAULT_OPTIONS);
-    expect(parseOptions({ profile: 'p2p', latency: 9 })).toEqual(DEFAULT_OPTIONS);
+    expect(parseOptions({ profile: 'p2p', latency: 9, transport: 'carrier-pigeon' })).toEqual(
+      DEFAULT_OPTIONS,
+    );
+    expect(parseOptions({ transport: 'relay' }).transport).toBe('relay');
+    expect(parseOptions({ transport: 'direct' }).transport).toBe('direct');
   });
 
   it('round-trips through storage and survives broken storage', () => {

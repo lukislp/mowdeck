@@ -10,6 +10,12 @@ the session of exactly that ``(account_id, mower_id)``:
   lease of another mower of the same account ``not_found``;
 * detach is idempotent: an unknown lease (or one of another mower) is ``detached: false``
   without an error; a lease of another account is ``forbidden``.
+
+Strict leases: a lease belongs to the principal that opened it (``requested_by`` of the attach,
+compared by kind and subject). Only that principal renews or detaches it; another principal,
+even a user of the same account, gets ``forbidden`` and the lease stays as it is. A Vision lease
+is opened by Vision's service principal on behalf of a user, so it is renewed and detached by
+that service principal only, never by the user's browser (and the other way round).
 """
 
 import asyncio
@@ -28,6 +34,7 @@ from mowdeck_contracts.v1.camera import (
     RelayEndpoint,
     RelayTile,
 )
+from mowdeck_contracts.v1.principal import PrincipalRef
 from mowdeck_contracts.v1.relay import (
     RelayAttachReply,
     RelayAttachRequest,
@@ -183,7 +190,7 @@ class RelayService:
             return RelayAttachReply(session=self._camera_session(session, lease, outcome))
 
     async def renew(self, request: RelayRenewRequest) -> RelayRenewReply:
-        """Heartbeat of a lease: extend it and issue a fresh ticket."""
+        """Heartbeat of a lease: extend it and issue a fresh ticket (its own principal only)."""
         found = self._own_key(request.account_id, request.mower_id, request.lease_id)
         if isinstance(found, RelayError):
             return RelayRenewReply(error=found)
@@ -191,6 +198,8 @@ class RelayService:
             session = self.repository.get(found)
             if session is None:
                 return RelayRenewReply(error=_not_found())
+            if not _owned_by(session, request.lease_id, request.requested_by):
+                return RelayRenewReply(error=_foreign_principal())
             decision = session.renew(request.lease_id, self.clock())
             outcome = await self._execute(session, decision.effects)
             if decision.lease is None:
@@ -198,7 +207,8 @@ class RelayService:
             return RelayRenewReply(session=self._camera_session(session, decision.lease, outcome))
 
     async def detach(self, request: RelayDetachRequest) -> RelayDetachReply:
-        """End a lease. Idempotent; only a lease of another account is an error."""
+        """End a lease. Idempotent for the lease's own principal; a lease of another account or
+        of another principal is ``forbidden`` and stays open."""
         found = self._own_key(request.account_id, request.mower_id, request.lease_id)
         if isinstance(found, RelayError):
             if found.code is RelayErrorCode.FORBIDDEN:
@@ -208,6 +218,8 @@ class RelayService:
             session = self.repository.get(found)
             if session is None:
                 return RelayDetachReply(detached=False)
+            if not _owned_by(session, request.lease_id, request.requested_by):
+                return RelayDetachReply(detached=False, error=_foreign_principal())
             decision = session.detach(request.lease_id, self.clock())
             await self._execute(session, decision.effects)
             return RelayDetachReply(detached=decision.lease is not None)
@@ -224,10 +236,12 @@ class RelayService:
 
     # --- Reports of the media plane and the source --------------------------------------------
 
-    async def media_confirmed(self, lease_id: UUID, whep_session: str) -> bool:
-        """The reader ``whep_session`` of a viewer receives media. True when the lease exists."""
+    async def media_confirmed(self, lease_id: UUID, whep_session: str, camera: str = "") -> bool:
+        """The reader ``whep_session`` of a viewer receives media on the path of ``camera``.
+        True when the lease exists."""
         return await self._on_lease(
-            lease_id, lambda s, now: s.media_confirmed(lease_id, whep_session, now).effects
+            lease_id,
+            lambda s, now: s.media_confirmed(lease_id, whep_session, now, camera).effects,
         )
 
     async def media_lost(self, lease_id: UUID, whep_session: str | None = None) -> bool:
@@ -379,3 +393,18 @@ class RelayService:
 
 def _not_found() -> RelayError:
     return _error(RelayErrorCode.NOT_FOUND, "no such lease (expired or detached)")
+
+
+def _same_principal(a: PrincipalRef, b: PrincipalRef) -> bool:
+    """The same person or service: kind and subject (the token id changes with every login)."""
+    return a.kind is b.kind and a.subject == b.subject
+
+
+def _owned_by(session: RelaySession, lease_id: UUID, principal: PrincipalRef) -> bool:
+    """The lease is unknown here (the session decides) or belongs to ``principal``."""
+    lease = session.leases.get(lease_id)
+    return lease is None or _same_principal(lease.principal, principal)
+
+
+def _foreign_principal() -> RelayError:
+    return _error(RelayErrorCode.FORBIDDEN, "the lease belongs to another principal")

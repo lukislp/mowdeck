@@ -48,8 +48,13 @@ def at(seconds: float) -> datetime:
     return T0 + timedelta(seconds=seconds)
 
 
-def principal() -> PrincipalRef:
-    return PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER)
+OWNER_SUBJECT = UUID("00000000-0000-4000-8000-0000000000a1")
+"""The user every helper request comes from (leases belong to their principal)."""
+
+
+def principal(subject: UUID | None = None) -> PrincipalRef:
+    """A user principal: the helpers' owner unless ``subject`` names another user."""
+    return PrincipalRef(subject=subject or OWNER_SUBJECT, kind=PrincipalKind.USER)
 
 
 def key(account_id: UUID | None = None, mower_id: UUID | None = None) -> RelayKey:

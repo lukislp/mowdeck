@@ -5330,7 +5330,7 @@
     },
     "/api/v1/fleet/mowers/{mower_id}/camera/session/{lease_id}": {
       "delete": {
-        "description": "End a relay camera lease (ADR 0045): the page was left or hidden. Idempotent: an unknown\nor already closed lease, or no relay at all, is 204 as well. ``can_view`` on the mower;\nno plan check (ending a stream is always allowed).",
+        "description": "End a relay camera lease (ADR 0045): the page was left or hidden. Idempotent: an unknown\nor already closed lease, or no relay at all, is 204 as well. ``can_view`` on the mower;\nonly the user who opened the lease ends it (another user's lease is 404 and keeps\nrunning); no plan check (ending a stream is always allowed).",
         "operationId": "close_camera_session_api_v1_fleet_mowers__mower_id__camera_session__lease_id__delete",
         "parameters": [
           {
@@ -5359,7 +5359,7 @@
             "description": "Successful Response"
           },
           "404": {
-            "description": "The mower is not visible, or the lease is another account's."
+            "description": "The mower is not visible, or the lease is another account's or was opened by another user."
           },
           "422": {
             "content": {
@@ -5383,7 +5383,7 @@
     },
     "/api/v1/fleet/mowers/{mower_id}/camera/session/{lease_id}/renew": {
       "post": {
-        "description": "The heartbeat of a relay camera lease (ADR 0045): extends it and answers the same session\nwith a fresh ticket (for reconnects). ``can_view`` on the mower and the plan feature\n``camera``; never cached.",
+        "description": "The heartbeat of a relay camera lease (ADR 0045): extends it and answers the same session\nwith a fresh ticket (for reconnects). ``can_view`` on the mower and the plan feature\n``camera``; only the user who opened the lease renews it; never cached.",
         "operationId": "renew_camera_session_api_v1_fleet_mowers__mower_id__camera_session__lease_id__renew_post",
         "parameters": [
           {
@@ -5422,7 +5422,7 @@
             "description": "The plan does not include the feature `camera`."
           },
           "404": {
-            "description": "The mower is not visible, or the lease is unknown, expired, detached or not the caller's account's."
+            "description": "The mower is not visible, or the lease is unknown, expired, detached, of another account or opened by another user."
           },
           "422": {
             "content": {

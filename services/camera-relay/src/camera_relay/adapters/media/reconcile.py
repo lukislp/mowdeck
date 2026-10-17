@@ -36,8 +36,8 @@ _log = get_logger("camera_relay.media.reconcile")
 class MediaReports(Protocol):
     """Where readers are reported (``RelayService``)."""
 
-    async def media_confirmed(self, lease_id: UUID, whep_session: str) -> bool:
-        """A viewer's reader receives media; False when the lease is gone."""
+    async def media_confirmed(self, lease_id: UUID, whep_session: str, camera: str = "") -> bool:
+        """A viewer's reader of ``camera`` receives media; False when the lease is gone."""
         ...
 
     async def media_lost(self, lease_id: UUID, whep_session: str | None = None) -> bool:
@@ -104,7 +104,8 @@ class Reconciler:
         reports = self._reports()
         seen: set[str] = set()
         for session in sessions:
-            if session.state != "read" or not VIEWER_PATH.match(session.path):
+            match = VIEWER_PATH.match(session.path)
+            if session.state != "read" or match is None:
                 continue
             seen.add(session.id)
             lease_id = self.bindings.lease_of(session.id)
@@ -127,7 +128,7 @@ class Reconciler:
                     _log.info(
                         "viewer media confirmed", whep_session=session.id, lease_id=str(lease_id)
                     )
-                    if not await reports.media_confirmed(lease_id, session.id):
+                    if not await reports.media_confirmed(lease_id, session.id, match["camera"]):
                         self._forget(session.id)
                         await self.api.kick_webrtc_session(session.id)
                 continue

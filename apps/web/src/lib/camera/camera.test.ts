@@ -367,7 +367,7 @@ describe('CameraViewer', () => {
   it('opens a session, plays the first publisher muted and schedules the renewal', async () => {
     const { viewer, players, timers, request } = harness();
     await viewer.open('m1');
-    expect(request).toHaveBeenCalledWith('m1');
+    expect(request).toHaveBeenCalledWith('m1', 'auto');
     expect(viewer.phase).toBe('live');
     // No choice yet: the player shows the first camera that publishes video.
     expect(viewer.cameraUid).toBeNull();

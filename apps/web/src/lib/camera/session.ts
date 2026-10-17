@@ -9,6 +9,7 @@ import type { components } from '$lib/generated/fleet';
 export type CameraSession = components['schemas']['CameraSession'];
 export type CameraInfo = components['schemas']['CameraInfo'];
 export type CameraPlacement = components['schemas']['CameraPlacement'];
+export type RelayEndpoint = components['schemas']['RelayEndpoint'];
 
 /** A camera whose Agora uid is known. */
 export type UidCamera = CameraInfo & { uid: number };
@@ -77,9 +78,20 @@ export function cameraUid(camera: CameraInfo | undefined): number | null {
   return camera?.uid ?? null;
 }
 
-/** Same channel and provider: a token renewal is enough, no rejoin. */
+/**
+ * Same channel and provider: a token renewal is enough, no rejoin. Two relay sessions are the
+ * same only with the same lease (a new session request always opens a new lease).
+ */
 export function sameChannel(a: CameraSession, b: CameraSession): boolean {
+  if (a.provider === 'relay' || b.provider === 'relay') {
+    return !!a.relay && a.relay.lease_id === b.relay?.lease_id;
+  }
   return a.provider === b.provider && a.app_id === b.app_id && a.channel === b.channel;
+}
+
+/** A session of MowDeck's camera relay (ADR 0045): WHEP per camera, a lease, no vendor token. */
+export function isRelay(session: CameraSession | null | undefined): boolean {
+  return session?.provider === 'relay' && !!session.relay;
 }
 
 /** Older sessions without `placement`: Mammotion slot ids and the simulator's ids. */

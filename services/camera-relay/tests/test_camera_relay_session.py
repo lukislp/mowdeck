@@ -287,6 +287,32 @@ def test_reconnect_with_a_new_reader_kicks_the_old_one() -> None:
     assert [k.whep_session for k in of_type(effects, KickViewer)] == [f"whep-{lease.lease_id}"]
 
 
+def test_one_reader_per_camera_both_tiles_of_one_lease_stay() -> None:
+    s = session()
+    lease = _attach(s, 0, ("front_left", "front_right"))
+    _live(s, 1)
+    left = s.media_confirmed(lease.lease_id, "whep-left", at(2), "front_left").effects
+    right = s.media_confirmed(lease.lease_id, "whep-right", at(2), "front_right").effects
+    # The right tile's reader does not kick the left one.
+    assert of_type(left + right, KickViewer) == []
+    assert lease.readers == {"front_left": "whep-left", "front_right": "whep-right"}
+    assert lease.present
+    # A reconnect of the left tile replaces only the left reader.
+    again = s.media_confirmed(lease.lease_id, "whep-left-2", at(3), "front_left").effects
+    assert [k.whep_session for k in of_type(again, KickViewer)] == ["whep-left"]
+    assert lease.readers == {"front_left": "whep-left-2", "front_right": "whep-right"}
+    # Losing one tile keeps the lease present; losing both starts the binding deadline.
+    s.media_lost(lease.lease_id, at(4), "whep-right")
+    assert lease.present and lease.bind_deadline is None
+    s.media_lost(lease.lease_id, at(5), "whep-left-2")
+    assert not lease.present and lease.bind_deadline is not None
+    # Closing kicks every reader still bound.
+    s.media_confirmed(lease.lease_id, "whep-l3", at(6), "front_left")
+    s.media_confirmed(lease.lease_id, "whep-r3", at(6), "front_right")
+    effects = s.detach(lease.lease_id, at(7)).effects
+    assert sorted(k.whep_session for k in of_type(effects, KickViewer)) == ["whep-l3", "whep-r3"]
+
+
 def test_detach_of_a_bound_viewer_kicks_its_reader() -> None:
     s = session()
     lease = _confirmed_viewer(s, 0)

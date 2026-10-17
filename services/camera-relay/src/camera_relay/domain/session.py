@@ -265,16 +265,24 @@ class RelaySession:
         self._settle(now, out)
         return LeaseDecision(lease, out)
 
-    def media_confirmed(self, lease_id: UUID, whep_session: str, now: datetime) -> LeaseDecision:
-        """The media plane reports bytes flowing to the reader ``whep_session`` of a viewer."""
+    def media_confirmed(
+        self, lease_id: UUID, whep_session: str, now: datetime, camera: str = ""
+    ) -> LeaseDecision:
+        """The media plane reports bytes flowing to the reader ``whep_session`` of a viewer, on
+        the path of ``camera``. One reader per camera: a new reader of the same camera (a
+        reconnect) replaces and kicks the old one; readers of other cameras (the tiles of a
+        side-by-side view) stay."""
         out: list[Effect] = []
         self._advance(now, out)
         lease = self.leases.get(lease_id)
         if lease is None or not lease.is_viewer:
             return LeaseDecision(None, out)
-        if lease.whep_session is not None and lease.whep_session != whep_session:
-            out.append(KickViewer(self.key, lease.lease_id, lease.whep_session))
-        lease.whep_session = whep_session
+        previous = lease.readers.get(camera)
+        if previous is not None and previous != whep_session:
+            out.append(KickViewer(self.key, lease.lease_id, previous))
+        for other in [c for c, s in lease.readers.items() if s == whep_session and c != camera]:
+            del lease.readers[other]
+        lease.readers[camera] = whep_session
         lease.bind_deadline = None
         lease.was_bound = True
         self._settle(now, out)
@@ -286,16 +294,25 @@ class RelaySession:
         """The viewer's reader ended or stopped receiving media: it may reconnect (with a fresh
         ticket from a renew) until the binding deadline, else it closes as ``media_lost``.
 
-        With ``whep_session`` only that reader counts: the loss of another reader of the same
-        lease (an attempt that never played, a reader already replaced) changes nothing."""
+        With ``whep_session`` only that reader counts: the loss of a reader the lease does not
+        hold (an attempt that never played, a reader already replaced) changes nothing, and
+        while another camera's reader still receives, the lease stays present. Without it every
+        reader is gone."""
         out: list[Effect] = []
         self._advance(now, out)
         lease = self.leases.get(lease_id)
-        if lease is None or not lease.is_viewer or lease.whep_session is None:
+        if lease is None or not lease.is_viewer or not lease.readers:
             return LeaseDecision(lease, out)
-        if whep_session is not None and lease.whep_session != whep_session:
-            return LeaseDecision(lease, out)
-        lease.whep_session = None
+        if whep_session is None:
+            lease.readers.clear()
+        else:
+            cameras = [c for c, s in lease.readers.items() if s == whep_session]
+            if not cameras:
+                return LeaseDecision(lease, out)
+            for camera in cameras:
+                del lease.readers[camera]
+            if lease.readers:
+                return LeaseDecision(lease, out)
         lease.bind_deadline = now + self.policy.unbound_lease
         self._settle(now, out)
         return LeaseDecision(lease, out)
@@ -512,8 +529,8 @@ class RelaySession:
         self, lease: Lease, reason: RelayLeaseCloseReason, at: datetime, out: list[Effect]
     ) -> None:
         del self.leases[lease.lease_id]
-        if lease.whep_session is not None:
-            out.append(KickViewer(self.key, lease.lease_id, lease.whep_session))
+        for reader in lease.readers.values():
+            out.append(KickViewer(self.key, lease.lease_id, reader))
         assert self.session_id is not None  # noqa: S101 - leases exist only with a session
         out.append(
             EmitEvent(

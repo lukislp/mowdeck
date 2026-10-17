@@ -95,7 +95,8 @@ export async function waitForMap(
  */
 export const PLATFORM_ADMIN_ENABLED = process.env.MOWDECK_E2E_PLATFORM_ADMIN !== 'off';
 
-function identityContainer(): string {
+/** The running container of a Compose service in the stack under test. */
+export function serviceContainer(service: string): string {
   const project = process.env.MOWDECK_E2E_COMPOSE_PROJECT;
   if (!project) {
     throw new Error(
@@ -111,16 +112,20 @@ function identityContainer(): string {
       '--filter',
       `label=com.docker.compose.project=${project}`,
       '--filter',
-      'label=com.docker.compose.service=identity',
+      `label=com.docker.compose.service=${service}`,
     ],
     { encoding: 'utf-8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] },
   )
     .split(/\s+/)
     .filter(Boolean);
   if (ids.length === 0) {
-    throw new Error(`no running identity container in the Compose project ${project}`);
+    throw new Error(`no running ${service} container in the Compose project ${project}`);
   }
-  return ids[0];
+  return ids[0]!;
+}
+
+function identityContainer(): string {
+  return serviceContainer('identity');
 }
 
 export function grantPlatformAdmin(who: Actor): void {
@@ -217,4 +222,99 @@ export async function spotRunsSupported(
     return { supported: false, why: `gateway: ${reason}` };
   }
   return { supported: true, why: `${record.status} ${reason}`.trim() };
+}
+
+// --- camera relay (camera-relay-web.spec.ts) -------------------------------------------------
+
+/** Force the camera transport of this browser (the per-browser camera option) on every page. */
+export async function forceCameraTransport(
+  page: Page,
+  transport: 'auto' | 'relay' | 'direct',
+): Promise<void> {
+  await page.addInitScript((value) => {
+    try {
+      const key = 'mowdeck.cameraOptions';
+      const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+      localStorage.setItem(key, JSON.stringify({ ...stored, transport: value }));
+    } catch {
+      // no storage: the default (auto) applies
+    }
+  }, transport);
+}
+
+/**
+ * Pause or resume the relay's fake camera sources (test hook of the test stack,
+ * `POST /internal/v1/test/freeze` inside the camera-relay container, never routed outside).
+ */
+export function freezeRelaySources(frozen: boolean): number {
+  const script =
+    'import json, urllib.request as u; ' +
+    `r = u.Request("http://127.0.0.1:8000/internal/v1/test/freeze", data=json.dumps({"frozen": ${frozen ? 'True' : 'False'}}).encode(), headers={"Content-Type": "application/json"}, method="POST"); ` +
+    'print(json.load(u.urlopen(r, timeout=10))["changed"])';
+  const output = execFileSync(
+    'docker',
+    ['exec', serviceContainer('camera-relay'), 'python', '-c', script],
+    { encoding: 'utf-8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  return Number(output.trim());
+}
+
+/** Fleet's audit rows of a mower with `action` (read in the stack's PostgreSQL). */
+export function fleetAuditCount(mowerId: string, action: string): number {
+  if (!/^[0-9a-f-]{36}$/.test(mowerId) || !/^[a-z._]+$/.test(action)) {
+    throw new Error('unexpected mower id or action');
+  }
+  const output = execFileSync(
+    'docker',
+    [
+      'exec',
+      serviceContainer('postgres'),
+      'psql',
+      '-U',
+      'postgres',
+      '-d',
+      'fleet',
+      '-tAc',
+      `select count(*) from audit_log where target_id = '${mowerId}' and action = '${action}'`,
+    ],
+    { encoding: 'utf-8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  return Number(output.trim());
+}
+
+/** Pretend the page went hidden or visible again (`visibilitychange` with the new state). */
+export async function setPageVisibility(page: Page, visible: boolean): Promise<void> {
+  await page.evaluate((shown) => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => (shown ? 'visible' : 'hidden'),
+    });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => !shown });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, visible);
+}
+
+/** Create a sub-user with the account's `viewer` role (a second user of the same account). */
+export async function createAccountViewer(
+  request: APIRequestContext,
+  owner: Actor,
+  name: string,
+): Promise<Actor> {
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  const roles = (await (
+    await request.get(`/api/v1/identity/accounts/${owner.accountId}/roles`, { headers: auth })
+  ).json()) as { id: string; key: string | null }[];
+  const viewerRole = roles.find((role) => role.key === 'viewer');
+  expect(viewerRole, 'viewer role').toBeDefined();
+  const viewer = actor(name);
+  const created = await request.post(`/api/v1/identity/accounts/${owner.accountId}/users`, {
+    headers: auth,
+    data: {
+      username: viewer.username,
+      password: viewer.password,
+      assignments: [{ role_id: viewerRole!.id, level: { type: 'account', id: owner.accountId } }],
+    },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  return loginByApi(request, viewer);
 }

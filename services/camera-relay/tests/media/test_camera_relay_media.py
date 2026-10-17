@@ -63,6 +63,10 @@ class Viewer:
         await self.pc.close()
 
 
+VIEWER = PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER)
+"""The person of every viewer lease here (renew and detach must come from the opener)."""
+
+
 async def attach(
     bus: Client, account_id: UUID, mower_id: UUID, cameras: list[str]
 ) -> CameraSession:
@@ -70,7 +74,7 @@ async def attach(
         account_id=account_id,
         mower_id=mower_id,
         camera_ids=cameras,
-        requested_by=PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER),
+        requested_by=VIEWER,
         purpose=RelayPurpose.VIEWER,
     )
     message = await bus.request(RELAY_CAMERA_ATTACH, request.model_dump_json().encode(), timeout=15)
@@ -85,7 +89,7 @@ async def detach(bus: Client, account_id: UUID, mower_id: UUID, lease_id: UUID) 
         account_id=account_id,
         mower_id=mower_id,
         lease_id=lease_id,
-        requested_by=PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER),
+        requested_by=VIEWER,
     )
     message = await bus.request(RELAY_CAMERA_DETACH, request.model_dump_json().encode(), 10)
     return RelayDetachReply.model_validate_json(message.data).detached
