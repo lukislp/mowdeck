@@ -27,6 +27,10 @@ Subject scheme:
                                       (Device-Gateway)
 ``gateway.mower.<mower_id>.photo``    core NATS request: a still image of one mower (Vision)
 ``gateway.cloud.discover``            core NATS request: devices of a vendor cloud account
+``relay.camera.attach``               core NATS request: a lease on the camera relay (ADR 0045)
+``relay.camera.renew``                core NATS request: a lease's heartbeat, a fresh ticket
+``relay.camera.detach``               core NATS request: end a lease
+``camera.mower.<id>.relay.<kind>``    camera relay events (stream ``CAMERA``)
 ====================================  ============================================
 
 The camera request lives below ``gateway.`` and not below ``device.``: the stream ``DEVICE``
@@ -91,6 +95,45 @@ GATEWAY_CLOUD_DISCOVER = "gateway.cloud.discover"
 ``device-gateway``): ``CloudDiscoverRequest`` in, ``CloudDiscoverReply`` out. Logs in to a
 vendor cloud account (or reuses the open session) and lists its devices (ADR 0034).
 Not below ``device.`` for the same reason as the camera request."""
+
+
+RELAY_CAMERA_ATTACH = "relay.camera.attach"
+"""Core NATS request subject (internal, Fleet or Vision to camera-relay, queue group
+``camera-relay``): ``RelayAttachRequest`` in, ``RelayAttachReply`` out (ADR 0045). Not below
+``camera.``: the ``CAMERA`` stream captures ``camera.>``, and a request on a stream subject is
+answered by JetStream's publish acknowledgement instead of the responder."""
+RELAY_CAMERA_RENEW = "relay.camera.renew"
+"""Core NATS request subject: ``RelayRenewRequest`` in, ``RelayRenewReply`` out (ADR 0045)."""
+RELAY_CAMERA_DETACH = "relay.camera.detach"
+"""Core NATS request subject: ``RelayDetachRequest`` in, ``RelayDetachReply`` out (ADR 0045)."""
+RELAY_CAMERA_REQUESTS = (RELAY_CAMERA_ATTACH, RELAY_CAMERA_RENEW, RELAY_CAMERA_DETACH)
+"""The relay's request subjects; no stream captures them."""
+CAMERA_PREFIX = "camera.mower"
+CAMERA_RELAY_EVENT_KINDS = ("started", "stopped", "lease_opened", "lease_closed")
+"""The event kinds below ``camera.mower.<id>.relay``."""
+
+CameraRelayEventKind = Literal["started", "stopped", "lease_opened", "lease_closed"]
+"""An event kind below ``camera.mower.<id>.relay``."""
+
+
+def camera_relay_event_subject(mower_id: UUID, kind: CameraRelayEventKind) -> str:
+    """Subject of a camera relay event: ``camera.mower.<id>.relay.<kind>`` (stream ``CAMERA``)."""
+    if kind not in CAMERA_RELAY_EVENT_KINDS:
+        msg = f"invalid camera relay event kind {kind!r}"
+        raise ValueError(msg)
+    return f"{CAMERA_PREFIX}.{mower_id}.relay.{kind}"
+
+
+def parse_camera_relay_event_subject(subject: str) -> tuple[UUID, str]:
+    """Split ``camera.mower.<id>.relay.<kind>`` into the mower id and the event kind."""
+    parts = subject.split(".")
+    if len(parts) != 5 or ".".join(parts[:2]) != CAMERA_PREFIX or parts[3] != "relay":
+        msg = f"not a camera relay event subject: {subject!r}"
+        raise ValueError(msg)
+    if parts[4] not in CAMERA_RELAY_EVENT_KINDS:
+        msg = f"unknown camera relay event kind in {subject!r}"
+        raise ValueError(msg)
+    return UUID(parts[2]), parts[4]
 
 
 def photo_subject(mower_id: UUID) -> str:
@@ -277,6 +320,8 @@ ALL_BRIDGE_SCANS = f"{GATEWAY_PREFIX}.*.bridge.scan"
 """Wildcard the Device-Gateway subscribes to for bridge scan requests (core NATS)."""
 ALL_FIRMWARE_CHECKS = f"{GATEWAY_PREFIX}.*.firmware.check"
 """Wildcard the Device-Gateway subscribes to for firmware check requests (core NATS)."""
+ALL_CAMERA_RELAY_EVENTS = f"{CAMERA_PREFIX}.*.relay.*"
+"""Wildcard for every camera relay event of any mower (stream ``CAMERA``)."""
 
 
 def event_wildcard(domain: str | None = None) -> str:
@@ -390,7 +435,17 @@ DEVICE = StreamSpec(
     duplicate_window_seconds=120,
 )
 
-STREAMS: tuple[StreamSpec, ...] = (COMMANDS, TELEMETRY, EVENTS, DEVICE)
+CAMERA = StreamSpec(
+    name="CAMERA",
+    subjects=("camera.>",),
+    description="Camera relay lifecycle (sessions started and stopped, leases opened and "
+    "closed) for audit, metrics and the Vision daily limit. Kept 30 days.",
+    max_age_seconds=30 * 24 * 3600,
+    max_bytes=64 * 1024 * 1024,
+    duplicate_window_seconds=120,
+)
+
+STREAMS: tuple[StreamSpec, ...] = (COMMANDS, TELEMETRY, EVENTS, DEVICE, CAMERA)
 """All streams MowDeck services expect."""
 
 

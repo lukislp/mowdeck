@@ -13,8 +13,13 @@ fetched from the Mammotion cloud. The path of one request:
 3. The browser joins the channel as audience (``provider`` ``agora``) or renders a generated test
    pattern (``provider`` ``fake``, the simulator).
 
-``token`` and the encryption ``key`` are secrets: they are excluded from ``repr`` and must never
-be logged. Use :meth:`CameraSession.redacted` for log lines and scripts.
+With the camera relay (ADR 0045) the browser no longer joins the vendor channel: the session
+has ``provider`` ``relay`` and carries a :class:`RelayEndpoint` (WHEP URLs per camera and a
+short-lived ticket) instead of vendor credentials. The relay's own request/reply contracts are
+in :mod:`mowdeck_contracts.v1.relay`.
+
+``token``, the encryption ``key`` and the relay ``ticket`` are secrets: they are excluded from
+``repr`` and must never be logged. Use :meth:`CameraSession.redacted` for log lines and scripts.
 """
 
 from enum import StrEnum
@@ -39,6 +44,21 @@ class CameraProvider(StrEnum):
     """The browser joins an Agora RTC channel with the Agora Web SDK (Mammotion cloud)."""
     FAKE = "fake"
     """No video: the web app renders a generated test pattern (the simulator)."""
+    RELAY = "relay"
+    """The client plays MowDeck's camera relay over WebRTC (WHEP, ADR 0045); the session carries
+    a :class:`RelayEndpoint` and no vendor credentials."""
+
+
+class CameraTransport(StrEnum):
+    """How a client wants to reach the camera (ADR 0045). Chosen per browser; Fleet decides."""
+
+    AUTO = "auto"
+    """The relay; the direct vendor path only when the relay answers ``unsupported_provider``.
+    Never switched while a drive session runs."""
+    RELAY = "relay"
+    """Only the relay; its errors are shown, never a fallback."""
+    DIRECT = "direct"
+    """The vendor session as before (ADR 0032), a manual per-browser option."""
 
 
 class CameraPlacement(StrEnum):
@@ -99,8 +119,64 @@ class CameraQuota(ContractModel):
     total_minutes: float = Field(ge=0)
 
 
+RELAY_HEARTBEAT_SECONDS: Final = 15
+"""Default interval of a viewer's lease heartbeat (``relay.camera.renew``)."""
+
+
+class RelayTile(ContractModel):
+    """One camera as the relay serves it: a WHEP endpoint per camera."""
+
+    camera_id: str = Field(
+        min_length=1, max_length=64, description="The `CameraInfo.id` this endpoint shows."
+    )
+    whep_url: str = Field(
+        min_length=2,
+        max_length=512,
+        pattern=r"^(/|https?://)[^\s]*$",
+        description=(
+            "WHEP endpoint of this camera: an absolute path on the MowDeck origin or an "
+            "`http(s)` URL. The path carries a random session token, never the mower id."
+        ),
+    )
+
+
+class RelayEndpoint(ContractModel):
+    """Where and with what a client plays a relay session (``provider`` ``relay``)."""
+
+    tiles: list[RelayTile] = Field(min_length=1, max_length=8)
+    ticket: str = Field(
+        repr=False,
+        min_length=1,
+        max_length=2048,
+        description=(
+            "Short-lived ticket signed by the relay, bound to account, mower, lease and paths. "
+            "Sent as the WHEP bearer token. Never log it."
+        ),
+    )
+    lease_id: UUID = Field(description="The viewer's lease; renew and detach name it.")
+    heartbeat_seconds: int = Field(
+        default=RELAY_HEARTBEAT_SECONDS,
+        ge=5,
+        le=60,
+        description="How often the client renews the lease while the page is visible.",
+    )
+
+    @model_validator(mode="after")
+    def _unique_cameras(self) -> Self:
+        ids = [tile.camera_id for tile in self.tiles]
+        if len(ids) != len(set(ids)):
+            msg = "each camera may appear in only one tile"
+            raise ValueError(msg)
+        return self
+
+
 class CameraSession(ContractModel):
-    """Credentials for one viewer to join the live video of one mower."""
+    """Credentials for one viewer to join the live video of one mower.
+
+    Provider ``relay`` needs the ``relay`` endpoint and carries no vendor secrets (``token``
+    and ``app_id`` empty, no ``encryption``); ``expires_at`` is then the ticket's expiry. Every
+    other provider has no ``relay`` endpoint.
+    """
 
     provider: CameraProvider
     app_id: str = Field(max_length=128, description="Agora app id (empty for `fake`).")
@@ -119,15 +195,35 @@ class CameraSession(ContractModel):
     quota: CameraQuota | None = Field(
         default=None, description="The video budget, when the vendor reports one."
     )
+    relay: RelayEndpoint | None = Field(
+        default=None, description="Set exactly when `provider` is `relay` (ADR 0045)."
+    )
+
+    @model_validator(mode="after")
+    def _provider_rules(self) -> Self:
+        if self.provider is CameraProvider.RELAY:
+            if self.relay is None:
+                msg = "provider relay needs a relay endpoint"
+                raise ValueError(msg)
+            if self.token or self.app_id or self.encryption is not None:
+                msg = "provider relay carries no vendor token, app id or encryption"
+                raise ValueError(msg)
+        elif self.relay is not None:
+            msg = f"provider {self.provider.value} has no relay endpoint"
+            raise ValueError(msg)
+        return self
 
     def redacted(self) -> dict[str, Any]:
-        """A JSON-ready dump with ``token``, the encryption ``key`` and ``salt`` replaced."""
+        """A JSON-ready dump with ``token``, the encryption ``key`` and ``salt`` and the relay
+        ``ticket`` replaced."""
         data = self.model_dump(mode="json")
         data["token"] = REDACTED if self.token else ""
         if data.get("encryption"):
             data["encryption"]["key"] = REDACTED
             if data["encryption"].get("salt"):
                 data["encryption"]["salt"] = REDACTED
+        if data.get("relay"):
+            data["relay"]["ticket"] = REDACTED
         return data
 
 

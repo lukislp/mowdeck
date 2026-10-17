@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "RelayLeaseCloseReason": {
+      "description": "Why a lease ended.",
+      "enum": [
+        "detached",
+        "expired",
+        "media_lost",
+        "session_stopped"
+      ],
+      "title": "RelayLeaseCloseReason",
+      "type": "string"
+    },
+    "RelayPurpose": {
+      "description": "Why a lease holds the session.",
+      "enum": [
+        "viewer",
+        "vision"
+      ],
+      "title": "RelayPurpose",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``camera.relay.lease_closed`` on ``camera.mower.<id>.relay.lease_closed``.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "closed_at": {
+      "format": "date-time",
+      "title": "Closed At",
+      "type": "string"
+    },
+    "lease_id": {
+      "format": "uuid",
+      "title": "Lease Id",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "opened_at": {
+      "format": "date-time",
+      "title": "Opened At",
+      "type": "string"
+    },
+    "purpose": {
+      "$ref": "#/$defs/RelayPurpose"
+    },
+    "reason": {
+      "$ref": "#/$defs/RelayLeaseCloseReason"
+    },
+    "relay_session_id": {
+      "format": "uuid",
+      "title": "Relay Session Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "lease_id",
+    "relay_session_id",
+    "account_id",
+    "mower_id",
+    "purpose",
+    "reason",
+    "opened_at",
+    "closed_at"
+  ],
+  "title": "CameraRelayLeaseClosed",
+  "type": "object"
+}

@@ -104,7 +104,8 @@
       "description": "Who delivers the video.",
       "enum": [
         "agora",
-        "fake"
+        "fake",
+        "relay"
       ],
       "title": "CameraProvider",
       "type": "string"
@@ -131,7 +132,7 @@
       "type": "object"
     },
     "CameraSession": {
-      "description": "Credentials for one viewer to join the live video of one mower.",
+      "description": "Credentials for one viewer to join the live video of one mower.\n\nProvider ``relay`` needs the ``relay`` endpoint and carries no vendor secrets (``token``\nand ``app_id`` empty, no ``encryption``); ``expires_at`` is then the ticket's expiry. Every\nother provider has no ``relay`` endpoint.",
       "properties": {
         "app_id": {
           "description": "Agora app id (empty for `fake`).",
@@ -186,6 +187,18 @@
           "default": null,
           "description": "The video budget, when the vendor reports one."
         },
+        "relay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelayEndpoint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set exactly when `provider` is `relay` (ADR 0045)."
+        },
         "token": {
           "description": "Short-lived Agora token. Never log it.",
           "maxLength": 2048,
@@ -209,6 +222,74 @@
         "expires_at"
       ],
       "title": "CameraSession",
+      "type": "object"
+    },
+    "RelayEndpoint": {
+      "description": "Where and with what a client plays a relay session (``provider`` ``relay``).",
+      "properties": {
+        "heartbeat_seconds": {
+          "default": 15,
+          "description": "How often the client renews the lease while the page is visible.",
+          "maximum": 60,
+          "minimum": 5,
+          "title": "Heartbeat Seconds",
+          "type": "integer"
+        },
+        "lease_id": {
+          "description": "The viewer's lease; renew and detach name it.",
+          "format": "uuid",
+          "title": "Lease Id",
+          "type": "string"
+        },
+        "ticket": {
+          "description": "Short-lived ticket signed by the relay, bound to account, mower, lease and paths. Sent as the WHEP bearer token. Never log it.",
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Ticket",
+          "type": "string"
+        },
+        "tiles": {
+          "items": {
+            "$ref": "#/$defs/RelayTile"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Tiles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tiles",
+        "ticket",
+        "lease_id"
+      ],
+      "title": "RelayEndpoint",
+      "type": "object"
+    },
+    "RelayTile": {
+      "description": "One camera as the relay serves it: a WHEP endpoint per camera.",
+      "properties": {
+        "camera_id": {
+          "description": "The `CameraInfo.id` this endpoint shows.",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Camera Id",
+          "type": "string"
+        },
+        "whep_url": {
+          "description": "WHEP endpoint of this camera: an absolute path on the MowDeck origin or an `http(s)` URL. The path carries a random session token, never the mower id.",
+          "maxLength": 512,
+          "minLength": 2,
+          "pattern": "^(/|https?://)[^\\s]*$",
+          "title": "Whep Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "camera_id",
+        "whep_url"
+      ],
+      "title": "RelayTile",
       "type": "object"
     }
   },

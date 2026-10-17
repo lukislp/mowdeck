@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-16); amends [ADR 0026](0026-manual-drive-channel.md) (the drive page) and [ADR 0032](0032-live-camera-over-agora.md) (the camera player is shared).
+Accepted (2026-10-16); amends [ADR 0026](0026-manual-drive-channel.md) (the drive page) and [ADR 0032](0032-live-camera-over-agora.md) (the camera player is shared). Amended by [ADR 0045](0045-camera-relay.md) (proposed, 2026-10-17): the stage plays the camera relay over WHEP; the relay never repeats or invents frames, so the freeze detection and the hold are unchanged.
 
 ## Context
 

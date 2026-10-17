@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    },
+    "RelayPurpose": {
+      "description": "Why a lease holds the session.",
+      "enum": [
+        "viewer",
+        "vision"
+      ],
+      "title": "RelayPurpose",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``relay.camera.attach`` (internal, Fleet or Vision to camera-relay).\n\nThe sender has already authorized the principal; the relay keys the session by\n``(account_id, mower_id)`` and never shares it across accounts.",
+  "properties": {
+    "account_id": {
+      "description": "The mower's account as Fleet knows it.",
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "camera_ids": {
+      "description": "`CameraInfo.id` of each wanted camera; one tile per camera.",
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Camera Ids",
+      "type": "array"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "purpose": {
+      "$ref": "#/$defs/RelayPurpose",
+      "default": "viewer"
+    },
+    "requested_by": {
+      "$ref": "#/$defs/PrincipalRef"
+    }
+  },
+  "required": [
+    "account_id",
+    "mower_id",
+    "camera_ids",
+    "requested_by"
+  ],
+  "title": "RelayAttachRequest",
+  "type": "object"
+}

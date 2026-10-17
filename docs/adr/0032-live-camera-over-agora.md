@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-10)
+Accepted (2026-10-10). Amended by [ADR 0045](0045-camera-relay.md) (proposed, 2026-10-17): by default the browser plays MowDeck's camera relay (provider `relay`, WHEP) instead of joining the vendor channel; the direct path stays as the manual transport `direct` and as the automatic fallback when the relay has no driver for the provider.
 
 ## Context
 

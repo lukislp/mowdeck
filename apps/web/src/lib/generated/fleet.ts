@@ -965,7 +965,7 @@ export type components = {
          * @description Who delivers the video.
          * @enum {string}
          */
-        CameraProvider: "agora" | "fake";
+        CameraProvider: "agora" | "fake" | "relay";
         /**
          * CameraQuota
          * @description The vendor's video budget (Mammotion meters video over 4G only).
@@ -979,6 +979,10 @@ export type components = {
         /**
          * CameraSession
          * @description Credentials for one viewer to join the live video of one mower.
+         *
+         *     Provider ``relay`` needs the ``relay`` endpoint and carries no vendor secrets (``token``
+         *     and ``app_id`` empty, no ``encryption``); ``expires_at`` is then the ticket's expiry. Every
+         *     other provider has no ``relay`` endpoint.
          */
         CameraSession: {
             /**
@@ -1004,6 +1008,8 @@ export type components = {
             provider: components["schemas"]["CameraProvider"];
             /** @description The video budget, when the vendor reports one. */
             quota?: components["schemas"]["CameraQuota"] | null;
+            /** @description Set exactly when `provider` is `relay` (ADR 0045). */
+            relay?: components["schemas"]["RelayEndpoint"] | null;
             /**
              * Token
              * @description Short-lived Agora token. Never log it.
@@ -2240,6 +2246,47 @@ export type components = {
              * @description The ESPHome node name.
              */
             proxy_name: string;
+        };
+        /**
+         * RelayEndpoint
+         * @description Where and with what a client plays a relay session (``provider`` ``relay``).
+         */
+        RelayEndpoint: {
+            /**
+             * Heartbeat Seconds
+             * @description How often the client renews the lease while the page is visible.
+             * @default 15
+             */
+            heartbeat_seconds: number;
+            /**
+             * Lease Id
+             * Format: uuid
+             * @description The viewer's lease; renew and detach name it.
+             */
+            lease_id: string;
+            /**
+             * Ticket
+             * @description Short-lived ticket signed by the relay, bound to account, mower, lease and paths. Sent as the WHEP bearer token. Never log it.
+             */
+            ticket: string;
+            /** Tiles */
+            tiles: components["schemas"]["RelayTile"][];
+        };
+        /**
+         * RelayTile
+         * @description One camera as the relay serves it: a WHEP endpoint per camera.
+         */
+        RelayTile: {
+            /**
+             * Camera Id
+             * @description The `CameraInfo.id` this endpoint shows.
+             */
+            camera_id: string;
+            /**
+             * Whep Url
+             * @description WHEP endpoint of this camera: an absolute path on the MowDeck origin or an `http(s)` URL. The path carries a random session token, never the mower id.
+             */
+            whep_url: string;
         };
         /**
          * ResumeMow

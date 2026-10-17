@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "CameraProvider": {
+      "description": "Who delivers the video.",
+      "enum": [
+        "agora",
+        "fake",
+        "relay"
+      ],
+      "title": "CameraProvider",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``camera.relay.started`` on ``camera.mower.<id>.relay.started``: the relay\njoined the source and has media.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "camera_ids": {
+      "description": "The cameras that publish.",
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Camera Ids",
+      "type": "array"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "relay_session_id": {
+      "format": "uuid",
+      "title": "Relay Session Id",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/CameraProvider",
+      "description": "The provider of the source (not `relay`)."
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "relay_session_id",
+    "account_id",
+    "mower_id",
+    "source",
+    "camera_ids",
+    "started_at"
+  ],
+  "title": "CameraRelayStarted",
+  "type": "object"
+}
