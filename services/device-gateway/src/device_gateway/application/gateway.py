@@ -12,6 +12,8 @@ from mowdeck_contracts.v1 import (
     BridgeScanErrorCode,
     BridgeScanReply,
     BridgeScanRequest,
+    CameraReleaseReply,
+    CameraReleaseRequest,
     CameraSessionError,
     CameraSessionErrorCode,
     CameraSessionReply,
@@ -286,6 +288,38 @@ class DeviceGateway:
                 CameraSessionErrorCode.UNSUPPORTED, "this mower has no camera on its connection"
             )
         return CameraSessionReply(session=camera)
+
+    async def camera_release(self, request: CameraReleaseRequest) -> CameraReleaseReply | None:
+        """Answer a camera release request (ADR 0045); None when the mower belongs to another
+        shard.
+
+        The account rule of :meth:`camera_session` applies. A connection without the release
+        port answers ``released`` false without an error (nothing to stop); a failed stop
+        answers ``unavailable`` and never ends the mower's session.
+        """
+        if not self.shard.owns(request.mower_id):
+            return None
+        session = self._sessions.get(request.mower_id)
+        refusal = camera_rejection(session.registration if session else None, request)
+        if refusal is not None or session is None:
+            code, detail = refusal or (CameraSessionErrorCode.NOT_FOUND, "unknown mower")
+            _log.warning(
+                "camera release refused",
+                mower_id=str(request.mower_id),
+                account_id=str(request.account_id),
+                code=code.value,
+            )
+            return _release_error(code, detail)
+        try:
+            released = await session.release_camera(request.channel)
+        except NotConnected as exc:
+            return _release_error(CameraSessionErrorCode.UNAVAILABLE, str(exc))
+        except Exception as exc:
+            _log.warning(
+                "camera release failed", mower_id=str(request.mower_id), error=type(exc).__name__
+            )
+            return _release_error(CameraSessionErrorCode.UNAVAILABLE, "the stream stop failed")
+        return CameraReleaseReply(released=released)
 
     # --- bridge scan and firmware (ADR 0038) --------------------------------------------------
 
@@ -578,6 +612,10 @@ class DeviceGateway:
 
 def _camera_error(code: CameraSessionErrorCode, detail: str) -> CameraSessionReply:
     return CameraSessionReply(error=CameraSessionError(code=code, detail=detail[:500]))
+
+
+def _release_error(code: CameraSessionErrorCode, detail: str) -> CameraReleaseReply:
+    return CameraReleaseReply(error=CameraSessionError(code=code, detail=detail[:500]))
 
 
 def _preview_error(code: PathPreviewErrorCode, detail: str) -> PathPreviewReply:

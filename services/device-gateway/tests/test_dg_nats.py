@@ -11,6 +11,8 @@ import pytest
 from dg_support import ISSUER, TestProvider, envelope, make_settings, registration, wait_until
 from mowdeck_contracts.v1 import (
     CameraProvider,
+    CameraReleaseReply,
+    CameraReleaseRequest,
     CameraSessionReply,
     CameraSessionRequest,
     CommandResult,
@@ -20,6 +22,7 @@ from mowdeck_contracts.v1 import (
     StartMow,
 )
 from mowdeck_contracts.v1.subjects import (
+    camera_release_subject,
     camera_session_subject,
     command_result_subject,
     telemetry_subject,
@@ -100,5 +103,14 @@ async def test_camera_session_request_reply_through_nats() -> None:
             session = reply.model(CameraSessionReply).session
             assert session is not None
             assert session.provider is CameraProvider.FAKE
+            # The release is core NATS as well (ADR 0045): no stream may answer it first.
+            release = CameraReleaseRequest(
+                mower_id=reg.mower_id,
+                account_id=reg.account_id,
+                requested_by=ISSUER,
+                channel=session.channel,
+            )
+            released = await client.request(camera_release_subject(reg.mower_id), release, 5.0)
+            assert released.model(CameraReleaseReply).released is True
     finally:
         await client.close()

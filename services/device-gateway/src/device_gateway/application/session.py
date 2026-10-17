@@ -70,6 +70,7 @@ from mowdeck_control import (
     bridge_scanner_of,
     camera_session_of,
     firmware_port_of,
+    release_camera_session_of,
 )
 from mowdeck_service_kit import get_logger
 from pydantic import BaseModel
@@ -740,6 +741,18 @@ class MowerSession:
         if controller is None:
             raise NotConnected("mower is not connected")
         return await camera_session_of(controller.connection)
+
+    async def release_camera(self, channel: str | None = None) -> bool:
+        """Tell the mower to stop publishing its camera stream (ADR 0045); False when the
+        connection cannot release (nothing was sent).
+
+        Raises :class:`~mowdeck_control.NotConnected` while the mower is not connected or the
+        stop could not be sent.
+        """
+        controller = self._controller
+        if controller is None:
+            raise NotConnected("mower is not connected")
+        return await release_camera_session_of(controller.connection, channel)
 
     # --- commands -----------------------------------------------------------------------------
 
