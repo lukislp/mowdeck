@@ -11,6 +11,7 @@ import json
 import statistics
 import sys
 from collections import defaultdict
+from itertools import pairwise
 from pathlib import Path
 
 KEY = 3
@@ -33,14 +34,14 @@ def main(out: Path) -> None:
         t = [float(r["t"]) for r in frames]
         sizes = [int(r["bytes"]) for r in frames]
         keys = [i for i, r in enumerate(frames) if int(r["frame_type"]) == KEY]
-        gops_frames = [b - a for a, b in zip(keys, keys[1:], strict=False)]
-        gops_s = [t[b] - t[a] for a, b in zip(keys, keys[1:], strict=False)]
+        gops_frames = [b - a for a, b in pairwise(keys)]
+        gops_s = [t[b] - t[a] for a, b in pairwise(keys)]
         span = t[-1] - t[0] if len(t) > 1 else 0
         cap = [int(r["capture_time_ms"]) for r in frames]
         wall = [int(r["wall_ms"]) for r in frames]
         lat = [w - c for w, c in zip(wall, cap, strict=False) if c > 1_000_000_000_000]
-        cap_steps = [b - a for a, b in zip(cap, cap[1:], strict=False) if a and b]
-        intervals = [b - a for a, b in zip(t, t[1:], strict=False)]
+        cap_steps = [b - a for a, b in pairwise(cap) if a and b]
+        intervals = [b - a for a, b in pairwise(t)]
         summary[uid] = {
             "frames": len(frames),
             "seconds": round(span, 1),

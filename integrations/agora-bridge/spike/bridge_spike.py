@@ -383,10 +383,12 @@ def main() -> None:
         help="seconds after leaving to join again with the same token (0 = no)",
     )
     p.add_argument("--rejoin-duration", type=float, default=20.0)
-    p.add_argument("--sdk-log", type=Path, default=Path("/tmp/agora-sdk-log"))
+    p.add_argument("--sdk-log", type=Path, default=None, help="default: <out>/agora-sdk-log")
     args = p.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
+    if args.sdk_log is None:
+        args.sdk_log = args.out / "agora-sdk-log"
     args.sdk_log.mkdir(parents=True, exist_ok=True)
     rec = Recorder(
         args.out,

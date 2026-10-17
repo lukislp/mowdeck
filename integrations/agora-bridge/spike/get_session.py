@@ -26,7 +26,7 @@ import nats
 SPIKE_SUBJECT_ID = "00000000-0000-4000-8000-00000000a6e0"
 
 
-async def fetch(nats_url: str, mower: str, account: str, timeout: float) -> dict:
+async def fetch(nats_url: str, mower: str, account: str, timeout_s: float) -> dict:
     nc = await nats.connect(nats_url, connect_timeout=5)
     try:
         request = {
@@ -41,7 +41,7 @@ async def fetch(nats_url: str, mower: str, account: str, timeout: float) -> dict
         msg = await nc.request(
             f"gateway.mower.{mower}.camera.session",
             json.dumps(request).encode(),
-            timeout=timeout,
+            timeout=timeout_s,
             headers={"Nats-Msg-Id": str(uuid.uuid4()), "Content-Type": "application/json"},
         )
         return json.loads(msg.data)
