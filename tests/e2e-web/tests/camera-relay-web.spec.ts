@@ -49,6 +49,21 @@ async function requireWebRtc(page: Page, browserName: string): Promise<void> {
     `${browserName} in this Playwright build has no WebRTC (RTCPeerConnection is missing); ` +
       'the relay player cannot run here',
   );
+  // The relay sends H.264 only (ADR 0045). A browser without an H.264 decoder offers none and
+  // MediaMTX refuses the offer ("codecs not supported by client"): fail with the reason instead
+  // of a timeout. Playwright's Firefox on Linux has no OpenH264 unless MOZ_GMP_PATH points at
+  // the plugin (CI installs it; see tests/e2e-web/README.md).
+  const h264 = await page.evaluate(
+    () =>
+      RTCRtpReceiver.getCapabilities?.('video')?.codecs.some(
+        (codec) => codec.mimeType.toLowerCase() === 'video/h264',
+      ) ?? false,
+  );
+  expect(
+    h264,
+    `${browserName} offers no H.264 decoder for WebRTC; the relay sends H.264 only ` +
+      '(Firefox on Linux: install the OpenH264 plugin and set MOZ_GMP_PATH)',
+  ).toBe(true);
 }
 
 /** The `<video>` presents new frames (requestVideoFrameCallback, else decoded frames grow). */

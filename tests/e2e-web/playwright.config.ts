@@ -51,7 +51,8 @@ export default defineConfig({
     },
     // Firefox: the relay player (ADR 0045). The test stack offers its ICE port on 127.0.0.1 only;
     // Firefox reaches it only with loopback candidates allowed and its host addresses not hidden
-    // behind mDNS names (a real relay offers a LAN address, see docs/dev/web-app.md).
+    // behind mDNS names (a real relay offers a LAN address, see docs/dev/web-app.md). On Linux it
+    // decodes the relay's H.264 only with the OpenH264 plugin in MOZ_GMP_PATH (README.md).
     {
       name: 'firefox',
       testMatch: /camera-relay-web\.spec\.ts/,
