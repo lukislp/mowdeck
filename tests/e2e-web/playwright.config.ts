@@ -38,15 +38,33 @@ export default defineConfig({
     {
       name: 'desktop',
       testMatch:
-        /(desktop|notifications|connection|schedules|drive|calibration|health|fleet|operator|camera|camera-freeze|camera-relay|vision|spot)\.spec\.ts/,
+        /(desktop|notifications|connection|schedules|drive|calibration|health|fleet|operator|camera|camera-freeze|camera-relay|camera-relay-web|vision|spot)\.spec\.ts/,
       use: { browserName: 'chromium', viewport: { width: 1280, height: 800 } },
     },
     // Safari's engine (ADR 0044 amendment 2026-10-17): the camera's freeze detection and the
-    // drive view's hold over a frozen picture also in WebKit.
+    // drive view's hold over a frozen picture also in WebKit, and the relay player (ADR 0045;
+    // skipped where the WebKit build has no WebRTC, e.g. on Windows).
     {
       name: 'webkit',
-      testMatch: /(camera-freeze|drive-camera)\.spec\.ts/,
+      testMatch: /(camera-freeze|drive-camera|camera-relay-web)\.spec\.ts/,
       use: { browserName: 'webkit', viewport: { width: 1280, height: 800 } },
+    },
+    // Firefox: the relay player (ADR 0045). The test stack offers its ICE port on 127.0.0.1 only;
+    // Firefox reaches it only with loopback candidates allowed and its host addresses not hidden
+    // behind mDNS names (a real relay offers a LAN address, see docs/dev/web-app.md).
+    {
+      name: 'firefox',
+      testMatch: /camera-relay-web\.spec\.ts/,
+      use: {
+        browserName: 'firefox',
+        viewport: { width: 1280, height: 800 },
+        launchOptions: {
+          firefoxUserPrefs: {
+            'media.peerconnection.ice.loopback': true,
+            'media.peerconnection.ice.obfuscate_host_addresses': false,
+          },
+        },
+      },
     },
     {
       name: 'screens',

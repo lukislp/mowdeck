@@ -6,7 +6,7 @@ The suite drives the web app in Chromium against a full Compose stack. It regist
 
 ```bash
 pnpm install
-pnpm --filter e2e-web exec playwright install chromium   # once
+pnpm --filter e2e-web exec playwright install chromium webkit firefox   # once
 pnpm e2e:stack up        # build and start the test stack, wait until healthy (first build takes a while)
 pnpm e2e:stack test      # projects phone and desktop; extra arguments go to `playwright test`
 pnpm e2e:stack down      # stop it and delete its volumes

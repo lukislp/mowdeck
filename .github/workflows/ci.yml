@@ -558,7 +558,7 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter e2e-web
-      - run: pnpm --filter e2e-web exec playwright install --with-deps chromium webkit
+      - run: pnpm --filter e2e-web exec playwright install --with-deps chromium webkit firefox
       - *ghcr-login
       - *mirror-env
       - uses: docker/setup-buildx-action@v4.4.1
