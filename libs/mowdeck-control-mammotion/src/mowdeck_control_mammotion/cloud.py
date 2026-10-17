@@ -13,7 +13,10 @@ Live camera (ADR 0032): :meth:`MammotionCloudConnection.get_camera_session` asks
 cloud for an Agora stream token (``get_stream_subscription``, which also makes the mower
 publish) and the 4G video budget (``get_video_resource``, best effort) and returns them as a
 :class:`~mowdeck_contracts.v1.CameraSession`. The browser joins the channel itself; no media
-passes through MowDeck. The token is a secret and is never logged.
+passes through MowDeck. The token is a secret and is never logged. The mower keeps publishing
+after the last viewer left; :meth:`MammotionCloudConnection.release_camera_session`
+(:class:`~mowdeck_control.CameraSessionRelease`, ADR 0045) tells it to stop (PyMammotion's
+``stop_stream``, Agora ``vi_switch=0``).
 
 Fresh state: the Mammotion broker forwards reports only on request, so the connection asks
 for a fresh report every ``refresh_seconds`` (option, 10 to 300 s, default 20; every
@@ -227,6 +230,32 @@ class MammotionCloudConnection(MammotionBase):
             session.expires_at.isoformat(),
         )
         return session
+
+    async def release_camera_session(self, channel: str | None = None) -> None:
+        """:class:`~mowdeck_control.CameraSessionRelease`: tell the mower to stop publishing
+        its camera stream (PyMammotion's ``stop_stream``, Agora ``vi_switch=0``).
+
+        The stop is per mower, so ``channel`` is not needed. Idempotent: the command is sent
+        every time and is harmless without a running stream; models without a camera send
+        nothing. Raises :class:`~mowdeck_control.NotConnected` when it could not be sent.
+        """
+        del channel  # one stream per mower: the stop needs no channel
+        self._require_connected()
+        device_name = self._port.device_name
+        if not mapping.has_camera(device_name, self._port.product_key()):
+            return
+        try:
+            async with asyncio.timeout(CAMERA_REQUEST_TIMEOUT_S):
+                await self._port.stop_stream()
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("the Mammotion cloud session is not open") from exc
+        except TimeoutError as exc:
+            _log.warning("camera stream stop for %s timed out", device_name)
+            raise NotConnected("the camera stream stop was not sent in time") from exc
+        except Exception as exc:
+            _log.warning("camera stream stop for %s failed: %s", device_name, type(exc).__name__)
+            raise NotConnected("the camera stream stop failed") from exc
+        _log.info("camera stream of %s released", device_name)
 
     async def _video_resource(self) -> VideoResourceResponse | None:
         try:

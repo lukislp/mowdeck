@@ -560,6 +560,9 @@ class _CameraClient(_Client):
         self.all_cameras.append(all_cameras)
         return _Response(self.stream)
 
+    async def stop_stream(self, name: str) -> None:
+        self.calls.append(("stop_stream", name))
+
 
 async def test_mammotion_client_port_fetches_stream_token_and_video_budget() -> None:
     stream = port.StreamSubscriptionResponse(
@@ -597,6 +600,20 @@ async def test_mammotion_client_port_fetches_stream_token_and_video_budget() -> 
     await ble_only.open()
     assert await ble_only.stream_subscription() is None
     assert await ble_only.video_resource() is None
+
+
+async def test_mammotion_client_port_stops_the_stream_of_its_device() -> None:
+    client = _CameraClient(None, None)
+    p = _port(client)
+    with pytest.raises(port.PortClosedError):
+        await p.stop_stream()
+    await p.open()
+    await p.stop_stream()
+    await p.stop_stream()
+    assert [c for c in client.calls if c[0] == "stop_stream"] == [
+        ("stop_stream", "Luba-VP1"),
+        ("stop_stream", "Luba-VP1"),
+    ]
 
 
 def _with_ext_mod(device: MowerDevice, value: str) -> MowerDevice:

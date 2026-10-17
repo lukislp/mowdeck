@@ -478,6 +478,13 @@ class MammotionPort(Protocol):
         Without it only the front left camera publishes (uid 1), as in the vendor app."""
         ...
 
+    async def stop_stream(self) -> None:
+        """Tell the mower to stop publishing video (PyMammotion's ``stop_stream``, Agora
+        ``vi_switch=0``: ``device_agora_join_channel_with_position(enter_state=0)``). The mower
+        keeps publishing after the last viewer left until it gets this. Harmless without a
+        running stream. Raises on a failed send."""
+        ...
+
     async def video_resource(self) -> VideoResourceResponse | None:
         """The 4G video budget of the mower; None when unknown."""
         ...
@@ -937,6 +944,11 @@ class ClientPort:
         )
         data = getattr(response, "data", None)
         return data if isinstance(data, StreamSubscriptionResponse) else None
+
+    async def stop_stream(self) -> None:
+        client = self._require_client()
+        handle = self._require_handle()
+        await client.stop_stream(handle.device_name)
 
     async def video_resource(self) -> VideoResourceResponse | None:
         client = self._require_client()
