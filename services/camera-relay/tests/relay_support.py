@@ -6,12 +6,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import EventEnvelope, PrincipalKind
+from mowdeck_contracts.v1.camera import CameraInfo, CameraProvider
 from mowdeck_contracts.v1.principal import PrincipalRef
 from mowdeck_contracts.v1.relay import RelayAttachRequest, RelayPurpose
 
 from camera_relay.adapters.memory import InMemoryRelayRepository
 from camera_relay.adapters.tickets import Ed25519TicketSigner
-from camera_relay.application.ports import SourceError
+from camera_relay.application.ports import SourceError, SourceOffer
 from camera_relay.application.service import RelayService
 from camera_relay.domain.effects import (
     Effect,
@@ -81,14 +82,33 @@ def attach_request(
     )
 
 
+def offered_cameras(*ids: str) -> tuple[CameraInfo, ...]:
+    return tuple(CameraInfo(id=camera, name=camera.replace("_", " ")) for camera in ids)
+
+
 @dataclass
 class FakeVendor:
-    """Records the source commands; ``fail_with`` makes every start fail."""
+    """Records the source commands; ``fail_with`` makes every start fail, ``offer_fails_with``
+    every offer. ``cameras`` is what the vendor session offers (empty: no camera list)."""
 
     fail_with: SourceError | None = None
+    offer_fails_with: SourceError | None = None
+    provider: CameraProvider = CameraProvider.FAKE
+    cameras: tuple[CameraInfo, ...] = ()
+    offers: list[RelayKey] = field(default_factory=list)
+    discarded: list[RelayKey] = field(default_factory=list)
     starts: list[StartVendorSession] = field(default_factory=list)
     updates: list[UpdateCameras] = field(default_factory=list)
     stops: list[StopVendorSession] = field(default_factory=list)
+
+    async def offer(self, key: RelayKey) -> SourceOffer:
+        self.offers.append(key)
+        if self.offer_fails_with is not None:
+            raise self.offer_fails_with
+        return SourceOffer(provider=self.provider, cameras=self.cameras)
+
+    async def discard(self, key: RelayKey) -> None:
+        self.discarded.append(key)
 
     async def start(self, command: StartVendorSession) -> None:
         self.starts.append(command)

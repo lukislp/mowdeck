@@ -1,15 +1,17 @@
 """The ``VendorSessions`` port: the Device-Gateway's camera session and release, and the source
 drivers.
 
-``start`` asks the gateway for a camera session (``gateway.mower.<id>.camera.session``, core
-NATS) with the relay's service principal and the lease's account, then hands it to the source
-driver of its ``CameraProvider``. The gateway checks the account like for commands, so a
-session of account A's key is only ever started with account A. ``stop`` stops the driver and,
-with ``release``, sends ``gateway.mower.<id>.camera.release``: the mower does not stop
-publishing by itself.
+``offer`` asks the gateway for a camera session (``gateway.mower.<id>.camera.session``, core
+NATS) with the relay's service principal and the lease's account before the first lease of a
+key; ``start`` hands that session (or, when the offer is older than
+:data:`OFFER_REUSE_SECONDS`, a fresh one) to the source driver of its ``CameraProvider``. The
+gateway checks the account like for commands, so a session of account A's key is only ever
+started with account A. ``stop`` stops the driver and, with ``release``, sends
+``gateway.mower.<id>.camera.release``: the mower does not stop publishing by itself.
 
-A provider without a driver (Agora until step 7 of ADR 0045) is answered with ``unavailable``;
-the session that was just issued is released at once, so the mower does not keep streaming.
+A provider without a driver (Agora until step 7 of ADR 0045) is answered with
+``unsupported_provider`` and the vendor session is **not** released: a client in ``auto`` falls
+back to the direct path (ADR 0032), and its viewer needs the mower's stream.
 
 Media arrives later: the reconciler reports ``source_started`` once a camera's path is ready;
 a driver whose processes fail for good reports ``source_failed``. Both reports run as tasks,
@@ -17,6 +19,7 @@ never inside ``start`` (the use case holds the session's lock while it calls the
 """
 
 import asyncio
+import time
 from collections.abc import Callable, Sequence
 from typing import Protocol
 from uuid import UUID
@@ -38,12 +41,18 @@ from camera_relay.adapters.media.pipeline import RunningSource
 from camera_relay.application.ports import (
     ForbiddenSourceError,
     SourceError,
+    SourceOffer,
     SourceUnavailableError,
+    UnsupportedProviderError,
 )
 from camera_relay.domain.effects import StartVendorSession, StopVendorSession, UpdateCameras
 from camera_relay.domain.models import RelayKey
 
 _log = get_logger("camera_relay.gateway")
+
+OFFER_REUSE_SECONDS = 30.0
+"""How long ``start`` reuses the vendor session fetched by ``offer`` (the same attach uses it
+at once; an older one is fetched again)."""
 
 
 class SourceDriver(Protocol):
@@ -94,28 +103,43 @@ class GatewayVendorSessions:
         reports: Callable[[], SourceReports],
         principal: PrincipalRef,
         timeout_seconds: float = 10.0,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._bus = bus
         self.drivers = {driver.provider: driver for driver in drivers}
         self._reports = reports
         self.principal = principal
         self.timeout_seconds = timeout_seconds
+        self._monotonic = monotonic
         self.sources: dict[str, RunningSource] = {}
+        self._offers: dict[RelayKey, tuple[float, CameraSession]] = {}
         self._tasks: set[asyncio.Task[None]] = set()
 
     # --- VendorSessions -----------------------------------------------------------------------
 
+    async def offer(self, key: RelayKey) -> SourceOffer:
+        """Request the vendor session for the next start of ``key``; raises ``SourceError``
+        (``UnsupportedProviderError`` without releasing the session)."""
+        self._offers.pop(key, None)
+        session = await self._camera_session(key)
+        if session.provider not in self.drivers:
+            raise _unsupported(session.provider)
+        self._offers[key] = (self._monotonic(), session)
+        return SourceOffer(provider=session.provider, cameras=tuple(session.cameras))
+
+    async def discard(self, key: RelayKey) -> None:
+        """Release an offered vendor session that no start will use."""
+        offered = self._offers.pop(key, None)
+        if offered is not None:
+            await self._release(key, offered[1].channel or None)
+
     async def start(self, command: StartVendorSession) -> None:
-        """Request the vendor session and start its driver; raises ``SourceError``."""
-        session = await self._camera_session(command.key)
+        """Start the driver with the offered (or a fresh) vendor session; raises
+        ``SourceError``."""
+        session = self._take_offer(command.key) or await self._camera_session(command.key)
         driver = self.drivers.get(session.provider)
         if driver is None:
-            await self._release(command.key, session.channel or None)
-            msg = (
-                f"the relay has no source driver for camera provider {session.provider.value} "
-                "yet (ADR 0045)"
-            )
-            raise SourceUnavailableError(msg)
+            raise _unsupported(session.provider)
         cameras = self._cameras(command.camera_ids, session)
         if not cameras:
             await self._release(command.key, session.channel or None)
@@ -186,6 +210,15 @@ class GatewayVendorSessions:
 
     # --- Gateway requests ---------------------------------------------------------------------
 
+    def _take_offer(self, key: RelayKey) -> CameraSession | None:
+        offered = self._offers.pop(key, None)
+        if offered is None:
+            return None
+        fetched_at, session = offered
+        if self._monotonic() - fetched_at > OFFER_REUSE_SECONDS:
+            return None
+        return session
+
     @staticmethod
     def _cameras(requested: Sequence[str], session: CameraSession) -> tuple[str, ...]:
         offered = {camera.id for camera in session.cameras}
@@ -246,6 +279,12 @@ class GatewayVendorSessions:
             released=reply.released,
             error=reply.error.code.value if reply.error else None,
         )
+
+
+def _unsupported(provider: CameraProvider) -> UnsupportedProviderError:
+    return UnsupportedProviderError(
+        f"the relay has no source driver for camera provider {provider.value} (ADR 0045)"
+    )
 
 
 def _session_error(code: CameraSessionErrorCode, detail: str) -> SourceError:

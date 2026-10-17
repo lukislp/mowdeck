@@ -59,7 +59,7 @@ from camera_relay.domain.effects import (
     StopVendorSession,
     UpdateCameras,
 )
-from camera_relay.domain.models import Lease, RelayKey, VisionMode
+from camera_relay.domain.models import Lease, RelayKey, SessionState, VisionMode
 from camera_relay.domain.policy import MowerStatus
 from camera_relay.domain.session import RelaySession
 from camera_relay.domain.tickets import TicketClaims, camera_path
@@ -124,10 +124,37 @@ class RelayService:
     async def attach(
         self, request: RelayAttachRequest, *, vision_mode: VisionMode = VisionMode.STREAM
     ) -> RelayAttachReply:
-        """Open a lease on the session of ``(account_id, mower_id)``."""
+        """Open a lease on the session of ``(account_id, mower_id)``.
+
+        The first lease of an idle session asks for the vendor session first (``offer``): a
+        provider without a source driver is answered with ``unsupported_provider`` before any
+        lease, event or start exists, and the vendor session is not released (a client in
+        ``auto`` falls back to the direct path and uses the stream). An empty ``camera_ids``
+        means every camera the vendor session offers.
+        """
         key = RelayKey(request.account_id, request.mower_id)
         async with self._lock(key):
             session = self.repository.get_or_create(key)
+            now = self.clock()
+            await self._execute(session, session.tick(now))
+            offered = False
+            if (
+                session.state is SessionState.IDLE
+                and session.admission(request.purpose, now) is None
+            ):
+                try:
+                    offer = await self.vendor.offer(key)
+                except SourceError as exc:
+                    _log.info(
+                        "camera source not offered",
+                        mower_id=str(key.mower_id),
+                        code=exc.code.value,
+                        reason=str(exc),
+                    )
+                    detail = (str(exc) or "the camera source is not available")[:500]
+                    return RelayAttachReply(error=_error(exc.code, detail))
+                session.offer(offer.cameras)
+                offered = True
             decision = session.attach(
                 camera_ids=request.camera_ids,
                 purpose=request.purpose,
@@ -137,6 +164,8 @@ class RelayService:
             )
             outcome = await self._execute(session, decision.effects)
             if decision.refusal is not None:
+                if offered:  # the offered vendor session starts nothing: let the mower stop
+                    await self.vendor.discard(key)
                 return RelayAttachReply(
                     error=_error(decision.refusal.code, decision.refusal.detail)
                 )
@@ -275,7 +304,12 @@ class RelayService:
                         )
                         outcome.start_error = exc.code
                         outcome.start_detail = (str(exc) or outcome.start_detail)[:500]
-                        queue.extend(session.source_failed(effect.session_id, self.clock()))
+                        # No driver for the provider: leave the vendor session to the direct
+                        # path instead of stopping the mower's stream.
+                        release = exc.code is not RelayErrorCode.UNSUPPORTED_PROVIDER
+                        queue.extend(
+                            session.source_failed(effect.session_id, self.clock(), release=release)
+                        )
                 case UpdateCameras():
                     try:
                         await self.vendor.update_cameras(effect)
@@ -332,6 +366,7 @@ class RelayService:
             channel="",
             token="",
             uid=0,
+            cameras=session.camera_infos(lease.camera_ids),
             expires_at=outcome.claims.expires_at,
             relay=RelayEndpoint(
                 tiles=tiles,

@@ -1,6 +1,6 @@
 """Ports: what the use cases need from the outside world, as protocols.
 
-* :class:`VendorSessions` starts, updates and stops the source of a session: the
+* :class:`VendorSessions` offers, starts, updates and stops the source of a session: the
   Device-Gateway's camera session and release requests and a source driver per
   ``CameraProvider`` (``adapters/gateway.py``); without a media server the service runs with an
   adapter that answers ``unavailable``.
@@ -11,11 +11,13 @@
 """
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import EventEnvelope
+from mowdeck_contracts.v1.camera import CameraInfo, CameraProvider
 from mowdeck_contracts.v1.relay import RelayErrorCode
 
 from camera_relay.domain.effects import StartVendorSession, StopVendorSession, UpdateCameras
@@ -57,9 +59,31 @@ class ForbiddenSourceError(SourceError):
     code = RelayErrorCode.FORBIDDEN
 
 
+@dataclass(frozen=True, slots=True)
+class SourceOffer:
+    """What a vendor session offers: its provider (which has a source driver) and cameras."""
+
+    provider: CameraProvider
+    cameras: tuple[CameraInfo, ...]
+
+
 class VendorSessions(Protocol):
-    """The source of a session. ``start`` only requests it: media arrives later and is reported
-    through ``RelayService.source_started`` (or ``source_failed``)."""
+    """The source of a session. ``offer`` asks for the vendor session before the first lease
+    starts it; ``start`` only requests the media: it arrives later and is reported through
+    ``RelayService.source_started`` (or ``source_failed``)."""
+
+    async def offer(self, key: RelayKey) -> SourceOffer:
+        """The vendor session the next ``start`` of ``key`` uses: its provider and cameras.
+
+        Raise :class:`UnsupportedProviderError` when no driver serves its provider (the vendor
+        session is left alone, a direct viewer may use it) or another :class:`SourceError`.
+        """
+        ...
+
+    async def discard(self, key: RelayKey) -> None:
+        """Release the offered vendor session of ``key`` that no start will use (the attach was
+        refused after the offer)."""
+        ...
 
     async def start(self, command: StartVendorSession) -> None:
         """Request the source; raise :class:`SourceError` when it cannot start."""

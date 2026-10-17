@@ -101,7 +101,7 @@ async def test_without_a_source_driver_attach_is_unavailable() -> None:
         assert reply.error.code is RelayErrorCode.UNAVAILABLE
         assert reply.error.detail == NO_DRIVER_DETAIL
         kinds = [m.subject.rsplit(".", 1)[-1] for m in bus.messages(ALL_CAMERA_RELAY_EVENTS)]
-        assert kinds == ["lease_opened", "lease_closed", "stopped"]
+        assert kinds == []  # refused before any lease opened
 
 
 async def test_responders_attach_renew_and_detach_over_the_bus() -> None:

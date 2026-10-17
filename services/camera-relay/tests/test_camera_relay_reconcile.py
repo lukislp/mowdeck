@@ -26,7 +26,11 @@ from mowdeck_contracts.v1.subjects import ALL_CAMERA_RELEASES, ALL_CAMERA_SESSIO
 from mowdeck_service_kit.bus import BusMessage, InMemoryBus
 from relay_support import T0, Harness, attach_request, key
 
-from camera_relay.adapters.gateway import GatewayVendorSessions, service_principal
+from camera_relay.adapters.gateway import (
+    OFFER_REUSE_SECONDS,
+    GatewayVendorSessions,
+    service_principal,
+)
 from camera_relay.adapters.media.mediamtx import (
     MediaMtxApi,
     MediaMtxPlane,
@@ -36,7 +40,11 @@ from camera_relay.adapters.media.mediamtx import (
 from camera_relay.adapters.media.pipeline import RunningSource, viewer_path
 from camera_relay.adapters.media.reconcile import Reconciler
 from camera_relay.application.media_auth import WhepBindings
-from camera_relay.application.ports import ForbiddenSourceError, SourceUnavailableError
+from camera_relay.application.ports import (
+    ForbiddenSourceError,
+    SourceUnavailableError,
+    UnsupportedProviderError,
+)
 from camera_relay.domain.effects import StartVendorSession, StopVendorSession, UpdateCameras
 from camera_relay.domain.models import SessionState
 
@@ -383,14 +391,49 @@ async def test_start_requests_the_session_with_the_service_principal_and_runs_th
     assert gateway.releases[0].requested_by.kind is PrincipalKind.SERVICE
 
 
-async def test_a_provider_without_a_driver_is_unavailable_and_released_at_once() -> None:
+async def test_a_provider_without_a_driver_is_unsupported_and_never_released() -> None:
+    # ADR 0045: `auto` falls back to the direct path on `unsupported_provider`, and the direct
+    # viewer needs the mower's stream: the vendor session is left alone.
     gateway, driver = Gateway(provider=CameraProvider.AGORA), FakeDriver()
     vendor, _ = await _wired(gateway, driver)
-    with pytest.raises(SourceUnavailableError, match="agora"):
-        await vendor.start(StartVendorSession(key(), uuid4(), RID, ("front_left",)))
+    relay_key = key()
+    with pytest.raises(UnsupportedProviderError, match="agora"):
+        await vendor.offer(relay_key)
+    with pytest.raises(UnsupportedProviderError, match="agora"):
+        await vendor.start(StartVendorSession(relay_key, uuid4(), RID, ("front_left",)))
+    assert UnsupportedProviderError.code is RelayErrorCode.UNSUPPORTED_PROVIDER
     assert driver.started == []
-    assert len(gateway.releases) == 1
+    assert gateway.releases == []
     assert vendor.sources == {}
+    assert len(gateway.sessions) == 2  # the refused offer is not reused
+
+
+async def test_start_reuses_the_offered_session_only_while_it_is_fresh() -> None:
+    now = [100.0]
+    gateway, driver = Gateway(), FakeDriver()
+    vendor, _ = await _wired(gateway, driver)
+    vendor._monotonic = lambda: now[0]
+    relay_key = key()
+    offer = await vendor.offer(relay_key)
+    assert offer.provider is CameraProvider.FAKE
+    assert [c.id for c in offer.cameras] == ["front_left", "front_right"]
+    await vendor.start(StartVendorSession(relay_key, uuid4(), RID, ("front_left",)))
+    assert len(gateway.sessions) == 1  # the offered session started the driver
+    await vendor.stop(StopVendorSession(relay_key, uuid4(), RID, release=False))
+    await vendor.offer(relay_key)
+    now[0] += OFFER_REUSE_SECONDS + 1
+    await vendor.start(StartVendorSession(relay_key, uuid4(), RID, ("front_left",)))
+    assert len(gateway.sessions) == 3  # too old: a fresh session for the start
+
+
+async def test_discard_releases_an_unused_offer_once() -> None:
+    gateway, driver = Gateway(), FakeDriver()
+    vendor, _ = await _wired(gateway, driver)
+    relay_key = key()
+    await vendor.offer(relay_key)
+    await vendor.discard(relay_key)
+    await vendor.discard(relay_key)  # nothing offered any more
+    assert [(r.mower_id, r.channel) for r in gateway.releases] == [(relay_key.mower_id, "sim-1")]
 
 
 @pytest.mark.parametrize(

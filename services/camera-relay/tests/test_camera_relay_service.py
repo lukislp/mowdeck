@@ -9,13 +9,24 @@ from mowdeck_contracts.v1.relay import (
     CAMERA_RELAY_LEASE_OPENED,
     CAMERA_RELAY_STARTED,
     CAMERA_RELAY_STOPPED,
+    CameraRelayStarted,
+    CameraRelayStopped,
     RelayDetachRequest,
     RelayErrorCode,
     RelayPurpose,
     RelayRenewRequest,
+    RelayStopReason,
 )
 from mowdeck_contracts.v1.subjects import parse_camera_relay_event_subject
-from relay_support import ONLINE, Harness, at, attach_request, key, principal
+from relay_support import (
+    ONLINE,
+    Harness,
+    at,
+    attach_request,
+    key,
+    offered_cameras,
+    principal,
+)
 
 from camera_relay.application.ports import SourceUnavailableError, UnsupportedProviderError
 from camera_relay.domain.models import RelayKey, SessionState
@@ -99,14 +110,15 @@ async def test_attach_returns_a_relay_session_with_a_valid_ticket() -> None:
 
 
 @pytest.mark.parametrize(
-    ("error", "code"),
+    ("error", "code", "release"),
     [
-        (SourceUnavailableError("no driver"), RelayErrorCode.UNAVAILABLE),
-        (UnsupportedProviderError("no driver"), RelayErrorCode.UNSUPPORTED_PROVIDER),
+        (SourceUnavailableError("no driver"), RelayErrorCode.UNAVAILABLE, True),
+        # The provider changed between offer and start: still never released.
+        (UnsupportedProviderError("no driver"), RelayErrorCode.UNSUPPORTED_PROVIDER, False),
     ],
 )
 async def test_a_source_that_cannot_start_answers_with_its_error(
-    error: Exception, code: RelayErrorCode
+    error: Exception, code: RelayErrorCode, release: bool
 ) -> None:
     h = Harness()
     assert isinstance(error, SourceUnavailableError | UnsupportedProviderError)
@@ -119,7 +131,7 @@ async def test_a_source_that_cannot_start_answers_with_its_error(
         CAMERA_RELAY_LEASE_CLOSED,
         CAMERA_RELAY_STOPPED,
     ]
-    assert len(h.vendor.stops) == 1 and h.vendor.stops[0].release
+    assert len(h.vendor.stops) == 1 and h.vendor.stops[0].release is release
     session = h.repository.get(relay_key)
     assert session is not None and session.state is SessionState.FAILED
     retry = await h.service.attach(attach_request(relay_key))
@@ -291,3 +303,93 @@ async def test_a_ticket_of_one_account_never_opens_another_accounts_paths() -> N
     claims = h.signer.verify(session_a.relay.ticket, h.clock())
     assert claims.allows(account_id=a.account_id, path=claims.paths[0], now=at(1))
     assert not claims.allows(account_id=uuid4(), path=claims.paths[0], now=at(1))
+
+
+async def test_an_unsupported_provider_is_refused_before_any_lease_and_without_release() -> None:
+    h = Harness()
+    h.vendor.offer_fails_with = UnsupportedProviderError("no driver for agora")
+    relay_key = key()
+    reply = await h.service.attach(attach_request(relay_key))
+    assert reply.error is not None
+    assert reply.error.code is RelayErrorCode.UNSUPPORTED_PROVIDER
+    assert "agora" in reply.error.detail
+    assert h.events.published == []  # no lease, no session, no event
+    assert h.vendor.starts == [] and h.vendor.stops == []  # nothing started, nothing released
+    assert h.vendor.discarded == []
+    session = h.repository.get(relay_key)
+    assert session is None or session.state is SessionState.IDLE
+    again = await h.service.attach(attach_request(relay_key))  # no backoff: still unsupported
+    assert again.error is not None
+    assert again.error.code is RelayErrorCode.UNSUPPORTED_PROVIDER
+    assert len(h.vendor.offers) == 2
+
+
+async def test_an_offer_that_fails_otherwise_answers_with_its_code() -> None:
+    h = Harness()
+    h.vendor.offer_fails_with = SourceUnavailableError("the gateway did not answer")
+    reply = await h.service.attach(attach_request(key()))
+    assert reply.error is not None and reply.error.code is RelayErrorCode.UNAVAILABLE
+    assert h.vendor.starts == []
+
+
+async def test_no_camera_ids_means_every_offered_camera_with_their_infos() -> None:
+    h = Harness()
+    h.vendor.cameras = offered_cameras("front_left", "front_right")
+    relay_key = key()
+    request = attach_request(relay_key).model_copy(update={"camera_ids": []})
+    reply = await h.service.attach(request)
+    assert reply.session is not None and reply.session.relay is not None
+    assert [t.camera_id for t in reply.session.relay.tiles] == ["front_left", "front_right"]
+    assert [c.id for c in reply.session.cameras] == ["front_left", "front_right"]
+    assert [s.camera_ids for s in h.vendor.starts] == [("front_left", "front_right")]
+    # A second lease on the running session: no new offer, the same cameras.
+    second = await h.service.attach(request)
+    assert second.session is not None and second.session.relay is not None
+    assert [t.camera_id for t in second.session.relay.tiles] == ["front_left", "front_right"]
+    assert len(h.vendor.offers) == 1
+    # A named camera the mower does not offer is left out; none left is refused.
+    only_rear = attach_request(relay_key, ["rear"])
+    refused = await h.service.attach(only_rear)
+    assert refused.error is not None and refused.error.code is RelayErrorCode.UNAVAILABLE
+    assert h.vendor.discarded == []  # the running session made no new offer
+    mixed = await h.service.attach(attach_request(relay_key, ["rear", "front_right"]))
+    assert mixed.session is not None and mixed.session.relay is not None
+    assert [t.camera_id for t in mixed.session.relay.tiles] == ["front_right"]
+
+
+async def test_no_camera_ids_without_a_camera_list_is_refused() -> None:
+    h = Harness()  # the vendor session lists no cameras
+    request = attach_request(key()).model_copy(update={"camera_ids": []})
+    reply = await h.service.attach(request)
+    assert reply.error is not None and reply.error.code is RelayErrorCode.UNAVAILABLE
+    assert "offers no camera" in reply.error.detail
+    assert h.vendor.starts == [] and h.events.published == []
+    assert len(h.vendor.discarded) == 1  # the offered vendor session is released
+
+
+async def test_events_carry_the_trigger_and_the_peak_of_viewers() -> None:
+    h = Harness()
+    relay_key = key()
+    first = await _attach(h, relay_key)
+    second = await _attach(h, relay_key)
+    await _go_live(h, relay_key)
+    for opened in (first, second):
+        assert opened.relay is not None
+        await h.service.detach(
+            RelayDetachRequest(
+                account_id=relay_key.account_id,
+                mower_id=relay_key.mower_id,
+                lease_id=opened.relay.lease_id,
+                requested_by=principal(),
+            )
+        )
+    h.clock.advance(16)
+    await h.service.tick()
+    by_type = {envelope.type: envelope.payload for _, envelope in h.events.published}
+    started = by_type[CAMERA_RELAY_STARTED]
+    stopped = by_type[CAMERA_RELAY_STOPPED]
+    assert isinstance(started, CameraRelayStarted) and isinstance(stopped, CameraRelayStopped)
+    assert started.trigger is RelayPurpose.VIEWER and started.started_by is not None
+    assert stopped.trigger is RelayPurpose.VIEWER
+    assert stopped.peak_viewers == 2
+    assert stopped.reason is RelayStopReason.IDLE

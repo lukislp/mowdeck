@@ -8,7 +8,10 @@ own due time, so event timestamps are exact however late the tick runs.
 
 Rules:
 
-* The active camera set is the union of the open leases' cameras.
+* The active camera set is the union of the open leases' cameras. A lease that names no
+  camera gets every camera the source offers (:meth:`RelaySession.offer`, set from the vendor
+  session before the first lease starts it); a named camera the source does not offer is left
+  out, and a lease with none left is refused.
 * Every open lease holds the session: a confirmed viewer while its heartbeat is fresh, an
   unconfirmed viewer only until its binding deadline (``UNBOUND_LEASE_SECONDS``), a Vision lease
   until its cap or its request ends. After the last lease the session drains for the grace
@@ -19,12 +22,12 @@ Rules:
 """
 
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID, uuid4
 
-from mowdeck_contracts.v1.camera import CameraProvider
+from mowdeck_contracts.v1.camera import CameraInfo, CameraProvider
 from mowdeck_contracts.v1.principal import PrincipalRef
 from mowdeck_contracts.v1.relay import (
     CAMERA_RELAY_LEASE_CLOSED,
@@ -115,7 +118,14 @@ class RelaySession:
         self.relay_id: str | None = None
         self.leases: dict[UUID, Lease] = {}
         self.cameras: tuple[str, ...] = ()
+        self.offered: tuple[CameraInfo, ...] = ()
+        """The cameras the source offers (from the vendor session), empty while unknown."""
         self.source: CameraProvider | None = None
+        self.trigger: RelayPurpose | None = None
+        """Purpose of the lease that started the running session."""
+        self.started_by: PrincipalRef | None = None
+        self.peak_viewers = 0
+        """Most viewer leases open at the same time in the running session."""
         self.publishing: tuple[str, ...] = ()
         self.started_at: datetime | None = None
         self.start_deadline: datetime | None = None
@@ -169,7 +179,23 @@ class RelaySession:
             expires_at=now + self.policy.ticket_lifetime,
         )
 
+    def admission(self, purpose: RelayPurpose, now: datetime) -> Refusal | None:
+        """Why a lease of ``purpose`` would be refused now, or None (no state change; process
+        due deadlines first with :meth:`tick`)."""
+        return self._admission(purpose, now)
+
+    def camera_infos(self, camera_ids: Sequence[str]) -> list[CameraInfo]:
+        """The offered cameras among ``camera_ids``, in that order."""
+        by_id = {camera.id: camera for camera in self.offered}
+        return [by_id[camera] for camera in camera_ids if camera in by_id]
+
     # --- Inputs -------------------------------------------------------------------------------
+
+    def offer(self, cameras: Sequence[CameraInfo]) -> None:
+        """The cameras of the vendor session the next start will use (``IDLE`` only: a running
+        source keeps the cameras it started with)."""
+        if self.state is SessionState.IDLE:
+            self.offered = tuple(cameras)
 
     def attach(
         self,
@@ -180,24 +206,30 @@ class RelaySession:
         now: datetime,
         vision_mode: VisionMode = VisionMode.STREAM,
     ) -> AttachDecision:
-        """Open a lease (``relay.camera.attach``)."""
+        """Open a lease (``relay.camera.attach``). No ``camera_ids``: every offered camera."""
         out: list[Effect] = []
         self._advance(now, out)
-        cameras = tuple(dict.fromkeys(camera_ids))
-        if not cameras:
-            msg = "a lease needs at least one camera"
-            raise ValueError(msg)
         refusal = self._admission(purpose, now)
         if refusal is not None:
             return AttachDecision(None, refusal, out)
+        cameras = self._lease_cameras(camera_ids)
+        if not cameras:
+            detail = (
+                "none of the requested cameras is offered by the mower"
+                if camera_ids
+                else "the mower offers no camera"
+            )
+            return AttachDecision(None, Refusal(RelayErrorCode.UNAVAILABLE, detail), out)
         warning = purpose is RelayPurpose.VIEWER and (
             self.policy.low_power_or_quota(self.status) is not None
         )
         start: StartVendorSession | None = None
         if self.state is SessionState.IDLE:
-            start = self._begin(cameras, now)
+            start = self._begin(cameras, now, purpose, principal)
         lease = self._new_lease(cameras, purpose, principal, now, vision_mode)
         self.leases[lease.lease_id] = lease
+        viewers = sum(1 for open_lease in self.leases.values() if open_lease.is_viewer)
+        self.peak_viewers = max(self.peak_viewers, viewers)
         out.append(self._lease_opened(lease))
         if start is not None:
             out.append(start)
@@ -301,6 +333,8 @@ class RelaySession:
                     source=source,
                     camera_ids=list(self.publishing),
                     started_at=now,
+                    trigger=self.trigger,
+                    started_by=self.started_by,
                 ),
                 now,
             )
@@ -308,12 +342,17 @@ class RelaySession:
         self._settle(now, out)
         return out
 
-    def source_failed(self, session_id: UUID, now: datetime) -> list[Effect]:
-        """The source failed (start refused, connection lost). Stale reports are ignored."""
+    def source_failed(
+        self, session_id: UUID, now: datetime, *, release: bool = True
+    ) -> list[Effect]:
+        """The source failed (start refused, connection lost). Stale reports are ignored.
+
+        ``release`` false leaves the vendor session alone (no driver for its provider: a direct
+        viewer may still use the stream)."""
         out: list[Effect] = []
         self._advance(now, out)
         if self.state in ACTIVE_STATES and session_id == self.session_id:
-            self._fail(now, out)
+            self._fail(now, out, release=release)
         return out
 
     def stop_completed(self, session_id: UUID, now: datetime) -> list[Effect]:
@@ -371,13 +410,31 @@ class RelaySession:
             return self.policy.vision_refusal(self.status, self.vision_used_on(_utc_day(now)))
         return None
 
-    def _begin(self, cameras: tuple[str, ...], now: datetime) -> StartVendorSession:
+    def _lease_cameras(self, camera_ids: Sequence[str]) -> tuple[str, ...]:
+        requested = tuple(dict.fromkeys(camera_ids))
+        offered = tuple(camera.id for camera in self.offered)
+        if not requested:
+            return offered
+        if not offered:
+            return requested
+        return tuple(camera for camera in requested if camera in offered)
+
+    def _begin(
+        self,
+        cameras: tuple[str, ...],
+        now: datetime,
+        purpose: RelayPurpose,
+        principal: PrincipalRef,
+    ) -> StartVendorSession:
         self.session_id = self._new_id()
         self.relay_id = self._new_path_token()
         self.state = SessionState.STARTING
         self.start_deadline = now + self.policy.start_timeout
         self.cameras = cameras
         self.session_vision = timedelta(0)
+        self.trigger = purpose
+        self.started_by = principal
+        self.peak_viewers = 0
         return StartVendorSession(self.key, self.session_id, self.relay_id, cameras)
 
     def _new_lease(
@@ -496,12 +553,15 @@ class RelaySession:
             lease.opened_at,
         )
 
-    def _stop(self, reason: RelayStopReason, at: datetime, out: list[Effect]) -> None:
-        """Close every lease, leave the source, release the stream: ``-> STOPPING``."""
+    def _stop(
+        self, reason: RelayStopReason, at: datetime, out: list[Effect], *, release: bool = True
+    ) -> None:
+        """Close every lease, leave the source and (``release``) release the stream:
+        ``-> STOPPING``."""
         assert self.session_id is not None and self.relay_id is not None  # noqa: S101
         for lease in list(self.leases.values()):
             self._close(lease, RelayLeaseCloseReason.SESSION_STOPPED, at, out)
-        out.append(StopVendorSession(self.key, self.session_id, self.relay_id, release=True))
+        out.append(StopVendorSession(self.key, self.session_id, self.relay_id, release=release))
         out.append(
             EmitEvent(
                 self.key,
@@ -515,6 +575,8 @@ class RelaySession:
                     started_at=self.started_at,
                     stopped_at=at,
                     vision_seconds=self.session_vision.total_seconds(),
+                    trigger=self.trigger,
+                    peak_viewers=self.peak_viewers,
                 ),
                 at,
             )
@@ -523,8 +585,8 @@ class RelaySession:
         self.start_deadline = None
         self.drain_deadline = None
 
-    def _fail(self, at: datetime, out: list[Effect]) -> None:
-        self._stop(RelayStopReason.FAILED, at, out)
+    def _fail(self, at: datetime, out: list[Effect], *, release: bool = True) -> None:
+        self._stop(RelayStopReason.FAILED, at, out, release=release)
         self.state = SessionState.FAILED
         self.failures += 1
         self.retry_at = at + self.policy.backoff(self.failures)
@@ -534,7 +596,11 @@ class RelaySession:
         self.session_id = None
         self.relay_id = None
         self.cameras = ()
+        self.offered = ()
         self.source = None
+        self.trigger = None
+        self.started_by = None
+        self.peak_viewers = 0
         self.publishing = ()
         self.started_at = None
         self.start_deadline = None
