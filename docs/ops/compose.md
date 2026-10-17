@@ -37,7 +37,8 @@ docker compose down -v          # reset, deletes all data
 | scheduler | `mowdeck/scheduler:dev`, built from the repository | via Traefik at `/api/v1/scheduler` |
 | vision-migrate | `mowdeck/vision:dev`, built from the repository | one-shot, no port |
 | vision | `mowdeck/vision:dev`, built from the repository | via Traefik at `/api/v1/vision` |
-| camera-relay (profile `relay`) | `mowdeck/camera-relay:dev`, built from the repository | none (internal, NATS requests `relay.camera.*`; [ADR 0045](../adr/0045-camera-relay.md), answers `unavailable` until the media plane follows) |
+| camera-relay (profile `relay`) | `mowdeck/camera-relay:dev`, built from the repository (with ffmpeg) | none (internal: NATS requests `relay.camera.*` and MediaMTX's auth callback; [ADR 0045](../adr/0045-camera-relay.md)) |
+| mediamtx (profile `relay`) | `bluenviron/mediamtx:1.21.2` (MIT) | via Traefik at `/media/whep/r/` (WHEP only, `/media/whep` stripped); `RELAY_ICE_BIND:RELAY_ICE_PORT` UDP and TCP (ICE media, default 8189) |
 | web | `mowdeck/web:dev`, built from `apps/web/Dockerfile` | via Traefik at `/` (the web app; router priority 1, behind every `/api/v1` route) |
 
 PostgreSQL creates the databases `identity`, `fleet`, `telemetry`, `scheduler`, `notifications`, `entitlements`, `billing`, `vision`, `openfga`, each with a role of the same name.
@@ -114,6 +115,17 @@ The Phase 2 gate for the web app is a Playwright suite (`tests/e2e-web`): `pnpm 
 The Device-Gateway holds the mower connections. It loads the mowers from Fleet when it starts and follows Fleet's `mower.registered`, `mower.updated` and `mower.removed` events; the stack seeds no mower. `MOWDECK_SIM_TIME_SCALE` (30 in `.env.example`) speeds up the simulation. `GET /api/v1/device-gateway/mowers` shows the connection status of the account's mowers. After every connect the gateway publishes the mower's capabilities and map to the stream `DEVICE` (only when they changed) and reads the map again after a job ends; Telemetry stores them for the web app.
 
 The service runs as non-root with a read-only root file system (tmpfs at `/tmp`); its healthcheck uses `/readyz`. Details: `services/device-gateway/README.md`.
+
+## Camera relay (profile `relay`)
+
+`COMPOSE_PROFILES=relay` starts `camera-relay` and its media server MediaMTX ([ADR 0045](../adr/0045-camera-relay.md); the details are in `services/camera-relay/README.md`). The relay asks the Device-Gateway for the mower's camera session, publishes every camera as H.264 into MediaMTX over RTSP (inside the Compose network) and browsers play it over WebRTC (WHEP):
+
+- **Signalling** runs through Traefik on the MowDeck origin: `/media/whep/r/<session>/<camera>/whep` is routed to MediaMTX's WebRTC server with `/media/whep` stripped. Nothing else of MediaMTX is routed: its API (`:9997`) and RTSP (`:8554`) are reachable inside the Compose network only, metrics, playback and pprof are off, and every read, publish and API call is decided by the relay (a viewer needs a relay ticket of a live lease).
+- **Media** leaves on one ICE port for UDP and TCP, `RELAY_ICE_PORT` (default 8189), published on `RELAY_ICE_BIND` (default all interfaces). The container listens on the same port it is published on, because ICE candidates carry the listener port. Set `RELAY_ICE_HOSTS` to the address(es) clients reach the host under (the LAN IP, comma separated); there is no STUN and no TURN.
+- **Firewall:** UDP and TCP `RELAY_ICE_PORT` must be reachable from the LAN clients (phones in the Wi-Fi). Without UDP, browsers fall back to TCP on the same port.
+- The relay holds at most one source per account and mower and stops it 15 s after the last viewer, then asks the gateway to release the stream. The simulator's `fake` camera is played as a generated test pattern; sources without a driver yet (Agora) are answered with `unavailable`.
+
+The test stacks (`docker-compose.e2e.yml`, `pnpm e2e:stack`) always run the relay, with its test hook `POST /internal/v1/test/freeze` (pauses the fake source) and the ICE port on `127.0.0.1:<MOWDECK_E2E_PORT>+9`.
 
 ## Notes
 

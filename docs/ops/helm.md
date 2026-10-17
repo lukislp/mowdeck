@@ -24,7 +24,7 @@ kubectl -n mowdeck create secret docker-registry ghcr-pull \
 
 | Compose service | Kubernetes | Notes |
 | --- | --- | --- |
-| traefik | your Ingress controller, two Ingress resources | path routes identical to the Traefik labels |
+| traefik | your Ingress controller, two Ingress resources (three with the camera relay) | path routes identical to the Traefik labels |
 | nats | [NATS chart](https://github.com/nats-io/k8s/tree/main/helm/charts/nats) 2.15.0 (`nats.enabled`) | JetStream with file storage on a PVC, `nats://mowdeck-nats:4222` |
 | postgres | CloudNativePG `Cluster` + one `Database` per service, or an external PostgreSQL | see [PostgreSQL](#postgresql) |
 | openfga, openfga-migrate | [OpenFGA chart](https://github.com/openfga/helm-charts) 0.3.16 (`openfga.enabled`) | postgres datastore, migration as an init container, `http://mowdeck-openfga:8080` |
@@ -33,12 +33,13 @@ kubectl -n mowdeck create secret docker-registry ghcr-pull \
 | identity, fleet, telemetry, realtime, notifications, scheduler, entitlements, planner, vision | Deployment + Service + ConfigMap | probes on `/healthz` (startup, liveness) and `/readyz` (readiness) |
 | device-gateway | StatefulSet + Service + headless Service | one shard per replica ([ADR 0013](../adr/0013-device-gateway-registry-and-sharding.md)) |
 | web | Deployment (nginx, uid 101, port 8080) | `/healthz`, runtime config from `WEB_MAP_*` |
+| camera-relay, mediamtx | Deployment each (`services.cameraRelay.enabled`) + a third Ingress `mowdeck-media` | off by default, see [Camera relay](#camera-relay-media-plane) |
 
 Every MowDeck pod runs as a non-root user with a read-only root file system, `allowPrivilegeEscalation: false`, all capabilities dropped, the `RuntimeDefault` seccomp profile, a memory-backed `/tmp` and no service account token. Settings come from a ConfigMap per service; secrets are mounted as files under `/run/secrets/mowdeck` and passed as the services' `MOWDECK_<NAME>_FILE` settings (database URL, OpenFGA token, Identity's key encryption key, the VAPID private key), so they never appear in the environment. Database services wait in an init container (`wait-for-schema`) until their database carries the newest migration of their image; services using OpenFGA wait (`wait-for-model`) until the store's latest model is the one of their release.
 
 ## Configuration
 
-The Entitlements plan file is a ConfigMap built from `infra/helm/mowdeck/files/plans.yaml`, an identical copy of `infra/entitlements/plans.yaml` (a repository test fails when they differ); change plans there and in the copy, then upgrade the release. Billing ([ADR 0031](../adr/0031-billing-with-stripe-adapter.md)) is off by default (`services.billing.enabled: false`: nothing of it is rendered); enabled, it gets its database URL and the Stripe keys (`secrets.BILLING_STRIPE_SECRET_KEY`, required with `config.BILLING_PROVIDER=stripe`, and `secrets.BILLING_STRIPE_WEBHOOK_SECRET`, or the keys `billing-stripe-secret-key` and `billing-stripe-webhook-secret` of an `existingSecret`) as files, its price file as a ConfigMap built from `files/prices.yaml` (an identical copy of `infra/billing/prices.yaml`), and the Stripe webhook path joins the rate limited `-auth` Ingress; see [Billing operations](billing.md). The CI render (`ci/test-values.yaml`) enables it. The camera relay ([ADR 0045](../adr/0045-camera-relay.md)) is off by default as well (`services.cameraRelay.enabled: false`, one replica: its sessions live in memory) until its media plane follows; the CI render enables it too. Vision ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)) is on by default; it gets `secrets.VISION_SECRETS_KEY` (encrypts the users' provider keys) and `secrets.VISION_DEFAULT_API_KEY` (the installation model, `config.VISION_DEFAULT_*`) as files, both may stay empty ([Compose operations, AI assist](compose.md#ai-assist-vision)). Fleet gets `secrets.FLEET_CREDENTIAL_ENCRYPTION_KEY` (the passwords of linked Mammotion accounts, [ADR 0034](../adr/0034-linked-cloud-accounts-and-device-discovery.md)) as a file; empty means no linked accounts, and an `existingSecret` must hold the keys `fleet-credential-encryption-key` and `fleet-credential-encryption-key-previous` (both may be empty; the second holds earlier keys during a rotation). Keep a backup of it like `IDENTITY_KEY_ENCRYPTION_KEY`. `values.yaml` is fully commented. `config` and `secrets` use the variable names of `infra/compose/.env.example`, so a Compose `.env` translates line by line; a repository test (`tools/repo-checks/tests/test_helm.py`) fails when a variable exists on one side only, when a Compose service has no chart template, or when a Compose service receives a `MOWDECK_*` setting the chart does not pass. The chart's defaults are production defaults (`MOWDECK_ENVIRONMENT=prod`, `MOWDECK_SIM_TIME_SCALE=1`, `NOTIFICATIONS_MOWING_MIN_SECONDS=120`, `IDENTITY_REFRESH_COOKIE_SECURE=true`); the Compose example file carries development values.
+The Entitlements plan file is a ConfigMap built from `infra/helm/mowdeck/files/plans.yaml`, an identical copy of `infra/entitlements/plans.yaml` (a repository test fails when they differ); change plans there and in the copy, then upgrade the release. Billing ([ADR 0031](../adr/0031-billing-with-stripe-adapter.md)) is off by default (`services.billing.enabled: false`: nothing of it is rendered); enabled, it gets its database URL and the Stripe keys (`secrets.BILLING_STRIPE_SECRET_KEY`, required with `config.BILLING_PROVIDER=stripe`, and `secrets.BILLING_STRIPE_WEBHOOK_SECRET`, or the keys `billing-stripe-secret-key` and `billing-stripe-webhook-secret` of an `existingSecret`) as files, its price file as a ConfigMap built from `files/prices.yaml` (an identical copy of `infra/billing/prices.yaml`), and the Stripe webhook path joins the rate limited `-auth` Ingress; see [Billing operations](billing.md). The CI render (`ci/test-values.yaml`) enables it. The camera relay ([ADR 0045](../adr/0045-camera-relay.md)) is off by default as well (`services.cameraRelay.enabled: false`) and brings its media server along when enabled ([Camera relay](#camera-relay-media-plane)); the CI render enables it too. Vision ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)) is on by default; it gets `secrets.VISION_SECRETS_KEY` (encrypts the users' provider keys) and `secrets.VISION_DEFAULT_API_KEY` (the installation model, `config.VISION_DEFAULT_*`) as files, both may stay empty ([Compose operations, AI assist](compose.md#ai-assist-vision)). Fleet gets `secrets.FLEET_CREDENTIAL_ENCRYPTION_KEY` (the passwords of linked Mammotion accounts, [ADR 0034](../adr/0034-linked-cloud-accounts-and-device-discovery.md)) as a file; empty means no linked accounts, and an `existingSecret` must hold the keys `fleet-credential-encryption-key` and `fleet-credential-encryption-key-previous` (both may be empty; the second holds earlier keys during a rotation). Keep a backup of it like `IDENTITY_KEY_ENCRYPTION_KEY`. `values.yaml` is fully commented. `config` and `secrets` use the variable names of `infra/compose/.env.example`, so a Compose `.env` translates line by line; a repository test (`tools/repo-checks/tests/test_helm.py`) fails when a variable exists on one side only, when a Compose service has no chart template, or when a Compose service receives a `MOWDECK_*` setting the chart does not pass. The chart's defaults are production defaults (`MOWDECK_ENVIRONMENT=prod`, `MOWDECK_SIM_TIME_SCALE=1`, `NOTIFICATIONS_MOWING_MIN_SECONDS=120`, `IDENTITY_REFRESH_COOKIE_SECURE=true`); the Compose example file carries development values.
 
 | Key | Purpose |
 | --- | --- |
@@ -183,6 +184,53 @@ The Compose stack uses a looser limit for the refresh path (`identity-session-ra
 **TLS.** With [cert-manager](https://cert-manager.io/docs/usage/ingress/) add `cert-manager.io/cluster-issuer: <issuer>` to `ingress.annotations` and a `tls` entry; cert-manager fills the Secret. Behind HTTPS keep `IDENTITY_REFRESH_COOKIE_SECURE=true`; `REALTIME_ALLOWED_ORIGINS` and `NOTIFICATIONS_APP_URL` default to `https://<ingress.host>`.
 
 **Tailscale at home.** With the [Tailscale Kubernetes operator](https://tailscale.com/kb/1236/kubernetes-operator) set `ingress.className: tailscale` and `ingress.host` to the machine name; the operator exposes the Ingress in the tailnet with a certificate for `<name>.<tailnet>.ts.net` ([cluster ingress](https://tailscale.com/kb/1439/kubernetes-operator-cluster-ingress)). Check the operator's documentation for what its Ingress class supports; the alternative is to keep your normal controller for the path routes and expose that controller's Service in the tailnet (annotation `tailscale.com/expose: "true"`, [exposing a Service](https://tailscale.com/kb/1439/kubernetes-operator-cluster-ingress)).
+
+## Camera relay (media plane)
+
+The camera relay ([ADR 0045](../adr/0045-camera-relay.md)) shares one camera session per account and mower among every viewer and serves it to browsers over WebRTC ([WHEP](https://datatracker.ietf.org/doc/draft-ietf-wish-whep/)). `services.cameraRelay.enabled: true` renders two Deployments, like the Compose profile `relay`:
+
+- **camera-relay** (one replica, its sessions live in memory): answers `relay.camera.*` on NATS, runs the source pipeline (ffmpeg: the simulator's fake source today, the transcoder for vendor sources), publishes into MediaMTX over RTSP (`MOWDECK_RELAY_MEDIAMTX_RTSP_URL=rtsp://mowdeck-mediamtx:8554`) and drives it through its API (`MOWDECK_RELAY_MEDIAMTX_API_URL=http://mowdeck-mediamtx:9997`). Sources without a driver yet (Agora) are answered with `unavailable`. It has no Ingress route.
+- **mediamtx** ([MediaMTX](https://github.com/bluenviron/mediamtx), MIT, `services.cameraRelay.mediamtx.image`, the `MEDIAMTX_IMAGE` of the Compose stack): one replica with the `Recreate` strategy, uid 65534, read-only root file system, all capabilities dropped, no service account token, TCP probes on the WHEP port. Its config is the ConfigMap built from `files/mediamtx.yml`, an identical copy of `infra/compose/mediamtx/mediamtx.yml` (a repository test fails when they differ). Every publish, read and API call is authorized by camera-relay (`MTX_AUTHHTTPADDRESS=http://mowdeck-camera-relay:8000/internal/mediamtx/auth`): a viewer needs a ticket of a live lease. The Service `mowdeck-mediamtx` exposes WHEP (8889), the API (9997) and RTSP (8554) inside the cluster only; metrics, playback, pprof, RTMP, HLS and SRT are off.
+
+**The ICE port.** The signalling goes through the Ingress, the media does not: MediaMTX sends it on one ICE port for UDP and TCP (`config.RELAY_ICE_PORT`, default 8189), which the chart publishes on the node as a `hostPort` (`services.cameraRelay.mediamtx.hostPort: true`; `hostIP` binds it to one node address like the Compose variable `RELAY_ICE_BIND`). ICE candidates carry the listener port, so the container listens on the same port. MediaMTX announces the addresses of `config.RELAY_ICE_HOSTS` (comma separated, the IPs clients reach the node under, for example its LAN IP); the chart default is empty and must be set, otherwise no candidate reaches the browser. There is no STUN or TURN: open UDP **and** TCP of the ICE port in the node's firewall for the clients in the LAN, and pin the pod to the node whose address you announce (`services.cameraRelay.mediamtx.nodeSelector`). A `hostPort` needs a CNI with the portmap plugin (k3s has it; kind needs an `extraPortMappings` entry); with `hostPort: false` expose the port yourself, for example with a `LoadBalancer` Service whose port equals `RELAY_ICE_PORT`.
+
+```yaml
+services:
+  cameraRelay:
+    enabled: true
+    mediamtx:
+      nodeSelector: {kubernetes.io/hostname: pi5}
+config:
+  RELAY_ICE_HOSTS: 192.168.1.20
+  RELAY_ICE_PORT: "8189"
+```
+
+**The `-media` Ingress.** A third Ingress (`mowdeck-media`, `ingress.media`) routes `/media/whep/r/` (Prefix) to the port `webrtc` (8889) of `mowdeck-mediamtx`; nothing else of MediaMTX is reachable from outside. MediaMTX serves `/r/<relay>/<camera>/whep`, so the controller must strip `/media/whep`, like the Compose middleware `mediamtx-whep-strip`. `ingress.media.annotations` are merged over `ingress.annotations`. With Traefik set `ingress.media.traefikStripPrefix: true`: the chart renders the Middleware `mowdeck-media-strip` (`traefik.io/v1alpha1`, needs Traefik's CRDs) and references it. Without the CRDs in the chart, create it yourself and reference it ([StripPrefix](https://doc.traefik.io/traefik/middlewares/http/stripprefix/)); if you set your own `router.middlewares` annotation, list the strip middleware in it:
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: media-strip
+  namespace: mowdeck
+spec:
+  stripPrefix:
+    prefixes: [/media/whep]
+# values: ingress.media.annotations:
+#   traefik.ingress.kubernetes.io/router.middlewares: mowdeck-media-strip@kubernetescrd
+```
+
+NGINX-based controllers rewrite with a regex path instead ([rewrite](https://kubernetes.github.io/ingress-nginx/examples/rewrite/)):
+
+```yaml
+ingress:
+  media:
+    path: /media/whep(/r/.*)
+    pathType: ImplementationSpecific
+    annotations:
+      nginx.ingress.kubernetes.io/use-regex: "true"
+      nginx.ingress.kubernetes.io/rewrite-target: /$1
+```
 
 ## Upgrades and migrations
 
