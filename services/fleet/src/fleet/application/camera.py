@@ -19,8 +19,10 @@ Every issued session writes an audit row ``mower.camera_opened`` (who, when, the
 ``transport``: the path actually used). The session itself (with its short-lived token or
 ticket) goes back to the caller and is never stored or logged.
 
-Renew and detach act on a relay lease of the mower in the caller's account; the relay refuses a
-lease of another account (``forbidden``), which Fleet answers like a hidden object (404).
+Renew and detach act on a relay lease of the mower in the caller's account and carry the
+token's principal (``requested_by``). Leases are strict: the relay refuses a lease of another
+account or one another user opened (``forbidden``), which Fleet answers like a hidden object
+(404); that lease keeps running.
 
 The relay's lifecycle events (stream ``CAMERA``) become the audit rows
 ``mower.camera_stream_started`` and ``mower.camera_stream_stopped`` of the event's account
@@ -253,7 +255,7 @@ class CameraService:
         """The heartbeat of a relay lease: the same lease with a fresh ticket.
 
         Raises :class:`FeatureNotInPlanError` (403), :class:`NotFoundError` (404: unknown or
-        expired lease, a lease of another mower or account) or :class:`Unavailable` (503).
+        expired lease, a lease of another mower, account or user) or :class:`Unavailable` (503).
         """
         await require_feature(self.entitlements, account_id, CAMERA_FEATURE)
         target = await self._mower(actor, account_id, mower_id)
@@ -281,7 +283,7 @@ class CameraService:
         """End a relay lease. Idempotent: an unknown or closed lease (or no relay at all)
         returns False. No plan check: ending a stream is always allowed.
 
-        Raises :class:`NotFoundError` (404: the mower, or a lease of another account) or
+        Raises :class:`NotFoundError` (404: the mower, or a lease of another account or user) or
         :class:`Unavailable` (503: the relay did not answer in time).
         """
         target = await self._mower(actor, account_id, mower_id)

@@ -96,8 +96,8 @@ No public HTTP routes.
 | Direction | Subject | Payload |
 | --- | --- | --- |
 | answered (core NATS, queue `camera-relay`) | `relay.camera.attach` | `RelayAttachRequest` / `RelayAttachReply` (empty `camera_ids`: every offered camera; no driver for the provider: `unsupported_provider`, nothing released) |
-| answered | `relay.camera.renew` | `RelayRenewRequest` / `RelayRenewReply` (another account: `forbidden`; unknown or another mower: `not_found`) |
-| answered | `relay.camera.detach` | `RelayDetachRequest` / `RelayDetachReply` (idempotent; another account: `forbidden`) |
+| answered | `relay.camera.renew` | `RelayRenewRequest` / `RelayRenewReply` (another account or another principal than the lease's opener: `forbidden`; unknown or another mower: `not_found`) |
+| answered | `relay.camera.detach` | `RelayDetachRequest` / `RelayDetachReply` (idempotent for the opener; another account or another principal: `forbidden`, the lease stays open) |
 | requested (core NATS) | `gateway.mower.<id>.camera.session` | `CameraSessionRequest` / `CameraSessionReply` (service principal, the lease's account) |
 | requested | `gateway.mower.<id>.camera.release` | `CameraReleaseRequest` / `CameraReleaseReply` (after the grace) |
 | produced (stream `CAMERA`) | `camera.mower.<id>.relay.started` | `EventEnvelope[CameraRelayStarted]` (`trigger`: the purpose of the starting lease, `started_by`) |

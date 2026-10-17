@@ -3,7 +3,9 @@
 from uuid import UUID, uuid4
 
 import pytest
+from mowdeck_contracts.v1 import PrincipalKind
 from mowdeck_contracts.v1.camera import CameraProvider, CameraSession
+from mowdeck_contracts.v1.principal import PrincipalRef
 from mowdeck_contracts.v1.relay import (
     CAMERA_RELAY_LEASE_CLOSED,
     CAMERA_RELAY_LEASE_OPENED,
@@ -20,6 +22,7 @@ from mowdeck_contracts.v1.relay import (
 from mowdeck_contracts.v1.subjects import parse_camera_relay_event_subject
 from relay_support import (
     ONLINE,
+    OWNER_SUBJECT,
     Harness,
     at,
     attach_request,
@@ -48,12 +51,13 @@ def _renew(
     lease_id: UUID,
     account_id: UUID | None = None,
     mower_id: UUID | None = None,
+    by: PrincipalRef | None = None,
 ) -> RelayRenewRequest:
     return RelayRenewRequest(
         account_id=account_id or relay_key.account_id,
         mower_id=mower_id or relay_key.mower_id,
         lease_id=lease_id,
-        requested_by=principal(),
+        requested_by=by or principal(),
     )
 
 
@@ -62,12 +66,13 @@ def _detach(
     lease_id: UUID,
     account_id: UUID | None = None,
     mower_id: UUID | None = None,
+    by: PrincipalRef | None = None,
 ) -> RelayDetachRequest:
     return RelayDetachRequest(
         account_id=account_id or relay_key.account_id,
         mower_id=mower_id or relay_key.mower_id,
         lease_id=lease_id,
-        requested_by=principal(),
+        requested_by=by or principal(),
     )
 
 
@@ -265,6 +270,67 @@ async def test_another_account_can_neither_renew_nor_detach_a_lease() -> None:
     assert sb is not None and lease_a not in sb.leases
     later = h.events.published[2:]
     assert not any(getattr(e.payload, "lease_id", None) == lease_a for _, e in later)
+
+
+async def test_another_user_of_the_same_account_can_neither_renew_nor_detach_a_lease() -> None:
+    h = Harness()
+    a = key()
+    session_a = await _attach(h, a)
+    assert session_a.relay is not None
+    lease = session_a.relay.lease_id
+    sa = h.repository.get(a)
+    assert sa is not None
+    expires = sa.leases[lease].expires_at
+    housemate = principal(uuid4())
+
+    h.clock.advance(10)
+    renew = await h.service.renew(_renew(a, lease, by=housemate))
+    assert renew.session is None and renew.error is not None
+    assert renew.error.code is RelayErrorCode.FORBIDDEN
+    assert sa.leases[lease].expires_at == expires  # not extended
+
+    detach = await h.service.detach(_detach(a, lease, by=housemate))
+    assert detach.detached is False and detach.error is not None
+    assert detach.error.code is RelayErrorCode.FORBIDDEN
+    assert lease in sa.leases  # the owner's lease keeps working
+    assert not h.events.types().count(CAMERA_RELAY_LEASE_CLOSED)
+
+    # The same person under another kind (a service with the same subject) is not the owner.
+    service = PrincipalRef(subject=OWNER_SUBJECT, kind=PrincipalKind.SERVICE)
+    refused = await h.service.renew(_renew(a, lease, by=service))
+    assert refused.error is not None and refused.error.code is RelayErrorCode.FORBIDDEN
+
+    # The owner renews (another login: another token id, same subject) and detaches.
+    relogin = principal().model_copy(update={"token_id": uuid4()})
+    owned = await h.service.renew(_renew(a, lease, by=relogin))
+    assert owned.session is not None and owned.session.relay is not None
+    assert owned.session.relay.lease_id == lease
+    assert sa.leases[lease].expires_at > expires
+    assert (await h.service.detach(_detach(a, lease))).detached is True
+    # Once closed, the housemate's detach is the idempotent no-op of an unknown lease.
+    gone = await h.service.detach(_detach(a, lease, by=housemate))
+    assert (gone.detached, gone.error) == (False, None)
+
+
+async def test_a_vision_lease_belongs_to_the_service_principal_not_to_the_user() -> None:
+    h = Harness()
+    a = key()
+    await h.service.mower_status_changed(a.mower_id, ONLINE)
+    vision = PrincipalRef(subject=uuid4(), kind=PrincipalKind.SERVICE)
+    request = attach_request(a, purpose=RelayPurpose.VISION).model_copy(
+        update={"requested_by": vision}
+    )
+    reply = await h.service.attach(request)
+    assert reply.session is not None and reply.session.relay is not None
+    lease = reply.session.relay.lease_id
+    # The user on whose behalf Vision looks cannot touch it from the browser.
+    user = await h.service.renew(_renew(a, lease))
+    assert user.error is not None and user.error.code is RelayErrorCode.FORBIDDEN
+    refused = await h.service.detach(_detach(a, lease))
+    assert refused.error is not None and refused.error.code is RelayErrorCode.FORBIDDEN
+    # Vision itself can.
+    assert (await h.service.renew(_renew(a, lease, by=vision))).session is not None
+    assert (await h.service.detach(_detach(a, lease, by=vision))).detached is True
 
 
 async def test_a_lease_is_found_only_under_its_own_mower() -> None:

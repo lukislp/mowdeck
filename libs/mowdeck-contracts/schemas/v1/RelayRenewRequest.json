@@ -61,7 +61,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Request on ``relay.camera.renew``: the heartbeat of one lease.\n\nIt extends the lease by :data:`RELAY_LEASE_TTL_SECONDS` and issues a fresh ticket for\nreconnects. A lease of another account is ``forbidden``, an unknown one ``not_found``.",
+  "description": "Request on ``relay.camera.renew``: the heartbeat of one lease.\n\nIt extends the lease by :data:`RELAY_LEASE_TTL_SECONDS` and issues a fresh ticket for\nreconnects. A lease of another account or of another principal than ``requested_by`` is\n``forbidden``, an unknown one ``not_found``.",
   "properties": {
     "account_id": {
       "format": "uuid",

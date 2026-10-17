@@ -92,7 +92,8 @@ class RelayErrorCode(StrEnum):
     BUDGET = "budget"
     """A limit refused it: the daily Vision minutes, the video budget or the battery."""
     FORBIDDEN = "forbidden"
-    """The lease or session belongs to another account."""
+    """The lease or session belongs to another account, or the lease to another principal
+    (strict leases: only the principal that opened a lease renews or detaches it)."""
     NOT_FOUND = "not_found"
     """No such lease (expired or detached) or no such mower."""
 
@@ -158,7 +159,8 @@ class RelayRenewRequest(ContractModel):
     """Request on ``relay.camera.renew``: the heartbeat of one lease.
 
     It extends the lease by :data:`RELAY_LEASE_TTL_SECONDS` and issues a fresh ticket for
-    reconnects. A lease of another account is ``forbidden``, an unknown one ``not_found``.
+    reconnects. A lease of another account or of another principal than ``requested_by`` is
+    ``forbidden``, an unknown one ``not_found``.
     """
 
     account_id: UUID
@@ -172,7 +174,8 @@ class RelayRenewReply(_SessionReply):
 
 
 class RelayDetachRequest(ContractModel):
-    """Request on ``relay.camera.detach``: the client is gone (page left, tab hidden)."""
+    """Request on ``relay.camera.detach``: the client is gone (page left, tab hidden). Only the
+    principal that opened the lease ends it; another principal's lease is ``forbidden``."""
 
     account_id: UUID
     mower_id: UUID
@@ -182,7 +185,8 @@ class RelayDetachRequest(ContractModel):
 
 class RelayDetachReply(ContractModel):
     """Reply to :class:`RelayDetachRequest`. Idempotent: ``detached`` is false when the lease
-    was already closed; ``error`` only for ``forbidden``."""
+    was already closed; ``error`` only for ``forbidden`` (another account's or another
+    principal's lease, which stays open)."""
 
     detached: bool
     error: RelayError | None = None

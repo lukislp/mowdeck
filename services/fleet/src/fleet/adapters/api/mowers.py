@@ -332,7 +332,7 @@ async def open_camera_session(
         403: {"description": "The plan does not include the feature `camera`."},
         404: {
             "description": "The mower is not visible, or the lease is unknown, expired, "
-            "detached or not the caller's account's."
+            "detached, of another account or opened by another user."
         },
         503: {"description": "The camera relay is not deployed or did not answer."},
     },
@@ -347,7 +347,7 @@ async def renew_camera_session(
 ) -> CameraSession:
     """The heartbeat of a relay camera lease (ADR 0045): extends it and answers the same session
     with a fresh ticket (for reconnects). ``can_view`` on the mower and the plan feature
-    ``camera``; never cached."""
+    ``camera``; only the user who opened the lease renews it; never cached."""
     response.headers["Cache-Control"] = "no-store"
     return await services.camera.renew(actor_of(principal), account_id, mower_id, lease_id)
 
@@ -356,7 +356,10 @@ async def renew_camera_session(
     "/mowers/{mower_id}/camera/session/{lease_id}",
     status_code=204,
     responses={
-        404: {"description": "The mower is not visible, or the lease is another account's."},
+        404: {
+            "description": "The mower is not visible, or the lease is another account's or was "
+            "opened by another user."
+        },
         503: {"description": "The camera relay did not answer in time."},
     },
 )
@@ -369,7 +372,8 @@ async def close_camera_session(
 ) -> None:
     """End a relay camera lease (ADR 0045): the page was left or hidden. Idempotent: an unknown
     or already closed lease, or no relay at all, is 204 as well. ``can_view`` on the mower;
-    no plan check (ending a stream is always allowed)."""
+    only the user who opened the lease ends it (another user's lease is 404 and keeps
+    running); no plan check (ending a stream is always allowed)."""
     await services.camera.detach(actor_of(principal), account_id, mower_id, lease_id)
 
 

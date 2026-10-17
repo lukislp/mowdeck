@@ -61,7 +61,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Request on ``relay.camera.detach``: the client is gone (page left, tab hidden).",
+  "description": "Request on ``relay.camera.detach``: the client is gone (page left, tab hidden). Only the\nprincipal that opened the lease ends it; another principal's lease is ``forbidden``.",
   "properties": {
     "account_id": {
       "format": "uuid",

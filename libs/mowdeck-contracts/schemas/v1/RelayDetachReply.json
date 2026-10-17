@@ -33,7 +33,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Reply to :class:`RelayDetachRequest`. Idempotent: ``detached`` is false when the lease\nwas already closed; ``error`` only for ``forbidden``.",
+  "description": "Reply to :class:`RelayDetachRequest`. Idempotent: ``detached`` is false when the lease\nwas already closed; ``error`` only for ``forbidden`` (another account's or another\nprincipal's lease, which stays open).",
   "properties": {
     "detached": {
       "title": "Detached",
