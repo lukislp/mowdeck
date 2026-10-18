@@ -78,6 +78,10 @@ proposals = Table(
     Column("start_pose", JSONB),
     Column("end_pose", JSONB),
     Column("return_command_id", Uuid),
+    # What approval executes (revision 0006): `drive` (the steps) or `return_to_dock`, and
+    # whether that is the rule based dock fallback after the model recommended nothing.
+    Column("action", String(16), nullable=False, server_default=text("'drive'")),
+    Column("fallback", Boolean, nullable=False, server_default=text("false")),
     Index("ix_proposals_account_mower_created", "account_id", "mower_id", "created_at"),
     Index("ix_proposals_chain", "chain_id", "round"),
     Index("ix_proposals_state_updated", "state", "updated_at"),

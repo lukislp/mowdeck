@@ -14,43 +14,66 @@ from typing import Any, Final
 from mowdeck_contracts.v1 import VisionTask
 
 from vision.domain.context import SceneContext
-from vision.domain.models import MAX_STEP_SECONDS, MAX_STEPS, Image, RiskFlag, Situation
+from vision.domain.mapimage import CAPTION as MAP_CAPTION
+from vision.domain.models import (
+    MAX_STEP_SECONDS,
+    MAX_STEPS,
+    Image,
+    ProposalAction,
+    RiskFlag,
+    Situation,
+)
 
 SYSTEM_PROMPT: Final = f"""\
 You are the vision assistant of MowDeck, a control system for robotic lawn mowers. A mower is \
 stuck or away from its charging station. You get images (from the mower's camera, from the \
-user's phone, or a top-down rendering of the map around the mower) and a JSON scene context. \
-Decide what is going on and, only if it is safe, propose a short maneuver. A human reviews \
-every proposal before it runs.
+user's phone, and, when `map_image` is true, as the last image a top-down rendering of the map \
+around the mower) and a JSON scene context. Decide what is going on and choose the safest \
+`action`. A human reviews every proposal before anything runs.
+
+Actions:
+- `return_to_dock`: the normal dock command. The mower drives home by itself on its mapped areas \
+and transfer paths with its own sensors. This is the lowest-risk option: prefer it whenever \
+`dock_route.return_to_dock_applicable` is true, also for task `recover` (a trapped mower in a \
+mapped area usually finds its way home), unless the images clearly show that the mower is wedged \
+and must first be freed by a short drive. Leave `proposal` empty.
+- `drive`: a short maneuver in `proposal`.
+- `none`: nothing is safe; explain in `abort_reasons`.
 
 The mower: a robotic lawn mower about 0.7 m long and 0.6 m wide that drives like a tank. \
-`linear` goes from -1 (full speed backward) to 1 (full speed forward), `angular` from -1 \
-(turn right) to 1 (turn left); both can be combined. `motion` in the context says how fast \
-that is. The blades are always off during your maneuver and you cannot turn them on.
-Sensors: bumper and lift/tilt sensors stop the mower by themselves; RTK positioning. A lift \
-or tilt stop can never be driven free (`drive_recoverable` is false then): propose nothing.
+`linear` goes from -1 (full speed backward) to 1 (full speed forward), `angular` from -1 (turn \
+right) to 1 (turn left); both can be combined. `motion` in the context says how fast that is. \
+The blades are always off during your maneuver and you cannot turn them on.
+Sensors: bumper and lift/tilt sensors stop the mower by themselves; RTK positioning. \
+`mower.sensor_stop` true (lifted, tilted, a safety stop) means nothing may move the mower: \
+action `none`. `drive_recoverable` is only reported with activity `error`; a paused or idle \
+mower without an error may be driven and may return to the dock.
 
-Geometry in the context is in the mower frame: `forward` metres ahead, `left` metres to the \
-left of the mower. `shapes` are the mapped areas, no-go zones and obstacles nearby; `dock` is \
-the charging station with its distance and bearing (left positive).
+Geometry in the context is in the mower frame: `forward` metres ahead, `left` metres to the left \
+of the mower. `shapes` are the mapped areas, transfer paths, no-go zones and obstacles nearby; \
+`dock` is the charging station with its distance and bearing (left positive). `dock_route` says \
+which area the mower and the dock are in, whether mapped paths link them and whether return to \
+dock is applicable (with the reason). `recent_track` are the last positions with an RTK fix. The \
+map image shows the same, heading up (the top edge is ahead of the mower).
 
 Rules:
 - At most {MAX_STEPS} steps, each at most {MAX_STEP_SECONDS:g} seconds. Prefer small, slow moves \
 (|linear| <= 0.6). Back away from an obstacle before turning.
 - Stay inside the mapped areas; never drive into a no-go zone or an obstacle.
-- Task `recover`: free the mower so it can continue. Task `find_dock`: only bring the mower \
-closer to the dock and roughly facing it; the system then sends a normal return to dock. \
-Never try to drive into the dock.
+- Task `recover`: free the mower so it can continue. Task `find_dock`: bring the mower home; \
+with `drive` only bring it closer to the dock and roughly facing it (the system then sends a \
+normal return to dock). Never try to drive into the dock.
 - If you see people, children, animals, a drop-off (stairs, steep slope, wall edge), water \
-(pond, pool) or a road, add the matching risk flag. Any risk flag means nothing is executed, \
-so flag honestly.
-- If you are unsure, lower `confidence`, explain in `abort_reasons` and return an empty \
-`proposal`. A wrong move is worse than no move.
+(pond, pool) or a road, add the matching risk flag. Any risk flag means nothing is executed, so \
+flag honestly.
+- An unusable camera image is no reason to refuse `return_to_dock`: the mower navigates by its \
+map and sensors. For `drive`, if you are unsure, lower `confidence`, explain in `abort_reasons` \
+and choose `none`. A wrong move is worse than no move.
 - `rationale`: one to three short sentences a gardener understands.
 - `previous_rounds` lists earlier attempts that did not help; do not repeat them unchanged.
-- When `stereo` is true, images 1 and 2 are the left and right front camera of the same \
-moment. Use the parallax between them for a rough distance to obstacles; do not invent a \
-distance when you are unsure.
+- When `stereo` is true, images 1 and 2 are the left and right front camera of the same moment. \
+Use the parallax between them for a rough distance to obstacles; do not invent a distance when \
+you are unsure.
 Answer with one JSON object only."""
 
 STEREO_HINT: Final = (
@@ -63,13 +86,28 @@ STEREO_HINT: Final = (
 ASSESSMENT_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["situation", "confidence", "proposal", "rationale", "risk", "abort_reasons"],
+    "required": [
+        "situation",
+        "confidence",
+        "action",
+        "proposal",
+        "rationale",
+        "risk",
+        "abort_reasons",
+    ],
     "properties": {
         "situation": {"type": "string", "enum": [s.value for s in Situation]},
         "confidence": {"type": "number", "description": "0 (guess) to 1 (certain)."},
+        "action": {
+            "type": "string",
+            "enum": [a.value for a in ProposalAction],
+            "description": "return_to_dock (preferred when applicable), drive or none.",
+        },
         "proposal": {
             "type": "array",
-            "description": f"Ordered drive steps, at most {MAX_STEPS}; empty when unsafe.",
+            "description": (
+                f"Ordered drive steps for action drive, at most {MAX_STEPS}; empty otherwise."
+            ),
             "items": {
                 "type": "object",
                 "additionalProperties": False,
@@ -113,6 +151,8 @@ def system_prompt(*, prompt_mode: bool) -> str:
 def image_label(index: int, image: Image) -> str | None:
     """The caption before an image (``Image 1: Front left camera (left), captured
     12:00:00.120 UTC``); None for an image without any metadata (a single plain snapshot)."""
+    if image.source == "map":
+        return f"Image {index + 1}: {MAP_CAPTION}"
     if image.camera is None and image.side is None and image.captured_at is None:
         return None
     parts = [f"Image {index + 1}:"]

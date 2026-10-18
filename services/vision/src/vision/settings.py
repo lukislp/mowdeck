@@ -89,7 +89,11 @@ class Settings(ServiceSettings):
     """Keep the images of a proposal this many days longer than its TTL (0: delete with it)."""
 
     vision_max_images: int = Field(default=4, ge=0, le=8)
-    """Images per request."""
+    """Camera or uploaded images per request (the map image comes on top, see below)."""
+
+    vision_map_image: bool = True
+    """Send a top-down map rendering around the mower (512 px PNG, heading up) as one extra
+    image after the camera frames; it never counts against ``vision_max_images``."""
 
     vision_max_image_bytes: int = Field(default=2 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
     """Size of one uploaded image."""

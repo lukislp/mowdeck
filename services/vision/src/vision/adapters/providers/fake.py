@@ -2,7 +2,10 @@
 
 The model string selects the behaviour: ``fake/recover`` (the default) answers ``recover`` with
 "back 1 s, turn about 30 degrees, forward 1 s" and ``find_dock`` with a turn towards the dock
-and a short approach computed from the scene context; ``fake/people`` flags people,
+and a short approach computed from the scene context; ``fake/dock`` answers
+``return_to_dock`` whenever the context's ``dock_route`` finds it applicable (else like
+``fake/recover``); ``fake/decline`` recommends nothing, like a cautious model ("recovery not
+recommended", which lets the service's dock fallback step in); ``fake/people`` flags people,
 ``fake/low_confidence`` is unsure, ``fake/empty`` proposes nothing, ``fake/fail`` and
 ``fake/invalid`` fail like a broken model.
 """
@@ -18,6 +21,7 @@ from vision.domain.models import (
     Assessment,
     AssessmentOut,
     Image,
+    ProposalAction,
     ProposedStep,
     RiskFlag,
     Situation,
@@ -30,6 +34,10 @@ RECOVER_STEPS = (
     ProposedStep(linear=0.6, angular=0.0, seconds=1.0),
 )
 """Back about 0.4 m, turn about 30 degrees left, forward about 0.3 m (at 0.5 m/s, 1 rad/s)."""
+
+
+def _dock_applies(context: SceneContext) -> bool:
+    return context.dock_route is not None and context.dock_route.return_to_dock_applicable
 
 
 class FakeVisionProvider:
@@ -57,6 +65,23 @@ class FakeVisionProvider:
         elif self.mode == "empty":
             answer = answer.model_copy(
                 update={"proposal": [], "abort_reasons": ["nothing safe to do"]}
+            )
+        elif self.mode == "decline":
+            answer = AssessmentOut(
+                situation=Situation.TRAPPED,
+                confidence=0.7,
+                action=ProposalAction.NONE,
+                proposal=[],
+                rationale="Recovery is not recommended: a safe route cannot be verified.",
+                abort_reasons=["a safe route cannot be verified from the images"],
+            )
+        elif self.mode == "dock" and _dock_applies(context):
+            answer = AssessmentOut(
+                situation=Situation.AWAY_FROM_DOCK,
+                confidence=0.9,
+                action=ProposalAction.RETURN_TO_DOCK,
+                proposal=[],
+                rationale="The mower stands in a mapped area linked to the dock: send it home.",
             )
         return Assessment(
             answer, self.model, "fake", Usage(latency_ms=0, cost_usd=0.0, mode="fake")

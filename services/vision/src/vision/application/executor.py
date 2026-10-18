@@ -17,6 +17,12 @@ Sequence (ADR 0033):
    closes the record with ``fleet.drive.stop``. A cancelled task (shutdown) does the same.
 5. After ``settle_seconds`` the outcome is checked; for ``find_dock`` a successful approach
    ends with a normal ``return_to_dock`` through ``fleet.commands.issue``.
+
+A proposal with action ``return_to_dock`` drives nothing itself: with a recent state the route
+check (:func:`~vision.domain.dock.dock_route`: no lift, tilt or safety stop, the mower in a
+mapped area linked to the dock) runs again on the newest state and map, then the normal
+``return_to_dock`` goes through ``fleet.commands.issue`` on behalf of the approver; the mower
+drives home by itself.
 """
 
 import asyncio
@@ -55,8 +61,10 @@ from vision.application.ports import (
     WatchEvent,
 )
 from vision.domain.context import Pose, pose_of
+from vision.domain.dock import dock_route
 from vision.domain.models import (
     Proposal,
+    ProposalAction,
     ProposalState,
     ProposedStep,
     StepOutcome,
@@ -74,6 +82,7 @@ from vision.domain.rules import (
 _log = get_logger("vision.executor")
 
 _NO_STOP_FRAME = ("emergency_stop", "sensor_stop")
+_FLEET_SILENT = "Fleet did not answer return_to_dock"
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +169,8 @@ class Executor:
     ) -> RunOutcome:
         """Drive the proposal's steps and check the outcome."""
         assert proposal.assessment is not None  # noqa: S101 - only proposed rows get here
+        if proposal.action is ProposalAction.RETURN_TO_DOCK:
+            return await self._dock_return(proposal, approver, account_id)
         steps = proposal.assessment.proposal
         watch = self.view.watch(proposal.mower_id)
         try:
@@ -194,6 +205,59 @@ class Executor:
             return await self._verify(run, steps, start_pose)
         finally:
             watch.close()
+
+    # --- return to dock -------------------------------------------------------------------
+
+    async def _dock_return(
+        self, proposal: Proposal, approver: PrincipalRef, account_id: UUID
+    ) -> RunOutcome:
+        """Check the route on the newest state and map again, then the normal dock command."""
+        observed = self.view.state(proposal.mower_id)
+        now = self.view.monotonic()
+        if observed is None or now - observed.received > self.config.start_state_max_age_seconds:
+            return RunOutcome(ProposalState.ABORTED, "no_state: no recent state of the mower")
+        if observed.state.account_id != proposal.account_id:
+            return RunOutcome(ProposalState.ABORTED, "no_state: no state of this account")
+        mapped = self.view.mower_map(proposal.mower_id)
+        mower_map = mapped[1] if mapped is not None and mapped[0] == proposal.account_id else None
+        pose = pose_of(observed.state, mower_map) if mower_map is not None else None
+        route = dock_route(mower_map, (pose.x, pose.y) if pose else None, observed.state)
+        if not route.return_to_dock_applicable:
+            detail = f"return to dock is not applicable any more: {route.reason}"
+            return RunOutcome(ProposalState.ABORTED, detail[:500], start_pose=pose)
+        command_id, problem = await self._issue_dock(approver, account_id, proposal.mower_id)
+        if problem is not None:
+            failed = problem == _FLEET_SILENT
+            state = ProposalState.FAILED if failed else ProposalState.NOT_RECOVERED
+            return RunOutcome(state, problem, start_pose=pose)
+        _log.info("vision return to dock issued", proposal_id=str(proposal.id))
+        return RunOutcome(
+            ProposalState.RECOVERED,
+            f"returning to the dock ({route.reason})"[:500],
+            start_pose=pose,
+            return_command_id=command_id,
+        )
+
+    async def _issue_dock(
+        self, approver: PrincipalRef, account_id: UUID, mower_id: UUID
+    ) -> tuple[UUID | None, str | None]:
+        """``return_to_dock`` through Fleet: the command id, or the problem."""
+        request = IssueCommandRequest(
+            on_behalf_of=approver,
+            account_id=account_id,
+            mower_id=mower_id,
+            command=CommandRequest(command=ReturnToDock()),
+            origin="vision",
+        )
+        try:
+            reply = await self.fleet.issue(request)
+        except Exception as exc:
+            _log.warning("return_to_dock failed", error=repr(exc))
+            return None, _FLEET_SILENT
+        if reply.accepted is None:
+            code = reply.error.code if reply.error else "unknown"
+            return None, f"return_to_dock was refused: {code}"
+        return reply.accepted.command_id, None
 
     # --- start ----------------------------------------------------------------------------
 
@@ -452,23 +516,11 @@ class Executor:
         return outcome
 
     async def _return_to_dock(self, run: _Run, outcome: RunOutcome) -> None:
-        request = IssueCommandRequest(
-            on_behalf_of=run.approver,
-            account_id=run.account_id,
-            mower_id=run.proposal.mower_id,
-            command=CommandRequest(command=ReturnToDock()),
-            origin="vision",
+        command_id, problem = await self._issue_dock(
+            run.approver, run.account_id, run.proposal.mower_id
         )
-        try:
-            reply = await self.fleet.issue(request)
-        except Exception as exc:
-            _log.warning("return_to_dock failed", error=repr(exc))
+        if problem is not None:
             outcome.state = ProposalState.NOT_RECOVERED
-            outcome.detail = "approached the dock, but Fleet did not answer return_to_dock"
+            outcome.detail = f"approached the dock, but {problem}"
             return
-        if reply.accepted is None:
-            outcome.state = ProposalState.NOT_RECOVERED
-            code = reply.error.code if reply.error else "unknown"
-            outcome.detail = f"approached the dock, but return_to_dock was refused: {code}"
-            return
-        outcome.return_command_id = reply.accepted.command_id
+        outcome.return_command_id = command_id

@@ -78,6 +78,7 @@ from vision.domain.models import (
     Assessment,
     AssessmentOut,
     Image,
+    ProposalAction,
     ProposalState,
     ProposedStep,
     ProviderConfig,
@@ -105,12 +106,15 @@ def answer(
     situation: Situation = Situation.STUCK_ON_OBSTACLE,
     confidence: float = 0.9,
     risk: list[RiskFlag] | None = None,
+    action: ProposalAction | None = None,
 ) -> AssessmentOut:
-    """A model answer for tests."""
+    """A model answer for tests (``action`` defaults to ``drive`` with steps, else ``none``)."""
+    proposal = QUICK_STEPS if steps is None else steps
     return AssessmentOut(
         situation=situation,
         confidence=confidence,
-        proposal=QUICK_STEPS if steps is None else steps,
+        action=action or (ProposalAction.DRIVE if proposal else ProposalAction.NONE),
+        proposal=proposal,
         rationale="Back off and turn.",
         risk=risk or [],
     )
@@ -165,6 +169,8 @@ def make_settings(**overrides: Any) -> Settings:
         "vision_frame_rate_hz": 10.0,
         "vision_settle_seconds": 0.3,
         "vision_state_timeout_seconds": 2.0,
+        # The camera frame tests count images; the map image tests switch it on.
+        "vision_map_image": False,
         **overrides,
     }
     return Settings.model_validate(values)

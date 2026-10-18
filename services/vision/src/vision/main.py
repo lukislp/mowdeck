@@ -188,6 +188,7 @@ def build_app(
                 dark_frame_threshold=settings.vision_dark_frame_threshold,
                 light_wait_seconds=settings.vision_light_wait_seconds,
                 stereo_max_skew_ms=settings.vision_stereo_max_skew_ms,
+                map_image=settings.vision_map_image,
             ),
             fleet=fleet,
         )

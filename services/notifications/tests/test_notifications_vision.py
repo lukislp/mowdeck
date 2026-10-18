@@ -94,6 +94,37 @@ async def test_notifications_vision_proposal_of_another_account_is_dropped() -> 
         assert await h.inbox(owner) == []
 
 
+async def test_notifications_vision_return_to_dock_proposal_says_so() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner, name="Vorgarten")
+        await h.subscribe_all(owner, enabled_kinds=[*KINDS, "vision_auto_proposal"])
+        dock = _proposal(
+            h,
+            mower_id,
+            owner.account_id,
+            task=VisionTask.FIND_DOCK,
+            steps=0,
+            action="return_to_dock",
+            fallback=True,
+        )
+        await _publish(h, dock, owner.account_id)
+        automatic = _proposal(
+            h,
+            mower_id,
+            owner.account_id,
+            steps=0,
+            action="return_to_dock",
+            trigger=VisionTrigger.ERROR,
+            error_code="1201",
+        )
+        await _publish(h, automatic, owner.account_id)
+        items = await h.inbox(owner)
+        assert len(items) == 2
+        assert all("return to the dock on the mapped paths" in i["body"].lower() for i in items)
+        assert not any("steps" in i["body"] for i in items)
+
+
 async def test_notifications_vision_auto_proposal_names_the_error() -> None:
     async with harness() as h:
         owner = await h.owner()

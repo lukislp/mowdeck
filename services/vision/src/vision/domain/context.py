@@ -2,19 +2,25 @@
 
 Geometry is given in the **mower frame**: ``forward`` metres ahead of the mower and ``left``
 metres to its left, so the model can plan maneuvers without converting map coordinates. Only
-the map around the mower (``radius_m``) is included: areas, no-go zones, obstacles and the dock
-with its distance and bearing. No account, user or mower names are sent.
+the map around the mower (``radius_m``) is included: areas, transfer paths, no-go zones,
+obstacles and the dock with its distance and bearing. ``dock_route`` says whether the generic
+return to dock fits (:mod:`vision.domain.dock`), ``recent_track`` where the mower was shortly
+before. No account, user or mower names are sent (area names are the user's own labels).
 """
 
 import math
 from datetime import datetime
 from typing import Literal
 
-from mowdeck_contracts.v1 import LocalPoint, MowerMap, MowerState, VisionTask
+from mowdeck_contracts.v1 import LocalPoint, MowerActivity, MowerMap, MowerState, VisionTask
 from mowdeck_control.geo import distance, from_wgs84, local_angle, point_in_polygon
 from pydantic import BaseModel, Field
 
+from vision.domain.dock import DockRoute, dock_route
 from vision.domain.models import MAX_STEP_SECONDS, MAX_STEPS
+
+TRACK_POINTS = 10
+"""At most this many recent positions go into the context (newest last)."""
 
 
 class Pose(BaseModel):
@@ -33,7 +39,14 @@ class MowerSnapshot(BaseModel):
     activity: str
     error_code: str | None = None
     error_message: str | None = None
-    drive_recoverable: bool = False
+    drive_recoverable: bool | None = Field(
+        default=None,
+        description="Only with activity `error`: whether driving may free the mower.",
+    )
+    sensor_stop: bool = Field(
+        default=False,
+        description="A lift, tilt or other safety stop is active: nothing may move the mower.",
+    )
     lifted: bool = False
     battery_percent: int
     rtk_fix: str
@@ -44,10 +57,12 @@ class MowerSnapshot(BaseModel):
 class Shape(BaseModel):
     """A map polygon in the mower frame."""
 
-    kind: Literal["area", "no_go_zone", "obstacle"]
+    kind: Literal["area", "no_go_zone", "obstacle", "path"]
     id: str
     name: str | None = None
-    points: list[tuple[float, float]] = Field(description="(forward, left) in metres.")
+    points: list[tuple[float, float]] = Field(
+        description="(forward, left) in metres; a polygon, for `path` a line."
+    )
     contains_mower: bool = False
 
 
@@ -70,6 +85,14 @@ class MapExcerpt(BaseModel):
     inside_no_go_zone: bool = False
 
 
+class TrackPoint(BaseModel):
+    """A recent position of the mower (with an RTK fix), in the mower frame."""
+
+    forward: float
+    left: float
+    seconds_ago: float
+
+
 class RecentCommand(BaseModel):
     """A command seen for the mower shortly before."""
 
@@ -82,6 +105,7 @@ class PreviousRound(BaseModel):
 
     round: int
     situation: str | None = None
+    action: str = Field(default="drive", description="`drive` or `return_to_dock`.")
     steps: list[dict[str, float]] = Field(default_factory=list)
     outcome: str
     detail: str | None = None
@@ -102,6 +126,10 @@ class SceneContext(BaseModel):
     task: VisionTask
     mower: MowerSnapshot | None = None
     map: MapExcerpt | None = None
+    dock_route: DockRoute | None = None
+    recent_track: list[TrackPoint] = Field(
+        default_factory=list, description="Recent positions with an RTK fix, oldest first."
+    )
     recent_commands: list[RecentCommand] = Field(default_factory=list)
     last_drive: str | None = Field(
         default=None, description="How the last drive session of the mower ended, if known."
@@ -115,6 +143,10 @@ class SceneContext(BaseModel):
             "Images 1 and 2 are the left and right front camera of the same moment (a stereo "
             "pair; the camera spacing is not calibrated)."
         ),
+    )
+    map_image: bool = Field(
+        default=False,
+        description="The last image is a top-down rendering of the map around the mower.",
     )
 
 
@@ -170,6 +202,17 @@ def map_excerpt(mower_map: MowerMap, pose: Pose, radius_m: float) -> MapExcerpt:
                         contains_mower=inside,
                     )
                 )
+    for path in mower_map.paths:
+        line = list(path.points)
+        if any(distance(p, here) <= radius_m for p in line):
+            excerpt.shapes.append(
+                Shape(
+                    kind="path",
+                    id=path.id,
+                    name=path.name,
+                    points=[to_mower_frame(p, pose) for p in line],
+                )
+            )
     dock = mower_map.dock
     if dock is not None:
         forward, left = to_mower_frame((dock.x, dock.y), pose)
@@ -196,17 +239,24 @@ def build_context(
     images: int,
     radius_m: float = 8.0,
     stereo: bool = False,
+    track: list[tuple[float, float, datetime]] | None = None,
+    map_image: bool = False,
 ) -> SceneContext:
-    """Assemble the context from what the service knows about the mower."""
+    """Assemble the context from what the service knows about the mower; ``track`` are recent
+    WGS84 positions ``(lat, lon, observed_at)``, oldest first."""
     snapshot = None
     excerpt = None
+    pose = None
     if state is not None:
+        in_error = state.activity is MowerActivity.ERROR
+        lifted = state.raw.get("lifted") is True
         snapshot = MowerSnapshot(
             activity=str(state.activity),
             error_code=state.error_code,
             error_message=state.error_message,
-            drive_recoverable=state.drive_recoverable,
-            lifted=state.raw.get("lifted") is True,
+            drive_recoverable=state.drive_recoverable if in_error else None,
+            sensor_stop=lifted or (in_error and not state.drive_recoverable),
+            lifted=lifted,
             battery_percent=state.battery_percent,
             rtk_fix=str(state.rtk_fix),
             heading_known=state.position is not None and state.position.heading is not None,
@@ -215,6 +265,15 @@ def build_context(
         pose = pose_of(state, mower_map)
         if pose is not None and mower_map is not None:
             excerpt = map_excerpt(mower_map, pose, radius_m)
+    route = None
+    points: list[TrackPoint] = []
+    if mower_map is not None:
+        route = dock_route(mower_map, (pose.x, pose.y) if pose else None, state)
+        if pose is not None:
+            for lat, lon, at in (track or [])[-TRACK_POINTS:]:
+                forward, left = to_mower_frame(from_wgs84(mower_map, lat, lon), pose)
+                age = round(max(0.0, (now - at).total_seconds()), 1)
+                points.append(TrackPoint(forward=forward, left=left, seconds_ago=age))
     recent = [
         RecentCommand(kind=kind, seconds_ago=round(max(0.0, (now - at).total_seconds()), 1))
         for kind, at in commands[-10:]
@@ -223,10 +282,13 @@ def build_context(
         task=task,
         mower=snapshot,
         map=excerpt,
+        dock_route=route,
+        recent_track=points,
         recent_commands=recent,
         last_drive=last_drive,
         previous_rounds=previous_rounds,
         motion=motion,
         images=images,
         stereo=stereo,
+        map_image=map_image,
     )

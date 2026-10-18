@@ -23,6 +23,7 @@ from vision.domain.models import (
     AutoSetting,
     FrameInfo,
     Proposal,
+    ProposalAction,
     ProposalState,
     ProposalStep,
     ProviderRequest,
@@ -54,7 +55,7 @@ def proposal_values(changes: Mapping[str, Any]) -> dict[str, Any]:
             values["assessment"] = answer.model_dump(mode="json") if answer else None
             values["situation"] = answer.situation.value if answer else None
             values["confidence"] = answer.confidence if answer else None
-        elif name in ("state", "task", "trigger"):
+        elif name in ("state", "task", "trigger", "action"):
             values[name] = value.value if hasattr(value, "value") else value
         elif name == "frames":
             values[name] = [frame.to_json() for frame in value]
@@ -103,6 +104,8 @@ def proposal_of(row: Any) -> Proposal:
         start_pose=v["start_pose"],
         end_pose=v["end_pose"],
         return_command_id=v["return_command_id"],
+        action=ProposalAction(v["action"]),
+        fallback=v["fallback"],
     )
 
 
@@ -154,6 +157,8 @@ _PROPOSAL_FIELDS = [
     "start_pose",
     "end_pose",
     "return_command_id",
+    "action",
+    "fallback",
 ]
 
 

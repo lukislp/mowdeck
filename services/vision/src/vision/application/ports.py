@@ -267,6 +267,10 @@ class MowerView(Protocol):
         """Recent command kinds with their issue time, oldest first (drive frames folded)."""
         ...
 
+    def recent_track(self, mower_id: UUID) -> list[tuple[float, float, datetime]]:
+        """Recent distinct positions ``(lat, lon, observed_at)`` with an RTK fix, oldest first."""
+        ...
+
     def watch(self, mower_id: UUID) -> MowerWatch:
         """Start receiving live events of the mower."""
         ...

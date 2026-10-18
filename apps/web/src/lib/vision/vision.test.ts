@@ -84,6 +84,8 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     finished_at: null,
     drive_session_id: null,
     return_command_id: null,
+    action: 'drive',
+    fallback: false,
     can_retry: false,
     rounds_left: 2,
     ...overrides,
@@ -103,6 +105,7 @@ const PROPOSED = proposal({
   assessment: {
     situation: 'stuck_on_obstacle',
     confidence: 0.82,
+    action: 'drive',
     rationale: 'A root blocks the front wheels.',
     risk: [],
     abort_reasons: [],
