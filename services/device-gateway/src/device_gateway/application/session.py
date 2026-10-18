@@ -60,6 +60,7 @@ from mowdeck_contracts.v1 import (
     MowerState,
     MowPath,
     SpotMow,
+    VisionDemand,
     utc_now,
 )
 from mowdeck_control import (
@@ -232,7 +233,7 @@ class MowerSession:
         """Number of commands not yet answered."""
         return len(self._commands)
 
-    async def capture_photo(self) -> Photo:
+    async def capture_photo(self, demand: VisionDemand = VisionDemand.ROUTINE) -> Photo:
         """A still image, one at a time per mower, from the first source that has one:
 
         1. the adapter itself (:class:`~mowdeck_control.PhotoCapture`, the simulator's garden),
@@ -265,9 +266,9 @@ class MowerSession:
         if not self._snapshotters:
             raise PhotoUnsupported("this connection cannot take photos")
         async with self._photo_lock:
-            return await self._camera_frame(controller)
+            return await self._camera_frame(controller, demand)
 
-    async def _camera_frame(self, controller: MowerController) -> Photo:
+    async def _camera_frame(self, controller: MowerController, demand: VisionDemand) -> Photo:
         connection = controller.connection
         capabilities = await controller.capabilities()
         if capabilities.camera is CameraAccess.NONE:
@@ -276,7 +277,9 @@ class MowerSession:
         fetched = False
         handed_over: SnapshotFailed | None = None
         for snapshotter in self._snapshotters:
-            target = SnapshotTarget(account_id=self.registration.account_id, mower_id=self.mower_id)
+            target = SnapshotTarget(
+                account_id=self.registration.account_id, mower_id=self.mower_id, demand=demand
+            )
             if snapshotter.needs_camera_session:
                 if not fetched:
                     vendor = await camera_session_of(connection)

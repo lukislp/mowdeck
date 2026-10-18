@@ -19,7 +19,8 @@ Status  Problem type                   When
 401     ``unauthorized``               missing or wrong token
 404     ``not-found``                  the mower is not the account's (``forbidden``,
                                        ``not_found``)
-409     ``camera-budget``              a Vision limit: battery, video budget, daily minutes
+409     ``camera-budget``              a routine Vision limit: battery, video budget,
+                                       daily minutes (never for ``error_analysis``)
 503     ``camera-unavailable``         offline or asleep, the source failed, relay full
 503     ``camera-relay-unsupported``   no source driver for the mower's camera provider
 503     ``frames-disabled``            no token configured
@@ -41,7 +42,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Response
 from fastapi.responses import StreamingResponse
 from mowdeck_contracts.v1.principal import PrincipalKind, PrincipalRef
-from mowdeck_contracts.v1.relay import RelayErrorCode
+from mowdeck_contracts.v1.relay import RelayErrorCode, VisionDemand
 from mowdeck_contracts.v1.vision import PHOTO_MAX_BYTES
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.errors import NotFound, ServiceError, Unauthorized
@@ -158,6 +159,8 @@ class SnapshotBody(BaseModel):
     """The requesting service (kind ``service``); it owns the lease."""
     on_behalf_of: UUID | None = None
     """The user the service acts for (logged only)."""
+    demand: VisionDemand = VisionDemand.ROUTINE
+    """``error_analysis`` may wake a sleeping mower and ignores the Vision budget."""
 
     @model_validator(mode="after")
     def _service_principal(self) -> "SnapshotBody":
@@ -249,6 +252,7 @@ def frames_router(
                     requested_by=_principal(body.requested_by),
                     camera_id=body.camera_id,
                     on_behalf_of=body.on_behalf_of,
+                    demand=body.demand,
                 ),
                 max_width=body.max_width,
                 max_bytes=body.max_bytes,
@@ -271,6 +275,7 @@ def frames_router(
         camera_id: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
         fps: Annotated[float, Query(gt=0, le=STREAM_MAX_FPS)] = 1.0,
         max_width: Annotated[int, Query(ge=160, le=3840)] = 1280,
+        demand: VisionDemand = VisionDemand.ROUTINE,
     ) -> StreamingResponse:
         current = active_tap()
         await acquire()
@@ -281,6 +286,7 @@ def frames_router(
                     mower_id=mower_id,
                     requested_by=_principal(None),
                     camera_id=camera_id,
+                    demand=demand,
                 ),
                 fps=fps,
                 max_width=max_width,

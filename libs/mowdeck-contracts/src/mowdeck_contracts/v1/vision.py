@@ -30,6 +30,7 @@ from pydantic import Field, model_validator
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 from mowdeck_contracts.v1.camera import CameraSession
 from mowdeck_contracts.v1.principal import PrincipalRef
+from mowdeck_contracts.v1.relay import VisionDemand
 
 VISION_PROPOSAL_CREATED: Final = "vision.proposal.created"
 """Event type: AI assist proposed a maneuver (payload :class:`VisionProposalCreated`)."""
@@ -72,6 +73,12 @@ class PhotoRequest(ContractModel):
     mower_id: UUID
     account_id: UUID
     max_bytes: int = Field(default=PHOTO_MAX_BYTES, ge=1024, le=PHOTO_MAX_BYTES)
+    demand: VisionDemand = Field(
+        default=VisionDemand.ROUTINE,
+        description="Why the photo is wanted: `error_analysis` (a mower with a problem: AI "
+        "assist, the automatic analysis) may wake a sleeping mower through the camera relay "
+        "and ignores the Vision budget; `routine` keeps every limit (ADR 0045).",
+    )
 
 
 class PhotoErrorCode(StrEnum):

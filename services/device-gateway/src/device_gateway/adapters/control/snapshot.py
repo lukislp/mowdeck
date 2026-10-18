@@ -98,6 +98,7 @@ class RelaySnapshotter:
             "max_width": self.max_width,
             "max_bytes": self.max_bytes,
             "timeout_s": wait,
+            "demand": target.demand.value,
             "requested_by": self.principal.model_dump(mode="json", exclude_none=True),
         }
         headers = {"Authorization": f"Bearer {self.token}"}

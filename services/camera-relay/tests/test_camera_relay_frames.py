@@ -15,6 +15,7 @@ from mowdeck_contracts.v1.principal import PrincipalRef
 from mowdeck_contracts.v1.relay import (
     RelayLeaseCloseReason,
     RelayPurpose,
+    VisionDemand,
 )
 from relay_support import ONLINE, Harness, attach_request, key, principal
 
@@ -38,12 +39,17 @@ def _harness(**vendor: object) -> Harness:
     return harness
 
 
-def _request(relay_key: RelayKey, camera: str | None = None) -> FrameRequest:
+def _request(
+    relay_key: RelayKey,
+    camera: str | None = None,
+    demand: VisionDemand = VisionDemand.ROUTINE,
+) -> FrameRequest:
     return FrameRequest(
         account_id=relay_key.account_id,
         mower_id=relay_key.mower_id,
         requested_by=GATEWAY,
         camera_id=camera,
+        demand=demand,
     )
 
 
@@ -377,3 +383,45 @@ async def test_a_viewer_lease_of_the_user_is_not_the_gateways() -> None:
     )
     assert owners == [GATEWAY]
     assert owners[0] != principal()
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        MowerStatus(online=True, asleep=True, battery_percent=80),
+        MowerStatus(online=True, battery_percent=5),
+        MowerStatus(online=True, battery_percent=80, quota_remaining_percent=2),
+    ],
+)
+async def test_an_error_analysis_wakes_a_sleeping_mower_and_ignores_the_budget(
+    status: MowerStatus,
+) -> None:
+    harness = _harness()
+    relay_key = key()
+    harness.repository.set_status(relay_key.mower_id, status)
+    tap = _tap(harness, FakeGrabber())
+    with pytest.raises(FrameTapError):
+        await tap.snapshot(_request(relay_key), max_width=640, max_bytes=512_000, timeout_s=5)
+    frame = await tap.snapshot(
+        _request(relay_key, demand=VisionDemand.ERROR_ANALYSIS),
+        max_width=640,
+        max_bytes=512_000,
+        timeout_s=5,
+    )
+    assert frame.data
+    assert len(harness.vendor.starts) == 1
+
+
+async def test_an_error_analysis_never_reaches_a_mower_without_connection() -> None:
+    harness = _harness()
+    relay_key = key()
+    harness.repository.set_status(relay_key.mower_id, MowerStatus(online=False))
+    with pytest.raises(FrameTapError) as refused:
+        await _tap(harness, FakeGrabber()).snapshot(
+            _request(relay_key, demand=VisionDemand.ERROR_ANALYSIS),
+            max_width=640,
+            max_bytes=512_000,
+            timeout_s=5,
+        )
+    assert refused.value.code == "unavailable"
+    assert harness.vendor.starts == []

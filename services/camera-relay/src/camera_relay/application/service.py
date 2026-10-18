@@ -155,7 +155,7 @@ class RelayService:
             offered = False
             if (
                 session.state is SessionState.IDLE
-                and session.admission(request.purpose, now) is None
+                and session.admission(request.purpose, now, request.vision_demand) is None
             ):
                 try:
                     offer = await self.vendor.offer(key)
@@ -180,6 +180,7 @@ class RelayService:
                 principal=request.requested_by,
                 now=self.clock(),
                 vision_mode=vision_mode,
+                vision_demand=request.vision_demand,
             )
             outcome = await self._execute(session, decision.effects)
             if decision.refusal is not None:

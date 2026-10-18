@@ -556,7 +556,7 @@ class DeviceGateway:
             return _photo_error(PhotoErrorCode.NOT_FOUND, "mower not found")
         try:
             async with asyncio.timeout(timeout_seconds):
-                photo = await session.capture_photo()
+                photo = await session.capture_photo(request.demand)
         except NotConnected:
             return _photo_error(PhotoErrorCode.NOT_CONNECTED, "the mower is not connected")
         except PhotoUnsupported as exc:

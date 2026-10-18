@@ -18,7 +18,13 @@ Rules:
   period; a new lease in that time takes it back to ``LIVE`` without a new source session.
 * Vision minutes count only while Vision holds the session without a present viewer; the
   limits of a Vision lease apply only then. Viewers are never refused for a limit (a warning).
-* An offline or sleeping mower is never woken: no new lease, and a running session stops.
+* An offline mower (no connection: the gateway's link is down or its heartbeat stale) gets
+  no lease, and a running session stops. A sleeping mower may be woken by a viewer, like the
+  vendor app does, and by an error analysis (a mower with a problem needs help); routine Vision
+  without a present viewer never wakes it and ends when it falls asleep (owner decisions
+  2026-10-18). A session with viewers keeps running while the mower reports asleep.
+* Error analyses (``VisionDemand.ERROR_ANALYSIS``) are bound only by their per-request caps;
+  their time still counts as Vision minutes (for the record), but no limit ends them.
 """
 
 import secrets
@@ -42,6 +48,7 @@ from mowdeck_contracts.v1.relay import (
     RelayLeaseCloseReason,
     RelayPurpose,
     RelayStopReason,
+    VisionDemand,
 )
 
 from camera_relay.domain.effects import (
@@ -154,6 +161,11 @@ class RelaySession:
             and not self.has_present_viewer
         )
 
+    @property
+    def routine_vision_only(self) -> bool:
+        """Vision-only use with a routine Vision lease (the Vision limits apply)."""
+        return self.vision_only and any(lease.is_routine_vision for lease in self.leases.values())
+
     def vision_used_on(self, day: date) -> timedelta:
         """Vision-only time of this key on a UTC day."""
         return self._vision_by_day.get(day, timedelta(0))
@@ -181,10 +193,15 @@ class RelaySession:
             expires_at=now + self.policy.ticket_lifetime,
         )
 
-    def admission(self, purpose: RelayPurpose, now: datetime) -> Refusal | None:
+    def admission(
+        self,
+        purpose: RelayPurpose,
+        now: datetime,
+        demand: VisionDemand = VisionDemand.ROUTINE,
+    ) -> Refusal | None:
         """Why a lease of ``purpose`` would be refused now, or None (no state change; process
         due deadlines first with :meth:`tick`)."""
-        return self._admission(purpose, now)
+        return self._admission(purpose, now, demand)
 
     def camera_available(self, camera: str, now: datetime) -> bool | None:
         """Whether ``camera`` delivers: True once its stream appeared, False when it has not
@@ -218,11 +235,12 @@ class RelaySession:
         principal: PrincipalRef,
         now: datetime,
         vision_mode: VisionMode = VisionMode.STREAM,
+        vision_demand: VisionDemand = VisionDemand.ROUTINE,
     ) -> AttachDecision:
         """Open a lease (``relay.camera.attach``). No ``camera_ids``: every offered camera."""
         out: list[Effect] = []
         self._advance(now, out)
-        refusal = self._admission(purpose, now)
+        refusal = self._admission(purpose, now, vision_demand)
         if refusal is not None:
             return AttachDecision(None, refusal, out)
         cameras = self._lease_cameras(camera_ids)
@@ -240,6 +258,8 @@ class RelaySession:
         if self.state is SessionState.IDLE:
             start = self._begin(cameras, now, purpose, principal)
         lease = self._new_lease(cameras, purpose, principal, now, vision_mode)
+        if lease.is_vision:
+            lease.vision_demand = vision_demand
         self.leases[lease.lease_id] = lease
         viewers = sum(1 for open_lease in self.leases.values() if open_lease.is_viewer)
         self.peak_viewers = max(self.peak_viewers, viewers)
@@ -407,12 +427,13 @@ class RelaySession:
         return out
 
     def mower_status_changed(self, status: MowerStatus, now: datetime) -> list[Effect]:
-        """New mower state: an unreachable mower stops the session; a Vision limit ends
-        Vision-only use."""
+        """New mower state: an offline mower (no connection) stops the session; asleep does
+        not (a viewer or an error analysis may wake it). A Vision limit, falling asleep
+        included, ends routine Vision-only use."""
         out: list[Effect] = []
         self._advance(now, out)
         self.status = status
-        if self.state in ACTIVE_STATES and not status.reachable:
+        if self.state in ACTIVE_STATES and not status.online:
             self._stop(RelayStopReason.MOWER_OFFLINE, now, out)
         else:
             self._settle(now, out)
@@ -434,7 +455,12 @@ class RelaySession:
 
     # --- Rules --------------------------------------------------------------------------------
 
-    def _admission(self, purpose: RelayPurpose, now: datetime) -> Refusal | None:
+    def _admission(
+        self,
+        purpose: RelayPurpose,
+        now: datetime,
+        demand: VisionDemand = VisionDemand.ROUTINE,
+    ) -> Refusal | None:
         if self.state is SessionState.STOPPING:
             return Refusal(RelayErrorCode.UNAVAILABLE, "the session is stopping; retry shortly")
         if self.state is SessionState.FAILED:
@@ -442,14 +468,13 @@ class RelaySession:
             return Refusal(
                 RelayErrorCode.UNAVAILABLE, f"the source failed; retry in {max(wait, 0):.0f} s"
             )
-        if self.status is not None and not self.status.reachable:
-            return Refusal(
-                RelayErrorCode.UNAVAILABLE,
-                "the mower is offline or asleep; the relay never wakes a mower",
-            )
+        if self.status is not None and not self.status.online:
+            return Refusal(RelayErrorCode.UNAVAILABLE, "the mower is offline (no connection to it)")
         if len(self.leases) >= self.policy.max_leases_per_session:
             return Refusal(RelayErrorCode.UNAVAILABLE, "the relay is full for this mower")
         if purpose is RelayPurpose.VISION and not self.has_present_viewer:
+            if demand is VisionDemand.ERROR_ANALYSIS:
+                return self.policy.error_analysis_refusal(self.status)
             return self.policy.vision_refusal(self.status, self.vision_used_on(_utc_day(now)))
         return None
 
@@ -538,17 +563,23 @@ class RelaySession:
             self.drain_deadline = now + self.policy.grace
 
     def _enforce_vision_limits(self, now: datetime, out: list[Effect]) -> None:
-        """Vision-only use ends when a limit is reached; with no lease left the session stops
-        at once (the grace is for viewers switching views)."""
-        if not self.vision_only:
+        """Routine Vision-only use ends when a limit is reached (falling asleep included);
+        error analyses are not ended by a limit. With no lease left the session stops at once
+        (the grace is for viewers switching views)."""
+        if not self.routine_vision_only:
             return
         refusal = self.policy.vision_refusal(self.status, self.vision_used_on(_utc_day(now)))
         if refusal is None:
             return
-        for lease in [lease for lease in self.leases.values() if lease.is_vision]:
+        for lease in [lease for lease in self.leases.values() if lease.is_routine_vision]:
             self._close(lease, RelayLeaseCloseReason.EXPIRED, now, out)
         if not self.leases:
-            self._stop(RelayStopReason.BUDGET, now, out)
+            reason = (
+                RelayStopReason.BUDGET
+                if refusal.code is RelayErrorCode.BUDGET
+                else RelayStopReason.MOWER_OFFLINE
+            )
+            self._stop(reason, now, out)
 
     def _update_cameras(self) -> UpdateCameras:
         assert self.session_id is not None and self.relay_id is not None  # noqa: S101
@@ -676,7 +707,7 @@ class RelaySession:
             candidates.append((self.drain_deadline, 2, self._drained))
         if self.state is SessionState.FAILED and self.retry_at is not None:
             candidates.append((self.retry_at, 3, self._retry))
-        if self.vision_only and self._accounted_at is not None:
+        if self.routine_vision_only and self._accounted_at is not None:
             used = self.vision_used_on(_utc_day(self._accounted_at))
             remaining = max(self.policy.vision_daily - used, timedelta(0))
             candidates.append((self._accounted_at + remaining, 4, self._enforce_vision_limits))

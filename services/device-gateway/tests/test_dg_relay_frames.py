@@ -21,6 +21,7 @@ from mowdeck_contracts.v1 import (
     PhotoReply,
     PhotoRequest,
 )
+from mowdeck_contracts.v1.relay import VisionDemand
 from mowdeck_contracts.v1.subjects import photo_subject
 from mowdeck_control import MowerConnection, Photo, SimulatedMower, SimulationConfig
 from mowdeck_control_mammotion.fake import FakeMammotionPort
@@ -107,6 +108,7 @@ async def test_dg_relay_frames_of_a_mower_without_own_photos_come_from_the_relay
     # Account and mower come from the gateway's own connection, never from the request.
     assert (target.account_id, target.mower_id) == (reg.account_id, reg.mower_id)
     assert target.session is None, "the relay asks for its own vendor session"
+    assert target.demand is VisionDemand.ROUTINE
     assert timeout == 7
     assert worker.calls == []
 
@@ -207,6 +209,7 @@ async def test_dg_relay_snapshotter_posts_the_gateways_mower_with_its_token() ->
     assert body["mower_id"] == str(target.mower_id)
     assert body["max_width"] == 800
     assert body["timeout_s"] == 30, "the relay holds a snapshot lease at most 30 s"
+    assert body["demand"] == "routine"
     assert body["requested_by"]["kind"] == "service"
     assert body["requested_by"]["display_name"] == "device-gateway"
 
@@ -305,3 +308,20 @@ async def test_dg_relay_one_photo_per_mower_at_a_time_also_through_the_relay() -
         replies = await asyncio.gather(_ask(bus, reg), _ask(bus, reg))
     assert all(r.error is None for r in replies)
     assert SlowRelay.peak == 1
+
+
+async def test_dg_relay_the_photo_requests_demand_reaches_the_relay() -> None:
+    reg = registration()
+    relay = FakeRelay()
+    bus = InMemoryBus()
+    async with lifespan_client(_app(bus, _sim_without_photos(reg), reg, relay_snapshotter=relay)):
+        await wait_until(lambda: telemetry(bus, reg.mower_id), within=5.0)
+        request = PhotoRequest(
+            mower_id=reg.mower_id, account_id=reg.account_id, demand=VisionDemand.ERROR_ANALYSIS
+        )
+        reply = (await bus.request(photo_subject(reg.mower_id), request, timeout=3)).model(
+            PhotoReply
+        )
+    assert reply.error is None
+    [(target, _)] = relay.targets
+    assert target.demand is VisionDemand.ERROR_ANALYSIS

@@ -18,6 +18,7 @@ from mowdeck_contracts.v1 import (
     MowerRegistration,
     MowerState,
 )
+from mowdeck_contracts.v1.relay import VisionDemand
 from mowdeck_control import MowerConnection, Photo
 
 from device_gateway.domain.rules import Shard
@@ -54,6 +55,9 @@ class SnapshotTarget:
     themselves (``needs_camera_session``); None for the camera relay, which asks for its own."""
     camera_uid: int | None = None
     """The camera of ``session`` to take (the first with a publisher uid)."""
+    demand: VisionDemand = VisionDemand.ROUTINE
+    """Why the photo is wanted (``PhotoRequest.demand``): the relay lets ``error_analysis``
+    wake a sleeping mower and skips the Vision budget for it."""
 
 
 class CameraSnapshotter(Protocol):

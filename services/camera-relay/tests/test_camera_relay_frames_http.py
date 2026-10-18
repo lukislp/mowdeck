@@ -284,6 +284,8 @@ def test_a_state_becomes_the_relays_mower_status() -> None:
     assert charging.charging
     asleep = mower_status(_state(mower, account, activity=MowerActivity.OFFLINE), T0)
     assert asleep.asleep and not asleep.reachable
+    docked = mower_status(_state(mower, account, activity=MowerActivity.DOCKED), T0)
+    assert docked.online and docked.reachable and not docked.asleep
     gone = mower_status(_state(mower, account, connected=False), T0)
     assert not gone.online
     stale = mower_status(_state(mower, account), T0 + timedelta(minutes=3))
@@ -353,3 +355,21 @@ def test_the_mjpeg_splitter_cuts_complete_images_only() -> None:
     buffer.extend(two[10:])
     assert split_jpegs(buffer) == [two]
     assert buffer == bytearray()
+
+
+async def test_the_demand_decides_whether_a_sleeping_mower_is_woken() -> None:
+    mower, account = uuid4(), uuid4()
+    async with _app() as (_, client, bus, _vendor):
+        await bus.publish(
+            telemetry_subject(mower), _state(mower, account, activity=MowerActivity.OFFLINE)
+        )
+        routine = await client.post(
+            "/internal/v1/frames/snapshot", json=_body(mower, account), headers=AUTH
+        )
+        assert routine.status_code == 503
+        woken = await client.post(
+            "/internal/v1/frames/snapshot",
+            json=_body(mower, account, demand="error_analysis"),
+            headers=AUTH,
+        )
+        assert woken.status_code == 200, woken.text

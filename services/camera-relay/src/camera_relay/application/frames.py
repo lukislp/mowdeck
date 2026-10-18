@@ -45,6 +45,7 @@ from mowdeck_contracts.v1.relay import (
     RelayErrorCode,
     RelayPurpose,
     RelayRenewRequest,
+    VisionDemand,
 )
 from mowdeck_service_kit import get_logger
 
@@ -136,6 +137,9 @@ class FrameRequest:
     """None: the first camera with a publisher uid (the front or left one)."""
     on_behalf_of: UUID | None = None
     """The user the service acts for (logged)."""
+    demand: VisionDemand = VisionDemand.ROUTINE
+    """``error_analysis`` (a mower with a problem) may wake a sleeping mower and is not bound by
+    the Vision budget; ``routine`` keeps every limit."""
 
     @property
     def key(self) -> RelayKey:
@@ -194,6 +198,7 @@ class FrameTap:
             camera=lease.camera_id,
             lease_id=str(lease.lease_id),
             on_behalf_of=str(request.on_behalf_of) if request.on_behalf_of else None,
+            demand=request.demand.value,
             bytes=len(frame.data),
         )
         return frame
@@ -240,6 +245,7 @@ class FrameTap:
                 camera_ids=[request.camera_id] if request.camera_id else [],
                 requested_by=request.requested_by,
                 purpose=RelayPurpose.VISION,
+                vision_demand=request.demand,
             ),
             vision_mode=mode,
             first_camera_only=True,

@@ -283,6 +283,7 @@ from mowdeck_contracts.v1.relay import (
     RelayRenewReply,
     RelayRenewRequest,
     RelayStopReason,
+    VisionDemand,
 )
 from mowdeck_contracts.v1.scheduler import (
     SCHEDULER_RUN_RECORDED,
@@ -615,6 +616,7 @@ __all__ = [
     "UiAreaDef",
     "UserChanged",
     "UtcDateTime",
+    "VisionDemand",
     "VisionProposalCreated",
     "VisionTask",
     "VisionTrigger",

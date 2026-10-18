@@ -9,7 +9,8 @@ becomes a :class:`~camera_relay.domain.policy.MowerStatus`:
   :data:`STALE_AFTER_SECONDS` old; a stored state of a gateway that went away counts as
   offline);
 * ``asleep``: the mower itself reports ``offline`` (the vendor's sleeping, powered off or
-  unconnected modes);
+  unconnected modes): a viewer or an error analysis may wake it, routine Vision never does.
+  ``docked``, ``charging`` and every other activity are awake;
 * ``battery_percent`` and ``charging`` (also while the activity is ``charging``).
 
 The video budget is not part of the telemetry: it comes from the vendor session the relay is
