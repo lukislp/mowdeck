@@ -22,6 +22,7 @@ from mowdeck_contracts.v1 import (
     IssueCommandRequest,
     PhotoReply,
     PhotoRequest,
+    VisionDemand,
     VisionProposalCreated,
 )
 from mowdeck_contracts.v1.subjects import (
@@ -90,13 +91,21 @@ class BusPhotoSource:
         self.timeout_seconds = timeout_seconds
 
     async def photo(self, mower_id: UUID, account_id: UUID) -> Image | None:
-        """An image from the gateway, None when none can be had (logged without content)."""
+        """An image from the gateway, None when none can be had (logged without content).
+
+        Every photo Vision asks for helps a mower with a problem (AI assist, the automatic
+        analysis of a recoverable error), so it is an ``error_analysis``: through the camera
+        relay it may wake a sleeping mower and is not bound by the Vision budget (ADR 0045)."""
         if self.bus is None:
             return None
         try:
             message = await self.bus.request(
                 photo_subject(mower_id),
-                PhotoRequest(mower_id=mower_id, account_id=account_id),
+                PhotoRequest(
+                    mower_id=mower_id,
+                    account_id=account_id,
+                    demand=VisionDemand.ERROR_ANALYSIS,
+                ),
                 timeout=self.timeout_seconds,
             )
             reply = message.model(PhotoReply)

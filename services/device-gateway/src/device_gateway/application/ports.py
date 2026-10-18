@@ -4,6 +4,7 @@ from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
+from uuid import UUID
 
 from mowdeck_contracts.v1 import (
     CameraSession,
@@ -17,6 +18,7 @@ from mowdeck_contracts.v1 import (
     MowerRegistration,
     MowerState,
 )
+from mowdeck_contracts.v1.relay import VisionDemand
 from mowdeck_control import MowerConnection, Photo
 
 from device_gateway.domain.rules import Shard
@@ -34,20 +36,48 @@ class Clock(Protocol):
 
 
 class SnapshotFailed(Exception):  # noqa: N818 - reads as an outcome
-    """The capture worker gave no frame; the message is safe to return (never the token)."""
+    """No frame of the live camera; the message is safe to return (never a token)."""
+
+
+class SnapshotUnavailable(SnapshotFailed):
+    """This frame source cannot serve the mower at all (not reachable, switched off, no driver
+    for the camera's provider): the next configured source may."""
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotTarget:
+    """What a frame is wanted of: the gateway's own connection, never a caller's input."""
+
+    account_id: UUID
+    mower_id: UUID
+    session: CameraSession | None = field(default=None, repr=False)
+    """A fresh vendor camera session (secret token) for sources that join the camera
+    themselves (``needs_camera_session``); None for the camera relay, which asks for its own."""
+    camera_uid: int | None = None
+    """The camera of ``session`` to take (the first with a publisher uid)."""
+    demand: VisionDemand = VisionDemand.ROUTINE
+    """Why the photo is wanted (``PhotoRequest.demand``): the relay lets ``error_analysis``
+    wake a sleeping mower and skips the Vision budget for it."""
 
 
 class CameraSnapshotter(Protocol):
-    """Still frames of a live camera session (the capture worker, ADR 0035).
+    """Still frames of a mower's live camera, for adapters that offer a camera but cannot take
+    a photo themselves (no ``PhotoCapture``), such as the Mammotion cloud connection.
 
-    Used for adapters that offer a camera session (``CameraCapable``) but cannot take a photo
-    themselves (no ``PhotoCapture``), such as the Mammotion cloud connection.
+    Two implementations, tried in this order: the camera relay (ADR 0045,
+    ``RelaySnapshotter``: a frame of the session the relay holds or starts, never a second
+    vendor session while someone watches) and the deprecated capture worker (ADR 0035,
+    ``HttpCameraSnapshotter``: joins the vendor channel with its own session).
     """
 
-    async def snapshot(
-        self, session: CameraSession, camera_uid: int | None, *, timeout_seconds: float
-    ) -> Photo:
-        """One JPEG of the camera ``camera_uid``; raises :class:`SnapshotFailed`."""
+    @property
+    def needs_camera_session(self) -> bool:
+        """True when the source joins the camera itself and needs a vendor session."""
+        ...
+
+    async def snapshot(self, target: SnapshotTarget, *, timeout_seconds: float) -> Photo:
+        """One JPEG; raises :class:`SnapshotUnavailable` (try the next source) or
+        :class:`SnapshotFailed`."""
         ...
 
 

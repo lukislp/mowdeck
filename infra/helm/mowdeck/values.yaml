@@ -194,7 +194,11 @@ config:
   VISION_PHOTO_TIMEOUT_SECONDS: "35"
   # Longest time the Device-Gateway takes for a photo (a camera frame needs 5 to 15 s).
   GATEWAY_PHOTO_TIMEOUT_SECONDS: "30"
-  # --- Capture worker (services.visionCapture, ADR 0035) ---
+  # --- Vision's camera frames through the camera relay (ADR 0045) ---
+  # Compose sets GATEWAY_RELAY_URL by hand; here services.cameraRelay.enabled points the
+  # Device-Gateway at the relay's in-cluster Service, with the shared secret
+  # secrets.RELAY_FRAMES_TOKEN (empty: no relay frames).
+  # --- Capture worker (services.visionCapture, ADR 0035; DEPRECATED by ADR 0045) ---
   # Compose sets GATEWAY_CAPTURE_URL by hand; here services.visionCapture.enabled points the
   # Device-Gateway at the worker's in-cluster Service.
   # How long the worker waits for the first decoded camera frame.
@@ -238,6 +242,7 @@ secrets:
   #   billing-stripe-secret-key, billing-stripe-webhook-secret   only with services.billing
   #   vision-secrets-key, vision-default-api-key   (may be empty)
   #   capture-token                 only with services.visionCapture (may be empty)
+  #   relay-frames-token            only with services.cameraRelay (may be empty)
   #   fleet-credential-encryption-key   FLEET_CREDENTIAL_ENCRYPTION_KEY (may be empty)
   #   fleet-credential-encryption-key-previous   FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS (may be empty)
   #   notifications-vapid-private-key   only with existingSecretHasVapidKey: true
@@ -276,6 +281,10 @@ secrets:
   # -- Shared secret between the Device-Gateway and the capture worker (services.visionCapture).
   # Empty: the worker accepts every request from inside the cluster.
   CAPTURE_TOKEN: ""
+  # -- Shared secret between the Device-Gateway and the camera relay's frame tap (Vision's
+  # photos through the relay, services.cameraRelay). Empty: the frame tap is off and photos of
+  # mowers without an own photo function fall back to the capture worker, if enabled.
+  RELAY_FRAMES_TOKEN: ""
   # -- Web Push private key (VAPID). Empty: each Notifications pod creates a development pair in
   # an emptyDir on start (lost on restart, and different per replica, so the chart refuses more
   # than one replica without it). Generate once:

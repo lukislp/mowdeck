@@ -44,7 +44,7 @@ from device_gateway.adapters.bus.subscriptions import (
 )
 from device_gateway.adapters.control.cloud_accounts import CloudBackend, cloud_backend
 from device_gateway.adapters.control.connections import RegistryConnectionProvider
-from device_gateway.adapters.control.snapshot import HttpCameraSnapshotter
+from device_gateway.adapters.control.snapshot import HttpCameraSnapshotter, RelaySnapshotter
 from device_gateway.application.discovery import CloudDiscoveryService
 from device_gateway.application.gateway import DeviceGateway
 from device_gateway.application.ports import (
@@ -63,14 +63,30 @@ _log = get_logger("device_gateway.main")
 
 
 def snapshotter_from(settings: Settings) -> CameraSnapshotter | None:
-    """The capture worker client when ``MOWDECK_CAPTURE_URL`` is set (ADR 0035)."""
+    """The capture worker client when ``MOWDECK_CAPTURE_URL`` is set (ADR 0035, deprecated)."""
     if not settings.capture_url:
         return None
     token = settings.capture_token.get_secret_value() if settings.capture_token else None
-    _log.info("camera frames through the capture worker", url=settings.capture_url)
+    _log.info("camera frames through the capture worker (deprecated)", url=settings.capture_url)
     return HttpCameraSnapshotter(
         settings.capture_url, token=token, max_width=settings.capture_max_width
     )
+
+
+def relay_snapshotter_from(settings: Settings) -> CameraSnapshotter | None:
+    """The camera relay's frame tap when ``MOWDECK_RELAY_URL`` and its token are set."""
+    token = (
+        settings.relay_frames_token.get_secret_value().strip()
+        if settings.relay_frames_token
+        else ""
+    )
+    if not settings.relay_url:
+        return None
+    if not token:
+        _log.warning("MOWDECK_RELAY_URL is set without MOWDECK_RELAY_FRAMES_TOKEN: no relay frames")
+        return None
+    _log.info("camera frames through the camera relay", url=settings.relay_url)
+    return RelaySnapshotter(settings.relay_url, token=token, max_width=settings.capture_max_width)
 
 
 def build_app(
@@ -83,6 +99,7 @@ def build_app(
     cloud: CloudBackend | None = None,
     cloud_accounts: CloudAccounts | None = None,
     snapshotter: CameraSnapshotter | None = None,
+    relay_snapshotter: CameraSnapshotter | None = None,
 ) -> FastAPI:
     """Build the app. ``bus`` and ``principal_resolver`` default to the kit's behaviour;
     ``connection_provider`` and ``fleet`` default to the control registry and the bus;
@@ -101,7 +118,15 @@ def build_app(
         cloud_factory=backend.factory,
     )
     accounts: CloudAccounts = cloud_accounts or backend.accounts
-    frames = snapshotter or snapshotter_from(settings)
+    # Fallback order of photos without an adapter photo: the relay, then the capture worker.
+    frames = tuple(
+        source
+        for source in (
+            relay_snapshotter or relay_snapshotter_from(settings),
+            snapshotter or snapshotter_from(settings),
+        )
+        if source is not None
+    )
 
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus
@@ -126,7 +151,7 @@ def build_app(
             credentials=BusCredentialSource(
                 active_bus, timeout_seconds=settings.fleet_request_timeout_seconds
             ),
-            snapshotter=frames,
+            snapshotters=frames,
             snapshot_timeout_seconds=settings.capture_timeout_seconds,
         )
         app.state.gateway = gateway

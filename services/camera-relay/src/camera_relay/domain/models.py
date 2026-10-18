@@ -6,7 +6,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from mowdeck_contracts.v1.principal import PrincipalRef
-from mowdeck_contracts.v1.relay import RelayLeaseCloseReason, RelayPurpose
+from mowdeck_contracts.v1.relay import RelayLeaseCloseReason, RelayPurpose, VisionDemand
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -75,6 +75,14 @@ class Lease:
     was_bound: bool = False
     """The viewer had confirmed media once (its later loss closes it as ``media_lost``)."""
     vision_mode: VisionMode | None = None
+    vision_demand: VisionDemand = VisionDemand.ROUTINE
+    """Why Vision holds it: ``error_analysis`` may wake a sleeping mower and is not bound
+    by the Vision budget; ``routine`` is."""
+
+    @property
+    def is_routine_vision(self) -> bool:
+        """A Vision lease bound by every Vision limit."""
+        return self.is_vision and self.vision_demand is VisionDemand.ROUTINE
 
     @property
     def is_viewer(self) -> bool:

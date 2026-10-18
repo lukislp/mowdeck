@@ -1,4 +1,15 @@
 {
+  "$defs": {
+    "VisionDemand": {
+      "description": "Why Vision wants camera frames; decides which limits apply without a present viewer\n(owner decision 2026-10-18).",
+      "enum": [
+        "routine",
+        "error_analysis"
+      ],
+      "title": "VisionDemand",
+      "type": "string"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Request on ``gateway.mower.<id>.photo``: a still image of the mower's surroundings.\n\n``account_id`` must be the mower's account; the gateway refuses other accounts with\n``not_found`` so a foreign mower never reveals itself.",
   "properties": {
@@ -6,6 +17,11 @@
       "format": "uuid",
       "title": "Account Id",
       "type": "string"
+    },
+    "demand": {
+      "$ref": "#/$defs/VisionDemand",
+      "default": "routine",
+      "description": "Why the photo is wanted: `error_analysis` (a mower with a problem: AI assist, the automatic analysis) may wake a sleeping mower through the camera relay and ignores the Vision budget; `routine` keeps every limit (ADR 0045)."
     },
     "max_bytes": {
       "default": 524288,

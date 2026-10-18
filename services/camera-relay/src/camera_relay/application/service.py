@@ -20,8 +20,8 @@ that service principal only, never by the user's browser (and the other way roun
 
 import asyncio
 from collections import deque
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -29,6 +29,8 @@ from uuid import UUID
 from mowdeck_contracts.v1 import EventEnvelope
 from mowdeck_contracts.v1.camera import (
     RELAY_HEARTBEAT_SECONDS,
+    CameraInfo,
+    CameraPlacement,
     CameraProvider,
     CameraSession,
     RelayEndpoint,
@@ -129,7 +131,12 @@ class RelayService:
     # --- Requests (relay.camera.*) ------------------------------------------------------------
 
     async def attach(
-        self, request: RelayAttachRequest, *, vision_mode: VisionMode = VisionMode.STREAM
+        self,
+        request: RelayAttachRequest,
+        *,
+        vision_mode: VisionMode = VisionMode.STREAM,
+        first_camera_only: bool = False,
+        avoid_cameras: Sequence[str] = (),
     ) -> RelayAttachReply:
         """Open a lease on the session of ``(account_id, mower_id)``.
 
@@ -137,7 +144,12 @@ class RelayService:
         provider without a source driver is answered with ``unsupported_provider`` before any
         lease, event or start exists, and the vendor session is not released (a client in
         ``auto`` falls back to the direct path and uses the stream). An empty ``camera_ids``
-        means every camera the vendor session offers.
+        means every camera the vendor session offers, or with ``first_camera_only`` (Vision's
+        frames) the one camera most likely to deliver (:func:`_first_camera`), never one of
+        ``avoid_cameras`` (cameras a caller found silent).
+        The video budget the offer reports updates the mower's state before the lease is
+        admitted, so a Vision lease below the budget limit is refused and the offered session
+        released.
         """
         key = RelayKey(request.account_id, request.mower_id)
         async with self._lock(key):
@@ -147,7 +159,7 @@ class RelayService:
             offered = False
             if (
                 session.state is SessionState.IDLE
-                and session.admission(request.purpose, now) is None
+                and session.admission(request.purpose, now, request.vision_demand) is None
             ):
                 try:
                     offer = await self.vendor.offer(key)
@@ -161,13 +173,18 @@ class RelayService:
                     detail = (str(exc) or "the camera source is not available")[:500]
                     return RelayAttachReply(error=_error(exc.code, detail))
                 session.offer(offer.cameras)
+                self._note_quota(session, offer.quota_remaining_percent)
                 offered = True
+            camera_ids = list(request.camera_ids)
+            if not camera_ids and first_camera_only:
+                camera_ids = _first_camera(session, self.clock(), avoid_cameras)
             decision = session.attach(
-                camera_ids=request.camera_ids,
+                camera_ids=camera_ids,
                 purpose=request.purpose,
                 principal=request.requested_by,
                 now=self.clock(),
                 vision_mode=vision_mode,
+                vision_demand=request.vision_demand,
             )
             outcome = await self._execute(session, decision.effects)
             if decision.refusal is not None:
@@ -224,6 +241,18 @@ class RelayService:
             await self._execute(session, decision.effects)
             return RelayDetachReply(detached=decision.lease is not None)
 
+    def _note_quota(self, session: RelaySession, remaining: float | None) -> None:
+        """Remember the video budget a vendor session reported (the mower's state must be
+        known: a budget alone never makes an unknown mower reachable)."""
+        if remaining is None:
+            return
+        status = self.repository.status_of(session.key.mower_id) or session.status
+        if status is None:
+            return
+        updated = replace(status, quota_remaining_percent=remaining)
+        self.repository.set_status(session.key.mower_id, updated)
+        session.status = updated
+
     def _own_key(self, account_id: UUID, mower_id: UUID, lease_id: UUID) -> RelayKey | RelayError:
         key = self.repository.key_of_lease(lease_id)
         if key is None:
@@ -268,7 +297,17 @@ class RelayService:
         await self._on_key(key, lambda s, now: s.source_failed(session_id, now))
 
     async def mower_status_changed(self, mower_id: UUID, status: MowerStatus) -> None:
-        """New state of a mower: applies to the session of every account that uses it."""
+        """New state of a mower: applies to the session of every account that uses it.
+
+        A state without the video budget (telemetry does not carry it) keeps the budget the last
+        vendor session reported."""
+        previous = self.repository.status_of(mower_id)
+        if (
+            status.quota_remaining_percent is None
+            and previous is not None
+            and previous.quota_remaining_percent is not None
+        ):
+            status = replace(status, quota_remaining_percent=previous.quota_remaining_percent)
         self.repository.set_status(mower_id, status)
         for key in list(self.repository.keys_of_mower(mower_id)):
             await self._on_key(key, lambda s, now: s.mower_status_changed(status, now))
@@ -396,6 +435,35 @@ class RelayService:
                 heartbeat_seconds=self.config.heartbeat_seconds,
             ),
         )
+
+
+_FRONT_PLACEMENTS = (CameraPlacement.FRONT_LEFT, CameraPlacement.FRONT, CameraPlacement.FRONT_RIGHT)
+
+
+def _first_camera(session: RelaySession, now: datetime, avoid: Sequence[str] = ()) -> list[str]:
+    """The one offered camera most likely to deliver, or none.
+
+    Ranked: a camera that already publishes in the running session; then a camera not known
+    to be silent, a front camera (left, front, right) before any other (a listed rear camera
+    may never publish, like the LUBA's), one with a publisher uid before one without, then
+    the offered order. Cameras known to be silent (``camera_available`` False) and ``avoid``
+    are left out."""
+
+    def rank(index: int, camera: CameraInfo) -> tuple[int, int, int, int]:
+        available = session.camera_available(camera.id, now)
+        front = (
+            _FRONT_PLACEMENTS.index(camera.placement)
+            if camera.placement in _FRONT_PLACEMENTS
+            else len(_FRONT_PLACEMENTS)
+        )
+        return (0 if available else 1, front, 0 if camera.uid is not None else 1, index)
+
+    candidates = [
+        (rank(index, camera), camera.id)
+        for index, camera in enumerate(session.offered)
+        if camera.id not in avoid and session.camera_available(camera.id, now) is not False
+    ]
+    return [min(candidates)[1]] if candidates else []
 
 
 def _not_found() -> RelayError:

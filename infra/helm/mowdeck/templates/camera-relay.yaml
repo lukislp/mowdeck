@@ -40,5 +40,7 @@ and names it in agoraBridge.image.repository; the chart refuses to render withou
   "volumeMounts" (list (dict "name" "agora-tmp" "mountPath" "/tmp"))) }}
 {{- $volumes = list (dict "name" "agora-tmp" "emptyDir" (dict "medium" "Memory" "sizeLimit" "64Mi")) }}
 {{- end }}
+{{- /* Vision's frame tap (internal HTTP): the token the Device-Gateway sends. */ -}}
+{{- $secretFiles := list (dict "key" "relay-frames-token" "file" "relay-frames-token" "env" "MOWDECK_RELAY_FRAMES_TOKEN_FILE") }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "camera-relay" "key" "cameraRelay" "image" "camera-relay"
-  "env" $env "sidecars" $sidecars "volumes" $volumes) }}
+  "env" $env "sidecars" $sidecars "volumes" $volumes "secretFiles" $secretFiles) }}

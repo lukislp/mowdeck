@@ -13,6 +13,7 @@ from mowdeck_contracts.v1.relay import (
     RelayLeaseCloseReason,
     RelayPurpose,
     RelayStopReason,
+    VisionDemand,
 )
 from relay_support import ONLINE, T0, at, events, of_type, principal, session
 
@@ -381,7 +382,7 @@ def test_vision_admission(status: MowerStatus | None, code: RelayErrorCode | Non
     [
         (None, True, False),
         (MowerStatus(online=False), False, False),
-        (MowerStatus(online=True, asleep=True), False, False),
+        (MowerStatus(online=True, asleep=True), True, False),  # a viewer may wake it
         (MowerStatus(online=True, battery_percent=5), True, True),
         (MowerStatus(online=True, quota_remaining_percent=1), True, True),
         (ONLINE, True, False),
@@ -675,3 +676,92 @@ def test_a_camera_asked_for_later_gets_its_own_settle_time() -> None:
     _attach(s, 30, ("front_left", "front_right"))  # the second camera joins the running source
     assert s.camera_available("front_right", at(31)) is None
     assert s.camera_available("front_right", at(46)) is False
+
+
+# --- Owner decisions 2026-10-18: who may wake a sleeping mower --------------------------------
+
+
+def _vision(
+    s: RelaySession, seconds: float, demand: VisionDemand
+) -> tuple[Lease | None, RelayErrorCode | None]:
+    decision = s.attach(
+        camera_ids=["front_left"],
+        purpose=RelayPurpose.VISION,
+        principal=principal(),
+        now=at(seconds),
+        vision_mode=VisionMode.SNAPSHOT,
+        vision_demand=demand,
+    )
+    return decision.lease, decision.refusal.code if decision.refusal else None
+
+
+ASLEEP = MowerStatus(online=True, asleep=True, battery_percent=80)
+
+
+@pytest.mark.parametrize(
+    ("status", "error_analysis", "routine"),
+    [
+        (ASLEEP, None, RelayErrorCode.UNAVAILABLE),
+        (MowerStatus(online=True, battery_percent=5), None, RelayErrorCode.BUDGET),
+        (MowerStatus(online=True, quota_remaining_percent=1), None, RelayErrorCode.BUDGET),
+        (MowerStatus(online=False), RelayErrorCode.UNAVAILABLE, RelayErrorCode.UNAVAILABLE),
+        (None, RelayErrorCode.UNAVAILABLE, RelayErrorCode.UNAVAILABLE),
+        (ONLINE, None, None),
+    ],
+)
+def test_error_analysis_may_wake_and_skips_the_budget_routine_may_not(
+    status: MowerStatus | None,
+    error_analysis: RelayErrorCode | None,
+    routine: RelayErrorCode | None,
+) -> None:
+    assert _vision(session(status=status), 0, VisionDemand.ERROR_ANALYSIS)[1] is error_analysis
+    assert _vision(session(status=status), 0, VisionDemand.ROUTINE)[1] is routine
+
+
+def test_used_up_vision_minutes_refuse_routine_but_not_error_analysis() -> None:
+    s = session()
+    s._vision_by_day[T0.date()] = timedelta(minutes=20)
+    assert _vision(s, 0, VisionDemand.ROUTINE)[1] is RelayErrorCode.BUDGET
+    lease, refusal = _vision(s, 0, VisionDemand.ERROR_ANALYSIS)
+    assert refusal is None and lease is not None
+    _live(s, 1)
+    # No limit ends it: it lives until its own cap (30 s for a snapshot), and ticking past
+    # the used-up budget neither closes it early nor loops.
+    s.tick(at(20))
+    assert lease.lease_id in s.leases
+    (closed,) = _closed(s.tick(at(31)))
+    assert closed.reason is RelayLeaseCloseReason.EXPIRED
+
+
+def test_asleep_does_not_stop_a_session_with_viewers_but_offline_does() -> None:
+    s = session()
+    viewer = _confirmed_viewer(s, 0)
+    _live(s, 1)
+    assert not of_type(s.mower_status_changed(ASLEEP, at(2)), StopVendorSession)
+    assert s.state is SessionState.LIVE and viewer.lease_id in s.leases
+    _lease, refusal = _vision(s, 3, VisionDemand.ROUTINE)
+    assert refusal is None, "a present viewer holds the session: Vision may use it"
+    stopped = s.mower_status_changed(MowerStatus(online=False), at(4))
+    assert of_type(stopped, StopVendorSession)
+    assert _stopped(stopped).reason is RelayStopReason.MOWER_OFFLINE
+    assert s.leases == {}
+
+
+def test_routine_vision_alone_ends_when_the_mower_falls_asleep() -> None:
+    s = session()
+    _vision(s, 0, VisionDemand.ROUTINE)
+    _live(s, 1)
+    effects = s.mower_status_changed(ASLEEP, at(2))
+    (stop,) = of_type(effects, StopVendorSession)
+    assert stop.release is True
+    assert _stopped(effects).reason is RelayStopReason.MOWER_OFFLINE
+    assert s.leases == {}
+
+
+def test_an_error_analysis_keeps_running_while_the_mower_sleeps() -> None:
+    s = session(status=ASLEEP)
+    lease, refusal = _vision(s, 0, VisionDemand.ERROR_ANALYSIS)
+    assert refusal is None and lease is not None
+    _live(s, 1)
+    assert not of_type(s.mower_status_changed(ASLEEP, at(2)), StopVendorSession)
+    assert lease.lease_id in s.leases

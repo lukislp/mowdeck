@@ -51,7 +51,9 @@ class MowerStatus:
 
     @property
     def reachable(self) -> bool:
-        """Online and awake: the only state in which the relay starts or keeps a source."""
+        """Online and awake: the only state in which routine Vision alone starts or keeps a
+        source. Viewers and error analyses need only ``online`` (they may wake a sleeping
+        mower, owner decision 2026-10-18)."""
         return self.online and not self.asleep
 
 
@@ -106,10 +108,21 @@ class RelayPolicy:
             return f"less than {self.vision_min_quota_percent:g} % of the video budget left"
         return None
 
-    def vision_refusal(self, status: MowerStatus | None, used_today: timedelta) -> Refusal | None:
-        """Why a Vision lease without a viewer is refused (or must end), or None.
+    def error_analysis_refusal(self, status: MowerStatus | None) -> Refusal | None:
+        """Why an error analysis without a viewer is refused, or None: only a mower without a
+        connection (or an unknown one). A stuck mower needs help, so it may be woken and no
+        battery, budget or daily limit applies."""
+        if status is None:
+            return Refusal(RelayErrorCode.UNAVAILABLE, "the mower's state is unknown")
+        if not status.online:
+            return Refusal(RelayErrorCode.UNAVAILABLE, "the mower is offline (no connection)")
+        return None
 
-        A Vision lease never wakes a mower: an unknown status counts as not reachable.
+    def vision_refusal(self, status: MowerStatus | None, used_today: timedelta) -> Refusal | None:
+        """Why a routine Vision lease without a viewer is refused (or must end), or None.
+
+        Routine Vision never wakes a mower: a sleeping mower and an unknown status count as not
+        reachable.
         """
         if status is None:
             return Refusal(

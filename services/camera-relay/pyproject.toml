@@ -17,6 +17,8 @@ dependencies = [
   "httpx>=0.28.1",
   "mowdeck-contracts",
   "mowdeck-service-kit",
+  # JPEG encoding of Vision's frames (the frame tap).
+  "pillow>=11.0.0",
 ]
 
 [project.scripts]

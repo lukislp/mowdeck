@@ -219,12 +219,18 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
     })
     .not.toBeNull();
 
-  // Camera session requests per mower, and every drive frame the page sends.
+  // Camera session requests per mower (and those the drive page made, by its referer: the mower
+  // page's camera panel may still ask for its own session while the drive page opens, so a count
+  // taken after the navigation would race with it), and every drive frame the page sends.
   const sessions = new Map<string, number>();
+  const driveSessions = new Map<string, number>();
   page.on('request', (req) => {
     const match = /\/fleet\/mowers\/([^/]+)\/camera\/session$/.exec(req.url());
-    if (match && req.method() === 'POST')
-      sessions.set(match[1]!, (sessions.get(match[1]!) ?? 0) + 1);
+    if (!match || req.method() !== 'POST') return;
+    sessions.set(match[1]!, (sessions.get(match[1]!) ?? 0) + 1);
+    const referer = req.headers()['referer'] ?? '';
+    if (new URL(referer, req.url()).pathname === `/mowers/${match[1]!}/drive`)
+      driveSessions.set(match[1]!, (driveSessions.get(match[1]!) ?? 0) + 1);
   });
   const frames: SentFrame[] = [];
   page.on('websocket', (socket) => {
@@ -254,11 +260,11 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await forceCameraTransport(page, 'direct');
   await loginByUi(page, owner);
   await page.goto(`/mowers/${mowerId}`);
+  // The mower page's camera panel has its own session; only the drive page's sessions count.
+  const before = driveSessions.get(mowerId) ?? 0;
   await page.getByTestId('mower-drive').click();
   await page.waitForURL(new RegExp(`/mowers/${mowerId}/drive$`));
-  // The mower page's camera panel had its own session; count the drive visit from here.
   await expect(page.getByTestId('camera-panel')).toHaveCount(0);
-  const before = sessions.get(mowerId) ?? 0;
 
   // --- desktop -------------------------------------------------------------------------------
   const drive = page.getByTestId('drive-page');
@@ -420,7 +426,7 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   await page.setViewportSize(DESKTOP);
   await expect(drive).toHaveAttribute('data-layout', 'desktop');
   // Exactly one camera session for the whole visit, through every layout.
-  expect((sessions.get(mowerId) ?? 0) - before).toBe(1);
+  expect((driveSessions.get(mowerId) ?? 0) - before).toBe(1);
   // The light belongs to the camera view: none over the map.
   await page.getByTestId('drive-view').getByText('Karte').click();
   await expect(drive).toHaveAttribute('data-view', 'map');

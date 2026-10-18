@@ -112,7 +112,13 @@ from mowdeck_contracts.v1 import (
 
 from mowdeck_control.broadcast import StateBroadcaster, StateSubscription
 from mowdeck_control.connection import ConnectionConfig, Dispatch, JobCommand, Outcome, Photo
-from mowdeck_control.errors import CommandRejected, NotConnected, SensorStop, UnsupportedPattern
+from mowdeck_control.errors import (
+    CommandRejected,
+    NotConnected,
+    PhotoUnavailable,
+    SensorStop,
+    UnsupportedPattern,
+)
 from mowdeck_control.geo import distance, point_in_polygon, to_geo_position
 from mowdeck_control.paths import stripe_path
 from mowdeck_control.photo import render_scene
@@ -228,6 +234,10 @@ class SimulationConfig:
     """Longitude of the demo garden's origin (with ``origin_lat``)."""
     camera: bool = True
     """Offer a fake camera (capability ``cloud``, sessions with provider ``fake``)."""
+    photos: bool = True
+    """Take still images of its own (:class:`PhotoCapture`, the garden drawn from the map).
+    False: :meth:`SimulatedMower.capture_photo` raises :class:`PhotoUnavailable`, like a camera
+    mower without own photos, so photos come from its live camera (the camera relay)."""
     camera_session_seconds: float = 300.0
     """Lifetime of a fake camera session (short values exercise the client's refresh)."""
     stuck_after_seconds: float | None = None
@@ -775,8 +785,12 @@ class SimulatedMower:
         return self._route_path(legs, job.area_ids)
 
     async def capture_photo(self) -> Photo:
-        """A still image of the surroundings drawn from the map (:class:`PhotoCapture`)."""
+        """A still image of the surroundings drawn from the map (:class:`PhotoCapture`);
+        :class:`PhotoUnavailable` with the option ``photos`` false."""
         self._require_connected()
+        if not self.config.photos:
+            msg = "the simulated mower takes no photos of its own (option photos: false)"
+            raise PhotoUnavailable(msg)
         return render_scene(
             self._map,
             (self._x, self._y),

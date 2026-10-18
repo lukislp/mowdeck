@@ -44,3 +44,8 @@ class PathUnavailable(ControlError):  # noqa: N818 - outcome names read best
         super().__init__(reason)
         self.reason = reason
         self.timed_out = timed_out
+
+
+class PhotoUnavailable(ControlError):  # noqa: N818 - outcome names read best
+    """The adapter takes no still image of its own (now): the caller may take a frame of the
+    live camera instead (the camera relay, ADR 0045)."""

@@ -81,6 +81,20 @@ class RelayPurpose(StrEnum):
     """Vision pulls frames. Bound by the vision limits; never wakes an offline mower."""
 
 
+class VisionDemand(StrEnum):
+    """Why Vision wants camera frames; decides which limits apply without a present viewer
+    (owner decision 2026-10-18)."""
+
+    ROUTINE = "routine"
+    """Frames nobody urgently needs (a learning run, routine stills): every Vision limit
+    applies and a sleeping mower is never woken."""
+    ERROR_ANALYSIS = "error_analysis"
+    """A mower with a problem needs help (AI assist, the automatic analysis of a recoverable
+    error): it may wake a sleeping mower and is not refused by the daily Vision minutes, the
+    battery or the video budget. Only a mower without a connection is refused; the per-request
+    caps (30 s snapshot, 300 s stream) still hold."""
+
+
 class RelayErrorCode(StrEnum):
     """Why the relay gave no lease."""
 
@@ -124,6 +138,10 @@ class RelayAttachRequest(ContractModel):
     )
     requested_by: PrincipalRef
     purpose: RelayPurpose = RelayPurpose.VIEWER
+    vision_demand: VisionDemand = Field(
+        default=VisionDemand.ROUTINE,
+        description="With purpose `vision`: `routine` or `error_analysis` (which limits apply).",
+    )
 
     @model_validator(mode="after")
     def _unique_camera_ids(self) -> Self:

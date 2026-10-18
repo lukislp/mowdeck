@@ -67,6 +67,15 @@
       ],
       "title": "RelayPurpose",
       "type": "string"
+    },
+    "VisionDemand": {
+      "description": "Why Vision wants camera frames; decides which limits apply without a present viewer\n(owner decision 2026-10-18).",
+      "enum": [
+        "routine",
+        "error_analysis"
+      ],
+      "title": "VisionDemand",
+      "type": "string"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -100,6 +109,11 @@
     },
     "requested_by": {
       "$ref": "#/$defs/PrincipalRef"
+    },
+    "vision_demand": {
+      "$ref": "#/$defs/VisionDemand",
+      "default": "routine",
+      "description": "With purpose `vision`: `routine` or `error_analysis` (which limits apply)."
     }
   },
   "required": [

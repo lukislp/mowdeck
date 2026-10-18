@@ -1,8 +1,10 @@
 {{- /* Device-Gateway: holds the mower connections, executes commands, publishes telemetry
 (Compose service device-gateway). A StatefulSet: one shard per replica, the shard index is the
 pod index (label apps.kubernetes.io/pod-index), the shard count the replica count (ADR 0013).
-With services.visionCapture enabled, photos of real cameras go through the capture worker
-(ADR 0035; MOWDECK_CAPTURE_URL, the shared token secrets.CAPTURE_TOKEN). */ -}}
+With services.cameraRelay enabled, photos of real cameras come from the relay's frame tap
+(ADR 0045; MOWDECK_RELAY_URL, the shared token secrets.RELAY_FRAMES_TOKEN); with
+services.visionCapture enabled (deprecated), the capture worker is the fallback (ADR 0035;
+MOWDECK_CAPTURE_URL, the shared token secrets.CAPTURE_TOKEN). */ -}}
 {{- $c := .Values.config }}
 {{- $v := .Values.services.deviceGateway }}
 {{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
@@ -14,9 +16,17 @@ With services.visionCapture enabled, photos of real cameras go through the captu
   "MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS" (toString $c.GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS)) }}
 {{- $secretFiles := list }}
 {{- $_ := set $env "MOWDECK_CAPTURE_TIMEOUT_SECONDS" (toString $c.CAPTURE_TIMEOUT_SECONDS) }}
+{{- if .Values.services.cameraRelay.enabled }}
+{{- $_ := set $env "MOWDECK_RELAY_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "camera-relay")) }}
+{{- $secretFiles = append $secretFiles (dict "key" "relay-frames-token" "file" "relay-frames-token" "env" "MOWDECK_RELAY_FRAMES_TOKEN_FILE") }}
+{{- else }}
+{{- /* No relay: no relay frames. */ -}}
+{{- $_ := set $env "MOWDECK_RELAY_URL" "" }}
+{{- $_ := set $env "MOWDECK_RELAY_FRAMES_TOKEN" "" }}
+{{- end }}
 {{- if .Values.services.visionCapture.enabled }}
 {{- $_ := set $env "MOWDECK_CAPTURE_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "vision-capture")) }}
-{{- $secretFiles = list (dict "key" "capture-token" "file" "capture-token" "env" "MOWDECK_CAPTURE_TOKEN_FILE") }}
+{{- $secretFiles = append $secretFiles (dict "key" "capture-token" "file" "capture-token" "env" "MOWDECK_CAPTURE_TOKEN_FILE") }}
 {{- else }}
 {{- /* No worker: photos of camera-capable adapters answer "unsupported". */ -}}
 {{- $_ := set $env "MOWDECK_CAPTURE_URL" "" }}

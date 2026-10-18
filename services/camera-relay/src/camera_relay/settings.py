@@ -105,6 +105,15 @@ class Settings(ServiceSettings):
     not built or not running): ``agora`` mowers are answered with ``unsupported_provider``, so
     clients in ``auto`` use the direct path."""
 
+    relay_frames_token: SecretStr | None = None
+    """Shared secret of the frame tap (``POST /internal/v1/frames/snapshot``, ``GET
+    /internal/v1/frames/stream``): callers (the Device-Gateway) send it as a bearer token,
+    usually as ``_FILE``. Unset or empty: the frame tap is off (``503 frames-disabled``)."""
+
+    relay_frames_max_concurrency: int = Field(default=4, ge=1, le=64)
+    """Frame requests served at the same time (snapshots and streams); one more waits 5 s,
+    then ``503 frames-busy``."""
+
     relay_test_hooks: bool = False
     """Serve ``POST /internal/v1/test/freeze`` (pauses the fake source) for the test stacks.
     Refused with ``MOWDECK_ENVIRONMENT=prod``."""
@@ -120,6 +129,13 @@ class Settings(ServiceSettings):
     def agora_bridge_url(self) -> str | None:
         """The configured bridge server, None when unset or empty."""
         return (self.relay_agora_bridge_url or "").strip() or None
+
+    @property
+    def frames_token(self) -> str | None:
+        """The frame tap's token, None when unset or empty."""
+        token = self.relay_frames_token
+        value = token.get_secret_value().strip() if token is not None else ""
+        return value or None
 
     @property
     def media_enabled(self) -> bool:
