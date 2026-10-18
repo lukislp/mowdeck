@@ -259,6 +259,10 @@ class RelayService:
             key, lambda s, now: s.source_started(session_id, source, publishing, now)
         )
 
+    async def cameras_published(self, key: RelayKey, session_id: UUID, cameras: list[str]) -> None:
+        """More cameras of the running source of ``key`` deliver."""
+        await self._on_key(key, lambda s, now: s.cameras_published(session_id, cameras, now))
+
     async def source_failed(self, key: RelayKey, session_id: UUID) -> None:
         """The source of ``key`` failed."""
         await self._on_key(key, lambda s, now: s.source_failed(session_id, now))
@@ -368,9 +372,12 @@ class RelayService:
         assert outcome.ticket is not None and outcome.claims is not None  # noqa: S101
         assert session.relay_id is not None  # noqa: S101
         base = self.config.whep_base_url.rstrip("/")
+        now = self.clock()
         tiles = [
             RelayTile(
-                camera_id=camera, whep_url=f"{base}/{camera_path(session.relay_id, camera)}/whep"
+                camera_id=camera,
+                whep_url=f"{base}/{camera_path(session.relay_id, camera)}/whep",
+                available=session.camera_available(camera, now),
             )
             for camera in lease.camera_ids
         ]

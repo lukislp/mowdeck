@@ -3,7 +3,9 @@
 One pass (:meth:`Reconciler.run_once`):
 
 1. **Source readiness.** A started source whose camera paths are ready on the media server is
-   reported once as ``source_started`` with the ready cameras (``STARTING -> LIVE``).
+   reported once as ``source_started`` with the ready cameras (``STARTING -> LIVE``); cameras
+   that become ready later are reported once each (``cameras_published``), so replies say
+   which cameras deliver (``RelayTile.available``).
 2. **Readers.** Every WHEP reader is looked up in the bindings the auth callback made:
    * bound and its ``bytesSent`` grew since the last pass: ``media_confirmed`` (once per
      binding, again after a loss); a lease that no longer exists gets its reader kicked;
@@ -90,13 +92,21 @@ class Reconciler:
         await self._viewers()
 
     async def _sources(self) -> None:
-        pending = [s for s in self.vendor.sources.values() if not s.started_reported]
+        pending = [
+            s
+            for s in self.vendor.sources.values()
+            if not s.started_reported or any(c not in s.published for c in s.cameras)
+        ]
         if not pending:
             return
         ready = {path.name for path in await self.api.paths() if path.ready}
         for source in pending:
             publishing = [c for c in source.cameras if viewer_path(source.relay_id, c) in ready]
-            if publishing:
+            if not publishing:
+                continue
+            if source.started_reported:
+                await self.vendor.mark_published(source, publishing)
+            else:
                 await self.vendor.mark_started(source, publishing)
 
     async def _viewers(self) -> None:

@@ -137,11 +137,25 @@ def fake_source_args(
     ]
 
 
+TRANSCODER_PROBESIZE = "1000000"
+"""Bytes ffmpeg reads at most before the transcoder starts (default 5 MB)."""
+TRANSCODER_ANALYZE_US = "1000000"
+"""Microseconds of input ffmpeg analyzes at most before the transcoder starts (default 5 s,
+spent estimating a frame rate the passthrough output never uses: ``-fpsprobesize 0``). Codec
+and size come from the source's parameter sets."""
+
+
 def transcoder_args(*, ffmpeg: str, input_url: str, output_url: str) -> list[str]:
     """Read the source (H.265 or H.264), write H.264 Constrained Baseline, frame for frame."""
     return [
         ffmpeg,
         *COMMON,
+        "-probesize",
+        TRANSCODER_PROBESIZE,
+        "-analyzeduration",
+        TRANSCODER_ANALYZE_US,
+        "-fpsprobesize",
+        "0",
         "-fflags",
         "nobuffer",
         "-flags",
@@ -174,6 +188,8 @@ class RunningSource:
     """The vendor session the source started with (credentials: never logged)."""
     started_reported: bool = False
     """``source_started`` was reported to the use cases."""
+    published: set[str] = field(default_factory=set)
+    """Cameras whose viewer path was seen ready (reported to the use cases)."""
     processes: dict[str, SupervisedProcess] = field(default_factory=dict)
     """Pipeline process per camera."""
 
@@ -264,7 +280,8 @@ class FakeSourceDriver:
 class Transcoder:
     """The generic transcoder of one camera: ``.../src`` (any codec ffmpeg reads) to the
     H.264 viewer path. Source drivers that deliver to ``.../src`` (the agora bridge source)
-    start one per camera."""
+    start one per camera once that path is ready on the media server; with ``max_restarts=0``
+    the first exit calls ``on_failure`` and the owner decides about a retry."""
 
     def __init__(
         self,

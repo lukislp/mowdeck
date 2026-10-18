@@ -87,6 +87,10 @@ class SourceReports(Protocol):
         """The source has media."""
         ...
 
+    async def cameras_published(self, key: RelayKey, session_id: UUID, cameras: list[str]) -> None:
+        """More cameras of the running source deliver."""
+        ...
+
     async def source_failed(self, key: RelayKey, session_id: UUID) -> None:
         """The source failed."""
         ...
@@ -211,9 +215,18 @@ class GatewayVendorSessions:
         if source.started_reported:
             return
         source.started_reported = True
+        source.published.update(publishing)
         await self._reports().source_started(
             source.key, source.session_id, source.provider, publishing
         )
+
+    async def mark_published(self, source: RunningSource, cameras: list[str]) -> None:
+        """The reconciler saw more cameras of a started source deliver: report them once."""
+        new = [camera for camera in cameras if camera not in source.published]
+        if not new or not source.started_reported:
+            return
+        source.published.update(new)
+        await self._reports().cameras_published(source.key, source.session_id, new)
 
     # --- Gateway requests ---------------------------------------------------------------------
 

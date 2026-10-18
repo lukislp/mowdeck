@@ -4,7 +4,9 @@ protocol, the relay's muxer and transcoder, MediaMTX and a WHEP client (ADR 0045
 The test gateway answers ``agora`` sessions; the stack's agora-bridge server starts
 ``fake_bridge.py`` per connection, which replays ``luba-uid1.h265`` (H.265) for uid 1 and 2.
 Covered: H.264 Constrained Baseline 640x480 at about 10 fps from the H.265 source and the
-H.265 ``.../src`` path; a crashing bridge fails the session (``unavailable`` during the
+H.265 ``.../src`` path; a first key frame 4 s after the join followed by a 6 s stall still
+plays (the transcoder waits for ``.../src``), the rear camera that never publishes blocks
+nothing and is reported unavailable; a crashing bridge fails the session (``unavailable`` during the
 backoff); without a reachable bridge an agora mower is ``unsupported_provider`` and its vendor
 session is not released.
 
@@ -27,11 +29,18 @@ from mowdeck_contracts.v1 import (
     utc_now,
 )
 from mowdeck_contracts.v1.camera import CameraInfo, CameraPlacement, CameraProvider
-from mowdeck_contracts.v1.relay import RelayAttachReply, RelayAttachRequest, RelayErrorCode
+from mowdeck_contracts.v1.relay import (
+    RelayAttachReply,
+    RelayAttachRequest,
+    RelayErrorCode,
+    RelayRenewReply,
+    RelayRenewRequest,
+)
 from mowdeck_contracts.v1.subjects import (
     ALL_CAMERA_RELEASES,
     ALL_CAMERA_SESSIONS,
     RELAY_CAMERA_ATTACH,
+    RELAY_CAMERA_RENEW,
 )
 from nats.aio.client import Client
 from nats.aio.msg import Msg
@@ -49,9 +58,11 @@ class AgoraGateway:
         self.sessions: list[CameraSessionRequest] = []
         self.releases: list[CameraReleaseRequest] = []
         self.crash_mowers: set[UUID] = set()
+        self.late_mowers: set[UUID] = set()
 
     def session_for(self, mower_id: UUID) -> CameraSession:
         prefix = "crash" if mower_id in self.crash_mowers else "luba"
+        prefix = "late" if mower_id in self.late_mowers else prefix
         return CameraSession(
             provider=CameraProvider.AGORA,
             app_id="media-test-app",
@@ -137,6 +148,52 @@ async def test_an_agora_mower_plays_through_the_bridge_as_h264(
     finally:
         await viewer.close()
         await detach(bus, account_id, mower_id, session.relay.lease_id)
+
+
+async def test_a_late_first_key_frame_and_a_silent_camera_still_play(
+    media_stack: MediaStack, bus: Client, agora: AgoraGateway
+) -> None:
+    # Live incident: the transcoder read .../src before the muxer had published it (the LUBA
+    # sends a key frame every 4 s), got 404 four times and failed the whole session.
+    account_id, mower_id = uuid4(), uuid4()
+    agora.late_mowers.add(mower_id)
+    session = await attach(bus, account_id, mower_id, [])  # every listed camera, rear too
+    assert session.relay is not None
+    assert [t.camera_id for t in session.relay.tiles] == ["front_left", "front_right", "rear"]
+    viewer = await watch(whep_url(media_stack, session), session.relay.ticket, within=40)
+    try:
+        assert await frames_after(viewer, 10, 20), "no frame decoded"
+        assert viewer.sizes == {(640, 480)}
+        second = await watch(whep_url(media_stack, session, 1), session.relay.ticket, within=30)
+        try:
+            assert await frames_after(second, 5, 20)
+        finally:
+            await second.close()
+
+        async def rear_unavailable() -> bool:
+            reply = await renew(bus, account_id, mower_id, session)
+            assert reply.session is not None and reply.session.relay is not None, reply.error
+            tiles = {t.camera_id: t.available for t in reply.session.relay.tiles}
+            return tiles == {"front_left": True, "front_right": True, "rear": False}
+
+        assert await eventually(rear_unavailable, 40), "the rear camera is still offered"
+    finally:
+        await viewer.close()
+        await detach(bus, account_id, mower_id, session.relay.lease_id)
+
+
+async def renew(
+    bus: Client, account_id: UUID, mower_id: UUID, session: CameraSession
+) -> RelayRenewReply:
+    assert session.relay is not None
+    request = RelayRenewRequest(
+        account_id=account_id,
+        mower_id=mower_id,
+        lease_id=session.relay.lease_id,
+        requested_by=VIEWER,
+    )
+    message = await bus.request(RELAY_CAMERA_RENEW, request.model_dump_json().encode(), timeout=10)
+    return RelayRenewReply.model_validate_json(message.data)
 
 
 async def test_a_crashing_bridge_fails_the_session_into_the_backoff(

@@ -1,7 +1,7 @@
 """The relay session's state machine with a fake time: leases, grace, failures, limits."""
 
 from datetime import timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from mowdeck_contracts.v1.camera import CameraProvider
@@ -635,3 +635,43 @@ def test_an_idle_session_without_vision_minutes_is_dormant() -> None:
     assert not s.is_dormant(T0)
     s.detach(lease.lease_id, at(1))
     assert not s.is_dormant(at(1))
+
+
+# --- Camera availability ------------------------------------------------------------------------
+
+
+def test_a_listed_camera_that_never_publishes_is_reported_unavailable_after_the_settle() -> None:
+    s = session()
+    _attach(s, 0, ("front_left", "front_right", "rear"))
+    assert s.session_id is not None
+    assert s.camera_available("rear", at(0)) is None  # starting: not known yet
+    s.source_started(s.session_id, CameraProvider.AGORA, ["front_left"], at(5))
+    assert s.state is SessionState.LIVE  # one camera is enough
+    s.cameras_published(s.session_id, ["front_right"], at(6))
+    assert [s.camera_available(c, at(10)) for c in ("front_left", "front_right", "rear")] == [
+        True,
+        True,
+        None,  # may still come: within the settle time after going live
+    ]
+    assert s.camera_available("rear", at(20)) is False
+    assert s.camera_available("front_right", at(20)) is True
+
+
+def test_stale_publish_reports_are_ignored() -> None:
+    s = session()
+    _attach(s, 0, ("front_left", "front_right"))
+    assert s.session_id is not None
+    assert s.cameras_published(s.session_id, ["front_right"], at(1)) == []  # still starting
+    assert s.publishing == ()
+    _live(s, 2)
+    s.cameras_published(uuid4(), ["rear"], at(3))
+    assert "rear" not in s.publishing
+
+
+def test_a_camera_asked_for_later_gets_its_own_settle_time() -> None:
+    s = session()
+    _attach(s, 0, ("front_left",))
+    _live(s, 1)
+    _attach(s, 30, ("front_left", "front_right"))  # the second camera joins the running source
+    assert s.camera_available("front_right", at(31)) is None
+    assert s.camera_available("front_right", at(46)) is False

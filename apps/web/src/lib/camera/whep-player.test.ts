@@ -360,6 +360,24 @@ describe('WhepPlayer', () => {
     expect(h.lease.renew).toHaveBeenCalledTimes(2);
   });
 
+  it('leaves cameras the relay reports as not available out of the publishers', async () => {
+    const h = harness();
+    const listed = relaySession();
+    listed.cameras = [
+      ...(listed.cameras ?? []),
+      { id: 'rear', name: 'Rear', uid: 3, placement: 'rear' },
+    ];
+    listed.relay!.tiles.push({ camera_id: 'rear', whep_url: '/media/whep/r/abc/rear/whep' });
+    const known = structuredClone(listed);
+    for (const tile of known.relay!.tiles) tile.available = tile.camera_id !== 'rear';
+    h.lease.renew.mockResolvedValue(known);
+    await h.player.start(listed, null);
+    expect(h.events.onPublishers).toHaveBeenLastCalledWith([1, 2, 3]); // not known yet
+    await h.fire(15_000);
+    // The vendor lists a rear camera the mower never publishes: no longer offered.
+    expect(h.events.onPublishers).toHaveBeenLastCalledWith([1, 2]);
+  });
+
   it('a lease that is gone (404) is a lost connection; other renew errors retry', async () => {
     const h = harness();
     await h.player.start(relaySession(), 1);

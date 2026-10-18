@@ -78,6 +78,7 @@ class FakeReports:
     lost: list[tuple[UUID, str | None]] = field(default_factory=list)
     leases: set[UUID] = field(default_factory=set)
     started: list[tuple[UUID, list[str]]] = field(default_factory=list)
+    published: list[tuple[UUID, list[str]]] = field(default_factory=list)
 
     async def media_confirmed(self, lease_id: UUID, whep_session: str, camera: str = "") -> bool:
         self.confirmed.append((lease_id, whep_session))
@@ -92,6 +93,9 @@ class FakeReports:
         self, key: Any, session_id: UUID, source: CameraProvider, publishing: list[str]
     ) -> None:
         self.started.append((session_id, publishing))
+
+    async def cameras_published(self, key: Any, session_id: UUID, cameras: list[str]) -> None:
+        self.published.append((session_id, cameras))
 
     async def source_failed(self, key: Any, session_id: UUID) -> None:
         return None
@@ -223,6 +227,41 @@ async def test_a_ready_path_reports_the_source_started_once() -> None:
     await reconciler.run_once()
     await reconciler.run_once()
     assert reports.started == [(source.session_id, ["front_left"])]
+    assert reports.published == []
+
+
+async def test_cameras_that_become_ready_later_are_reported_once_each() -> None:
+    api, reports, bindings = FakeApi(), FakeReports(), WhepBindings()
+    reconciler = _reconciler(api, reports, bindings)
+    source = RunningSource(
+        key=key(),
+        session_id=uuid4(),
+        relay_id=RID,
+        provider=CameraProvider.AGORA,
+        cameras=("front_left", "front_right", "rear"),
+    )
+    reconciler.vendor.sources[RID] = source
+    api.ready = {viewer_path(RID, "front_left")}
+    await reconciler.run_once()
+    api.ready.add(viewer_path(RID, "front_right"))
+    await reconciler.run_once()
+    await reconciler.run_once()  # the rear camera never publishes: nothing more
+    assert reports.started == [(source.session_id, ["front_left"])]
+    assert reports.published == [(source.session_id, ["front_right"])]
+
+
+async def test_path_ready_needs_a_ready_path_of_that_name() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        items = [{"name": "r/x/0/src", "ready": False}, {"name": "r/x/1/src", "ready": True}]
+        return httpx.Response(200, json={"pageCount": 1, "items": items})
+
+    api = MediaMtxApi(
+        "http://m:9997", user="u", secret=lambda: "s", transport=httpx.MockTransport(handler)
+    )
+    assert await api.path_ready("r/x/1/src")
+    assert not await api.path_ready("r/x/0/src")  # announced, no stream yet
+    assert not await api.path_ready("r/x/2/src")  # unknown: a reader would get 404
+    await api.close()
 
 
 async def test_media_reports_reach_the_domain_and_detach_kicks_the_bound_reader() -> None:

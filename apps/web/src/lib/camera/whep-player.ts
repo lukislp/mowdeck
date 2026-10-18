@@ -24,6 +24,9 @@
  *   WHEP sessions and detaches the lease (Fleet's DELETE, `keepalive` so it survives a page
  *   that is going away). A lease without confirmed media closes after 30 s on the relay, so
  *   every reconnect requests a new session.
+ * * Cameras: a tile the relay reports as `available: false` (a camera the vendor lists but the
+ *   mower never publishes) is left out of the publishers, so the picker does not offer it;
+ *   every renewal updates that list.
  * * Diagnostics: `getStats()` of every tile's receiver (bitrate, loss, frame rate, size,
  *   freezes, jitter buffer, round trip) as the panel's snapshot.
  *
@@ -316,9 +319,12 @@ export class WhepPlayer implements CameraPlayer {
 
   // --- Cameras --------------------------------------------------------------------------------
 
-  /** The uids of the cameras the relay serves (a tile each). */
+  /**
+   * The uids of the cameras the relay serves (a tile each), without those it reports as not
+   * available (`available: false`: listed by the vendor, but the mower never publishes them).
+   */
   private servedUids(): number[] {
-    const tiles = this.session?.relay?.tiles ?? [];
+    const tiles = (this.session?.relay?.tiles ?? []).filter((tile) => tile.available !== false);
     return (this.session?.cameras ?? [])
       .filter((camera) => tiles.some((tile) => tile.camera_id === camera.id))
       .map((camera) => camera.uid)
@@ -334,7 +340,7 @@ export class WhepPlayer implements CameraPlayer {
     if (!session || !endpoints.length) return null;
     const cameras = session.cameras ?? [];
     if (wanted === null) {
-      const endpoint = endpoints[0]!;
+      const endpoint = endpoints.find((e) => e.available !== false) ?? endpoints[0]!;
       const camera = cameras.find((c) => c.id === endpoint.camera_id);
       return { uid: camera?.uid ?? null, cameraId: endpoint.camera_id, url: endpoint.whep_url };
     }
@@ -580,6 +586,7 @@ export class WhepPlayer implements CameraPlayer {
     this.session = next;
     this.ticket = next.relay.ticket;
     this.events.onRenewed?.(next);
+    this.events.onPublishers?.(this.servedUids()); // the relay now knows which cameras deliver
   }
 
   // --- Statistics -----------------------------------------------------------------------------

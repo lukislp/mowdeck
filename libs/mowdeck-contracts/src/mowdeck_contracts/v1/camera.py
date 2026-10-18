@@ -138,6 +138,15 @@ class RelayTile(ContractModel):
             "`http(s)` URL. The path carries a random session token, never the mower id."
         ),
     )
+    available: bool | None = Field(
+        default=None,
+        description=(
+            "Whether this camera delivers video: true once its stream appeared, false when it "
+            "has not appeared a while after the session went live (a camera the vendor lists "
+            "but the mower never publishes), null while not known yet. Clients offer only "
+            "cameras that are not false."
+        ),
+    )
 
 
 class RelayEndpoint(ContractModel):

@@ -2345,6 +2345,11 @@ export type components = {
          */
         RelayTile: {
             /**
+             * Available
+             * @description Whether this camera delivers video: true once its stream appeared, false when it has not appeared a while after the session went live (a camera the vendor lists but the mower never publishes), null while not known yet. Clients offer only cameras that are not false.
+             */
+            available?: boolean | null;
+            /**
              * Camera Id
              * @description The `CameraInfo.id` this endpoint shows.
              */

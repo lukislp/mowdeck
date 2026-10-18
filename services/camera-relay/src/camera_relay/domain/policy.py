@@ -31,6 +31,9 @@ BACKOFF_INITIAL_SECONDS: Final = 5
 """Wait after the first failed start before the next start on demand."""
 BACKOFF_MAX_SECONDS: Final = 60
 """The wait doubles with every failure in a row up to this cap."""
+CAMERA_SETTLE_SECONDS: Final = 15
+"""A camera whose stream has not appeared this long after the session went live is reported
+as not available (``RelayTile.available`` false): a listed camera that never publishes."""
 MAX_LEASES_PER_SESSION: Final = 32
 """Open leases per session; one more is answered with ``unavailable`` (the relay is full)."""
 
@@ -78,6 +81,7 @@ class RelayPolicy:
     vision_min_quota_percent: float = VISION_MIN_QUOTA_PERCENT
     vision_min_battery_percent: float = VISION_MIN_BATTERY_PERCENT
     max_leases_per_session: int = MAX_LEASES_PER_SESSION
+    camera_settle: timedelta = timedelta(seconds=CAMERA_SETTLE_SECONDS)
 
     def backoff(self, failures: int) -> timedelta:
         """The wait after ``failures`` failed starts in a row: 5, 10, 20, 40, 60, 60, ... s."""

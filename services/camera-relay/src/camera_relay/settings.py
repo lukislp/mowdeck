@@ -78,6 +78,11 @@ class Settings(ServiceSettings):
     relay_media_stall_polls: int = Field(default=3, ge=1, le=30)
     """A bound reader whose sent bytes do not grow for this many polls counts as lost."""
 
+    relay_source_ready_seconds: float = Field(default=20.0, ge=5, le=120)
+    """How long a camera's ``.../src`` (the vendor stream before transcoding) may take to
+    become ready after its first key frame before it is logged as late; it is still awaited
+    and its transcoder starts only once it is ready."""
+
     relay_gateway_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     """Timeout of the Device-Gateway's camera session and release requests."""
 
