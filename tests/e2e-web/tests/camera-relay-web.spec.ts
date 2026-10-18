@@ -16,6 +16,11 @@
  * - The drive view over the relay: a frozen source (the relay's test hook pauses the fake
  *   sources) shows "Bild steht", holds the mower and latches the stick until it is let go; the
  *   light chip still switches the simulated mower's light.
+ * - Recovery (live incident 2026-10-18, the tile stayed "connecting" while the relay released
+ *   the stream): a camera that publishes only 8 s after its lease opened says "Kamera startet"
+ *   and then plays on that lease; a stream that goes away for 30 s mid-session (the relay's
+ *   muxer restart after a stall: the media server drops the reader) comes back on the same
+ *   lease without a new session, with the lease renewed and never detached meanwhile.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
@@ -30,6 +35,7 @@ import {
   loginByUi,
   presentsFrames,
   registerByApi,
+  relayTimingHook,
   requireWebRtc,
   setPageVisibility,
   videoFingerprint,
@@ -297,5 +303,68 @@ test('drive view over the relay: a frozen source holds the mower and latches the
   await light.click();
   await expect(light).toHaveAttribute('data-state', 'off', { timeout: 15_000 });
   await page.getByTestId('drive-stop').click();
+  csp.assertNone();
+});
+
+test('camera relay recovery: a slow camera start and a 30 s stream outage play on the same lease', async ({
+  page,
+  request,
+  browserName,
+}) => {
+  test.setTimeout(240_000);
+  await requireWebRtc(page, browserName);
+  const csp = watchCsp(page);
+  const owner = await registerByApi(request, actor(`relayrecover-${browserName}`));
+  const mowerId = await createMowerByApi(
+    request,
+    owner,
+    `Luba relay recover ${browserName} ${RUN}`,
+  );
+  await waitForMap(request, owner, mowerId);
+
+  let posts = 0;
+  const deletes: string[] = [];
+  const whep: number[] = [];
+  const renewals: number[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && SESSION.test(req.url())) posts += 1;
+    if (req.method() === 'DELETE' && LEASE.test(req.url())) deletes.push(req.url());
+  });
+  page.on('response', (res) => {
+    if (res.request().method() === 'POST' && WHEP.test(res.url())) whep.push(res.status());
+    if (res.url().endsWith('/renew')) renewals.push(res.status());
+  });
+
+  // The camera publishes only 8 s after the source started (Agora join, publisher, key frame).
+  relayTimingHook('start-delay', mowerId, 8);
+  await loginByUi(page, owner);
+  await page.goto(`/mowers/${mowerId}/camera`);
+  const stage = page.getByTestId('camera-stage');
+  await expect(stage).toHaveAttribute('data-starting', 'true', { timeout: 15_000 });
+  await expect(page.getByTestId('camera-status')).toContainText('Kamera startet');
+  await expectRelayLive(page);
+  await expect(stage).toHaveAttribute('data-starting', 'false');
+  expect(whep).toContain(404); // it was starting
+  expect(whep.at(-1)).toBe(201);
+  expect(posts).toBe(1);
+
+  // The stream goes away for 30 s mid-session and comes back: the same lease plays again.
+  const before = whep.length;
+  expect(relayTimingHook('outage', mowerId, 30)).toBeGreaterThan(0);
+  await expect(page.getByTestId('camera-tile')).not.toHaveAttribute('data-status', 'live', {
+    timeout: 30_000,
+  });
+  await expect(stage).toHaveAttribute('data-starting', 'true', { timeout: 30_000 });
+  await expect(page.getByTestId('camera-status')).toContainText('Kamera startet');
+  await expect(page.getByTestId('camera-tile')).toHaveAttribute('data-status', 'live', {
+    timeout: 60_000,
+  });
+  await expectRelayLive(page);
+  expect(whep.slice(before)).toContain(404);
+  expect(posts).toBe(1); // no new session: the tile reconnected on its lease
+  expect(deletes).toEqual([]);
+  expect(renewals.length).toBeGreaterThanOrEqual(2);
+  expect(renewals.every((status) => status === 200)).toBe(true);
+  await expect(page.getByTestId('camera-error')).toHaveCount(0);
   csp.assertNone();
 });

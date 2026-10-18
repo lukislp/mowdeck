@@ -9,8 +9,10 @@ import {
   DISCONNECTED_LIMIT_MS,
   GATHER_TIMEOUT_MS,
   resolveLocation,
+  TILE_GIVE_UP_MS,
+  WHEP_RETRY_MAX_MS,
   WHEP_RETRY_MS,
-  WHEP_START_ATTEMPTS,
+  whepRetryDelayMs,
   WhepPlayer,
   type PeerConnection,
   type RelayLeaseApi,
@@ -102,6 +104,12 @@ class FakePeer extends EventTarget {
     this.iceConnectionState = state;
     this.dispatchEvent(new Event('iceconnectionstatechange'));
   }
+
+  /** The other side closed the connection (MediaMTX dropped its reader). */
+  closeRemotely(): void {
+    this.connectionState = 'closed';
+    this.dispatchEvent(new Event('connectionstatechange'));
+  }
 }
 
 interface Call {
@@ -114,9 +122,11 @@ interface Call {
 
 function harness(options: { status?: number; location?: string | null; gathers?: boolean } = {}) {
   let status = options.status ?? 201;
+  let clock = NOW;
+  let failNetwork = false;
   const peers: FakePeer[] = [];
   const calls: Call[] = [];
-  const timers = new Map<number, { fn: () => void; ms: number }>();
+  const timers = new Map<number, { fn: () => void; ms: number; due: number }>();
   let nextTimer = 0;
   const videos = [document.createElement('video'), document.createElement('video')];
   const frames = [0, 0];
@@ -130,6 +140,7 @@ function harness(options: { status?: number; location?: string | null; gathers?:
     onActive: vi.fn(),
     onTracks: vi.fn(),
     onRenewed: vi.fn(),
+    onStarting: vi.fn(),
   } satisfies PlayerEvents;
   let renewTicket = 'v1.ticket-two.sig';
   const lease = {
@@ -146,6 +157,7 @@ function harness(options: { status?: number; location?: string | null; gathers?:
       body: String(init?.body ?? ''),
       keepalive: init?.keepalive === true,
     });
+    if (failNetwork && init?.method === 'POST') throw new TypeError('Failed to fetch');
     const camera = url.split('/').at(-2) ?? '';
     const headers = new Headers();
     if (location) headers.set('Location', location.replace('CAM', camera));
@@ -167,10 +179,10 @@ function harness(options: { status?: number; location?: string | null; gathers?:
     origin: () => ORIGIN,
     frames: (video) => frames[videos.indexOf(video)] ?? null,
     stream: (tracks) => ({ getTracks: () => tracks }) as unknown as MediaStream,
-    now: () => NOW,
+    now: () => clock,
     setTimer: (fn, ms) => {
       nextTimer += 1;
-      timers.set(nextTimer, { fn, ms });
+      timers.set(nextTimer, { fn, ms, due: clock + ms });
       return nextTimer;
     },
     clearTimer: (handle) => void timers.delete(handle as number),
@@ -184,8 +196,24 @@ function harness(options: { status?: number; location?: string | null; gathers?:
     }
     await flush();
   };
+  /** Let `ms` pass: every timer that falls due runs at its time, in time order. */
+  const advance = async (ms: number): Promise<void> => {
+    const until = clock + ms;
+    for (;;) {
+      const next = [...timers].sort((a, b) => a[1].due - b[1].due || a[0] - b[0])[0];
+      if (!next || next[1].due > until) break;
+      timers.delete(next[0]);
+      clock = next[1].due;
+      next[1].fn();
+      await flush();
+    }
+    clock = until;
+    await flush();
+  };
   return {
     player,
+    advance,
+    setNetworkDown: (down: boolean) => (failNetwork = down),
     peers,
     calls,
     timers,
@@ -420,24 +448,28 @@ describe('WhepPlayer', () => {
     expect(h.events.onConnectionLost).toHaveBeenCalledExactlyOnceWith('disconnected');
   });
 
-  it('ICE failed is a lost connection at once, disconnected only after 5 s', async () => {
+  it('ICE failed reconnects the tile at once, disconnected only after 5 s', async () => {
     const h = harness();
     await h.player.start(relaySession(), 1);
     const peer = h.peers[0]!;
     peer.setIce('connected');
     peer.setIce('disconnected');
-    expect(h.events.onConnectionLost).not.toHaveBeenCalled();
     peer.setIce('connected'); // back within the limit
-    await h.fire(DISCONNECTED_LIMIT_MS);
-    expect(h.events.onConnectionLost).not.toHaveBeenCalled();
+    await h.advance(DISCONNECTED_LIMIT_MS + WHEP_RETRY_MS);
+    expect(h.peers).toHaveLength(1);
     peer.setIce('disconnected');
-    await h.fire(DISCONNECTED_LIMIT_MS);
-    expect(h.events.onConnectionLost).toHaveBeenCalledExactlyOnceWith('disconnected');
+    await h.advance(DISCONNECTED_LIMIT_MS);
+    expect(peer.closed).toBe(true);
+    await h.advance(WHEP_RETRY_MS);
+    expect(h.peers).toHaveLength(2);
+    expect(h.peers[1]!.remote?.type).toBe('answer');
+    // The WHEP session of the lost connection was deleted.
+    expect(h.calls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
 
-    const other = harness();
-    await other.player.start(relaySession(), 1);
-    other.peers[0]!.setIce('failed');
-    expect(other.events.onConnectionLost).toHaveBeenCalledExactlyOnceWith('disconnected');
+    h.peers[1]!.setIce('failed'); // without a picture since the loss: the backoff goes on
+    await h.advance(whepRetryDelayMs(1));
+    expect(h.peers).toHaveLength(3);
+    expect(h.events.onConnectionLost).not.toHaveBeenCalled();
   });
 
   it('without automatic rejoin a lost connection fails the stream', async () => {
@@ -471,20 +503,116 @@ describe('WhepPlayer', () => {
     expect(h.calls).toHaveLength(2);
     expect(h.calls[1]!.body).toBe(h.calls[0]!.body); // the same offer
     h.setStatus(201);
-    await h.fire(WHEP_RETRY_MS);
+    await h.fire(whepRetryDelayMs(1));
     await started;
     expect(h.calls.filter((c) => c.method === 'POST')).toHaveLength(3);
     expect(h.peers[0]!.remote?.type).toBe('answer');
     expect(h.events.onConnectionLost).not.toHaveBeenCalled();
   });
 
-  it('gives up after 20 s of 404 answers', async () => {
+  it('backs off from 0.5 s to at most 3 s between offers', () => {
+    expect([0, 1, 2, 3, 4, 5, 20].map(whepRetryDelayMs)).toEqual([
+      500, 750, 1125, 1688, 2531, 3000, 3000,
+    ]);
+    expect(whepRetryDelayMs(99)).toBe(WHEP_RETRY_MAX_MS);
+  });
+
+  it.each([8_000, 30_000, 35_000])(
+    'keeps offering while the camera starts (%i ms) and plays then, on the same lease',
+    async (readyAfter) => {
+      // Live incident 2026-10-18: the player stopped offering after 20 s while a LUBA camera
+      // became playable 3 to 28 s after its lease opened; the relay released the stream.
+      const h = harness({ status: 404 });
+      await h.player.start(relaySession(), 1);
+      expect(h.events.onStarting).toHaveBeenLastCalledWith([1]);
+      await h.advance(readyAfter - 1);
+      expect(h.calls.filter((c) => c.method === 'POST').length).toBeGreaterThan(3);
+      expect(h.peers).toHaveLength(1); // the same offer, the same peer connection
+      h.setStatus(201);
+      await h.advance(WHEP_RETRY_MAX_MS);
+      expect(h.peers[0]!.remote?.type).toBe('answer');
+      expect(h.events.onStarting).toHaveBeenLastCalledWith([]);
+      expect(h.events.onConnectionLost).not.toHaveBeenCalled();
+      expect(h.events.onFailed).not.toHaveBeenCalled();
+      // The heartbeat renewed the lease meanwhile; it was never detached.
+      expect(h.lease.renew).toHaveBeenCalledTimes(Math.floor((readyAfter + 2_999) / 15_000));
+      expect(h.lease.detach).not.toHaveBeenCalled();
+      h.peers[0]!.emitTrack(track());
+      h.frames[0] = 1;
+      await h.advance(100);
+      expect(h.events.onLive).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('gives up only after 90 s without a picture: the camera is unreachable', async () => {
     const h = harness({ status: 404 });
-    const started = h.player.start(relaySession(), 1);
-    for (let i = 0; i < WHEP_START_ATTEMPTS; i += 1) await h.fire(WHEP_RETRY_MS);
-    await started;
-    expect(h.calls).toHaveLength(WHEP_START_ATTEMPTS);
-    expect(h.events.onConnectionLost).toHaveBeenCalledExactlyOnceWith('disconnected');
+    await h.player.start(relaySession(), 1);
+    await h.advance(TILE_GIVE_UP_MS - 3_000);
+    expect(h.events.onFailed).not.toHaveBeenCalled();
+    await h.advance(6_000);
+    expect(h.events.onFailed).toHaveBeenCalledExactlyOnceWith('unavailable');
+    expect(h.events.onConnectionLost).not.toHaveBeenCalled();
+    expect(h.events.onStarting).toHaveBeenLastCalledWith([]);
+    const offers = h.calls.filter((c) => c.method === 'POST').length;
+    await h.advance(30_000);
+    expect(h.calls.filter((c) => c.method === 'POST')).toHaveLength(offers); // stopped trying
+  });
+
+  it('a media plane that is away (5xx, no answer) is offered to again, not "starting"', async () => {
+    const h = harness({ status: 502 });
+    await h.player.start(relaySession(), 1);
+    expect(h.events.onConnectionLost).not.toHaveBeenCalled();
+    expect(h.events.onStarting).not.toHaveBeenCalledWith([1]);
+    h.setNetworkDown(true);
+    await h.advance(3_000);
+    h.setNetworkDown(false);
+    h.setStatus(201);
+    await h.advance(WHEP_RETRY_MAX_MS);
+    expect(h.peers[0]!.remote?.type).toBe('answer');
+    expect(h.events.onConnectionLost).not.toHaveBeenCalled();
+  });
+
+  it('a camera the relay reports as never publishing is not called "starting"', async () => {
+    const h = harness({ status: 404 });
+    const session = relaySession();
+    session.relay!.tiles[0]!.available = false;
+    await h.player.start(session, 1);
+    expect(h.events.onStarting).not.toHaveBeenCalledWith([1]);
+  });
+
+  it('a tile whose connection the media server closed reconnects alone on the same lease', async () => {
+    // The relay stops a camera's muxer after a stall (or MediaMTX restarts): its readers are
+    // dropped, the path answers 404 until the next key frame, then the tile plays again.
+    const h = harness();
+    await h.player.start(relaySession(), [1, 2]);
+    for (const [slot, peer] of h.peers.entries()) {
+      peer.setIce('connected');
+      peer.emitTrack(track());
+      h.frames[slot] = 1;
+    }
+    await h.advance(100);
+    expect(h.events.onTracks).toHaveBeenLastCalledWith([1, 2]);
+    h.setStatus(404);
+    h.peers[0]!.closeRemotely();
+    expect(h.events.onTracks).toHaveBeenLastCalledWith([2]); // the other tile keeps playing
+    expect(h.peers[0]!.closed).toBe(true);
+    await h.advance(28_000); // the muxer waits for the next key frame
+    expect(h.peers).toHaveLength(3); // one new connection, for the lost tile only
+    expect(h.events.onStarting).toHaveBeenLastCalledWith([1]);
+    h.setStatus(201);
+    await h.advance(WHEP_RETRY_MAX_MS);
+    expect(h.peers[2]!.remote?.type).toBe('answer');
+    const posts = h.calls.filter((c) => c.method === 'POST');
+    expect(posts.at(-1)!.url).toBe('/media/whep/r/abc/front_left/whep');
+    expect(posts.at(-1)!.headers.Authorization).toBe('Bearer v1.ticket-two.sig'); // renewed
+    h.peers[2]!.emitTrack(track());
+    await h.advance(100);
+    expect(h.events.onTracks).toHaveBeenLastCalledWith([2]); // the old frame count is no picture
+    h.frames[0] = 5;
+    await h.advance(100);
+    expect(h.events.onTracks).toHaveBeenLastCalledWith([1, 2]);
+    expect(h.events.onConnectionLost).not.toHaveBeenCalled();
+    expect(h.lease.detach).not.toHaveBeenCalled();
   });
 
   it('refuses a session that is not a relay session', async () => {

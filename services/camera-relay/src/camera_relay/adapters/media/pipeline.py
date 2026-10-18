@@ -20,6 +20,7 @@ ahead after a pause until it caught up with the wall clock (a burst of frames af
 while ``realtime=limit=...`` resets its clock after a pause and continues at 10 fps.
 """
 
+import asyncio
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -217,6 +218,8 @@ class FakeSourceDriver:
         self._spawn = spawn
         self._max_restarts = max_restarts
         self.sources: dict[str, RunningSource] = {}
+        self._start_delays: dict[UUID | None, float] = {}
+        self._pending: dict[str, asyncio.Task[None]] = {}
 
     def process_for(self, source: RunningSource, camera_id: str) -> SupervisedProcess:
         """The (not yet started) process of one camera."""
@@ -241,18 +244,66 @@ class FakeSourceDriver:
         return True
 
     async def start(self, source: RunningSource) -> None:
-        """Start one process per camera."""
+        """Start one process per camera (later, when a test asked for a delayed start)."""
         self.sources[source.relay_id] = source
+        delay = self._start_delays.pop(source.key.mower_id, None)
+        if delay is None:
+            delay = self._start_delays.pop(None, None)
+        if delay:
+            self._later(source, delay)
+            return
         await self._converge(source, source.cameras)
 
     async def update(self, source: RunningSource, cameras: Sequence[str]) -> None:
         """Start and stop processes to match ``cameras``."""
+        if source.relay_id in self._pending:
+            source.cameras = tuple(cameras)  # the pending start takes them
+            return
         await self._converge(source, tuple(cameras))
 
     async def stop(self, source: RunningSource) -> None:
         """Stop every process of the source."""
+        pending = self._pending.pop(source.relay_id, None)
+        if pending is not None:
+            pending.cancel()
         await self._converge(source, ())
         self.sources.pop(source.relay_id, None)
+
+    def delay_next_start(self, seconds: float, mower_id: UUID | None = None) -> None:
+        """Test hook: the next source of ``mower_id`` (of any mower without one) publishes
+        only ``seconds`` after its start, like a vendor camera that takes long to deliver."""
+        self._start_delays[mower_id] = seconds
+
+    async def outage(self, seconds: float, mower_id: UUID | None = None) -> int:
+        """Test hook: the streams of the running fake sources (all, or those of ``mower_id``)
+        go away now, like a muxer the relay stopped after a stall, and come back after
+        ``seconds``; the media server drops their readers. Returns how many processes
+        stopped."""
+        stopped = 0
+        for source in list(self.sources.values()):
+            if mower_id is not None and source.key.mower_id != mower_id:
+                continue
+            for camera in list(source.processes):
+                await source.processes.pop(camera).stop()
+                stopped += 1
+            self._later(source, seconds)
+        return stopped
+
+    def _later(self, source: RunningSource, seconds: float) -> None:
+        """Start the source's processes after ``seconds``, if it still runs then."""
+        previous = self._pending.pop(source.relay_id, None)
+        if previous is not None:
+            previous.cancel()
+
+        async def resume() -> None:
+            await asyncio.sleep(seconds)
+            self._pending.pop(source.relay_id, None)
+            if self.sources.get(source.relay_id) is source:
+                await self._converge(source, source.cameras)
+
+        self._pending[source.relay_id] = asyncio.create_task(
+            resume(), name=f"fake-later-{source.relay_id[:8]}"
+        )
 
     def freeze(self, frozen: bool, relay_id: str | None = None) -> int:
         """Pause (``frozen``) or resume the fake sources (all, or those of ``relay_id``).

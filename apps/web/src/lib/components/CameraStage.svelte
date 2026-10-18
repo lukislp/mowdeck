@@ -22,7 +22,14 @@
   Transport: the session request names the browser's camera option (`auto` unless forced to
   `relay` or `direct`). A hidden page suspends a relay session (its lease is detached at once,
   the relay stops the stream after its grace) and requests a new one when the page is visible
-  again; leaving the page closes it.
+  again (also on `pageshow` and `focus`, which a WebKit app view may send without a
+  `visibilitychange`); leaving the page closes it. A session that arrives when it is no longer
+  wanted is discarded at once (its lease detached).
+
+  Status: "requesting", "connecting", "camera starting" (the relay's source has not published
+  yet: a LUBA camera takes 6 to 8 s, after a 4G stall up to about 35 s), "camera not reachable,
+  trying again" (a session request that did not get through), "live", "picture frozen"; a tile
+  of both cameras says "this camera is starting" on its own.
 
   `compact` is the drive view: the stage fills its box, the tile captions keep only the side
   badge, the status sits small in a corner. Video and canvas never take pointer events, so a
@@ -167,6 +174,11 @@
           body: { transport },
         }),
       ),
+    // A relay lease nobody plays: end it now, not after the relay's unbound time.
+    discard: async (session) => {
+      const leaseId = session.relay?.lease_id;
+      if (session.provider === 'relay' && leaseId) await factory.detachLease(leaseId);
+    },
     createPlayer: (session, events): Promise<CameraPlayer> => factory.create(session, events),
     secure: () => window.isSecureContext,
     cameraEnabled: async () => (await loadConfig()).cameraEnabled,
@@ -187,12 +199,21 @@
     // A hidden tab or app holds no relay stream (ADR 0045): detach now, reconnect on return.
     const visibility = () =>
       void (document.visibilityState === 'hidden' ? cam.suspend() : cam.resume());
+    // A WebKit app view coming back to the foreground may send only `pageshow` or `focus`: a
+    // suspended session resumes on whichever arrives first (resume is a no-op otherwise).
+    const shown = () => {
+      if (document.visibilityState !== 'hidden') void cam.resume();
+    };
     window.addEventListener('pagehide', leave);
     window.addEventListener('pageshow', back);
+    window.addEventListener('pageshow', shown);
+    window.addEventListener('focus', shown);
     document.addEventListener('visibilitychange', visibility);
     return () => {
       window.removeEventListener('pagehide', leave);
       window.removeEventListener('pageshow', back);
+      window.removeEventListener('pageshow', shown);
+      window.removeEventListener('focus', shown);
       document.removeEventListener('visibilitychange', visibility);
     };
   });
@@ -275,18 +296,27 @@
     return () => clearInterval(timer);
   });
 
+  /** A shown tile has its picture (fake sessions always draw). */
+  const showingPicture = $derived(fake || tiles.some((tile) => tile.status === 'live'));
+
   const status = $derived.by(() => {
     if (frozenShown && !failed) return m.camera_frozen();
     if (cam.missing && cam.phase !== 'error') return ''; // the notice on the stage says it
     switch (cam.phase) {
       case 'requesting':
-        return m.camera_requesting();
+        return cam.unreachable ? m.camera_unreachable_retrying() : m.camera_requesting();
       case 'connecting':
-        return m.camera_connecting();
+        if (cam.unreachable) return m.camera_unreachable_retrying();
+        return cam.starting.length ? m.camera_starting() : m.camera_connecting();
       case 'waiting':
         return m.camera_waiting();
       case 'live':
-        return fake ? m.camera_test_pattern() : m.camera_live();
+        if (fake) return m.camera_test_pattern();
+        // Every shown tile lost its picture and reconnects (a muxer restart after a stall, a
+        // media server restart): say what happens, never "Live" over a picture that is gone.
+        if (!showingPicture)
+          return cam.starting.length ? m.camera_starting() : m.camera_connecting();
+        return m.camera_live();
       default:
         return '';
     }
@@ -303,6 +333,7 @@
   data-phase={cam.phase}
   data-provider={cam.session?.provider ?? ''}
   data-transport={cam.transport ?? ''}
+  data-starting={cam.starting.length ? 'true' : 'false'}
   data-frozen={frozenShown && !failed ? 'true' : 'false'}
 >
   {#if cam.phase === 'error' && cam.error}
@@ -367,6 +398,10 @@
             <p class="notice" data-testid="camera-no-picture">{m.camera_no_picture()}</p>
           {:else if tile.status === 'no_data'}
             <p class="notice" data-testid="camera-no-data">{m.camera_no_data()}</p>
+          {:else if tile.status === 'starting' && cam.both}
+            <p class="notice quiet-notice" data-testid="camera-tile-starting">
+              {m.camera_tile_starting()}
+            </p>
           {:else if tile.status === 'connecting' && cam.both}
             <p class="notice quiet-notice">{m.camera_tile_waiting()}</p>
           {/if}
@@ -400,7 +435,10 @@
       data-testid="camera-status"
       data-frozen={frozenShown ? 'true' : 'false'}
     >
-      {#if cam.phase === 'live' && !frozenShown}<span class="dot" aria-hidden="true"></span>{/if}
+      {#if cam.phase === 'live' && showingPicture && !frozenShown}<span
+          class="dot"
+          aria-hidden="true"
+        ></span>{/if}
       {status}
     </span>
   {/if}

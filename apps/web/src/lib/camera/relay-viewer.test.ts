@@ -45,8 +45,15 @@ class StubPlayer implements CameraPlayer {
   constructor(
     readonly session: CameraSession,
     readonly events: PlayerEvents,
+    /** Report a lost connection while starting (a lease that lapsed under the new player). */
+    readonly loseOnStart = false,
   ) {}
   async start(): Promise<void> {
+    if (this.loseOnStart) {
+      this.events.onStarting?.([1]);
+      this.events.onConnectionLost?.('disconnected');
+      return;
+    }
     this.events.onPublishers?.([1]);
     this.events.onActive?.(1);
     this.events.onTracks?.([1]);
@@ -62,6 +69,8 @@ class StubPlayer implements CameraPlayer {
 
 function harness(first: CameraSession = relaySession(), transport: CameraTransport = 'auto') {
   const players: StubPlayer[] = [];
+  const losing = { count: 0 };
+  const discarded: string[] = [];
   const timers: { fn: () => void; ms: number }[] = [];
   let lease = 1;
   const request = vi.fn(async (_id: string, wanted: CameraTransport) => {
@@ -71,8 +80,11 @@ function harness(first: CameraSession = relaySession(), transport: CameraTranspo
   });
   const deps: ViewerDeps = {
     request,
+    discard: async (session) => void discarded.push(session.relay?.lease_id ?? ''),
     createPlayer: async (session, events) => {
-      const player = new StubPlayer(session, events);
+      const lose = losing.count > 0;
+      if (lose) losing.count -= 1;
+      const player = new StubPlayer(session, events, lose);
       players.push(player);
       return player;
     },
@@ -89,7 +101,7 @@ function harness(first: CameraSession = relaySession(), transport: CameraTranspo
     layout: 'single',
     saveLayout: () => undefined,
   };
-  return { viewer: new CameraViewer(deps), players, timers, request };
+  return { viewer: new CameraViewer(deps), players, timers, request, losing, discarded, deps };
 }
 
 describe('CameraViewer with the camera relay', () => {
@@ -158,8 +170,76 @@ describe('CameraViewer with the camera relay', () => {
     expect(viewer.phase).toBe('live');
   });
 
+  it('a loss reported by the new player of a rejoin while it starts leads to the next rejoin', async () => {
+    // Live incident 2026-10-18: the second loss in a row arrived while the rejoin was still
+    // playing its session and was dropped; the tile said "connecting" for good.
+    const { viewer, players, timers, request, losing } = harness();
+    await viewer.open('m1');
+    losing.count = 2; // the next two players lose their lease while they start
+    players[0]!.events.onConnectionLost?.('disconnected');
+    for (let round = 1; round <= 3; round += 1) {
+      timers.at(-1)!.fn();
+      await vi.waitFor(() => expect(players).toHaveLength(round + 1));
+    }
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(viewer.phase).toBe('live');
+    expect(viewer.rejoins).toBe(3);
+    expect(viewer.starting).toEqual([]);
+  });
+
+  it('starting cameras are reported per tile until they play', async () => {
+    const { viewer, players, losing } = harness();
+    losing.count = 1;
+    await viewer.open('m1');
+    expect(viewer.starting).toEqual([1]);
+    players[0]!.events.onActive?.(1);
+    expect(viewer.tiles[0]!.status).toBe('starting');
+    players[0]!.events.onStarting?.([]);
+    players[0]!.events.onTracks?.([1]);
+    expect(viewer.tiles[0]!.status).toBe('live');
+  });
+
+  it('a refused rejoin (503) gives up after the last attempt, a network gap does not', async () => {
+    const { viewer, players, timers, request } = harness();
+    await viewer.open('m1');
+    request.mockRejectedValue(new ApiProblem({ status: 503 }));
+    players[0]!.events.onConnectionLost?.('disconnected');
+    for (let i = 0; i < 8 && viewer.phase !== 'error'; i += 1) {
+      timers.at(-1)!.fn();
+      await vi.waitFor(() => expect(request.mock.calls.length).toBeGreaterThan(i + 1));
+    }
+    await vi.waitFor(() => expect(viewer.phase).toBe('error'));
+    expect(viewer.error).toBe('unavailable');
+
+    const offline = harness();
+    await offline.viewer.open('m1');
+    offline.request.mockRejectedValue(ApiProblem.network());
+    offline.players[0]!.events.onConnectionLost?.('disconnected');
+    for (let i = 0; i < 12; i += 1) {
+      offline.timers.at(-1)!.fn();
+      await vi.waitFor(() => expect(offline.request.mock.calls.length).toBe(i + 2));
+    }
+    expect(offline.viewer.phase).toBe('connecting');
+    expect(offline.viewer.unreachable).toBe(true);
+    expect(offline.timers.at(-1)!.ms).toBe(16_000); // the longest delay repeats
+    offline.request.mockResolvedValue(relaySession('lease-back'));
+    offline.timers.at(-1)!.fn();
+    await vi.waitFor(() => expect(offline.viewer.phase).toBe('live'));
+    expect(offline.viewer.unreachable).toBe(false);
+  });
+
+  it('a session whose player cannot be created is discarded', async () => {
+    const { viewer, deps, discarded } = harness();
+    deps.createPlayer = async () => {
+      throw new Error('no video element');
+    };
+    await viewer.open('m1');
+    expect(viewer.phase).toBe('error');
+    expect(discarded).toEqual(['lease-1']);
+  });
+
   it('a session that arrives after the page went hidden is not played', async () => {
-    const { viewer, request, players } = harness();
+    const { viewer, request, players, discarded } = harness();
     let release!: (session: CameraSession) => void;
     request.mockImplementationOnce(
       () => new Promise<CameraSession>((resolve) => (release = resolve)),
@@ -167,9 +247,10 @@ describe('CameraViewer with the camera relay', () => {
     const opening = viewer.open('m1');
     await vi.waitFor(() => expect(request).toHaveBeenCalled());
     await viewer.suspend();
-    release(relaySession());
+    release(relaySession('lease-late'));
     await opening;
     expect(players).toEqual([]);
+    expect(discarded).toEqual(['lease-late']); // its lease ends at once
     await viewer.resume();
     expect(players).toHaveLength(1);
   });

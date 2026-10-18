@@ -115,8 +115,9 @@ class Settings(ServiceSettings):
     then ``503 frames-busy``."""
 
     relay_test_hooks: bool = False
-    """Serve ``POST /internal/v1/test/freeze`` (pauses the fake source) for the test stacks.
-    Refused with ``MOWDECK_ENVIRONMENT=prod``."""
+    """Serve the test hooks ``POST /internal/v1/test/freeze``, ``.../outage`` and
+    ``.../start-delay`` (steer the fake source) for the test stacks. Refused with
+    ``MOWDECK_ENVIRONMENT=prod``."""
 
     @model_validator(mode="after")
     def _no_test_hooks_in_production(self) -> Self:

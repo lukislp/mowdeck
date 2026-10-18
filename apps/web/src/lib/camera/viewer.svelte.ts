@@ -17,9 +17,20 @@
  *
  * Stability: `options` (per browser, `options.ts`); a lost connection (`DISCONNECTED`, or
  * `RECONNECTING` for more than 20 s) joins again with a fresh session, with a backoff, up to
- * {@link MAX_REJOIN_ATTEMPTS} times in a row. Statistics are read every 2 s while a player can
- * measure: `tracks` (resolution and frame rate per tile) always, the full `diagnostics` while
- * watched (the panel's Diagnose line).
+ * {@link MAX_REJOIN_ATTEMPTS} times in a row; a session request that does not reach the server
+ * (a 4G or WLAN gap) is retried at the longest backoff for as long as the camera is open and
+ * says so (`unreachable`). A loss reported while a rejoin plays its new session is a loss of
+ * that session and is never dropped (live incident 2026-10-18: the second loss in a row was
+ * swallowed and the tile said "connecting" for good). Statistics are read every 2 s while a
+ * player can measure: `tracks` (resolution and frame rate per tile) always, the full
+ * `diagnostics` while watched (the panel's Diagnose line).
+ *
+ * Starting: `starting` are the uids whose source has not published yet (a relay camera that
+ * starts, or restarts after a stall); their tiles say "camera starting" instead of "no data".
+ *
+ * Leases: a session that arrives when it is no longer wanted (the page went hidden or the
+ * camera closed while it was requested) is handed to `discard`, so its relay lease ends at
+ * once instead of holding the mower's stream for the relay's unbound time.
  *
  * Transport (ADR 0045): every session request names the browser's `options.transport` (`auto`
  * by default). The first session of an `open` pins the path it took (`relay` or `direct`): a
@@ -72,6 +83,8 @@ export type ViewerPhase =
 export interface ViewerDeps {
   /** `POST /mowers/{id}/camera/session` with `transport`; throws an `ApiProblem` when refused. */
   request(mowerId: string, transport: CameraTransport): Promise<CameraSession>;
+  /** Ends a session that is not played (a relay lease: Fleet's DELETE); best effort. */
+  discard?(session: CameraSession): Promise<void>;
   /** The player for the session's provider. */
   createPlayer(session: CameraSession, events: PlayerEvents): Promise<CameraPlayer>;
   /** The page runs in a secure context (HTTPS or localhost); WebRTC needs it. */
@@ -125,6 +138,10 @@ export class CameraViewer {
   transport = $state<'relay' | 'direct' | null>(null);
   /** A relay session is paused while the page is hidden. */
   suspended = $state(false);
+  /** Uids whose camera's source has not published yet (the tile says it is starting). */
+  starting = $state.raw<number[]>([]);
+  /** The last session request did not reach the camera service; the viewer keeps trying. */
+  unreachable = $state(false);
 
   private player: CameraPlayer | null = null;
   private mowerId: string | null = null;
@@ -171,6 +188,7 @@ export class CameraViewer {
       publishing: this.publishing,
       live: this.live,
       stalled: this.stalled,
+      starting: this.starting,
     });
   }
 
@@ -198,6 +216,7 @@ export class CameraViewer {
     this.rejoins = 0;
     this.transport = null;
     this.suspended = false;
+    this.unreachable = false;
     this.phase = 'requesting';
     let session: CameraSession;
     try {
@@ -206,7 +225,7 @@ export class CameraViewer {
       if (generation === this.generation) this.fail(error);
       return;
     }
-    if (generation !== this.generation) return;
+    if (generation !== this.generation) return this.discard(session);
     await this.play(session, generation);
   }
 
@@ -223,7 +242,7 @@ export class CameraViewer {
       if (generation === this.generation) this.fail(error);
       return;
     }
-    if (generation !== this.generation) return;
+    if (generation !== this.generation) return this.discard(next);
     if (this.player && sameChannel(current, next)) {
       try {
         await this.player.renew(next);
@@ -274,7 +293,7 @@ export class CameraViewer {
       if (generation === this.generation) this.fail(error);
       return;
     }
-    if (generation !== this.generation) return;
+    if (generation !== this.generation) return this.discard(session);
     await this.play(session, generation);
   }
 
@@ -379,6 +398,7 @@ export class CameraViewer {
         if (generation !== this.generation) return;
         this.phase = 'live';
         this.attempts = 0;
+        this.unreachable = false;
       },
       onWaiting: () => {
         if (generation === this.generation) this.phase = 'waiting';
@@ -410,9 +430,14 @@ export class CameraViewer {
           this.stalled = this.stalled.filter((uid) => !uids.includes(uid));
         }
       },
+      onStarting: (uids) => {
+        if (generation === this.generation) this.starting = uids;
+      },
     };
+    let created = false;
     try {
       const player = await this.deps.createPlayer(session, events);
+      created = true;
       if (generation !== this.generation) {
         await player.stop();
         return;
@@ -423,6 +448,7 @@ export class CameraViewer {
       this.armNoData(choice);
       await player.start(session, choice, this.options);
     } catch (error) {
+      if (!created) void this.discard(session);
       if (generation !== this.generation) return;
       await this.release(false);
       this.fail(error);
@@ -452,14 +478,19 @@ export class CameraViewer {
    * The connection dropped or stayed `RECONNECTING` too long: join again with a fresh session
    * (a new token), `disconnected` after the backoff, `stuck` at once.
    */
-  private connectionLost(kind: 'disconnected' | 'stuck', generation: number): void {
+  private connectionLost(
+    kind: 'disconnected' | 'stuck',
+    generation: number,
+    unreachable = false,
+  ): void {
+    // A rejoin already waits for its delay or its session request: this loss is covered.
     if (this.rejoinTimer !== null || this.rejoining) return;
-    if (this.attempts >= MAX_REJOIN_ATTEMPTS) {
+    if (this.attempts >= MAX_REJOIN_ATTEMPTS && !unreachable) {
       void this.release().then(() => this.setError('failed'));
       return;
     }
     const delay = kind === 'stuck' ? 0 : rejoinDelayMs(this.attempts);
-    this.attempts += 1;
+    this.attempts = Math.min(this.attempts + 1, MAX_REJOIN_ATTEMPTS);
     this.phase = 'connecting';
     this.rejoinTimer = this.setTimer(() => {
       this.rejoinTimer = null;
@@ -477,20 +508,28 @@ export class CameraViewer {
     } catch (error) {
       this.rejoining = false;
       if (generation !== this.generation) return;
-      // The network may be down: try again with the next delay, give up after the last attempt.
-      if (this.attempts >= MAX_REJOIN_ATTEMPTS) return this.fail(error);
-      this.connectionLost('disconnected', generation);
+      // Not reached (a 4G or WLAN gap): keep trying at the longest delay while the camera is
+      // open. Refused (the relay is full, the mower offline): give up after the last attempt.
+      const offline = asProblem(error).status === 0;
+      this.unreachable = offline || this.unreachable;
+      if (!offline && this.attempts >= MAX_REJOIN_ATTEMPTS) return this.fail(error);
+      this.connectionLost('disconnected', generation, offline);
       return;
     }
-    try {
-      if (generation !== this.generation) return;
-      this.rejoins += 1;
-      await this.release(false);
-      if (generation !== this.generation) return;
-      await this.play(session, generation);
-    } finally {
-      this.rejoining = false;
-    }
+    // The request is done: from here on a loss belongs to the new session and must lead to the
+    // next rejoin (the player may report it while it still starts).
+    this.rejoining = false;
+    if (generation !== this.generation) return this.discard(session);
+    this.unreachable = false;
+    this.rejoins += 1;
+    await this.release(false);
+    if (generation !== this.generation) return this.discard(session);
+    await this.play(session, generation);
+  }
+
+  /** End a session that will not be played (best effort, never throws). */
+  private async discard(session: CameraSession): Promise<void> {
+    await this.deps.discard?.(session).catch(() => undefined);
   }
 
   private schedule(session: CameraSession): void {
@@ -523,6 +562,7 @@ export class CameraViewer {
     this.activeUid = null;
     this.live = [];
     this.stalled = [];
+    this.starting = [];
     this.tracks = [];
     if (player) await player.stop().catch(() => undefined);
   }

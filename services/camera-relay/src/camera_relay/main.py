@@ -13,9 +13,10 @@ With ``MOWDECK_RELAY_MEDIAMTX_API_URL`` set, the media plane is wired (ADR 0045 
 gateway's camera sessions through :class:`~camera_relay.adapters.gateway.GatewayVendorSessions`
 with the ``fake`` source driver, MediaMTX's auth callback (``/internal/mediamtx/auth``), the
 reconcile loop (every ``MOWDECK_RELAY_RECONCILE_SECONDS``) and, with
-``MOWDECK_RELAY_TEST_HOOKS=true``, the freeze hook. With ``MOWDECK_RELAY_AGORA_BRIDGE_URL``
-also the ``agora`` source driver (step 7: the optional agora-bridge next to the relay; while it
-is not reachable, ``agora`` mowers are ``unsupported_provider``). Without it the source port is
+``MOWDECK_RELAY_TEST_HOOKS=true``, the test hooks (freeze, outage, start delay). With
+``MOWDECK_RELAY_AGORA_BRIDGE_URL`` also the ``agora`` source driver (step 7: the optional
+agora-bridge next to the relay; while it is not reachable, ``agora`` mowers are
+``unsupported_provider``). Without it the source port is
 :class:`~camera_relay.adapters.sources.NoSourceDriver`: every attach is answered with
 ``unavailable``. The relay keeps its state in memory and runs as a single replica.
 """

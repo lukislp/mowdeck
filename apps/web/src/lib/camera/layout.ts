@@ -2,8 +2,10 @@
  * The camera panel's layout (stereo cameras): one camera (`single`) or both front cameras side
  * by side (`both`, stacked on phones), kept per browser in `localStorage` (`mowdeck.cameraLayout`).
  * The tiles say for every view what it shows: live video, still
- * connecting, a camera that does not publish (`missing`) or one that delivered nothing within
- * {@link NO_DATA_MS} (`no_data`). A tile never shows another camera's picture in its place.
+ * connecting, a camera whose source is starting (`starting`: the relay has nothing published for
+ * it yet, so it is coming and not "no data"), a camera that does not publish (`missing`) or one
+ * that delivered nothing within {@link NO_DATA_MS} (`no_data`). A tile never shows another
+ * camera's picture in its place.
  */
 import { sideOf, type CameraInfo, type StereoPair } from './session';
 
@@ -16,7 +18,7 @@ export const LAYOUT_KEY = 'mowdeck.cameraLayout';
 /** A wanted camera that shows no picture after this long is reported as delivering no data. */
 export const NO_DATA_MS = 8_000;
 
-export type TileStatus = 'live' | 'connecting' | 'missing' | 'no_data';
+export type TileStatus = 'live' | 'connecting' | 'starting' | 'missing' | 'no_data';
 
 export interface CameraTile {
   /** Position in the panel: 0 (left or the single view), 1 (right). */
@@ -42,6 +44,8 @@ export interface TileInput {
   live: readonly number[];
   /** Wanted uids that delivered nothing within {@link NO_DATA_MS}. */
   stalled: readonly number[];
+  /** Uids whose source has not published yet (it is starting). */
+  starting?: readonly number[];
 }
 
 /** `both` only when the session has a stereo pair, otherwise `single`. */
@@ -71,11 +75,12 @@ export function wantedUids(choice: number | null | readonly number[]): number[] 
 
 function status(
   uid: number | null,
-  input: Pick<TileInput, 'publishing' | 'live' | 'stalled'>,
+  input: Pick<TileInput, 'publishing' | 'live' | 'stalled' | 'starting'>,
 ): TileStatus {
   if (uid === null) return 'connecting';
   if (input.live.includes(uid)) return 'live';
   if (input.publishing?.length && !input.publishing.includes(uid)) return 'missing';
+  if (input.starting?.includes(uid)) return 'starting';
   if (input.stalled.includes(uid)) return 'no_data';
   return 'connecting';
 }

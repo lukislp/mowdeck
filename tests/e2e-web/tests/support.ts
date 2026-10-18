@@ -346,6 +346,33 @@ export function freezeRelaySources(frozen: boolean): number {
   return Number(output.trim());
 }
 
+/**
+ * A timing hook of the relay's fake sources (test stack only, inside the camera-relay
+ * container): `outage` drops the streams of the mower now and brings them back after
+ * `seconds` (like a muxer the relay stopped after a 4G stall), `start-delay` lets the next
+ * source of the mower publish only after `seconds` (a camera that takes long to start).
+ */
+export function relayTimingHook(
+  hook: 'outage' | 'start-delay',
+  mowerId: string,
+  seconds: number,
+): number {
+  if (!/^[0-9a-f-]{36}$/.test(mowerId) || !Number.isFinite(seconds)) {
+    throw new Error('unexpected mower id or seconds');
+  }
+  const body = JSON.stringify({ seconds, mower_id: mowerId });
+  const script =
+    'import json, sys, urllib.request as u; ' +
+    `r = u.Request("http://127.0.0.1:8000/internal/v1/test/${hook}", data=sys.argv[1].encode(), headers={"Content-Type": "application/json"}, method="POST"); ` +
+    'print(json.load(u.urlopen(r, timeout=30))["changed"])';
+  const output = execFileSync(
+    'docker',
+    ['exec', serviceContainer('camera-relay'), 'python', '-c', script, body],
+    { encoding: 'utf-8', timeout: 60_000, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  return Number(output.trim());
+}
+
 /** Fleet's audit rows of a mower with `action` (read in the stack's PostgreSQL). */
 export function fleetAuditCount(mowerId: string, action: string): number {
   if (!/^[0-9a-f-]{36}$/.test(mowerId) || !/^[a-z._]+$/.test(action)) {
