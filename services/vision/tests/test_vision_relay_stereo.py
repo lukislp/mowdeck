@@ -278,3 +278,17 @@ def test_vision_photo_reply_images_of_both_reply_shapes() -> None:
     ]
     unnamed = RIGHT.model_copy(update={"camera_name": None})
     assert _images(PhotoReply(frames=[unnamed]))[0].camera == "front_right"
+
+
+def test_vision_prompt_safety_rule_counts_camera_images_not_the_map() -> None:
+    context = SceneContext(
+        task=VisionTask.RECOVER,
+        motion=Motion(linear_mps_at_1=0.5, turn_deg_per_s_at_1=57.0),
+        images=2,
+    )
+    camera = Image(_jpeg(150), "image/jpeg", "mower")
+    rendering = Image(_jpeg(200), "image/png", "map", "Map")
+    text = user_content([camera, rendering], context, VisionTask.RECOVER)[0]["text"]
+    assert MULTI_IMAGE_SAFETY not in text
+    pair = [Image(_jpeg(150), "image/jpeg", "mower", "Front left", "left", AT), camera, rendering]
+    assert MULTI_IMAGE_SAFETY in user_content(pair, context, VisionTask.RECOVER)[0]["text"]

@@ -89,7 +89,7 @@ MULTI_IMAGE_SAFETY: Final = (
     "see different parts of the scene and one may be hidden): add the risk flag and propose "
     "nothing. Never let one image overrule a risk seen in another."
 )
-"""The safety rule in the user message whenever the model gets more than one image."""
+"""The safety rule in the user message whenever the model gets more than one camera image."""
 
 ASSESSMENT_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
@@ -178,13 +178,14 @@ def user_content(
 ) -> list[dict[str, Any]]:
     """The user message: the task and context as text, then the images as data URLs, each
     after its caption when it has one. A stereo pair (``context.stereo``) comes left first,
-    with :data:`STEREO_HINT`; more than one image adds :data:`MULTI_IMAGE_SAFETY`."""
+    with :data:`STEREO_HINT`; more than one camera or upload image (the map rendering does not
+    count) adds :data:`MULTI_IMAGE_SAFETY`."""
     text = f"Task: {task.value}\nScene context (JSON):\n" + context.model_dump_json(
         exclude_none=True
     )
     if context.stereo:
         text += "\n\n" + STEREO_HINT
-    if len(images) > 1:
+    if sum(1 for image in images if image.source != "map") > 1:
         text += "\n\n" + MULTI_IMAGE_SAFETY
     parts: list[dict[str, Any]] = [{"type": "text", "text": text}]
     for index, image in enumerate(images):
