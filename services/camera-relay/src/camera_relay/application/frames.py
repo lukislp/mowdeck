@@ -134,7 +134,8 @@ class FrameRequest:
     requested_by: PrincipalRef
     """The requesting service (it owns the lease)."""
     camera_id: str | None = None
-    """None: the first camera with a publisher uid (the front or left one)."""
+    """None: the camera most likely to deliver (one already publishing, else a front
+    camera; never a listed camera known to be silent)."""
     on_behalf_of: UUID | None = None
     """The user the service acts for (logged)."""
     demand: VisionDemand = VisionDemand.ROUTINE
@@ -183,15 +184,16 @@ class FrameTap:
         """One frame; the lease lives exactly as long as this call (at most 30 s)."""
         budget = min(timeout_s, SNAPSHOT_MAX_SECONDS)
         deadline = self._monotonic() + budget
-        lease = await self._attach(request, VisionMode.SNAPSHOT)
+        holder: list[_Lease] = []
         try:
             async with asyncio.timeout(max(deadline - self._monotonic(), 0.0)):
-                await self._wait_live(lease)
+                lease = await self._ready_lease(request, VisionMode.SNAPSHOT, holder)
                 frame = await self._first_frame(lease, max_width=max_width, max_bytes=max_bytes)
         except TimeoutError as exc:
             raise FrameTapError(TIMEOUT, "no camera frame in time") from exc
         finally:
-            await self._detach(lease)
+            for held in holder:
+                await self._detach(held)
         _log.info(
             "vision frame served",
             mower_id=str(request.mower_id),
@@ -223,21 +225,53 @@ class FrameTap:
         """Open a lease and wait until its session is live; the caller pulls frames from the
         returned :class:`FrameStream` and must close it (closing is idempotent)."""
         rate = min(max(fps, 0.1), STREAM_MAX_FPS)
-        lease = await self._attach(request, VisionMode.STREAM)
+        holder: list[_Lease] = []
         try:
             async with asyncio.timeout(ready_timeout):
-                await self._wait_live(lease)
+                lease = await self._ready_lease(request, VisionMode.STREAM, holder)
         except TimeoutError as exc:
-            await self._detach(lease)
+            for held in holder:
+                await self._detach(held)
             raise FrameTapError(TIMEOUT, "the camera did not go live in time") from exc
         except BaseException:
-            await self._detach(lease)
+            for held in holder:
+                await self._detach(held)
             raise
         return FrameStream(self, lease, fps=rate, max_width=max_width)
 
+    async def _ready_lease(
+        self, request: FrameRequest, mode: VisionMode, holder: list[_Lease]
+    ) -> _Lease:
+        """A lease whose camera delivers. Like the transcoder, wait until the camera's path is
+        ready (the session reports the camera available). A camera that turns out silent (a
+        listed camera that never publishes) fails a request that named it; without a named
+        camera the next candidate is tried, the silent one avoided. ``holder`` keeps the open
+        lease for the caller's cleanup."""
+        silent: list[str] = []
+        while True:
+            lease = await self._attach(request, mode, avoid=silent)
+            holder.append(lease)
+            if await self._wait_ready(lease):
+                return lease
+            holder.remove(lease)
+            await self._detach(lease)
+            if request.camera_id is not None:
+                raise FrameTapError(
+                    RelayErrorCode.UNAVAILABLE.value,
+                    f"camera {lease.camera_id} does not publish",
+                )
+            silent.append(lease.camera_id)
+            _log.info(
+                "vision camera silent, trying another",
+                mower_id=str(request.mower_id),
+                camera=lease.camera_id,
+            )
+
     # --- Leases -------------------------------------------------------------------------------
 
-    async def _attach(self, request: FrameRequest, mode: VisionMode) -> _Lease:
+    async def _attach(
+        self, request: FrameRequest, mode: VisionMode, *, avoid: list[str] | None = None
+    ) -> _Lease:
         reply = await self.service.attach(
             RelayAttachRequest(
                 account_id=request.account_id,
@@ -249,6 +283,7 @@ class FrameTap:
             ),
             vision_mode=mode,
             first_camera_only=True,
+            avoid_cameras=tuple(avoid or ()),
         )
         if reply.error is not None:
             _log.info(
@@ -324,8 +359,11 @@ class FrameTap:
                 RelayErrorCode.UNAVAILABLE.value, "the camera session ended (lease closed)"
             )
 
-    async def _wait_live(self, lease: _Lease) -> None:
-        """Wait until the lease's session has media (``LIVE``); fail when the lease closed."""
+    async def _wait_ready(self, lease: _Lease) -> bool:
+        """Wait until the session is live and the lease's camera delivers (its path is ready):
+        True; False when the camera turned out silent (also when the source has not gone live
+        within the camera settle time with only this camera). Fails when the lease closed."""
+        attached = self.service.clock()
         while True:
             session = self.service.repository.get(lease.request.key)
             if session is None or lease.lease_id not in session.leases:
@@ -333,7 +371,14 @@ class FrameTap:
                     RelayErrorCode.UNAVAILABLE.value, "the camera source did not start"
                 )
             if session.state is SessionState.LIVE:
-                return
+                available = session.camera_available(lease.camera_id, self.service.clock())
+                if available is not None:
+                    return available
+            elif (
+                session.state is SessionState.STARTING
+                and self.service.clock() - attached >= session.policy.camera_settle
+            ):
+                return False
             await asyncio.sleep(self._ready_poll)
 
 

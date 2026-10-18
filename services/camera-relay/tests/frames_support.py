@@ -15,7 +15,7 @@ from relay_support import FakeVendor
 from camera_relay.application.frames import Frame, FrameUnavailableError
 from camera_relay.application.ports import ForbiddenSourceError, SourceOffer
 from camera_relay.application.service import RelayService
-from camera_relay.domain.effects import StartVendorSession
+from camera_relay.domain.effects import StartVendorSession, UpdateCameras
 from camera_relay.domain.models import RelayKey
 
 FRONT_CAMERAS = (
@@ -44,6 +44,8 @@ class LiveVendor(FakeVendor):
     """mower -> the only account the gateway serves it to."""
     quota_remaining_percent: float | None = None
     go_live: bool = True
+    silent: set[str] = field(default_factory=set)
+    """Listed cameras that never publish (like the LUBA's rear one)."""
     _tasks: set[asyncio.Task[None]] = field(default_factory=set)
 
     async def offer(self, key: RelayKey) -> SourceOffer:
@@ -58,6 +60,23 @@ class LiveVendor(FakeVendor):
             quota_remaining_percent=self.quota_remaining_percent,
         )
 
+    async def update_cameras(self, command: UpdateCameras) -> None:
+        await super().update_cameras(command)
+        publishing = [c for c in command.camera_ids if c not in self.silent]
+        if self.service is None or not publishing:
+            return
+        service = self.service
+
+        async def report() -> None:  # later, like the reconciler (the use case holds the lock)
+            await asyncio.sleep(0)
+            # The first publishing camera takes a starting source live.
+            await service.source_started(command.key, command.session_id, self.provider, publishing)
+            await service.cameras_published(command.key, command.session_id, publishing)
+
+        task = asyncio.create_task(report())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
     async def start(self, command: StartVendorSession) -> None:
         await super().start(command)
         if self.go_live and self.service is not None:
@@ -65,9 +84,11 @@ class LiveVendor(FakeVendor):
 
             async def live() -> None:
                 await asyncio.sleep(0)
-                await service.source_started(
-                    command.key, command.session_id, self.provider, list(command.camera_ids)
-                )
+                publishing = [c for c in command.camera_ids if c not in self.silent]
+                if publishing:
+                    await service.source_started(
+                        command.key, command.session_id, self.provider, publishing
+                    )
 
             task = asyncio.create_task(live())
             self._tasks.add(task)

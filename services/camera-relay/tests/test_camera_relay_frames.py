@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from frames_support import FRONT_CAMERAS, FakeGrabber, LiveVendor
 from mowdeck_contracts.v1 import PrincipalKind
-from mowdeck_contracts.v1.camera import CameraInfo
+from mowdeck_contracts.v1.camera import CameraInfo, CameraPlacement
 from mowdeck_contracts.v1.principal import PrincipalRef
 from mowdeck_contracts.v1.relay import (
     RelayLeaseCloseReason,
@@ -425,3 +425,95 @@ async def test_an_error_analysis_never_reaches_a_mower_without_connection() -> N
         )
     assert refused.value.code == "unavailable"
     assert harness.vendor.starts == []
+
+
+LUBA_CAMERAS = (
+    CameraInfo(id="rear", name="Rear", uid=3, placement=CameraPlacement.REAR),
+    CameraInfo(id="front_left", name="Front left", uid=1, placement=CameraPlacement.FRONT_LEFT),
+    CameraInfo(id="front_right", name="Front right", uid=2, placement=CameraPlacement.FRONT_RIGHT),
+)
+
+
+async def _settle_later(harness: Harness, seconds: float = 20) -> None:
+    """Let the camera settle time pass on the relay's clock once the source is live."""
+    await asyncio.sleep(0.05)
+    harness.clock.advance(seconds)
+
+
+async def test_without_a_camera_a_front_camera_is_taken_never_the_listed_rear_one() -> None:
+    harness = _harness()
+    assert isinstance(harness.vendor, LiveVendor)
+    harness.vendor.cameras = LUBA_CAMERAS
+    relay_key = key()
+    harness.repository.set_status(relay_key.mower_id, ONLINE)
+    grabber = FakeGrabber()
+    await _tap(harness, grabber).snapshot(
+        _request(relay_key), max_width=640, max_bytes=512_000, timeout_s=5
+    )
+    assert grabber.snapshots[0].endswith("/front_left")
+    assert harness.vendor.starts[0].camera_ids == ("front_left",)
+
+
+async def test_a_running_session_prefers_a_camera_that_already_publishes() -> None:
+    harness = _harness()
+    assert isinstance(harness.vendor, LiveVendor)
+    harness.vendor.cameras = LUBA_CAMERAS
+    relay_key = key()
+    harness.repository.set_status(relay_key.mower_id, ONLINE)
+    viewer = await harness.service.attach(attach_request(relay_key, ["front_right"]))
+    assert viewer.session is not None and viewer.session.relay is not None
+    await asyncio.sleep(0.01)
+    await harness.service.media_confirmed(viewer.session.relay.lease_id, "w", "front_right")
+    grabber = FakeGrabber()
+    await _tap(harness, grabber).snapshot(
+        _request(relay_key), max_width=640, max_bytes=512_000, timeout_s=5
+    )
+    assert grabber.snapshots[0].endswith("/front_right")
+    assert harness.vendor.updates == [], "no other camera was switched on for Vision"
+
+
+async def test_a_named_camera_that_never_publishes_is_unavailable() -> None:
+    harness = _harness()
+    assert isinstance(harness.vendor, LiveVendor)
+    harness.vendor.cameras = LUBA_CAMERAS
+    harness.vendor.silent = {"rear"}
+    relay_key = key()
+    harness.repository.set_status(relay_key.mower_id, ONLINE)
+    viewer = await harness.service.attach(attach_request(relay_key, ["front_left"]))
+    assert viewer.session is not None and viewer.session.relay is not None
+    await asyncio.sleep(0.01)
+    await harness.service.media_confirmed(viewer.session.relay.lease_id, "w", "front_left")
+    grabber = FakeGrabber()
+    settle = asyncio.create_task(_settle_later(harness))
+    with pytest.raises(FrameTapError) as refused:
+        await _tap(harness, grabber).snapshot(
+            _request(relay_key, "rear"), max_width=640, max_bytes=512_000, timeout_s=5
+        )
+    await settle
+    assert refused.value.code == "unavailable"
+    assert "does not publish" in refused.value.detail
+    assert grabber.snapshots == [], "the grabber never waited on a path that is not there"
+    session = harness.repository.get(relay_key)
+    assert session is not None
+    assert [lease.purpose for lease in session.leases.values()] == [RelayPurpose.VIEWER]
+
+
+async def test_a_default_camera_that_turns_out_silent_falls_back_to_another() -> None:
+    harness = _harness()
+    assert isinstance(harness.vendor, LiveVendor)
+    harness.vendor.cameras = LUBA_CAMERAS
+    harness.vendor.silent = {"front_left"}
+    relay_key = key()
+    harness.repository.set_status(relay_key.mower_id, ONLINE)
+    grabber = FakeGrabber()
+    settle = asyncio.create_task(_settle_later(harness))
+    frame = await _tap(harness, grabber).snapshot(
+        _request(relay_key), max_width=640, max_bytes=512_000, timeout_s=5
+    )
+    await settle
+    assert frame.data
+    assert grabber.snapshots == [grabber.snapshots[0]]
+    assert grabber.snapshots[0].endswith("/front_right")
+    session = harness.repository.get(relay_key)
+    assert session is not None and session.leases == {}
+    assert [reason for _, reason in _closed(harness)] == ["detached", "detached"]

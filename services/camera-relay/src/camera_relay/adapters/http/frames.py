@@ -151,7 +151,8 @@ class SnapshotBody(BaseModel):
     account_id: UUID
     mower_id: UUID
     camera_id: str | None = Field(default=None, min_length=1, max_length=64)
-    """None: the first camera with a publisher uid (the front or left one)."""
+    """None: the camera most likely to deliver (one already publishing, else a front
+    camera; never a listed camera known to be silent)."""
     max_width: int = Field(default=1280, ge=160, le=3840)
     max_bytes: int = Field(default=PHOTO_MAX_BYTES, ge=1024, le=8 * 1024 * 1024)
     timeout_s: float = Field(default=20.0, gt=0, le=SNAPSHOT_MAX_SECONDS)
