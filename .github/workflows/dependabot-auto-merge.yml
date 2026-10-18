@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   dependabot:
-    uses: lukislp/ci-workflows/.github/workflows/dependabot-auto-merge.yml@72b4327ed4a8deaf7758744bb7b01e2d7703736f # pre-release (lukislp/ci-workflows#78), bump to its release tag before merging
+    uses: lukislp/ci-workflows/.github/workflows/dependabot-auto-merge.yml@5b531ea2761888c5f574048c2c8049005a71edc5 # v1.8.0
     with:
       exclude-dependencies: pymammotion
     secrets:
