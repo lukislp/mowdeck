@@ -67,7 +67,9 @@ from pathlib import Path
 from typing import Any, Final, Literal, Protocol, runtime_checkable
 
 from pymammotion.client import MammotionClient
+from pymammotion.data.error_codes import bundled_error_codes
 from pymammotion.data.error_codes import describe as describe_error
+from pymammotion.data.error_codes import get_error_info as error_info
 from pymammotion.data.model.coordinates import CoordinateConverter
 from pymammotion.data.model.device import MowerDevice, create_device
 from pymammotion.data.model.device_capabilities import DeviceConfig
@@ -106,6 +108,7 @@ from pymammotion.http.model.http import CheckDeviceVersion, ProductVersionInfo
 from pymammotion.messaging.command_queue import Priority
 from pymammotion.messaging.mow_path_saga import MowPathSaga
 from pymammotion.proto import DrvUpgradeReport, RptAct, RptInfoType, SystemUpdateBufMsg
+from pymammotion.state.device_state import DeviceNotification
 from pymammotion.transport.base import (
     AccountInUseError,
     AuthError,
@@ -157,6 +160,7 @@ __all__ = [
     "NavGetCommData",
     "NavGetHashListData",
     "NoTransportAvailableError",
+    "NotificationListener",
     "OTAProgress",
     "OpenedClient",
     "OperationSettings",
@@ -176,9 +180,11 @@ __all__ = [
     "VideoResourceResponse",
     "WorkMode",
     "build_route_information",
+    "bundled_error_codes",
     "create_device",
     "decode_agora_token",
     "describe_error",
+    "error_info",
     "firmware_of",
     "login_cloud",
     "login_cloud_client",
@@ -191,6 +197,9 @@ _log = logging.getLogger("mowdeck_control_mammotion.port")
 
 StateListener = Callable[[], Awaitable[None]]
 """Called (without arguments) whenever PyMammotion publishes a new device snapshot."""
+NotificationListener = Callable[[str, dict[str, Any] | None], Awaitable[None]]
+"""Called with the identifier and value of every ``thing/event`` post (PyMammotion's
+``DeviceNotification``): ``device_warning_event``, ``device_warning_code_event``, ..."""
 
 _SAGA_START_GRACE_S = 3.0
 _SAGA_POLL_S = 0.5
@@ -402,6 +411,11 @@ class MammotionPort(Protocol):
 
     def subscribe(self, listener: StateListener) -> Callable[[], None]:
         """Call ``listener`` on every state change; returns the unsubscribe function."""
+        ...
+
+    def subscribe_notifications(self, listener: NotificationListener) -> Callable[[], None]:
+        """Call ``listener(identifier, value)`` on every ``thing/event`` post of the mower
+        (warning codes, information, ...); returns the unsubscribe function."""
         ...
 
     async def send(self, command: str, *, priority: Priority, **kwargs: Any) -> None:
@@ -790,6 +804,15 @@ class ClientPort:
             await listener()
 
         subscription = handle.subscribe_state_changed(on_snapshot)
+        return subscription.cancel
+
+    def subscribe_notifications(self, listener: NotificationListener) -> Callable[[], None]:
+        handle = self._require_handle()
+
+        async def on_notification(notification: DeviceNotification) -> None:
+            await listener(notification.identifier, notification.value)
+
+        subscription = handle.subscribe_notification(on_notification)
         return subscription.cancel
 
     # --- commands -------------------------------------------------------------------------

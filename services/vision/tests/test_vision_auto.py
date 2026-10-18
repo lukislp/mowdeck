@@ -104,7 +104,7 @@ def test_vision_auto_codes_are_normalised() -> None:
     assert normalise_code("Stuck") == "stuck"
     assert parse_codes("1201, -1032,,STUCK") == frozenset({"1201", "1032", "stuck"})
     assert parse_codes(["a", " "]) == frozenset({"a"})
-    for code in ("stuck", "1201", "11112", "11121", "1145", "1032", "11134", "2000701"):
+    for code in ("stuck", "1201", "1214", "11112", "11121", "1145", "1032", "11134", "2000701"):
         assert code in CODES
     for code in ("1004", "1030", "2502", "2801", "11131", "11133", "1005", "1202", "lifted"):
         assert code not in CODES, f"{code} must never start an automatic analysis"
@@ -124,6 +124,42 @@ def test_vision_auto_recoverable_errors() -> None:
     assert recoverable_error(unknown, CODES) == "9999"
     bare = _state(mower, account, error, None, drive_recoverable=True)
     assert recoverable_error(bare, CODES) == DRIVE_RECOVERABLE
+
+
+def test_vision_auto_trapped_mower_that_reports_a_pause_triggers() -> None:
+    """The Mammotion adapter reports a trapped mower (``MODE_PAUSE`` with fault 1201 in its
+    error log) as ``error`` with the code, its category and ``drive_recoverable``; an obstructed
+    recharge route (1214) likewise. A lift stop never triggers, also not while paused."""
+    mower, account = uuid4(), uuid4()
+    error = MowerActivity.ERROR
+    trapped = _state(
+        mower,
+        account,
+        error,
+        "1201",
+        error_message="The robot is stuck",
+        drive_recoverable=True,
+        raw={"work_mode": "MODE_PAUSE", "error_category": "trapped", "error_source": "error_log"},
+    )
+    assert recoverable_error(trapped, CODES) == "1201"
+    obstructed = _state(
+        mower,
+        account,
+        error,
+        "1214",
+        raw={"work_mode": "MODE_PAUSE", "error_category": "obstacle"},
+    )
+    assert recoverable_error(obstructed, CODES) == "1214"
+    lifted = _state(
+        mower,
+        account,
+        error,
+        "2801",
+        raw={"work_mode": "MODE_PAUSE", "error_category": "lift_tilt", "lifted": True},
+    )
+    assert recoverable_error(lifted, CODES) is None
+    paused = _state(mower, account, MowerActivity.PAUSED, None, raw={"work_mode": "MODE_PAUSE"})
+    assert recoverable_error(paused, CODES) is None
 
 
 # --- opt-in ---------------------------------------------------------------------------------

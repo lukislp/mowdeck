@@ -57,6 +57,7 @@ from mowdeck_contracts.v1 import (
 from mowdeck_control.geo import to_wgs84
 from mowdeck_control.translation import MowRequest, NativeJob, Pattern, plan_to_native_job
 
+from mowdeck_control_mammotion import errors
 from mowdeck_control_mammotion.port import (
     FIRMWARE_PLACEHOLDER,
     CheckDeviceVersion,
@@ -125,12 +126,21 @@ _RTK_SOURCE: Final[Mapping[str, RtkSource]] = {
     "RTK_USED_INTERNET": RtkSource.BASE_STATION,  # own base station over the internet
 }
 
-LIFT_ERROR_CODES: Final = frozenset({"1004", "1030", "2502", "2801", "11131", "11133"})
+LIFT_ERROR_CODES: Final = frozenset(str(code) for code in errors.LIFT_TILT_CODES)
 """Error codes of PyMammotion's error table that mean the mower was lifted or tilted: 1004 tilt
 sensor activated, 1030 front wheels lifted or tilted, 2502 machine tilted too much, 2801 lift
 sensor triggered, 11131 and 11133 rear lift sensor triggered while reversing or turning. A state
-in error with one of them carries ``raw["lifted"] = True`` (the theft alarm of Notifications
-reads that flag, so it never needs this GPL package)."""
+in error with a ``lift_tilt`` code (:mod:`~mowdeck_control_mammotion.errors`) carries
+``raw["lifted"] = True`` (the theft alarm of Notifications reads that flag, so it never needs
+this GPL package)."""
+
+FAULT_TOLERANCE_S: Final = 120.0
+"""A fault logged (or a warning received) up to this long before the adapter saw the mower pause
+or fail still counts as its cause: the work mode report lags the error log and the events."""
+FAULT_LOOKBACK_S: Final = 1800.0
+"""The same when the mower already stood paused or failed at connect (the start is unknown)."""
+FaultWarning = tuple[int, datetime]
+"""A warning code the mower posted (``thing/event``) with the adapter's receive time."""
 
 LINEAR_WIRE_PER_PERCENT: Final = 10.0
 ANGULAR_WIRE_PER_PERCENT: Final = 4.5
@@ -310,18 +320,65 @@ def located_position_of(
             return position, PositionSource.UNKNOWN
 
 
-def error_of(device: MowerDevice, activity: MowerActivity) -> tuple[str | None, str | None]:
+def fault_window_open(device: MowerDevice, activity: MowerActivity) -> bool:
+    """True while a fault may hold the mower: an error mode, or a pause off the charger (a
+    trapped or blocked mower reports ``MODE_PAUSE``, not an error mode)."""
+    if activity is MowerActivity.ERROR:
+        return True
+    return activity is MowerActivity.PAUSED and not in_dock(device, activity)
+
+
+@dataclass(frozen=True, slots=True)
+class Fault:
+    """The fault that holds the mower: the code and where it came from (``error_log``: the
+    mower's error list, ``warning_event``: a ``thing/event`` warning post)."""
+
+    code: int
+    source: str
+
+
+def fault_of(
+    device: MowerDevice, since: datetime | None, warnings: Sequence[FaultWarning] = ()
+) -> Fault | None:
+    """The newest fault logged at or after ``since``, None when there is none (or no ``since``).
+
+    Mammotion-HA reads the same sources: the newest entry of the error list
+    (``errors.err_code_list``, filled by the error log read ``read_write_device(rw_id=5,
+    context=2)``) and the warning events. The list is a log of the last ten faults, so only an
+    entry with a real time at or after ``since`` counts (an entry still on its uptime stamp is
+    picked up once the firmware dated it).
+    """
+    if since is None:
+        return None
+    best: tuple[datetime, Fault] | None = None
+    dated = device.errors.dated_codes
+    if dated:
+        code, logged = dated[0]
+        number = errors.normalise_code(code)
+        if logged >= since and number:
+            best = (logged, Fault(number, "error_log"))
+    for code, received in warnings:
+        if received >= since and (best is None or received > best[0]):
+            best = (received, Fault(code, "warning_event"))
+    return best[1] if best is not None else None
+
+
+def error_of(
+    device: MowerDevice, activity: MowerActivity, fault: Fault | None = None
+) -> tuple[str | None, str | None]:
     """``(error_code, error_message)`` while the mower reports an error, else ``(None, None)``.
 
-    The code is the newest entry of the device's error list (``errors.active_codes``) or, when
-    the list is empty, the work mode name. The list is a log, so it is only read in an error
-    mode.
+    The code is ``fault`` when given, else the newest entry of the device's error list
+    (``errors.active_codes``, sign dropped) or, when the list is empty, the work mode name. The
+    list is a log, so it is only read in an error.
     """
     if activity is not MowerActivity.ERROR:
         return None, None
+    if fault is not None:
+        return str(fault.code)[:64], describe_error(fault.code)[:500]
     codes = device.errors.active_codes
     if codes:
-        code = str(codes[0])
+        code = str(errors.normalise_code(codes[0]) or codes[0])
         return code[:64], describe_error(codes[0])[:500]
     mode = work_mode(device)
     return mode.name.lower()[:64], f"mower reports {mode.name}"[:500]
@@ -410,6 +467,8 @@ def state_of(
     speed_setpoint_mps: float | None = None,
     links: Mapping[str, LinkStatus] | None = None,
     firmware_info: FirmwareInfo | None = None,
+    fault_since: datetime | None = None,
+    warnings: Sequence[FaultWarning] = (),
 ) -> MowerState:
     """Build the :class:`MowerState` snapshot of ``device``.
 
@@ -418,9 +477,23 @@ def state_of(
     its default); reported as ``speed_mps`` while the mower reports no speed (idle, docked),
     with ``raw["speed_source"]`` ``setpoint`` instead of ``reported``. ``links`` and
     ``firmware_info`` are the connection's additional links and firmware state (ADR 0038).
+
+    Faults (:func:`fault_of`): ``fault_since`` is when the adapter saw the mower pause off the
+    charger or fail (minus :data:`FAULT_TOLERANCE_S`), ``warnings`` the warning codes it received.
+    A pause with a fault logged since then is ``error`` with that code (a trapped mower pauses,
+    it never reports an error mode); an error mode prefers it over older list entries. An error
+    carries ``raw["error_category"]`` (:class:`~mowdeck_control_mammotion.errors.ErrorCategory`)
+    and ``raw["error_source"]``, and ``drive_recoverable`` for the trapped, obstacle, outside
+    and wheel slip categories. ``raw["self_check"]`` names what the mower's self-check reports
+    as stopping it from starting (when not normal).
     """
     activity = activity_of(device, has_report=has_report)
-    code, message = error_of(device, activity)
+    fault = None
+    if fault_window_open(device, activity):
+        fault = fault_of(device, fault_since, warnings)
+    if fault is not None:
+        activity = MowerActivity.ERROR
+    code, message = error_of(device, activity, fault)
     battery = device.report_data.dev.battery_val
     raw = raw_of(device, device_name, link=link, model=model)
     speed = speed_of(device)
@@ -434,8 +507,20 @@ def state_of(
         lamp = device.mower_state.lamp_info
         raw["manual_light"] = bool(lamp.manual_light)
         raw["lamp_bright"] = int(lamp.lamp_bright)
-    if activity is MowerActivity.ERROR and code in LIFT_ERROR_CODES:
-        raw["lifted"] = True
+    category: errors.ErrorCategory | None = None
+    if activity is MowerActivity.ERROR and code is not None:
+        numeric = errors.normalise_code(code) is not None
+        category = errors.category_of(code) if numeric else errors.ErrorCategory.OTHER
+        raw["error_category"] = str(category)
+        if fault is not None:
+            raw["error_source"] = fault.source
+        else:
+            raw["error_source"] = "error_log" if numeric else "work_mode"
+        if category is errors.ErrorCategory.LIFT_TILT:
+            raw["lifted"] = True
+    self_check = device.report_data.dev.self_check_status
+    if self_check not in errors.SELF_CHECK_NORMAL:
+        raw["self_check"] = errors.self_check_name(self_check)
     rtk_fix = rtk_fix_of(device, has_report=has_report)
     position, position_source = located_position_of(device, activity, rtk_fix)
     return MowerState(
@@ -459,6 +544,7 @@ def state_of(
         links=dict(links) if links else {},
         firmware_info=firmware_info,
         drive_speed_mps=drive_speed_of(device),
+        drive_recoverable=category in errors.RECOVERABLE_CATEGORIES,
         turn_style=turn_style_of(device),
         raw=raw,
     )
