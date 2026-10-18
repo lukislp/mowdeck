@@ -8,7 +8,8 @@
  *   once the source is resumed. A browser without WebRTC (Playwright's WebKit on Windows) skips
  *   this test with the reason; CI on Linux runs it in Chromium and WebKit.
  * - The test pattern on its canvas (the direct path): a canvas marked `data-freeze` sends no more
- *   frames, "Bild steht" within 3 s, live again once frames come back. Runs in every browser.
+ *   frames, "Bild steht" within 4 s (the label's 2.5 s hysteresis), live again once frames come
+ *   back. Runs in every browser.
  *
  * The drive view's hold and latch over a frozen picture are `drive-camera.spec.ts` (canvas) and
  * `camera-relay-web.spec.ts` (relay).
@@ -61,7 +62,7 @@ test('camera freeze: a real video stream that stops shows "Bild steht" and runs 
   await expect(page.getByTestId('camera-frozen')).toHaveCount(0);
 
   // The source stands (the relay keeps the WebRTC session, no new frames): frozen, and it stays
-  // frozen. A pause longer than MediaMTX's 10 s read timeout would end the publisher, so the
+  // frozen. A pause longer than the relay's 20 s stall watch would end the publisher, so the
   // source is resumed well before that.
   try {
     expect(freezeRelaySources(true)).toBeGreaterThan(0);
@@ -106,9 +107,9 @@ test('camera freeze: the test pattern that stops drawing shows "Bild steht" and 
   await page.waitForTimeout(2_500);
   await expect(stage).toHaveAttribute('data-frozen', 'false');
 
-  // The pattern stops: frozen within 3 s, and it stays frozen.
+  // The pattern stops: "Bild steht" within 4 s (the label's 2.5 s hysteresis), and it stays.
   await freezePattern(page, true);
-  await expect(page.getByTestId('camera-frozen')).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByTestId('camera-frozen')).toBeVisible({ timeout: 4_000 });
   await expect(stage).toHaveAttribute('data-frozen', 'true');
   await expect(page.getByTestId('camera-status')).toContainText('Bild steht');
   await page.waitForTimeout(1_000);

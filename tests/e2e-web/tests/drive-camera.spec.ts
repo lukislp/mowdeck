@@ -332,7 +332,7 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
 
   // --- freeze: the picture stands while the stick is held forward ----------------------------
   await freeze(page, true);
-  await expect(page.getByTestId('camera-frozen')).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByTestId('camera-frozen')).toBeVisible({ timeout: 4_000 });
   await expect(stage).toHaveAttribute('data-frozen', 'true');
   await expect(page.getByTestId('camera-status')).toContainText('Bild steht');
   await expect(page.getByTestId('drive-held')).toBeVisible();
