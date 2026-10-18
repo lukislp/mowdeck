@@ -34,7 +34,9 @@ from mowdeck_service_kit.bus import EventBus
 
 from camera_relay.adapters.bus.events import BusEventPublisher
 from camera_relay.adapters.bus.subscriptions import subscribe_all
+from camera_relay.adapters.bus.telemetry import subscribe_mower_states
 from camera_relay.adapters.gateway import GatewayVendorSessions, SourceDriver, service_principal
+from camera_relay.adapters.http.frames import frames_router
 from camera_relay.adapters.http.routes import auth_router, hooks_router
 from camera_relay.adapters.media.bridge_source import (
     BridgeEndpoint,
@@ -42,6 +44,7 @@ from camera_relay.adapters.media.bridge_source import (
     StdinSpawn,
     spawn_stdin_process,
 )
+from camera_relay.adapters.media.frames import FfmpegFrameGrabber
 from camera_relay.adapters.media.mediamtx import MediaMtxApi, MediaMtxPlane
 from camera_relay.adapters.media.pipeline import FakeSourceDriver, MediaServer, RunningSource
 from camera_relay.adapters.media.process import Spawn, spawn_process
@@ -49,6 +52,7 @@ from camera_relay.adapters.media.reconcile import Reconciler
 from camera_relay.adapters.memory import InMemoryRelayRepository
 from camera_relay.adapters.sources import NoMediaPlane, NoSourceDriver
 from camera_relay.adapters.tickets import Ed25519TicketSigner
+from camera_relay.application.frames import FrameGrabber, FrameTap
 from camera_relay.application.media_auth import MediaAuthorizer, WhepBindings
 from camera_relay.application.ports import Clock, MediaPlane, TicketSigner, VendorSessions
 from camera_relay.application.service import RelayService
@@ -87,6 +91,7 @@ class MediaStack:
     agora: BridgeSourceDriver | None
     vendor: GatewayVendorSessions
     reconciler: Reconciler
+    grabber: FfmpegFrameGrabber
 
 
 def _media_stack(
@@ -147,7 +152,8 @@ def _media_stack(
         reports=lambda: app.state.relay,
         stall_polls=settings.relay_media_stall_polls,
     )
-    return MediaStack(api, MediaMtxPlane(api, bindings), fake, agora, vendor, reconciler)
+    grabber = FfmpegFrameGrabber(server=server, ffmpeg=settings.relay_ffmpeg_path)
+    return MediaStack(api, MediaMtxPlane(api, bindings), fake, agora, vendor, reconciler, grabber)
 
 
 def build_app(
@@ -162,6 +168,7 @@ def build_app(
     spawn: Spawn = spawn_process,
     spawn_stdin: StdinSpawn = spawn_stdin_process,
     media_transport: httpx.AsyncBaseTransport | None = None,
+    frame_grabber: FrameGrabber | None = None,
 ) -> FastAPI:
     """Build the app. Without a media server (``MOWDECK_RELAY_MEDIAMTX_API_URL``) and without
     overrides it runs without source drivers (``unavailable``)."""
@@ -179,9 +186,11 @@ def build_app(
     async def startup(app: FastAPI) -> None:
         service: RelayService = app.state.relay
         active_bus: EventBus | None = app.state.bus
-        app.state.relay_subscriptions = (
-            await subscribe_all(active_bus, service) if active_bus is not None else None
-        )
+        subscriptions = None
+        if active_bus is not None:
+            subscriptions = await subscribe_all(active_bus, service)
+            subscriptions.append(await subscribe_mower_states(active_bus, service, service.clock))
+        app.state.relay_subscriptions = subscriptions
         if background_tasks:
             tasks.append(asyncio.create_task(ticker(service), name="camera-relay-tick"))
             if stack is not None:
@@ -198,6 +207,8 @@ def build_app(
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        if app.state.frames is not None:
+            await app.state.frames.drain()
         await app.state.relay.shutdown()
         for subscription in app.state.relay_subscriptions or []:
             await subscription.unsubscribe()
@@ -255,6 +266,15 @@ def build_app(
                 publisher_user=settings.relay_publisher_user,
                 publisher_secret=lambda: secret,
             )
+        )
+    )
+    grabber = frame_grabber or (stack.grabber if stack else None)
+    app.state.frames = FrameTap(app.state.relay, grabber) if grabber is not None else None
+    app.include_router(
+        frames_router(
+            lambda: app.state.frames,
+            lambda: settings.frames_token,
+            max_concurrency=settings.relay_frames_max_concurrency,
         )
     )
     if settings.relay_test_hooks and stack is not None:

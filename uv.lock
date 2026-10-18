@@ -624,6 +624,7 @@ dependencies = [
     { name = "httpx" },
     { name = "mowdeck-contracts" },
     { name = "mowdeck-service-kit" },
+    { name = "pillow" },
 ]
 
 [package.metadata]
@@ -632,6 +633,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-service-kit", editable = "libs/mowdeck-service-kit" },
+    { name = "pillow", specifier = ">=11.0.0" },
 ]
 
 [[package]]

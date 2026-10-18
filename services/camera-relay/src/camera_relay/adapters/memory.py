@@ -61,6 +61,10 @@ class InMemoryRelayRepository:
         """Remember the mower's state for new sessions."""
         self._statuses[mower_id] = status
 
+    def status_of(self, mower_id: UUID) -> MowerStatus | None:
+        """The mower's last known state."""
+        return self._statuses.get(mower_id)
+
     def remove(self, key: RelayKey) -> None:
         """Forget a dormant session."""
         self._sessions.pop(key, None)

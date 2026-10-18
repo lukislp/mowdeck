@@ -3,7 +3,7 @@
 # test module's fixture as its own Compose project; every port is bound to 127.0.0.1:
 #
 #   RELAY_TEST_NATS_PORT  NATS (the test answers the gateway's camera requests and attaches)
-#   RELAY_TEST_HTTP_PORT  camera-relay (freeze hook)
+#   RELAY_TEST_HTTP_PORT  camera-relay (freeze hook, frame tap)
 #   RELAY_TEST_WHEP_PORT  MediaMTX's WebRTC server (what Traefik routes to /media/whep/r/)
 #   RELAY_TEST_API_PORT   MediaMTX's control API (the test inspects the readers)
 #   RELAY_TEST_ICE_PORT   the ICE port (UDP and TCP)
@@ -60,6 +60,7 @@ services:
       MOWDECK_RELAY_TEST_HOOKS: "true"
       MOWDECK_RELAY_GATEWAY_TIMEOUT_SECONDS: "3"
       MOWDECK_RELAY_AGORA_BRIDGE_URL: tcp://agora-bridge:7700
+      MOWDECK_RELAY_FRAMES_TOKEN: media-test-frames-token
     volumes:
       - ./:/opt/media-tests:ro
       - ../../../../integrations/agora-bridge/spike/fixtures:/opt/fixtures:ro

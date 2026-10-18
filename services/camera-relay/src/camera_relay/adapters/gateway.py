@@ -135,7 +135,11 @@ class GatewayVendorSessions:
         if driver is None or not await driver.available():
             raise _unsupported(session.provider)
         self._offers[key] = (self._monotonic(), session)
-        return SourceOffer(provider=session.provider, cameras=tuple(session.cameras))
+        return SourceOffer(
+            provider=session.provider,
+            cameras=tuple(session.cameras),
+            quota_remaining_percent=quota_remaining_percent(session),
+        )
 
     async def discard(self, key: RelayKey) -> None:
         """Release an offered vendor session that no start will use."""
@@ -303,6 +307,15 @@ class GatewayVendorSessions:
             released=reply.released,
             error=reply.error.code.value if reply.error else None,
         )
+
+
+def quota_remaining_percent(session: CameraSession) -> float | None:
+    """The remaining share of the vendor's video budget in percent, None when not reported."""
+    quota = session.quota
+    if quota is None or quota.total_minutes <= 0:
+        return None
+    left = max(quota.total_minutes - quota.used_minutes, 0.0)
+    return min(100.0, 100.0 * left / quota.total_minutes)
 
 
 def _unsupported(provider: CameraProvider) -> UnsupportedProviderError:

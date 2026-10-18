@@ -21,7 +21,7 @@ that service principal only, never by the user's browser (and the other way roun
 import asyncio
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -129,7 +129,11 @@ class RelayService:
     # --- Requests (relay.camera.*) ------------------------------------------------------------
 
     async def attach(
-        self, request: RelayAttachRequest, *, vision_mode: VisionMode = VisionMode.STREAM
+        self,
+        request: RelayAttachRequest,
+        *,
+        vision_mode: VisionMode = VisionMode.STREAM,
+        first_camera_only: bool = False,
     ) -> RelayAttachReply:
         """Open a lease on the session of ``(account_id, mower_id)``.
 
@@ -137,7 +141,11 @@ class RelayService:
         provider without a source driver is answered with ``unsupported_provider`` before any
         lease, event or start exists, and the vendor session is not released (a client in
         ``auto`` falls back to the direct path and uses the stream). An empty ``camera_ids``
-        means every camera the vendor session offers.
+        means every camera the vendor session offers, or with ``first_camera_only`` (Vision's
+        frames) only the first offered camera with a publisher uid (the front or left one).
+        The video budget the offer reports updates the mower's state before the lease is
+        admitted, so a Vision lease below the budget limit is refused and the offered session
+        released.
         """
         key = RelayKey(request.account_id, request.mower_id)
         async with self._lock(key):
@@ -161,9 +169,13 @@ class RelayService:
                     detail = (str(exc) or "the camera source is not available")[:500]
                     return RelayAttachReply(error=_error(exc.code, detail))
                 session.offer(offer.cameras)
+                self._note_quota(session, offer.quota_remaining_percent)
                 offered = True
+            camera_ids = list(request.camera_ids)
+            if not camera_ids and first_camera_only:
+                camera_ids = _first_camera(session)
             decision = session.attach(
-                camera_ids=request.camera_ids,
+                camera_ids=camera_ids,
                 purpose=request.purpose,
                 principal=request.requested_by,
                 now=self.clock(),
@@ -224,6 +236,18 @@ class RelayService:
             await self._execute(session, decision.effects)
             return RelayDetachReply(detached=decision.lease is not None)
 
+    def _note_quota(self, session: RelaySession, remaining: float | None) -> None:
+        """Remember the video budget a vendor session reported (the mower's state must be
+        known: a budget alone never makes an unknown mower reachable)."""
+        if remaining is None:
+            return
+        status = self.repository.status_of(session.key.mower_id) or session.status
+        if status is None:
+            return
+        updated = replace(status, quota_remaining_percent=remaining)
+        self.repository.set_status(session.key.mower_id, updated)
+        session.status = updated
+
     def _own_key(self, account_id: UUID, mower_id: UUID, lease_id: UUID) -> RelayKey | RelayError:
         key = self.repository.key_of_lease(lease_id)
         if key is None:
@@ -268,7 +292,17 @@ class RelayService:
         await self._on_key(key, lambda s, now: s.source_failed(session_id, now))
 
     async def mower_status_changed(self, mower_id: UUID, status: MowerStatus) -> None:
-        """New state of a mower: applies to the session of every account that uses it."""
+        """New state of a mower: applies to the session of every account that uses it.
+
+        A state without the video budget (telemetry does not carry it) keeps the budget the last
+        vendor session reported."""
+        previous = self.repository.status_of(mower_id)
+        if (
+            status.quota_remaining_percent is None
+            and previous is not None
+            and previous.quota_remaining_percent is not None
+        ):
+            status = replace(status, quota_remaining_percent=previous.quota_remaining_percent)
         self.repository.set_status(mower_id, status)
         for key in list(self.repository.keys_of_mower(mower_id)):
             await self._on_key(key, lambda s, now: s.mower_status_changed(status, now))
@@ -396,6 +430,13 @@ class RelayService:
                 heartbeat_seconds=self.config.heartbeat_seconds,
             ),
         )
+
+
+def _first_camera(session: RelaySession) -> list[str]:
+    """The first offered camera with a publisher uid (else the first offered), or none."""
+    offered = session.offered
+    chosen = next((c for c in offered if c.uid is not None), offered[0] if offered else None)
+    return [chosen.id] if chosen is not None else []
 
 
 def _not_found() -> RelayError:

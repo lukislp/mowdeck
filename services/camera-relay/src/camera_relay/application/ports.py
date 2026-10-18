@@ -65,6 +65,9 @@ class SourceOffer:
 
     provider: CameraProvider
     cameras: tuple[CameraInfo, ...]
+    quota_remaining_percent: float | None = None
+    """Remaining share of the vendor's video budget, when the vendor session reports one (the
+    Vision limit below 10 %)."""
 
 
 class VendorSessions(Protocol):
@@ -151,6 +154,10 @@ class RelayRepository(Protocol):
 
     def set_status(self, mower_id: UUID, status: MowerStatus) -> None:
         """Remember the mower's state for new sessions."""
+        ...
+
+    def status_of(self, mower_id: UUID) -> MowerStatus | None:
+        """The mower's last known state."""
         ...
 
     def remove(self, key: RelayKey) -> None:
