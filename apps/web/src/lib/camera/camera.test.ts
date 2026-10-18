@@ -275,37 +275,6 @@ describe('FakePlayer', () => {
     expect(canvas.dataset.frames).toBe('4');
   });
 
-  it('plays the pattern through the tile video as a stream when asked', async () => {
-    const ctx = recordingContext();
-    const canvas = document.createElement('canvas');
-    canvas.getContext = (() => ctx) as unknown as HTMLCanvasElement['getContext'];
-    const stopped: string[] = [];
-    const stream = { getTracks: () => [{ stop: () => void stopped.push('v') }] };
-    let captures = 0;
-    canvas.captureStream = (() => {
-      captures += 1;
-      return stream;
-    }) as unknown as HTMLCanvasElement['captureStream'];
-    const video = document.createElement('video');
-    video.play = async () => undefined;
-    const player = new FakePlayer(
-      canvas,
-      { label: () => '', position: () => null, colors: () => COLORS },
-      { onLive() {}, onWaiting() {}, onTokenExpiring() {}, onFailed() {} },
-      undefined,
-      (slot) => (slot ? null : video),
-    );
-    player.draw();
-    player.draw();
-    // One stream per canvas, however often it draws.
-    expect(captures).toBe(1);
-    expect(video.srcObject).toBe(stream);
-    expect(video.muted).toBe(true);
-    await player.stop();
-    expect(video.srcObject).toBeNull();
-    expect(stopped).toEqual(['v']);
-  });
-
   it('does nothing without a 2D context', () => {
     const canvas = document.createElement('canvas');
     canvas.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];

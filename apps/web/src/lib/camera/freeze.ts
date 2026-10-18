@@ -52,7 +52,7 @@ export interface TileReading {
   frames: number | null;
 }
 
-/** What the watch knows about one tile (for the debug overlay). */
+/** What the watch knows about one tile (its interval and threshold). */
 export interface SlotView {
   /** Typical gap between two new frames in ms (null: not seen two frames yet). */
   intervalMs: number | null;
@@ -197,7 +197,7 @@ export function presentedFrames(video: FrameCallbackVideo): number | null {
   return clock.count;
 }
 
-/** Every frame signal of `video` (the debug overlay shows them all). */
+/** The frame signals of `video` (presented frames, else decoded ones count). */
 export function videoFrameSignals(video: HTMLVideoElement): VideoFrameSignals {
   const quality =
     typeof video.getVideoPlaybackQuality === 'function' ? video.getVideoPlaybackQuality() : null;

@@ -1163,8 +1163,6 @@
   "camera_expand": "Kamera ausklappen",
   "camera_collapsed": "Eingeklappt: keine Video-Sitzung, kein Datenverbrauch.",
   "camera_diag_summary": "Diagnose",
-  "camera_debug_copy": "Kopieren",
-  "camera_debug_copied": "Kopiert",
   "camera_diag_none": "Noch keine Statistik.",
   "camera_diag_state": "Verbindung: {state}",
   "camera_diag_video": "Empfang {bitrate} kbit/s · {fps} fps · {size}",

@@ -214,6 +214,47 @@ export function trackSummary(track: TrackDiagnostics | undefined): string | null
   return `${size ?? '-'} · ${fps ?? '-'}`;
 }
 
+/** The `inbound-rtp` video numbers of one WebRTC receiver (null fields: the browser has none). */
+export interface InboundVideo {
+  packetsReceived: number | null;
+  packetsLost: number | null;
+  framesPerSecond: number | null;
+  width: number | null;
+  height: number | null;
+  /** `totalFreezesDuration` in seconds. */
+  freezeSeconds: number | null;
+  /** Mean jitter buffer delay in ms. */
+  jitterMs: number | null;
+}
+
+type StatsEntry = Record<string, unknown>;
+
+const num = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+/** The video `inbound-rtp` entry of a `getStats()` report (null: none). */
+export function summarizeInbound(report: Iterable<StatsEntry>): InboundVideo | null {
+  let inbound: StatsEntry | undefined;
+  for (const e of report) {
+    if (e.type === 'inbound-rtp' && (e.kind === 'video' || e.mediaType === 'video')) {
+      inbound = e;
+      break;
+    }
+  }
+  if (!inbound) return null;
+  const delay = num(inbound.jitterBufferDelay);
+  const emitted = num(inbound.jitterBufferEmittedCount);
+  return {
+    packetsReceived: num(inbound.packetsReceived),
+    packetsLost: num(inbound.packetsLost),
+    framesPerSecond: num(inbound.framesPerSecond),
+    width: num(inbound.frameWidth),
+    height: num(inbound.frameHeight),
+    freezeSeconds: num(inbound.totalFreezesDuration),
+    jitterMs: delay !== null && emitted ? Math.round((delay / emitted) * 1000) : null,
+  };
+}
+
 /** A number for the readout, `-` when unknown. */
 export function shown(value: number | null, unit = ''): string {
   return value === null ? '-' : `${value}${unit}`;

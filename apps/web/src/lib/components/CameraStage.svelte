@@ -21,8 +21,6 @@
   the relay stops the stream after its grace) and requests a new one when the page is visible
   again; leaving the page closes it.
 
-  Debugging (`?camdebug=1`): an overlay with the readings of every tile (`CameraDebug`).
-
   `compact` is the drive view: the stage fills its box, the tile captions keep only the side
   badge, the status sits small in a corner. Video and canvas never take pointer events, so a
   joystick floating over the stage gets every touch.
@@ -32,11 +30,9 @@
   import { onDestroy, onMount } from 'svelte';
 
   import { fleetApi, unwrap } from '$lib/api/client';
-  import { applyDebugQuery, loadExperiments } from '$lib/camera/debug';
   import { trackSummary } from '$lib/camera/diagnostics';
   import { CameraPlayerFactory } from '$lib/camera/factory';
   import { FREEZE_POLL_MS, FreezeWatch, frameCounter } from '$lib/camera/freeze';
-  import { VideoProbe, type DebugInput } from '$lib/camera/probe';
   import { cameraLabel } from '$lib/camera/labels';
   import type { CameraLayout, CameraTile } from '$lib/camera/layout';
   import type { CameraPlayer } from '$lib/camera/player';
@@ -51,8 +47,6 @@
   import { CameraViewer } from '$lib/camera/viewer.svelte';
   import { loadConfig } from '$lib/config';
   import { m } from '$lib/paraglide/messages';
-
-  import CameraDebug from './CameraDebug.svelte';
 
   interface Props {
     mowerId: string;
@@ -129,13 +123,9 @@
     };
   }
 
-  /** The test pattern plays through the tile's <video> (debug switch `camfakevideo`). */
-  let throughVideo = $state(false);
-
   const factory: CameraPlayerFactory = new CameraPlayerFactory({
     canvas: (slot = 0) => canvases[slot] ?? null,
     video: (slot = 0) => videos[slot] ?? null,
-    fakeVideo: () => throughVideo,
     lease: {
       renew: (leaseId) =>
         unwrap(
@@ -182,18 +172,7 @@
   });
   if (initial.cameraUid !== null) cam.cameraUid = initial.cameraUid;
 
-  /** The debug overlay is on (`?camdebug=1`, kept per browser). */
-  let debugging = $state(false);
-  /** Media events of each tile's <video> (only while debugging). */
-  const probes = [new VideoProbe(), new VideoProbe()];
-
   onMount(() => {
-    // `?camdebug=1` and the experiments must be stored before the player is created.
-    applyDebugQuery(window.location.search);
-    debugging = cam.debugging;
-    throughVideo =
-      loadExperiments().fakeVideo &&
-      typeof HTMLCanvasElement.prototype.captureStream === 'function';
     // Hand the viewer to the host (its picker, diagnostics and readouts read the same session).
     if (viewer !== cam) viewer = cam;
     void cam.open(mowerId);
@@ -215,7 +194,6 @@
     };
   });
   onDestroy(() => {
-    probes.forEach((probe) => probe.detach());
     stalled = false;
     void cam.close();
   });
@@ -234,8 +212,6 @@
    * a `<video>` that is not rendered: the relay's video stays rendered while it connects.
    */
   const relay = $derived(cam.session?.provider === 'relay');
-  /** The tile shows its canvas (the simulator's pattern, unless it plays through the video). */
-  const onCanvas = $derived(fake && !throughVideo);
   const tiles = $derived(cam.tiles);
   const failed = $derived(cam.phase === 'error');
   const layoutName = $derived(cam.both ? 'both' : 'single');
@@ -247,7 +223,7 @@
 
   /** The tile's picture element (canvas for the simulator, video otherwise). */
   function pictureOf(slot: number): HTMLCanvasElement | HTMLVideoElement | null {
-    return (onCanvas ? canvases[slot] : videos[slot]) ?? null;
+    return (fake ? canvases[slot] : videos[slot]) ?? null;
   }
 
   function tileName(tile: CameraTile): string {
@@ -291,33 +267,6 @@
     }, FREEZE_POLL_MS);
     return () => clearInterval(timer);
   });
-
-  $effect(() => {
-    if (!debugging) return;
-    probes.forEach((probe, slot) => probe.attach(videos[slot] ?? null));
-  });
-
-  /** The debug overlay's readings of every shown tile. */
-  async function debugInput(): Promise<DebugInput> {
-    const freeze = watch.view();
-    const shown = cam.tiles.slice(0, cam.both ? 2 : 1);
-    return {
-      at: new Date().toISOString(),
-      userAgent: navigator.userAgent,
-      phase: cam.phase,
-      frozen: stalled,
-      transport: { requested: cam.options.transport, used: cam.transport },
-      tiles: shown.map((tile, slot) => ({
-        slot,
-        status: tile.status,
-        uid: tile.uid,
-        element: onCanvas ? null : (probes[slot]?.state() ?? null),
-        events: onCanvas ? [] : [...(probes[slot]?.events ?? [])],
-        freeze: freeze[slot] ?? null,
-      })),
-      report: await cam.debugReport(),
-    };
-  }
 
   const status = $derived.by(() => {
     if (stalled && !failed) return m.camera_frozen();
@@ -381,14 +330,14 @@
         <canvas
           bind:this={canvases[slot]}
           class="picture"
-          class:hidden={!onCanvas || !live || !shownTile}
+          class:hidden={!fake || !live || !shownTile}
           width="640"
           height="360"
           aria-label={tile
             ? `${m.camera_test_pattern()} · ${tileName(tile)}`
             : m.camera_test_pattern()}
           data-testid={slot === 0 ? 'camera-pattern' : 'camera-pattern-right'}
-          data-camera-video={onCanvas && live && shownTile ? '' : undefined}
+          data-camera-video={fake && live && shownTile ? '' : undefined}
           data-camera-live={live ? 'true' : 'false'}
           data-camera-name={tile?.camera?.name ?? ''}
           data-camera-side={cam.both ? (tile?.side ?? '') : ''}
@@ -396,12 +345,12 @@
         <video
           bind:this={videos[slot]}
           class="picture"
-          class:hidden={onCanvas || !cam.session || !shownTile || (!live && !relay)}
+          class:hidden={fake || !cam.session || !shownTile || (!live && !relay)}
           autoplay
           muted
           playsinline
           data-testid={slot === 0 ? 'camera-video' : 'camera-video-right'}
-          data-camera-video={!onCanvas && live && shownTile ? '' : undefined}
+          data-camera-video={!fake && live && shownTile ? '' : undefined}
           data-camera-live={live ? 'true' : 'false'}
           data-camera-name={tile?.camera?.name ?? ''}
           data-camera-side={cam.both ? (tile?.side ?? '') : ''}
@@ -434,9 +383,6 @@
       <strong>{m.camera_frozen()}</strong>
       {#if compact}<span>{m.camera_frozen_hint()}</span>{/if}
     </div>
-  {/if}
-  {#if debugging}
-    <CameraDebug read={debugInput} />
   {/if}
   {#if samePicture && !failed}
     <p class="same" role="status" data-testid="camera-same-picture">{m.camera_same_picture()}</p>
