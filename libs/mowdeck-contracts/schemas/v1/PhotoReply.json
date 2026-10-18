@@ -30,10 +30,93 @@
       ],
       "title": "PhotoErrorCode",
       "type": "string"
+    },
+    "PhotoFrame": {
+      "description": "One camera's frame of a multi-frame :class:`PhotoReply`.",
+      "properties": {
+        "camera_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Camera Id"
+        },
+        "camera_name": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Camera Name"
+        },
+        "captured_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the camera took it, as well as known.",
+          "title": "Captured At"
+        },
+        "image_base64": {
+          "description": "The image, base64 (standard).",
+          "minLength": 1,
+          "title": "Image Base64",
+          "type": "string"
+        },
+        "media_type": {
+          "enum": [
+            "image/jpeg",
+            "image/png"
+          ],
+          "title": "Media Type",
+          "type": "string"
+        },
+        "side": {
+          "anyOf": [
+            {
+              "enum": [
+                "left",
+                "right"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`left` or `right` for a front camera of a stereo pair.",
+          "title": "Side"
+        }
+      },
+      "required": [
+        "image_base64",
+        "media_type"
+      ],
+      "title": "PhotoFrame",
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Reply to :class:`PhotoRequest`: exactly one of ``image_base64`` or ``error``.",
+  "description": "Reply to :class:`PhotoRequest`: exactly one of ``image_base64``, ``frames`` or\n``error``. ``frames`` only answers a request with ``max_frames`` above 1 (a source with a\nsingle camera still answers that way, with one frame).",
   "properties": {
     "error": {
       "anyOf": [
@@ -45,6 +128,26 @@
         }
       ],
       "default": null
+    },
+    "frames": {
+      "description": "Frames of the same moment, left before right (`max_frames` above 1).",
+      "items": {
+        "$ref": "#/$defs/PhotoFrame"
+      },
+      "maxItems": 2,
+      "title": "Frames",
+      "type": "array"
+    },
+    "frames_missing": {
+      "description": "Cameras of the set that gave no frame (silent, too late): the frames are served without them.",
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Frames Missing",
+      "type": "array"
     },
     "image_base64": {
       "anyOf": [

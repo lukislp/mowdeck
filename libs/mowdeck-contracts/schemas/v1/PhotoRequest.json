@@ -30,6 +30,14 @@
       "title": "Max Bytes",
       "type": "integer"
     },
+    "max_frames": {
+      "default": 1,
+      "description": "Up to this many frames of the same moment, one per camera (2: both front cameras as a stereo pair); `max_bytes` caps them together. 1: the single `image_base64`.",
+      "maximum": 2,
+      "minimum": 1,
+      "title": "Max Frames",
+      "type": "integer"
+    },
     "mower_id": {
       "format": "uuid",
       "title": "Mower Id",

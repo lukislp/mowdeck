@@ -14,6 +14,8 @@ read like for every other.
   previous one is selected (``select`` with ``-fps_mode vfr``: frames are dropped, never
   repeated, so a frozen source sends nothing), scaled like the snapshot and split into JPEG
   images at their end markers. ``-t`` bounds the stream; closing the generator kills ffmpeg.
+* **Fit.** A stream frame of a frame set above its ``max_bytes`` is decoded and encoded again
+  with the snapshot's quality steps (in a worker thread).
 
 The RTSP URL carries the internal credential: it never reaches a log (stderr is redacted).
 """
@@ -22,6 +24,7 @@ import asyncio
 import contextlib
 import io
 from collections.abc import AsyncGenerator, Callable
+from dataclasses import replace
 from datetime import datetime
 from typing import Final
 
@@ -149,6 +152,18 @@ def split_jpegs(buffer: bytearray) -> list[bytes]:
         del buffer[: end + 2]
 
 
+def _refit(frame: Frame, max_bytes: int) -> Frame:
+    """``frame`` decoded and encoded again within ``max_bytes`` (:func:`encode_jpeg`)."""
+    try:
+        with Image.open(io.BytesIO(frame.data)) as image:
+            image.load()
+            data, _ = encode_jpeg(image, max_bytes=max_bytes)
+    except OSError as exc:
+        msg = "the frame is not an image"
+        raise FrameTooLargeError(msg) from exc
+    return replace(frame, data=data)
+
+
 def _dimensions(data: bytes) -> tuple[int | None, int | None]:
     try:
         with Image.open(io.BytesIO(data)) as image:
@@ -220,6 +235,12 @@ class FfmpegFrameGrabber:
             width=width,
             height=height,
         )
+
+    async def fit(self, frame: Frame, *, max_bytes: int) -> Frame:
+        """``frame`` re-encoded with the snapshot's quality steps to at most ``max_bytes``."""
+        if len(frame.data) <= max_bytes:
+            return frame
+        return await asyncio.to_thread(_refit, frame, max_bytes)
 
     async def stream(
         self, path: str, *, fps: float, max_width: int, duration: float

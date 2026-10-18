@@ -4,7 +4,11 @@
   :func:`~mowdeck_contracts.v1.subjects.photo_subject` (core NATS request, internal): the
   Device-Gateway that holds the mower answers with a still image when the adapter can take one
   (``capture_photo``; the simulator renders its surroundings from the map). The image travels
-  base64 encoded and is capped at ``max_bytes``, well below the NATS payload limit.
+  base64 encoded and is capped at ``max_bytes``, well below the NATS payload limit. With
+  ``max_frames`` 2 the reply carries ``frames`` instead: one frame of each camera of the same
+  moment (both front cameras through the camera relay, left first, each with its side and
+  capture time), all together within ``max_bytes``; a request without ``max_frames`` gets the
+  single image as before.
 * ``vision.proposal.created`` (:class:`VisionProposalCreated`, stream ``EVENTS``): the Vision
   service proposed a maneuver for a mower; Notifications turns it into a ``vision_proposal``
   notification for the account's users who may drive the mower. Images and the model's raw
@@ -30,7 +34,12 @@ from pydantic import Field, model_validator
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 from mowdeck_contracts.v1.camera import CameraSession
 from mowdeck_contracts.v1.principal import PrincipalRef
-from mowdeck_contracts.v1.relay import VisionDemand
+from mowdeck_contracts.v1.relay import (
+    VISION_FRAME_SET_MAX_FRAMES,
+    CameraId,
+    CameraSide,
+    VisionDemand,
+)
 
 VISION_PROPOSAL_CREATED: Final = "vision.proposal.created"
 """Event type: AI assist proposed a maneuver (payload :class:`VisionProposalCreated`)."""
@@ -79,6 +88,13 @@ class PhotoRequest(ContractModel):
         "assist, the automatic analysis) may wake a sleeping mower through the camera relay "
         "and ignores the Vision budget; `routine` keeps every limit (ADR 0045).",
     )
+    max_frames: int = Field(
+        default=1,
+        ge=1,
+        le=VISION_FRAME_SET_MAX_FRAMES,
+        description="Up to this many frames of the same moment, one per camera (2: both front "
+        "cameras as a stereo pair); `max_bytes` caps them together. 1: the single `image_base64`.",
+    )
 
 
 class PhotoErrorCode(StrEnum):
@@ -103,18 +119,47 @@ class PhotoError(ContractModel):
     detail: str = Field(max_length=500)
 
 
+class PhotoFrame(ContractModel):
+    """One camera's frame of a multi-frame :class:`PhotoReply`."""
+
+    image_base64: str = Field(min_length=1, description="The image, base64 (standard).")
+    media_type: Literal["image/jpeg", "image/png"]
+    captured_at: UtcDateTime | None = Field(
+        default=None, description="When the camera took it, as well as known."
+    )
+    camera_id: CameraId | None = None
+    camera_name: str | None = Field(default=None, max_length=100)
+    side: CameraSide | None = Field(
+        default=None, description="`left` or `right` for a front camera of a stereo pair."
+    )
+
+
 class PhotoReply(ContractModel):
-    """Reply to :class:`PhotoRequest`: exactly one of ``image_base64`` or ``error``."""
+    """Reply to :class:`PhotoRequest`: exactly one of ``image_base64``, ``frames`` or
+    ``error``. ``frames`` only answers a request with ``max_frames`` above 1 (a source with a
+    single camera still answers that way, with one frame)."""
 
     image_base64: str | None = Field(default=None, description="The image, base64 (standard).")
     media_type: Literal["image/jpeg", "image/png"] | None = None
     taken_at: UtcDateTime | None = None
+    frames: list[PhotoFrame] = Field(
+        default_factory=list,
+        max_length=VISION_FRAME_SET_MAX_FRAMES,
+        description="Frames of the same moment, left before right (`max_frames` above 1).",
+    )
+    frames_missing: list[CameraId] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Cameras of the set that gave no frame (silent, too late): the frames are "
+        "served without them.",
+    )
     error: PhotoError | None = None
 
     @model_validator(mode="after")
     def _exactly_one(self) -> Self:
-        if (self.image_base64 is None) == (self.error is None):
-            msg = "exactly one of image_base64 or error must be given"
+        given = sum((self.image_base64 is not None, bool(self.frames), self.error is not None))
+        if given != 1:
+            msg = "exactly one of image_base64, frames or error must be given"
             raise ValueError(msg)
         if self.image_base64 is not None and self.media_type is None:
             msg = "media_type is required with an image"

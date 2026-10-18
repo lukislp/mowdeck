@@ -83,6 +83,14 @@ STEREO_HINT: Final = (
 )
 """The explicit hint in the user message when the model gets a stereo pair."""
 
+MULTI_IMAGE_SAFETY: Final = (
+    "Check every image on its own for risks. A person, child or animal, a drop-off, water or a "
+    "road seen in any one image counts, even when another image does not show it (the cameras "
+    "see different parts of the scene and one may be hidden): add the risk flag and propose "
+    "nothing. Never let one image overrule a risk seen in another."
+)
+"""The safety rule in the user message whenever the model gets more than one image."""
+
 ASSESSMENT_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
     "additionalProperties": False,
@@ -170,12 +178,14 @@ def user_content(
 ) -> list[dict[str, Any]]:
     """The user message: the task and context as text, then the images as data URLs, each
     after its caption when it has one. A stereo pair (``context.stereo``) comes left first,
-    with :data:`STEREO_HINT`."""
+    with :data:`STEREO_HINT`; more than one image adds :data:`MULTI_IMAGE_SAFETY`."""
     text = f"Task: {task.value}\nScene context (JSON):\n" + context.model_dump_json(
         exclude_none=True
     )
     if context.stereo:
         text += "\n\n" + STEREO_HINT
+    if len(images) > 1:
+        text += "\n\n" + MULTI_IMAGE_SAFETY
     parts: list[dict[str, Any]] = [{"type": "text", "text": text}]
     for index, image in enumerate(images):
         label = image_label(index, image)

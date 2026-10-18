@@ -1,9 +1,11 @@
 """The frame tap's HTTP routes, the mower states from telemetry and the ffmpeg frame grabber's
 pieces (command lines, JPEG quality steps, the MJPEG splitter)."""
 
+import base64
 import io
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -16,6 +18,9 @@ from mowdeck_contracts.v1 import (
     ConnectionKind,
     MowerActivity,
     MowerState,
+    PrincipalKind,
+    PrincipalRef,
+    VisionFrameSetReply,
 )
 from mowdeck_contracts.v1.subjects import telemetry_subject
 from mowdeck_service_kit.bus import InMemoryBus
@@ -26,12 +31,13 @@ from relay_support import T0, FakeClock, FakeMedia
 from camera_relay.adapters.bus.telemetry import mower_status
 from camera_relay.adapters.media.frames import (
     QUALITY_STEPS,
+    FfmpegFrameGrabber,
     encode_jpeg,
     snapshot_args,
     split_jpegs,
     stream_args,
 )
-from camera_relay.application.frames import FrameTooLargeError
+from camera_relay.application.frames import Frame, FrameTooLargeError
 from camera_relay.application.ports import UnsupportedProviderError
 from camera_relay.main import build_app
 from camera_relay.settings import Settings
@@ -347,6 +353,22 @@ def test_jpeg_quality_steps_down_to_the_size_cap() -> None:
         assert image.size == (640, 480)
 
 
+async def test_a_stream_frame_above_the_cap_is_fitted_with_the_quality_steps() -> None:
+    noisy = Image.effect_noise((640, 480), 90).convert("RGB")
+    buffer = io.BytesIO()
+    noisy.save(buffer, format="JPEG", quality=95)
+    big = Frame(data=buffer.getvalue(), received_at=T0, captured_at=T0, width=640, height=480)
+    grabber = FfmpegFrameGrabber(server=None)  # type: ignore[arg-type] # fit needs no server
+    assert await grabber.fit(big, max_bytes=len(big.data)) is big
+    fitted = await grabber.fit(big, max_bytes=len(big.data) - 1)
+    assert len(fitted.data) < len(big.data)
+    assert (fitted.captured_at, fitted.width) == (T0, 640)
+    with pytest.raises(FrameTooLargeError):
+        await grabber.fit(big, max_bytes=2_000)
+    with pytest.raises(FrameTooLargeError):
+        await grabber.fit(replace(big, data=b"not a jpeg"), max_bytes=5)
+
+
 def test_the_mjpeg_splitter_cuts_complete_images_only() -> None:
     one, two = jpeg(32, 24), jpeg(16, 12)
     buffer = bytearray(b"junk" + one + two[:10])
@@ -373,3 +395,59 @@ async def test_the_demand_decides_whether_a_sleeping_mower_is_woken() -> None:
             headers=AUTH,
         )
         assert woken.status_code == 200, woken.text
+
+
+# --- Frame sets -----------------------------------------------------------------------------
+
+
+async def test_the_set_route_answers_both_frames_as_json() -> None:
+    mower, account = uuid4(), uuid4()
+    async with _app(FakeGrabber()) as (_, client, bus, vendor):
+        await bus.publish(telemetry_subject(mower), _state(mower, account))
+        response = await client.post(
+            "/internal/v1/frames/set",
+            json=_body(mower, account, demand="error_analysis"),
+            headers=AUTH,
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "application/json"
+        reply = VisionFrameSetReply.model_validate_json(response.content)
+        assert [(f.camera_id, f.side, f.camera_name) for f in reply.frames] == [
+            ("front_left", "left", "Front left"),
+            ("front_right", "right", "Front right"),
+        ]
+        assert all(base64.b64decode(f.image_base64) == JPEG for f in reply.frames)
+        assert reply.complete
+        assert reply.skew_ms is not None and reply.skew_ms < 200
+        assert [start.camera_ids for start in vendor.starts] == [("front_left", "front_right")]
+
+
+async def test_the_set_route_needs_its_token_and_a_service_principal() -> None:
+    mower, account = uuid4(), uuid4()
+    async with _app() as (_, client, bus, _vendor):
+        await bus.publish(telemetry_subject(mower), _state(mower, account))
+        missing = await client.post("/internal/v1/frames/set", json=_body(mower, account))
+        assert missing.status_code == 401
+        user = PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER)
+        refused = await client.post(
+            "/internal/v1/frames/set",
+            json=_body(mower, account, requested_by=user.model_dump(mode="json")),
+            headers=AUTH,
+        )
+        assert refused.status_code == 422
+        too_many = await client.post(
+            "/internal/v1/frames/set", json=_body(mower, account, max_frames=3), headers=AUTH
+        )
+        assert too_many.status_code == 422
+
+
+async def test_the_set_route_refuses_another_account_with_404() -> None:
+    mower, account = uuid4(), uuid4()
+    async with _app() as (_, client, bus, vendor):
+        vendor.owner[mower] = account
+        await bus.publish(telemetry_subject(mower), _state(mower, account))
+        response = await client.post(
+            "/internal/v1/frames/set", json=_body(mower, uuid4()), headers=AUTH
+        )
+        assert response.status_code == 404
+        assert vendor.starts == []

@@ -1,7 +1,8 @@
 """Requests to other services and publications over NATS.
 
 * :class:`BusFleetGateway`: ``fleet.drive.start``, ``fleet.drive.stop``, ``fleet.commands.issue``.
-* :class:`BusPhotoSource`: ``gateway.mower.<id>.photo`` (the Device-Gateway holding the mower).
+* :class:`BusPhotoSource`: ``gateway.mower.<id>.photo`` (the Device-Gateway holding the mower),
+  asking for both front cameras of the same moment (``max_frames`` 2).
 * :class:`BusPublisher`: drive frames on ``command.mower.<id>`` and
   ``vision.proposal.created`` on ``event.vision.proposal.created``.
 """
@@ -11,6 +12,7 @@ import binascii
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    VISION_FRAME_SET_MAX_FRAMES,
     VISION_PROPOSAL_CREATED,
     CommandEnvelope,
     DriveStartReply,
@@ -90,14 +92,17 @@ class BusPhotoSource:
         self.bus = bus
         self.timeout_seconds = timeout_seconds
 
-    async def photo(self, mower_id: UUID, account_id: UUID) -> Image | None:
-        """An image from the gateway, None when none can be had (logged without content).
+    async def photos(self, mower_id: UUID, account_id: UUID) -> list[Image]:
+        """The images of one moment from the gateway (logged without content): both front
+        cameras, left first, when it takes them through the camera relay, else its single
+        image; empty when none can be had.
 
         Every photo Vision asks for helps a mower with a problem (AI assist, the automatic
         analysis of a recoverable error), so it is an ``error_analysis``: through the camera
-        relay it may wake a sleeping mower and is not bound by the Vision budget (ADR 0045)."""
+        relay it may wake a sleeping mower and is not bound by the Vision budget (ADR 0045).
+        A gateway of an older release ignores ``max_frames`` and answers its single image."""
         if self.bus is None:
-            return None
+            return []
         try:
             message = await self.bus.request(
                 photo_subject(mower_id),
@@ -105,23 +110,62 @@ class BusPhotoSource:
                     mower_id=mower_id,
                     account_id=account_id,
                     demand=VisionDemand.ERROR_ANALYSIS,
+                    max_frames=VISION_FRAME_SET_MAX_FRAMES,
                 ),
                 timeout=self.timeout_seconds,
             )
             reply = message.model(PhotoReply)
         except (BusError, ValidationError) as exc:
             _log.info("no photo from the gateway", mower_id=str(mower_id), error=type(exc).__name__)
-            return None
-        if reply.error is not None or reply.image_base64 is None or reply.media_type is None:
-            code = reply.error.code.value if reply.error else "empty"
-            _log.info("the gateway delivered no photo", mower_id=str(mower_id), code=code)
-            return None
-        try:
-            data = base64.b64decode(reply.image_base64, validate=True)
-        except (binascii.Error, ValueError):
-            return None
-        _log.info("photo received", mower_id=str(mower_id), bytes=len(data))
-        return Image(data, reply.media_type, "mower")
+            return []
+        if reply.error is not None:
+            _log.info(
+                "the gateway delivered no photo",
+                mower_id=str(mower_id),
+                code=reply.error.code.value,
+            )
+            return []
+        images = _images(reply)
+        _log.info(
+            "photo received",
+            mower_id=str(mower_id),
+            images=len(images),
+            sides=[image.side for image in images],
+            missing=reply.frames_missing,
+            bytes=sum(len(image.data) for image in images),
+        )
+        return images
+
+
+def _decode(data: str) -> bytes | None:
+    try:
+        return base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _images(reply: PhotoReply) -> list[Image]:
+    """The images of a photo reply (source ``mower``); undecodable ones are skipped."""
+    if reply.frames:
+        images: list[Image] = []
+        for frame in reply.frames:
+            data = _decode(frame.image_base64)
+            if data:
+                images.append(
+                    Image(
+                        data,
+                        frame.media_type,
+                        "mower",
+                        camera=frame.camera_name or frame.camera_id,
+                        side=frame.side,
+                        captured_at=frame.captured_at,
+                    )
+                )
+        return images
+    if reply.image_base64 is None or reply.media_type is None:
+        return []
+    data = _decode(reply.image_base64)
+    return [Image(data, reply.media_type, "mower")] if data else []
 
 
 class BusPublisher:

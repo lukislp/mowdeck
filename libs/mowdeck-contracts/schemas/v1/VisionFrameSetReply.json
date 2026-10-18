@@ -1,0 +1,211 @@
+{
+  "$defs": {
+    "CameraPlacement": {
+      "description": "Where a camera sits on the mower. Clients pair ``front_left`` and ``front_right`` for the\nside-by-side view and stereo frames (both front cameras of a LUBA 2 AWD X).",
+      "enum": [
+        "front_left",
+        "front_right",
+        "front",
+        "rear"
+      ],
+      "title": "CameraPlacement",
+      "type": "string"
+    },
+    "VisionFrame": {
+      "description": "One camera's frame of a :class:`VisionFrameSetReply`.",
+      "properties": {
+        "camera_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Camera Id",
+          "type": "string"
+        },
+        "camera_name": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Camera Name"
+        },
+        "captured_at": {
+          "description": "Best estimate of when the camera took it (the relay's wall clock).",
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height"
+        },
+        "image_base64": {
+          "description": "The JPEG, base64 (standard).",
+          "minLength": 1,
+          "title": "Image Base64",
+          "type": "string"
+        },
+        "media_type": {
+          "const": "image/jpeg",
+          "default": "image/jpeg",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraPlacement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "received_at": {
+          "description": "When the relay had the decoded frame.",
+          "format": "date-time",
+          "title": "Received At",
+          "type": "string"
+        },
+        "side": {
+          "anyOf": [
+            {
+              "enum": [
+                "left",
+                "right"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`left` or `right` for a front camera of a stereo pair.",
+          "title": "Side"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width"
+        }
+      },
+      "required": [
+        "camera_id",
+        "image_base64",
+        "captured_at",
+        "received_at"
+      ],
+      "title": "VisionFrame",
+      "type": "object"
+    },
+    "VisionFrameMissing": {
+      "description": "A camera of the set without a frame.",
+      "properties": {
+        "camera_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Camera Id",
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/VisionFrameMissingReason"
+        },
+        "side": {
+          "anyOf": [
+            {
+              "enum": [
+                "left",
+                "right"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Side"
+        }
+      },
+      "required": [
+        "camera_id",
+        "reason"
+      ],
+      "title": "VisionFrameMissing",
+      "type": "object"
+    },
+    "VisionFrameMissingReason": {
+      "description": "Why a camera of a set gave no frame.",
+      "enum": [
+        "silent",
+        "no_frame",
+        "too_large"
+      ],
+      "title": "VisionFrameMissingReason",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Answer of ``POST /internal/v1/frames/set``: the frames, left before right.\n\nA set is never refused because one camera is silent: the cameras that delivered are served\nand the others are listed in ``missing``. Without any frame the relay answers a problem\ndocument like the single snapshot.",
+  "properties": {
+    "frames": {
+      "items": {
+        "$ref": "#/$defs/VisionFrame"
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "title": "Frames",
+      "type": "array"
+    },
+    "missing": {
+      "items": {
+        "$ref": "#/$defs/VisionFrameMissing"
+      },
+      "maxItems": 8,
+      "title": "Missing",
+      "type": "array"
+    },
+    "skew_ms": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Milliseconds between the first and the last capture time (null: one frame).",
+      "title": "Skew Ms"
+    }
+  },
+  "required": [
+    "frames"
+  ],
+  "title": "VisionFrameSetReply",
+  "type": "object"
+}

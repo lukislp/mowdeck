@@ -11,8 +11,9 @@ issues ``set_light on`` through ``fleet.commands.issue`` on the requester's beha
 the analysis, issues ``set_light off``. The proposal records ``light_used``. A light that
 cannot be switched never stops the analysis: it goes on with the dark frame.
 
-Stereo frames: two uploaded frames marked ``left`` and ``right`` (the camera panel's front
-cameras, captured at most ``stereo_max_skew_ms`` apart) form a stereo pair. When the requester
+Stereo frames: two frames marked ``left`` and ``right`` of the same source (the camera panel's
+uploaded front cameras, or the gateway's photo of both front cameras through the camera relay,
+ADR 0045), captured at most ``stereo_max_skew_ms`` apart, form a stereo pair. When the requester
 keeps the preference ``stereo_frames`` (default on), the model gets both, left first, with an
 explicit hint (``SceneContext.stereo``) and the proposal records ``stereo``; with the preference
 off only the left frame is analysed. Every proposal keeps what each image was (``frames``).
@@ -293,15 +294,14 @@ class VisionService:
         light_used = restore_light = False
         images, stereo = await self._stereo(principal, mower_id, images)
         if not images:
-            photo = await self.photos.photo(mower_id, account)
-            if photo is None and trigger is VisionTrigger.ERROR:
+            photos = await self.photos.photos(mower_id, account)
+            if not photos and trigger is VisionTrigger.ERROR:
                 raise PhotoUnavailable("the mower delivered no photo")
-            if photo is not None:
-                images = [photo]
-                if self._light_helps(mower_id, account, photo):
-                    restore_light, lit = await self._photo_with_light(principal, mower_id, account)
-                    if lit is not None:
-                        images, light_used = [lit], True
+            if photos and self._light_helps(mower_id, account, photos):
+                restore_light, lit = await self._photo_with_light(principal, mower_id, account)
+                if lit:
+                    photos, light_used = lit, True
+            images, stereo = await self._stereo(principal, mower_id, photos)
         now = self.clock()
         map_image = self._map_image(mower_id, account)
         if map_image is not None:
@@ -394,9 +394,10 @@ class VisionService:
 
     # --- dark frames ----------------------------------------------------------------------
 
-    def _light_helps(self, mower_id: UUID, account_id: UUID, photo: Image) -> bool:
-        """The photo is too dark and the mower has a switchable light that is off."""
-        if not too_dark(photo.data, self.config.dark_frame_threshold):
+    def _light_helps(self, mower_id: UUID, account_id: UUID, photos: list[Image]) -> bool:
+        """A photo is too dark (any camera of a pair) and the mower has a switchable light that
+        is off."""
+        if not any(too_dark(photo.data, self.config.dark_frame_threshold) for photo in photos):
             return False
         caps = self.view.capabilities(mower_id)
         observed = self.view.state(mower_id)
@@ -410,24 +411,24 @@ class VisionService:
 
     async def _photo_with_light(
         self, principal: Principal, mower_id: UUID, account_id: UUID
-    ) -> tuple[bool, Image | None]:
-        """Switch the light on, wait for the mower to report it, take the photo again.
+    ) -> tuple[bool, list[Image]]:
+        """Switch the light on, wait for the mower to report it, take the photos again.
 
         Returns whether the light was switched (and must be switched off again) and the new
-        photo (None: keep the dark one).
+        photos (empty: keep the dark ones).
         """
         if not await self._set_light(principal.ref(), account_id, mower_id, on=True):
-            return False, None
+            return False, []
         deadline = self.view.monotonic() + self.config.light_wait_seconds
         while not self._light_reported_on(mower_id):
             if self.view.monotonic() >= deadline:
                 _log.info("the mower did not report the light on in time", mower_id=str(mower_id))
                 break
             await asyncio.sleep(self.config.light_poll_seconds)
-        photo = await self.photos.photo(mower_id, account_id)
-        if photo is None:
+        photos = await self.photos.photos(mower_id, account_id)
+        if not photos:
             _log.info("no second photo with the light on", mower_id=str(mower_id))
-        return True, photo
+        return True, photos
 
     def _light_reported_on(self, mower_id: UUID) -> bool:
         observed = self.view.state(mower_id)

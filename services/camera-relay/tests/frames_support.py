@@ -3,8 +3,8 @@
 import asyncio
 import io
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from mowdeck_contracts.v1 import utc_now
@@ -12,7 +12,7 @@ from mowdeck_contracts.v1.camera import CameraInfo, CameraPlacement
 from PIL import Image
 from relay_support import FakeVendor
 
-from camera_relay.application.frames import Frame, FrameUnavailableError
+from camera_relay.application.frames import Frame, FrameTooLargeError, FrameUnavailableError
 from camera_relay.application.ports import ForbiddenSourceError, SourceOffer
 from camera_relay.application.service import RelayService
 from camera_relay.domain.effects import StartVendorSession, UpdateCameras
@@ -130,6 +130,10 @@ class FakeGrabber:
             await asyncio.Event().wait()
         return self._frame()
 
+    async def fit(self, frame: Frame, *, max_bytes: int) -> Frame:
+        del max_bytes
+        return frame
+
     async def stream(
         self, path: str, *, fps: float, max_width: int, duration: float
     ) -> AsyncGenerator[Frame]:
@@ -143,3 +147,51 @@ class FakeGrabber:
                 await self.after_stream()
         finally:
             self.closed_streams += 1
+
+
+SET_T0 = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
+
+
+@dataclass
+class TimedGrabber:
+    """Frames of a frame set without ffmpeg: per camera (the last part of the path) the capture
+    times, in milliseconds after :data:`SET_T0`, of the frames each reader yields at once;
+    afterwards the reader waits like a live path without a new frame. A camera without an
+    entry publishes but never gives a frame. ``large`` cameras send frames above any cap;
+    ``unfit`` makes them impossible to shrink."""
+
+    offsets: dict[str, list[float]] = field(default_factory=dict)
+    large: set[str] = field(default_factory=set)
+    unfit: bool = False
+    data: bytes = JPEG
+    streams: list[tuple[str, float]] = field(default_factory=list)
+    open_readers: int = 0
+    fitted: list[str] = field(default_factory=list)
+
+    async def snapshot(self, path: str, *, max_width: int, max_bytes: int) -> Frame:
+        del path, max_width, max_bytes
+        raise AssertionError("a frame set reads streams, never single snapshots")
+
+    async def fit(self, frame: Frame, *, max_bytes: int) -> Frame:
+        self.fitted.append(frame.captured_at.isoformat())
+        if self.unfit:
+            msg = f"still above {max_bytes}"
+            raise FrameTooLargeError(msg)
+        return replace(frame, data=self.data)
+
+    async def stream(
+        self, path: str, *, fps: float, max_width: int, duration: float
+    ) -> AsyncGenerator[Frame]:
+        del max_width, duration
+        camera = path.rsplit("/", 1)[-1]
+        self.streams.append((camera, fps))
+        self.open_readers += 1
+        data = self.data * 40 if camera in self.large else self.data
+        try:
+            for offset in self.offsets.get(camera, []):
+                await asyncio.sleep(0)
+                at = SET_T0 + timedelta(milliseconds=offset)
+                yield Frame(data=data, received_at=at, captured_at=at, width=640, height=480)
+            await asyncio.Event().wait()
+        finally:
+            self.open_readers -= 1

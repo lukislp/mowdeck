@@ -20,20 +20,28 @@ stop the stream.
 The relay publishes its lifecycle as events (wrapped in ``EventEnvelope``) on the stream
 ``CAMERA``, subjects ``camera.mower.<id>.relay.<kind>``. Nothing here names a manufacturer: the
 source of a session is a :class:`~mowdeck_contracts.v1.camera.CameraProvider`.
+
+Vision frames (internal HTTP of the relay's frame tap, ``Authorization: Bearer
+<MOWDECK_RELAY_FRAMES_TOKEN>``): ``POST /internal/v1/frames/snapshot`` answers one JPEG of one
+camera (the first contract, kept unchanged); ``POST /internal/v1/frames/set`` with a
+:class:`VisionFrameSetRequest` answers a :class:`VisionFrameSetReply`: one frame of each
+camera of the same moment (both front cameras for a stereo pair), each with its camera, side
+and capture time, and the cameras that gave none (``missing``).
 """
 
 from enum import StrEnum
-from typing import Annotated, Final, Self
+from typing import Annotated, Final, Literal, Self
 from uuid import UUID
 
 from pydantic import Field, StringConstraints, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 from mowdeck_contracts.v1.camera import (
+    CameraPlacement,
     CameraProvider,
     CameraSession,
 )
-from mowdeck_contracts.v1.principal import PrincipalRef
+from mowdeck_contracts.v1.principal import PrincipalKind, PrincipalRef
 
 CameraId = Annotated[str, StringConstraints(min_length=1, max_length=64)]
 """A ``CameraInfo.id``."""
@@ -56,6 +64,10 @@ VISION_MIN_QUOTA_PERCENT: Final = 10
 """Vision-only streaming is refused below this share of the vendor's video budget."""
 VISION_MIN_BATTERY_PERCENT: Final = 15
 """Vision-only streaming is refused below this battery level unless the mower charges."""
+VISION_FRAME_SET_MAX_FRAMES: Final = 2
+"""Most frames of one frame set (the two front cameras of a stereo pair)."""
+VISION_FRAME_SET_TARGET_SKEW_MS: Final = 200
+"""The relay looks for frames of a set captured at most this far apart."""
 
 # --- Event types ------------------------------------------------------------------------------
 
@@ -320,3 +332,120 @@ class CameraRelayLeaseClosed(ContractModel):
     reason: RelayLeaseCloseReason
     opened_at: UtcDateTime
     closed_at: UtcDateTime
+
+
+# --- Vision frame sets (internal HTTP, ``POST /internal/v1/frames/set``) ----------------------
+
+CameraSide = Literal["left", "right"]
+"""The side of a front camera of a stereo pair."""
+
+
+def camera_side(placement: CameraPlacement | None) -> CameraSide | None:
+    """``left`` for a front left camera, ``right`` for a front right one, else None."""
+    if placement is CameraPlacement.FRONT_LEFT:
+        return "left"
+    if placement is CameraPlacement.FRONT_RIGHT:
+        return "right"
+    return None
+
+
+class VisionFrameSetRequest(ContractModel):
+    """Body of ``POST /internal/v1/frames/set``: one frame of each camera of the same moment.
+
+    The relay holds one ``vision`` lease on the cameras for exactly the request (the same
+    reuse, limits and demand rules as a single snapshot) and picks the cameras itself: both
+    front cameras when the mower has a left and a right one, else the cameras most likely to
+    deliver, at most ``max_frames``. The account and the mower come from a service that
+    already checked them (the Device-Gateway takes them from its own connection).
+    """
+
+    account_id: UUID
+    mower_id: UUID
+    max_frames: int = Field(
+        default=VISION_FRAME_SET_MAX_FRAMES,
+        ge=1,
+        le=VISION_FRAME_SET_MAX_FRAMES,
+        description="Most cameras in the set (2: a stereo pair of the front cameras).",
+    )
+    max_width: int = Field(default=1280, ge=160, le=3840)
+    max_bytes: int = Field(
+        default=256 * 1024,
+        ge=1024,
+        le=8 * 1024 * 1024,
+        description="Size cap of each frame (JPEG); the caller divides its total by the frames.",
+    )
+    timeout_s: float = Field(default=20.0, gt=0, le=VISION_SNAPSHOT_HOLD_SECONDS)
+    requested_by: PrincipalRef | None = Field(
+        default=None, description="The requesting service (kind `service`); it owns the lease."
+    )
+    on_behalf_of: UUID | None = Field(
+        default=None, description="The user the service acts for (logged only)."
+    )
+    demand: VisionDemand = VisionDemand.ROUTINE
+
+    @model_validator(mode="after")
+    def _service_principal(self) -> Self:
+        if self.requested_by is not None and self.requested_by.kind is not PrincipalKind.SERVICE:
+            msg = "requested_by must be a service principal"
+            raise ValueError(msg)
+        return self
+
+
+class VisionFrame(ContractModel):
+    """One camera's frame of a :class:`VisionFrameSetReply`."""
+
+    camera_id: CameraId
+    camera_name: str | None = Field(default=None, max_length=100)
+    placement: CameraPlacement | None = None
+    side: CameraSide | None = Field(
+        default=None, description="`left` or `right` for a front camera of a stereo pair."
+    )
+    media_type: Literal["image/jpeg"] = "image/jpeg"
+    image_base64: str = Field(min_length=1, description="The JPEG, base64 (standard).")
+    captured_at: UtcDateTime = Field(
+        description="Best estimate of when the camera took it (the relay's wall clock)."
+    )
+    received_at: UtcDateTime = Field(description="When the relay had the decoded frame.")
+    width: int | None = Field(default=None, ge=1)
+    height: int | None = Field(default=None, ge=1)
+
+
+class VisionFrameMissingReason(StrEnum):
+    """Why a camera of a set gave no frame."""
+
+    SILENT = "silent"
+    """The camera is listed but does not publish."""
+    NO_FRAME = "no_frame"
+    """No frame of this camera in time (the others were served without it)."""
+    TOO_LARGE = "too_large"
+    """The frame stayed above ``max_bytes`` at the lowest quality."""
+
+
+class VisionFrameMissing(ContractModel):
+    """A camera of the set without a frame."""
+
+    camera_id: CameraId
+    side: CameraSide | None = None
+    reason: VisionFrameMissingReason
+
+
+class VisionFrameSetReply(ContractModel):
+    """Answer of ``POST /internal/v1/frames/set``: the frames, left before right.
+
+    A set is never refused because one camera is silent: the cameras that delivered are served
+    and the others are listed in ``missing``. Without any frame the relay answers a problem
+    document like the single snapshot.
+    """
+
+    frames: list[VisionFrame] = Field(min_length=1, max_length=VISION_FRAME_SET_MAX_FRAMES)
+    missing: list[VisionFrameMissing] = Field(default_factory=list, max_length=8)
+    skew_ms: float | None = Field(
+        default=None,
+        ge=0,
+        description="Milliseconds between the first and the last capture time (null: one frame).",
+    )
+
+    @property
+    def complete(self) -> bool:
+        """Every camera of the set delivered."""
+        return not self.missing

@@ -283,8 +283,10 @@ class MowerView(Protocol):
 class PhotoSource(Protocol):
     """Still images from the mower's adapter (``gateway.mower.<id>.photo``)."""
 
-    async def photo(self, mower_id: UUID, account_id: UUID) -> Image | None:
-        """An image, or None when the gateway cannot deliver one."""
+    async def photos(self, mower_id: UUID, account_id: UUID) -> list[Image]:
+        """The images of one moment: both front cameras (left first, with ``side``, camera and
+        capture time) when the gateway takes them through the camera relay, else its single
+        image; empty when the gateway cannot deliver one."""
         ...
 
 

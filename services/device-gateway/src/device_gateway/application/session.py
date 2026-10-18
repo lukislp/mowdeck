@@ -43,6 +43,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import (
     MOWER_CONNECTED,
     MOWER_DISCONNECTED,
+    PHOTO_MAX_BYTES,
     BridgeScanReply,
     CameraAccess,
     CameraSession,
@@ -79,10 +80,13 @@ from mowdeck_service_kit import get_logger
 from pydantic import BaseModel
 
 from device_gateway.application.ports import (
+    CameraFrame,
+    CameraFrames,
     CameraSnapshotter,
     Clock,
     ConnectionProvider,
     CredentialSource,
+    FrameSetSnapshotter,
     GatewayPublisher,
     NoCredentials,
     SnapshotFailed,
@@ -254,21 +258,50 @@ class MowerSession:
         :class:`~device_gateway.application.ports.SnapshotFailed` when the sources gave no
         frame.
         """
+        found = await self.capture_frames(demand)
+        return found.frames[0].photo
+
+    async def capture_frames(
+        self,
+        demand: VisionDemand = VisionDemand.ROUTINE,
+        *,
+        max_frames: int = 1,
+        max_bytes: int = PHOTO_MAX_BYTES,
+    ) -> CameraFrames:
+        """Stills of the same moment from the sources of :meth:`capture_photo`, in the same
+        order and with the same hand-over rules.
+
+        With ``max_frames`` above 1 a source that takes frame sets (the camera relay:
+        :class:`FrameSetSnapshotter`) gives one frame of each front camera, left first, with
+        side and capture time, each at most ``max_bytes / max_frames`` so the set stays
+        within ``max_bytes``; every other source (the adapter's own photo, the capture worker)
+        gives its single frame. The camera the app shows is no filter: a set always asks for
+        both front cameras.
+        """
         controller = self._controller
         if controller is None:
             raise NotConnected("the mower is not connected")
         connection = controller.connection
         if isinstance(connection, PhotoCapture):
             try:
-                return await connection.capture_photo()
+                return CameraFrames(frames=(CameraFrame(await connection.capture_photo()),))
             except PhotoUnavailable as exc:
                 _log.debug("adapter takes no photo", mower_id=str(self.mower_id), reason=str(exc))
         if not self._snapshotters:
             raise PhotoUnsupported("this connection cannot take photos")
         async with self._photo_lock:
-            return await self._camera_frame(controller, demand)
+            return await self._camera_frames(
+                controller, demand, max_frames=max_frames, max_bytes=max_bytes
+            )
 
-    async def _camera_frame(self, controller: MowerController, demand: VisionDemand) -> Photo:
+    async def _camera_frames(
+        self,
+        controller: MowerController,
+        demand: VisionDemand,
+        *,
+        max_frames: int,
+        max_bytes: int,
+    ) -> CameraFrames:
         connection = controller.connection
         capabilities = await controller.capabilities()
         if capabilities.camera is CameraAccess.NONE:
@@ -288,9 +321,18 @@ class MowerSession:
                     continue
                 target = replace(target, session=vendor, camera_uid=snapshot_camera_uid(vendor))
             try:
-                photo = await snapshotter.snapshot(
-                    target, timeout_seconds=self._snapshot_timeout_seconds
-                )
+                if max_frames > 1 and isinstance(snapshotter, FrameSetSnapshotter):
+                    found = await snapshotter.frame_set(
+                        target,
+                        max_frames=max_frames,
+                        max_bytes=max_bytes // max_frames,
+                        timeout_seconds=self._snapshot_timeout_seconds,
+                    )
+                else:
+                    photo = await snapshotter.snapshot(
+                        target, timeout_seconds=self._snapshot_timeout_seconds
+                    )
+                    found = CameraFrames(frames=(CameraFrame(photo),))
             except SnapshotUnavailable as exc:
                 _log.info(
                     "camera frame source unavailable, trying the next",
@@ -305,8 +347,11 @@ class MowerSession:
                 mower_id=str(self.mower_id),
                 source=type(snapshotter).__name__,
                 camera_uid=target.camera_uid,
+                frames=len(found.frames),
+                sides=[frame.side for frame in found.frames],
+                missing=list(found.missing),
             )
-            return photo
+            return found
         if handed_over is not None:
             raise handed_over
         raise PhotoUnsupported("this connection has no camera")

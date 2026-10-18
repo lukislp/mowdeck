@@ -39,22 +39,30 @@ def too_dark(data: bytes, threshold: float) -> bool:
 
 
 STEREO_MAX_SKEW_MS: Final = 500
-"""Default for how far apart the two frames of a stereo pair may be captured (the browser aims
-at 200 ms; the service tolerates more, a moving mower is still in practice)."""
+"""Default for how far apart the two frames of a stereo pair may be captured (the browser and
+the camera relay aim at 200 ms; the service tolerates more, a moving mower is still in
+practice)."""
+
+
+PAIR_SOURCES: Final = frozenset({"upload", "mower"})
+"""Sources whose frames may form a stereo pair (both frames of the same one)."""
 
 
 def stereo_pair(images: Sequence[Image], max_skew_ms: float = STEREO_MAX_SKEW_MS) -> list[Image]:
     """The two images as ``[left, right]`` when they form a stereo pair, else an empty list.
 
-    A pair is exactly two uploaded frames, one ``left`` and one ``right``, from two different
-    cameras, captured at most ``max_skew_ms`` apart (when both carry a capture time; without
-    times the pair is accepted as the browser sent it).
+    A pair is exactly two frames of the same source, one ``left`` and one ``right``, from two
+    different cameras, captured at most ``max_skew_ms`` apart (when both carry a capture time;
+    without times the pair is accepted as sent): two uploaded frames of the camera panel, or the
+    two front camera frames the gateway took through the camera relay (source ``mower``).
     """
     if len(images) != 2:
         return []
     by_side = {image.side: image for image in images}
     left, right = by_side.get("left"), by_side.get("right")
-    if left is None or right is None or left.source != "upload" or right.source != "upload":
+    if left is None or right is None or left.source != right.source:
+        return []
+    if left.source not in PAIR_SOURCES:
         return []
     if left.camera is not None and left.camera == right.camera:
         return []

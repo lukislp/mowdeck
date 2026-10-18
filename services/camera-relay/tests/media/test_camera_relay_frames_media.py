@@ -5,13 +5,15 @@ and calls the frame tap like the Device-Gateway. Covered with the ``fake`` sourc
 a valid 640x480 JPEG within its size cap, opens a vision lease for the request only, and the
 vision-only session stops after the 15 s grace and is released; a stream yields JPEG parts at
 the requested rate and ends its lease when the client goes away; a low battery is refused
-(409) without asking the gateway. With the recorded LUBA stream through the fake agora bridge
+(409) without asking the gateway; a frame set holds both front cameras of the same moment.
+With the recorded LUBA stream through the fake agora bridge
 (H.265 transcoded to H.264): a snapshot is a valid 640x480 JPEG.
 
 Opt-in (Docker): ``MOWDECK_TEST_RELAY_MEDIA=1`` (see relay_media_support.py).
 """
 
 import asyncio
+import base64
 import io
 import time
 from datetime import datetime
@@ -19,7 +21,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
-from mowdeck_contracts.v1 import ConnectionKind, MowerActivity, MowerState, utc_now
+from mowdeck_contracts.v1 import (
+    ConnectionKind,
+    MowerActivity,
+    MowerState,
+    VisionFrameSetReply,
+    utc_now,
+)
 from mowdeck_contracts.v1.subjects import telemetry_subject
 from nats.aio.client import Client
 from PIL import Image
@@ -117,6 +125,41 @@ async def test_a_small_size_cap_lowers_the_quality_or_refuses(
     tiny = await snapshot(media_stack, account_id, mower_id, max_bytes=1024)
     assert tiny.status_code == 502
     assert tiny.json()["type"].endswith(":frame-failed")
+
+
+async def test_a_frame_set_holds_both_front_cameras_of_the_same_moment(
+    media_stack: MediaStack, bus: Client, gateway: FakeGateway
+) -> None:
+    account_id, mower_id = uuid4(), uuid4()
+    await publish_state(bus, account_id, mower_id)
+    started = time.monotonic()
+    async with httpx.AsyncClient(timeout=40) as client:
+        response = await client.post(
+            f"{media_stack.relay_url}/internal/v1/frames/set",
+            json={
+                "account_id": str(account_id),
+                "mower_id": str(mower_id),
+                "max_width": 1280,
+                "max_bytes": 200_000,
+                "timeout_s": 25,
+                "demand": "error_analysis",
+            },
+            headers=AUTH,
+        )
+    assert response.status_code == 200, response.text
+    assert time.monotonic() - started < 20
+    reply = VisionFrameSetReply.model_validate_json(response.content)
+    assert [(frame.side, frame.camera_id) for frame in reply.frames] == [
+        ("left", "front_left"),
+        ("right", "front_right"),
+    ]
+    assert reply.missing == []
+    for frame in reply.frames:
+        data = base64.b64decode(frame.image_base64)
+        assert len(data) <= 200_000
+        assert decoded(data) == ("JPEG", (640, 480))
+    assert reply.skew_ms is not None and reply.skew_ms < 200
+    assert [s.mower_id for s in gateway.sessions] == [mower_id], "one vendor session for both"
 
 
 async def test_a_low_battery_refuses_vision_without_asking_the_gateway(

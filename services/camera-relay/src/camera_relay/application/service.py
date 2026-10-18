@@ -136,6 +136,7 @@ class RelayService:
         *,
         vision_mode: VisionMode = VisionMode.STREAM,
         first_camera_only: bool = False,
+        camera_count: int = 1,
         avoid_cameras: Sequence[str] = (),
     ) -> RelayAttachReply:
         """Open a lease on the session of ``(account_id, mower_id)``.
@@ -145,8 +146,9 @@ class RelayService:
         lease, event or start exists, and the vendor session is not released (a client in
         ``auto`` falls back to the direct path and uses the stream). An empty ``camera_ids``
         means every camera the vendor session offers, or with ``first_camera_only`` (Vision's
-        frames) the one camera most likely to deliver (:func:`_first_camera`), never one of
-        ``avoid_cameras`` (cameras a caller found silent).
+        frames) the ``camera_count`` cameras most likely to deliver (:func:`vision_cameras`;
+        with 2 both front cameras of a stereo pair), never one of ``avoid_cameras`` (cameras a
+        caller found silent).
         The video budget the offer reports updates the mower's state before the lease is
         admitted, so a Vision lease below the budget limit is refused and the offered session
         released.
@@ -177,7 +179,7 @@ class RelayService:
                 offered = True
             camera_ids = list(request.camera_ids)
             if not camera_ids and first_camera_only:
-                camera_ids = _first_camera(session, self.clock(), avoid_cameras)
+                camera_ids = vision_cameras(session, self.clock(), avoid_cameras, camera_count)
             decision = session.attach(
                 camera_ids=camera_ids,
                 purpose=request.purpose,
@@ -440,14 +442,18 @@ class RelayService:
 _FRONT_PLACEMENTS = (CameraPlacement.FRONT_LEFT, CameraPlacement.FRONT, CameraPlacement.FRONT_RIGHT)
 
 
-def _first_camera(session: RelaySession, now: datetime, avoid: Sequence[str] = ()) -> list[str]:
-    """The one offered camera most likely to deliver, or none.
+def vision_cameras(
+    session: RelaySession, now: datetime, avoid: Sequence[str] = (), count: int = 1
+) -> list[str]:
+    """The ``count`` offered cameras most likely to deliver, best first, or none.
 
     Ranked: a camera that already publishes in the running session; then a camera not known
     to be silent, a front camera (left, front, right) before any other (a listed rear camera
     may never publish, like the LUBA's), one with a publisher uid before one without, then
     the offered order. Cameras known to be silent (``camera_available`` False) and ``avoid``
-    are left out."""
+    are left out. For two cameras a front left and a front right camera are taken together
+    whenever both are candidates (a stereo pair of the same moment), whatever else publishes.
+    """
 
     def rank(index: int, camera: CameraInfo) -> tuple[int, int, int, int]:
         available = session.camera_available(camera.id, now)
@@ -458,12 +464,20 @@ def _first_camera(session: RelaySession, now: datetime, avoid: Sequence[str] = (
         )
         return (0 if available else 1, front, 0 if camera.uid is not None else 1, index)
 
-    candidates = [
-        (rank(index, camera), camera.id)
+    candidates = sorted(
+        (rank(index, camera), camera)
         for index, camera in enumerate(session.offered)
         if camera.id not in avoid and session.camera_available(camera.id, now) is not False
-    ]
-    return [min(candidates)[1]] if candidates else []
+    )
+    if count >= 2:
+        sides = {camera.placement: camera.id for _, camera in reversed(candidates)}
+        left = sides.get(CameraPlacement.FRONT_LEFT)
+        right = sides.get(CameraPlacement.FRONT_RIGHT)
+        if left is not None and right is not None:
+            pair = [left, right]
+            rest = [camera.id for _, camera in candidates if camera.id not in pair]
+            return (pair + rest)[:count]
+    return [camera.id for _, camera in candidates][: max(count, 1)]
 
 
 def _not_found() -> RelayError:
