@@ -1163,8 +1163,6 @@
   "camera_expand": "Expand camera",
   "camera_collapsed": "Collapsed: no video session, no data used.",
   "camera_diag_summary": "Diagnose",
-  "camera_debug_copy": "Copy",
-  "camera_debug_copied": "Copied",
   "camera_diag_none": "No statistics yet.",
   "camera_diag_state": "Connection: {state}",
   "camera_diag_video": "Receive {bitrate} kbit/s · {fps} fps · {size}",

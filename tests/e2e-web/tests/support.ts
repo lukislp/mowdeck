@@ -4,7 +4,7 @@
  */
 import { execFileSync } from 'node:child_process';
 
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 export const RUN = process.env.MOWDECK_E2E_RUN_ID ?? Date.now().toString(36).slice(-6);
 export const PASSWORD = 'gate-password-' + RUN;
@@ -240,6 +240,93 @@ export async function forceCameraTransport(
       // no storage: the default (auto) applies
     }
   }, transport);
+}
+
+/** Skip in a browser without WebRTC (never fake a picture there). */
+export async function requireWebRtc(page: Page, browserName: string): Promise<void> {
+  await page.goto('/login');
+  const available = await page.evaluate(() => typeof RTCPeerConnection === 'function');
+  test.skip(
+    !available,
+    `${browserName} in this Playwright build has no WebRTC (RTCPeerConnection is missing); ` +
+      'the relay player cannot run here',
+  );
+  // The relay sends H.264 only (ADR 0045). A browser without an H.264 decoder offers none and
+  // MediaMTX refuses the offer ("codecs not supported by client"): fail with the reason instead
+  // of a timeout. Playwright's Firefox on Linux has no OpenH264 unless MOZ_GMP_PATH points at
+  // the plugin (CI installs it; see tests/e2e-web/README.md).
+  const h264 = await page.evaluate(
+    () =>
+      RTCRtpReceiver.getCapabilities?.('video')?.codecs.some(
+        (codec) => codec.mimeType.toLowerCase() === 'video/h264',
+      ) ?? false,
+  );
+  expect(
+    h264,
+    `${browserName} offers no H.264 decoder for WebRTC; the relay sends H.264 only ` +
+      '(Firefox on Linux: install the OpenH264 plugin and set MOZ_GMP_PATH)',
+  ).toBe(true);
+}
+
+/** The `<video>` presents new frames (requestVideoFrameCallback, else decoded frames grow). */
+export async function presentsFrames(video: Locator): Promise<number> {
+  return video.evaluate(async (node) => {
+    const element = node as HTMLVideoElement;
+    if (typeof element.requestVideoFrameCallback !== 'function') {
+      const before = element.getVideoPlaybackQuality?.().totalVideoFrames ?? 0;
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      return (element.getVideoPlaybackQuality?.().totalVideoFrames ?? 0) - before;
+    }
+    let count = 0;
+    await new Promise<void>((resolve) => {
+      const tick = (): void => {
+        count += 1;
+        if (count >= 3) resolve();
+        else element.requestVideoFrameCallback(tick);
+      };
+      element.requestVideoFrameCallback(tick);
+      setTimeout(resolve, 4_000);
+    });
+    return count;
+  });
+}
+
+/** A coarse fingerprint of the current video frame (every 997th pixel of a small copy). */
+export async function videoFingerprint(
+  video: Locator,
+): Promise<{ colours: number; print: string }> {
+  return video.evaluate((node) => {
+    const element = node as HTMLVideoElement;
+    const canvas = document.createElement('canvas');
+    canvas.width = 160;
+    canvas.height = 120;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(element, 0, 0, canvas.width, canvas.height);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const colours = new Set<string>();
+    const parts: string[] = [];
+    for (let i = 0; i < data.length; i += 4 * 97) {
+      colours.add(`${data[i]! >> 4},${data[i + 1]! >> 4},${data[i + 2]! >> 4}`);
+      parts.push(`${data[i]! >> 5},${data[i + 1]! >> 5}`);
+    }
+    return { colours: colours.size, print: parts.join(';') };
+  });
+}
+
+/** The stage plays the relay: provider and transport `relay`, live, real frames, not blank. */
+export async function expectRelayLive(page: Page, testid = 'camera-video'): Promise<void> {
+  const stage = page.getByTestId('camera-stage');
+  await expect(stage).toHaveAttribute('data-provider', 'relay', { timeout: 30_000 });
+  await expect(stage).toHaveAttribute('data-transport', 'relay');
+  await expect(stage).toHaveAttribute('data-phase', 'live', { timeout: 30_000 });
+  const video = page.getByTestId(testid);
+  await expect(video).toBeVisible();
+  await expect(video).toHaveAttribute('data-camera-video', '');
+  await expect.poll(() => presentsFrames(video), { timeout: 15_000 }).toBeGreaterThanOrEqual(3);
+  // Not a blank picture: the pattern's bars arrive.
+  await expect
+    .poll(async () => (await videoFingerprint(video)).colours, { timeout: 10_000 })
+    .toBeGreaterThan(3);
 }
 
 /**

@@ -24,17 +24,17 @@
  *   WHEP sessions and detaches the lease (Fleet's DELETE, `keepalive` so it survives a page
  *   that is going away). A lease without confirmed media closes after 30 s on the relay, so
  *   every reconnect requests a new session.
- * * Diagnostics: `getStats()` of every tile's receiver (codec, frames, key frames, NACK/PLI,
- *   jitter buffer, freezes) as the panel's snapshot and the debug overlay's report, plus the
- *   relay rows (transport, lease, ticket expiry, heartbeats, WHEP status per tile).
+ * * Diagnostics: `getStats()` of every tile's receiver (bitrate, loss, frame rate, size,
+ *   freezes, jitter buffer, round trip) as the panel's snapshot.
  *
- * The ticket and the WHEP session URLs are secrets: never logged, never in the debug report.
+ * The ticket and the WHEP session URLs are secrets: never logged.
  */
 import { asProblem } from '$lib/api/problem';
 
 import {
   buildSnapshot,
   EventLog,
+  summarizeInbound,
   type DiagnosticsSnapshot,
   type RemoteStatsLike,
 } from './diagnostics';
@@ -42,13 +42,6 @@ import { frameCounter } from './freeze';
 import { attachTracks, detachTracks } from './media';
 import { DEFAULT_OPTIONS, type CameraOptions } from './options';
 import { slotsOf, type CameraChoice, type CameraPlayer, type PlayerEvents } from './player';
-import {
-  summarizeInbound,
-  type InboundVideo,
-  type PlayerDebugReport,
-  type RelayDebug,
-  type TrackDebug,
-} from './probe';
 import { CameraError, type CameraSession } from './session';
 
 /** Wait at most this long for ICE gathering before the offer goes out as it is. */
@@ -146,8 +139,6 @@ interface Tile {
   pc: PeerConnection | null;
   /** The WHEP session to delete (secret, never shown). */
   location: string | null;
-  /** HTTP status of the WHEP POST (debug). */
-  status: number | null;
   live: boolean;
   firstFrameTimer: unknown;
   lostTimer: unknown;
@@ -155,7 +146,6 @@ interface Tile {
   /** Previous stats reading (bitrate and loss deltas). */
   last: { at: number; bytes: number; received: number; lost: number } | null;
   remote: RemoteStatsLike | undefined;
-  inbound: InboundVideo | null;
   rttMs: number | null;
 }
 
@@ -166,14 +156,12 @@ const emptyTile = (wanted: number | null): Tile => ({
   url: null,
   pc: null,
   location: null,
-  status: null,
   live: false,
   firstFrameTimer: null,
   lostTimer: null,
   state: 'new',
   last: null,
   remote: undefined,
-  inbound: null,
   rttMs: null,
 });
 
@@ -195,9 +183,6 @@ export class WhepPlayer implements CameraPlayer {
   private stopped = false;
   private muted = true;
   private heartbeat: unknown = null;
-  private beats = 0;
-  private beatFailures = 0;
-  private lastBeatAt: number | null = null;
   private anyLive = false;
   private lastTracks = '';
   private lastActive: number | null | undefined = undefined;
@@ -329,47 +314,6 @@ export class WhepPlayer implements CameraPlayer {
     });
   }
 
-  async debugReport(): Promise<PlayerDebugReport | null> {
-    if (!this.session) return null;
-    await this.readStats();
-    const tracks: TrackDebug[] = [];
-    let codec = '-';
-    for (const [slot, tile] of this.tiles.entries()) {
-      if (tile.uid === null) continue;
-      if (tile.inbound?.codec) codec = tile.inbound.codec.split(' ')[0] ?? codec;
-      tracks.push({
-        slot,
-        uid: tile.uid,
-        agora: {},
-        inbound: tile.inbound,
-        transform: null,
-        whep: { status: tile.status, ice: tile.state },
-      });
-    }
-    return {
-      state: this.tiles.map((tile) => tile.state).join('/'),
-      codec,
-      experiments: 'none',
-      tracks,
-      relay: this.relayDebug(),
-    };
-  }
-
-  /** What the overlay shows about the lease (no secrets). */
-  private relayDebug(): RelayDebug {
-    const relay = this.session?.relay;
-    const expires = this.session ? Date.parse(this.session.expires_at) : Number.NaN;
-    return {
-      transport: 'relay',
-      lease: relay ? relay.lease_id.slice(0, 8) : '-',
-      heartbeatSeconds: relay?.heartbeat_seconds ?? null,
-      beats: this.beats,
-      beatFailures: this.beatFailures,
-      lastBeatAgoMs: this.lastBeatAt === null ? null : this.now() - this.lastBeatAt,
-      ticketExpiresInS: Number.isFinite(expires) ? Math.round((expires - this.now()) / 1000) : null,
-    };
-  }
-
   // --- Cameras --------------------------------------------------------------------------------
 
   /** The uids of the cameras the relay serves (a tile each). */
@@ -440,7 +384,6 @@ export class WhepPlayer implements CameraPlayer {
           headers: { 'Content-Type': 'application/sdp', Authorization: `Bearer ${this.ticket}` },
           body: sdp,
         });
-        tile.status = response.status;
         this.log.add('state', `tile ${slot} whep ${response.status}`);
         if (response.status !== 404 || attempt + 1 >= WHEP_START_ATTEMPTS) break;
         await this.delay(WHEP_RETRY_MS);
@@ -619,12 +562,9 @@ export class WhepPlayer implements CameraPlayer {
     try {
       const next = await this.deps.lease.renew(leaseId);
       if (this.stopped) return;
-      this.beats += 1;
-      this.lastBeatAt = this.now();
       this.adopt(next);
     } catch (error) {
       if (this.stopped) return;
-      this.beatFailures += 1;
       if (asProblem(error).status === 404) {
         this.log.add('state', 'lease gone');
         this.lost();
@@ -658,7 +598,6 @@ export class WhepPlayer implements CameraPlayer {
           return;
         }
         const inbound = summarizeInbound(entries);
-        tile.inbound = inbound;
         const pair = entries.find(
           (e) =>
             e.type === 'candidate-pair' &&

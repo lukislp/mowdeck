@@ -4,7 +4,6 @@ import { ApiProblem } from '$lib/api/problem';
 
 import { CameraPlayerFactory } from './factory';
 import type { CameraPlayer, PlayerEvents } from './player';
-import { debugLines } from './probe';
 import type { CameraSession } from './session';
 import {
   DISCONNECTED_LIMIT_MS,
@@ -456,7 +455,7 @@ describe('WhepPlayer', () => {
     ).rejects.toThrow();
   });
 
-  it('reports receiver statistics and the relay rows, never the ticket', async () => {
+  it('reports the receiver statistics in the diagnostics snapshot', async () => {
     const h = harness();
     await h.player.start(relaySession(), 1);
     h.peers[0]!.setIce('connected');
@@ -488,48 +487,24 @@ describe('WhepPlayer', () => {
     h.frames[0] = 1;
     await flush();
     await h.fire(100);
-    const report = await h.player.debugReport!();
-    expect(report?.codec).toBe('video/H264');
-    expect(report?.tracks[0]).toMatchObject({
-      slot: 0,
-      uid: 1,
-      whep: { status: 201, ice: 'connected' },
-      inbound: {
-        framesDecoded: 98,
-        keyFramesDecoded: 10,
-        nackCount: 3,
-        pliCount: 1,
-        jitterMs: 40,
-      },
-    });
-    expect(report?.relay).toMatchObject({
-      transport: 'relay',
-      lease: LEASE.slice(0, 8),
-      heartbeatSeconds: 15,
-      ticketExpiresInS: 60,
-    });
-    expect(JSON.stringify(report)).not.toContain('ticket-one');
-    expect(JSON.stringify(report)).not.toContain('secret-1');
-    const lines = debugLines({
-      at: 'now',
-      userAgent: 'ua',
-      phase: 'live',
-      frozen: false,
-      transport: { requested: 'auto', used: 'relay' },
-      tiles: [{ slot: 0, status: 'live', uid: 1, element: null, events: [], freeze: null }],
-      report,
-    });
-    expect(lines).toContain('transport auto > relay');
-    expect(lines.some((l) => l.startsWith('relay state=connected codec=video/H264'))).toBe(true);
-    expect(lines.some((l) => l.includes('ticket=60s'))).toBe(true);
-    expect(lines).toContain(' whep status=201 ice=connected');
-    expect(lines.some((l) => l.startsWith(' agora'))).toBe(false);
-    expect(lines.some((l) => l.includes('rtp frames rx=100 dec=98 key=10'))).toBe(true);
-
+    h.player.diagnostics!();
+    await flush();
     const snapshot = h.player.diagnostics!();
     await flush();
-    expect(snapshot).toMatchObject({ state: 'connected', uid: 1, fps: 10, width: 640, rttMs: 4 });
+    expect(snapshot).toMatchObject({
+      state: 'connected',
+      uid: 1,
+      fps: 10,
+      width: 640,
+      height: 480,
+      rttMs: 4,
+      lossTotalPercent: 10,
+      delayMs: 40,
+      delaySource: 'receive',
+    });
     expect(snapshot?.tracks.map((t) => t.uid)).toEqual([1]);
+    expect(JSON.stringify(snapshot)).not.toContain('ticket-one');
+    expect(JSON.stringify(snapshot)).not.toContain('secret-1');
   });
 });
 

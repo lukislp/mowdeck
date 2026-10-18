@@ -1,7 +1,14 @@
 /** Stability of the live camera: options, diagnostics, rejoin with backoff, option changes. */
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildSnapshot, EventLog, lossToPercent, pickDelay, shown } from './diagnostics';
+import {
+  buildSnapshot,
+  EventLog,
+  lossToPercent,
+  pickDelay,
+  shown,
+  summarizeInbound,
+} from './diagnostics';
 import {
   DEFAULT_OPTIONS,
   loadOptions,
@@ -259,6 +266,40 @@ describe('diagnostics snapshot', () => {
     });
     expect(snap.lossPercent).toBe(0);
     expect(snap.lossTotalPercent).toBe(32.8);
+  });
+});
+
+describe('inbound statistics', () => {
+  it('reads the video entry of a WebRTC stats report', () => {
+    const report = [
+      { id: 'a', type: 'inbound-rtp', kind: 'audio', packetsReceived: 5 },
+      {
+        id: 'v',
+        type: 'inbound-rtp',
+        kind: 'video',
+        packetsReceived: 300,
+        packetsLost: 3,
+        framesPerSecond: 12,
+        frameWidth: 1280,
+        frameHeight: 720,
+        totalFreezesDuration: 0.5,
+        jitterBufferDelay: 3,
+        jitterBufferEmittedCount: 30,
+      },
+    ];
+    expect(summarizeInbound(report)).toEqual({
+      packetsReceived: 300,
+      packetsLost: 3,
+      framesPerSecond: 12,
+      width: 1280,
+      height: 720,
+      freezeSeconds: 0.5,
+      jitterMs: 100,
+    });
+    expect(summarizeInbound([report[0]!])).toBeNull();
+    expect(
+      summarizeInbound([{ type: 'inbound-rtp', mediaType: 'video', jitterBufferDelay: 1 }]),
+    ).toMatchObject({ packetsReceived: null, jitterMs: null });
   });
 });
 

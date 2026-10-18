@@ -5,7 +5,8 @@
  * (webkit); a browser without WebRTC (Playwright's WebKit on Windows) is skipped with a reason.
  *
  * - The camera page asks for `transport: auto` and plays the relay over WHEP: the tile's
- *   `<video>` presents frames of the test pattern; the debug overlay shows the relay rows.
+ *   `<video>` presents frames of the test pattern; the stage names the relay as its provider
+ *   and transport (`data-provider`, `data-transport`), and the tile's WHEP offer was answered 201.
  *   "Beide" plays both front cameras on two connections with two different pictures.
  * - A hidden tab detaches the lease at once (`DELETE .../camera/session/{lease}`), the relay
  *   stops the source after its 15 s grace (Fleet's audit row `mower.camera_stream_stopped`),
@@ -23,105 +24,26 @@ import {
   actor,
   createAccountViewer,
   createMowerByApi,
+  expectRelayLive,
   fleetAuditCount,
   freezeRelaySources,
   loginByUi,
+  presentsFrames,
   registerByApi,
+  requireWebRtc,
   setPageVisibility,
+  videoFingerprint,
   waitForMap,
   watchCsp,
 } from './support';
 
 const SESSION = /\/api\/v1\/fleet\/mowers\/[^/]+\/camera\/session$/;
 const LEASE = /\/api\/v1\/fleet\/mowers\/[^/]+\/camera\/session\/[0-9a-f-]{36}$/;
+const WHEP = /\/media\/whep\//;
 
 interface SessionBody {
   provider: string;
   relay: { lease_id: string; heartbeat_seconds: number } | null;
-}
-
-/** Skip in a browser without WebRTC (never fake a picture there). */
-async function requireWebRtc(page: Page, browserName: string): Promise<void> {
-  await page.goto('/login');
-  const available = await page.evaluate(() => typeof RTCPeerConnection === 'function');
-  test.skip(
-    !available,
-    `${browserName} in this Playwright build has no WebRTC (RTCPeerConnection is missing); ` +
-      'the relay player cannot run here',
-  );
-  // The relay sends H.264 only (ADR 0045). A browser without an H.264 decoder offers none and
-  // MediaMTX refuses the offer ("codecs not supported by client"): fail with the reason instead
-  // of a timeout. Playwright's Firefox on Linux has no OpenH264 unless MOZ_GMP_PATH points at
-  // the plugin (CI installs it; see tests/e2e-web/README.md).
-  const h264 = await page.evaluate(
-    () =>
-      RTCRtpReceiver.getCapabilities?.('video')?.codecs.some(
-        (codec) => codec.mimeType.toLowerCase() === 'video/h264',
-      ) ?? false,
-  );
-  expect(
-    h264,
-    `${browserName} offers no H.264 decoder for WebRTC; the relay sends H.264 only ` +
-      '(Firefox on Linux: install the OpenH264 plugin and set MOZ_GMP_PATH)',
-  ).toBe(true);
-}
-
-/** The `<video>` presents new frames (requestVideoFrameCallback, else decoded frames grow). */
-async function presentsFrames(video: Locator): Promise<number> {
-  return video.evaluate(async (node) => {
-    const element = node as HTMLVideoElement;
-    if (typeof element.requestVideoFrameCallback !== 'function') {
-      const before = element.getVideoPlaybackQuality?.().totalVideoFrames ?? 0;
-      await new Promise((resolve) => setTimeout(resolve, 1_500));
-      return (element.getVideoPlaybackQuality?.().totalVideoFrames ?? 0) - before;
-    }
-    let count = 0;
-    await new Promise<void>((resolve) => {
-      const tick = (): void => {
-        count += 1;
-        if (count >= 3) resolve();
-        else element.requestVideoFrameCallback(tick);
-      };
-      element.requestVideoFrameCallback(tick);
-      setTimeout(resolve, 4_000);
-    });
-    return count;
-  });
-}
-
-/** A coarse fingerprint of the current video frame (every 997th pixel of a small copy). */
-async function videoFingerprint(video: Locator): Promise<{ colours: number; print: string }> {
-  return video.evaluate((node) => {
-    const element = node as HTMLVideoElement;
-    const canvas = document.createElement('canvas');
-    canvas.width = 160;
-    canvas.height = 120;
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(element, 0, 0, canvas.width, canvas.height);
-    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const colours = new Set<string>();
-    const parts: string[] = [];
-    for (let i = 0; i < data.length; i += 4 * 97) {
-      colours.add(`${data[i]! >> 4},${data[i + 1]! >> 4},${data[i + 2]! >> 4}`);
-      parts.push(`${data[i]! >> 5},${data[i + 1]! >> 5}`);
-    }
-    return { colours: colours.size, print: parts.join(';') };
-  });
-}
-
-async function expectRelayLive(page: Page, testid = 'camera-video'): Promise<void> {
-  const stage = page.getByTestId('camera-stage');
-  await expect(stage).toHaveAttribute('data-provider', 'relay', { timeout: 30_000 });
-  await expect(stage).toHaveAttribute('data-transport', 'relay');
-  await expect(stage).toHaveAttribute('data-phase', 'live', { timeout: 30_000 });
-  const video = page.getByTestId(testid);
-  await expect(video).toBeVisible();
-  await expect(video).toHaveAttribute('data-camera-video', '');
-  await expect.poll(() => presentsFrames(video), { timeout: 15_000 }).toBeGreaterThanOrEqual(3);
-  // Not a blank picture: the pattern's bars arrive.
-  await expect
-    .poll(async () => (await videoFingerprint(video)).colours, { timeout: 10_000 })
-    .toBeGreaterThan(3);
 }
 
 test('camera relay in the web app: live test pattern, both cameras, a hidden tab detaches', async ({
@@ -138,27 +60,28 @@ test('camera relay in the web app: live test pattern, both cameras, a hidden tab
 
   let posts = 0;
   const deletes: string[] = [];
+  const whep: number[] = [];
   page.on('request', (req) => {
     if (req.method() === 'POST' && SESSION.test(req.url())) posts += 1;
     if (req.method() === 'DELETE' && LEASE.test(req.url())) deletes.push(req.url());
+  });
+  page.on('response', (res) => {
+    if (res.request().method() === 'POST' && WHEP.test(res.url())) whep.push(res.status());
   });
 
   await loginByUi(page, owner);
   const opened = page.waitForResponse(
     (r) => SESSION.test(r.url()) && r.request().method() === 'POST',
   );
-  await page.goto(`/mowers/${mowerId}/camera?camdebug=1`);
+  await page.goto(`/mowers/${mowerId}/camera`);
+  // The browser's option is the default `auto`; the session took the relay path with a lease.
   const first = (await (await opened).json()) as SessionBody;
   expect(first.provider).toBe('relay');
+  expect(first.relay?.lease_id).toBeTruthy();
   await expectRelayLive(page);
   await expect(page.getByTestId('camera-status')).toContainText('Live');
-  // The debug overlay reads the relay path (the option `auto`, the path the session took).
-  const overlay = page.getByTestId('camera-debug');
-  await expect(overlay).toContainText('transport auto > relay');
-  await expect(overlay).toContainText('relay state=');
-  await expect(overlay).toContainText(`lease=${first.relay!.lease_id.slice(0, 8)}`);
-  await expect(overlay).toContainText('whep status=201');
-  await expect(overlay).not.toContainText('agora state=');
+  // The tile's WHEP offer was answered (the source may answer 404 while it starts).
+  expect(whep).toContain(201);
 
   // "Beide": both front cameras, two connections, two different pictures.
   const picker = page.getByTestId('camera-picker');

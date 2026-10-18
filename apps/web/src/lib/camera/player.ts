@@ -10,7 +10,6 @@
  */
 import type { DiagnosticsSnapshot } from './diagnostics';
 import type { CameraOptions } from './options';
-import type { PlayerDebugReport } from './probe';
 import type { CameraSession } from './session';
 import {
   drawTestPattern,
@@ -59,8 +58,6 @@ export interface CameraPlayer {
   applyOptions?(options: CameraOptions): Promise<void>;
   /** Receive statistics, connection state and event log (null: nothing to measure). */
   diagnostics?(): DiagnosticsSnapshot | null;
-  /** Receiver and SDK readings per shown camera for the debug overlay (`?camdebug=1`). */
-  debugReport?(): Promise<PlayerDebugReport | null>;
   /** Use the token of a fresh session of the same channel. */
   renew(session: CameraSession): Promise<void>;
   /** Show another camera, or other cameras side by side. */
@@ -85,21 +82,12 @@ export interface FakeFrameSource {
 /** The canvas of a tile (a single canvas serves tile 0 only). */
 export type CanvasTarget = HTMLCanvasElement | ((slot: number) => HTMLCanvasElement | null);
 
-/** Which canvas a test pattern stream comes from. */
-const streams = new WeakMap<object, HTMLCanvasElement>();
-
 /** Interval of the test pattern (10 frames per second keeps it cheap). */
 export const FAKE_FRAME_MS = 100;
-
-/** The video element of a tile (the test pattern through a `MediaStream`, see below). */
-export type FakeVideoTarget = (slot: number) => HTMLVideoElement | null;
 
 /**
  * The player of `fake` sessions: the test pattern on a canvas per tile. A canvas marked
  * `data-freeze="true"` stops drawing (its frame counter stands) until the mark is removed.
- * With `video` (the debug switch `camfakevideo`), every canvas also plays as a `MediaStream`
- * (`canvas.captureStream()`) in its tile's `<video>`, so the freeze detection of a real camera
- * (presented frames of a WebRTC-like stream) is exercised; a frozen canvas sends no frames.
  */
 export class FakePlayer implements CameraPlayer {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -115,7 +103,6 @@ export class FakePlayer implements CameraPlayer {
     private readonly source: FakeFrameSource,
     private readonly events: PlayerEvents,
     private readonly now: () => number = () => Date.now(),
-    private readonly video?: FakeVideoTarget,
   ) {}
 
   /** The first tile's camera. */
@@ -148,26 +135,6 @@ export class FakePlayer implements CameraPlayer {
   async stop(): Promise<void> {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
-    for (let slot = 0; slot < 2; slot += 1) {
-      const video = this.video?.(slot);
-      if (!video) continue;
-      for (const track of (video.srcObject as MediaStream | null)?.getTracks() ?? []) track.stop();
-      video.srcObject = null;
-    }
-  }
-
-  /** The tile's `<video>` plays its canvas as a stream (once per canvas). */
-  private stream(slot: number, canvas: HTMLCanvasElement): void {
-    const video = this.video?.(slot);
-    if (!video || typeof canvas.captureStream !== 'function') return;
-    const current = video.srcObject;
-    if (current && streams.get(current) === canvas) return;
-    const stream = canvas.captureStream();
-    streams.set(stream, canvas);
-    video.muted = true;
-    video.playsInline = true;
-    video.srcObject = stream;
-    void video.play().catch(() => undefined);
   }
 
   /** A uid this simulated mower "publishes". */
@@ -194,7 +161,6 @@ export class FakePlayer implements CameraPlayer {
     this.slots.forEach((uid, slot) => {
       const canvas = this.canvasOf(slot);
       if (!canvas || (this.known.length && !this.delivers(uid))) return;
-      this.stream(slot, canvas);
       // Simulator hook: a canvas marked `data-freeze="true"` keeps its last frame, like a
       // stream whose picture stands (the drive view's freeze warning is tested with it).
       if (canvas.dataset.freeze === 'true') return;
