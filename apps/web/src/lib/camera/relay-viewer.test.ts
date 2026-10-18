@@ -88,7 +88,6 @@ function harness(first: CameraSession = relaySession(), transport: CameraTranspo
     saveOptions: () => undefined,
     layout: 'single',
     saveLayout: () => undefined,
-    debug: () => false,
   };
   return { viewer: new CameraViewer(deps), players, timers, request };
 }
