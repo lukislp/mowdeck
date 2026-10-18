@@ -129,3 +129,17 @@ def test_template_renders_database_wiring_and_permissions(repo_root: Path, tmp_p
 def test_template_rejects_invalid_service_names(repo_root: Path, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="kebab-case"):
         _render(repo_root, tmp_path / "bad", service_name="Bad_Name")
+
+
+def test_no_template_source_is_named_like_a_dockerfile(repo_root: Path) -> None:
+    # OpenSSF Scorecard parses every file whose name contains "dockerfile" (in any case) as a
+    # Dockerfile; an unrendered Jinja source makes its Pinned-Dependencies check fail with a parse
+    # error. The sources use the computed Copier value image_build_file instead
+    # (templates/service/copier.yml).
+    template = repo_root / "templates" / "service" / "template"
+    offenders = [
+        p.relative_to(template).as_posix()
+        for p in template.rglob("*")
+        if "dockerfile" in p.name.lower()
+    ]
+    assert offenders == []

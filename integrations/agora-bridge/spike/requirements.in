@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# Direct requirements of the spike image; requirements.txt is compiled from this file.
+agora-python-server-sdk==2.4.9
+nats-py==2.11.0

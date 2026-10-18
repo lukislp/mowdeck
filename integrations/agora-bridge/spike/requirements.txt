@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Pinned with hashes for the spike image (pip install --require-hashes). Regenerate with
+#   uv pip compile requirements.in --generate-hashes --python-version 3.12 \
+#     --python-platform x86_64-manylinux_2_28 --no-header -o requirements.txt
+agora-python-server-sdk==2.4.9 \
+    --hash=sha256:3f9453ce4730c1b9db86e56ea9b96713ffc576060b357d9bf0de8f65b473031e
+nats-py==2.11.0 \
+    --hash=sha256:fb1097db8b520bb4c8f5ad51340ca54d9fa54dbfc4ecc81c3625ef80994b6100

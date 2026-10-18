@@ -22,7 +22,7 @@
 # camera relay's network namespace (Compose: network_mode service:camera-relay; Helm: a second
 # container in the relay's pod). x86_64 only: the pinned native SDK is the x86_64 build.
 
-ARG PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.13-slim
+ARG PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
 
 FROM ${PYTHON_IMAGE} AS sdk
 COPY docker/install_sdk.py /build/install_sdk.py
