@@ -1,0 +1,28 @@
+name: Dependabot auto-merge
+
+# Thin caller of the shared implementation in lukislp/ci-workflows (auto-merge of Dependabot
+# patch/minor updates, update-stale for every PR that is behind the tip) - the triggers stay
+# here because a reusable workflow cannot declare them for the caller. Needs the AUTOMERGE_TOKEN
+# repository secret (fine-grained PAT, contents + pull requests write).
+#
+# pymammotion is never merged automatically: every release changes the protocol surface of the
+# GPL adapter (mowdeck-control-mammotion) and is tested on a real mower first. Its PRs wait for a
+# manual approval and merge (see CONTRIBUTING.md, "Dependency updates").
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, auto_merge_enabled]
+  schedule:
+    - cron: "23 * * * *"
+  push:
+    branches: [main]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  dependabot:
+    uses: lukislp/ci-workflows/.github/workflows/dependabot-auto-merge.yml@72b4327ed4a8deaf7758744bb7b01e2d7703736f # pre-release (lukislp/ci-workflows#78), bump to its release tag before merging
+    with:
+      exclude-dependencies: pymammotion
+    secrets:
+      AUTOMERGE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}

@@ -20,6 +20,12 @@ A new service is generated from `templates/service` and has its own definition o
 
 A new third-party image (a base image, an infrastructure container, an image only CI runs) is pinned under "Image sources" in `infra/compose/.env.example` and used through its `*_IMAGE` variable or build argument; `tools/repo-checks/tests/test_images.py` keeps every default equal to that list. CI pulls the list through the repository's GHCR mirror: the workflow `mirror-images.yml` copies a new or bumped image there when the pull request changes the list (re-run CI jobs that pulled before the copy finished). See `infra/compose/README.md`, "Image sources".
 
+## Dependency updates
+
+Dependabot opens the dependency PRs (`.github/dependabot.yml`) and updates `uv.lock` and `pnpm-lock.yaml` itself. The workflow `dependabot-auto-merge.yml` (a caller of the shared `lukislp/ci-workflows` implementation) approves patch and minor updates and merges them once every required check is green; majors stay a manual decision. It needs the `AUTOMERGE_TOKEN` repository secret, a fine-grained token of the code owner with contents and pull requests write on this repository; without it the workflow does nothing.
+
+`pymammotion` is excluded (`exclude-dependencies: pymammotion`), also inside grouped PRs: a new release changes the protocol surface of the GPL adapter `mowdeck-control-mammotion`, so it is tested on the real mower before it is merged by hand. After that test, approve the PR and enable auto-merge; the workflow then only keeps the branch up to date.
+
 ## Running checks locally
 
 Requirements: Python 3.13, [uv](https://docs.astral.sh/uv/), Docker.
