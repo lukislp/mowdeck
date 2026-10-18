@@ -278,7 +278,9 @@ class SupervisedProcess:
             )
             if not self._may_restart():
                 self.failed = True
-                _log.error("pipeline process failed for good", process=self.name)
+                if self._max_restarts:
+                    _log.error("pipeline process failed for good", process=self.name)
+                # Without restarts (max_restarts=0) the owner retries: nothing failed for good.
                 if self._on_failure is not None:
                     self._on_failure()
                 return

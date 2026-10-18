@@ -9,6 +9,9 @@ driver, muxer and transcoder run exactly as with the mower, without Agora:
 * ``subscribe`` -> the recorded access units of ``luba-uid1.h265`` (H.265, 640x480, 10 fps,
   4 s GOP) for uid 1 and 2, looped, paced at 10 fps, with ``recv_mono_ns`` of this process;
 * a channel that starts with ``crash`` exits with code 1 after 150 frames (a crashing SDK);
+* a channel that starts with ``late`` starts each camera mid-GOP (its first key frame comes
+  after about 4 s, like the LUBA's) and then sends nothing for ``LATE_HOLD`` seconds after
+  that key frame (a 4G stall): the muxer cannot finish its probe, ``.../src`` appears late;
 * ``leave`` or the end of stdin -> ``left``, exit 0. ``--check`` exits 0.
 """
 
@@ -25,6 +28,8 @@ OUT = sys.stdout.buffer
 STOP = threading.Event()
 CRASH_AFTER = 150
 """Frames before a "crash" channel ends the bridge (15 s: the viewer is connected by then)."""
+LATE_HOLD = 6.0
+"""Seconds a "late" channel stays silent after its first key frame."""
 
 
 def record(kind: int, body: bytes) -> None:
@@ -84,9 +89,13 @@ def access_units(data: bytes) -> list[tuple[bool, bytes]]:
     ]
 
 
-def replay(uid: int, units: list[tuple[bool, bytes]], crash: bool) -> None:
+def replay(uid: int, units: list[tuple[bool, bytes]], crash: bool, late: bool) -> None:
     sent = 0
     next_at = time.monotonic()
+    if late:  # start right after the first key frame: the next one is a GOP away
+        first_key = next(i for i, (keyframe, _) in enumerate(units) if keyframe)
+        units = units[first_key + 1 :] + units[: first_key + 1]
+    held = not late
     while not STOP.is_set():
         for keyframe, data in units:
             if STOP.is_set():
@@ -97,6 +106,10 @@ def replay(uid: int, units: list[tuple[bool, bytes]], crash: bool) -> None:
             next_at += 0.1
             frame(uid, keyframe, data)
             sent += 1
+            if keyframe and not held:
+                held = True
+                time.sleep(LATE_HOLD)
+                next_at = time.monotonic() + 0.1
             if crash and sent >= CRASH_AFTER:
                 event("error", code="connection_failed", detail="simulated crash")
                 OUT.flush()
@@ -108,13 +121,14 @@ def main() -> int:
         return 0
     units = access_units(Path(sys.argv[1]).read_bytes())
     event("hello", protocol=1, bridge="fake-bridge/1", sdk="none (recorded stream)")
-    crash = False
+    crash = late = False
     started: set[int] = set()
     for line in sys.stdin:
         control = json.loads(line)
         op = control.get("op")
         if op == "join":
             crash = str(control.get("channel", "")).startswith("crash")
+            late = str(control.get("channel", "")).startswith("late")
             event("joined", elapsed_ms=5)
             for uid in (1, 2, 3):
                 event("publisher", uid=uid, state="published")
@@ -122,7 +136,9 @@ def main() -> int:
             for uid in control.get("uids", []):
                 if uid in (1, 2) and uid not in started:
                     started.add(uid)
-                    threading.Thread(target=replay, args=(uid, units, crash), daemon=True).start()
+                    threading.Thread(
+                        target=replay, args=(uid, units, crash, late), daemon=True
+                    ).start()
         elif op == "renew":
             event("renewed")
         elif op == "leave":

@@ -128,6 +128,8 @@ def _media_stack(
             fetch_session=lambda key: vendors[0].camera_session(key),
             spawn=spawn,
             spawn_stdin=spawn_stdin,
+            source_ready=api.path_ready,
+            ready_timeout=settings.relay_source_ready_seconds,
         )
         drivers.append(agora)
     vendor = GatewayVendorSessions(

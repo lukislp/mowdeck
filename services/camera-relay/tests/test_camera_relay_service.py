@@ -459,3 +459,25 @@ async def test_events_carry_the_trigger_and_the_peak_of_viewers() -> None:
     assert stopped.trigger is RelayPurpose.VIEWER
     assert stopped.peak_viewers == 2
     assert stopped.reason is RelayStopReason.IDLE
+
+
+async def test_renew_reports_which_cameras_deliver() -> None:
+    h = Harness()
+    relay_key = key()
+    first = await _attach(h, relay_key, ["front_left", "front_right", "rear"])
+    assert first.relay is not None
+    assert [t.available for t in first.relay.tiles] == [None, None, None]  # starting
+    session = h.repository.get(relay_key)
+    assert session is not None and session.session_id is not None
+    await h.service.source_started(
+        relay_key, session.session_id, CameraProvider.AGORA, ["front_left"]
+    )
+    await h.service.cameras_published(relay_key, session.session_id, ["front_right"])
+    h.clock.advance(16)
+    reply = await h.service.renew(_renew(relay_key, first.relay.lease_id))
+    assert reply.session is not None and reply.session.relay is not None
+    assert {t.camera_id: t.available for t in reply.session.relay.tiles} == {
+        "front_left": True,
+        "front_right": True,
+        "rear": False,  # listed by the vendor, never published
+    }

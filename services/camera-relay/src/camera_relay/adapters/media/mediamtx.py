@@ -3,7 +3,8 @@
 The relay authenticates with the internal publisher credential (MediaMTX asks the relay's own
 auth callback, which allows ``api`` only with it). Used endpoints:
 
-* ``GET /v3/paths/list``: which relay paths have a ready stream (source readiness);
+* ``GET /v3/paths/list``: which relay paths have a ready stream (source readiness, and a
+  camera's ``.../src`` before its transcoder starts);
 * ``GET /v3/webrtcsessions/list``: the WHEP readers with their ``bytesSent`` (media
   confirmation);
 * ``POST /v3/webrtcsessions/kick/{id}``: end a reader.
@@ -111,6 +112,11 @@ class MediaMtxApi:
             MediaPath(name=str(item["name"]), ready=bool(item.get("ready")))
             for item in await self._items("/v3/paths/list")
         ]
+
+    async def path_ready(self, name: str) -> bool:
+        """``name`` has a publisher whose stream is ready (False while it does not exist: a
+        reader would get 404). Raises ``MediaServerError`` when the API fails."""
+        return any(path.ready for path in await self.paths() if path.name == name)
 
     async def kick_webrtc_session(self, session_id: str) -> bool:
         """End a WHEP session; False when it no longer exists."""

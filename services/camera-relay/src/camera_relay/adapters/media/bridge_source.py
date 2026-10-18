@@ -20,6 +20,16 @@ Per source session (:class:`BridgeSourceDriver`):
   ``r/<rid>/<cam>/src`` (H.265, ``-c copy``); the generic :class:`Transcoder` turns it into the
   H.264 viewer path (1 s GOP, passthrough). Nothing is repeated or invented; a full pipe drops
   delta frames until the next key frame.
+* **Transcoder start.** The muxer publishes only from the first key frame on (the LUBA sends
+  one every 4 s and ignores requests for one), plus ffmpeg's probe and the RTSP handshake: the
+  transcoder starts once ``.../src`` is ready on the media server (``source_ready``, polled),
+  never before; a read before that would only get 404. A source not ready within
+  ``ready_timeout`` (20 s: several GOPs) is logged as late and still awaited. A transcoder
+  that exits is started again (once ``.../src`` is ready) with a backoff of 1 s doubling to
+  30 s while the camera is wanted. A camera's pipeline never fails the session by itself:
+  the domain's start timeout (30 s without any ready camera) and the viewers' media
+  confirmation bound it. Only a muxer that keeps crashing fails the source, and only when no
+  other camera delivers.
 * **Renewal.** Vendor sessions last about an hour. ``renew_lead`` (300 s) before
   ``expires_at`` the driver asks the gateway for a fresh session: same channel, ``renew`` on the
   running connection; ``renew_failed``, no answer, another channel, or the bridge's
@@ -85,6 +95,18 @@ MUXER_BUFFER_LIMIT = 2 * 1024 * 1024
 """Bytes waiting in a muxer's stdin before delta frames are dropped until the next key frame."""
 FRAME_INTERVAL_NS = 100_000_000
 """Nominal frame interval (10 fps) for the first frame of a stream and after a switch."""
+SOURCE_READY_TIMEOUT_SECONDS = 20.0
+"""A camera's ``.../src`` should be ready this long after its first key frame (at least two
+4 s GOPs of the LUBA plus ffmpeg's probe); later it is logged as late and still awaited."""
+SOURCE_READY_POLL_SECONDS = 0.5
+"""How often the media server is asked whether ``.../src`` is ready."""
+TRANSCODER_RETRY_SECONDS = (1.0, 30.0)
+"""Backoff of a transcoder that exited: from the first to the last value, doubling."""
+TRANSCODER_STABLE_SECONDS = 30.0
+"""A transcoder that ran this long starts its next retry at the shortest delay again."""
+
+SourceReady = Callable[[str], Awaitable[bool]]
+"""Whether a media server path is ready (has a publisher); raises on an API failure."""
 
 
 class StdinProcess(Protocol):
@@ -138,15 +160,25 @@ async def spawn_stdin_process(*args: str) -> StdinProcess:
     return process
 
 
+MUXER_ANALYZE_US = "500000"
+"""Stream time (µs) the muxer's ffmpeg probes at most before it publishes. ``0`` would not
+mean "none" but ffmpeg's default (7 s of stream for MPEG-TS): ``.../src`` then appeared only
+seconds after the first key frame."""
+
+
 def muxer_args(*, ffmpeg: str, output_url: str) -> list[str]:
     """MPEG-TS on stdin to RTSP, stream copy. ``-fflags nobuffer`` must not be used: it drops
-    the packets ffmpeg read while probing, i.e. the first key frame."""
+    the packets ffmpeg read while probing, i.e. the first key frame. The probe is short: the
+    codec and the size come from the key frame's parameter sets, and no frame rate is
+    estimated (``-fpsprobesize 0``; the copy keeps the bridge's timestamps)."""
     return [
         ffmpeg,
         *COMMON[:4],  # -hide_banner -nostdin -loglevel warning
         "-probesize",
         "32768",
         "-analyzeduration",
+        MUXER_ANALYZE_US,
+        "-fpsprobesize",
         "0",
         "-flags",
         "low_delay",
@@ -255,7 +287,13 @@ class CameraFeed:
         on_failure: Callable[[], None],
         spawn: Spawn,
         spawn_stdin: StdinSpawn,
+        source_ready: SourceReady | None = None,
         transcoder_delay: float = 1.0,
+        ready_timeout: float = SOURCE_READY_TIMEOUT_SECONDS,
+        ready_poll: float = SOURCE_READY_POLL_SECONDS,
+        retry_delays: tuple[float, float] = TRANSCODER_RETRY_SECONDS,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         max_restarts: int = 3,
         restart_window: float = 60.0,
     ) -> None:
@@ -266,7 +304,13 @@ class CameraFeed:
         self._on_failure = on_failure
         self._spawn = spawn
         self._spawn_stdin = spawn_stdin
+        self._source_ready = source_ready
         self._transcoder_delay = transcoder_delay
+        self._ready_timeout = ready_timeout
+        self._ready_poll = ready_poll
+        self._retry_delays = retry_delays
+        self._monotonic = monotonic
+        self._sleep = sleep
         self._max_restarts = max_restarts
         self._restart_window = restart_window
         self.link: BridgeLink | None = None
@@ -287,7 +331,20 @@ class CameraFeed:
         self.frames_written = 0
         self.frames_dropped = 0
         self.starts = 0
+        self.transcoder_starts = 0
+        self.source_late = False
+        """``.../src`` was not ready within ``ready_timeout`` (still awaited)."""
         self.last_error = ""
+
+    @property
+    def delivering(self) -> bool:
+        """This camera's muxer runs and has written frames."""
+        return (
+            not self.failed
+            and self.frames_written > 0
+            and self.process is not None
+            and self.process.returncode is None
+        )
 
     async def push(self, frame: BridgeFrame, link: BridgeLink) -> None:
         """Write one frame from ``link`` (from a key frame on). Serialized per camera: during a
@@ -322,9 +379,9 @@ class CameraFeed:
         stdin.write(self.writer.frame(frame.data, pts, keyframe=frame.keyframe))
         self._awaiting_key = False
         self.frames_written += 1
-        if self.transcoder is None and self._transcoder_task is None:
+        if self._transcoder_task is None:
             self._transcoder_task = asyncio.create_task(
-                self._start_transcoder(), name=f"camera-relay-transcoder-{self.camera_id}"
+                self._transcode(), name=f"camera-relay-transcoder-{self.camera_id}"
             )
 
     def _writable(self) -> bool:
@@ -408,20 +465,78 @@ class CameraFeed:
                 error=self.last_error[-300:],
             )
 
-    async def _start_transcoder(self) -> None:
-        await asyncio.sleep(self._transcoder_delay)  # the muxer publishes .../src first
-        if self.stopping or self.failed:
-            return
-        transcoder = Transcoder(
-            server=self._server,
-            ffmpeg=self._ffmpeg,
-            relay_id=self.relay_id,
-            camera_id=self.camera_id,
-            on_failure=self._on_failure,
-            spawn=self._spawn,
-        )
-        self.transcoder = transcoder
-        await transcoder.start()
+    async def _transcode(self) -> None:
+        """Run the transcoder while the camera is wanted: start it once ``.../src`` is ready,
+        start it again (backoff) after every exit. Never fails the session."""
+        delay = self._retry_delays[0]
+        while not (self.stopping or self.failed):
+            if not await self._await_source():
+                return
+            exited = asyncio.Event()
+            transcoder = Transcoder(
+                server=self._server,
+                ffmpeg=self._ffmpeg,
+                relay_id=self.relay_id,
+                camera_id=self.camera_id,
+                on_failure=exited.set,
+                spawn=self._spawn,
+                max_restarts=0,
+            )
+            self.transcoder = transcoder
+            began = self._monotonic()
+            try:
+                await transcoder.start()
+            except OSError:
+                _log.exception("transcoder could not be started", camera=self.camera_id)
+                exited.set()
+            else:
+                self.transcoder_starts += 1
+            await exited.wait()
+            await transcoder.stop()
+            if self.stopping or self.failed:
+                return
+            if self._monotonic() - began >= TRANSCODER_STABLE_SECONDS:
+                delay = self._retry_delays[0]
+            _log.warning(
+                "transcoder exited; starting it again",
+                camera=self.camera_id,
+                retry_in_s=delay,
+                error=transcoder.process.last_error[-300:],
+            )
+            await self._sleep(delay)
+            delay = min(delay * 2, self._retry_delays[1])
+
+    async def _await_source(self) -> bool:
+        """Wait until ``.../src`` is ready on the media server (True), or until the camera
+        stops (False). Not being ready yet is no failure: a reader would only get 404."""
+        if self._source_ready is None:  # no media server API: a fixed head start
+            await self._sleep(self._transcoder_delay)
+            return not (self.stopping or self.failed)
+        path = source_path(self.relay_id, self.camera_id)
+        began = self._monotonic()
+        while not (self.stopping or self.failed):
+            try:
+                if await self._source_ready(path):
+                    _log.info(
+                        "camera source ready",
+                        camera=self.camera_id,
+                        waited_ms=round((self._monotonic() - began) * 1000),
+                    )
+                    return True
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                _log.debug("source readiness unknown", camera=self.camera_id, error=str(exc))
+            if not self.source_late and self._monotonic() - began >= self._ready_timeout:
+                self.source_late = True
+                _log.error(
+                    "camera source not ready in time; still waiting",
+                    camera=self.camera_id,
+                    timeout_s=self._ready_timeout,
+                    muxer_error=self.last_error[-300:],
+                )
+            await self._sleep(self._ready_poll)
+        return False
 
     async def _stop_muxer(self) -> None:
         process, watch = self.process, self._watch
@@ -491,6 +606,10 @@ class BridgeSourceDriver:
         connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
         switch_timeout: float = SWITCH_TIMEOUT_SECONDS,
         transcoder_delay: float = 1.0,
+        source_ready: SourceReady | None = None,
+        ready_timeout: float = SOURCE_READY_TIMEOUT_SECONDS,
+        feed_monotonic: Callable[[], float] = time.monotonic,
+        feed_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.endpoint = endpoint
         self.server = server
@@ -505,6 +624,10 @@ class BridgeSourceDriver:
         self.connect_timeout = connect_timeout
         self.switch_timeout = switch_timeout
         self.transcoder_delay = transcoder_delay
+        self.source_ready = source_ready
+        self.ready_timeout = ready_timeout
+        self._feed_monotonic = feed_monotonic
+        self._feed_sleep = feed_sleep
         self.runs: dict[str, _Run] = {}
 
     # --- SourceDriver -------------------------------------------------------------------------
@@ -677,6 +800,15 @@ class BridgeSourceDriver:
         run.failed = True
         self._on_failure(run.source)
 
+    def _camera_failed(self, run: _Run, camera: str) -> None:
+        """One camera's muxer failed for good: the source fails only when no other camera
+        delivers (a camera that never published does not count)."""
+        others = [feed for name, feed in run.feeds.items() if name != camera]
+        if any(feed.delivering for feed in others):
+            _log.error("camera pipeline failed; the other cameras go on", camera=camera)
+            return
+        self._fail(run)
+
     # --- Records ------------------------------------------------------------------------------
 
     async def _frame(self, run: _Run, link: BridgeLink, frame: BridgeFrame) -> None:
@@ -829,10 +961,14 @@ class BridgeSourceDriver:
             relay_id=run.source.relay_id,
             server=self.server,
             ffmpeg=self.ffmpeg,
-            on_failure=lambda: self._fail(run),
+            on_failure=lambda: self._camera_failed(run, camera),
             spawn=self._spawn,
             spawn_stdin=self._spawn_stdin,
+            source_ready=self.source_ready,
             transcoder_delay=self.transcoder_delay,
+            ready_timeout=self.ready_timeout,
+            monotonic=self._feed_monotonic,
+            sleep=self._feed_sleep,
         )
 
     def _task(self, run: _Run, coroutine: Awaitable[Any], name: str) -> asyncio.Task[Any]:

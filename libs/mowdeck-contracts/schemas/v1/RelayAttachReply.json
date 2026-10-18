@@ -300,6 +300,19 @@
     "RelayTile": {
       "description": "One camera as the relay serves it: a WHEP endpoint per camera.",
       "properties": {
+        "available": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether this camera delivers video: true once its stream appeared, false when it has not appeared a while after the session went live (a camera the vendor lists but the mower never publishes), null while not known yet. Clients offer only cameras that are not false.",
+          "title": "Available"
+        },
         "camera_id": {
           "description": "The `CameraInfo.id` this endpoint shows.",
           "maxLength": 64,

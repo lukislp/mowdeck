@@ -127,6 +127,8 @@ class RelaySession:
         self.peak_viewers = 0
         """Most viewer leases open at the same time in the running session."""
         self.publishing: tuple[str, ...] = ()
+        self.wanted_since: dict[str, datetime] = {}
+        """When each camera of the running source was first asked for (for the settle time)."""
         self.started_at: datetime | None = None
         self.start_deadline: datetime | None = None
         self.drain_deadline: datetime | None = None
@@ -183,6 +185,17 @@ class RelaySession:
         """Why a lease of ``purpose`` would be refused now, or None (no state change; process
         due deadlines first with :meth:`tick`)."""
         return self._admission(purpose, now)
+
+    def camera_available(self, camera: str, now: datetime) -> bool | None:
+        """Whether ``camera`` delivers: True once its stream appeared, False when it has not
+        appeared :attr:`RelayPolicy.camera_settle` after the session went live (a listed
+        camera that never publishes), None while that is not known yet."""
+        if camera in self.publishing:
+            return True
+        if self.state not in (SessionState.LIVE, SessionState.DRAINING) or not self.started_at:
+            return None
+        since = max(self.started_at, self.wanted_since.get(camera, self.started_at))
+        return False if now - since >= self.policy.camera_settle else None
 
     def camera_infos(self, camera_ids: Sequence[str]) -> list[CameraInfo]:
         """The offered cameras among ``camera_ids``, in that order."""
@@ -359,6 +372,19 @@ class RelaySession:
         self._settle(now, out)
         return out
 
+    def cameras_published(
+        self, session_id: UUID, cameras: Sequence[str], now: datetime
+    ) -> list[Effect]:
+        """More cameras of the running source deliver (after ``source_started``). Stale
+        reports are ignored; no effect."""
+        out: list[Effect] = []
+        self._advance(now, out)
+        if self.state in (SessionState.LIVE, SessionState.DRAINING) and (
+            session_id == self.session_id
+        ):
+            self.publishing = tuple(dict.fromkeys((*self.publishing, *cameras)))
+        return out
+
     def source_failed(
         self, session_id: UUID, now: datetime, *, release: bool = True
     ) -> list[Effect]:
@@ -448,6 +474,7 @@ class RelaySession:
         self.state = SessionState.STARTING
         self.start_deadline = now + self.policy.start_timeout
         self.cameras = cameras
+        self.wanted_since = dict.fromkeys(cameras, now)
         self.session_vision = timedelta(0)
         self.trigger = purpose
         self.started_by = principal
@@ -500,6 +527,8 @@ class RelaySession:
             )
             if cameras != self.cameras:
                 self.cameras = cameras
+                for camera in cameras:
+                    self.wanted_since.setdefault(camera, now)
                 out.append(self._update_cameras())
             if self.state is SessionState.DRAINING:
                 self.state = SessionState.LIVE
@@ -619,6 +648,7 @@ class RelaySession:
         self.started_by = None
         self.peak_viewers = 0
         self.publishing = ()
+        self.wanted_since = {}
         self.started_at = None
         self.start_deadline = None
         self.drain_deadline = None
