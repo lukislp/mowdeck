@@ -7,6 +7,8 @@ import {
   FreezeWatch,
   frameCounter,
   freezeThreshold,
+  LABEL_COLD_MS,
+  LABEL_FLOOR_MS,
   presentedFrames,
 } from './freeze';
 
@@ -156,6 +158,92 @@ class FakeFrameVideo {
     pending.forEach((callback) => callback());
   }
 }
+
+describe('FreezeWatch label ("Bild steht") and hold', () => {
+  /**
+   * A bursty but alive 4G stream: 10 fps, then a 1.8 s gap (frames held up), then a burst, every
+   * 3 s. Returns at which readings the hold and the label were on.
+   */
+  function bursty(watch: FreezeWatch, untilMs: number): { hold: number[]; label: number[] } {
+    const hold: number[] = [];
+    const label: number[] = [];
+    let frames = 1;
+    let lastFrameAt = 0;
+    for (let t = 0; t <= untilMs; t += FREEZE_POLL_MS) {
+      const phase = t % 3_000;
+      const flowing = phase < 1_200; // 1.2 s of frames, then 1.8 s without
+      if (flowing && t - lastFrameAt >= 100) {
+        frames += 2;
+        lastFrameAt = t;
+      }
+      if (watch.observe([live(frames)], t)) hold.push(t);
+      if (watch.labelled) label.push(t);
+    }
+    return { hold, label };
+  }
+
+  it('shows no label on a bursty stream with 1.8 s gaps; the hold may hold during a gap', () => {
+    const watch = new FreezeWatch();
+    const { hold, label } = bursty(watch, 30_000);
+    expect(label).toEqual([]);
+    // The hold keeps its strict 1.5 s floor (the drive view's safety): a 1.8 s gap holds.
+    expect(hold.length).toBeGreaterThan(0);
+    expect(hold.every((t) => t % 3_000 > 1_200 + FREEZE_FLOOR_MS - FREEZE_POLL_MS)).toBe(true);
+  });
+
+  it('a true freeze holds after 1.5 s and labels after 2.5 s; the next frame clears both', () => {
+    const watch = new FreezeWatch();
+    for (let t = 0, f = 1; t <= 3_000; t += FREEZE_POLL_MS, f += 2) watch.observe([live(f)], t);
+    const stoppedAt = 3_000;
+    let holdAt: number | null = null;
+    let labelAt: number | null = null;
+    for (let t = stoppedAt + FREEZE_POLL_MS; t <= 8_000; t += FREEZE_POLL_MS) {
+      if (watch.observe([live(31)], t) && holdAt === null) holdAt = t;
+      if (watch.labelled && labelAt === null) labelAt = t;
+    }
+    expect(holdAt! - stoppedAt).toBeLessThanOrEqual(FREEZE_FLOOR_MS + FREEZE_POLL_MS);
+    expect(labelAt! - stoppedAt).toBeGreaterThan(LABEL_FLOOR_MS);
+    expect(labelAt! - stoppedAt).toBeLessThanOrEqual(LABEL_FLOOR_MS + FREEZE_POLL_MS);
+    expect(watch.observe([live(32)], 8_200)).toBe(false);
+    expect(watch.labelled).toBe(false);
+  });
+
+  it('never labels a tile that is connecting or has presented no frame (cold start)', () => {
+    const watch = new FreezeWatch();
+    for (let t = 0; t <= 10_000; t += FREEZE_POLL_MS) {
+      watch.observe([{ live: false, frames: null }], t);
+      expect(watch.labelled).toBe(false);
+    }
+    // Live, but no frame counter yet: still nothing to call frozen.
+    for (let t = 10_200; t <= 20_000; t += FREEZE_POLL_MS) {
+      expect(watch.observe([live(null)], t)).toBe(false);
+      expect(watch.labelled).toBe(false);
+    }
+  });
+
+  it('right after the start a first frame with a slow second one is no label yet', () => {
+    const watch = new FreezeWatch();
+    watch.observe([live(1)], 0);
+    let label = false;
+    for (let t = FREEZE_POLL_MS; t < LABEL_COLD_MS; t += FREEZE_POLL_MS) {
+      watch.observe([live(1)], t);
+      label ||= watch.labelled;
+    }
+    expect(label).toBe(false);
+    // A picture that never moves on is still labelled, after the cold-start limit.
+    watch.observe([live(1)], LABEL_COLD_MS + FREEZE_POLL_MS);
+    expect(watch.labelled).toBe(true);
+  });
+
+  it('a reconnecting tile holds the mower but shows no label (the status says connecting)', () => {
+    const watch = new FreezeWatch();
+    for (let t = 0, f = 1; t <= 2_000; t += FREEZE_POLL_MS, f += 2) watch.observe([live(f)], t);
+    expect(watch.observe([gone], 2_200)).toBe(true);
+    expect(watch.labelled).toBe(false);
+    expect(watch.observe([gone], 9_000)).toBe(true);
+    expect(watch.labelled).toBe(false);
+  });
+});
 
 describe('presentedFrames', () => {
   it('is null without requestVideoFrameCallback', () => {

@@ -234,8 +234,13 @@ class FakeSpawns:
 
     muxers: list[FakeMuxer] = field(default_factory=list)
     transcoders: list[FakeMuxer] = field(default_factory=list)
+    fail_stdin: bool = False
+    """Muxer spawns raise ``OSError`` (no ffmpeg)."""
 
     async def stdin(self, *args: str) -> Any:
+        if self.fail_stdin:
+            msg = "no ffmpeg"
+            raise FileNotFoundError(msg)
         process = FakeMuxer(pid=500 + len(self.muxers), args=args)
         self.muxers.append(process)
         return process

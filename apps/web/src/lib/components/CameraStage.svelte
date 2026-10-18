@@ -9,10 +9,13 @@
   so. Every live tile is marked (`data-camera-video`, name, side) for AI assist's frame capture.
 
   Freeze: a few times a second the stage reads every shown tile's frame counter (`freeze.ts`:
-  presented frames through requestVideoFrameCallback for a video). A picture without a new frame
-  for longer than its threshold (1.5 s, up to 3 s for a steady slow stream), or one that went
-  away after it was live, is frozen: the stage greys it out under a hatched "picture frozen" plate (a standing picture must
-  never look live) and reports it through the bindable `stalled`. The viewer is bindable too, so
+  presented frames through requestVideoFrameCallback for a video). Two signals with their own
+  thresholds: the hold (a picture without a new frame for longer than 1.5 s, up to 3 s for a
+  steady slow stream, or one that went away after it was live) is reported through the bindable
+  `stalled` and holds the mower on the drive page; the label greys the picture out under a
+  hatched "picture frozen" plate (a standing picture must never look live) only after a gap of
+  at least 2.5 s on a live tile (5 s right after the start) and clears at the next frame, so a
+  bursty 4G stream does not flicker and a tile that is connecting says so instead. The viewer is bindable too, so
   the hosts (`CameraPanel` with its picker and diagnostics, the drive page's HUD) read the same
   session.
 
@@ -195,6 +198,7 @@
   });
   onDestroy(() => {
     stalled = false;
+    frozenShown = false;
     void cam.close();
   });
 
@@ -253,6 +257,8 @@
 
   // A standing picture must never look live: read the frame counters a few times a second.
   const watch = new FreezeWatch();
+  /** "Bild steht" is shown (the label, with hysteresis; `stalled` is the stricter hold). */
+  let frozenShown = $state(false);
   $effect(() => {
     const timer = setInterval(() => {
       const shown = cam.tiles.slice(0, cam.both ? 2 : 1);
@@ -264,12 +270,13 @@
         Date.now(),
       );
       if (frozen !== stalled) stalled = frozen;
+      if (watch.labelled !== frozenShown) frozenShown = watch.labelled;
     }, FREEZE_POLL_MS);
     return () => clearInterval(timer);
   });
 
   const status = $derived.by(() => {
-    if (stalled && !failed) return m.camera_frozen();
+    if (frozenShown && !failed) return m.camera_frozen();
     if (cam.missing && cam.phase !== 'error') return ''; // the notice on the stage says it
     switch (cam.phase) {
       case 'requesting':
@@ -296,7 +303,7 @@
   data-phase={cam.phase}
   data-provider={cam.session?.provider ?? ''}
   data-transport={cam.transport ?? ''}
-  data-frozen={stalled && !failed ? 'true' : 'false'}
+  data-frozen={frozenShown && !failed ? 'true' : 'false'}
 >
   {#if cam.phase === 'error' && cam.error}
     <div class="problem" data-testid="camera-error" data-kind={cam.error}>
@@ -378,7 +385,7 @@
       </figure>
     {/each}
   </div>
-  {#if stalled && !failed}
+  {#if frozenShown && !failed}
     <div class="frozen" role="alert" data-testid="camera-frozen">
       <strong>{m.camera_frozen()}</strong>
       {#if compact}<span>{m.camera_frozen_hint()}</span>{/if}
@@ -388,8 +395,12 @@
     <p class="same" role="status" data-testid="camera-same-picture">{m.camera_same_picture()}</p>
   {/if}
   {#if status}
-    <span class="status mono" data-testid="camera-status" data-frozen={stalled ? 'true' : 'false'}>
-      {#if cam.phase === 'live' && !stalled}<span class="dot" aria-hidden="true"></span>{/if}
+    <span
+      class="status mono"
+      data-testid="camera-status"
+      data-frozen={frozenShown ? 'true' : 'false'}
+    >
+      {#if cam.phase === 'live' && !frozenShown}<span class="dot" aria-hidden="true"></span>{/if}
       {status}
     </span>
   {/if}

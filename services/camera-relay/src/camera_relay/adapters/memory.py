@@ -6,6 +6,7 @@ renew and attach again; a source left running is stopped by the vendor session's
 """
 
 from collections.abc import Callable, Iterable
+from datetime import datetime
 from uuid import UUID
 
 from camera_relay.domain.models import RelayKey
@@ -29,6 +30,8 @@ class InMemoryRelayRepository:
         )
         self._sessions: dict[RelayKey, RelaySession] = {}
         self._statuses: dict[UUID, MowerStatus] = {}
+        self._silent: dict[RelayKey, dict[str, datetime]] = {}
+        """Silent cameras of forgotten sessions (``RelaySession.silent_cameras``)."""
 
     def get(self, key: RelayKey) -> RelaySession | None:
         """The session of ``key``, if any."""
@@ -39,6 +42,7 @@ class InMemoryRelayRepository:
         session = self._sessions.get(key)
         if session is None:
             session = self._factory(key, self.policy, self._statuses.get(key.mower_id))
+            session.silent_cameras = dict(self._silent.pop(key, {}))
             self._sessions[key] = session
         return session
 
@@ -66,5 +70,7 @@ class InMemoryRelayRepository:
         return self._statuses.get(mower_id)
 
     def remove(self, key: RelayKey) -> None:
-        """Forget a dormant session."""
-        self._sessions.pop(key, None)
+        """Forget a dormant session (its silent cameras are kept for the next one)."""
+        session = self._sessions.pop(key, None)
+        if session is not None and session.silent_cameras:
+            self._silent[key] = dict(session.silent_cameras)

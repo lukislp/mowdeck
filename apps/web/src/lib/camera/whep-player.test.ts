@@ -259,7 +259,8 @@ describe('WhepPlayer', () => {
       Authorization: `Bearer ${TICKET}`,
     });
     expect(peer.remote).toEqual({ type: 'answer', sdp: 'v=0 answer front_left' });
-    expect(h.events.onPublishers).toHaveBeenCalledWith([1, 2]);
+    // Availability not known yet: only the chosen camera is offered, no other flashes up.
+    expect(h.events.onPublishers).toHaveBeenCalledWith([1]);
     expect(h.events.onActive).toHaveBeenCalledWith(1);
   });
 
@@ -372,10 +373,40 @@ describe('WhepPlayer', () => {
     for (const tile of known.relay!.tiles) tile.available = tile.camera_id !== 'rear';
     h.lease.renew.mockResolvedValue(known);
     await h.player.start(listed, null);
-    expect(h.events.onPublishers).toHaveBeenLastCalledWith([1, 2, 3]); // not known yet
+    // Not known yet (null): nothing is offered, the rear camera never flashes up.
+    expect(h.events.onPublishers).toHaveBeenLastCalledWith([]);
     await h.fire(15_000);
-    // The vendor lists a rear camera the mower never publishes: no longer offered.
+    // The vendor lists a rear camera the mower never publishes: still not offered.
     expect(h.events.onPublishers).toHaveBeenLastCalledWith([1, 2]);
+  });
+
+  it('offers a camera whose availability is unknown only once its tile plays', async () => {
+    const h = harness();
+    const listed = relaySession();
+    listed.cameras = [
+      ...(listed.cameras ?? []),
+      { id: 'rear', name: 'Rear', uid: 3, placement: 'rear' },
+    ];
+    listed.relay!.tiles.push({ camera_id: 'rear', whep_url: '/media/whep/r/abc/rear/whep' });
+    for (const tile of listed.relay!.tiles) tile.available = null;
+    await h.player.start(listed, null);
+    expect(h.events.onPublishers).toHaveBeenLastCalledWith([]);
+    expect(h.calls.filter((c) => c.method === 'POST').map((c) => c.url)).toEqual([
+      expect.stringContaining('front_left'), // the default front tile connects meanwhile
+    ]);
+    h.peers[0]!.emitTrack(track());
+    await flush();
+    h.frames[0] = 1;
+    await h.fire(100);
+    expect(h.events.onPublishers).toHaveBeenLastCalledWith([1]);
+  });
+
+  it('a camera the viewer chose is offered while unknown (never shown as missing)', async () => {
+    const h = harness();
+    const listed = relaySession();
+    for (const tile of listed.relay!.tiles) tile.available = null;
+    await h.player.start(listed, 2);
+    expect(h.events.onPublishers).toHaveBeenLastCalledWith([2]);
   });
 
   it('a lease that is gone (404) is a lost connection; other renew errors retry', async () => {

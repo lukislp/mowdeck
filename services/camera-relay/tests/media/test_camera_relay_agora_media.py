@@ -6,14 +6,16 @@ The test gateway answers ``agora`` sessions; the stack's agora-bridge server sta
 Covered: H.264 Constrained Baseline 640x480 at about 10 fps from the H.265 source and the
 H.265 ``.../src`` path; a first key frame 4 s after the join followed by a 6 s stall still
 plays (the transcoder waits for ``.../src``), the rear camera that never publishes blocks
-nothing and is reported unavailable; a crashing bridge fails the session (``unavailable`` during the
-backoff); without a reachable bridge an agora mower is ``unsupported_provider`` and its vendor
-session is not released.
+nothing and is reported unavailable; a link that stalls again and again, a camera that
+leaves for good and one that publishes again recover (a new WHEP reader gets H.264 again); a
+crashing bridge fails the session (``unavailable`` during the backoff); without a reachable
+bridge an agora mower is ``unsupported_provider`` and its vendor session is not released.
 
 Opt-in (Docker): ``MOWDECK_TEST_RELAY_MEDIA=1`` (see relay_media_support.py).
 """
 
 import asyncio
+import contextlib
 import time
 from collections.abc import AsyncIterator
 from datetime import timedelta
@@ -59,10 +61,12 @@ class AgoraGateway:
         self.releases: list[CameraReleaseRequest] = []
         self.crash_mowers: set[UUID] = set()
         self.late_mowers: set[UUID] = set()
+        self.stall_mowers: set[UUID] = set()
 
     def session_for(self, mower_id: UUID) -> CameraSession:
         prefix = "crash" if mower_id in self.crash_mowers else "luba"
         prefix = "late" if mower_id in self.late_mowers else prefix
+        prefix = "stall" if mower_id in self.stall_mowers else prefix
         return CameraSession(
             provider=CameraProvider.AGORA,
             app_id="media-test-app",
@@ -194,6 +198,51 @@ async def renew(
     )
     message = await bus.request(RELAY_CAMERA_RENEW, request.model_dump_json().encode(), timeout=10)
     return RelayRenewReply.model_validate_json(message.data)
+
+
+async def test_a_flapping_link_and_a_republished_camera_recover(
+    media_stack: MediaStack, bus: Client, agora: AgoraGateway
+) -> None:
+    # Live incident 2026-10-18: the LUBA's 4G link stalled again and again while it mowed,
+    # MediaMTX dropped the publishers, Agora reported both cameras unpublished and only one of
+    # them published again. The relay never started that camera's muxer again: every WHEP
+    # offer got 404 while the web player kept the session alive with new leases.
+    account_id, mower_id = uuid4(), uuid4()
+    agora.stall_mowers.add(mower_id)
+    session = await attach(bus, account_id, mower_id, ["front_left", "front_right"])
+    assert session.relay is not None
+    began = time.monotonic()
+    viewer = await watch(whep_url(media_stack, session), session.relay.ticket, within=40)
+    leases = [session.relay.lease_id]
+    try:
+        assert await frames_after(viewer, 5, 20), "no frame before the stall"
+        await viewer.close()
+        # Like the web player that gets 404: a new lease about every 20 s keeps the session.
+        latest = session
+        while time.monotonic() - began < REPUBLISHED_AFTER:
+            await asyncio.sleep(15)
+            latest = await attach(bus, account_id, mower_id, ["front_left", "front_right"])
+            assert latest.relay is not None
+            leases.append(latest.relay.lease_id)
+        assert latest.relay is not None
+        # front_left (uid 1) publishes again: offer (404 while it recovers) until it plays.
+        viewer = await watch(whep_url(media_stack, latest), latest.relay.ticket, within=25)
+        assert await frames_after(viewer, 10, 20), "no frame after the recovery"
+        assert viewer.sizes == {(640, 480)}
+        path = whep_url(media_stack, latest).removeprefix(media_stack.whep_url + "/")
+        out = probe(media_stack, path.removesuffix("/whep"))
+        assert out.get("codec_name") == "h264", out
+    finally:
+        await viewer.close()
+        for lease in leases:
+            with contextlib.suppress(Exception):
+                await detach(bus, account_id, mower_id, lease)
+
+
+REPUBLISHED_AFTER = 75.0
+"""When the fake bridge's "stall" channel has published uid 1 again (fake_bridge.py: 8 s of
+frames, three stalls of 12 s with 5 s of frames between, a last stall of 12 s, 2 s unpublished),
+counted from the attach with some margin."""
 
 
 async def test_a_crashing_bridge_fails_the_session_into_the_backoff(

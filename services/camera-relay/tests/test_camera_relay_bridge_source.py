@@ -615,7 +615,10 @@ class FeedTime:
 
 
 @pytest.fixture
-async def timed() -> AsyncIterator[tuple[Harness, FeedTime]]:
+async def timed(request: pytest.FixtureRequest) -> AsyncIterator[tuple[Harness, FeedTime]]:
+    # The stall watch runs on the feeds' virtual time only where a test asks for it (indirect
+    # parameter: the stall timeout): every other test sends a few frames only.
+    stall_timeout: float | None = getattr(request, "param", None)
     bridge = FakeBridgeServer()
     port = await bridge.start()
     spawns = FakeSpawns()
@@ -636,6 +639,8 @@ async def timed() -> AsyncIterator[tuple[Harness, FeedTime]]:
         ready_timeout=20,
         feed_monotonic=feed_time.monotonic,
         feed_sleep=feed_time.sleep,
+        stall_timeout=stall_timeout,
+        watch_sleep=feed_time.sleep,
     )
     h = Harness(bridge, spawns, driver, clock)
     holder.append(h)
@@ -719,36 +724,149 @@ async def test_a_camera_that_never_publishes_blocks_and_fails_nothing(
     assert h.failures == []
 
 
-async def test_a_crashing_muxer_of_one_camera_does_not_fail_the_others(
+def _muxers_of(h: Harness, camera: str) -> list[Any]:
+    return [m for m in h.spawns.muxers if source_path(RID, camera) in m.args[-1]]
+
+
+# --- Recovery (live incident 2026-10-18: a LUBA mowing over 4G) ---------------------------------
+
+
+async def test_a_muxer_that_keeps_exiting_restarts_at_key_frames_with_a_backoff(
+    timed: tuple[Harness, FeedTime],
+) -> None:
+    # The incident: the fourth muxer start within a minute was refused ("failed for good") and
+    # the camera never came back. Now every exit restarts at a key frame: the first at once,
+    # then after 1, 2, 4 ... s (capped at 30 s), and nothing fails.
+    h, feed_time = timed
+    feed_time.ready_at[source_path(RID, "front_left")] = 0.0  # virtual time moves by hand only
+    _, connection = await _started(h)
+    await connection.send(frame(1, key=True, recv_ms=0))
+    await eventually(lambda: len(h.spawns.muxers) == 1)
+    feed = h.driver.runs[RID].feeds["front_left"]
+    expected = [0.0, 1.0, 2.0, 4.0, 8.0, 16.0, 30.0, 30.0]
+    for n, delay in enumerate(expected, start=1):
+        h.spawns.muxers[-1].exit(224)  # e.g. Broken pipe: MediaMTX dropped the publisher
+        await eventually(lambda: feed.process is None or feed.process.returncode is not None)
+        await _settle()
+        exited_at = feed_time.now
+        if delay:
+            await connection.send(frame(1, key=True, recv_ms=1000 * n))  # inside the backoff
+            await _settle()
+            assert len(h.spawns.muxers) == n, f"restart {n} came before its backoff"
+            feed_time.now = exited_at + delay
+        await connection.send(frame(1, key=True, recv_ms=1000 * n + 500))
+        await eventually(lambda n=n: len(h.spawns.muxers) == n + 1)
+    assert not feed.failed and h.failures == []
+    # A muxer that ran 30 s restarts at once again.
+    feed_time.now += 31
+    h.spawns.muxers[-1].exit(224)
+    await _settle()
+    await connection.send(frame(1, key=True, recv_ms=99_000))
+    await eventually(lambda: len(h.spawns.muxers) == len(expected) + 2)
+
+
+async def test_unpublished_stops_the_muxer_and_published_starts_a_new_one(
     timed: tuple[Harness, FeedTime],
 ) -> None:
     h, feed_time = timed
-    del feed_time
+    path = source_path(RID, "front_left")
+    feed_time.ready_at[path] = 0.0
+    feed_time.ready_at[source_path(RID, "front_right")] = 0.0
     _, connection = await _started(h)
     await connection.send(frame(1, key=True, recv_ms=0), frame(2, key=True, recv_ms=0))
+    await eventually(lambda: len(h.spawns.transcoders) == 2)
+    feed = h.driver.runs[RID].feeds["front_left"]
+    old = _muxers_of(h, "front_left")[0]
+
+    await connection.event("publisher", uid=1, state="unpublished")
+    await eventually(lambda: old.returncode is not None)
+    assert old.stdin.closed  # stopped cleanly: stdin closed, no kill
+    assert feed.process is None and not feed.publisher_present
+    right = _muxers_of(h, "front_right")[0]
+    assert right.returncode is None  # the other camera goes on
+    await connection.send(frame(1, key=False, recv_ms=100))  # nothing until a key frame
+    await _settle()
+    assert len(_muxers_of(h, "front_left")) == 1
+
+    # The source path went away: the transcoder exits and attaches again at the shortest delay.
+    feed_time.ready_at[path] = float("inf")
+    left_transcoder = h.spawns.transcoders[0]
+    left_transcoder.exit(0)
+    await connection.event("publisher", uid=1, state="published")
+    await _settle()
+    assert feed.publisher_present
+    await connection.send(frame(1, key=False, recv_ms=4000), frame(1, key=True, recv_ms=4100))
+    await eventually(lambda: len(_muxers_of(h, "front_left")) == 2)
+    restarted = _pes(bytes(_muxers_of(h, "front_left")[1].stdin.data))
+    assert restarted[1].payload.startswith(KEYFRAME)
+    feed_time.ready_at[path] = feed_time.now
+    before = feed_time.now
+    await eventually(lambda: len(h.spawns.transcoders) == 3)
+    assert feed_time.now - before < 2  # no long transcoder backoff after the source came back
+    assert h.failures == []
+
+
+async def test_publisher_events_of_the_other_connection_of_a_rejoin_change_nothing(
+    harness: Harness,
+) -> None:
+    _, connection = await _started(harness)
+    await connection.send(frame(1, key=True, recv_ms=0))
+    await eventually(lambda: len(harness.spawns.muxers) == 1)
+    run = harness.driver.runs[RID]
+    pending = await harness.driver._open(run, agora_session())
+    run.pending = pending
+    second = await harness.bridge.connection(1)
+    await second.event("publisher", uid=1, state="unpublished")
+    await _settle()
+    assert harness.spawns.muxers[0].returncode is None
+
+
+@pytest.mark.parametrize("timed", [20.0], indirect=True)
+async def test_a_silent_camera_gets_its_muxer_stopped_and_no_zombie_is_left(
+    timed: tuple[Harness, FeedTime],
+) -> None:
+    # The incident: a camera whose frames stopped kept an ffmpeg waiting on a publish MediaMTX
+    # had dropped, and it counted as "delivering", so the session never failed over either.
+    h, feed_time = timed
+    _, connection = await _started(h)
+    await connection.send(frame(1, key=True, recv_ms=0))
+    await eventually(lambda: len(h.spawns.muxers) == 1)
+    feed = h.driver.runs[RID].feeds["front_left"]
+    muxer = h.spawns.muxers[0]
+    await eventually(lambda: muxer.returncode is not None)  # the watch's virtual 20 s
+    assert muxer.stdin.closed and feed.process is None
+    assert feed.stalls == 1 and not feed.delivering
+    assert feed_time.now >= 20
+    # Frames again: a new muxer from the next key frame on (the stop is no muxer fault).
+    await connection.send(frame(1, key=False, recv_ms=30_000), frame(1, key=True, recv_ms=30_100))
     await eventually(lambda: len(h.spawns.muxers) == 2)
-    right = next(m for m in h.spawns.muxers if source_path(RID, "front_right") in m.args[-1])
-    for n in range(4):  # the fourth start within a minute is refused: that camera fails
-        right.exit(1)
-        await _settle()
-        await connection.send(frame(2, key=True, recv_ms=100 * (n + 1)))
-        await _settle()
-        muxers = [m for m in h.spawns.muxers if source_path(RID, "front_right") in m.args[-1]]
-        right = muxers[-1]
-    assert h.driver.runs[RID].feeds["front_right"].failed
-    assert h.failures == []  # the left camera still delivers
+    assert h.failures == []
 
 
-async def test_the_last_delivering_camera_failing_fails_the_source(
+async def test_a_muxer_that_cannot_start_spares_the_source_while_another_camera_delivers(
     timed: tuple[Harness, FeedTime],
 ) -> None:
     h, _ = timed
+    _, connection = await _started(h)
+    await connection.send(frame(1, key=True, recv_ms=0))
+    await eventually(lambda: len(h.spawns.muxers) == 1)
+    h.spawns.fail_stdin = True  # no ffmpeg any more
+    await connection.send(frame(1, key=False, recv_ms=100), frame(2, key=True, recv_ms=100))
+    await eventually(lambda: h.driver.runs[RID].feeds["front_right"].failed)
+    await _settle()
+    assert h.failures == []  # the left camera delivers
+
+
+async def test_a_muxer_that_cannot_start_fails_the_source_when_the_others_are_silent(
+    timed: tuple[Harness, FeedTime],
+) -> None:
+    # The incident's second half: the other camera's muxer was alive but had not had a frame
+    # for minutes, and it counted as delivering, so the session never failed over.
+    h, feed_time = timed
     source, connection = await _started(h)
     await connection.send(frame(1, key=True, recv_ms=0))
     await eventually(lambda: len(h.spawns.muxers) == 1)
-    for n in range(4):
-        h.spawns.muxers[-1].exit(1)
-        await _settle()
-        await connection.send(frame(1, key=True, recv_ms=100 * (n + 1)))
-        await _settle()
+    feed_time.now += 60  # the left camera falls silent; its muxer still runs
+    h.spawns.fail_stdin = True
+    await connection.send(frame(2, key=True, recv_ms=60_000))
     await eventually(lambda: h.failures == [source])

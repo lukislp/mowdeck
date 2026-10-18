@@ -14,6 +14,21 @@
  * - a tile that has never been live yet (still connecting) is not frozen: nothing is shown that
  *   could be mistaken for a live picture, and the status says it is connecting.
  *
+ * Two outputs with their own thresholds (owner report 2026-10-18: "Bild steht" flickered every
+ * 2 to 3 s on a LUBA streaming over 4G while mowing, and showed while the picture was still
+ * being set up):
+ *
+ * - **Hold** ({@link FreezeWatch.observe}'s result): the strict signal the drive view holds the
+ *   mower on. It keeps the rules above (1.5 s floor, a picture that went away counts), so a real
+ *   freeze stops the mower within about 1.5 to 2 s. A bursty but alive stream may trigger it for
+ *   a moment; holding briefly is the safe side.
+ * - **Label** ({@link FreezeWatch.labelled}): what the stage shows as "Bild steht". It has
+ *   hysteresis: a live tile's gap must last at least {@link LABEL_FLOOR_MS} (and never less than
+ *   the hold threshold) before the label shows, and it clears at the next new frame. Before the
+ *   tile has presented {@link LABEL_WARM_FRAMES} frames (cold start: the decoder and the jitter
+ *   buffer are still settling) the gap must last {@link LABEL_COLD_MS}. A tile that is not live
+ *   (connecting, reconnecting) never shows the label: the status says it is connecting.
+ *
  * Frame counters ({@link frameCounter}): the test pattern's canvas counts its frames
  * (`data-frames`). A `<video>` counts the frames the browser actually presented, through
  * `requestVideoFrameCallback` (Chrome, Edge, Safari 15.4+, Firefox 132+). Only where that is
@@ -31,6 +46,12 @@ export const FREEZE_CEILING_MS = 3_000;
 export const FREEZE_INTERVALS = 3;
 /** The stage reads the counters this often. */
 export const FREEZE_POLL_MS = 200;
+/** The label "Bild steht" shows only after a gap of at least this long (hysteresis). */
+export const LABEL_FLOOR_MS = 2_500;
+/** Before a tile has presented {@link LABEL_WARM_FRAMES} frames its label needs this long a gap. */
+export const LABEL_COLD_MS = 5_000;
+/** New frames a tile presents before the label uses {@link LABEL_FLOOR_MS}. */
+export const LABEL_WARM_FRAMES = 3;
 /** Weight of the newest gap in the tile's typical frame interval. */
 const INTERVAL_WEIGHT = 0.3;
 
@@ -67,6 +88,8 @@ interface SlotState {
   frames: number | null;
   changedAt: number;
   interval: number | null;
+  /** New frames seen since the tile (last) went live. */
+  seen: number;
 }
 
 export interface FreezeLimits {
@@ -77,6 +100,7 @@ export interface FreezeLimits {
 export class FreezeWatch {
   #slots: SlotState[] = [];
   #now = 0;
+  #labelled = false;
   private readonly floorMs: number;
   private readonly ceilingMs: number;
 
@@ -90,23 +114,30 @@ export class FreezeWatch {
     this.#now = now;
     this.#slots.length = Math.min(this.#slots.length, tiles.length);
     let frozen = false;
+    let labelled = false;
     tiles.forEach((tile, slot) => {
       const state = (this.#slots[slot] ??= {
         everLive: false,
         frames: null,
         changedAt: now,
         interval: null,
+        seen: 0,
       });
       if (!tile.live) {
-        // A picture that went away is as bad as one that stands.
+        // A picture that went away is as bad as one that stands (hold); the label waits: the
+        // status says the tile is connecting.
         if (state.everLive) frozen = true;
         state.frames = null;
         state.changedAt = now;
+        state.seen = 0;
         return;
       }
       if (!state.everLive || tile.frames === null || tile.frames !== state.frames) {
         if (tile.frames !== state.frames) {
-          if (state.frames !== null && tile.frames !== null) this.learn(state, now);
+          if (state.frames !== null && tile.frames !== null) {
+            this.learn(state, now);
+            state.seen += 1;
+          }
           state.changedAt = now;
         }
         state.frames = tile.frames;
@@ -115,9 +146,21 @@ export class FreezeWatch {
         if (tile.frames === null) state.changedAt = now;
         return;
       }
-      if (now - state.changedAt > this.threshold(state)) frozen = true;
+      const since = now - state.changedAt;
+      if (since > this.threshold(state)) frozen = true;
+      if (since > this.labelThreshold(state)) labelled = true;
     });
+    this.#labelled = labelled;
     return frozen;
+  }
+
+  /**
+   * Whether the stage shows "Bild steht" after the last reading: a live tile whose gap lasted
+   * the label's threshold (hysteresis, cleared at the next frame). Never for a tile that is not
+   * live (connecting) or has not presented a frame yet.
+   */
+  get labelled(): boolean {
+    return this.#labelled;
   }
 
   /** What the watch knows about every tile at the last reading. */
@@ -132,6 +175,12 @@ export class FreezeWatch {
   /** Forget everything (a new session, another camera layout). */
   reset(): void {
     this.#slots = [];
+    this.#labelled = false;
+  }
+
+  private labelThreshold(state: SlotState): number {
+    const floor = state.seen < LABEL_WARM_FRAMES ? LABEL_COLD_MS : LABEL_FLOOR_MS;
+    return Math.max(floor, this.threshold(state));
   }
 
   private threshold(state: SlotState): number {
