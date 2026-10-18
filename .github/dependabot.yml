@@ -1,0 +1,51 @@
+# Daily dependency PRs for the ecosystems this repository builds from, in the same shape as the
+# other lukislp repositories: fix(...) commit prefixes, at most two open PRs per ecosystem.
+#
+# Not covered here, on purpose:
+#   * Container images. Every third-party image is pinned once under "Image sources" in
+#     infra/compose/.env.example and reaches the Dockerfiles, Compose and the Helm chart through
+#     *_IMAGE variables and build arguments (FROM ${PYTHON_IMAGE}), which Dependabot's docker
+#     ecosystem cannot parse; tools/repo-checks/tests/test_images.py keeps every default equal to
+#     that list, so a partial bump would fail CI. Images are bumped deliberately in that list.
+#   * The Capacitor shells in apps/mobile (Gradle, Swift package): their native dependencies come
+#     from the @capacitor/* npm packages, which the npm entry below keeps current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "fix(ci)"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 2
+  # One uv workspace with a single uv.lock for every service, library and tool.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: daily
+    ignore:
+      # pymammotion is pinned exactly on purpose (GPL adapter, mowdeck-control-mammotion): every
+      # release changes the protocol surface the adapter depends on and needs a test on a real
+      # mower before it is taken over.
+      - dependency-name: "pymammotion"
+    commit-message:
+      prefix: "fix(deps)"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 2
+  # The pnpm workspace of the web frontend (apps/*, libs/mowdeck-ui, tests/e2e-web,
+  # tools/ts-codegen) with its single pnpm-lock.yaml.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      dev:
+        dependency-type: development
+    commit-message:
+      prefix: "fix(deps)"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 2

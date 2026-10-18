@@ -1,5 +1,10 @@
 # MowDeck
 
+[![CI](https://github.com/lukislp/mowdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/lukislp/mowdeck/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lukislp/mowdeck/badge)](https://scorecard.dev/viewer/?uri=github.com/lukislp/mowdeck) [![CodeQL](https://github.com/lukislp/mowdeck/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/lukislp/mowdeck/security/code-scanning)
+[![License: AGPL-3.0](https://img.shields.io/github/license/lukislp/mowdeck)](LICENSING.md)
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB)](https://www.python.org/)
+[![Node](https://img.shields.io/badge/Node-22-339933)](https://nodejs.org/)
+
 MowDeck is a self-hosted control centre for robotic mowers. It runs on a mini PC or Raspberry Pi at home with Docker Compose, keeps your data in your own house, and gives you and your family one web app for everything the mower does: live status and map, starting a job with your own settings, spot mowing that MowDeck steers itself, schedules that respect the weather, the cameras, notifications on the phone, and an optional AI assistant for a stuck mower. The same images also run on Kubernetes if you prefer a server.
 
 MowDeck is not tied to one manufacturer. The services never talk to a mower directly; they use the `mowdeck-control` interface, and each manufacturer is an adapter package behind it. The first adapter is for Mammotion (LUBA, YUKA); a simulator implements the same interface for trying everything without hardware. A Home Assistant integration and native app shells for iOS and Android come with it.
