@@ -158,12 +158,12 @@ class Settings(ServiceSettings):
     (``VISION_USER_DAILY_REQUESTS``) applies on top."""
 
     vision_auto_error_codes: str = (
-        "stuck,1032,1100,1145,1201,1206,1218,1411,1421,1422,11112,11113,11121,11122,"
+        "stuck,1032,1100,1145,1201,1206,1214,1218,1411,1421,1422,11112,11113,11121,11122,"
         "11132,11134,2000701"
     )
     """Error codes (comma separated, a leading minus sign is ignored) that start an automatic
     analysis: stuck or trapped (``stuck`` of the simulator, Mammotion 1201, 1421, 11112,
-    2000701), blocked by an obstacle (1206, 11113, 11121, 11122), outside the work area (1100,
+    2000701), blocked by an obstacle (1206, 1214, 11113, 11121, 11122), outside the work area (1100,
     1145, 1411, 1422) and wheel slip (1032, 1218, 11132, 11134). A state with
     ``drive_recoverable`` counts too. Never lift, tilt, battery or blade errors: a state with
     ``raw.lifted`` never starts one."""

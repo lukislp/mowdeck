@@ -15,7 +15,7 @@ import asyncio
 import contextlib
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
@@ -37,6 +37,7 @@ from mowdeck_control_mammotion.port import (
     MowPathPacket,
     NavGetCommData,
     NavGetHashListData,
+    NotificationListener,
     NoTransportAvailableError,
     PathType,
     PortClosedError,
@@ -169,6 +170,20 @@ def dock_buffer(
     data[7] = round(dock_x * 1e4)
     data[8] = round(dock_y * 1e4)
     data[13] = round(math.radians(rtk_yaw_deg) * 1e8)
+    return SystemUpdateBufMsg(update_buf_data=data)
+
+
+def error_log_buffer(entries: Sequence[tuple[int, int]]) -> SystemUpdateBufMsg:
+    """The ``system_update_buf`` frame (type 2) a mower sends in answer to the error log read
+    ``read_write_device(rw_id=5, context=2, rw=1)``, laid out as ``MowerDevice.buffer`` reads it:
+    ten ``(code, time)`` slots from index 3, newest first, padded with zeros. ``entries`` are
+    ``(code, epoch seconds)``; the firmware sends faults negative (``-1201``) and stamps a fresh
+    entry with its uptime seconds until it knows the real time."""
+    data = [0] * 23
+    data[0] = 2
+    for slot, (code, stamp) in enumerate(entries[:10]):
+        data[3 + 2 * slot] = code
+        data[4 + 2 * slot] = stamp
     return SystemUpdateBufMsg(update_buf_data=data)
 
 
@@ -329,7 +344,10 @@ class FakeMammotionPort:
         self.product_model = product_model
         self.dock_answer: SystemUpdateBufMsg | None = dock_buffer()
         """The ``system_update_buf`` the mower sends on the dock buffer request
-        (``read_write_device`` with ``rw_id=5``); None: no answer."""
+        (``read_write_device`` with ``rw_id=5, context=1``); None: no answer."""
+        self.error_log_answer: SystemUpdateBufMsg | None = None
+        """The ``system_update_buf`` (type 2, see :func:`error_log_buffer`) the mower sends on the
+        error log read (``read_write_device`` with ``rw_id=5, context=2``); None: no answer."""
         self.light_answer: bool | None = False
         """The headlamp state the mower reports on a read (``get_car_light(ids=1126)``, answer
         ``get_lamp_rsp``), stored like PyMammotion's reducer in ``mower_state.lamp_info``; None: no
@@ -419,6 +437,7 @@ class FakeMammotionPort:
         self._ota_task: asyncio.Task[None] | None = None
         self._emitted = asyncio.Event()
         self._listeners: list[StateListener] = []
+        self._notification_listeners: list[NotificationListener] = []
         self._open = False
 
     # --- MammotionPort --------------------------------------------------------------------
@@ -486,6 +505,21 @@ class FakeMammotionPort:
                 self._listeners.remove(listener)
 
         return unsubscribe
+
+    def subscribe_notifications(self, listener: NotificationListener) -> Callable[[], None]:
+        self._notification_listeners.append(listener)
+
+        def unsubscribe() -> None:
+            if listener in self._notification_listeners:
+                self._notification_listeners.remove(listener)
+
+        return unsubscribe
+
+    async def deliver_notification(self, identifier: str, value: dict[str, Any] | None) -> None:
+        """Deliver a ``thing/event`` post (``device_warning_event`` with ``{"code": 1201}``, ...)
+        to the notification listeners, as PyMammotion does."""
+        for listener in list(self._notification_listeners):
+            await listener(identifier, value)
 
     def _route(self, command: str | None) -> str:
         return bridge_route(
@@ -760,6 +794,10 @@ class FakeMammotionPort:
 
     async def _apply(self, command: str, kwargs: dict[str, Any] | None = None) -> None:
         if command == "read_write_device" and (kwargs or {}).get("rw_id") == 5:
+            if (kwargs or {}).get("context", 1) == 2:
+                if self.error_log_answer is not None:
+                    await self.deliver_dock_buffer(self.error_log_answer)
+                return
             if self.dock_answer is not None:
                 await self.deliver_dock_buffer(self.dock_answer)
             return
@@ -816,6 +854,7 @@ __all__ = [
     "PathLine",
     "SentCommand",
     "dock_buffer",
+    "error_log_buffer",
     "firmware_offer",
     "frames",
     "install_mow_path",

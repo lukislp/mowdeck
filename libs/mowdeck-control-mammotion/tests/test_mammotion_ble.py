@@ -476,6 +476,9 @@ class _ProxyHandle(_Handle):
     def subscribe_state_changed(self, _listener: Any) -> Any:
         return SimpleNamespace(cancel=lambda: None)
 
+    def subscribe_notification(self, _listener: Any) -> Any:
+        return SimpleNamespace(cancel=lambda: None)
+
 
 class _Proxy:
     """``open_proxy`` and ``open_ble_client`` of the tests: records every proxy close."""

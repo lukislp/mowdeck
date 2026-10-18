@@ -114,8 +114,9 @@ import asyncio
 import contextlib
 import logging
 import time
+from collections import deque
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Final
 
 from mowdeck_contracts.v1 import (
@@ -155,7 +156,7 @@ from mowdeck_control import (
     firmware_update_problem,
 )
 
-from mowdeck_control_mammotion import mapping
+from mowdeck_control_mammotion import errors, mapping
 from mowdeck_control_mammotion.port import (
     CommandTimeoutError,
     FirmwareRefused,
@@ -208,6 +209,19 @@ whose first value is 1, which PyMammotion's ``MowerDevice.buffer`` turns into th
 (``location.RTK`` with its yaw) and the dock pose (``location.dock``). Mammotion-HA sends exactly
 this (``coordinator.py`` ``async_rtk_dock_location``, the "resync RTK dock" button) whenever the
 RTK or dock latitude is still 0; PyMammotion's ``mower_api.py`` has the same call."""
+ERROR_LOG_ARGS: Final[dict[str, int]] = {"rw_id": 5, "context": 2, "rw": 1}
+"""``read_write_device(rw_id=5, context=2, rw=1)``: the mower answers with ``system_update_buf``
+whose first value is 2, which PyMammotion's ``MowerDevice.buffer`` turns into the error log
+(``errors.err_code_list`` and ``err_code_list_time``, the last ten faults, newest first). The
+cloud never pushes it: Mammotion-HA reads it (``_async_read_error_log``) when the mower enters a
+mode a fault is logged with (pause among them) and when a warning event arrives, ten seconds
+later so the firmware has replaced the entry's uptime stamp with the real time."""
+ERROR_LOG_DELAYS_S: Final = (10.0, 30.0, 60.0)
+"""Waits before the error log reads of one fault window (pause off the charger or error): the
+first read, then again while no dated fault has been found. Three reads at most per window, to
+stay well inside the cloud's send budget."""
+MAX_WARNINGS: Final = 10
+"""Warning codes kept (the mower's own log holds ten)."""
 DOCK_WAIT_S: Final = 15.0
 """How long a map read waits for the dock buffer when the dock or the origin is unknown."""
 LIGHT_COMMAND: Final = "set_car_manual_light"
@@ -338,6 +352,13 @@ class MammotionBase:
         self._preview_lock = asyncio.Lock()
         self._firmware = mapping.FirmwareTracker()
         self._firmware_recheck: asyncio.Task[None] | None = None
+        self._fault_since: datetime | None = None
+        """Start of the current fault window (the mower paused off the charger or failed),
+        minus the tolerance; None outside one (see :func:`mapping.fault_of`)."""
+        self._warnings: deque[mapping.FaultWarning] = deque(maxlen=MAX_WARNINGS)
+        self._error_log_task: asyncio.Task[None] | None = None
+        self._unsubscribe_notifications: Callable[[], None] | None = None
+        self.error_log_delays_s: tuple[float, ...] = ERROR_LOG_DELAYS_S
 
     # --- MowerConnection: lifecycle -------------------------------------------------------
 
@@ -373,6 +394,11 @@ class MammotionBase:
             self._connected = True
             self._light_reported = False
             self._unsubscribe = self._port.subscribe(self._on_device_update)
+            self._unsubscribe_notifications = self._port.subscribe_notifications(
+                self._on_notification
+            )
+            self._fault_since = None
+            self._warnings.clear()
             self._publish(force=True)
             if self._refresh_interval_s > 0:
                 self._refresher = asyncio.create_task(
@@ -400,7 +426,15 @@ class MammotionBase:
                     await self._stop_device_info()
                     await self._stop_path_fetch()
                     await self._stop_firmware_recheck()
+                    await self._stop_error_log()
                     unsubscribe, self._unsubscribe = self._unsubscribe, None
+                    if unsubscribe is not None:
+                        with contextlib.suppress(Exception):
+                            unsubscribe()
+                    unsubscribe, self._unsubscribe_notifications = (
+                        self._unsubscribe_notifications,
+                        None,
+                    )
                     if unsubscribe is not None:
                         with contextlib.suppress(Exception):
                             unsubscribe()
@@ -681,6 +715,74 @@ class MammotionBase:
     async def _stop_firmware_recheck(self) -> None:
         task, self._firmware_recheck = self._firmware_recheck, None
         await _cancel(task, "firmware re-check")
+
+    async def _stop_error_log(self) -> None:
+        task, self._error_log_task = self._error_log_task, None
+        await _cancel(task, "error log read")
+
+    # --- faults ---------------------------------------------------------------------------
+
+    def _track_fault_window(self) -> None:
+        """Open a fault window when the mower pauses off the charger or fails, close it when it
+        leaves; opening one reads the error log (:meth:`_read_error_log`)."""
+        device = self._port.device()
+        activity = mapping.activity_of(device, has_report=self._port.has_report)
+        if not mapping.fault_window_open(device, activity):
+            self._fault_since = None
+            return
+        if self._fault_since is not None:
+            return
+        first = self._last_state is None
+        lookback = mapping.FAULT_LOOKBACK_S if first else mapping.FAULT_TOLERANCE_S
+        self._fault_since = self._clock() - timedelta(seconds=lookback)
+        self._schedule_error_log_read()
+
+    def _schedule_error_log_read(self) -> None:
+        """Start the error log reads unless they already run (no running loop: skipped)."""
+        if self._error_log_task is not None and not self._error_log_task.done():
+            return
+        try:
+            self._error_log_task = asyncio.get_running_loop().create_task(
+                self._read_error_log(), name=f"error-log-{self._port.device_name}"
+            )
+        except RuntimeError:  # no running loop (synchronous tests)
+            return
+
+    def _fault_found(self) -> bool:
+        return (
+            mapping.fault_of(self._port.device(), self._fault_since, tuple(self._warnings))
+            is not None
+        )
+
+    async def _read_error_log(self) -> None:
+        """Read the error log (:data:`ERROR_LOG_ARGS`) after each of ``error_log_delays_s`` while
+        the fault window is open and no dated fault was found; best effort, background
+        priority. The answer arrives as a device update and is published from there."""
+        for delay in self.error_log_delays_s:
+            await asyncio.sleep(delay)
+            if not self._connected or self._fault_since is None:
+                return
+            try:
+                if self._fault_found():
+                    return
+                await self._port.send(
+                    DOCK_BUFFER_COMMAND, priority=Priority.BACKGROUND, **ERROR_LOG_ARGS
+                )
+            except Exception:
+                _log.debug("error log read of %s failed", self._port.device_name, exc_info=True)
+
+    async def _on_notification(self, identifier: str, value: dict[str, Any] | None) -> None:
+        """A warning post names the fault at once; it also triggers an error log read, like
+        Mammotion-HA does on ``device_warning_event`` and ``device_warning_code_event``."""
+        codes = errors.warning_codes(identifier, value)
+        if not codes:
+            return
+        now = self._clock()
+        self._warnings.extend((code, now) for code in codes)
+        _log.info("mower %s posted warning codes %s", self._port.device_name, codes)
+        if self._connected:
+            self._publish()
+            self._schedule_error_log_read()
 
     async def _stop_refresh(self) -> None:
         task, self._refresher = self._refresher, None
@@ -1345,6 +1447,8 @@ class MammotionBase:
             speed_setpoint_mps=self._speed_mps or DEFAULT_SPEED_MPS,
             links=self._link_statuses(),
             firmware_info=self._firmware.info,
+            fault_since=self._fault_since,
+            warnings=tuple(self._warnings),
         )
 
     async def _on_device_update(self) -> None:
@@ -1356,6 +1460,7 @@ class MammotionBase:
     def _publish(self, *, force: bool = False) -> None:
         try:
             self._track_firmware(self._port.device())
+            self._track_fault_window()
             state = self._snapshot()
         except Exception:
             _log.exception("cannot map the state of %s", self._config.mower_id)
@@ -1381,7 +1486,7 @@ class MammotionBase:
 
     def _require_no_sensor_stop(self) -> None:
         state = self._snapshot()
-        if state.activity is MowerActivity.ERROR:
+        if state.activity is MowerActivity.ERROR and not state.drive_recoverable:
             msg = f"the mower reports an error ({state.error_code}); clear it at the mower"
             raise SensorStop(msg)
 
