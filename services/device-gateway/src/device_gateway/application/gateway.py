@@ -3,7 +3,7 @@
 import asyncio
 import base64
 import contextlib
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Literal
 from uuid import UUID
 
@@ -93,11 +93,11 @@ class DeviceGateway:
         timing: SessionTiming,
         clock: Clock = utc_now,
         credentials: CredentialSource | None = None,
-        snapshotter: CameraSnapshotter | None = None,
+        snapshotters: Sequence[CameraSnapshotter] = (),
         snapshot_timeout_seconds: float = 20.0,
     ) -> None:
         self.shard = shard
-        self._snapshotter = snapshotter
+        self._snapshotters = tuple(snapshotters)
         self._snapshot_timeout_seconds = snapshot_timeout_seconds
         self._credentials = credentials
         self._warned_sharded_cloud = False
@@ -159,7 +159,7 @@ class DeviceGateway:
             timing=self._timing,
             clock=self._clock,
             credentials=self._credentials,
-            snapshotter=self._snapshotter,
+            snapshotters=self._snapshotters,
             snapshot_timeout_seconds=self._snapshot_timeout_seconds,
         )
         self._sessions[mower_id] = session

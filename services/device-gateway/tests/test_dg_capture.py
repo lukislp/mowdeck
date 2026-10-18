@@ -12,6 +12,7 @@ import asyncio
 import base64
 import json
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -43,7 +44,7 @@ from mowdeck_service_kit.bus import InMemoryBus
 from mowdeck_service_kit.testing import lifespan_client
 
 from device_gateway.adapters.control.snapshot import HttpCameraSnapshotter
-from device_gateway.application.ports import SnapshotFailed
+from device_gateway.application.ports import SnapshotFailed, SnapshotTarget, SnapshotUnavailable
 from device_gateway.application.session import snapshot_camera_uid
 from device_gateway.main import build_app, snapshotter_from
 
@@ -51,7 +52,10 @@ JPEG = b"\xff\xd8\xff\xe0fake-jpeg\xff\xd9"
 
 
 class FakeSnapshotter:
-    """Records requests and answers with a JPEG (or fails)."""
+    """Records requests and answers with a JPEG (or fails); plays the capture worker (it needs
+    the vendor's camera session)."""
+
+    needs_camera_session = True
 
     def __init__(self, *, fail: str | None = None, delay: float = 0.0) -> None:
         self.fail = fail
@@ -60,10 +64,9 @@ class FakeSnapshotter:
         self.active = 0
         self.max_active = 0
 
-    async def snapshot(
-        self, session: CameraSession, camera_uid: int | None, *, timeout_seconds: float
-    ) -> Photo:
-        self.calls.append((session, camera_uid, timeout_seconds))
+    async def snapshot(self, target: SnapshotTarget, *, timeout_seconds: float) -> Photo:
+        assert target.session is not None
+        self.calls.append((target.session, target.camera_uid, timeout_seconds))
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         try:
@@ -204,6 +207,16 @@ def _session(**changes: Any) -> CameraSession:
     return CameraSession.model_validate(values)
 
 
+def _target(session: CameraSession | None, uid: int | None) -> SnapshotTarget:
+    return SnapshotTarget(account_id=uuid4(), mower_id=uuid4(), session=session, camera_uid=uid)
+
+
+async def test_dg_capture_http_snapshotter_needs_a_session() -> None:
+    snapshotter = HttpCameraSnapshotter("http://c")
+    with pytest.raises(SnapshotUnavailable):
+        await snapshotter.snapshot(_target(None, None), timeout_seconds=1)
+
+
 def test_dg_capture_camera_choice() -> None:
     assert snapshot_camera_uid(_session()) == 1
     assert snapshot_camera_uid(_session(cameras=[])) is None
@@ -219,7 +232,7 @@ async def test_dg_capture_http_snapshotter_posts_the_session_to_the_worker() -> 
     snapshotter = HttpCameraSnapshotter(
         "http://capture:8000/", token="t0k", transport=httpx.MockTransport(handler)
     )
-    photo = await snapshotter.snapshot(_session(), 1, timeout_seconds=12)
+    photo = await snapshotter.snapshot(_target(_session(), 1), timeout_seconds=12)
     assert photo == Photo(JPEG, "image/jpeg")
     [request] = seen
     assert str(request.url) == "http://capture:8000/api/v1/capture"
@@ -250,7 +263,7 @@ async def test_dg_capture_http_snapshotter_maps_worker_problems() -> None:
     ]:
         snapshotter = HttpCameraSnapshotter("http://c", transport=httpx.MockTransport(handler))
         with pytest.raises(SnapshotFailed, match=text):
-            await snapshotter.snapshot(_session(), None, timeout_seconds=1)
+            await snapshotter.snapshot(_target(_session(), None), timeout_seconds=1)
 
 
 def test_dg_capture_snapshotter_from_settings() -> None:

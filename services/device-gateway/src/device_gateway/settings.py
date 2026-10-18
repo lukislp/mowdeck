@@ -78,19 +78,31 @@ class Settings(ServiceSettings):
     firmware_check_interval_seconds: float = Field(default=24 * 3600.0, ge=60, le=30 * 86_400)
     """Then ask again this often while the connection lasts."""
 
+    relay_url: str | None = None
+    """Base URL of the camera relay (``http://camera-relay:8000``, ADR 0045). With
+    ``relay_frames_token`` set, mowers whose adapter offers a live camera but cannot take photos
+    (the Mammotion cloud connection) answer photo requests with a frame from the relay: it
+    reuses the session a viewer holds or starts one within the Vision limits. Empty: no relay
+    frames."""
+
+    relay_frames_token: SecretStr | None = None
+    """Shared secret of the relay's frame tap (``MOWDECK_RELAY_FRAMES_TOKEN`` there). Empty:
+    no relay frames."""
+
     capture_url: str | None = None
-    """Base URL of the capture worker (``http://vision-capture:8000``, ADR 0035). When set,
-    mowers whose adapter offers a live camera but cannot take photos (the Mammotion cloud
-    connection) answer photo requests with a frame of their camera. Empty: no such photos."""
+    """Deprecated (ADR 0045): base URL of the capture worker (``http://vision-capture:8000``,
+    ADR 0035), tried only when the relay is not configured, not reachable or has no source
+    driver for the mower's camera. Empty: no capture worker."""
 
     capture_token: SecretStr | None = None
     """Shared secret sent to the capture worker (``MOWDECK_CAPTURE_TOKEN`` there)."""
 
     capture_timeout_seconds: float = Field(default=20.0, gt=0, le=60)
-    """How long the capture worker may wait for the first decoded frame."""
+    """How long a frame source (the camera relay, at most 30 s; the capture worker) may take
+    for one frame."""
 
     capture_max_width: int = Field(default=1280, ge=160, le=3840)
-    """Frames wider than this are scaled down by the worker."""
+    """Frames wider than this are scaled down (by the relay and by the worker)."""
 
     fleet_retry_max_seconds: float = Field(default=30.0, gt=0, le=3600)
     """Upper bound of the backoff between ``fleet.mowers.list`` attempts."""

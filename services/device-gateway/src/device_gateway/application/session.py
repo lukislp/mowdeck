@@ -35,7 +35,7 @@ import asyncio
 import contextlib
 import hashlib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -44,6 +44,7 @@ from mowdeck_contracts.v1 import (
     MOWER_CONNECTED,
     MOWER_DISCONNECTED,
     BridgeScanReply,
+    CameraAccess,
     CameraSession,
     CommandEnvelope,
     CommandResult,
@@ -67,6 +68,7 @@ from mowdeck_control import (
     NotConnected,
     Photo,
     PhotoCapture,
+    PhotoUnavailable,
     bridge_scanner_of,
     camera_session_of,
     firmware_port_of,
@@ -82,6 +84,9 @@ from device_gateway.application.ports import (
     CredentialSource,
     GatewayPublisher,
     NoCredentials,
+    SnapshotFailed,
+    SnapshotTarget,
+    SnapshotUnavailable,
 )
 from device_gateway.domain.rules import (
     ConnectionStatus,
@@ -184,11 +189,11 @@ class MowerSession:
         timing: SessionTiming,
         clock: Clock = utc_now,
         credentials: CredentialSource | None = None,
-        snapshotter: CameraSnapshotter | None = None,
+        snapshotters: Sequence[CameraSnapshotter] = (),
         snapshot_timeout_seconds: float = 20.0,
     ) -> None:
         self.registration = registration
-        self._snapshotter = snapshotter
+        self._snapshotters = tuple(snapshotters)
         self._snapshot_timeout_seconds = snapshot_timeout_seconds
         self._photo_lock = asyncio.Lock()
         self._credentials: CredentialSource = credentials or NoCredentials()
@@ -228,12 +233,24 @@ class MowerSession:
         return len(self._commands)
 
     async def capture_photo(self) -> Photo:
-        """A still image: from the adapter (:class:`~mowdeck_control.PhotoCapture`), else a
-        frame of its live camera through the capture worker (ADR 0035), one at a time.
+        """A still image, one at a time per mower, from the first source that has one:
+
+        1. the adapter itself (:class:`~mowdeck_control.PhotoCapture`, the simulator's garden),
+           unless it raises :class:`~mowdeck_control.PhotoUnavailable`;
+        2. the camera relay (ADR 0045), when configured: a frame of the session it holds or
+           starts for this connection's account and mower (no second vendor session while
+           someone watches), within the Vision limits;
+        3. the deprecated capture worker (ADR 0035), when configured, with a fresh vendor
+           session of the connection.
+
+        A source that cannot serve the mower at all (:class:`SnapshotUnavailable`: not
+        reachable, switched off, no driver for the camera's provider) hands over to the next;
+        any other failure (a limit, an offline mower, no frame in time) is final, so a refusal
+        of the relay is never bypassed through the worker.
 
         Raises :class:`~mowdeck_control.NotConnected` while the link is down,
-        :class:`PhotoUnsupported` when neither is possible (no camera, no worker configured)
-        and :class:`~device_gateway.application.ports.SnapshotFailed` when the worker gave no
+        :class:`PhotoUnsupported` when no source applies (no camera, nothing configured) and
+        :class:`~device_gateway.application.ports.SnapshotFailed` when the sources gave no
         frame.
         """
         controller = self._controller
@@ -241,19 +258,55 @@ class MowerSession:
             raise NotConnected("the mower is not connected")
         connection = controller.connection
         if isinstance(connection, PhotoCapture):
-            return await connection.capture_photo()
-        if self._snapshotter is None:
+            try:
+                return await connection.capture_photo()
+            except PhotoUnavailable as exc:
+                _log.debug("adapter takes no photo", mower_id=str(self.mower_id), reason=str(exc))
+        if not self._snapshotters:
             raise PhotoUnsupported("this connection cannot take photos")
         async with self._photo_lock:
-            camera = await camera_session_of(connection)
-            if camera is None:
-                raise PhotoUnsupported("this connection has no camera")
-            uid = snapshot_camera_uid(camera)
-            photo = await self._snapshotter.snapshot(
-                camera, uid, timeout_seconds=self._snapshot_timeout_seconds
+            return await self._camera_frame(controller)
+
+    async def _camera_frame(self, controller: MowerController) -> Photo:
+        connection = controller.connection
+        capabilities = await controller.capabilities()
+        if capabilities.camera is CameraAccess.NONE:
+            raise PhotoUnsupported("this connection has no camera")
+        vendor: CameraSession | None = None
+        fetched = False
+        handed_over: SnapshotFailed | None = None
+        for snapshotter in self._snapshotters:
+            target = SnapshotTarget(account_id=self.registration.account_id, mower_id=self.mower_id)
+            if snapshotter.needs_camera_session:
+                if not fetched:
+                    vendor = await camera_session_of(connection)
+                    fetched = True
+                if vendor is None:
+                    continue
+                target = replace(target, session=vendor, camera_uid=snapshot_camera_uid(vendor))
+            try:
+                photo = await snapshotter.snapshot(
+                    target, timeout_seconds=self._snapshot_timeout_seconds
+                )
+            except SnapshotUnavailable as exc:
+                _log.info(
+                    "camera frame source unavailable, trying the next",
+                    mower_id=str(self.mower_id),
+                    source=type(snapshotter).__name__,
+                    detail=str(exc),
+                )
+                handed_over = exc
+                continue
+            _log.info(
+                "camera frame captured",
+                mower_id=str(self.mower_id),
+                source=type(snapshotter).__name__,
+                camera_uid=target.camera_uid,
             )
-        _log.info("camera frame captured", mower_id=str(self.mower_id), camera_uid=uid)
-        return photo
+            return photo
+        if handed_over is not None:
+            raise handed_over
+        raise PhotoUnsupported("this connection has no camera")
 
     # --- lifecycle ----------------------------------------------------------------------------
 

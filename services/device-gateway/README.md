@@ -27,7 +27,13 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 
 Principals come from Identity's access tokens: with `MOWDECK_AUTH_JWKS_URL` set (Compose: `http://identity:8000/.well-known/jwks.json`) the `mowdeck-auth` resolver verifies bearer tokens locally; without it every request is answered with 401. `device_gateway.view` is an account-wide key (no relation in the authorization model) checked from the token's `perms`; its descriptor declares it implied by `mower.view`, so Identity puts it into the token of everybody who may view the mowers of the whole account (owner, admin, Operator or Viewer at account level).
 
-Photo requests (ADR 0033): every instance subscribes to `gateway.mower.*.photo` (core NATS, no queue group); only the instance that holds the mower answers a `PhotoRequest` with a `PhotoReply` (base64 image, capped at `max_bytes`, at most 512 KiB) when the adapter implements `PhotoCapture` (the simulator), otherwise, when the capture worker is configured (`MOWDECK_CAPTURE_URL`, [ADR 0035](../../docs/adr/0035-server-side-camera-frames-and-automatic-analysis.md)) and the adapter offers a live camera (`CameraCapable`, the Mammotion cloud connection), with a frame of its camera: the session asks the adapter for a fresh camera session and posts it with the first camera's publisher uid (front left) to the worker (`HttpCameraSnapshotter`, `POST /api/v1/capture`, bearer `MOWDECK_CAPTURE_TOKEN`), one capture per mower at a time. Otherwise the reply is `unsupported`, `not_connected` (no stream token), `too_large` or `failed` (the worker's status in `detail`). A mower of another account answers `not_found`. `MOWDECK_PHOTO_TIMEOUT_SECONDS` (default 30) bounds the whole photo, `MOWDECK_CAPTURE_TIMEOUT_SECONDS` (default 20) the worker's wait for the first frame. While a drive session is open the telemetry heartbeat is `MOWDECK_TELEMETRY_DRIVE_HEARTBEAT_SECONDS` (default 1 s instead of 10 s), so AI assist's liveness watch (no state for 3 s aborts) also works for a mower that does not move.
+Photo requests (ADR 0033): every instance subscribes to `gateway.mower.*.photo` (core NATS, no queue group); only the instance that holds the mower answers a `PhotoRequest` with a `PhotoReply` (base64 image, capped at `max_bytes`, at most 512 KiB), one photo per mower at a time, from the first source that has one (`MowerSession.capture_photo`):
+
+1. the adapter's own photo (`PhotoCapture`, the simulator's garden), unless it raises `PhotoUnavailable` (the simulator's option `photos: false`);
+2. the camera relay ([ADR 0045](../../docs/adr/0045-camera-relay.md) step 8), when `MOWDECK_RELAY_URL` and `MOWDECK_RELAY_FRAMES_TOKEN` are set and the mower has a camera (capability `camera` not `none`): `RelaySnapshotter` posts the mower's account and id **from this connection** (never from the request) with the gateway's service principal to the relay's frame tap (`POST /internal/v1/frames/snapshot`). The relay holds a `vision` lease for that request only: it takes the frame from the session a viewer holds (no second vendor session) or starts one within the Vision limits, and releases it 15 s later;
+3. the capture worker (deprecated, [ADR 0035](../../docs/adr/0035-server-side-camera-frames-and-automatic-analysis.md)), when `MOWDECK_CAPTURE_URL` is set and the adapter offers a live camera (`CameraCapable`, the Mammotion cloud connection): the session asks the adapter for a fresh camera session and posts it with the first camera's publisher uid (front left) to the worker (`HttpCameraSnapshotter`, `POST /api/v1/capture`, bearer `MOWDECK_CAPTURE_TOKEN`).
+
+A source that cannot serve the mower at all (`SnapshotUnavailable`: the relay is not reachable, its frame tap is off, it has no driver for the camera's provider) hands over to the next; any other answer of the relay (a Vision limit `camera-budget`, an offline mower, no frame in time) is final, so a refusal is never bypassed through the worker. Otherwise the reply is `unsupported` (no camera, no source configured), `not_connected` (no stream token), `too_large` or `failed` (the source's status and problem type in `detail`). A mower of another account answers `not_found`. `MOWDECK_PHOTO_TIMEOUT_SECONDS` (default 30) bounds the whole photo, `MOWDECK_CAPTURE_TIMEOUT_SECONDS` (default 20) the worker's wait for the first frame. While a drive session is open the telemetry heartbeat is `MOWDECK_TELEMETRY_DRIVE_HEARTBEAT_SECONDS` (default 1 s instead of 10 s), so AI assist's liveness watch (no state for 3 s aborts) also works for a mower that does not move.
 
 ## Link heartbeat
 
@@ -174,10 +180,12 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_PATH_PROGRESS_SECONDS` | `5` | A mow path snapshot whose only change is the progress is republished at most this often |
 | `MOWDECK_FIRMWARE_CHECK_INITIAL_SECONDS` | `120` | Wait after a connect before the manufacturer is asked for firmware updates (connections with `capabilities.firmware_update`); `0` switches the periodic check off |
 | `MOWDECK_FIRMWARE_CHECK_INTERVAL_SECONDS` | `86400` | Then ask again this often while the connection lasts |
-| `MOWDECK_CAPTURE_URL` | unset | Base URL of the capture worker (`http://vision-capture:8000`, ADR 0035); unset: camera-capable adapters without an own photo answer `unsupported` |
+| `MOWDECK_RELAY_URL` | unset | Base URL of the camera relay (`http://camera-relay:8000`, ADR 0045): photos of camera-capable adapters without an own photo come from its frame tap |
+| `MOWDECK_RELAY_FRAMES_TOKEN` (`_FILE`) | unset | Shared secret of the relay's frame tap; unset: no relay photos (a warning when the URL is set) |
+| `MOWDECK_CAPTURE_URL` | unset | Deprecated: base URL of the capture worker (`http://vision-capture:8000`, ADR 0035), the fallback after the relay; unset (and no relay): camera-capable adapters without an own photo answer `unsupported` |
 | `MOWDECK_CAPTURE_TOKEN` (`_FILE`) | unset | Shared secret sent to the worker |
-| `MOWDECK_CAPTURE_TIMEOUT_SECONDS` | `20` | How long the worker may wait for the first decoded frame |
-| `MOWDECK_CAPTURE_MAX_WIDTH` | `1280` | Wider frames are scaled down by the worker |
+| `MOWDECK_CAPTURE_TIMEOUT_SECONDS` | `20` | How long a frame source (the relay, the worker) may take for one frame |
+| `MOWDECK_CAPTURE_MAX_WIDTH` | `1280` | Wider frames are scaled down (by the relay and the worker) |
 | `MOWDECK_FAKE_MAMMOTION_CLOUD` | `false` | **Development only.** The fake Mammotion cloud for discoveries and cloud mowers (Compose: `GATEWAY_FAKE_MAMMOTION_CLOUD`) |
 | `MOWDECK_AUTH_JWKS_URL` | unset | Identity's JWKS; other `MOWDECK_AUTH_*` settings in `libs/mowdeck-auth/README.md` |
 
@@ -262,7 +270,7 @@ telemetry activity=mowing battery=99% blade=True x=11.239 y=0.2 progress=3%
 uv run pytest services/device-gateway --cov=device_gateway
 ```
 
-The tests use the in-memory bus and simulated mowers (`tests/dg_support.py` has the helpers). The JetStream flow test runs when `MOWDECK_TEST_NATS_URL` is set:
+The tests use the in-memory bus and simulated mowers (`tests/dg_support.py` has the helpers). `test_dg_relay_frames.py` covers the photo order (the adapter's own photo first, then the relay, the capture worker only after a relay that cannot serve, never after a refusal; account and mower from the connection; a mower without a camera is `unsupported`) and `RelaySnapshotter` against a mocked frame tap; `test_dg_capture.py` the capture worker. The JetStream flow test runs when `MOWDECK_TEST_NATS_URL` is set:
 
 ```bash
 docker run -d --name mowdeck-test-nats -p 4222:4222 public.ecr.aws/docker/library/nats:2.15.0-alpine -js

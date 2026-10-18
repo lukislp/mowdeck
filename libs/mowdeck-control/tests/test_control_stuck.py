@@ -28,6 +28,7 @@ from mowdeck_control import (
     MowerController,
     NotConnected,
     PhotoCapture,
+    PhotoUnavailable,
     SimulatedMower,
     SimulationConfig,
     create_simulated_connection,
@@ -173,6 +174,16 @@ async def test_control_capture_photo_renders_the_garden() -> None:
     sim.inject_stuck()
     stuck_photo = await sim.capture_photo()
     assert stuck_photo.data != photo.data, "the stuck marker is drawn"
+
+
+async def test_control_without_own_photos_the_camera_is_left_to_the_relay() -> None:
+    sim = create_simulated_connection(
+        ConnectionConfig(mower_id=uuid4(), account_id=uuid4(), options={"photos": False})
+    )
+    await sim.connect()
+    with pytest.raises(PhotoUnavailable):
+        await sim.capture_photo()
+    assert await sim.get_camera_session() is not None, "the live camera stays"
 
 
 async def test_control_night_photos_are_dark_until_the_light_is_on() -> None:
