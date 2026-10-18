@@ -34,8 +34,11 @@ export interface PlayerEvents {
   onWaiting(): void;
   /** The token is about to expire: renew it. */
   onTokenExpiring(): void;
-  /** The stream ended for good (expired token, decryption error, connection lost). */
-  onFailed(kind: 'expired' | 'failed'): void;
+  /**
+   * The stream ended for good (expired token, decryption error, connection lost, or no camera
+   * delivered a picture for a long time: `unavailable`).
+   */
+  onFailed(kind: 'expired' | 'failed' | 'unavailable'): void;
   /**
    * The connection dropped (`disconnected`) or stayed `RECONNECTING` too long (`stuck`): the
    * viewer may join again with a fresh session. Without a handler the stream fails.
@@ -47,6 +50,11 @@ export interface PlayerEvents {
   onActive?(uid: number | null): void;
   /** The uids whose picture is attached to a tile right now, tile order. */
   onTracks?(uids: number[]): void;
+  /**
+   * The uids whose tiles wait for their camera's source to publish (the relay's camera starts,
+   * or restarts after a stall), tile order; empty when none waits.
+   */
+  onStarting?(uids: number[]): void;
   /** The player renewed its session itself (the relay lease's heartbeat, a fresh ticket). */
   onRenewed?(session: CameraSession): void;
 }

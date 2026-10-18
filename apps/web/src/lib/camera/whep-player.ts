@@ -9,16 +9,28 @@
  *   lease's ticket as bearer token (`Content-Type: application/sdp`) and applies the answer. The
  *   `Location` of the answer names the WHEP session; it is deleted when the tile closes.
  *   MediaMTX answers it relative to its own root (`/r/<id>/<camera>/whep/<secret>`) while the
- *   gateway serves it below `/media/whep`: {@link resolveLocation} puts the prefix back. A
- *   source that is still starting answers 404 (nothing published on its path yet): the same
- *   offer goes out again every {@link WHEP_RETRY_MS} for up to 20 s.
+ *   gateway serves it below `/media/whep`: {@link resolveLocation} puts the prefix back.
+ * * Starting and recovering (live incident 2026-10-18): a source that is still starting answers
+ *   404 (nothing published on its path yet; the tile reports it as starting), the media plane
+ *   that is away for a moment answers 5xx or not at all. The tile offers again with a backoff
+ *   ({@link whepRetryDelayMs}: 0.5 s growing to 3 s) for as long as the lease lives, and gives
+ *   up only after {@link TILE_GIVE_UP_MS} without a picture. Getting from a new lease to a
+ *   playable H.264 path takes 6 to 8 s on a LUBA (Agora join, publisher, key frame,
+ *   transcoder) and up to about 35 s after a 4G stall; every accepted offer keeps the relay's
+ *   unconfirmed lease alive, so the lease never lapses while the tile is still trying.
  * * Live: a tile is live at its first presented frame (`requestVideoFrameCallback` through the
  *   freeze watch's frame counter, `freeze.ts`); the viewer's freeze detection and the drive
  *   view's hold read the same counter afterwards. The relay never invents frames, so a frozen
  *   source is a frozen picture here.
- * * Lost: ICE `failed`, or `disconnected` for longer than {@link DISCONNECTED_LIMIT_MS}, is
- *   reported as a lost connection; the viewer joins again with a fresh session (new lease, its
- *   backoff). A WHEP POST that is refused fails the start the same way.
+ * * Lost tile: ICE `failed`, `disconnected` for longer than {@link DISCONNECTED_LIMIT_MS}, or a
+ *   connection the media server closed (its muxer restarted after a stall, MediaMTX restarted)
+ *   reconnects that tile alone with a new WHEP session on the same lease (same backoff). Only a
+ *   lease that is gone (heartbeat 404) or an offer the relay refuses (401/403, or another 4xx
+ *   such as a browser without H.264) is a lost connection: the viewer joins again with a fresh
+ *   session (new lease, its backoff). Without automatic rejoin any loss fails the stream.
+ * * Gave up: a tile without a picture for {@link TILE_GIVE_UP_MS} stops trying (its tile says
+ *   it delivers nothing); when no tile plays and every tile gave up the stream fails as
+ *   `unavailable` ("camera not reachable", with a retry).
  * * Lease: a heartbeat every `heartbeat_seconds` (Fleet's renew endpoint) keeps the lease and
  *   brings a fresh ticket; a lease that is gone (404) is a lost connection. `stop()` deletes the
  *   WHEP sessions and detaches the lease (Fleet's DELETE, `keepalive` so it survives a page
@@ -54,13 +66,23 @@ import { CameraError, type CameraSession } from './session';
 export const GATHER_TIMEOUT_MS = 1_500;
 /** ICE `disconnected` for longer than this is a lost connection. */
 export const DISCONNECTED_LIMIT_MS = 5_000;
-/**
- * A WHEP offer answered 404 (the source is starting and has not published yet) is sent again
- * after {@link WHEP_RETRY_MS}, at most this many times (20 s, well inside the relay's 30 s for
- * a lease without media).
- */
-export const WHEP_START_ATTEMPTS = 40;
+/** First delay before a WHEP offer goes out again (404 starting, 5xx or no answer). */
 export const WHEP_RETRY_MS = 500;
+/** The retry delay grows by this factor per attempt ... */
+export const WHEP_RETRY_FACTOR = 1.5;
+/** ... up to this delay. */
+export const WHEP_RETRY_MAX_MS = 3_000;
+/**
+ * A tile that has shown no picture for this long while it keeps trying gives up (a camera that
+ * does not come back; a starting LUBA camera takes 6 to 8 s, after a 4G stall up to about 35 s).
+ */
+export const TILE_GIVE_UP_MS = 90_000;
+
+/** Delay before retry number `retry` (0-based) of a tile's offer. */
+export function whepRetryDelayMs(retry: number): number {
+  const delay = WHEP_RETRY_MS * WHEP_RETRY_FACTOR ** Math.max(0, retry);
+  return Math.round(Math.min(WHEP_RETRY_MAX_MS, delay));
+}
 /** How often a tile is checked for its first presented frame. */
 export const FIRST_FRAME_POLL_MS = 100;
 /** Heartbeat interval when the session names none. */
@@ -146,6 +168,17 @@ interface Tile {
   /** The WHEP session to delete (secret, never shown). */
   location: string | null;
   live: boolean;
+  /** The last offer was answered 404: the camera's source has nothing published yet. */
+  starting: boolean;
+  /** Since when the tile tries without a picture (null: playing, or not trying). */
+  since: number | null;
+  /** Offers retried since the tile last played (the backoff). */
+  retries: number;
+  retryTimer: unknown;
+  /** No picture for {@link TILE_GIVE_UP_MS}: the tile stopped trying. */
+  gaveUp: boolean;
+  /** The element's frame count when the tile lost its connection (live again only above). */
+  framesAtLoss: number;
   firstFrameTimer: unknown;
   lostTimer: unknown;
   state: string;
@@ -163,6 +196,12 @@ const emptyTile = (wanted: number | null): Tile => ({
   pc: null,
   location: null,
   live: false,
+  starting: false,
+  since: null,
+  retries: 0,
+  retryTimer: null,
+  gaveUp: false,
+  framesAtLoss: 0,
   firstFrameTimer: null,
   lostTimer: null,
   state: 'new',
@@ -194,6 +233,7 @@ export class WhepPlayer implements CameraPlayer {
   private lastActive: number | null | undefined = undefined;
   private lostReported = false;
   private lastPublishers: string | null = null;
+  private lastStarting = '';
   private readonly fetcher: typeof fetch;
   private readonly createPeer: () => PeerConnection;
   private readonly origin: () => string;
@@ -235,6 +275,7 @@ export class WhepPlayer implements CameraPlayer {
     this.log = new EventLog(this.now);
     this.stopped = false;
     this.lastPublishers = null;
+    this.lastStarting = '';
     this.tiles = slotsOf(choice).map((wanted) => this.bind(emptyTile(wanted)));
     this.scheduleHeartbeat();
     this.announce();
@@ -273,7 +314,9 @@ export class WhepPlayer implements CameraPlayer {
     await Promise.all(dropped.map((tile) => this.closeTile(tile)));
     this.announce();
     await Promise.all(
-      next.map((tile, slot) => (tile.pc || this.stopped ? undefined : this.connect(tile, slot))),
+      next.map((tile, slot) =>
+        tile.pc || tile.retryTimer !== null || this.stopped ? undefined : this.connect(tile, slot),
+      ),
     );
   }
 
@@ -386,10 +429,16 @@ export class WhepPlayer implements CameraPlayer {
     return tile;
   }
 
-  /** Open the WHEP session of one tile; a refused or failed offer is a lost connection. */
+  /**
+   * Open the WHEP session of one tile. Resolves after the first answer; a source that is still
+   * starting (404) or a media plane that is away (5xx, no answer) gets the same offer again
+   * later, a refused offer is a lost connection.
+   */
   private async connect(tile: Tile, slot: number): Promise<void> {
     const url = tile.url;
-    if (!url) return; // a camera the relay does not serve: the tile says so after a while
+    if (!url || this.stopped) return; // a camera the relay does not serve: the tile says so
+    tile.since ??= this.now();
+    tile.gaveUp = false;
     const pc = this.createPeer();
     tile.pc = pc;
     tile.state = 'connecting';
@@ -399,47 +448,159 @@ export class WhepPlayer implements CameraPlayer {
       const track = (event as RTCTrackEvent).track;
       void this.show(tile, slot, track);
     });
-    const onState = (): void => this.watchConnection(tile, pc);
+    const onState = (): void => this.watchConnection(tile, slot, pc);
     pc.addEventListener('iceconnectionstatechange', onState);
     pc.addEventListener('connectionstatechange', onState);
+    let sdp: string;
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await this.gathered(pc);
-      if (tile.pc !== pc) return;
-      const sdp = pc.localDescription?.sdp ?? offer.sdp ?? '';
-      let response: Response;
-      // A source that is still starting has no stream on its path yet (404): offer again.
-      for (let attempt = 0; ; attempt += 1) {
-        response = await this.fetcher(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/sdp', Authorization: `Bearer ${this.ticket}` },
-          body: sdp,
-        });
-        this.log.add('state', `tile ${slot} whep ${response.status}`);
-        if (response.status !== 404 || attempt + 1 >= WHEP_START_ATTEMPTS) break;
-        await this.delay(WHEP_RETRY_MS);
-        if (tile.pc !== pc || this.stopped) return;
-      }
-      if (response.status !== 201) throw new Error(`WHEP answered ${response.status}`);
-      const location = response.headers.get('Location');
-      if (location) tile.location = resolveLocation(location, url, this.origin());
-      const answer = await response.text();
-      if (tile.pc !== pc) {
-        await this.deleteSession(tile.location);
-        return;
-      }
-      await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      sdp = pc.localDescription?.sdp ?? offer.sdp ?? '';
     } catch {
       if (tile.pc !== pc || this.stopped) return;
-      tile.state = 'failed';
-      this.log.add('state', `tile ${slot} offer failed`);
-      this.lost();
+      this.tileLost(tile, slot, 'offer failed');
+      return;
     }
+    if (tile.pc !== pc) return;
+    await this.offer(tile, slot, pc, url, sdp);
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => this.setTimer(resolve, ms));
+  /** POST the tile's offer once; schedules the next one when the answer says "later". */
+  private async offer(
+    tile: Tile,
+    slot: number,
+    pc: PeerConnection,
+    url: string,
+    sdp: string,
+  ): Promise<void> {
+    let response: Response | null;
+    try {
+      response = await this.fetcher(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp', Authorization: `Bearer ${this.ticket}` },
+        body: sdp,
+      });
+    } catch {
+      response = null; // offline for a moment, or the gateway is restarting
+    }
+    if (tile.pc !== pc || this.stopped) return;
+    const status = response?.status ?? 0;
+    this.log.add('state', `tile ${slot} whep ${status}`);
+    if (response && status === 201) {
+      const location = response.headers.get('Location');
+      const resolved = location ? resolveLocation(location, url, this.origin()) : null;
+      let answer: string;
+      try {
+        answer = await response.text();
+      } catch {
+        await this.deleteSession(resolved);
+        if (tile.pc === pc && !this.stopped) this.retryOffer(tile, slot, pc, url, sdp);
+        return;
+      }
+      if (tile.pc !== pc || this.stopped) {
+        await this.deleteSession(resolved);
+        return;
+      }
+      tile.location = resolved;
+      this.setStarting(tile, false);
+      try {
+        await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+      } catch {
+        if (tile.pc === pc && !this.stopped) this.tileLost(tile, slot, 'answer refused');
+      }
+      return;
+    }
+    if (status >= 400 && status < 500 && status !== 404 && status !== 408 && status !== 429) {
+      // Refused: the ticket or its lease (401/403), or the offer itself. A new session.
+      tile.state = 'failed';
+      this.log.add('state', `tile ${slot} offer refused`);
+      this.lost();
+      return;
+    }
+    // 404: nothing published yet (the source starts, or its muxer restarts after a stall);
+    // 5xx, 408, 429 or no answer: the media plane is away for a moment. Offer again later.
+    this.setStarting(tile, status === 404 && !this.knownSilent(tile));
+    this.retryOffer(tile, slot, pc, url, sdp);
+  }
+
+  private retryOffer(tile: Tile, slot: number, pc: PeerConnection, url: string, sdp: string): void {
+    this.retryLater(tile, slot, () => {
+      if (tile.pc === pc) void this.offer(tile, slot, pc, url, sdp);
+    });
+  }
+
+  /** Run `again` after the tile's next backoff delay, or give up after {@link TILE_GIVE_UP_MS}. */
+  private retryLater(tile: Tile, slot: number, again: () => void): void {
+    if (tile.retryTimer !== null) this.clearTimer(tile.retryTimer);
+    tile.retryTimer = null;
+    if (tile.since !== null && this.now() - tile.since >= TILE_GIVE_UP_MS) {
+      void this.giveUp(tile, slot);
+      return;
+    }
+    const delay = whepRetryDelayMs(tile.retries);
+    tile.retries += 1;
+    tile.retryTimer = this.setTimer(() => {
+      tile.retryTimer = null;
+      if (this.stopped || !this.tiles.includes(tile)) return;
+      again();
+    }, delay);
+  }
+
+  /** The relay reports the tile's camera as one that never publishes. */
+  private knownSilent(tile: Tile): boolean {
+    const endpoint = this.session?.relay?.tiles.find((e) => e.camera_id === tile.cameraId);
+    return endpoint?.available === false;
+  }
+
+  private setStarting(tile: Tile, starting: boolean): void {
+    if (tile.starting === starting) return;
+    tile.starting = starting;
+    this.announce();
+  }
+
+  /**
+   * A tile lost its connection (or could not build an offer): reconnect it alone on the same
+   * lease after its backoff. Without automatic rejoin the stream fails instead.
+   */
+  private tileLost(tile: Tile, slot: number, reason: string): void {
+    if (this.stopped || !this.tiles.includes(tile)) return;
+    this.log.add('state', `tile ${slot} ${reason}`);
+    if (!this.options.autoRejoin) {
+      tile.state = 'failed';
+      this.lost();
+      return;
+    }
+    const wasLive = tile.live;
+    const element = this.video(slot);
+    tile.framesAtLoss = (element ? this.frames(element) : null) ?? 0;
+    void this.closeTile(tile);
+    tile.state = 'reconnecting';
+    if (wasLive || tile.since === null) {
+      tile.since = this.now();
+      tile.retries = 0;
+    }
+    this.announce();
+    this.retryLater(tile, slot, () => {
+      if (tile.pc === null) void this.connect(tile, slot);
+    });
+  }
+
+  /** No picture for {@link TILE_GIVE_UP_MS}: stop trying; no tile left: the camera is unreachable. */
+  private async giveUp(tile: Tile, slot: number): Promise<void> {
+    this.log.add('state', `tile ${slot} gave up`);
+    await this.closeTile(tile);
+    tile.gaveUp = true;
+    tile.starting = false;
+    tile.since = null;
+    tile.state = 'failed';
+    this.announce();
+    if (this.stopped) return;
+    const trying = this.tiles.some((t) => t.live || (t.url !== null && !t.gaveUp));
+    if (!trying && !this.lostReported) {
+      this.lostReported = true;
+      this.events.onFailed('unavailable');
+    }
   }
 
   /** ICE gathering complete, or the timeout (the candidates so far go out). */
@@ -479,8 +640,13 @@ export class WhepPlayer implements CameraPlayer {
       tile.firstFrameTimer = null;
       if (this.stopped || !this.tiles.includes(tile) || tile.live) return;
       const frames = this.frames(element);
-      if (frames !== null && frames > 0) {
+      // A reconnected tile is live at the first frame of its new connection, not at the count
+      // its element kept from the old one.
+      if (frames !== null && frames > tile.framesAtLoss) {
         tile.live = true;
+        tile.starting = false;
+        tile.since = null;
+        tile.retries = 0;
         this.lostReported = false;
         this.announce();
         return;
@@ -490,22 +656,33 @@ export class WhepPlayer implements CameraPlayer {
     check();
   }
 
-  /** ICE `failed` at once, `disconnected` after {@link DISCONNECTED_LIMIT_MS}: connection lost. */
-  private watchConnection(tile: Tile, pc: PeerConnection): void {
+  /**
+   * ICE `failed` or a connection the other side closed at once, `disconnected` after
+   * {@link DISCONNECTED_LIMIT_MS}: the tile reconnects (a connection the player closed itself
+   * is no longer the tile's and never counts).
+   */
+  private watchConnection(tile: Tile, slot: number, pc: PeerConnection): void {
     if (tile.pc !== pc || this.stopped) return;
     const ice = pc.iceConnectionState;
-    const state = pc.connectionState === 'failed' || ice === 'failed' ? 'failed' : ice;
+    const state =
+      pc.connectionState === 'failed' || ice === 'failed'
+        ? 'failed'
+        : pc.connectionState === 'closed' || ice === 'closed'
+          ? 'closed'
+          : ice;
     if (state === tile.state) return;
     this.log.add('state', `${tile.state} > ${state}`);
     tile.state = state;
     if (tile.lostTimer !== null) this.clearTimer(tile.lostTimer);
     tile.lostTimer = null;
-    if (state === 'failed') {
-      this.lost();
+    if (state === 'failed' || state === 'closed') {
+      this.tileLost(tile, slot, `connection ${state}`);
     } else if (state === 'disconnected') {
       tile.lostTimer = this.setTimer(() => {
         tile.lostTimer = null;
-        if (tile.pc === pc && tile.state === 'disconnected') this.lost();
+        if (tile.pc === pc && tile.state === 'disconnected') {
+          this.tileLost(tile, slot, 'connection disconnected');
+        }
       }, DISCONNECTED_LIMIT_MS);
     }
   }
@@ -524,8 +701,10 @@ export class WhepPlayer implements CameraPlayer {
   private async closeTile(tile: Tile): Promise<void> {
     if (tile.firstFrameTimer !== null) this.clearTimer(tile.firstFrameTimer);
     if (tile.lostTimer !== null) this.clearTimer(tile.lostTimer);
+    if (tile.retryTimer !== null) this.clearTimer(tile.retryTimer);
     tile.firstFrameTimer = null;
     tile.lostTimer = null;
+    tile.retryTimer = null;
     const pc = tile.pc;
     const location = tile.location;
     tile.pc = null;
@@ -556,6 +735,14 @@ export class WhepPlayer implements CameraPlayer {
   /** Tell the viewer the first tile's camera, the live cameras and live or not (on changes). */
   private announce(): void {
     this.announcePublishers();
+    const starting = this.tiles
+      .filter((tile) => tile.starting && !tile.live && tile.uid !== null)
+      .map((tile) => tile.uid as number);
+    const startingKey = starting.join(',');
+    if (startingKey !== this.lastStarting) {
+      this.lastStarting = startingKey;
+      this.events.onStarting?.(starting);
+    }
     const first = this.tiles[0]?.uid ?? null;
     if (first !== this.lastActive) {
       this.lastActive = first;

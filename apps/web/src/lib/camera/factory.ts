@@ -30,6 +30,11 @@ export interface PlayerTargets {
 export class CameraPlayerFactory {
   constructor(private readonly targets: PlayerTargets) {}
 
+  /** End a relay lease no player plays (a session that arrived too late); best effort. */
+  async detachLease(leaseId: string): Promise<void> {
+    await this.targets.lease?.detach(leaseId).catch(() => undefined);
+  }
+
   async create(session: CameraSession, events: PlayerEvents): Promise<CameraPlayer> {
     if (session.provider === 'fake') {
       if (!this.targets.canvas(0))
