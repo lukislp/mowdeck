@@ -48,4 +48,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0042](0042-drive-calibration.md) | Drive calibration | Accepted |
 | [0043](0043-turn-styles.md) | Turn styles | Accepted |
 | [0044](0044-drive-view-with-camera.md) | Drive view with camera | Accepted |
-| [0045](0045-camera-relay.md) | Camera relay | Proposed |
+| [0045](0045-camera-relay.md) | Camera relay | Accepted |

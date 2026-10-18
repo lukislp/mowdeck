@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-11). Amends [ADR 0033](0033-vision-assisted-recovery-with-approval.md) (images of a real mower, the trigger of an analysis) and [ADR 0032](0032-live-camera-over-agora.md) (a second Agora viewer besides the browser). Amended by [ADR 0045](0045-camera-relay.md) (proposed, 2026-10-17): in a later phase Vision takes frames from the camera relay (a `vision` lease with its limits) and the capture worker is retired.
+Accepted (2026-10-11). Amends [ADR 0033](0033-vision-assisted-recovery-with-approval.md) (images of a real mower, the trigger of an analysis) and [ADR 0032](0032-live-camera-over-agora.md) (a second Agora viewer besides the browser). Amended by [ADR 0045](0045-camera-relay.md) (accepted 2026-10-18): Vision takes its frames from the camera relay's frame tap (a `vision` lease with its limits; the Device-Gateway's `RelaySnapshotter`). The capture worker below is **deprecated**: it stays one release as the gateway's fallback for mowers the relay cannot serve (relay not configured or not reachable, no source driver for the camera) and is then removed.
 
 ## Context
 
