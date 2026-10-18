@@ -14,9 +14,11 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
 import {
+  PLATFORM_ADMIN_ENABLED,
   RUN,
   actor,
   commandByApi,
+  fleetAuditCount,
   loginByUi,
   registerByApi,
   waitForMap,
@@ -155,4 +157,97 @@ test('vision: fake provider set up, a stuck mower recovered by an approved AI ma
   await sheet.getByTestId('assist-done').click();
   await expect(sheet).toBeHidden();
   csp.assertNone();
+});
+
+/** Width and height of a baseline or progressive JPEG (its SOF segment). */
+function jpegSize(data: Buffer): { width: number; height: number } | null {
+  let at = 2;
+  while (at + 9 < data.length) {
+    if (data[at] !== 0xff) return null;
+    const marker = data[at + 1]!;
+    const length = data.readUInt16BE(at + 2);
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return { height: data.readUInt16BE(at + 5), width: data.readUInt16BE(at + 7) };
+    }
+    at += 2 + length;
+  }
+  return null;
+}
+
+/** AI assist asks the mower's gateway for a photo; returns the size of the image the model saw. */
+async function assistPhotoSize(
+  request: APIRequestContext,
+  owner: Actor,
+  mowerId: string,
+): Promise<{ width: number; height: number } | null> {
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  const started = await request.post(`/api/v1/vision/mowers/${mowerId}/recover`, {
+    headers: auth,
+    data: { task: 'recover' },
+  });
+  expect(started.status(), await started.text()).toBe(202);
+  const proposal = (await started.json()) as {
+    id: string;
+    image_count: number;
+    frames: { source: string }[];
+  };
+  expect(proposal.image_count).toBe(1);
+  expect(proposal.frames.map((f) => f.source)).toEqual(['mower']);
+  const image = await request.get(`/api/v1/vision/proposals/${proposal.id}/images/0`, {
+    headers: auth,
+  });
+  expect(image.status()).toBe(200);
+  expect(image.headers()['content-type']).toContain('image/jpeg');
+  return jpegSize(await image.body());
+}
+
+/**
+ * Vision through the camera relay (ADR 0045): a simulated mower with `photos: false` takes no
+ * stills of its own (like the Mammotion cloud connection), so the Device-Gateway asks the relay's
+ * frame tap (the test stack sets GATEWAY_RELAY_URL and RELAY_FRAMES_TOKEN, tests/e2e-web/stack.env).
+ * The photo the model sees is the relay's 640x480 frame of the simulator's `fake` camera, the
+ * relay's lifecycle events reach Fleet's audit as a stream started (and, after the 15 s grace,
+ * stopped) for a mower nobody watched. A normal simulated mower keeps its own 480x360 still and
+ * never starts the relay.
+ */
+test('vision: a mower without own photos gets its AI assist still from the camera relay', async ({
+  request,
+}) => {
+  test.skip(!PLATFORM_ADMIN_ENABLED, 'reads the audit in the stack (docker exec)');
+  test.setTimeout(180_000);
+  const owner = await registerByApi(request, actor('vision-relay'));
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  const saved = await request.put('/api/v1/vision/me/provider', {
+    headers: auth,
+    data: { model: 'fake/recover' },
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+
+  const create = async (name: string, options: Record<string, unknown>): Promise<string> => {
+    const response = await request.post('/api/v1/fleet/mowers', {
+      headers: auth,
+      data: { name, connection_kind: 'simulated', connection_options: options },
+    });
+    expect(response.status(), await response.text()).toBe(201);
+    const id = ((await response.json()) as { id: string }).id;
+    await waitForMap(request, owner, id);
+    return id;
+  };
+
+  // The simulator's own still: unchanged, and the relay is never asked.
+  const own = await create(`Luba own photo ${RUN}`, {});
+  expect(await assistPhotoSize(request, owner, own)).toEqual({ width: 480, height: 360 });
+  expect(fleetAuditCount(own, 'mower.camera_stream_started')).toBe(0);
+
+  // Without own photos: the frame of the relay.
+  const relayed = await create(`Luba relay photo ${RUN}`, { photos: false });
+  expect(fleetAuditCount(relayed, 'mower.camera_stream_started')).toBe(0);
+  expect(await assistPhotoSize(request, owner, relayed)).toEqual({ width: 640, height: 480 });
+  await expect
+    .poll(() => fleetAuditCount(relayed, 'mower.camera_stream_started'), { timeout: 20_000 })
+    .toBe(1);
+  // The vision-only session ends after the grace (15 s) and is released.
+  await expect
+    .poll(() => fleetAuditCount(relayed, 'mower.camera_stream_stopped'), { timeout: 45_000 })
+    .toBe(1);
 });

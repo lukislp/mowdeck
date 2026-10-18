@@ -398,9 +398,16 @@ services:
       MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS: ${GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS:-75}
       # Development only: the fake Mammotion cloud for linked accounts and cloud mowers.
       MOWDECK_FAKE_MAMMOTION_CLOUD: ${GATEWAY_FAKE_MAMMOTION_CLOUD:-false}
-      # Photos of real cameras (ADR 0035): the capture worker of the `capture` profile
-      # (http://vision-capture:8000). Empty: mowers without an own photo function answer
-      # photo requests with "unsupported" (AI assist then needs the camera panel's frame).
+      # Photos of real cameras (ADR 0045): the camera relay's frame tap (profile `relay`,
+      # GATEWAY_RELAY_URL=http://camera-relay:8000 and the shared RELAY_FRAMES_TOKEN). It
+      # reuses the session a viewer holds or starts one within the Vision limits.
+      MOWDECK_RELAY_URL: ${GATEWAY_RELAY_URL:-}
+      MOWDECK_RELAY_FRAMES_TOKEN: ${RELAY_FRAMES_TOKEN:-}
+      # Deprecated (ADR 0045, kept for one release): the capture worker of the `capture`
+      # profile (http://vision-capture:8000), tried only when the relay is not configured, not
+      # reachable or has no driver for the camera. Both empty: mowers without an own photo
+      # function answer photo requests with "unsupported" (AI assist then needs the camera
+      # panel's frame).
       MOWDECK_CAPTURE_URL: ${GATEWAY_CAPTURE_URL:-}
       MOWDECK_CAPTURE_TOKEN: ${CAPTURE_TOKEN:-}
       MOWDECK_CAPTURE_TIMEOUT_SECONDS: ${CAPTURE_TIMEOUT_SECONDS:-20}
@@ -883,6 +890,8 @@ services:
         condition: service_completed_successfully
     networks: [mowdeck]
 
+  # DEPRECATED (ADR 0045): Vision takes its frames from the camera relay's frame tap; this
+  # worker stays for one release as the fallback for mowers the relay cannot serve.
   # Still frames of live cameras without an open browser (ADR 0035): headless Chromium with the
   # Agora Web SDK, only with `--profile capture` (COMPOSE_PROFILES=capture) and
   # GATEWAY_CAPTURE_URL=http://vision-capture:8000. The Vision image built with
@@ -952,6 +961,9 @@ services:
       # The optional agora-bridge (profile agora) on this container's loopback; while nothing
       # listens there, agora mowers are unsupported_provider (direct path).
       MOWDECK_RELAY_AGORA_BRIDGE_URL: tcp://127.0.0.1:7700
+      # Vision's frames (POST /internal/v1/frames/snapshot, internal only): the shared secret
+      # of the Device-Gateway (GATEWAY_RELAY_URL). Empty: the frame tap is off.
+      MOWDECK_RELAY_FRAMES_TOKEN: ${RELAY_FRAMES_TOKEN:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
       interval: 5s
