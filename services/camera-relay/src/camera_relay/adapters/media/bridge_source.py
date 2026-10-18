@@ -26,10 +26,21 @@ Per source session (:class:`BridgeSourceDriver`):
   never before; a read before that would only get 404. A source not ready within
   ``ready_timeout`` (20 s: several GOPs) is logged as late and still awaited. A transcoder
   that exits is started again (once ``.../src`` is ready) with a backoff of 1 s doubling to
-  30 s while the camera is wanted. A camera's pipeline never fails the session by itself:
-  the domain's start timeout (30 s without any ready camera) and the viewers' media
-  confirmation bound it. Only a muxer that keeps crashing fails the source, and only when no
-  other camera delivers.
+  30 s while the camera is wanted; when its source went away meanwhile (the muxer stopped or
+  started anew) it is attached again at the shortest delay. A camera's pipeline never fails the
+  session by itself: the domain's start timeout (30 s without any ready camera) and the viewers'
+  media confirmation bound it.
+* **Recovery** (live incident 2026-10-18: a LUBA mowing over 4G). A muxer that exits (e.g.
+  ``Broken pipe`` after the media server dropped a stalled publisher) is started again at the
+  next key frame while the camera is leased, however often: the first restart at once, then
+  with a backoff of 1 s doubling to 30 s (back to the start after a muxer ran 30 s). A source
+  that sends nothing for ``stall_timeout`` (20 s, below MediaMTX's ``readTimeout`` of 30 s) gets
+  its muxer stopped cleanly, so no process waits on a dead publish; the next key frame starts a
+  new one. ``publisher`` ``unpublished`` stops that camera's muxer, ``published`` again clears
+  its backoff, and its next key frame starts a new muxer; the transcoder attaches again once
+  ``.../src`` is ready. Only a muxer that cannot be spawned at all (no ffmpeg) fails the camera,
+  and the source only when no other camera delivers (has sent frames within the stall
+  timeout).
 * **Renewal.** Vendor sessions last about an hour. ``renew_lead`` (300 s) before
   ``expires_at`` the driver asks the gateway for a fresh session: same channel, ``renew`` on the
   running connection; ``renew_failed``, no answer, another channel, or the bridge's
@@ -46,7 +57,6 @@ Per source session (:class:`BridgeSourceDriver`):
 import asyncio
 import contextlib
 import time
-from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -104,6 +114,17 @@ TRANSCODER_RETRY_SECONDS = (1.0, 30.0)
 """Backoff of a transcoder that exited: from the first to the last value, doubling."""
 TRANSCODER_STABLE_SECONDS = 30.0
 """A transcoder that ran this long starts its next retry at the shortest delay again."""
+MUXER_RETRY_SECONDS = (1.0, 30.0)
+"""Backoff of a muxer that exited, after the first restart (at the next key frame, at once):
+from the first to the last value, doubling."""
+MUXER_STABLE_SECONDS = 30.0
+"""A muxer that ran this long restarts at the next key frame at once again."""
+STALL_TIMEOUT_SECONDS = 20.0
+"""A camera without a frame this long gets its muxer stopped (restarted at the next key frame).
+Below MediaMTX's ``readTimeout`` (30 s): the relay ends a stalled publish before the media
+server drops it, and no muxer waits on a publish that is gone."""
+STALL_POLL_SECONDS = 1.0
+"""How often a camera's stall watch looks at its last frame."""
 
 SourceReady = Callable[[str], Awaitable[bool]]
 """Whether a media server path is ready (has a publisher); raises on an API failure."""
@@ -294,8 +315,10 @@ class CameraFeed:
         retry_delays: tuple[float, float] = TRANSCODER_RETRY_SECONDS,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        max_restarts: int = 3,
-        restart_window: float = 60.0,
+        muxer_retry: tuple[float, float] = MUXER_RETRY_SECONDS,
+        stall_timeout: float | None = STALL_TIMEOUT_SECONDS,
+        stall_poll: float = STALL_POLL_SECONDS,
+        watch_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.camera_id = camera_id
         self.relay_id = relay_id
@@ -311,8 +334,10 @@ class CameraFeed:
         self._retry_delays = retry_delays
         self._monotonic = monotonic
         self._sleep = sleep
-        self._max_restarts = max_restarts
-        self._restart_window = restart_window
+        self._muxer_retry = muxer_retry
+        self._stall_timeout = stall_timeout
+        self._stall_poll = stall_poll
+        self._watch_sleep = watch_sleep
         self.link: BridgeLink | None = None
         """The connection whose frames this camera takes."""
         self.process: StdinProcess | None = None
@@ -320,7 +345,18 @@ class CameraFeed:
         self.transcoder: Transcoder | None = None
         self._transcoder_task: asyncio.Task[None] | None = None
         self._watch: asyncio.Task[None] | None = None
-        self._restarts: deque[float] = deque()
+        self._stall_task: asyncio.Task[None] | None = None
+        self._muxer_exits = 0
+        """Muxer exits in a row (its own, not a stop of the relay); sets the backoff."""
+        self._restart_at = 0.0
+        """No muxer starts before this (``monotonic``); a key frame before is dropped."""
+        self._muxer_began = 0.0
+        self._exit_accounted = False
+        self._last_frame_at: float | None = None
+        self.muxer_generation = 0
+        """Counts muxer starts: a transcoder knows whether its source is still the same."""
+        self.stalls = 0
+        self.publisher_present = True
         self._awaiting_key = True
         self._pts: int | None = None
         self._last_recv: int | None = None
@@ -338,13 +374,19 @@ class CameraFeed:
 
     @property
     def delivering(self) -> bool:
-        """This camera's muxer runs and has written frames."""
+        """This camera's muxer runs and has written frames lately (within the stall timeout: a
+        muxer that waits on a silent camera does not count)."""
+        recent = self._stall_timeout or STALL_TIMEOUT_SECONDS
         return (
             not self.failed
             and self.frames_written > 0
-            and self.process is not None
-            and self.process.returncode is None
+            and self._muxer_alive()
+            and self._last_frame_at is not None
+            and self._monotonic() - self._last_frame_at <= recent
         )
+
+    def _muxer_alive(self) -> bool:
+        return self.process is not None and self.process.returncode is None
 
     async def push(self, frame: BridgeFrame, link: BridgeLink) -> None:
         """Write one frame from ``link`` (from a key frame on). Serialized per camera: during a
@@ -355,7 +397,8 @@ class CameraFeed:
     async def _push(self, frame: BridgeFrame, link: BridgeLink) -> None:
         if self.stopping or self.failed or frame.codec not in (CODEC_H264, CODEC_H265):
             return
-        alive = self.process is not None and self.process.returncode is None
+        self._last_frame_at = self._monotonic()
+        alive = self._muxer_alive()
         if alive and self.writer is not None and frame.codec != self.writer.codec:
             if not frame.keyframe:
                 self.frames_dropped += 1
@@ -364,6 +407,11 @@ class CameraFeed:
             alive = False
         if not frame.keyframe and (not alive or self._awaiting_key):
             self.frames_dropped += 1
+            return
+        if not alive and self.process is not None:
+            self._account_exit()  # it exited by itself; its supervisor may not have run yet
+        if not alive and self._monotonic() < self._restart_at:
+            self.frames_dropped += 1  # the muxer's backoff: a later key frame starts it
             return
         if alive and not self._writable():
             self.frames_dropped += 1
@@ -411,11 +459,6 @@ class CameraFeed:
         return pts
 
     async def _start_muxer(self, codec: int, pts: int) -> bool:
-        if self.starts and not self._may_restart():
-            self.failed = True
-            _log.error("muxer failed for good", camera=self.camera_id, error=self.last_error)
-            self._on_failure()
-            return False
         args = muxer_args(
             ffmpeg=self._ffmpeg,
             output_url=self._server.url(source_path(self.relay_id, self.camera_id)),
@@ -428,6 +471,9 @@ class CameraFeed:
             self._on_failure()
             return False
         self.starts += 1
+        self.muxer_generation += 1
+        self._muxer_began = self._monotonic()
+        self._exit_accounted = False
         self.process = process
         self.writer = TsWriter(codec)
         self._awaiting_key = True
@@ -436,17 +482,39 @@ class CameraFeed:
         self._watch = asyncio.create_task(
             self._supervise(process), name=f"camera-relay-muxer-{self.camera_id}"
         )
-        _log.info("muxer started", camera=self.camera_id, pid=process.pid, codec=codec)
+        if self._stall_timeout is not None and self._stall_task is None:
+            self._stall_task = asyncio.create_task(
+                self._watch_stalls(), name=f"camera-relay-stall-{self.camera_id}"
+            )
+        _log.info(
+            "muxer started", camera=self.camera_id, pid=process.pid, codec=codec, starts=self.starts
+        )
         return True
 
-    def _may_restart(self) -> bool:
-        now = time.monotonic()
-        while self._restarts and now - self._restarts[0] > self._restart_window:
-            self._restarts.popleft()
-        if len(self._restarts) >= self._max_restarts:
+    def _account_exit(self) -> bool:
+        """Count the current muxer's own exit once (from its supervisor or from the next frame,
+        whichever comes first): the next one starts at the next key frame, after the backoff
+        (none for the first exit in a row, nor after a muxer that ran long). False when it was
+        counted already."""
+        if self._exit_accounted:
             return False
-        self._restarts.append(now)
+        self._exit_accounted = True
+        ran = self._monotonic() - self._muxer_began
+        if ran >= MUXER_STABLE_SECONDS:
+            self._muxer_exits = 0
+        self._muxer_exits += 1
+        if self._muxer_exits == 1:
+            delay = 0.0
+        else:
+            first, last = self._muxer_retry
+            delay = min(first * 2 ** (self._muxer_exits - 2), last)
+        self._restart_at = self._monotonic() + delay
+        self._awaiting_key = True
         return True
+
+    def _clear_backoff(self) -> None:
+        self._muxer_exits = 0
+        self._restart_at = 0.0
 
     async def _supervise(self, process: StdinProcess) -> None:
         secrets = self._server.secrets()
@@ -457,13 +525,58 @@ class CameraFeed:
                     self.last_error = text
                     _log.debug("muxer", camera=self.camera_id, line=text[:500])
         code = await process.wait()
-        if not self.stopping:
-            _log.warning(
-                "muxer exited; restarting at the next key frame",
-                camera=self.camera_id,
-                code=code,
-                error=self.last_error[-300:],
-            )
+        if self.stopping or process is not self.process:
+            return  # stopped by the relay (stop, stall, unpublish, another codec)
+        self._account_exit()
+        _log.warning(
+            "muxer exited; restarting at the next key frame",
+            camera=self.camera_id,
+            code=code,
+            exits_in_row=self._muxer_exits,
+            retry_in_s=round(max(0.0, self._restart_at - self._monotonic()), 1),
+            error=self.last_error[-300:],
+        )
+
+    async def _watch_stalls(self) -> None:
+        """Stop the muxer of a camera that sent nothing for ``stall_timeout``: its publish
+        would only wait (and the media server drop it); the next key frame starts a new one."""
+        timeout = self._stall_timeout
+        assert timeout is not None  # noqa: S101 - started only with a timeout
+        while not (self.stopping or self.failed):
+            await self._watch_sleep(self._stall_poll)
+            last = self._last_frame_at
+            if not self._muxer_alive() or last is None:
+                continue
+            silent = self._monotonic() - last
+            if silent <= timeout:
+                continue
+            async with self._lock:
+                if self.stopping or not self._muxer_alive() or self._last_frame_at != last:
+                    continue
+                self.stalls += 1
+                _log.warning(
+                    "camera stalled; muxer stopped until the next key frame",
+                    camera=self.camera_id,
+                    silent_s=round(silent, 1),
+                )
+                await self._stop_muxer()
+                self._awaiting_key = True
+
+    async def publisher_left(self) -> None:
+        """The vendor reports this camera's publisher gone: stop its muxer cleanly."""
+        async with self._lock:
+            self.publisher_present = False
+            self._clear_backoff()
+            self._awaiting_key = True
+            if self.process is not None:
+                _log.info("camera unpublished; muxer stopped", camera=self.camera_id)
+                await self._stop_muxer()
+
+    async def publisher_joined(self) -> None:
+        """The publisher is back: its next key frame starts a new muxer at once."""
+        async with self._lock:
+            self.publisher_present = True
+            self._clear_backoff()
 
     async def _transcode(self) -> None:
         """Run the transcoder while the camera is wanted: start it once ``.../src`` is ready,
@@ -484,6 +597,7 @@ class CameraFeed:
             )
             self.transcoder = transcoder
             began = self._monotonic()
+            generation = self.muxer_generation
             try:
                 await transcoder.start()
             except OSError:
@@ -495,7 +609,13 @@ class CameraFeed:
             await transcoder.stop()
             if self.stopping or self.failed:
                 return
-            if self._monotonic() - began >= TRANSCODER_STABLE_SECONDS:
+            if (
+                self._monotonic() - began >= TRANSCODER_STABLE_SECONDS
+                or generation != self.muxer_generation
+                or not self._muxer_alive()
+            ):
+                # It ran long, or its source went away (a new muxer, or none yet): attach to
+                # the next source at the shortest delay, that is no fault of the transcoder.
                 delay = self._retry_delays[0]
             _log.warning(
                 "transcoder exited; starting it again",
@@ -514,6 +634,7 @@ class CameraFeed:
             return not (self.stopping or self.failed)
         path = source_path(self.relay_id, self.camera_id)
         began = self._monotonic()
+        self.source_late = False
         while not (self.stopping or self.failed):
             try:
                 if await self._source_ready(path):
@@ -559,6 +680,11 @@ class CameraFeed:
     async def stop(self) -> None:
         """Stop the muxer and the transcoder. Idempotent."""
         self.stopping = True
+        if self._stall_task is not None:
+            self._stall_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._stall_task
+            self._stall_task = None
         if self._transcoder_task is not None:
             self._transcoder_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -610,6 +736,9 @@ class BridgeSourceDriver:
         ready_timeout: float = SOURCE_READY_TIMEOUT_SECONDS,
         feed_monotonic: Callable[[], float] = time.monotonic,
         feed_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        stall_timeout: float | None = STALL_TIMEOUT_SECONDS,
+        stall_poll: float = STALL_POLL_SECONDS,
+        watch_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.endpoint = endpoint
         self.server = server
@@ -628,6 +757,9 @@ class BridgeSourceDriver:
         self.ready_timeout = ready_timeout
         self._feed_monotonic = feed_monotonic
         self._feed_sleep = feed_sleep
+        self.stall_timeout = stall_timeout
+        self.stall_poll = stall_poll
+        self._watch_sleep = watch_sleep
         self.runs: dict[str, _Run] = {}
 
     # --- SourceDriver -------------------------------------------------------------------------
@@ -838,6 +970,7 @@ class BridgeSourceDriver:
                 _log.info(
                     "agora publisher", link=link.id, uid=event.get("uid"), state=event.get("state")
                 )
+                await self._publisher(run, link, event)
             case "video_state":
                 _log.debug("agora video state", link=link.id, **_plain(event))
             case "token_will_expire":
@@ -856,6 +989,21 @@ class BridgeSourceDriver:
                 _log.info("agora channel left", link=link.id)
             case _:
                 _log.debug("agora bridge event", link=link.id, event_name=str(name)[:32])
+
+    async def _publisher(self, run: _Run, link: BridgeLink, event: dict[str, Any]) -> None:
+        """A camera stopped or started publishing on the connection it takes frames from."""
+        uid = event.get("uid")
+        camera = link.uid_cameras.get(uid) if isinstance(uid, int) else None
+        feed = run.feeds.get(camera) if camera is not None else None
+        if feed is None or run.stopping:
+            return
+        if feed.link is not link and not (feed.link is None and link is run.active):
+            return  # the other connection of a rejoin: this camera does not take its frames
+        match event.get("state"):
+            case "unpublished":
+                await feed.publisher_left()
+            case "published":
+                await feed.publisher_joined()
 
     # --- Renewal and rejoin -------------------------------------------------------------------
 
@@ -969,6 +1117,9 @@ class BridgeSourceDriver:
             ready_timeout=self.ready_timeout,
             monotonic=self._feed_monotonic,
             sleep=self._feed_sleep,
+            stall_timeout=self.stall_timeout,
+            stall_poll=self.stall_poll,
+            watch_sleep=self._watch_sleep,
         )
 
     def _task(self, run: _Run, coroutine: Awaitable[Any], name: str) -> asyncio.Task[Any]:

@@ -20,7 +20,13 @@
 logLevel: info
 logDestinations: [stdout]
 logStructured: true
-readTimeout: 10s
+# readTimeout ends a publisher that sends nothing for this long. 30 s (not 10 s): a mower on 4G
+# stalls for 10 to 20 s at times, and dropping its publisher broke the relay's pipeline (live
+# incident 2026-10-18). The relay stops a camera that sent nothing for 20 s itself (ADR 0045,
+# correction 2026-10-18), so this only bounds a publisher the relay lost track of. A frozen
+# source stays a frozen picture meanwhile: nothing is repeated, the viewers' freeze detection
+# shows it.
+readTimeout: 30s
 writeTimeout: 10s
 writeQueueSize: 512
 udpMaxPayloadSize: 1200
