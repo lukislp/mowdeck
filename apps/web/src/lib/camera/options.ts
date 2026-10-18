@@ -30,7 +30,11 @@ export interface CameraOptions {
 }
 
 export const OPTIONS_KEY = 'mowdeck.cameraOptions';
-export const DEBUG_KEY = 'mowdeck.cameraDebug';
+/**
+ * Keys of removed debug features (the console statistics and the debug overlay's experiments,
+ * ADR 0044): a browser that once set them still has them, so the viewer removes them.
+ */
+export const STALE_KEYS: readonly string[] = ['mowdeck.cameraDebug', 'mowdeck.cameraExperiments'];
 
 export const DEFAULT_OPTIONS: CameraOptions = {
   profile: 'rtc',
@@ -103,11 +107,13 @@ export function saveOptions(
   }
 }
 
-/** `localStorage.mowdeck.cameraDebug === "1"`: statistics also go to `console.debug`. */
-export function debugEnabled(storage: Pick<Storage, 'getItem'> | null = safeStorage()): boolean {
-  try {
-    return storage?.getItem(DEBUG_KEY) === '1';
-  } catch {
-    return false;
+/** Removes the {@link STALE_KEYS}; a failing storage is left alone. */
+export function clearStaleKeys(storage: Pick<Storage, 'removeItem'> | null = safeStorage()): void {
+  for (const key of STALE_KEYS) {
+    try {
+      storage?.removeItem(key);
+    } catch {
+      // private mode or blocked storage: nothing to clean up
+    }
   }
 }

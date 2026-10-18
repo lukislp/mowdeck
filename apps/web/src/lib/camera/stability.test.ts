@@ -10,6 +10,7 @@ import {
   summarizeInbound,
 } from './diagnostics';
 import {
+  clearStaleKeys,
   DEFAULT_OPTIONS,
   loadOptions,
   MAX_REJOIN_ATTEMPTS,
@@ -17,6 +18,7 @@ import {
   parseOptions,
   rejoinDelayMs,
   saveOptions,
+  STALE_KEYS,
   type CameraOptions,
 } from './options';
 import type { CameraPlayer, PlayerEvents } from './player';
@@ -97,7 +99,6 @@ function harness(live = true, overrides: Partial<ViewerDeps> = {}) {
     },
     options: { ...DEFAULT_OPTIONS },
     saveOptions: (o) => saved.push(o),
-    debug: () => false,
     ...overrides,
   });
   const pending = () => timers.filter((t) => !t.cleared);
@@ -131,6 +132,28 @@ describe('camera options', () => {
     );
     expect(parseOptions({ transport: 'relay' }).transport).toBe('relay');
     expect(parseOptions({ transport: 'direct' }).transport).toBe('direct');
+  });
+
+  it('clears only the stale debug keys and survives broken storage', () => {
+    expect(STALE_KEYS).toEqual(['mowdeck.cameraDebug', 'mowdeck.cameraExperiments']);
+    const data = new Map<string, string>([
+      ['mowdeck.cameraDebug', '1'],
+      ['mowdeck.cameraExperiments', '{}'],
+      [OPTIONS_KEY, '{}'],
+    ]);
+    clearStaleKeys({ removeItem: (k: string) => void data.delete(k) });
+    expect([...data.keys()]).toEqual([OPTIONS_KEY]);
+    const tried: string[] = [];
+    expect(() =>
+      clearStaleKeys({
+        removeItem: (k: string) => {
+          tried.push(k);
+          throw new Error('blocked');
+        },
+      }),
+    ).not.toThrow();
+    expect(tried).toEqual([...STALE_KEYS]);
+    expect(() => clearStaleKeys(null)).not.toThrow();
   });
 
   it('round-trips through storage and survives broken storage', () => {
@@ -323,12 +346,24 @@ describe('viewer: polling, options and rejoin', () => {
     expect(viewer.tracks).toEqual([]);
   });
 
-  it('logs the statistics with console.debug when the debug flag is on', async () => {
+  it('never logs the statistics to the console, even with the old debug key set', async () => {
+    localStorage.setItem('mowdeck.cameraDebug', '1');
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
-    const { viewer } = harness(true, { debug: () => true });
+    const { viewer } = harness(true);
     await viewer.open('m1');
-    expect(debug).toHaveBeenCalledWith('[mowdeck camera]', expect.objectContaining({ uid: 1 }));
+    expect(debug).not.toHaveBeenCalled();
     debug.mockRestore();
+  });
+
+  it('removes the stale debug keys from localStorage when a viewer starts', () => {
+    localStorage.setItem('mowdeck.cameraDebug', '1');
+    localStorage.setItem('mowdeck.cameraExperiments', '{"codec":"h264"}');
+    localStorage.setItem(OPTIONS_KEY, JSON.stringify(DEFAULT_OPTIONS));
+    harness(true);
+    expect(localStorage.getItem('mowdeck.cameraDebug')).toBeNull();
+    expect(localStorage.getItem('mowdeck.cameraExperiments')).toBeNull();
+    expect(localStorage.getItem(OPTIONS_KEY)).not.toBeNull();
+    localStorage.removeItem(OPTIONS_KEY);
   });
 
   it('applies fallback and data saver live, but rejoins for a new profile', async () => {

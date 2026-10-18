@@ -19,7 +19,7 @@
  * `RECONNECTING` for more than 20 s) joins again with a fresh session, with a backoff, up to
  * {@link MAX_REJOIN_ATTEMPTS} times in a row. Statistics are read every 2 s while a player can
  * measure: `tracks` (resolution and frame rate per tile) always, the full `diagnostics` while
- * watched (the panel's Diagnose line, or `localStorage.mowdeck.cameraDebug === "1"`).
+ * watched (the panel's Diagnose line).
  *
  * Transport (ADR 0045): every session request names the browser's `options.transport` (`auto`
  * by default). The first session of an `open` pins the path it took (`relay` or `direct`): a
@@ -44,7 +44,7 @@ import {
   type CameraTile,
 } from './layout';
 import {
-  debugEnabled,
+  clearStaleKeys,
   loadOptions,
   MAX_REJOIN_ATTEMPTS,
   rejoinDelayMs,
@@ -85,8 +85,6 @@ export interface ViewerDeps {
   options?: CameraOptions;
   /** Stores changed options (default: `localStorage`). */
   saveOptions?: (options: CameraOptions) => void;
-  /** Statistics also go to `console.debug` (default: `localStorage.mowdeck.cameraDebug`). */
-  debug?: () => boolean;
   /** The stored layout (default: from `localStorage`). */
   layout?: CameraLayout;
   /** Stores a changed layout (default: `localStorage`). */
@@ -143,6 +141,7 @@ export class CameraViewer {
   private readonly clearTimer: (handle: unknown) => void;
 
   constructor(private readonly deps: ViewerDeps) {
+    clearStaleKeys();
     if (deps.options) this.options = deps.options;
     if (deps.layout) this.layout = deps.layout;
     this.now = deps.now ?? (() => Date.now());
@@ -351,10 +350,10 @@ export class CameraViewer {
     }
   }
 
-  /** Poll statistics every 2 s while the Diagnose line is open (or debugging is on). */
+  /** Poll statistics every 2 s while the Diagnose line is open. */
   watchDiagnostics(watched: boolean): void {
     this.diagWatched = watched;
-    if (!watched && !this.debugOn()) this.diagnostics = null;
+    if (!watched) this.diagnostics = null;
     this.pollDiagnostics();
   }
 
@@ -435,10 +434,6 @@ export class CameraViewer {
     }
   }
 
-  private debugOn(): boolean {
-    return (this.deps.debug ?? debugEnabled)();
-  }
-
   /**
    * One reading now and the next one in 2 s (a single timer chain), while the player can
    * measure: the per-tile numbers always, the full snapshot while watched.
@@ -446,12 +441,10 @@ export class CameraViewer {
   private pollDiagnostics(): void {
     if (this.diagTimer !== null) this.clearTimer(this.diagTimer);
     this.diagTimer = null;
-    const debug = this.debugOn();
     if (!this.player?.diagnostics) return;
     const snapshot = this.player.diagnostics() ?? null;
     this.tracks = snapshot?.tracks ?? [];
     if (this.diagWatched) this.diagnostics = snapshot;
-    if (debug && snapshot) console.debug('[mowdeck camera]', snapshot);
     this.diagTimer = this.setTimer(() => this.pollDiagnostics(), DIAGNOSTICS_INTERVAL_MS);
   }
 

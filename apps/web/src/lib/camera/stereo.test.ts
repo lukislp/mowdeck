@@ -382,7 +382,6 @@ function viewerHarness(layout: CameraLayout = 'single', delivers = [1, 2]) {
     },
     options: { ...DEFAULT_OPTIONS },
     saveOptions: () => undefined,
-    debug: () => false,
     layout,
     saveLayout: (l) => layouts.push(l),
   });
