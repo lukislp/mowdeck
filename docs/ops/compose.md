@@ -167,7 +167,7 @@ Model strings (LiteLLM):
 | Mistral | `mistral/pixtral-large-latest` | `MISTRAL_API_KEY` | no |
 | Ollama (local) | `ollama/llava`, `ollama/qwen2.5vl` | none | `http://<host>:11434` |
 | OpenAI-compatible (vLLM, LM Studio, LocalAI, a proxy) | `openai/<model name of the endpoint>` | optional | `http://<host>:<port>/v1` |
-| Fake (offline demo, development) | `fake/recover`, `fake/people`, `fake/low_confidence`, `fake/fail` | none | no |
+| Fake (offline demo, development) | `fake/recover`, `fake/dock`, `fake/decline`, `fake/people`, `fake/low_confidence`, `fake/fail` | none | no |
 
 **Local models.** Run Ollama next to the stack (`docker run -d --name ollama --network mowdeck -v ollama:/root/.ollama ollama/ollama`, then `docker exec ollama ollama pull llava`) and use `ollama/llava` with the base URL `http://ollama:11434`; images then never leave the installation. Small local models answer less reliably: answers that do not match the schema are retried once and otherwise fail, low confidence is never proposed.
 

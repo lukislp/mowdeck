@@ -3,7 +3,12 @@ the mower recovered.
 
 Safety rules (ADR 0033, plan "Risiken"):
 
-* An answer with any risk flag, a confidence below the threshold or no step is never proposed.
+* An answer with any risk flag, a confidence below the threshold or no step is never proposed;
+  an answer ``return_to_dock`` only when :func:`~vision.domain.dock.dock_route` finds it
+  applicable (mower in a mapped area linked to the dock, no lift, tilt or other safety stop).
+* Dock fallback: when the model recommends nothing (or something not allowed) without any risk
+  flag and return to dock is applicable, the service still offers ``return_to_dock``, labelled
+  as a rule based fallback. Like every proposal it runs only after a human approves it.
 * While executing, the run aborts at once on an emergency stop, on a sensor stop (any error
   that is not ``drive_recoverable``, or the lift flag), on a new error, when the mower starts
   doing something else (mowing, returning, docked), when it goes offline, when no state arrived
@@ -23,7 +28,8 @@ from mowdeck_contracts.v1 import LocalPoint, MowerActivity, MowerMap, MowerState
 from mowdeck_control.geo import distance, point_in_polygon
 
 from vision.domain.context import Pose
-from vision.domain.models import AssessmentOut, ProposalState, ProposedStep
+from vision.domain.dock import DockRoute
+from vision.domain.models import AssessmentOut, ProposalAction, ProposalState, ProposedStep
 
 FRAME_TTL_MS: Final = 1000
 """Dead-man time of every drive frame."""
@@ -38,8 +44,10 @@ _BUSY_ACTIVITIES: Final = frozenset(
 )
 
 
-def evaluate(answer: AssessmentOut, *, min_confidence: float) -> tuple[ProposalState, str | None]:
-    """``proposed`` or ``rejected_by_ai`` with the reason."""
+def evaluate(
+    answer: AssessmentOut, *, min_confidence: float, dock: DockRoute | None = None
+) -> tuple[ProposalState, str | None]:
+    """``proposed`` or ``rejected_by_ai`` with the reason (the model's answer alone)."""
     if answer.risk:
         flags = ", ".join(sorted(r.value for r in answer.risk))
         return ProposalState.REJECTED_BY_AI, f"risk: {flags}"
@@ -48,10 +56,58 @@ def evaluate(answer: AssessmentOut, *, min_confidence: float) -> tuple[ProposalS
             ProposalState.REJECTED_BY_AI,
             f"confidence {answer.confidence:.2f} below {min_confidence:.2f}",
         )
-    if not answer.proposal:
+    if answer.action is ProposalAction.RETURN_TO_DOCK:
+        if dock is None or not dock.return_to_dock_applicable:
+            why = dock.reason if dock is not None else "no map with a dock is known"
+            return ProposalState.REJECTED_BY_AI, f"return to dock is not applicable: {why}"[:500]
+        return ProposalState.PROPOSED, None
+    if answer.action is ProposalAction.NONE or not answer.proposal:
         reasons = "; ".join(answer.abort_reasons) or "the model proposed no safe maneuver"
         return ProposalState.REJECTED_BY_AI, reasons[:500]
     return ProposalState.PROPOSED, None
+
+
+@dataclass(frozen=True, slots=True)
+class Decision:
+    """What becomes of an analysed proposal."""
+
+    state: ProposalState
+    detail: str | None
+    action: ProposalAction
+    fallback: bool = False
+
+
+FALLBACK_PREFIX: Final = "Fallback: return to dock"
+
+
+def dock_fallback_applies(answer: AssessmentOut, dock: DockRoute | None) -> bool:
+    """Return to dock may be offered although the model did not recommend it: no risk flag and
+    the route check finds it applicable."""
+    return dock is not None and dock.return_to_dock_applicable and not answer.risk
+
+
+def decide(
+    answer: AssessmentOut,
+    *,
+    min_confidence: float,
+    dock: DockRoute | None,
+    allow_fallback: bool = True,
+) -> Decision:
+    """The model's answer through :func:`evaluate`, then the dock fallback (not offered again
+    when ``allow_fallback`` is false: an earlier round already tried it without success)."""
+    state, detail = evaluate(answer, min_confidence=min_confidence, dock=dock)
+    if state is ProposalState.PROPOSED:
+        action = (
+            ProposalAction.RETURN_TO_DOCK
+            if answer.action is ProposalAction.RETURN_TO_DOCK
+            else ProposalAction.DRIVE
+        )
+        return Decision(state, None, action)
+    if allow_fallback and dock_fallback_applies(answer, dock):
+        assert dock is not None  # noqa: S101 - checked by dock_fallback_applies
+        text = f"{FALLBACK_PREFIX} ({dock.reason}). The model recommended nothing: {detail}"
+        return Decision(ProposalState.PROPOSED, text[:500], ProposalAction.RETURN_TO_DOCK, True)
+    return Decision(state, detail, answer.action)
 
 
 def frames_for(step: ProposedStep, rate_hz: float) -> int:

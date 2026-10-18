@@ -9,7 +9,10 @@
  * idle or mowing, and Fleet lists the drive session with `origin: "vision"`. Stereo: the settings
  * page has "Stereo-Bilder, wenn verfügbar" switched on by default; with both front cameras of the
  * simulator side by side in the camera panel the request carries both frames, and the proposal
- * shows "Stereo" with the two images (left and right) and `stereo: true` in the API.
+ * shows "Stereo" with the two images (left and right) and `stereo: true` in the API; Vision adds
+ * its top-down map rendering as a third image ("Karte"). (c) Return to dock: with the cautious
+ * fake model `fake/decline` ("recovery not recommended") a paused mower on its lawn still gets
+ * the labelled dock fallback; approving it sends the normal dock command and no drive session.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
@@ -107,20 +110,26 @@ test('vision: fake provider set up, a stuck mower recovered by an approved AI ma
     timeout: 30_000,
   });
   await expect(sheet.getByTestId('assist-stereo')).toContainText('Stereo');
-  await expect(sheet.getByTestId('assist-images').getByRole('img')).toHaveCount(2);
+  await expect(sheet.getByTestId('assist-images').getByRole('img')).toHaveCount(3);
   await expect(sheet.getByTestId('assist-images')).toContainText('Front links');
   await expect(sheet.getByTestId('assist-images')).toContainText('Front rechts');
+  await expect(sheet.getByTestId('assist-images')).toContainText('Karte (Fahrtrichtung oben)');
   const listed = await request.get(`/api/v1/vision/mowers/${mowerId}/proposals?limit=1`, {
     headers: auth,
   });
   const newest = (
     (await listed.json()) as {
-      items: { stereo: boolean; image_count: number; frames: { side: string | null }[] }[];
+      items: {
+        stereo: boolean;
+        image_count: number;
+        frames: { side: string | null; source: string }[];
+      }[];
     }
   ).items[0];
   expect(newest?.stereo).toBe(true);
-  expect(newest?.image_count).toBe(2);
-  expect(newest?.frames.map((f) => f.side)).toEqual(['left', 'right']);
+  expect(newest?.image_count).toBe(3);
+  expect(newest?.frames.map((f) => f.side)).toEqual(['left', 'right', null]);
+  expect(newest?.frames.at(-1)?.source).toBe('map');
   const steps = sheet.getByTestId('assist-steps').getByRole('listitem');
   await expect(steps).toHaveCount(3);
   await expect(steps.nth(0)).toContainText('Zurück');
@@ -159,6 +168,79 @@ test('vision: fake provider set up, a stuck mower recovered by an approved AI ma
   csp.assertNone();
 });
 
+test('vision: the AI declines, the dock fallback is offered and sends the mower home', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const csp = watchCsp(page);
+  const owner = await registerByApi(request, actor('vision-dock'));
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  const saved = await request.put('/api/v1/vision/me/provider', {
+    headers: auth,
+    data: { model: 'fake/decline' },
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+  const created = await request.post('/api/v1/fleet/mowers', {
+    headers: auth,
+    data: { name: `Luba dock ${RUN}`, connection_kind: 'simulated', connection_options: {} },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  const mowerId = ((await created.json()) as { id: string }).id;
+  await waitForMap(request, owner, mowerId);
+  // Mow a few seconds, then pause on the lawn: paused, no error, like the owner's report.
+  await commandByApi(request, owner, mowerId, { kind: 'start_mow', area_ids: ['front'] });
+  await loginByUi(page, owner);
+  await page.goto(`/mowers/${mowerId}`);
+  await expect(page.getByTestId('mower-state')).toContainText('Mäht', { timeout: 60_000 });
+  await page.waitForTimeout(4_000);
+  await commandByApi(request, owner, mowerId, { kind: 'pause_mow' });
+  await expect(page.getByTestId('mower-state')).toContainText('Pausiert', { timeout: 30_000 });
+
+  await page.getByRole('button', { name: 'Ladestation mit KI-Hilfe finden' }).click();
+  const sheet = page.getByRole('dialog', { name: 'KI-Hilfe: Ladestation finden' });
+  await expect(sheet.getByTestId('assist-provider')).toContainText('fake/decline');
+  await sheet.getByTestId('assist-start').click();
+  await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'proposed', {
+    timeout: 30_000,
+  });
+  const plan = sheet.getByTestId('assist-dock');
+  await expect(plan).toHaveAttribute('data-fallback', 'true');
+  await expect(plan).toContainText('Zurück zur Ladestation');
+  await expect(sheet.getByTestId('assist-fallback')).toContainText('Rückfalloption');
+  await expect(sheet.getByTestId('assist-fallback-reasons')).toContainText('safe route');
+  await expect(sheet.getByTestId('assist-steps')).toHaveCount(0);
+  await expect(sheet.getByTestId('assist-images')).toContainText('Karte (Fahrtrichtung oben)');
+  const listed = await request.get(`/api/v1/vision/mowers/${mowerId}/proposals?limit=1`, {
+    headers: auth,
+  });
+  const newest = (
+    (await listed.json()) as {
+      items: { action: string; fallback: boolean; steps: unknown[]; state: string }[];
+    }
+  ).items[0];
+  expect(newest).toMatchObject({ action: 'return_to_dock', fallback: true, steps: [] });
+
+  // Nothing moved so far; approving sends the normal dock command.
+  await sheet.getByRole('button', { name: 'Freigeben und zur Ladestation schicken' }).click();
+  await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'recovered', {
+    timeout: 30_000,
+  });
+  await expect(sheet.getByTestId('assist-outcome')).toContainText(
+    'Der Befehl zur Rückkehr wurde gesendet',
+  );
+  await expect(page.getByTestId('mower-state')).toContainText(/Fährt zurück|Angedockt|Lädt/, {
+    timeout: 30_000,
+  });
+  const sessions = await request.get(`/api/v1/fleet/mowers/${mowerId}/drive-sessions`, {
+    headers: auth,
+  });
+  const items = ((await sessions.json()) as { items: { origin?: string | null }[] }).items;
+  expect(items.some((item) => item.origin === 'vision')).toBe(false);
+  await sheet.getByTestId('assist-done').click();
+  csp.assertNone();
+});
+
 /** Width and height of a baseline or progressive JPEG (its SOF segment). */
 function jpegSize(data: Buffer): { width: number; height: number } | null {
   let at = 2;
@@ -191,8 +273,8 @@ async function assistPhotoSize(
     image_count: number;
     frames: { source: string }[];
   };
-  expect(proposal.image_count).toBe(1);
-  expect(proposal.frames.map((f) => f.source)).toEqual(['mower']);
+  expect(proposal.image_count).toBe(2);
+  expect(proposal.frames.map((f) => f.source)).toEqual(['mower', 'map']);
   const image = await request.get(`/api/v1/vision/proposals/${proposal.id}/images/0`, {
     headers: auth,
   });

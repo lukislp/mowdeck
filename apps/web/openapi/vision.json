@@ -11,6 +11,11 @@
             "title": "Abort Reasons",
             "type": "array"
           },
+          "action": {
+            "$ref": "#/components/schemas/ProposalAction",
+            "default": "drive",
+            "description": "What the model recommended: `drive`, `return_to_dock` or `none`."
+          },
           "confidence": {
             "title": "Confidence",
             "type": "number"
@@ -238,10 +243,11 @@
             "title": "Side"
           },
           "source": {
-            "description": "`upload`: sent by the app; `mower`: the mower's own photo.",
+            "description": "`upload`: sent by the app; `mower`: the mower's own photo; `map`: the top-down map rendering around the mower (heading up) that Vision adds.",
             "enum": [
               "upload",
-              "mower"
+              "mower",
+              "map"
             ],
             "title": "Source",
             "type": "string"
@@ -634,9 +640,24 @@
         "title": "PrincipalRef",
         "type": "object"
       },
+      "ProposalAction": {
+        "description": "What a proposal does once a human approves it.",
+        "enum": [
+          "drive",
+          "return_to_dock",
+          "none"
+        ],
+        "title": "ProposalAction",
+        "type": "string"
+      },
       "ProposalOut": {
         "description": "A proposal of AI assist (poll it while ``final`` is false).",
         "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ProposalAction",
+            "default": "drive",
+            "description": "What approval executes: `drive` (the steps, blades off) or `return_to_dock` (the normal dock command; no steps). `none` only on rejected rows."
+          },
           "analysed_at": {
             "anyOf": [
               {
@@ -754,6 +775,12 @@
             ],
             "description": "Approval is refused after this time.",
             "title": "Expires At"
+          },
+          "fallback": {
+            "default": false,
+            "description": "The model recommended nothing; Vision offers return to dock as a rule based fallback because it applies (mower in a mapped area linked to the dock, no safety stop). It still needs an approval.",
+            "title": "Fallback",
+            "type": "boolean"
           },
           "final": {
             "title": "Final",

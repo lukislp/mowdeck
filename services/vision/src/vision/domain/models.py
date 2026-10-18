@@ -17,7 +17,7 @@ from typing import Any, Final, Literal
 from uuid import UUID
 
 from mowdeck_contracts.v1 import PrincipalKind, PrincipalRef, VisionTask, VisionTrigger
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_STEPS: Final = 6
 MAX_STEP_SECONDS: Final = 3.0
@@ -46,6 +46,17 @@ class RiskFlag(StrEnum):
     DROP_OFF = "drop_off"
     WATER = "water"
     ROAD = "road"
+
+
+class ProposalAction(StrEnum):
+    """What a proposal does once a human approves it."""
+
+    DRIVE = "drive"
+    """The drive steps of ``proposal``, blades off."""
+    RETURN_TO_DOCK = "return_to_dock"
+    """The generic dock command: the mower drives home on its mapped paths by itself."""
+    NONE = "none"
+    """Nothing (the model found nothing safe to do)."""
 
 
 class ProposalState(StrEnum):
@@ -120,10 +131,22 @@ class AssessmentOut(BaseModel):
 
     situation: Situation
     confidence: float = Field(ge=0, le=1)
+    action: ProposalAction = ProposalAction.DRIVE
+    """``drive`` (the steps), ``return_to_dock`` (no steps) or ``none``. Answers stored before
+    the field existed get ``drive`` with steps and ``none`` without."""
     proposal: list[ProposedStep] = Field(default_factory=list, max_length=MAX_STEPS)
     rationale: str = ""
     risk: list[RiskFlag] = Field(default_factory=list)
     abort_reasons: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_action(cls, value: Any) -> Any:
+        if isinstance(value, Mapping) and "action" not in value:
+            steps = value.get("proposal")
+            action = ProposalAction.DRIVE if steps else ProposalAction.NONE
+            return {**value, "action": action}
+        return value
 
     @field_validator("rationale", mode="before")
     @classmethod
@@ -143,7 +166,9 @@ class AssessmentOut(BaseModel):
         return list(dict.fromkeys(value))
 
 
-ImageSource = Literal["upload", "mower"]
+ImageSource = Literal["upload", "mower", "map"]
+"""``upload`` (sent by the app), ``mower`` (the gateway's photo) or ``map`` (the top-down map
+rendering of :mod:`vision.domain.mapimage`)."""
 CameraSide = Literal["left", "right"]
 """Which camera of a stereo pair took a frame (the mower's front left or front right camera)."""
 
@@ -203,7 +228,7 @@ class FrameInfo:
         camera = value.get("camera")
         return cls(
             index=int(value.get("index", 0)),
-            source="mower" if source == "mower" else "upload",
+            source=source if source in ("mower", "map") else "upload",
             camera=camera if isinstance(camera, str) else None,
             side=side if side in ("left", "right") else None,
             captured_at=datetime.fromisoformat(at) if isinstance(at, str) else None,
@@ -280,6 +305,11 @@ class Proposal:
     start_pose: dict[str, float] | None = None
     end_pose: dict[str, float] | None = None
     return_command_id: UUID | None = None
+    action: ProposalAction = ProposalAction.DRIVE
+    """What approval executes: the drive steps or the generic return to dock."""
+    fallback: bool = False
+    """The model recommended nothing, but return to dock was applicable: the service offers it
+    as a rule based fallback (labelled as such; it still needs a human approval)."""
 
     @property
     def final(self) -> bool:

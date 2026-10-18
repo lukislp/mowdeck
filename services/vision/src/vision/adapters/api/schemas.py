@@ -20,6 +20,7 @@ from vision.domain.models import (
     FrameInfo,
     Image,
     Proposal,
+    ProposalAction,
     ProposalState,
     ProposalStep,
     RiskFlag,
@@ -76,6 +77,10 @@ class AssessmentOut(BaseModel):
 
     situation: str
     confidence: float
+    action: ProposalAction = Field(
+        default=ProposalAction.DRIVE,
+        description="What the model recommended: `drive`, `return_to_dock` or `none`.",
+    )
     rationale: str
     risk: list[RiskFlag]
     abort_reasons: list[str]
@@ -114,8 +119,9 @@ class FrameOut(BaseModel):
     """What one image of the proposal was (fetch it from ``images/{index}``)."""
 
     index: int
-    source: Literal["upload", "mower"] = Field(
-        description="`upload`: sent by the app; `mower`: the mower's own photo."
+    source: Literal["upload", "mower", "map"] = Field(
+        description="`upload`: sent by the app; `mower`: the mower's own photo; `map`: the "
+        "top-down map rendering around the mower (heading up) that Vision adds."
     )
     camera: str | None = None
     side: CameraSide | None = None
@@ -150,6 +156,17 @@ class ProposalOut(BaseModel):
     provider_family: str | None
     hosted: bool
     assessment: AssessmentOut | None
+    action: ProposalAction = Field(
+        default=ProposalAction.DRIVE,
+        description="What approval executes: `drive` (the steps, blades off) or "
+        "`return_to_dock` (the normal dock command; no steps). `none` only on rejected rows.",
+    )
+    fallback: bool = Field(
+        default=False,
+        description="The model recommended nothing; Vision offers return to dock as a rule "
+        "based fallback because it applies (mower in a mapped area linked to the dock, no "
+        "safety stop). It still needs an approval.",
+    )
     steps: list[StepOut]
     image_count: int
     light_used: bool = Field(
@@ -196,7 +213,7 @@ class ProposalOut(BaseModel):
         answer = proposal.assessment
         if steps:
             step_out = [StepOut.of(s) for s in steps]
-        elif answer is not None:
+        elif answer is not None and proposal.action is ProposalAction.DRIVE:
             step_out = [
                 StepOut(
                     index=i,
@@ -226,12 +243,15 @@ class ProposalOut(BaseModel):
             assessment=AssessmentOut(
                 situation=answer.situation.value,
                 confidence=answer.confidence,
+                action=answer.action,
                 rationale=answer.rationale,
                 risk=answer.risk,
                 abort_reasons=answer.abort_reasons,
             )
             if answer
             else None,
+            action=proposal.action,
+            fallback=proposal.fallback,
             steps=step_out,
             image_count=proposal.image_count,
             light_used=proposal.light_used,

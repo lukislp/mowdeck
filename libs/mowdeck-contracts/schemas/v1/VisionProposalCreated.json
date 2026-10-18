@@ -86,6 +86,16 @@
       "title": "Account Id",
       "type": "string"
     },
+    "action": {
+      "default": "drive",
+      "description": "`drive`: the drive steps; `return_to_dock`: the normal dock command, the mower drives home on its mapped paths by itself.",
+      "enum": [
+        "drive",
+        "return_to_dock"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
     "confidence": {
       "maximum": 1,
       "minimum": 0,
@@ -116,6 +126,12 @@
       "format": "date-time",
       "title": "Expires At",
       "type": "string"
+    },
+    "fallback": {
+      "default": false,
+      "description": "The model recommended nothing; the service offers return to dock as a rule based fallback (it applies: the mower is in a mapped area linked to the dock).",
+      "title": "Fallback",
+      "type": "boolean"
     },
     "link": {
       "description": "App path of the proposal, e.g. `/mowers/<id>?assist=<id>`.",
@@ -149,9 +165,9 @@
       "type": "string"
     },
     "steps": {
-      "description": "Number of proposed drive steps.",
+      "description": "Number of proposed drive steps (0 for `return_to_dock`).",
       "maximum": 6,
-      "minimum": 1,
+      "minimum": 0,
       "title": "Steps",
       "type": "integer"
     },

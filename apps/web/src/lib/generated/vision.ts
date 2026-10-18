@@ -322,6 +322,11 @@ export type components = {
         AssessmentOut: {
             /** Abort Reasons */
             abort_reasons: string[];
+            /**
+             * @description What the model recommended: `drive`, `return_to_dock` or `none`.
+             * @default drive
+             */
+            action: components["schemas"]["ProposalAction"];
             /** Confidence */
             confidence: number;
             /** Rationale */
@@ -414,10 +419,10 @@ export type components = {
             side?: ("left" | "right") | null;
             /**
              * Source
-             * @description `upload`: sent by the app; `mower`: the mower's own photo.
+             * @description `upload`: sent by the app; `mower`: the mower's own photo; `map`: the top-down map rendering around the mower (heading up) that Vision adds.
              * @enum {string}
              */
-            source: "upload" | "mower";
+            source: "upload" | "mower" | "map";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -599,10 +604,21 @@ export type components = {
             token_id?: string | null;
         };
         /**
+         * ProposalAction
+         * @description What a proposal does once a human approves it.
+         * @enum {string}
+         */
+        ProposalAction: "drive" | "return_to_dock" | "none";
+        /**
          * ProposalOut
          * @description A proposal of AI assist (poll it while ``final`` is false).
          */
         ProposalOut: {
+            /**
+             * @description What approval executes: `drive` (the steps, blades off) or `return_to_dock` (the normal dock command; no steps). `none` only on rejected rows.
+             * @default drive
+             */
+            action: components["schemas"]["ProposalAction"];
             /** Analysed At */
             analysed_at: string | null;
             /** Approved At */
@@ -637,6 +653,12 @@ export type components = {
              * @description Approval is refused after this time.
              */
             expires_at: string | null;
+            /**
+             * Fallback
+             * @description The model recommended nothing; Vision offers return to dock as a rule based fallback because it applies (mower in a mapped area linked to the dock, no safety stop). It still needs an approval.
+             * @default false
+             */
+            fallback: boolean;
             /** Final */
             final: boolean;
             /** Finished At */

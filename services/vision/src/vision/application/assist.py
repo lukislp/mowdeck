@@ -17,6 +17,16 @@ keeps the preference ``stereo_frames`` (default on), the model gets both, left f
 explicit hint (``SceneContext.stereo``) and the proposal records ``stereo``; with the preference
 off only the left frame is analysed. Every proposal keeps what each image was (``frames``).
 
+Map image: with ``map_image`` on (the default) and a known map and position, the model also
+gets a top-down rendering of the map around the mower (:mod:`vision.domain.mapimage`) as the
+last image. It comes on top of the ``max_images`` camera or upload frames, so it never pushes
+one out; it is stored and listed with the proposal like the other images (``source = map``).
+
+Return to dock (:mod:`vision.domain.dock`): the context says whether the generic dock command
+fits (``dock_route``). The model may answer ``return_to_dock``; when it recommends nothing but
+the dock command fits and no risk flag is set, the service offers it as a labelled fallback
+(``fallback``). Either way it is a proposal: nothing runs before a human approves it.
+
 Automatic analyses (ADR 0035, :meth:`VisionService.request_auto`, started by
 :class:`~vision.application.auto.AutoAnalysis`): the same round as a manual request, on behalf
 of the user who opted in, always with the gateway's photo (none: no analysis), recorded with
@@ -43,6 +53,7 @@ from mowdeck_contracts.v1 import (
     VisionTask,
     VisionTrigger,
 )
+from mowdeck_control.geo import from_wgs84
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.entitlements import Entitlements, require_feature
 
@@ -57,7 +68,7 @@ from vision.application.ports import (
     Store,
 )
 from vision.application.providers import ProviderService
-from vision.domain.context import Motion, PreviousRound, SceneContext, build_context
+from vision.domain.context import Motion, PreviousRound, SceneContext, build_context, pose_of
 from vision.domain.errors import (
     ConflictError,
     InvalidInput,
@@ -68,18 +79,20 @@ from vision.domain.errors import (
     QuotaExceeded,
 )
 from vision.domain.frames import STEREO_MAX_SKEW_MS, capture_skew_ms, stereo_pair, too_dark
+from vision.domain.mapimage import render_map
 from vision.domain.models import (
     FINAL_STATES,
     RETRY_STATES,
     Image,
     Proposal,
+    ProposalAction,
     ProposalState,
     ProposalStep,
     ProviderConfig,
     ProviderRequest,
     StoredImage,
 )
-from vision.domain.rules import day_start, evaluate
+from vision.domain.rules import day_start, decide
 
 _log = get_logger("vision.assist")
 
@@ -119,6 +132,8 @@ class AssistConfig:
     light_poll_seconds: float = 0.2
     stereo_max_skew_ms: float = STEREO_MAX_SKEW_MS
     """Two frames captured further apart than this are not a stereo pair."""
+    map_image: bool = True
+    """Add the top-down map rendering as one extra image (on top of ``max_images``)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,7 +303,18 @@ class VisionService:
                     if lit is not None:
                         images, light_used = [lit], True
         now = self.clock()
-        context = self._context(mower_id, account, task, len(images), history or [], stereo)
+        map_image = self._map_image(mower_id, account)
+        if map_image is not None:
+            images = [*images, map_image]
+        context = self._context(
+            mower_id,
+            account,
+            task,
+            len(images),
+            history or [],
+            stereo,
+            map_image=map_image is not None,
+        )
         proposal = Proposal(
             id=uuid4(),
             chain_id=chain_id,
@@ -465,6 +491,32 @@ class VisionService:
                 )
                 raise QuotaExceeded(msg)
 
+    def _map_image(self, mower_id: UUID, account_id: UUID) -> Image | None:
+        """The top-down map rendering, or None (switched off, no map, no position, no Pillow)."""
+        if not self.config.map_image:
+            return None
+        observed = self.view.state(mower_id)
+        mapped = self.view.mower_map(mower_id)
+        if observed is None or observed.state.account_id != account_id:
+            return None
+        if mapped is None or mapped[0] != account_id:
+            return None
+        mower_map = mapped[1]
+        pose = pose_of(observed.state, mower_map)
+        if pose is None:
+            return None
+        track = [
+            from_wgs84(mower_map, lat, lon) for lat, lon, _ in self.view.recent_track(mower_id)
+        ]
+        try:
+            data = render_map(mower_map, pose, track=track[-10:])
+        except Exception:
+            _log.exception("map rendering failed", mower_id=str(mower_id))
+            return None
+        if data is None:
+            return None
+        return Image(data, "image/png", source="map", camera="Map")
+
     def _context(
         self,
         mower_id: UUID,
@@ -473,6 +525,8 @@ class VisionService:
         images: int,
         history: list[Proposal],
         stereo: bool = False,
+        *,
+        map_image: bool = False,
     ) -> SceneContext:
         observed = self.view.state(mower_id)
         state = observed.state if observed and observed.state.account_id == account_id else None
@@ -483,6 +537,7 @@ class VisionService:
             PreviousRound(
                 round=p.round,
                 situation=p.assessment.situation.value if p.assessment else None,
+                action=p.action.value,
                 steps=[s.model_dump() for s in p.assessment.proposal] if p.assessment else [],
                 outcome=p.state.value,
                 detail=p.detail,
@@ -505,6 +560,8 @@ class VisionService:
             images=images,
             radius_m=self.config.context_radius_m,
             stereo=stereo,
+            track=self.view.recent_track(mower_id),
+            map_image=map_image,
         )
 
     async def _analyse(
@@ -533,7 +590,19 @@ class VisionService:
             )
             return
         usage = assessment.usage
-        state, detail = evaluate(assessment.result, min_confidence=self.config.min_confidence)
+        tried_dock = any(
+            r.action == ProposalAction.RETURN_TO_DOCK.value
+            and r.outcome in (ProposalState.NOT_RECOVERED.value, ProposalState.ABORTED.value)
+            for r in context.previous_rounds
+        )
+        decision = decide(
+            assessment.result,
+            min_confidence=self.config.min_confidence,
+            dock=context.dock_route,
+            allow_fallback=not tried_dock,
+        )
+        state, detail = decision.state, decision.detail
+        drive = decision.action is ProposalAction.DRIVE
         now = self.clock()
         await self.store.record_request(
             ProviderRequest(
@@ -558,7 +627,7 @@ class VisionService:
             )
         )
         expires = now + timedelta(seconds=self.config.proposal_ttl_seconds)
-        if state is ProposalState.PROPOSED:
+        if state is ProposalState.PROPOSED and drive:
             await self.store.put_steps(
                 [
                     ProposalStep(proposal.id, i, s.linear, s.angular, s.seconds)
@@ -574,6 +643,8 @@ class VisionService:
                 "analysed_at": now,
                 "expires_at": expires if state is ProposalState.PROPOSED else None,
                 "provider_model": assessment.model,
+                "action": decision.action,
+                "fallback": decision.fallback,
                 "updated_at": now,
             },
             states={ProposalState.ANALYSING},
@@ -584,6 +655,8 @@ class VisionService:
             state=state.value,
             situation=assessment.result.situation.value,
             confidence=assessment.result.confidence,
+            action=decision.action.value,
+            fallback=decision.fallback,
             steps=len(assessment.result.proposal),
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
@@ -601,7 +674,9 @@ class VisionService:
                     requested_by=proposal.requested_by,
                     situation=assessment.result.situation.value,
                     confidence=assessment.result.confidence,
-                    steps=len(assessment.result.proposal),
+                    steps=len(assessment.result.proposal) if drive else 0,
+                    action="drive" if drive else "return_to_dock",
+                    fallback=decision.fallback,
                     expires_at=expires,
                     link=f"/mowers/{proposal.mower_id}?assist={proposal.id}",
                     created_at=now,

@@ -86,7 +86,8 @@
     if (!proposal || proposal.image_count < 1) return;
     let cancelled = false;
     const urls: string[] = [];
-    const count = Math.min(proposal.image_count, 2);
+    // Up to three: a stereo pair plus the map rendering Vision adds after the frames.
+    const count = Math.min(proposal.image_count, 3);
     imageUrls = Array.from({ length: count }, () => null);
     for (let index = 0; index < count; index += 1) {
       void api
@@ -110,6 +111,7 @@
   function frameCaption(index: number): string | null {
     const frame = proposal?.frames?.[index];
     if (!frame) return null;
+    if (frame.source === 'map') return m.vision_frame_map();
     if (frame.side === 'left') return m.camera_front_left();
     if (frame.side === 'right') return m.camera_front_right();
     return frame.camera ?? null;
@@ -249,6 +251,24 @@
         </dl>
       {/if}
 
+      {#if proposal.action === 'return_to_dock'}
+        <section class="dock-plan" data-testid="assist-dock" data-fallback={proposal.fallback}>
+          <h3>{m.vision_dock_title()}</h3>
+          <p>{m.vision_dock_hint()}</p>
+          {#if proposal.fallback}
+            <p class="fallback-note" data-testid="assist-fallback">
+              <span class="fallback-mark mono">{m.vision_fallback_mark()}</span>
+              <span>{m.vision_fallback_hint()}</span>
+            </p>
+            {#if assessment?.abort_reasons.length}
+              <ul class="reasons" data-testid="assist-fallback-reasons">
+                {#each assessment.abort_reasons as reason, i (i)}<li>{reason}</li>{/each}
+              </ul>
+            {/if}
+          {/if}
+        </section>
+      {/if}
+
       {#if triggerNote(proposal)}
         <p class="trigger-note" data-testid="assist-trigger" title={m.vision_trigger_error_hint()}>
           <span class="mark" aria-hidden="true"></span>
@@ -339,9 +359,11 @@
         <div class="outcome" data-testid="assist-outcome" data-state={proposal.state}>
           {#if proposal.state === 'recovered'}
             <p>
-              {proposal.task === 'find_dock'
-                ? m.vision_outcome_docking()
-                : m.vision_outcome_recovered()}
+              {proposal.action === 'return_to_dock'
+                ? m.vision_outcome_dock_sent()
+                : proposal.task === 'find_dock'
+                  ? m.vision_outcome_docking()
+                  : m.vision_outcome_recovered()}
             </p>
           {:else if proposal.state === 'not_recovered'}
             <p>{m.vision_outcome_not_recovered()}</p>
@@ -386,7 +408,10 @@
           pending={assist.busy === 'approve'}
           disabled={assist.busy !== null}
           onclick={() => assist.approve()}
-          testid="assist-approve">{m.vision_approve()}</Button
+          testid="assist-approve"
+          >{proposal?.action === 'return_to_dock'
+            ? m.vision_approve_dock()
+            : m.vision_approve()}</Button
         >
         <Button
           full
@@ -606,6 +631,36 @@
     gap: var(--md-space-1);
     margin: 0;
     min-width: 0;
+  }
+
+  /* Return to dock: the mower drives home by itself; a fallback is marked as such. */
+  .dock-plan {
+    display: grid;
+    gap: var(--md-space-1);
+    padding: var(--md-space-2) var(--md-space-3);
+    border-inline-start: 3px solid var(--md-state-returning);
+    background: var(--md-state-returning-bg);
+  }
+
+  .dock-plan h3,
+  .dock-plan p {
+    margin: 0;
+  }
+
+  .fallback-note {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: start;
+    column-gap: var(--md-space-2);
+  }
+
+  .fallback-mark {
+    padding: 0 var(--md-space-1);
+    border: var(--md-hairline) dashed var(--md-color-line);
+    border-radius: var(--md-radius-1);
+    color: var(--md-color-ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .stereo-note {

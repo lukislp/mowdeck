@@ -133,7 +133,19 @@ class VisionProposalCreated(ContractModel):
     requested_by: PrincipalRef
     situation: str = Field(max_length=64)
     confidence: float = Field(ge=0, le=1)
-    steps: int = Field(ge=1, le=6, description="Number of proposed drive steps.")
+    steps: int = Field(
+        ge=0, le=6, description="Number of proposed drive steps (0 for `return_to_dock`)."
+    )
+    action: Literal["drive", "return_to_dock"] = Field(
+        default="drive",
+        description="`drive`: the drive steps; `return_to_dock`: the normal dock command, the "
+        "mower drives home on its mapped paths by itself.",
+    )
+    fallback: bool = Field(
+        default=False,
+        description="The model recommended nothing; the service offers return to dock as a "
+        "rule based fallback (it applies: the mower is in a mapped area linked to the dock).",
+    )
     expires_at: UtcDateTime = Field(description="Approval is refused after this time.")
     link: str = Field(
         max_length=300, description="App path of the proposal, e.g. `/mowers/<id>?assist=<id>`."

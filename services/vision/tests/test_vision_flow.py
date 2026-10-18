@@ -17,9 +17,12 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_contracts.v1.subjects import command_subject, event_subject_for_type
 from mowdeck_control import flat_png
+from mowdeck_control.geo import from_wgs84
 from mowdeck_service_kit.testing import FakeEntitlements
 from vision_support import (
     API,
+    Harness,
+    SimRig,
     StaticFactory,
     answer,
     harness,
@@ -143,7 +146,11 @@ async def test_vision_flow_low_confidence_and_empty_answers_are_rejected() -> No
     )
     async with harness(factory=factory) as h:
         owner = h.owner()
+        # Far behind the back lawn, outside every mapped area: return to dock does not apply,
+        # so there is no dock fallback either.
         rig = await h.rig(owner)
+        rig.idle_at(5.0, 30.0)
+        await wait_for(lambda: _local_y(h, rig) > 29)
         low = (
             await h.client.post(
                 f"{API}/mowers/{rig.mower_id}/recover", json={}, headers=owner.headers
@@ -151,6 +158,7 @@ async def test_vision_flow_low_confidence_and_empty_answers_are_rejected() -> No
         ).json()
         body = await h.until(low["id"], owner, ProposalState.REJECTED_BY_AI)
         assert body["detail"].startswith("confidence 0.30")
+        assert body["fallback"] is False
         empty = (
             await h.client.post(
                 f"{API}/mowers/{rig.mower_id}/recover",
@@ -160,6 +168,15 @@ async def test_vision_flow_low_confidence_and_empty_answers_are_rejected() -> No
         ).json()
         body = await h.until(empty["id"], owner, ProposalState.REJECTED_BY_AI)
         assert "no safe maneuver" in body["detail"]
+
+
+def _local_y(h: Harness, rig: SimRig) -> float:
+    observed = h.service.view.state(rig.mower_id)
+    mapped = h.service.view.mower_map(rig.mower_id)
+    if observed is None or mapped is None or observed.state.position is None:
+        return 0.0
+    position = observed.state.position
+    return from_wgs84(mapped[1], position.lat, position.lon)[1]
 
 
 async def test_vision_flow_emergency_stop_aborts_the_execution() -> None:
