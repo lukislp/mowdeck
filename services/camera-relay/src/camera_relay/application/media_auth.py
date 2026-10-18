@@ -6,7 +6,9 @@ MediaMTX asks the relay for every action (``authMethod: http``). The rules:
   ticket (the WHEP bearer token) that is signed by this relay, not expired, names exactly this
   path, and whose account, mower, session (``relay_id``) and lease match a live lease of a
   running session. The reader's session id is bound to that lease, so the relay can confirm its
-  media, notice when it is gone and end it when the lease closes.
+  media, notice when it is gone and end it when the lease closes. An accepted offer also tells
+  the lease that its viewer is trying to play (``media_attempt``): a viewer that keeps offering
+  while a camera starts or recovers keeps its lease past the unbound deadline.
 * ``publish`` on a relay path (``r/<relay_id>/<camera>`` or ``.../src``), ``read`` over RTSP of
   a relay path (the transcoder reads ``.../src``) and ``api`` (the relay's own control API
   client) only with the internal publisher credential, compared in constant time.
@@ -163,6 +165,9 @@ class MediaAuthorizer:
             return decision
         if request.session_id:
             self.bindings.bind(request.session_id, claims.lease_id)
+        session = self.repository.get(RelayKey(claims.account_id, claims.mower_id))
+        if session is not None:
+            session.media_attempt(claims.lease_id, now)
         return decision
 
     def _live_lease(self, key: RelayKey, relay_id: str, lease_id: UUID) -> MediaAuthDecision:

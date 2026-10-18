@@ -1,5 +1,6 @@
 """MediaMTX's auth callback: who may read, publish and use the API (ADR 0045)."""
 
+from datetime import timedelta
 from uuid import uuid4
 
 import httpx
@@ -53,6 +54,30 @@ async def test_a_valid_ticket_reads_its_path_and_binds_the_reader() -> None:
     assert decision.allowed, decision.reason
     assert decision.lease_id == lease_id
     assert bindings.lease_of("whep-1") == lease_id
+
+
+async def test_an_accepted_offer_keeps_an_unconfirmed_lease_while_it_connects() -> None:
+    h = Harness()
+    relay_key = key()
+    reply = await h.service.attach(attach_request(relay_key))
+    assert reply.session is not None and reply.session.relay is not None
+    session = h.repository.get(relay_key)
+    assert session is not None and session.relay_id is not None
+    lease = session.leases[reply.session.relay.lease_id]
+    opened = lease.bind_deadline
+    assert opened is not None
+    h.clock.advance(20)
+    path = camera_path(session.relay_id, "front_left")
+    authorizer = _authorizer(h)
+    assert authorizer.decide(_read(path, reply.session.relay.ticket, "whep-1")).allowed
+    assert lease.bind_deadline == h.clock() + timedelta(seconds=30)
+    # A refused offer (a foreign ticket) extends nothing.
+    foreign = Harness()
+    foreign_ticket, _, _ = await _live(foreign)
+    h.clock.advance(5)
+    before = lease.bind_deadline
+    assert not authorizer.decide(_read(path, foreign_ticket)).allowed
+    assert lease.bind_deadline == before
 
 
 async def test_a_ticket_opens_only_its_own_paths() -> None:
@@ -229,6 +254,9 @@ async def test_the_freeze_hook_exists_only_with_test_hooks() -> None:
     async with lifespan_client(without) as client:
         response = await client.post("/internal/v1/test/freeze", json={"frozen": True})
         assert response.status_code == 404
+        for hook in ("outage", "start-delay"):
+            missing = await client.post(f"/internal/v1/test/{hook}", json={"seconds": 1})
+            assert missing.status_code == 404
     with_hooks = build_app(
         _settings(relay_test_hooks=True), bus=InMemoryBus(), background_tasks=False
     )
@@ -238,6 +266,15 @@ async def test_the_freeze_hook_exists_only_with_test_hooks() -> None:
         assert response.json() == {"frozen": True, "changed": 0}
         bad = await client.post("/internal/v1/test/freeze", json={"relay_id": "../x"})
         assert bad.status_code == 422
+        outage = await client.post("/internal/v1/test/outage", json={"seconds": 1})
+        assert outage.status_code == 200
+        assert outage.json() == {"seconds": 1.0, "changed": 0}
+        delay = await client.post(
+            "/internal/v1/test/start-delay", json={"seconds": 8, "mower_id": str(uuid4())}
+        )
+        assert delay.status_code == 200
+        too_long = await client.post("/internal/v1/test/outage", json={"seconds": 600})
+        assert too_long.status_code == 422
 
 
 def test_test_hooks_are_refused_in_production() -> None:

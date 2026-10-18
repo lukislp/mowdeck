@@ -13,7 +13,8 @@ Rules:
   session before the first lease starts it); a named camera the source does not offer is left
   out, and a lease with none left is refused.
 * Every open lease holds the session: a confirmed viewer while its heartbeat is fresh, an
-  unconfirmed viewer only until its binding deadline (``UNBOUND_LEASE_SECONDS``), a Vision lease
+  unconfirmed viewer only until its binding deadline (``UNBOUND_LEASE_SECONDS`` after it opened,
+  lost its media or last offered to play: :meth:`RelaySession.media_attempt`), a Vision lease
   until its cap or its request ends. After the last lease the session drains for the grace
   period; a new lease in that time takes it back to ``LIVE`` without a new source session.
 * Vision minutes count only while Vision holds the session without a present viewer; the
@@ -328,6 +329,22 @@ class RelaySession:
         lease.was_bound = True
         self._settle(now, out)
         return LeaseDecision(lease, out)
+
+    def media_attempt(self, lease_id: UUID, now: datetime) -> bool:
+        """The media plane accepted a WHEP offer of the viewer ``lease_id`` (its client is
+        connecting or reconnecting, e.g. while a camera starts or its muxer restarts after a
+        stall): an unconfirmed viewer's binding deadline moves to ``unbound_lease`` after now.
+
+        No effects and no deadline processing (the media plane's auth callback calls this
+        between two inputs): a lease whose deadline has passed stays due and is closed by the
+        next input. True when the deadline moved. The heartbeat still bounds the lease."""
+        lease = self.leases.get(lease_id)
+        if lease is None or not lease.is_viewer or lease.bind_deadline is None:
+            return False
+        if lease.bind_deadline <= now:
+            return False
+        lease.bind_deadline = max(lease.bind_deadline, now + self.policy.unbound_lease)
+        return True
 
     def media_lost(
         self, lease_id: UUID, now: datetime, whep_session: str | None = None
@@ -676,14 +693,22 @@ class RelaySession:
         self.drain_deadline = None
 
     def _remember_silent(self, at: datetime) -> None:
-        """At the end of a live session: the wanted cameras that never published are silent
-        (from the publishers alone: no camera, model or placement is special)."""
+        """At the end of a live session: the wanted cameras that never published although they
+        were wanted for at least :attr:`RelayPolicy.silent_camera_evidence` are silent (from
+        the publishers alone: no camera, model or placement is special). A camera that was
+        only late (a short session, a slow start) is not remembered."""
         if self.started_at is None:
             return
         for camera in self.cameras:
             if camera in self.publishing:
                 self.silent_cameras.pop(camera, None)
-            elif camera not in self.silent_cameras and self.camera_available(camera, at) is False:
+                continue
+            since = max(self.started_at, self.wanted_since.get(camera, self.started_at))
+            if (
+                camera not in self.silent_cameras
+                and self.camera_available(camera, at) is False
+                and at - since >= self.policy.silent_camera_evidence
+            ):
                 self.silent_cameras[camera] = at
         memory = self.policy.silent_camera_memory
         for camera, found in list(self.silent_cameras.items()):

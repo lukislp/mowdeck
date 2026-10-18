@@ -8,9 +8,16 @@
 * ``POST /internal/v1/test/freeze``: only with ``MOWDECK_RELAY_TEST_HOOKS=true`` (the test
   stacks). Body ``{"frozen": true|false, "relay_id": optional}``: pauses or resumes the fake
   sources, so a test sees a frozen picture (no new frames) and its recovery.
+* ``POST /internal/v1/test/outage`` (test stacks only). Body ``{"seconds": s, "mower_id":
+  optional}``: the fake sources' streams go away now (the media server drops their readers,
+  like a muxer the relay stopped after a stall) and come back after ``s`` seconds.
+* ``POST /internal/v1/test/start-delay`` (test stacks only). Body ``{"seconds": s,
+  "mower_id": optional}``: the next fake source (of that mower) publishes only ``s`` seconds
+  after its start, like a vendor camera that takes long to deliver.
 """
 
 from typing import Protocol
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response
 from mowdeck_service_kit import get_logger
@@ -74,10 +81,18 @@ def auth_router(authorizer: MediaAuthorizer) -> APIRouter:
 
 
 class Freezable(Protocol):
-    """A source that can be frozen (the fake source driver)."""
+    """A source the test hooks steer (the fake source driver)."""
 
     def freeze(self, frozen: bool, relay_id: str | None = None) -> int:
         """Pause or resume; returns how many processes changed."""
+        ...
+
+    async def outage(self, seconds: float, mower_id: UUID | None = None) -> int:
+        """Drop the streams now and bring them back after ``seconds``."""
+        ...
+
+    def delay_next_start(self, seconds: float, mower_id: UUID | None = None) -> None:
+        """Delay the streams of the next start by ``seconds``."""
         ...
 
 
@@ -97,6 +112,22 @@ class FreezeReply(BaseModel):
     changed: int
 
 
+class TimingBody(BaseModel):
+    """Body of the outage and start-delay hooks."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seconds: float = Field(ge=0, le=120)
+    mower_id: UUID | None = None
+
+
+class TimingReply(BaseModel):
+    """What a timing hook did."""
+
+    seconds: float
+    changed: int = 0
+
+
 def hooks_router(source: Freezable) -> APIRouter:
     """Test-only hooks (``MOWDECK_RELAY_TEST_HOOKS=true``)."""
     router = APIRouter()
@@ -109,5 +140,17 @@ def hooks_router(source: Freezable) -> APIRouter:
             raise HTTPException(status_code=501, detail=str(exc)) from exc
         _log.warning("test hook: fake source freeze", frozen=body.frozen, changed=changed)
         return FreezeReply(frozen=body.frozen, changed=changed)
+
+    @router.post("/internal/v1/test/outage", include_in_schema=False)
+    async def outage(body: TimingBody) -> TimingReply:
+        changed = await source.outage(body.seconds, body.mower_id)
+        _log.warning("test hook: fake source outage", seconds=body.seconds, changed=changed)
+        return TimingReply(seconds=body.seconds, changed=changed)
+
+    @router.post("/internal/v1/test/start-delay", include_in_schema=False)
+    async def start_delay(body: TimingBody) -> TimingReply:
+        source.delay_next_start(body.seconds, body.mower_id)
+        _log.warning("test hook: fake source start delay", seconds=body.seconds)
+        return TimingReply(seconds=body.seconds)
 
     return router

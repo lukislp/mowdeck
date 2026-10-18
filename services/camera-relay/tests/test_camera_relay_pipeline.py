@@ -291,3 +291,51 @@ async def test_a_failing_fake_source_reports_its_source() -> None:
     spawn.processes[0].exit(1)
     await _settle()
     assert failed == [source]
+
+
+async def test_the_outage_hook_drops_the_streams_and_brings_them_back() -> None:
+    spawn = FakeSpawn()
+    driver = FakeSourceDriver(
+        server=SERVER, ffmpeg="ffmpeg", font="/f.ttf", on_failure=lambda s: None, spawn=spawn
+    )
+    one, other = _source(("front_left",)), _source(("front_left",))
+    other.relay_id = "f" * 32
+    await driver.start(one)
+    await driver.start(other)
+    assert await driver.outage(0.05, one.key.mower_id) == 1
+    assert one.processes == {}  # the stream went away
+    assert list(other.processes) == ["front_left"]  # another mower is untouched
+    await asyncio.sleep(0.1)
+    await _settle()
+    assert list(one.processes) == ["front_left"]  # back after the outage
+    assert len(spawn.calls) == 3
+    await driver.stop(one)
+    await driver.stop(other)
+
+
+async def test_the_start_delay_hook_publishes_later_and_a_stop_cancels_it() -> None:
+    spawn = FakeSpawn()
+    driver = FakeSourceDriver(
+        server=SERVER, ffmpeg="ffmpeg", font="/f.ttf", on_failure=lambda s: None, spawn=spawn
+    )
+    late = _source(("front_left",))
+    driver.delay_next_start(0.05, late.key.mower_id)
+    await driver.start(late)
+    assert late.processes == {}
+    await driver.update(late, ["front_left", "front_right"])  # taken by the delayed start
+    assert late.processes == {}
+    await asyncio.sleep(0.1)
+    await _settle()
+    assert sorted(late.processes) == ["front_left", "front_right"]
+    on_time = _source(("front_left",))
+    await driver.start(on_time)  # the delay was for one start only
+    assert list(on_time.processes) == ["front_left"]
+    cancelled = _source(("front_left",))
+    driver.delay_next_start(0.05)
+    await driver.start(cancelled)
+    await driver.stop(cancelled)
+    await asyncio.sleep(0.1)
+    await _settle()
+    assert cancelled.processes == {}
+    await driver.stop(late)
+    await driver.stop(on_time)

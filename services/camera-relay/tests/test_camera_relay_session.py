@@ -268,6 +268,66 @@ def test_unconfirmed_and_lost_leases_expire(
     assert s.state is SessionState.DRAINING
 
 
+def test_a_viewer_that_keeps_offering_while_its_camera_starts_keeps_its_lease() -> None:
+    # Live incident 2026-10-18: after a 4G stall a camera took 28 s to play again; the lease
+    # closed 30 s after it opened while the viewer was still offering, the relay released the
+    # stream and the tile stayed "connecting". Every accepted offer extends the binding.
+    s = session()
+    lease = _attach(s, 0)
+    _live(s, 1)
+    s.renew(lease.lease_id, at(15))
+    assert s.media_attempt(lease.lease_id, at(20))
+    assert _closed(s.tick(at(30))) == []
+    s.renew(lease.lease_id, at(30))
+    assert s.media_attempt(lease.lease_id, at(40))
+    s.renew(lease.lease_id, at(45))
+    assert _closed(s.tick(at(69.999))) == []
+    s.media_confirmed(lease.lease_id, "whep-1", at(60))  # the camera plays at last
+    assert lease.bind_deadline is None
+    s.renew(lease.lease_id, at(60))
+    assert _closed(s.tick(at(100))) == []
+
+
+def test_a_viewer_that_stopped_offering_loses_its_lease_after_the_unbound_time() -> None:
+    s = session()
+    lease = _attach(s, 0)
+    _live(s, 1)
+    s.media_attempt(lease.lease_id, at(10))
+    s.renew(lease.lease_id, at(15))
+    assert _closed(s.tick(at(39.999))) == []
+    (closed,) = _closed(s.tick(at(40)))
+    assert (closed.reason, closed.closed_at) == (RelayLeaseCloseReason.EXPIRED, at(40))
+
+
+def test_offers_never_outlive_the_heartbeat_or_revive_a_due_lease() -> None:
+    s = session()
+    lease = _attach(s, 0)
+    _live(s, 1)
+    s.media_attempt(lease.lease_id, at(25))  # binding until 55 s, heartbeat until 45 s
+    (closed,) = _closed(s.tick(at(45)))
+    assert (closed.reason, closed.closed_at) == (RelayLeaseCloseReason.EXPIRED, at(45))
+    other = _attach(s, 50)
+    assert not s.media_attempt(other.lease_id, at(80.5))  # its deadline (80 s) has passed
+    assert not s.media_attempt(lease.lease_id, at(51))  # closed
+    confirmed = _confirmed_viewer(s, 52)
+    assert not s.media_attempt(confirmed.lease_id, at(53))  # bound: nothing to extend
+    assert confirmed.bind_deadline is None
+
+
+def test_media_lost_then_offers_keep_the_lease_until_the_reader_is_back() -> None:
+    s = session()
+    lease = _confirmed_viewer(s, 0)
+    _live(s, 1)
+    s.media_lost(lease.lease_id, at(10))  # the muxer stopped after a stall
+    for second in (20, 30, 39):
+        s.renew(lease.lease_id, at(second))
+        assert s.media_attempt(lease.lease_id, at(second))
+    assert _closed(s.tick(at(68.999))) == []
+    s.media_confirmed(lease.lease_id, "whep-2", at(68))
+    s.renew(lease.lease_id, at(68))
+    assert _closed(s.tick(at(100))) == []
+
+
 def test_heartbeat_lapse_closes_the_lease_and_kicks_the_viewer() -> None:
     s = session()
     lease = _confirmed_viewer(s, 0)
@@ -725,6 +785,23 @@ def test_the_silent_memory_expires_after_a_day() -> None:
     day = 24 * 3600
     _attach(s, day + 100, ("front_left", "front_right", "rear"))
     assert s.camera_available("rear", at(day + 100)) is None  # forgotten: asked again
+
+
+def test_a_camera_that_was_only_late_is_not_remembered_silent() -> None:
+    # A session that ends before the evidence time (here 30 s live) must not hide a camera
+    # that merely started late from the next sessions.
+    s = session()
+    lease = _confirmed_viewer(s, 0, ("front_left", "front_right"))
+    assert s.session_id is not None
+    s.source_started(s.session_id, CameraProvider.AGORA, ["front_left"], at(1))
+    assert s.camera_available("front_right", at(20)) is False  # this session: past the settle
+    s.detach(lease.lease_id, at(16))
+    effects = s.tick(at(31))
+    (stop,) = of_type(effects, StopVendorSession)
+    s.stop_completed(stop.session_id, at(31))
+    assert s.silent_cameras == {}
+    _attach(s, 100, ("front_left", "front_right"))
+    assert s.camera_available("front_right", at(100)) is None
 
 
 def test_a_session_that_never_went_live_remembers_nothing() -> None:

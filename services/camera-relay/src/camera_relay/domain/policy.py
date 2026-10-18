@@ -1,8 +1,9 @@
 """Timings and limits of the relay, and the admission rules of Vision leases.
 
 The defaults are the ones of ADR 0045, taken from ``mowdeck_contracts.v1.relay`` where the
-contracts define them. Three values exist only inside the relay and are defined here:
-:data:`UNBOUND_LEASE_SECONDS`, :data:`START_TIMEOUT_SECONDS` and the backoff bounds.
+contracts define them. Values that exist only inside the relay are defined here:
+:data:`UNBOUND_LEASE_SECONDS`, :data:`START_TIMEOUT_SECONDS`, the backoff bounds and the camera
+availability timings.
 """
 
 from dataclasses import dataclass
@@ -24,7 +25,10 @@ from mowdeck_contracts.v1.relay import (
 
 UNBOUND_LEASE_SECONDS: Final = 30
 """A viewer lease without confirmed media (no WHEP reader receiving bytes) is closed after this
-long: it holds the session only while its client connects."""
+long: it holds the session only while its client connects. Every WHEP offer the lease's ticket
+is accepted for (the client is trying to play) moves the deadline to this long after the offer,
+so a viewer that keeps trying while a camera starts or recovers from a stall keeps its lease,
+and one that stopped trying loses it this long after its last offer."""
 START_TIMEOUT_SECONDS: Final = 30
 """A session that has no media this long after the start request has failed."""
 BACKOFF_INITIAL_SECONDS: Final = 5
@@ -38,6 +42,10 @@ SILENT_CAMERA_MEMORY_SECONDS: Final = 24 * 3600
 """A camera found silent in a session is reported not available from the start of the next
 sessions of the same ``(account, mower)`` for this long (or until it publishes): a listed
 camera that never publishes does not show up for the first seconds of every session."""
+SILENT_CAMERA_EVIDENCE_SECONDS: Final = 45
+"""A camera is remembered as silent only when it was wanted for at least this long in a live
+session without publishing: a camera that merely starts late (a slow publisher, a 4G stall at
+the start) is never hidden from the next sessions."""
 MAX_LEASES_PER_SESSION: Final = 32
 """Open leases per session; one more is answered with ``unavailable`` (the relay is full)."""
 
@@ -89,6 +97,7 @@ class RelayPolicy:
     max_leases_per_session: int = MAX_LEASES_PER_SESSION
     camera_settle: timedelta = timedelta(seconds=CAMERA_SETTLE_SECONDS)
     silent_camera_memory: timedelta = timedelta(seconds=SILENT_CAMERA_MEMORY_SECONDS)
+    silent_camera_evidence: timedelta = timedelta(seconds=SILENT_CAMERA_EVIDENCE_SECONDS)
 
     def backoff(self, failures: int) -> timedelta:
         """The wait after ``failures`` failed starts in a row: 5, 10, 20, 40, 60, 60, ... s."""
