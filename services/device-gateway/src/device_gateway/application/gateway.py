@@ -32,6 +32,7 @@ from mowdeck_contracts.v1 import (
     PathPreviewReply,
     PhotoError,
     PhotoErrorCode,
+    PhotoFrame,
     PhotoReply,
     PhotoRequest,
     utc_now,
@@ -40,6 +41,7 @@ from mowdeck_control import CommandRejected, NotConnected, PathUnavailable
 from mowdeck_service_kit import get_logger
 
 from device_gateway.application.ports import (
+    CameraFrames,
     CameraSnapshotter,
     Clock,
     ConnectionProvider,
@@ -543,6 +545,10 @@ class DeviceGateway:
 
         A mower of another account is answered with ``not_found``, exactly like an unknown one.
         The image is capped at ``request.max_bytes``. Images are never logged.
+
+        With ``request.max_frames`` above 1 the reply carries ``frames`` (one per camera of the
+        same moment, left first, :meth:`MowerSession.capture_frames`) within ``max_bytes``
+        together; a frame beyond the cap is left out and named in ``frames_missing``.
         """
         session = self._sessions.get(request.mower_id)
         if session is None:
@@ -556,7 +562,9 @@ class DeviceGateway:
             return _photo_error(PhotoErrorCode.NOT_FOUND, "mower not found")
         try:
             async with asyncio.timeout(timeout_seconds):
-                photo = await session.capture_photo(request.demand)
+                found = await session.capture_frames(
+                    request.demand, max_frames=request.max_frames, max_bytes=request.max_bytes
+                )
         except NotConnected:
             return _photo_error(PhotoErrorCode.NOT_CONNECTED, "the mower is not connected")
         except PhotoUnsupported as exc:
@@ -571,20 +579,57 @@ class DeviceGateway:
             return _photo_error(
                 PhotoErrorCode.FAILED, f"taking the photo failed: {type(exc).__name__}"
             )
+        if request.max_frames > 1:
+            return self._frames_reply(request, found)
+        photo = found.frames[0].photo
         if len(photo.data) > request.max_bytes:
             return _photo_error(
                 PhotoErrorCode.TOO_LARGE,
                 f"the image has {len(photo.data)} bytes, more than allowed",
             )
-        media_type: Literal["image/jpeg", "image/png"] = (
-            "image/png" if photo.media_type == "image/png" else "image/jpeg"
-        )
         _log.info("photo taken", mower_id=str(request.mower_id), bytes=len(photo.data))
         return PhotoReply(
             image_base64=base64.b64encode(photo.data).decode("ascii"),
-            media_type=media_type,
+            media_type=_media_type(photo.media_type),
             taken_at=self._clock(),
         )
+
+    def _frames_reply(self, request: PhotoRequest, found: CameraFrames) -> PhotoReply:
+        """The frames of a multi-frame photo request, left first, within ``max_bytes``."""
+        frames: list[PhotoFrame] = []
+        missing = list(found.missing)
+        used = 0
+        for frame in found.frames[: request.max_frames]:
+            size = len(frame.photo.data)
+            if used + size > request.max_bytes:
+                if frame.camera_id:
+                    missing.append(frame.camera_id)
+                continue
+            used += size
+            frames.append(
+                PhotoFrame(
+                    image_base64=base64.b64encode(frame.photo.data).decode("ascii"),
+                    media_type=_media_type(frame.photo.media_type),
+                    captured_at=frame.captured_at,
+                    camera_id=frame.camera_id,
+                    camera_name=frame.camera_name,
+                    side=frame.side,
+                )
+            )
+        if not frames:
+            return _photo_error(
+                PhotoErrorCode.TOO_LARGE,
+                f"the image has {len(found.frames[0].photo.data)} bytes, more than allowed",
+            )
+        _log.info(
+            "photo frames taken",
+            mower_id=str(request.mower_id),
+            frames=len(frames),
+            sides=[frame.side for frame in frames],
+            missing=missing,
+            bytes=used,
+        )
+        return PhotoReply(frames=frames, frames_missing=missing[:8], taken_at=self._clock())
 
     # --- shutdown -----------------------------------------------------------------------------
 
@@ -628,6 +673,10 @@ def _scan_error(code: BridgeScanErrorCode, detail: str) -> BridgeScanReply:
 
 def _firmware_error(code: FirmwareCheckErrorCode, detail: str) -> FirmwareCheckReply:
     return FirmwareCheckReply(error=FirmwareCheckError(code=code, detail=detail[:500]))
+
+
+def _media_type(media_type: str) -> Literal["image/jpeg", "image/png"]:
+    return "image/png" if media_type == "image/png" else "image/jpeg"
 
 
 def _photo_error(code: PhotoErrorCode, detail: str) -> PhotoReply:

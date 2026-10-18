@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "PrincipalKind": {
+      "description": "What kind of subject a principal is.",
+      "enum": [
+        "user",
+        "subuser",
+        "api_token",
+        "service"
+      ],
+      "title": "PrincipalKind",
+      "type": "string"
+    },
+    "PrincipalRef": {
+      "description": "A compact reference to a principal, embedded in commands and audit records.",
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "kind": {
+          "$ref": "#/$defs/PrincipalKind",
+          "description": "Kind of subject."
+        },
+        "subject": {
+          "description": "Stable subject id (JWT `sub`).",
+          "format": "uuid",
+          "title": "Subject",
+          "type": "string"
+        },
+        "token_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Token id (JWT `jti`), if known.",
+          "title": "Token Id"
+        }
+      },
+      "required": [
+        "subject",
+        "kind"
+      ],
+      "title": "PrincipalRef",
+      "type": "object"
+    },
+    "VisionDemand": {
+      "description": "Why Vision wants camera frames; decides which limits apply without a present viewer\n(owner decision 2026-10-18).",
+      "enum": [
+        "routine",
+        "error_analysis"
+      ],
+      "title": "VisionDemand",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Body of ``POST /internal/v1/frames/set``: one frame of each camera of the same moment.\n\nThe relay holds one ``vision`` lease on the cameras for exactly the request (the same\nreuse, limits and demand rules as a single snapshot) and picks the cameras itself: both\nfront cameras when the mower has a left and a right one, else the cameras most likely to\ndeliver, at most ``max_frames``. The account and the mower come from a service that\nalready checked them (the Device-Gateway takes them from its own connection).",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "demand": {
+      "$ref": "#/$defs/VisionDemand",
+      "default": "routine"
+    },
+    "max_bytes": {
+      "default": 262144,
+      "description": "Size cap of each frame (JPEG); the caller divides its total by the frames.",
+      "maximum": 8388608,
+      "minimum": 1024,
+      "title": "Max Bytes",
+      "type": "integer"
+    },
+    "max_frames": {
+      "default": 2,
+      "description": "Most cameras in the set (2: a stereo pair of the front cameras).",
+      "maximum": 2,
+      "minimum": 1,
+      "title": "Max Frames",
+      "type": "integer"
+    },
+    "max_width": {
+      "default": 1280,
+      "maximum": 3840,
+      "minimum": 160,
+      "title": "Max Width",
+      "type": "integer"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "on_behalf_of": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The user the service acts for (logged only).",
+      "title": "On Behalf Of"
+    },
+    "requested_by": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PrincipalRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The requesting service (kind `service`); it owns the lease."
+    },
+    "timeout_s": {
+      "default": 20.0,
+      "exclusiveMinimum": 0,
+      "maximum": 30,
+      "title": "Timeout S",
+      "type": "number"
+    }
+  },
+  "required": [
+    "account_id",
+    "mower_id"
+  ],
+  "title": "VisionFrameSetRequest",
+  "type": "object"
+}

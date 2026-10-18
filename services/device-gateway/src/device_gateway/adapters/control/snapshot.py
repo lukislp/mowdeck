@@ -11,6 +11,14 @@ one within the Vision limits. A relay that is not reachable, has the frame tap s
 :class:`~device_gateway.application.ports.SnapshotUnavailable`, so the gateway may try the
 capture worker; every other answer (a limit, an offline mower, no frame in time) is final.
 
+``RelaySnapshotter.frame_set``: ``POST <MOWDECK_RELAY_URL>/internal/v1/frames/set`` with a
+:class:`~mowdeck_contracts.v1.VisionFrameSetRequest` (the same account, mower, principal,
+demand and token; ``max_bytes`` per frame) answers a
+:class:`~mowdeck_contracts.v1.VisionFrameSetReply`: one frame of each front camera of the same
+moment, left first, with its side and capture time, and the cameras that gave none. A relay
+without that route (an older release: 404 without a problem document, or 405) is asked for the
+single snapshot instead, so a rolling update never loses the photo.
+
 ``HttpCameraSnapshotter`` (deprecated with ADR 0045, kept for one release):
 ``POST <MOWDECK_CAPTURE_URL>/api/v1/capture`` with a
 :class:`~mowdeck_contracts.v1.CameraSnapshotRequest` (the camera session including its secret
@@ -20,16 +28,31 @@ token, the camera's Agora uid, the frame timeout) and ``Authorization: Bearer
 Tokens and images are never logged; problems carry the HTTP status only.
 """
 
-from typing import Final
+import base64
+import binascii
+from typing import Any, Final
 from uuid import UUID
 
 import httpx
-from mowdeck_contracts.v1 import CameraSnapshotRequest, PrincipalKind, PrincipalRef
+from mowdeck_contracts.v1 import (
+    CameraSnapshotRequest,
+    PrincipalKind,
+    PrincipalRef,
+    VisionFrameSetReply,
+    VisionFrameSetRequest,
+)
 from mowdeck_contracts.v1.vision import PHOTO_MAX_BYTES
 from mowdeck_control import Photo
 from mowdeck_service_kit import get_logger
+from pydantic import ValidationError
 
-from device_gateway.application.ports import SnapshotFailed, SnapshotTarget, SnapshotUnavailable
+from device_gateway.application.ports import (
+    CameraFrame,
+    CameraFrames,
+    SnapshotFailed,
+    SnapshotTarget,
+    SnapshotUnavailable,
+)
 
 _log = get_logger(__name__)
 
@@ -63,8 +86,29 @@ def _problem(response: httpx.Response) -> tuple[str, str]:
     return kind, detail
 
 
+def _frames(response: httpx.Response) -> CameraFrames:
+    """The frames of a frame set reply (base64 JPEGs, left first)."""
+    try:
+        reply = VisionFrameSetReply.model_validate_json(response.content)
+        frames = tuple(
+            CameraFrame(
+                photo=Photo(base64.b64decode(frame.image_base64, validate=True), "image/jpeg"),
+                captured_at=frame.captured_at,
+                camera_id=frame.camera_id,
+                camera_name=frame.camera_name,
+                side=frame.side,
+            )
+            for frame in reply.frames
+        )
+    except (ValidationError, binascii.Error, ValueError) as exc:
+        raise SnapshotFailed("the camera relay sent an unreadable frame set") from exc
+    if any(not frame.photo.data for frame in frames):
+        raise SnapshotFailed("the camera relay sent an empty image")
+    return CameraFrames(frames=frames, missing=tuple(item.camera_id for item in reply.missing))
+
+
 class RelaySnapshotter:
-    """Asks the camera relay's frame tap for one frame (ADR 0045)."""
+    """Asks the camera relay's frame tap for one frame or a frame set (ADR 0045)."""
 
     needs_camera_session = False
 
@@ -79,6 +123,7 @@ class RelaySnapshotter:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.url = base_url.rstrip("/") + "/internal/v1/frames/snapshot"
+        self.set_url = base_url.rstrip("/") + "/internal/v1/frames/set"
         self.token = token
         self.max_width = max_width
         self.max_bytes = max_bytes
@@ -101,30 +146,74 @@ class RelaySnapshotter:
             "demand": target.demand.value,
             "requested_by": self.principal.model_dump(mode="json", exclude_none=True),
         }
-        headers = {"Authorization": f"Bearer {self.token}"}
+        response = await self._post(self.url, body, wait)
+        if response.status_code == httpx.codes.OK:
+            return _jpeg(response, "camera relay")
+        raise self._refusal(response)
+
+    async def frame_set(
+        self,
+        target: SnapshotTarget,
+        *,
+        max_frames: int,
+        max_bytes: int,
+        timeout_seconds: float,
+    ) -> CameraFrames:
+        """One frame of each front camera of the same moment through the relay (each at most
+        ``max_bytes``); an older relay without frame sets gives its single snapshot."""
+        wait = min(timeout_seconds, RELAY_MAX_TIMEOUT_SECONDS)
+        request = VisionFrameSetRequest(
+            account_id=target.account_id,
+            mower_id=target.mower_id,
+            max_frames=max_frames,
+            max_width=self.max_width,
+            max_bytes=min(max_bytes, self.max_bytes),
+            timeout_s=wait,
+            requested_by=self.principal,
+            demand=target.demand,
+        )
+        response = await self._post(
+            self.set_url, request.model_dump(mode="json", exclude_none=True), wait
+        )
+        if response.status_code == httpx.codes.OK:
+            return _frames(response)
+        problem, _ = _problem(response)
+        if response.status_code == httpx.codes.METHOD_NOT_ALLOWED or (
+            response.status_code == httpx.codes.NOT_FOUND and not problem
+        ):
+            _log.info("camera relay without frame sets, asking for one frame")
+            photo = await self.snapshot(target, timeout_seconds=timeout_seconds)
+            return CameraFrames(frames=(CameraFrame(photo=photo),))
+        raise self._refusal(response)
+
+    async def _post(self, url: str, body: dict[str, Any], wait: float) -> httpx.Response:
+        headers = {"Authorization": "Bearer " + self.token}
         try:
             async with httpx.AsyncClient(transport=self._transport, timeout=wait + 5) as client:
-                response = await client.post(self.url, json=body, headers=headers)
+                return await client.post(url, json=body, headers=headers)
         except httpx.TimeoutException as exc:
             raise SnapshotFailed("the camera relay did not answer in time") from exc
         except httpx.HTTPError as exc:
             raise SnapshotUnavailable(
                 f"the camera relay is unreachable: {type(exc).__name__}"
             ) from exc
-        if response.status_code == httpx.codes.OK:
-            return _jpeg(response, "camera relay")
+
+    @staticmethod
+    def _refusal(response: httpx.Response) -> SnapshotFailed:
+        """The error of a refused request: :class:`SnapshotUnavailable` when another frame
+        source may serve the mower, else final."""
         problem, detail = _problem(response)
         _log.info("camera relay refused the frame", status=response.status_code, problem=problem)
         text = f"the camera relay answered {response.status_code} {problem}".strip()
         if detail:
             text = f"{text}: {detail}"
         if problem in HANDOVER_PROBLEMS:
-            raise SnapshotUnavailable(text)
+            return SnapshotUnavailable(text)
         if response.status_code in (401, 405) or (response.status_code == 404 and not problem):
             # The tokens do not match, or a relay without the frame tap: a configuration the
             # next source may cover. A refused mower (a "not-found" problem) stays final.
-            raise SnapshotUnavailable(text)
-        raise SnapshotFailed(text)
+            return SnapshotUnavailable(text)
+        return SnapshotFailed(text)
 
 
 class HttpCameraSnapshotter:

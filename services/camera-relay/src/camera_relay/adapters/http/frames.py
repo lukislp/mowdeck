@@ -5,6 +5,11 @@ Traefik, the relay has no route at all).
   with ``X-Frame-Captured-At`` and ``X-Frame-Received-At`` (ISO 8601, the relay's wall clock;
   the capture time is the best estimate, the receive time where nothing better is known),
   ``X-Frame-Camera``, ``X-Frame-Width`` and ``X-Frame-Height``.
+* ``POST /internal/v1/frames/set`` with a :class:`~mowdeck_contracts.v1.VisionFrameSetRequest`
+  answers a :class:`~mowdeck_contracts.v1.VisionFrameSetReply` (JSON): one frame of each camera
+  of the same moment (both front cameras for a stereo pair, left first), each with its camera,
+  side and capture time, and the cameras that gave none in ``missing``. One silent camera
+  never fails the set; the problems below apply only when no camera gives a frame.
 * ``GET /internal/v1/frames/stream?account_id&mower_id&camera_id&fps&max_width`` answers
   ``multipart/x-mixed-replace; boundary=frame``: one JPEG part per frame with
   ``Content-Length``, ``X-Frame-Index`` and the two time headers. The lease lives while the
@@ -33,6 +38,7 @@ Images and tokens are never logged.
 """
 
 import asyncio
+import base64
 import hmac
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime
@@ -42,7 +48,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Response
 from fastapi.responses import StreamingResponse
 from mowdeck_contracts.v1.principal import PrincipalKind, PrincipalRef
-from mowdeck_contracts.v1.relay import RelayErrorCode, VisionDemand
+from mowdeck_contracts.v1.relay import (
+    RelayErrorCode,
+    VisionDemand,
+    VisionFrame,
+    VisionFrameMissing,
+    VisionFrameSetReply,
+    VisionFrameSetRequest,
+)
 from mowdeck_contracts.v1.vision import PHOTO_MAX_BYTES
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.errors import NotFound, ServiceError, Unauthorized
@@ -56,6 +69,7 @@ from camera_relay.application.frames import (
     TIMEOUT,
     Frame,
     FrameRequest,
+    FrameSet,
     FrameStream,
     FrameTap,
     FrameTapError,
@@ -204,6 +218,30 @@ def _part(frame: Frame, index: int) -> bytes:
     return ("\r\n".join(head) + "\r\n\r\n").encode("ascii") + frame.data + b"\r\n"
 
 
+def _set_reply(found: FrameSet) -> VisionFrameSetReply:
+    return VisionFrameSetReply(
+        frames=[
+            VisionFrame(
+                camera_id=item.camera.id,
+                camera_name=item.camera.name or None,
+                placement=item.camera.placement,
+                side=item.side,
+                image_base64=base64.b64encode(item.frame.data).decode("ascii"),
+                captured_at=item.frame.captured_at,
+                received_at=item.frame.received_at,
+                width=item.frame.width,
+                height=item.frame.height,
+            )
+            for item in found.frames
+        ],
+        missing=[
+            VisionFrameMissing(camera_id=item.camera.id, side=item.side, reason=item.reason)
+            for item in found.missing
+        ],
+        skew_ms=found.skew_ms,
+    )
+
+
 def frames_router(
     tap: Callable[[], FrameTap | None],
     token: Callable[[], str | None],
@@ -264,6 +302,38 @@ def frames_router(
         finally:
             slots.release()
         return Response(content=frame.data, media_type="image/jpeg", headers=_frame_headers(frame))
+
+    @router.post(
+        "/internal/v1/frames/set",
+        include_in_schema=False,
+        dependencies=[Depends(authorized)],
+    )
+    async def frame_set(body: VisionFrameSetRequest) -> Response:
+        current = active_tap()
+        await acquire()
+        try:
+            found = await current.snapshot_set(
+                FrameRequest(
+                    account_id=body.account_id,
+                    mower_id=body.mower_id,
+                    requested_by=_principal(body.requested_by),
+                    on_behalf_of=body.on_behalf_of,
+                    demand=body.demand,
+                ),
+                max_frames=body.max_frames,
+                max_width=body.max_width,
+                max_bytes=body.max_bytes,
+                timeout_s=body.timeout_s,
+            )
+        except FrameTapError as exc:
+            raise _problem(exc) from exc
+        finally:
+            slots.release()
+        return Response(
+            content=_set_reply(found).model_dump_json(),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get(
         "/internal/v1/frames/stream",

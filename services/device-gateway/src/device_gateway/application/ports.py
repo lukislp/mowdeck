@@ -3,7 +3,7 @@
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
@@ -18,7 +18,7 @@ from mowdeck_contracts.v1 import (
     MowerRegistration,
     MowerState,
 )
-from mowdeck_contracts.v1.relay import VisionDemand
+from mowdeck_contracts.v1.relay import CameraSide, VisionDemand
 from mowdeck_control import MowerConnection, Photo
 
 from device_gateway.domain.rules import Shard
@@ -78,6 +78,45 @@ class CameraSnapshotter(Protocol):
     async def snapshot(self, target: SnapshotTarget, *, timeout_seconds: float) -> Photo:
         """One JPEG; raises :class:`SnapshotUnavailable` (try the next source) or
         :class:`SnapshotFailed`."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class CameraFrame:
+    """One camera's still of a moment and what is known about it."""
+
+    photo: Photo
+    captured_at: datetime | None = None
+    """When the camera took it, as well as the source knows."""
+    camera_id: str | None = None
+    camera_name: str | None = None
+    side: CameraSide | None = None
+    """``left`` or ``right`` for a front camera of a stereo pair."""
+
+
+@dataclass(frozen=True, slots=True)
+class CameraFrames:
+    """Stills of the same moment, left before right, and the cameras that gave none."""
+
+    frames: tuple[CameraFrame, ...]
+    missing: tuple[str, ...] = ()
+
+
+@runtime_checkable
+class FrameSetSnapshotter(Protocol):
+    """A :class:`CameraSnapshotter` that also takes one frame of each camera of the same moment
+    (the camera relay's frame set: both front cameras as a stereo pair)."""
+
+    async def frame_set(
+        self,
+        target: SnapshotTarget,
+        *,
+        max_frames: int,
+        max_bytes: int,
+        timeout_seconds: float,
+    ) -> CameraFrames:
+        """Up to ``max_frames`` frames, each at most ``max_bytes``; one silent camera is left
+        out (``missing``), never failing the set. Raises like ``snapshot``."""
         ...
 
 
