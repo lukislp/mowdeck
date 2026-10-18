@@ -144,6 +144,10 @@ class RelaySession:
         self.session_vision = timedelta(0)
         self._vision_by_day: dict[date, timedelta] = {}
         self._accounted_at: datetime | None = None
+        self.silent_cameras: dict[str, datetime] = {}
+        """Cameras found silent in an earlier session (camera -> when): reported not available
+        from the start for :attr:`RelayPolicy.silent_camera_memory`, until they publish. Kept
+        across sessions (the repository hands it on when it forgets a dormant session)."""
 
     # --- Queries ------------------------------------------------------------------------------
 
@@ -206,9 +210,13 @@ class RelaySession:
     def camera_available(self, camera: str, now: datetime) -> bool | None:
         """Whether ``camera`` delivers: True once its stream appeared, False when it has not
         appeared :attr:`RelayPolicy.camera_settle` after the session went live (a listed
-        camera that never publishes), None while that is not known yet."""
+        camera that never publishes) or was found silent in a recent session (no flash of a
+        camera that never publishes at the start), None while that is not known yet."""
         if camera in self.publishing:
             return True
+        found = self.silent_cameras.get(camera)
+        if found is not None and now - found < self.policy.silent_camera_memory:
+            return False
         if self.state not in (SessionState.LIVE, SessionState.DRAINING) or not self.started_at:
             return None
         since = max(self.started_at, self.wanted_since.get(camera, self.started_at))
@@ -371,6 +379,8 @@ class RelaySession:
         self.failures = 0
         self.source = source
         self.publishing = tuple(publishing)
+        for camera in self.publishing:
+            self.silent_cameras.pop(camera, None)
         out.append(
             EmitEvent(
                 self.key,
@@ -403,6 +413,8 @@ class RelaySession:
             session_id == self.session_id
         ):
             self.publishing = tuple(dict.fromkeys((*self.publishing, *cameras)))
+            for camera in cameras:
+                self.silent_cameras.pop(camera, None)
         return out
 
     def source_failed(
@@ -636,6 +648,7 @@ class RelaySession:
         """Close every lease, leave the source and (``release``) release the stream:
         ``-> STOPPING``."""
         assert self.session_id is not None and self.relay_id is not None  # noqa: S101
+        self._remember_silent(at)
         for lease in list(self.leases.values()):
             self._close(lease, RelayLeaseCloseReason.SESSION_STOPPED, at, out)
         out.append(StopVendorSession(self.key, self.session_id, self.relay_id, release=release))
@@ -661,6 +674,21 @@ class RelaySession:
         self.state = SessionState.STOPPING
         self.start_deadline = None
         self.drain_deadline = None
+
+    def _remember_silent(self, at: datetime) -> None:
+        """At the end of a live session: the wanted cameras that never published are silent
+        (from the publishers alone: no camera, model or placement is special)."""
+        if self.started_at is None:
+            return
+        for camera in self.cameras:
+            if camera in self.publishing:
+                self.silent_cameras.pop(camera, None)
+            elif camera not in self.silent_cameras and self.camera_available(camera, at) is False:
+                self.silent_cameras[camera] = at
+        memory = self.policy.silent_camera_memory
+        for camera, found in list(self.silent_cameras.items()):
+            if at - found >= memory:
+                del self.silent_cameras[camera]
 
     def _fail(self, at: datetime, out: list[Effect], *, release: bool = True) -> None:
         self._stop(RelayStopReason.FAILED, at, out, release=release)

@@ -24,9 +24,12 @@
  *   WHEP sessions and detaches the lease (Fleet's DELETE, `keepalive` so it survives a page
  *   that is going away). A lease without confirmed media closes after 30 s on the relay, so
  *   every reconnect requests a new session.
- * * Cameras: a tile the relay reports as `available: false` (a camera the vendor lists but the
- *   mower never publishes) is left out of the publishers, so the picker does not offer it;
- *   every renewal updates that list.
+ * * Cameras: only a camera known to deliver is a publisher the picker offers: one the relay
+ *   reports `available: true`, one a tile plays (live), or one a tile was asked for by the
+ *   viewer's choice (it must not look missing while it starts). A camera whose availability is
+ *   not known yet (`null`, the first seconds of a session) or that the relay reports
+ *   `available: false` (listed by the vendor, never published) is left out, so a camera the
+ *   mower does not have never flashes up; every renewal and every live tile updates the list.
  * * Diagnostics: `getStats()` of every tile's receiver (bitrate, loss, frame rate, size,
  *   freezes, jitter buffer, round trip) as the panel's snapshot.
  *
@@ -190,6 +193,7 @@ export class WhepPlayer implements CameraPlayer {
   private lastTracks = '';
   private lastActive: number | null | undefined = undefined;
   private lostReported = false;
+  private lastPublishers: string | null = null;
   private readonly fetcher: typeof fetch;
   private readonly createPeer: () => PeerConnection;
   private readonly origin: () => string;
@@ -230,7 +234,7 @@ export class WhepPlayer implements CameraPlayer {
     this.options = options;
     this.log = new EventLog(this.now);
     this.stopped = false;
-    this.events.onPublishers?.(this.servedUids());
+    this.lastPublishers = null;
     this.tiles = slotsOf(choice).map((wanted) => this.bind(emptyTile(wanted)));
     this.scheduleHeartbeat();
     this.announce();
@@ -320,15 +324,32 @@ export class WhepPlayer implements CameraPlayer {
   // --- Cameras --------------------------------------------------------------------------------
 
   /**
-   * The uids of the cameras the relay serves (a tile each), without those it reports as not
-   * available (`available: false`: listed by the vendor, but the mower never publishes them).
+   * The uids of the cameras known to deliver: reported `available: true` by the relay, played
+   * by a live tile, or asked for by a tile of the viewer's choice. Unknown (`null`) and
+   * `available: false` cameras are left out (the vendor lists cameras the mower may not have).
    */
   private servedUids(): number[] {
-    const tiles = (this.session?.relay?.tiles ?? []).filter((tile) => tile.available !== false);
+    const endpoints = this.session?.relay?.tiles ?? [];
+    const shown = new Set(
+      this.tiles.filter((tile) => tile.live || tile.wanted !== null).map((tile) => tile.uid),
+    );
     return (this.session?.cameras ?? [])
-      .filter((camera) => tiles.some((tile) => tile.camera_id === camera.id))
+      .filter((camera) => {
+        const tile = endpoints.find((endpoint) => endpoint.camera_id === camera.id);
+        if (!tile || tile.available === false) return false;
+        return tile.available === true || shown.has(camera.uid ?? null);
+      })
       .map((camera) => camera.uid)
       .filter((uid): uid is number => uid !== null && uid !== undefined);
+  }
+
+  /** Report the publishers when they changed. */
+  private announcePublishers(): void {
+    const uids = this.servedUids();
+    const key = uids.join(',');
+    if (key === this.lastPublishers) return;
+    this.lastPublishers = key;
+    this.events.onPublishers?.(uids);
   }
 
   /** The camera a tile plays: its uid's, or (without a choice) the first one served. */
@@ -340,7 +361,12 @@ export class WhepPlayer implements CameraPlayer {
     if (!session || !endpoints.length) return null;
     const cameras = session.cameras ?? [];
     if (wanted === null) {
-      const endpoint = endpoints.find((e) => e.available !== false) ?? endpoints[0]!;
+      // The first camera known to deliver, else the first not known silent (the relay lists
+      // the tiles front first), else the first.
+      const endpoint =
+        endpoints.find((e) => e.available === true) ??
+        endpoints.find((e) => e.available !== false) ??
+        endpoints[0]!;
       const camera = cameras.find((c) => c.id === endpoint.camera_id);
       return { uid: camera?.uid ?? null, cameraId: endpoint.camera_id, url: endpoint.whep_url };
     }
@@ -529,6 +555,7 @@ export class WhepPlayer implements CameraPlayer {
 
   /** Tell the viewer the first tile's camera, the live cameras and live or not (on changes). */
   private announce(): void {
+    this.announcePublishers();
     const first = this.tiles[0]?.uid ?? null;
     if (first !== this.lastActive) {
       this.lastActive = first;
@@ -586,7 +613,7 @@ export class WhepPlayer implements CameraPlayer {
     this.session = next;
     this.ticket = next.relay.ticket;
     this.events.onRenewed?.(next);
-    this.events.onPublishers?.(this.servedUids()); // the relay now knows which cameras deliver
+    this.announcePublishers(); // the relay now knows which cameras deliver
   }
 
   // --- Statistics -----------------------------------------------------------------------------

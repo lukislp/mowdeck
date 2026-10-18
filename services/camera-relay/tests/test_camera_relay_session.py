@@ -15,8 +15,9 @@ from mowdeck_contracts.v1.relay import (
     RelayStopReason,
     VisionDemand,
 )
-from relay_support import ONLINE, T0, at, events, of_type, principal, session
+from relay_support import ONLINE, T0, at, events, key, of_type, principal, session
 
+from camera_relay.adapters.memory import InMemoryRelayRepository
 from camera_relay.domain.effects import (
     Effect,
     IssueTicket,
@@ -678,6 +679,62 @@ def test_a_camera_asked_for_later_gets_its_own_settle_time() -> None:
     assert s.camera_available("front_right", at(46)) is False
 
 
+def _run_and_stop(s: RelaySession, start: float, publishing: list[str]) -> None:
+    """A viewer session of every listed camera that goes live with ``publishing`` and ends
+    after the grace (60 s after ``start``)."""
+    lease = _confirmed_viewer(s, start, ("front_left", "front_right", "rear"))
+    assert s.session_id is not None
+    s.source_started(s.session_id, CameraProvider.AGORA, publishing, at(start + 1))
+    s.detach(lease.lease_id, at(start + 40))
+    effects = s.tick(at(start + 60))
+    (stop,) = of_type(effects, StopVendorSession)
+    s.stop_completed(stop.session_id, at(start + 60))
+    assert _state(s) is SessionState.IDLE
+
+
+def test_a_camera_found_silent_is_unavailable_from_the_start_of_the_next_session() -> None:
+    # Owner report 2026-10-18: the picker showed the LUBA's rear camera (listed, never
+    # published) for the first 15 s of every session. Derived from the publishers alone.
+    s = session()
+    _run_and_stop(s, 0, ["front_left", "front_right"])
+    assert set(s.silent_cameras) == {"rear"}
+    _attach(s, 100, ("front_left", "front_right", "rear"))
+    assert [s.camera_available(c, at(100)) for c in ("front_left", "front_right", "rear")] == [
+        None,  # not known yet in this session
+        None,
+        False,  # silent last time: not offered from the start
+    ]
+
+
+def test_a_remembered_silent_camera_flips_to_available_once_it_publishes() -> None:
+    s = session()
+    _run_and_stop(s, 0, ["front_left"])
+    assert set(s.silent_cameras) == {"front_right", "rear"}
+    _attach(s, 100, ("front_left", "front_right", "rear"))
+    assert s.session_id is not None
+    s.source_started(s.session_id, CameraProvider.AGORA, ["front_left"], at(101))
+    assert s.camera_available("front_right", at(101)) is False
+    s.cameras_published(s.session_id, ["front_right"], at(102))
+    assert s.camera_available("front_right", at(102)) is True
+    assert "front_right" not in s.silent_cameras
+
+
+def test_the_silent_memory_expires_after_a_day() -> None:
+    s = session()
+    _run_and_stop(s, 0, ["front_left", "front_right"])
+    day = 24 * 3600
+    _attach(s, day + 100, ("front_left", "front_right", "rear"))
+    assert s.camera_available("rear", at(day + 100)) is None  # forgotten: asked again
+
+
+def test_a_session_that_never_went_live_remembers_nothing() -> None:
+    s = session()
+    _attach(s, 0, ("front_left", "rear"))
+    assert s.session_id is not None
+    s.source_failed(s.session_id, at(5))
+    assert s.silent_cameras == {}
+
+
 # --- Owner decisions 2026-10-18: who may wake a sleeping mower --------------------------------
 
 
@@ -765,3 +822,15 @@ def test_an_error_analysis_keeps_running_while_the_mower_sleeps() -> None:
     _live(s, 1)
     assert not of_type(s.mower_status_changed(ASLEEP, at(2)), StopVendorSession)
     assert lease.lease_id in s.leases
+
+
+def test_the_repository_hands_silent_cameras_on_to_the_next_session_of_the_key() -> None:
+    repository = InMemoryRelayRepository()
+    relay_key = key()
+    first = repository.get_or_create(relay_key)
+    first.silent_cameras = {"rear": at(0)}
+    repository.remove(relay_key)  # a dormant session is forgotten
+    second = repository.get_or_create(relay_key)
+    assert second is not first
+    assert second.silent_cameras == {"rear": at(0)}
+    assert repository.get_or_create(key()).silent_cameras == {}  # another mower: nothing

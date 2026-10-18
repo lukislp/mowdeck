@@ -34,6 +34,10 @@ BACKOFF_MAX_SECONDS: Final = 60
 CAMERA_SETTLE_SECONDS: Final = 15
 """A camera whose stream has not appeared this long after the session went live is reported
 as not available (``RelayTile.available`` false): a listed camera that never publishes."""
+SILENT_CAMERA_MEMORY_SECONDS: Final = 24 * 3600
+"""A camera found silent in a session is reported not available from the start of the next
+sessions of the same ``(account, mower)`` for this long (or until it publishes): a listed
+camera that never publishes does not show up for the first seconds of every session."""
 MAX_LEASES_PER_SESSION: Final = 32
 """Open leases per session; one more is answered with ``unavailable`` (the relay is full)."""
 
@@ -84,6 +88,7 @@ class RelayPolicy:
     vision_min_battery_percent: float = VISION_MIN_BATTERY_PERCENT
     max_leases_per_session: int = MAX_LEASES_PER_SESSION
     camera_settle: timedelta = timedelta(seconds=CAMERA_SETTLE_SECONDS)
+    silent_camera_memory: timedelta = timedelta(seconds=SILENT_CAMERA_MEMORY_SECONDS)
 
     def backoff(self, failures: int) -> timedelta:
         """The wait after ``failures`` failed starts in a row: 5, 10, 20, 40, 60, 60, ... s."""
