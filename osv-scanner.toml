@@ -1,0 +1,13 @@
+# OSV-Scanner configuration, also read by the OpenSSF Scorecard Vulnerabilities check. It sits
+# next to pnpm-lock.yaml and uv.lock because OSV-Scanner looks for it beside the lock file.
+# Every entry is an explicit, time-boxed acceptance; CONTRIBUTING.md says when to remove one.
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2027-01-19
+reason = """\
+braces 3.0.3 is dev-only: micromatch 4.0.8 <- fast-glob/globby <- stylelint, which only expands \
+the repository's own lint globs and never sees untrusted input. No fixed braces release exists \
+and every package on the path is already at its latest version. Remove this entry once a fixed \
+braces (or a micromatch/stylelint release without it) lands via Dependabot or upstream, or \
+re-check by the ignoreUntil date."""

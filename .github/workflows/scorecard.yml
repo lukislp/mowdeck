@@ -3,11 +3,18 @@ name: OpenSSF Scorecard
 # Weekly supply-chain posture check (branch protection, pinned dependencies, token permissions,
 # vulnerabilities, ...). Results land in the Security tab as code-scanning alerts and on
 # https://scorecard.dev/viewer/?uri=github.com/lukislp/mowdeck. Read-only, non-blocking.
+#
+# After a merge it runs once ci.yml has finished on main instead of on push: Binary-Artifacts
+# only counts the committed gradle-wrapper.jar as validated when a successful ci.yml run (the
+# gradle-wrapper job) exists for the latest main commit, and a push-triggered analysis finishes
+# before that run does.
 on:
   branch_protection_rule:
   schedule:
     - cron: "17 4 * * 1"
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -15,6 +22,8 @@ permissions: read-all
 
 jobs:
   analysis:
+    # A cancelled or failed ci.yml run is superseded by the next one; analyse after that instead.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
