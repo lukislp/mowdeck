@@ -82,8 +82,8 @@ importers:
         specifier: 8.0.2
         version: 8.0.2(@capacitor/core@8.5.2)
       '@capawesome/capacitor-badge':
-        specifier: 8.0.3
-        version: 8.0.3(@capacitor/core@8.5.2)
+        specifier: 8.0.4
+        version: 8.0.4(@capacitor/core@8.5.2)
       '@mowdeck/ui':
         specifier: workspace:*
         version: link:../../libs/mowdeck-ui
@@ -419,8 +419,8 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
-  '@capawesome/capacitor-badge@8.0.3':
-    resolution: {integrity: sha512-Lj79UxRW2PqHVxE+9OUtLItAkrOwN3i0K/QUzLOp/Em5OALXaFRjldzFlLOmJpjE/5+tEZ55KstwgtzrzW2aqw==}
+  '@capawesome/capacitor-badge@8.0.4':
+    resolution: {integrity: sha512-ADqD0XvSxrry2B5ntLHJrrRKnjYqZjJANRbNpCnEwHn2zBeOt5KIqP6T2FZUod574fPCgXpfhQJWAacaYjNMXA==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
@@ -3066,7 +3066,7 @@ snapshots:
     dependencies:
       '@capacitor/core': 8.5.2
 
-  '@capawesome/capacitor-badge@8.0.3(@capacitor/core@8.5.2)':
+  '@capawesome/capacitor-badge@8.0.4(@capacitor/core@8.5.2)':
     dependencies:
       '@capacitor/core': 8.5.2
 
