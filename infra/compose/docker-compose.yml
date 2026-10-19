@@ -1228,6 +1228,10 @@ services:
       args:
         NODE_IMAGE: ${NODE_IMAGE:-public.ecr.aws/docker/library/node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402}
         NGINX_IMAGE: ${NGINX_IMAGE:-public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine@sha256:56b8272e43a0525f67aed68d1e0794a712d10e3e45a563e118e9a77c817e6f86}
+        # The Agora Web SDK for the direct camera path (ADR 0032) in this locally built image
+        # only; the published web image never contains it (apps/web/README.md, "Agora Web SDK").
+        # "exclude" builds what the release publishes.
+        WEB_AGORA_SDK: ${WEB_AGORA_SDK:-include}
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]

@@ -24,6 +24,7 @@ The tag starts `release.yml` and `helm-kind.yml`. A tag with a pre-release suffi
 | Job | Output |
 | --- | --- |
 | `version` | the version from the tag (`v0.1.0` gives `0.1.0`) or the input, checked against semantic versioning |
+| `licence-gate` (one job per image, before anything is pushed) | builds each image for linux/amd64 into the runner only and runs `tools/repo-checks/scripts/licence_gate.py` on it: a Syft SBOM with licences, the image's file system, the web bundle and the `org.opencontainers.image.licenses` label. It fails on any Agora package or file (the Agora SDKs are proprietary and are never redistributed), a licence that is not open source, a label that differs from the expected one or missing licence texts; `images` only starts after it passed. See [Licences](#licences). |
 | `images` (one job per image, in parallel) | `identity`, `fleet`, `device-gateway`, `telemetry`, `realtime`, `notifications`, `scheduler`, `entitlements`, `planner`, `web` and `authz-bootstrap` for **linux/amd64 and linux/arm64** as one multi-platform image each: `ghcr.io/<owner>/mowdeck/<image>:<version>`, `:v<version>` and, for a final release, `:latest`. Built with Buildx, QEMU for arm64 ([docker/setup-qemu-action](https://github.com/docker/setup-qemu-action), [multi-platform builds](https://docs.docker.com/build/building/multi-platform/)) and the GitHub Actions cache ([gha cache backend](https://docs.docker.com/build/cache/backends/gha/)); base images as pinned in `infra/compose/.env.example`. Each image carries an SBOM and a provenance attestation ([build attestations](https://docs.docker.com/build/metadata/attestations/sbom/)) and gets an SPDX SBOM file from [anchore/sbom-action](https://github.com/anchore/sbom-action). |
 | `chart` | `helm package` with `version` and `appVersion` set to the release version (so `image.tag` defaults to the released images), pushed as an OCI artifact to `oci://ghcr.io/<owner>/charts/mowdeck:<version>` ([Helm registries](https://helm.sh/docs/topics/registries/)) |
 | `release` | a GitHub release `v<version>` with notes generated from the merged pull requests and commits since the previous tag ([generated release notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes), [softprops/action-gh-release](https://github.com/softprops/action-gh-release)), an install snippet, the chart archive and the SBOM files |
@@ -60,3 +61,19 @@ With Compose, the stack runs `mowdeck/<service>:${MOWDECK_VERSION}`; to run a pu
 ## Signing (not yet enabled)
 
 Images and the chart are not signed yet. Keyless signing with [Cosign](https://docs.sigstore.dev/cosign/signing/signing_with_containers/) fits the workflow: add `id-token: write` to the `images` and `chart` jobs, install `sigstore/cosign-installer`, and run `cosign sign --yes ghcr.io/<owner>/mowdeck/<image>@<digest>` (digest from the build step's output) and `cosign sign --yes ghcr.io/<owner>/charts/mowdeck@<digest>` after `helm push`. Verification then pins the workflow identity: `cosign verify --certificate-identity-regexp 'https://github.com/lukislp/mowdeck/.github/workflows/release.yml@refs/tags/v.*' --certificate-oidc-issuer https://token.actions.githubusercontent.com <image>`.
+
+## Licences
+
+What a release publishes and under which licence ([LICENSING.md](https://github.com/lukislp/mowdeck/blob/main/LICENSING.md)):
+
+| Artifact | `org.opencontainers.image.licenses` | Notes |
+| --- | --- | --- |
+| `identity`, `fleet`, `telemetry`, `realtime`, `notifications`, `scheduler`, `entitlements`, `billing`, `planner`, `vision`, `camera-relay` | `AGPL-3.0-only AND Apache-2.0` | the service (AGPL-3.0) and the `libs/*` it uses (Apache-2.0); `vision` without the capture worker (`WITH_CAPTURE=false`), `camera-relay` with Debian's ffmpeg (GPL, Debian main) |
+| `device-gateway` | `AGPL-3.0-only AND Apache-2.0 AND GPL-3.0-only` | contains the GPL-3.0 adapter `mowdeck-control-mammotion` and PyMammotion (GPL-3.0); AGPL-3.0 section 13 and GPL-3.0 section 13 allow the combination |
+| `web` | `AGPL-3.0-only AND Apache-2.0` | built with `WEB_AGORA_SDK=exclude`: no Agora Web SDK; `/THIRD-PARTY-LICENSES.txt` lists every npm package in the bundle with its licence text |
+| `authz-bootstrap` | `AGPL-3.0-only AND Apache-2.0 AND MIT AND GPL-2.0-only` | bootstrap script (AGPL-3.0), the OpenFGA CLI (Apache-2.0), jq (MIT), busybox (GPL-2.0) |
+| Helm chart | AGPL-3.0 | templates only; no agora-bridge image (the operator builds it, the chart refuses to render the bridge without one) |
+
+Every service and web image carries `LICENSE`, `LICENSING.md` and `LICENSES/` under `/usr/share/doc/mowdeck`; the third-party Python packages keep their licence files in their `dist-info`, the Debian and Alpine packages under `/usr/share/doc` and `/usr/share/licenses`. The SPDX SBOM files attached to the release list every package with its declared licence.
+
+Never published: `agora-bridge` (contains Agora's native SDK), `vision-capture` (contains the Agora Web SDK) and a web image built with `WEB_AGORA_SDK=include`. Operators who want them build them for their own installation ([integrations/agora-bridge](https://github.com/lukislp/mowdeck/blob/main/integrations/agora-bridge/README.md), [apps/web](https://github.com/lukislp/mowdeck/blob/main/apps/web/README.md#agora-web-sdk-and-third-party-licences)). `tools/repo-checks` (`test_release_licences.py`) keeps them out of every workflow, and the `licence-gate` job checks the built images again.

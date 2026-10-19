@@ -3,7 +3,8 @@ name: release
 # Publishes a MowDeck release (docs/ops/release.md):
 #   * every image for linux/amd64 and linux/arm64 (QEMU, GitHub Actions cache) to
 #     ghcr.io/<owner>/mowdeck/<image>:<version>, :v<version> and, for a final release, :latest,
-#     each with an SBOM and provenance attestation and an SPDX SBOM file
+#     each with an SBOM and provenance attestation and an SPDX SBOM file (with licences), after
+#     the licence gate passed (job licence-gate; the licence label comes from each Dockerfile)
 #   * the Helm chart as an OCI artifact ghcr.io/<owner>/charts/mowdeck:<version>
 #     (appVersion = version, so image.tag defaults to the released images)
 #   * the Android app as mowdeck-<version>.apk (apps/mobile, docs/ops/mobile-apps.md), signed with
@@ -80,8 +81,102 @@ jobs:
             echo "owner=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
           } | tee -a "$GITHUB_OUTPUT"
 
-  images:
+  # Licence gate (LICENSING.md, apps/web/README.md "Agora Web SDK and third-party licences"):
+  # every image is built once for linux/amd64 into the runner's Docker engine, never pushed, and
+  # checked before the images job publishes anything: no Agora package or file (the Agora SDKs
+  # are proprietary and never redistributed), no licence that is not open source, the licence
+  # label of the Dockerfile and the MowDeck licence texts inside. Its matrix equals the images
+  # matrix (tools/repo-checks, test_release_licences.py).
+  licence-gate:
     needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {image: identity, context: ., file: services/identity/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: fleet, context: ., file: services/fleet/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: device-gateway, context: ., file: services/device-gateway/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0 AND GPL-3.0-only"}
+          - {image: telemetry, context: ., file: services/telemetry/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: realtime, context: ., file: services/realtime/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: notifications, context: ., file: services/notifications/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: scheduler, context: ., file: services/scheduler/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: entitlements, context: ., file: services/entitlements/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: billing, context: ., file: services/billing/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: planner, context: ., file: services/planner/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: vision, context: ., file: services/vision/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: camera-relay, context: ., file: services/camera-relay/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: web, context: ., file: apps/web/Dockerfile, kind: web, licenses: "AGPL-3.0-only AND Apache-2.0", flags: --web}
+          - {image: authz-bootstrap, context: infra/openfga, file: infra/openfga/bootstrap/Dockerfile, kind: bootstrap, licenses: "AGPL-3.0-only AND Apache-2.0 AND MIT AND GPL-2.0-only", flags: --no-licence-files}
+    env:
+      LOCAL: licence-gate/${{ matrix.image }}:${{ needs.version.outputs.version }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Use the image mirror
+        run: sh infra/mirror-env.sh | tee -a "$GITHUB_ENV"
+      # The same build arguments as the images job; nothing selects the Agora Web SDK
+      # (WEB_AGORA_SDK) or the capture worker (WITH_CAPTURE), so the Dockerfile defaults apply.
+      - name: Build arguments
+        id: args
+        env:
+          KIND: ${{ matrix.kind }}
+        run: |
+          case "$KIND" in
+            python) args="PYTHON_IMAGE=$PYTHON_IMAGE
+          UV_IMAGE=$UV_IMAGE" ;;
+            web) args="NODE_IMAGE=$NODE_IMAGE
+          NGINX_IMAGE=$NGINX_IMAGE" ;;
+            bootstrap) args="FGA_CLI_IMAGE=$FGA_CLI_IMAGE
+          JQ_IMAGE=$JQ_IMAGE
+          BUSYBOX_IMAGE=$BUSYBOX_IMAGE" ;;
+          esac
+          printf 'build-args<<EOF\n%s\nEOF\n' "$args" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build (linux/amd64, local only)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: ${{ steps.args.outputs.build-args }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.LOCAL }}
+          cache-from: |
+            type=gha,scope=${{ matrix.image }}
+            type=gha,scope=${{ matrix.image }}-release
+      - name: SBOM with licences (syft-json)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.LOCAL }}
+          format: syft-json
+          output-file: ${{ runner.temp }}/sbom.syft.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Check licences
+        env:
+          LICENSES: ${{ matrix.licenses }}
+          FLAGS: ${{ matrix.flags }}
+        run: |
+          # shellcheck disable=SC2086 # FLAGS is a list of options
+          python3 tools/repo-checks/scripts/licence_gate.py --image "$LOCAL" \
+            --sbom "$RUNNER_TEMP/sbom.syft.json" --licenses "$LICENSES" $FLAGS
+
+  images:
+    needs: [version, licence-gate]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
@@ -163,7 +258,6 @@ jobs:
             org.opencontainers.image.version=${{ needs.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.licenses=AGPL-3.0-only
           # SBOM and provenance attestations attached to the image index (buildx --sbom).
           sbom: true
           provenance: mode=max

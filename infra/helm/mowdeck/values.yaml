@@ -102,7 +102,9 @@ config:
   # pages are placeholders the operator replaces (docs/ops/billing.md).
   WEB_LEGAL_ENABLED: "false"
   # Live camera through Agora (ADR 0032): "true" adds *.agora.io and *.sd-rtn.com to the CSP;
-  # the video then goes through Agora's and Mammotion's servers.
+  # the video then goes through Agora's and Mammotion's servers. The published web image has no
+  # Agora Web SDK (Compose's build argument WEB_AGORA_SDK=exclude, apps/web/README.md): with it
+  # the direct path is unavailable and the camera relay (agoraBridge below) serves the video.
   WEB_CAMERA_ENABLED: "false"
 
   # --- Device-Gateway ---

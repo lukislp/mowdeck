@@ -15,5 +15,10 @@ COPY --from=fga /fga /usr/local/bin/fga
 COPY --from=jq /jq /usr/local/bin/jq
 COPY model.fga /model/model.fga
 COPY bootstrap/bootstrap.sh /usr/local/bin/authz-bootstrap
+# The bootstrap script and model are AGPL-3.0 (LICENSING.md), the fga CLI Apache-2.0, jq MIT and
+# busybox GPL-2.0 (its source: https://busybox.net/downloads/). The build context (infra/openfga)
+# cannot reach the repository's licence texts; they are at
+# https://github.com/lukislp/mowdeck/tree/main/LICENSES.
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only AND Apache-2.0 AND MIT AND GPL-2.0-only"
 USER 65534:65534
 ENTRYPOINT ["/bin/sh", "/usr/local/bin/authz-bootstrap"]

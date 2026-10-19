@@ -37,6 +37,11 @@ RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent \
        --shell /usr/sbin/nologin app
 COPY --from=build /app/.venv /app/.venv
+# The MowDeck licence texts (LICENSING.md). Third-party notices: each package's dist-info and
+# /usr/share/doc.
+COPY LICENSE LICENSING.md /usr/share/doc/mowdeck/
+COPY LICENSES/ /usr/share/doc/mowdeck/LICENSES/
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only AND Apache-2.0"
 # Development only: the VAPID key file created on first start when no key is configured
 # (MOWDECK_NOTIFICATIONS_VAPID_KEY_PATH). A new named volume mounted here inherits the owner.
 RUN mkdir -p /var/lib/notifications && chown 10001:10001 /var/lib/notifications
