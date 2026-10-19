@@ -26,6 +26,8 @@ Dependabot opens the dependency PRs (`.github/dependabot.yml`) and updates `uv.l
 
 `pymammotion` is excluded (`exclude-dependencies: pymammotion`), also inside grouped PRs: a new release changes the protocol surface of the GPL adapter `mowdeck-control-mammotion`, so it is tested on the real mower before it is merged by hand. After that test, approve the PR and enable auto-merge; the workflow then only keeps the branch up to date.
 
+The Socket Security GitHub App (configured in `socket.yml`) scans every pull request for supply-chain risks in new or changed dependencies, such as install scripts, typosquatting, obfuscated code or known malware. Its checks `Socket Security: Project Report` and `Socket Security: Pull Request Alerts` will be required checks; a flagged dependency is either replaced or explicitly reviewed before the merge.
+
 ## Running checks locally
 
 Requirements: Python 3.13, [uv](https://docs.astral.sh/uv/), Docker.
