@@ -59,7 +59,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
       build: ${{ steps.version.outputs.build }}
-      ref: ${{ steps.version.outputs.ref }}
+      ref: ${{ steps.ref.outputs.ref }}
       latest: ${{ steps.version.outputs.latest }}
       owner: ${{ steps.version.outputs.owner }}
     steps:
@@ -107,7 +107,6 @@ jobs:
           release=false
           build=false
           version=""
-          ref="$SHA"
           if [ "$EVENT" = push ]; then
             if [ "$PUBLISHED" != true ]; then
               echo "No releasable commits since the last tag (docs, ci, chore, test only): nothing to publish. This is the common case, not a failure." | tee -a "$GITHUB_STEP_SUMMARY"
@@ -137,7 +136,6 @@ jobs:
               fi
               release=true
               build=true
-              ref="v$version"
             fi
           else
             version="$INPUT_VERSION"
@@ -151,10 +149,27 @@ jobs:
             echo "version=$version"
             echo "release=$release"
             echo "build=$build"
-            echo "ref=$ref"
             echo "latest=$release"
             echo "owner=$owner"
           } | tee -a "$GITHUB_OUTPUT"
+      # The ref every build job checks out, derived only from semantic-release's own result or the
+      # commit the run started from, never from the free-form version input of a test build: the
+      # release tag for a release, otherwise exactly the commit of this run (github.sha).
+      - id: ref
+        env:
+          EVENT: ${{ github.event_name }}
+          PUBLISHED: ${{ steps.semrel.outputs.new_release_published }}
+          NEXT_VERSION: ${{ steps.semrel.outputs.new_release_version }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          if [ "$EVENT" = push ] && [ "$PUBLISHED" = true ]; then
+            echo "$NEXT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
+            echo "ref=v$NEXT_VERSION" | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "$SHA" | grep -Eq '^[0-9a-f]{40}$'
+            echo "ref=$SHA" | tee -a "$GITHUB_OUTPUT"
+          fi
 
   # The real semantic-release run: the signed tag v<version> and the GitHub release with the
   # generated notes. It runs before anything is built, so nothing is published under a version
