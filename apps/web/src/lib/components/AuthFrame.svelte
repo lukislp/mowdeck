@@ -1,10 +1,12 @@
 <!--
   Frame of the sign-in and registration pages: a nameplate on the metric grid (the same grid
-  the map uses as background) and the form column. No hero, no illustration.
+  the map uses as background) and the form column. No hero, no illustration. Under the form the
+  build and the link to its source code (AGPL-3.0 section 13), reachable without an account.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
+  import SourceCode from '$lib/components/SourceCode.svelte';
   import { m } from '$lib/paraglide/messages';
 
   let { title, children }: { title: string; children: Snippet } = $props();
@@ -19,6 +21,9 @@
   <main class="column">
     <h1>{title}</h1>
     {@render children()}
+    <footer class="foot">
+      <SourceCode />
+    </footer>
   </main>
 </div>
 
@@ -91,6 +96,11 @@
     width: 100%;
     max-width: 440px;
     padding: var(--md-space-6) var(--md-gutter) var(--md-space-12);
+  }
+
+  .foot {
+    margin-top: auto;
+    padding-top: var(--md-space-6);
   }
 
   @media (min-width: 900px) {

@@ -81,6 +81,7 @@ export default defineConfig({
         'src/lib/billing/billing.ts',
         'src/lib/billing/account.svelte.ts',
         'src/lib/legal/markdown.ts',
+        'src/lib/legal/source.ts',
         'src/lib/camera/session.ts',
         'src/lib/camera/test-pattern.ts',
         'src/lib/camera/player.ts',

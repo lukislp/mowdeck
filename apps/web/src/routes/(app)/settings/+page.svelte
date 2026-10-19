@@ -1,7 +1,7 @@
 <!--
   The one settings page: every settings module the user may see as a section under its anchor
   (account and profile, notifications, users, AI provider, linked accounts, API tokens; the
-  order of `module.ts`). A numbered section index sits on the left on the desktop and as a strip
+  order of `module.ts`), then About for everyone (the build and its source code, AGPL-3.0). A numbered section index sits on the left on the desktop and as a strip
   under the top bar on phones; it marks the section in view. Old routes forward here
   (`$lib/settings/sections`).
 -->
@@ -14,7 +14,8 @@
   import { session } from '$lib/auth/session.svelte';
   import { operatorAccess } from '$lib/operator/access.svelte';
   import { m } from '$lib/paraglide/messages';
-  import { settingsSections } from '$lib/settings/sections';
+  import { settingsSections, type SettingsSection } from '$lib/settings/sections';
+  import AboutSection from '$lib/settings/sections/AboutSection.svelte';
   import AiProviderSection from '$lib/settings/sections/AiProviderSection.svelte';
   import ApiTokensSection from '$lib/settings/sections/ApiTokensSection.svelte';
   import LinkedAccountsSection from '$lib/settings/sections/LinkedAccountsSection.svelte';
@@ -31,7 +32,11 @@
     'ai-provider': AiProviderSection,
     'linked-accounts': LinkedAccountsSection,
     'api-tokens': ApiTokensSection,
+    about: AboutSection,
   };
+
+  /** Not a module: every user sees the build and its source code (AGPL-3.0 section 13). */
+  const ABOUT: SettingsSection = { id: 'about', anchor: 'about', label: () => m.source_about() };
 
   const sections = $derived(
     settingsSections(
@@ -41,7 +46,9 @@
         registry.areas,
         operatorAccess.allowed,
       ),
-    ).filter((section) => section.id in VIEWS),
+    )
+      .filter((section) => section.id in VIEWS && section.id !== ABOUT.id)
+      .concat(ABOUT),
   );
   const anchors = $derived(sections.map((section) => section.anchor).join(' '));
   let current = $state('');

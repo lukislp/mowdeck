@@ -92,6 +92,13 @@ config:
   REALTIME_ALLOWED_ORIGINS: ""
   REALTIME_DRIVE_MAX_SECONDS: "600"
 
+  # --- Source code (AGPL-3.0 section 13, LICENSING.md) ---
+  # Repository of the running code, linked in the web app and named in every API response
+  # (X-Source-Code). Empty: the repository the images were built from (the official one for the
+  # released images). A fork that runs modified code sets its own public repository; "{ref}"
+  # makes it a template for hosts other than GitHub (https://codeberg.org/me/mowdeck/src/tag/{ref}).
+  SOURCE_URL: ""
+
   # --- Web app ---
   # Optional raster tiles under the map ({z}, {x}, {y}); empty keeps the metric grid and sends
   # nothing to third parties. Respect the provider's usage policy and attribution.
