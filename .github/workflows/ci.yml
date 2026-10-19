@@ -61,7 +61,7 @@ jobs:
       - &mirror-env
         name: Use the image mirror
         run: sh infra/mirror-env.sh | tee -a "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -149,7 +149,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -208,7 +208,7 @@ jobs:
           tar -xzf kubeconform.tar.gz -C "$RUNNER_TEMP/bin" kubeconform
           rm kubeconform.tar.gz
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -374,7 +374,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - *ghcr-login
       - *mirror-env
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -412,7 +412,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "0.12.24"
           enable-cache: true
