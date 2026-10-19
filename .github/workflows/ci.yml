@@ -206,7 +206,9 @@ jobs:
 
   # apps/mobile/android keeps the standard committed Gradle wrapper (gradle-wrapper.jar); this
   # job checks the jar against the checksums Gradle publishes for its releases, so a modified
-  # wrapper fails the pull request before release.yml ever runs it.
+  # wrapper fails the pull request before release.yml ever runs it. It also runs on push to main
+  # (no event condition): Scorecard's Binary-Artifacts check needs a successful ci.yml run for the
+  # latest main commit, which is why scorecard.yml waits for this workflow.
   gradle-wrapper:
     runs-on: ubuntu-24.04
     steps:
