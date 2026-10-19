@@ -8,8 +8,8 @@
 # runs as the non-root user "app" (uid 10001), writes nothing at runtime (read-only root file
 # system; mount a tmpfs at /tmp) and has no architecture specific steps (amd64 and arm64).
 
-ARG PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.13-slim
-ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.24
+ARG PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a
 
 FROM ${UV_IMAGE} AS uv
 

@@ -3,7 +3,8 @@
 # NAME_IMAGE=<image:tag> line per image) as references into a mirror registry.
 #
 #   sh infra/mirror-env.sh [<registry/prefix>]
-#       prints NAME_IMAGE=<prefix>/<alias>:<tag> per image. The alias is the variable name without
+#       prints NAME_IMAGE=<prefix>/<alias>:<tag>[@<digest>] per image (the digest when the list
+#       pins one, so a pull from the mirror is checked against it). The alias is the variable name without
 #       _IMAGE in lower case with "-" for "_" (POSTGRES_IMAGE -> postgres, FGA_CLI_IMAGE -> fga-cli,
 #       STRIPE_MOCK_IMAGE -> stripe-mock); the prefix is the argument or $MOWDECK_IMAGE_MIRROR,
 #       lower-cased as registries require. CI appends the lines to $GITHUB_ENV and to .env; at home:
@@ -25,8 +26,11 @@ awk -v mode="$mode" -v prefix="$prefix" '
     name = $0; sub(/=.*/, "", name)
     source = $0; sub(/^[^=]*=/, "", source); sub(/[[:space:]]+$/, "", source)
     alias = tolower(substr(name, 1, length(name) - 6)); gsub(/_/, "-", alias)
-    tag = source; sub(/.*:/, "", tag)
+    ref = source; digest = ""
+    at = index(ref, "@")
+    if (at > 0) { digest = substr(ref, at); ref = substr(ref, 1, at - 1) }
+    tag = ref; sub(/.*:/, "", tag)
     if (mode == "list") print alias, source
-    else print name "=" prefix "/" alias ":" tag
+    else print name "=" prefix "/" alias ":" tag digest
   }
 ' "$list"

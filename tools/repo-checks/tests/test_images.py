@@ -45,8 +45,17 @@ def _alias(name: str) -> str:
     return name.removesuffix("_IMAGE").lower().replace("_", "-")
 
 
+DIGEST_RE = re.compile(r"@sha256:[0-9a-f]{64}$")
+
+
+def _digest(image: str) -> str:
+    """Return the ``@sha256:...`` suffix of a digest-pinned image, else an empty string."""
+    match = DIGEST_RE.search(image)
+    return match.group(0) if match else ""
+
+
 def _tag(image: str) -> str:
-    last = image.rsplit("/", 1)[-1]
+    last = image.removesuffix(_digest(image)).rsplit("/", 1)[-1]
     return last.rsplit(":", 1)[-1] if ":" in last else ""
 
 
@@ -56,7 +65,9 @@ def _dockerfiles(repo_root: Path) -> list[Path]:
         repo_root / "apps" / "web" / "Dockerfile",
         repo_root / "infra" / "openfga" / "bootstrap" / "Dockerfile",
         repo_root / "integrations" / "agora-bridge" / "Dockerfile",
-        *sorted((repo_root / "templates").rglob("Dockerfile*.jinja")),
+        # The template's Dockerfile source is "{{ image_build_file }}.jinja" (templates/service/
+        # copier.yml explains why it is not called Dockerfile.jinja).
+        *sorted((repo_root / "templates").rglob("{{ image_build_file }}*.jinja")),
     ]
     return [f for f in files if f.is_file() and "dockerignore" not in f.name]
 
@@ -88,7 +99,10 @@ def test_image_list_is_well_formed(repo_root: Path) -> None:
     assert images, "infra/compose/.env.example pins no *_IMAGE"
     aliases: dict[str, str] = {}
     for name, source in images.items():
-        assert "@" not in source, f"{name}={source}: pin a tag, not a digest (mirrored by tag)"
+        # A digest is optional and only after a tag (the mirror copies by tag).
+        assert "@" not in source.removesuffix(_digest(source)), (
+            f"{name}={source}: pin image:tag or image:tag@sha256:<64 hex digits>"
+        )
         assert _tag(source), f"{name}={source} must pin a tag"
         assert _tag(source) != "latest", f"{name}={source} must not use :latest"
         alias = _alias(name)
@@ -109,6 +123,8 @@ def test_dockerfiles_use_listed_base_images(repo_root: Path) -> None:
                 f"{path}: ARG {name}={default} differs from .env.example "
                 f"({images.get(name, 'not listed')})"
             )
+            # Base images are pinned by digest as well (OpenSSF Scorecard, Pinned-Dependencies).
+            assert _digest(default), f"{path}: ARG {name}={default} has no @sha256 digest"
             checked += 1
         stages = {m.group(1) for m in re.finditer(r"\bAS\s+(\S+)", text, re.IGNORECASE)}
         for base in FROM_RE.findall(text):
@@ -158,7 +174,10 @@ def test_mirror_env_script_derives_from_the_list(repo_root: Path) -> None:
         )
 
     prefix = "registry.example.org/mowdeck"
-    expected = [f"{name}={prefix}/{_alias(name)}:{_tag(source)}" for name, source in images.items()]
+    expected = [
+        f"{name}={prefix}/{_alias(name)}:{_tag(source)}{_digest(source)}"
+        for name, source in images.items()
+    ]
     by_argument = run("Registry.Example.org/mowdeck/")  # lower-cased, trailing slash dropped
     assert by_argument.returncode == 0, by_argument.stderr
     assert by_argument.stdout.splitlines() == expected
@@ -221,7 +240,9 @@ def test_packages_permission_matches_the_use(repo_root: Path) -> None:
     assert "packages" not in (release.get("permissions") or {})
     assert release["jobs"]["images"]["permissions"].get("packages") == "write"
     _, mirror = _workflow(repo_root, MIRROR_WORKFLOW)
-    assert mirror["permissions"] == {"contents": "read", "packages": "write"}
+    # Read-only at the top (OpenSSF Scorecard Token-Permissions), write on the copying job only.
+    assert mirror["permissions"] == {"contents": "read"}
+    assert mirror["jobs"]["mirror"]["permissions"] == {"contents": "read", "packages": "write"}
 
 
 def test_mirror_workflow_fills_the_namespace_from_the_list(repo_root: Path) -> None:

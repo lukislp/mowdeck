@@ -62,6 +62,15 @@ first_permission:
   when: false
   default: "{{ (permission_map | list)[0] }}"
 
+# File name of the generated Dockerfile and its ignore file. The template sources are named
+# "{{ image_build_file }}.jinja" and "{{ image_build_file }}.dockerignore.jinja" so that tools
+# which parse every file whose name contains "dockerfile" in any case (OpenSSF Scorecard's
+# Pinned-Dependencies check) do not try to parse the unrendered Jinja source as a Dockerfile.
+image_build_file:
+  type: str
+  when: false
+  default: Dockerfile
+
 _message_after_copy: |
   Service {{ service_name }} created. Next steps (see docs/dev/service-template.md):
     1. Add "{{ service_name }}" to the dev group and [tool.uv.sources] of the root pyproject.toml.
