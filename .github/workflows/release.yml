@@ -1,30 +1,40 @@
 name: release
 
-# Publishes a MowDeck release (docs/ops/release.md):
-#   * every image for linux/amd64 and linux/arm64 (QEMU, GitHub Actions cache) to
-#     ghcr.io/<owner>/mowdeck/<image>:<version>, :v<version> and, for a final release, :latest,
-#     each with an SBOM and provenance attestation and an SPDX SBOM file (with licences), after
-#     the licence gate passed (job licence-gate; the licence label comes from each Dockerfile)
-#   * the Helm chart as an OCI artifact ghcr.io/<owner>/charts/mowdeck:<version>
-#     (appVersion = version, so image.tag defaults to the released images)
-#   * the Android app as mowdeck-<version>.apk (apps/mobile, docs/ops/mobile-apps.md), signed with
-#     the repository's release keystore; skipped with a warning while the secret is not set
-#   * a GitHub release with notes generated from the commits since the previous tag
-# Runs only for a pushed tag v* or by hand (minute budget: never on pull requests). By hand it
-# builds a test version (for example 0.1.0-rc.1) and creates the GitHub release only when asked.
+# Publishes a MowDeck release (docs/ops/release.md). Every push to main asks semantic-release
+# (.releaserc.json, Conventional Commits) whether the commits since the last tag warrant a release:
+# fix/refactor/perf -> patch, feat -> minor, and while the version line is 0.x a breaking change is
+# a minor too. When they do, the run
+#   * creates the SSH-signed tag v<version> and the GitHub release with the notes semantic-release
+#     writes from the commits (job tag),
+#   * checks every image built from that tag with the licence gate before anything is pushed
+#     (job licence-gate: no Agora SDK, only open source licences, the licence label of each
+#     Dockerfile; LICENSING.md),
+#   * builds every image from that tag for linux/amd64 and linux/arm64 (QEMU, GitHub Actions cache)
+#     to ghcr.io/<owner>/mowdeck/<image>:<version>, :v<version> and :latest, with an SBOM and a
+#     provenance attestation in the image index, a Sigstore keyless signature and a GitHub build
+#     provenance attestation in the registry, and an SPDX SBOM file,
+#   * pushes the Helm chart as an OCI artifact ghcr.io/<owner>/charts/mowdeck:<version> (appVersion
+#     = version, so image.tag defaults to the released images), signed and attested the same way,
+#   * builds the Android app as mowdeck-<version>.apk (apps/mobile, docs/ops/mobile-apps.md),
+#     signed with the repository's release keystore; skipped with a warning while it is not set,
+#   * attaches the chart, the SBOMs and the APK to the release with SHA256SUMS, a Sigstore bundle
+#     (*.sigstore.json) per file and the build provenance (mowdeck-<version>.intoto.jsonl), and
+#     lists the image digests and the verification commands in the release notes (job publish).
+# Nothing is published from a push whose commits are docs/ci/chore/test only. By hand the workflow
+# builds a test version (for example 0.1.0-rc.1) from any branch: images and chart, no tag, no
+# GitHub release, no :latest. Versions are set at build time (image labels, chart version and
+# appVersion, APK); no file in the repository carries the release version, so a release makes no
+# commit. Never on pull requests (minute budget).
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version without the v (e.g. 0.1.0-rc.1)"
+        description: "Test build version without the v (e.g. 0.1.0-rc.1); no tag, no GitHub release"
         required: true
-      publish-release:
-        description: "Create the GitHub release (and move :latest for a final version)"
-        type: boolean
-        default: false
 
+# One release chain at a time; a newer push waits instead of cancelling a release in progress.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -40,10 +50,16 @@ env:
 jobs:
   version:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # @semantic-release/github's verifyConditions checks that the token may push (contents:
+    # write), even in a dry run.
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
-      prerelease: ${{ steps.version.outputs.prerelease }}
-      publish: ${{ steps.version.outputs.publish }}
+      release: ${{ steps.version.outputs.release }}
+      build: ${{ steps.version.outputs.build }}
+      ref: ${{ steps.version.outputs.ref }}
       latest: ${{ steps.version.outputs.latest }}
       owner: ${{ steps.version.outputs.owner }}
     steps:
@@ -51,35 +67,191 @@ jobs:
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
+      # ref: main (the branch tip), not the event SHA: semantic-release refuses to release from a
+      # checkout that is behind the remote, and the real release in job tag is cut from the tip.
+      - if: github.event_name == 'push'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: main
+      # semantic-release runs from lukislp/ci-workflows' pinned toolchain (lock file in the
+      # action) instead of a registry install per run or a package.json here. The deploy key (if
+      # set) makes the tag push in job tag a push by a key rather than by GITHUB_TOKEN, so it
+      # starts the tag workflows (helm-kind.yml); verifyConditions runs a push --dry-run here too.
+      - if: github.event_name == 'push'
+        name: Push as the semantic-release deploy key (if configured)
+        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@4b19e87569c767e2855b4a53292d8edfe4065de4 # v1.8.3
+        with:
+          deploy-key: ${{ secrets.SEMANTIC_RELEASE_DEPLOY_KEY }}
+      # Dry run: computes the next version from the commits since the last tag without tagging.
+      # "No relevant changes" is the expected outcome for docs/ci/chore-only pushes, not a failure.
+      - if: github.event_name == 'push'
+        id: semrel
+        uses: lukislp/ci-workflows/.github/actions/semantic-release@4b19e87569c767e2855b4a53292d8edfe4065de4 # v1.8.3
+        with:
+          dry-run: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - id: version
         env:
           EVENT: ${{ github.event_name }}
-          REF_NAME: ${{ github.ref_name }}
+          PUBLISHED: ${{ steps.semrel.outputs.new_release_published }}
+          NEXT_VERSION: ${{ steps.semrel.outputs.new_release_version }}
           INPUT_VERSION: ${{ inputs.version }}
-          INPUT_PUBLISH: ${{ inputs.publish-release }}
           OWNER: ${{ github.repository_owner }}
+          SHA: ${{ github.sha }}
+          SIGNING_KEY: ${{ secrets.DEPLOY_SIGNING_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -eu
+          owner="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          release=false
+          build=false
+          version=""
+          ref="$SHA"
           if [ "$EVENT" = push ]; then
-            version="${REF_NAME#v}"
-            publish=true
+            if [ "$PUBLISHED" != true ]; then
+              echo "No releasable commits since the last tag (docs, ci, chore, test only): nothing to publish. This is the common case, not a failure." | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              version="$NEXT_VERSION"
+              # semantic-release starts a repository without tags at 1.0.0. MowDeck's line starts
+              # at 0.x from the initial tag v0.0.0 (docs/ops/release.md), so a missing tag is a
+              # setup error, never a reason to publish 1.0.0.
+              if [ -z "$(git tag --list 'v*')" ]; then
+                echo "::error::no v* tag exists, so semantic-release would publish $version. Create the initial tag v0.0.0 first (docs/ops/release.md, 'Setting up releases')."
+                exit 1
+              fi
+              # Signed releases: the tag is signed with DEPLOY_SIGNING_KEY, whose public half must
+              # be a signing key of the owner's account, or GitHub shows the tag as unverified.
+              if [ -z "$SIGNING_KEY" ]; then
+                echo "::error::DEPLOY_SIGNING_KEY is not set: the release tag cannot be signed (docs/ops/release.md, 'Setting up releases')."
+                exit 1
+              fi
+              key="$RUNNER_TEMP/signing_key"
+              printf '%s\n' "$SIGNING_KEY" > "$key"
+              chmod 600 "$key"
+              public="$(ssh-keygen -y -f "$key" | awk '{print $2}')"
+              rm -f "$key"
+              if ! gh api "users/$OWNER/ssh_signing_keys" --jq '.[].key' | grep -qF "$public"; then
+                echo "::error::the public half of DEPLOY_SIGNING_KEY is not a signing key of $OWNER (github.com/settings/keys), so the tag would show as unverified."
+                exit 1
+              fi
+              release=true
+              build=true
+              ref="v$version"
+            fi
           else
             version="$INPUT_VERSION"
-            publish="$INPUT_PUBLISH"
+            build=true
           fi
-          if ! echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-            echo "::error::'$version' is not a semantic version (tag v1.2.3 or v1.2.3-rc.1)"
+          if [ "$build" = true ] && ! echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$version' is not a semantic version (1.2.3 or 1.2.3-rc.1)"
             exit 1
           fi
-          case "$version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
-          latest=false
-          [ "$publish" = true ] && [ "$prerelease" = false ] && latest=true
           {
             echo "version=$version"
-            echo "prerelease=$prerelease"
-            echo "publish=$publish"
-            echo "latest=$latest"
-            echo "owner=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+            echo "release=$release"
+            echo "build=$build"
+            echo "ref=$ref"
+            echo "latest=$release"
+            echo "owner=$owner"
           } | tee -a "$GITHUB_OUTPUT"
+
+  # The real semantic-release run: the signed tag v<version> and the GitHub release with the
+  # generated notes. It runs before anything is built, so nothing is published under a version
+  # that has no tag; the jobs below build from the tag.
+  tag:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      # @semantic-release/github comments on the released pull requests and issues.
+      issues: write
+      pull-requests: write
+    env:
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: main
+      - name: Push as the semantic-release deploy key (if configured)
+        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@4b19e87569c767e2855b4a53292d8edfe4065de4 # v1.8.3
+        with:
+          deploy-key: ${{ secrets.SEMANTIC_RELEASE_DEPLOY_KEY }}
+      # semantic-release creates its tag with a plain `git tag <name> <sha>`. With tag.gpgSign git
+      # makes that an annotated tag signed with the SSH key; the "editor" writes the tag message,
+      # and the tagger is the owner's noreply address, which GitHub needs to show "Verified".
+      - name: Sign the release tag with the SSH signing key
+        env:
+          SIGNING_KEY: ${{ secrets.DEPLOY_SIGNING_KEY }}
+        run: |
+          set -eu
+          key="$RUNNER_TEMP/release_signing_key"
+          printf '%s\n' "$SIGNING_KEY" > "$key"
+          chmod 600 "$key"
+          # git's SSH signing loads the public key from user.signingkey.
+          ssh-keygen -y -f "$key" > "$key.pub"
+          git config gpg.format ssh
+          git config user.signingkey "$key.pub"
+          git config tag.gpgSign true
+          cat > "$RUNNER_TEMP/tag-message.sh" <<'EOF'
+          #!/bin/sh
+          printf 'MowDeck %s\n' "$RELEASE_VERSION" > "$1"
+          EOF
+          chmod +x "$RUNNER_TEMP/tag-message.sh"
+          {
+            echo "GIT_EDITOR=$RUNNER_TEMP/tag-message.sh"
+            echo "GIT_COMMITTER_NAME=mowdeck-release"
+            echo "GIT_COMMITTER_EMAIL=155678024+lukislp@users.noreply.github.com"
+          } >> "$GITHUB_ENV"
+      - id: semrel
+        uses: lukislp/ci-workflows/.github/actions/semantic-release@4b19e87569c767e2855b4a53292d8edfe4065de4 # v1.8.3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      # Retry once for the narrow window where another push landed on main between this job's
+      # checkout and its own push.
+      - if: steps.semrel.outcome == 'failure'
+        name: "Diagnose before retrying (expected: a push landed since checkout)"
+        run: |
+          git fetch origin main
+          before="$(git rev-parse HEAD)"
+          after="$(git rev-parse origin/main)"
+          if [ "$before" != "$after" ]; then
+            echo "origin/main moved since checkout ($before -> $after): the race this retry is for."
+          else
+            echo "::warning::origin/main did not move since checkout, so this is likely not the push race. Retrying anyway; read the semantic-release log above for the cause."
+          fi
+          git checkout -B main origin/main
+      - if: steps.semrel.outcome == 'failure'
+        uses: lukislp/ci-workflows/.github/actions/semantic-release@4b19e87569c767e2855b4a53292d8edfe4065de4 # v1.8.3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # The jobs below build from v<version>: make sure that exact tag exists, is signed and that
+      # GitHub verifies its signature.
+      - name: Check the signed tag and the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          tag="v$RELEASE_VERSION"
+          test "$(git cat-file -t "$tag")" = tag
+          git cat-file -p "$tag" | grep -q 'BEGIN SSH SIGNATURE'
+          gh release view "$tag" -R "$REPOSITORY" --json tagName --jq .tagName
+          object="$(gh api "repos/$REPOSITORY/git/ref/tags/$tag" --jq .object.sha)"
+          verified="$(gh api "repos/$REPOSITORY/git/tags/$object" --jq '.verification.verified')"
+          reason="$(gh api "repos/$REPOSITORY/git/tags/$object" --jq '.verification.reason')"
+          if [ "$verified" != true ]; then
+            echo "::warning::GitHub does not show $tag as verified (reason: $reason)."
+          fi
+          echo "- signed tag \`$tag\` (verified: $verified)" >> "$GITHUB_STEP_SUMMARY"
 
   # Licence gate (LICENSING.md, apps/web/README.md "Agora Web SDK and third-party licences"):
   # every image is built once for linux/amd64 into the runner's Docker engine, never pushed, and
@@ -88,7 +260,10 @@ jobs:
   # label of the Dockerfile and the MowDeck licence texts inside. Its matrix equals the images
   # matrix (tools/repo-checks, test_release_licences.py).
   licence-gate:
-    needs: version
+    needs: [version, tag]
+    # Checks the release tag (or the commit of a test build) after job tag and before anything is
+    # pushed; status functions keep it from being skipped with tag on a test build.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -114,12 +289,16 @@ jobs:
           - {image: authz-bootstrap, context: infra/openfga, file: infra/openfga/bootstrap/Dockerfile, kind: bootstrap, licenses: "AGPL-3.0-only AND Apache-2.0 AND MIT AND GPL-2.0-only", flags: --no-licence-files}
     env:
       LOCAL: licence-gate/${{ matrix.image }}:${{ needs.version.outputs.version }}
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+          persist-credentials: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -143,6 +322,8 @@ jobs:
           JQ_IMAGE=$JQ_IMAGE
           BUSYBOX_IMAGE=$BUSYBOX_IMAGE" ;;
           esac
+          args="$args
+          MOWDECK_VERSION=$VERSION"
           printf 'build-args<<EOF\n%s\nEOF\n' "$args" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build (linux/amd64, local only)
@@ -176,12 +357,18 @@ jobs:
             --sbom "$RUNNER_TEMP/sbom.syft.json" --licenses "$LICENSES" $FLAGS
 
   images:
-    needs: [version, licence-gate]
+    needs: [version, tag, licence-gate]
+    # Only after the licence gate passed for every image (on a test build tag is skipped, so the
+    # condition names the gate instead of relying on the default success()).
+    if: ${{ !cancelled() && needs.licence-gate.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: read
       packages: write
+      # Keyless signing (Sigstore) and build provenance attestations.
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -209,6 +396,9 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+          persist-credentials: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -245,6 +435,7 @@ jobs:
           platforms: arm64
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build and push (linux/amd64, linux/arm64)
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ matrix.context }}
@@ -266,10 +457,37 @@ jobs:
             type=gha,scope=${{ matrix.image }}
             type=gha,scope=${{ matrix.image }}-release
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-release
+      # Keyless signature of the image index, bound to this workflow's identity, and a GitHub
+      # build provenance attestation pushed next to the image (gh attestation verify).
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign the image (Sigstore keyless) and verify
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IDENTITY: https://github.com/${{ github.workflow_ref }}
+        run: |
+          set -eu
+          cosign sign --yes "$IMAGE@$DIGEST"
+          cosign verify --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$IMAGE@$DIGEST" > /dev/null
+          echo "- \`$IMAGE@$DIGEST\` signed" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > "digest-${{ matrix.image }}.txt"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      # The digest for the release notes (job publish).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.image }}
+          path: digest-${{ matrix.image }}.txt
+          if-no-files-found: error
       # SPDX SBOM file of the pushed image for the GitHub release.
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          image: ${{ env.IMAGE }}:${{ env.VERSION }}
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
           format: spdx-json
@@ -278,20 +496,28 @@ jobs:
           upload-release-assets: false
 
   chart:
-    needs: [version, images]
+    needs: [version, tag, licence-gate, images]
+    if: ${{ !cancelled() && needs.images.result == 'success' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     env:
       VERSION: ${{ needs.version.outputs.version }}
       CHARTS: oci://ghcr.io/${{ needs.version.outputs.owner }}/charts
+      CHART: ghcr.io/${{ needs.version.outputs.owner }}/charts/mowdeck
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+          persist-credentials: false
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v4.3.0
@@ -302,24 +528,51 @@ jobs:
           helm dependency build infra/helm/mowdeck
           helm package infra/helm/mowdeck --version "$VERSION" --app-version "$VERSION" -d dist
       - name: Push to GHCR
+        id: push
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: |
+          set -eu
           echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
-          helm push "dist/mowdeck-$VERSION.tgz" "$CHARTS"
-          echo "- chart \`$CHARTS/mowdeck:$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+          helm push "dist/mowdeck-$VERSION.tgz" "$CHARTS" 2>&1 | tee "$RUNNER_TEMP/helm-push.log"
+          digest="$(awk '/^Digest:/ {print $2}' "$RUNNER_TEMP/helm-push.log")"
+          test -n "$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          printf '%s@%s\n' "$CHART" "$digest" > dist/digest-chart.txt
+          echo "- chart \`$CHARTS/mowdeck:$VERSION\` (\`$digest\`)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign the chart (Sigstore keyless) and verify
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          IDENTITY: https://github.com/${{ github.workflow_ref }}
+        run: |
+          set -eu
+          cosign sign --yes "$CHART@$DIGEST"
+          cosign verify --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$CHART@$DIGEST" > /dev/null
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.CHART }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: chart
-          path: dist/mowdeck-${{ needs.version.outputs.version }}.tgz
+          path: |
+            dist/mowdeck-${{ needs.version.outputs.version }}.tgz
+            dist/digest-chart.txt
+          if-no-files-found: error
 
   # The Android app shell (Capacitor). No Firebase, no Play Store: the APK is attached to the
   # GitHub release. Secrets: ANDROID_KEYSTORE_BASE64 (the .jks as base64), ANDROID_KEYSTORE_PASSWORD,
   # ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (optional, defaults to the keystore password). The
   # iOS app is built and installed on the owner's Mac (apps/mobile/scripts), never in CI.
   android:
-    needs: version
+    needs: [version, tag]
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -344,6 +597,9 @@ jobs:
           fi
       - if: steps.keystore.outputs.present == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+          persist-credentials: false
       - if: steps.keystore.outputs.present == 'true'
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - if: steps.keystore.outputs.present == 'true'
@@ -368,12 +624,22 @@ jobs:
           path: apps/mobile/build/mowdeck-${{ needs.version.outputs.version }}.apk
           if-no-files-found: error
 
-  release:
-    needs: [version, images, chart, android]
-    if: needs.version.outputs.publish == 'true'
+  # Signed, verifiable release assets (OpenSSF Scorecard "Signed-Releases"): SHA256SUMS over every
+  # file, a Sigstore keyless bundle per file (*.sigstore.json) and one GitHub build provenance
+  # attestation over all of them, attached as mowdeck-<version>.intoto.jsonl; then the image
+  # digests and the verification commands go into the release notes.
+  publish:
+    needs: [version, tag, licence-gate, images, chart, android]
+    if: ${{ !cancelled() && needs.version.outputs.release == 'true' && needs.tag.result == 'success' && needs.licence-gate.result == 'success' && needs.images.result == 'success' && needs.chart.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      OWNER: ${{ needs.version.outputs.owner }}
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -383,25 +649,77 @@ jobs:
         with:
           path: assets
           merge-multiple: true
-      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      - name: Separate the digests and write SHA256SUMS
+        run: |
+          set -eu
+          mkdir digests
+          mv assets/digest-*.txt digests/
+          ls -l assets digests
+          (cd assets && sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS")
+          mv "$RUNNER_TEMP/SHA256SUMS" assets/SHA256SUMS
+          cat assets/SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        id: provenance
         with:
-          tag_name: v${{ needs.version.outputs.version }}
-          name: MowDeck ${{ needs.version.outputs.version }}
-          target_commitish: ${{ github.sha }}
-          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
-          generate_release_notes: true
-          append_body: true
-          body: |
-            ## Install
-
-            ```bash
-            helm install mowdeck oci://ghcr.io/${{ needs.version.outputs.owner }}/charts/mowdeck \
-              --version ${{ needs.version.outputs.version }} -n mowdeck --create-namespace -f my-values.yaml
-            ```
-
-            Images: `ghcr.io/${{ needs.version.outputs.owner }}/mowdeck/<image>:${{ needs.version.outputs.version }}`
-            (linux/amd64, linux/arm64). Operations manual: docs/ops/helm.md, release notes below.
-
-            Android app: `mowdeck-${{ needs.version.outputs.version }}.apk` below (if attached); iPhone app:
-            built and installed from the Mac (docs/ops/mobile-apps.md).
-          files: assets/*
+          subject-checksums: assets/SHA256SUMS
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign every asset (Sigstore keyless) and verify
+        env:
+          IDENTITY: https://github.com/${{ github.workflow_ref }}
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          set -eu
+          for file in assets/*; do
+            cosign sign-blob --yes --bundle "$file.sigstore.json" "$file"
+            cosign verify-blob --bundle "$file.sigstore.json" \
+              --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$file"
+          done
+          cp "$BUNDLE" "assets/mowdeck-$VERSION.intoto.jsonl"
+      - name: Attach the assets and complete the release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          tag="v$VERSION"
+          gh release view "$tag" -R "$REPOSITORY" --json tagName --jq .tagName
+          gh release upload "$tag" -R "$REPOSITORY" --clobber assets/*
+          gh release view "$tag" -R "$REPOSITORY" --json body --jq .body > notes.md
+          {
+            echo
+            echo "## Install"
+            echo
+            echo '```bash'
+            echo "helm install mowdeck oci://ghcr.io/$OWNER/charts/mowdeck --version $VERSION \\"
+            echo "  -n mowdeck --create-namespace -f my-values.yaml"
+            echo '```'
+            echo
+            echo "Operations manual: docs/ops/helm.md. Android app: \`mowdeck-$VERSION.apk\` below (if attached); iPhone app: built and installed from the Mac (docs/ops/mobile-apps.md)."
+            echo
+            echo "## Images and chart (linux/amd64, linux/arm64)"
+            echo
+            echo "Tags \`$VERSION\`, \`v$VERSION\` and \`latest\`; pull by digest for an immutable reference."
+            echo
+            echo "| Artifact | Digest |"
+            echo "| --- | --- |"
+            for f in digests/*.txt; do
+              ref="$(cat "$f")"
+              echo "| \`${ref%@*}\` | \`${ref#*@}\` |"
+            done
+            echo
+            echo "## Verify"
+            echo
+            echo "Tag \`$tag\` is SSH-signed. Images and chart are signed keyless with Sigstore and carry GitHub build provenance; every file below has a \`.sigstore.json\` bundle, \`SHA256SUMS\` lists them, and \`mowdeck-$VERSION.intoto.jsonl\` is their build provenance. Details: docs/ops/release.md#verifying-a-release."
+            echo
+            echo '```bash'
+            echo "cosign verify ghcr.io/$OWNER/mowdeck/<image>@<digest> \\"
+            echo "  --certificate-identity https://github.com/$REPOSITORY/.github/workflows/release.yml@refs/heads/main \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo "gh attestation verify oci://ghcr.io/$OWNER/mowdeck/<image>@<digest> -R $REPOSITORY"
+            echo "sha256sum -c SHA256SUMS --ignore-missing"
+            echo "gh attestation verify mowdeck-$VERSION.tgz -R $REPOSITORY"
+            echo '```'
+          } >> notes.md
+          gh release edit "$tag" -R "$REPOSITORY" --notes-file notes.md
+          echo "- release \`$tag\` with $(ls assets | wc -l) assets" >> "$GITHUB_STEP_SUMMARY"

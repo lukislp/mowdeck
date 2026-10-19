@@ -13,6 +13,20 @@ manufacturer's cloud or firmware is passed on to the manufacturer only with your
 
 Only the latest release and the `main` branch receive security fixes.
 
+## Verifying releases
+
+Releases come only from the release workflow on `main` (`.github/workflows/release.yml`). The tag `v<version>` is an SSH-signed annotated tag that GitHub shows as verified. Every container image and the Helm chart in GHCR are signed keyless with Sigstore (Cosign) and carry a GitHub build provenance attestation (SLSA provenance); every file attached to a GitHub release has a Sigstore bundle (`<file>.sigstore.json`), the release lists their checksums in `SHA256SUMS` and their build provenance in `mowdeck-<version>.intoto.jsonl`. The signing identity is `https://github.com/lukislp/mowdeck/.github/workflows/release.yml@refs/heads/main` with the issuer `https://token.actions.githubusercontent.com`:
+
+```bash
+cosign verify ghcr.io/lukislp/mowdeck/<image>:<version> \
+  --certificate-identity https://github.com/lukislp/mowdeck/.github/workflows/release.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+gh attestation verify oci://ghcr.io/lukislp/mowdeck/<image>:<version> -R lukislp/mowdeck
+gh attestation verify mowdeck-<version>.tgz -R lukislp/mowdeck --bundle mowdeck-<version>.intoto.jsonl
+```
+
+All commands, including the release files and the tag: [docs/ops/release.md](docs/ops/release.md#verifying-a-release). Do not run an image or chart whose signature does not verify against this identity, and report it.
+
 ## Security baseline
 
 - The baseline is the OWASP ASVS (Application Security Verification Standard); each phase gate reviews the relevant chapters.

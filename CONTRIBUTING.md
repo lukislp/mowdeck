@@ -7,6 +7,15 @@
 - The GitHub wiki is a generated mirror of `docs/`: edit the docs, never the wiki (see `docs/dev/wiki.md`).
 - Everything is written in English: code, comments, commits, documentation. The UI is German by default, with English available.
 
+## Releases
+
+Releases are automatic: every push to `main` runs semantic-release (`.github/workflows/release.yml`, `.releaserc.json`), and the Conventional Commit types since the last tag decide whether and how the version moves. So the commit type is part of the change, not a formality; with a squash merge it is the pull request title.
+
+- `fix:`, `perf:`, `refactor:` release a patch, `feat:` a minor version.
+- MowDeck is on the **0.x line**: a breaking change (`feat!:`, `fix(api)!:` or a `BREAKING CHANGE:` footer) releases a minor version, never 1.0.0. Mark it anyway, the release notes list it under "BREAKING CHANGES". Going to 1.0.0 is a deliberate change of `.releaserc.json` by the owner ([Releases](docs/ops/release.md#commit-types-and-versions)).
+- `docs:`, `ci:`, `chore:`, `test:`, `style:`, `build:` release nothing. Use them for changes that ship nothing to an installation, and `fix:` or `feat:` when a user would notice.
+- Never tag by hand. The release tag is SSH-signed, images, chart and release files are signed with Sigstore and carry build provenance; how to verify them is in [Releases](docs/ops/release.md#verifying-a-release).
+
 ## Definition of done
 
 A change is done when:
