@@ -12,8 +12,9 @@
 #
 # agora-bridge is the bridge server of integrations/agora-bridge run from source in the relay
 # image (it has Python; no Agora SDK anywhere): it starts tests/media/fake_bridge.py per
-# connection, which replays the spike's recorded H.265 stream through the bridge protocol. The
-# relay reaches it over TCP (in the Compose stack and Helm it shares the relay's loopback).
+# connection, which replays the synthetic H.265 stream through the bridge protocol. The stream
+# is encoded into .fixtures/ by the test fixture (relay_media_support.synthetic_h265) before the
+# stack starts and mounted at /opt/fixtures. The relay reaches it over TCP (in the Compose stack and Helm it shares the relay's loopback).
 name: camera-relay-media-test
 
 services:
@@ -63,7 +64,7 @@ services:
       MOWDECK_RELAY_FRAMES_TOKEN: media-test-frames-token
     volumes:
       - ./:/opt/media-tests:ro
-      - ../../../../integrations/agora-bridge/spike/fixtures:/opt/fixtures:ro
+      - ./.fixtures:/opt/fixtures:ro
     ports:
       - "127.0.0.1:${RELAY_TEST_HTTP_PORT:-18321}:8000"
     healthcheck:
@@ -91,11 +92,11 @@ services:
       - --listen
       - 0.0.0.0:7700
       - --command
-      - python /opt/media-tests/fake_bridge.py /opt/fixtures/luba-uid1.h265
+      - python /opt/media-tests/fake_bridge.py /opt/fixtures/camera-h265.h265
     volumes:
       - ../../../../integrations/agora-bridge/src:/opt/agora-bridge-src:ro
       - ./:/opt/media-tests:ro
-      - ../../../../integrations/agora-bridge/spike/fixtures:/opt/fixtures:ro
+      - ./.fixtures:/opt/fixtures:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 7700), 2).close()"]
       interval: 2s

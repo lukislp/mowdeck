@@ -1,4 +1,4 @@
-"""A stand-in for agora-bridge in the media test stack: the spike's recorded stream through the
+"""A stand-in for agora-bridge in the media test stack: a synthetic H.265 stream through the
 bridge protocol (docs/dev/camera-relay-bridge-protocol.md), standard library only.
 
 The agora-bridge server (``integrations/agora-bridge``, run from source in the test stack)
@@ -6,8 +6,9 @@ starts this script once per relay connection instead of the real bridge, so the 
 driver, muxer and transcoder run exactly as with the mower, without Agora:
 
 * ``join`` -> ``joined`` and the publishers 1, 2 and 3 (3, the rear camera, never sends);
-* ``subscribe`` -> the recorded access units of ``luba-uid1.h265`` (H.265, 640x480, 10 fps,
-  4 s GOP) for uid 1 and 2, looped, paced at 10 fps, with ``recv_mono_ns`` of this process;
+* ``subscribe`` -> the access units of the synthetic ``camera-h265.h265`` (H.265, 640x480,
+  10 fps, 4 s GOP like the LUBA 2 AWD X front camera) for uid 1 and 2, looped, paced at
+  10 fps, with ``recv_mono_ns`` of this process;
 * a channel that starts with ``crash`` exits with code 1 after 150 frames (a crashing SDK);
 * a channel that starts with ``late`` starts each camera mid-GOP (its first key frame comes
   after about 4 s, like the LUBA's) and then sends nothing for ``LATE_HOLD`` seconds after
@@ -174,7 +175,7 @@ def main() -> int:
     if "--check" in sys.argv:
         return 0
     units = access_units(Path(sys.argv[1]).read_bytes())
-    event("hello", protocol=1, bridge="fake-bridge/1", sdk="none (recorded stream)")
+    event("hello", protocol=1, bridge="fake-bridge/1", sdk="none (synthetic stream)")
     crash = late = stall = False
     started: set[int] = set()
     for line in sys.stdin:

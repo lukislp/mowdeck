@@ -30,6 +30,9 @@ apps/web/src/lib/paraglide/
 # Owner script output: JSON lines logs and the PyMammotion credential cache (live tokens)
 out/
 mammotion_session*.json
+# Camera recordings of the agora-bridge spike and the media tests' generated H.265 stream
+integrations/agora-bridge/spike/fixtures/
+services/camera-relay/tests/media/.fixtures/
 
 # Docs
 site/
