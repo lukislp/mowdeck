@@ -59,7 +59,6 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
       build: ${{ steps.version.outputs.build }}
-      ref: ${{ steps.ref.outputs.ref }}
       latest: ${{ steps.version.outputs.latest }}
       owner: ${{ steps.version.outputs.owner }}
     steps:
@@ -110,6 +109,8 @@ jobs:
           if [ "$EVENT" = push ]; then
             if [ "$PUBLISHED" != true ]; then
               echo "No releasable commits since the last tag (docs, ci, chore, test only): nothing to publish. This is the common case, not a failure." | tee -a "$GITHUB_STEP_SUMMARY"
+            elif [ "$(git rev-parse HEAD)" != "$SHA" ]; then
+              echo "main moved past this run's commit ($SHA): the newer push's run releases it." | tee -a "$GITHUB_STEP_SUMMARY"
             else
               version="$NEXT_VERSION"
               # semantic-release starts a repository without tags at 1.0.0. MowDeck's line starts
@@ -152,24 +153,6 @@ jobs:
             echo "latest=$release"
             echo "owner=$owner"
           } | tee -a "$GITHUB_OUTPUT"
-      # The ref every build job checks out, derived only from semantic-release's own result or the
-      # commit the run started from, never from the free-form version input of a test build: the
-      # release tag for a release, otherwise exactly the commit of this run (github.sha).
-      - id: ref
-        env:
-          EVENT: ${{ github.event_name }}
-          PUBLISHED: ${{ steps.semrel.outputs.new_release_published }}
-          NEXT_VERSION: ${{ steps.semrel.outputs.new_release_version }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -eu
-          if [ "$EVENT" = push ] && [ "$PUBLISHED" = true ]; then
-            echo "$NEXT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
-            echo "ref=v$NEXT_VERSION" | tee -a "$GITHUB_OUTPUT"
-          else
-            echo "$SHA" | grep -Eq '^[0-9a-f]{40}$'
-            echo "ref=$SHA" | tee -a "$GITHUB_OUTPUT"
-          fi
 
   # The real semantic-release run: the signed tag v<version> and the GitHub release with the
   # generated notes. It runs before anything is built, so nothing is published under a version
@@ -195,6 +178,18 @@ jobs:
         with:
           fetch-depth: 0
           ref: main
+      # semantic-release tags the checked-out tip of main; the build jobs check out this run's
+      # commit (github.sha). Both must be the same commit, or nothing is tagged (a newer push's
+      # run, queued behind this one, then releases).
+      - name: The tip of main is this run's commit
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          head="$(git rev-parse HEAD)"
+          if [ "$head" != "$SHA" ]; then
+            echo "::error::main moved to $head since this run started at $SHA; not tagging. The run of the newer push releases."
+            exit 1
+          fi
       - name: Push as the semantic-release deploy key (if configured)
         uses: lukislp/ci-workflows/.github/actions/deploy-key-push@4b19e87569c767e2855b4a53292d8edfe4065de4 # v1.8.3
         with:
@@ -229,35 +224,21 @@ jobs:
         uses: lukislp/ci-workflows/.github/actions/semantic-release@4b19e87569c767e2855b4a53292d8edfe4065de4 # v1.8.3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-      # Retry once for the narrow window where another push landed on main between this job's
-      # checkout and its own push.
-      - if: steps.semrel.outcome == 'failure'
-        name: "Diagnose before retrying (expected: a push landed since checkout)"
-        run: |
-          git fetch origin main
-          before="$(git rev-parse HEAD)"
-          after="$(git rev-parse origin/main)"
-          if [ "$before" != "$after" ]; then
-            echo "origin/main moved since checkout ($before -> $after): the race this retry is for."
-          else
-            echo "::warning::origin/main did not move since checkout, so this is likely not the push race. Retrying anyway; read the semantic-release log above for the cause."
-          fi
-          git checkout -B main origin/main
-      - if: steps.semrel.outcome == 'failure'
-        uses: lukislp/ci-workflows/.github/actions/semantic-release@4b19e87569c767e2855b4a53292d8edfe4065de4 # v1.8.3
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      # The jobs below build from v<version>: make sure that exact tag exists, is signed and that
-      # GitHub verifies its signature.
+      # No retry from a newer tip (unlike the repositories that build after tagging from main):
+      # the build jobs check out this run's commit, so the tag may only ever land on it. When a
+      # push raced in, this job fails before tagging and the newer push's run releases.
+      # The jobs below build this run's commit: make sure the tag exists on exactly that commit,
+      # is signed and that GitHub verifies its signature.
       - name: Check the signed tag and the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
           set -eu
           tag="v$RELEASE_VERSION"
           test "$(git cat-file -t "$tag")" = tag
+          test "$(git rev-parse "$tag^{commit}")" = "$SHA"
           git cat-file -p "$tag" | grep -q 'BEGIN SSH SIGNATURE'
           gh release view "$tag" -R "$REPOSITORY" --json tagName --jq .tagName
           object="$(gh api "repos/$REPOSITORY/git/ref/tags/$tag" --jq .object.sha)"
@@ -312,7 +293,6 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.version.outputs.ref }}
           persist-credentials: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -411,7 +391,6 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.version.outputs.ref }}
           persist-credentials: false
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -532,7 +511,6 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.version.outputs.ref }}
           persist-credentials: false
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
@@ -614,7 +592,6 @@ jobs:
       - if: steps.keystore.outputs.present == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.version.outputs.ref }}
           persist-credentials: false
       - if: steps.keystore.outputs.present == 'true'
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -664,7 +641,6 @@ jobs:
       # The source offer script and the names of MowDeck's own packages, at the release tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.version.outputs.ref }}
           path: src
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
