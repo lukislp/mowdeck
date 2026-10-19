@@ -4,6 +4,9 @@
 !package.json
 !pnpm-lock.yaml
 !.npmrc
+!LICENSE
+!LICENSING.md
+!LICENSES/
 !apps/web/**
 !libs/mowdeck-ui/**
 !tools/ts-codegen/package.json

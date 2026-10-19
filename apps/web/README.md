@@ -70,6 +70,17 @@ docker build -f apps/web/Dockerfile -t mowdeck/web:dev .
 docker compose -f infra/compose/docker-compose.yml up -d --build web
 ```
 
+### Agora Web SDK and third-party licences
+
+The direct vendor camera path (ADR 0032) needs the Agora Web SDK (`agora-rtc-sdk-ng`), which is closed-source software of Agora: its npm metadata says MIT, but the package ships no licence text and no source, only minified bundles marked "Copyright AgoraInc.", and Agora's SDK licence agreement, where it applies, forbids using Agora SDKs in applications that contain AGPL-3.0 code. A published MowDeck image therefore never contains it:
+
+| Build | `WEB_AGORA_SDK` | Direct Agora path | Who |
+| --- | --- | --- | --- |
+| `docker build` (default), CI, the release | `exclude` | not available: an `agora` session reports "switched off on this installation"; the camera relay (ADR 0045) serves the video | everyone |
+| `--build-arg WEB_AGORA_SDK=include`, Compose `up --build` (`WEB_AGORA_SDK=include` in `.env`) | `include` | as before | an operator's own image, never redistributed |
+
+`build-tools/release-licences.ts` (two Vite plugins, build only) enforces this: without the SDK the camera factory's `import('./agora-player')` resolves to `src/lib/camera/agora-player.excluded.ts`, and any other import of an Agora package (`agora-rtc-sdk-ng`, `@agora-js/*`, `agora-*`) fails the build. It also lists every npm package in the client bundle, fails on a licence outside its allow list (MIT, ISC, BSD, Apache-2.0, ...) and writes `build/THIRD-PARTY-LICENSES.txt` (served at `/THIRD-PARTY-LICENSES.txt`) and `build/third-party-licences.json`. The release workflow's licence gate (`tools/repo-checks/scripts/licence_gate.py`) checks the built image again before anything is pushed.
+
 ## Layout
 
 | Path | Content |

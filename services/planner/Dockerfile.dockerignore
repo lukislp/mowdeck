@@ -3,6 +3,9 @@
 *
 !pyproject.toml
 !uv.lock
+!LICENSE
+!LICENSING.md
+!LICENSES/
 !libs/
 !services/planner/
 **/__pycache__

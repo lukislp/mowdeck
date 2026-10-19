@@ -24,9 +24,15 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter web...
 COPY libs/mowdeck-ui libs/mowdeck-ui
 COPY apps/web apps/web
+# The Agora Web SDK (proprietary, direct vendor camera path of ADR 0032) is left out by default:
+# a published image never contains it, the camera relay (ADR 0045) serves every browser. Only an
+# operator's own image may include it (--build-arg WEB_AGORA_SDK=include, apps/web/README.md);
+# the build fails for any other value and for any Agora package in a build without it.
+ARG WEB_AGORA_SDK=exclude
 # Compiles the messages (Paraglide), builds the SPA and writes build/csp.conf with the hashes of
-# the inline bootstrap script.
-RUN pnpm --filter web build
+# the inline bootstrap script, plus THIRD-PARTY-LICENSES.txt and third-party-licences.json of the
+# npm packages in the bundle (build-tools/release-licences.ts).
+RUN MOWDECK_WEB_AGORA_SDK="$WEB_AGORA_SDK" pnpm --filter web build
 
 FROM ${NGINX_IMAGE}
 COPY apps/web/nginx/default.conf /etc/nginx/conf.d/default.conf
@@ -36,6 +42,11 @@ COPY --from=build /repo/apps/web/build/csp.conf /etc/nginx/snippets/csp.conf
 # into /tmp at container start.
 COPY --chmod=0755 apps/web/nginx/40-mowdeck-runtime-config.sh /docker-entrypoint.d/40-mowdeck-runtime-config.sh
 COPY --from=build /repo/apps/web/build /usr/share/nginx/html
+# The MowDeck licence texts (LICENSING.md); the bundle's third-party notices are served as
+# /THIRD-PARTY-LICENSES.txt. The labels replace the ones inherited from the nginx base image.
+COPY LICENSE LICENSING.md /usr/share/doc/mowdeck/
+COPY LICENSES/ /usr/share/doc/mowdeck/LICENSES/
+LABEL org.opencontainers.image.title="mowdeck-web"       org.opencontainers.image.description="MowDeck web app"       org.opencontainers.image.source="https://github.com/lukislp/mowdeck"       org.opencontainers.image.url="https://github.com/lukislp/mowdeck"       org.opencontainers.image.revision=""       org.opencontainers.image.version=""       org.opencontainers.image.licenses="AGPL-3.0-only AND Apache-2.0"
 USER 101
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \

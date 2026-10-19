@@ -3,9 +3,15 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
+import { agoraIncluded, releaseLicences } from './build-tools/release-licences.js';
+
 /** The Compose stack's gateway; `pnpm dev` proxies the API (and the WebSocket) to it so the
  * app and the API share one origin, exactly like the `web` service behind Traefik. */
 const gateway = process.env.MOWDECK_DEV_GATEWAY ?? 'http://localhost';
+
+/** The Agora Web SDK only in an operator's own build (MOWDECK_WEB_AGORA_SDK=include); every
+ * published image is built without it (build-tools/release-licences.ts, apps/web/README.md). */
+const agora = agoraIncluded(process.env.MOWDECK_WEB_AGORA_SDK);
 
 export default defineConfig({
   plugins: [
@@ -16,6 +22,7 @@ export default defineConfig({
       strategy: ['localStorage', 'preferredLanguage', 'baseLocale'],
     }),
     svelteTesting(),
+    ...releaseLicences(agora),
   ],
   server: {
     port: 5173,
@@ -40,7 +47,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'build-tools/**/*.test.ts'],
     setupFiles: ['src/tests/setup.ts'],
     coverage: {
       provider: 'v8',
