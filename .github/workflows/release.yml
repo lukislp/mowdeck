@@ -9,7 +9,7 @@ name: release
 #   * checks every image built from that tag with the licence gate before anything is pushed
 #     (job licence-gate: no Agora SDK, only open source licences, the licence label of each
 #     Dockerfile; LICENSING.md),
-#   * builds every image from that tag for linux/amd64 and linux/arm64 (QEMU, GitHub Actions cache)
+#   * builds every image from that tag for linux/amd64 and linux/arm64 (QEMU, no build cache)
 #     to ghcr.io/<owner>/mowdeck/<image>:<version>, :v<version> and :latest, with an SBOM and a
 #     provenance attestation in the image index, a Sigstore keyless signature and a GitHub build
 #     provenance attestation in the registry, and an SPDX SBOM file,
@@ -336,9 +336,8 @@ jobs:
           push: false
           load: true
           tags: ${{ env.LOCAL }}
-          cache-from: |
-            type=gha,scope=${{ matrix.image }}
-            type=gha,scope=${{ matrix.image }}-release
+          # No build cache in release jobs (see the images job).
+          no-cache: true
       - name: SBOM with licences (syft-json)
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
@@ -456,11 +455,9 @@ jobs:
           # SBOM and provenance attestations attached to the image index (buildx --sbom).
           sbom: true
           provenance: mode=max
-          # The amd64 layers of the CI docker job (same scope) seed the cache.
-          cache-from: |
-            type=gha,scope=${{ matrix.image }}
-            type=gha,scope=${{ matrix.image }}-release
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-release
+          # Release images never read or write a shared cache: a cache entry written by another
+          # workflow run (a pull request, a test build) must not end up in a published image.
+          no-cache: true
       # Keyless signature of the image index, bound to this workflow's identity, and a GitHub
       # build provenance attestation pushed next to the image (gh attestation verify).
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -610,13 +607,13 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-          cache: pnpm
+          # No dependency cache in release jobs (cache poisoning, see the images job).
+          package-manager-cache: false
       - if: steps.keystore.outputs.present == 'true'
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "21"
-          cache: gradle
       # The runner image ships the Android SDK (ANDROID_HOME); Gradle fetches a missing platform.
       - if: steps.keystore.outputs.present == 'true'
         name: Build the APK
