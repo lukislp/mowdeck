@@ -25,11 +25,9 @@ updates:
     directory: /
     schedule:
       interval: daily
-    ignore:
-      # pymammotion is pinned exactly on purpose (GPL adapter, mowdeck-control-mammotion): every
-      # release changes the protocol surface the adapter depends on and needs a test on a real
-      # mower before it is taken over.
-      - dependency-name: "pymammotion"
+    # pymammotion (GPL adapter, mowdeck-control-mammotion) is pinned exactly and is NOT ignored:
+    # every release changes the protocol surface the adapter depends on, so its PRs exist to make
+    # new releases visible and are only merged after a test on a real mower.
     commit-message:
       prefix: "fix(deps)"
     reviewers:
@@ -41,9 +39,20 @@ updates:
     directory: /
     schedule:
       interval: daily
+    # Only minor and patch updates are grouped; every major arrives as its own PR so that one
+    # breaking upgrade (SvelteKit, adapter-static, jsdom, ...) cannot hold back the routine bumps.
     groups:
       dev:
         dependency-type: development
+        update-types: ["minor", "patch"]
+    ignore:
+      # @types/node follows the Node runtime (22, see "engines" in package.json and the Node
+      # image); it is raised together with the runtime, not on its own.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint does not support TypeScript 7 yet; revisit once it declares support.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "fix(deps)"
     reviewers:

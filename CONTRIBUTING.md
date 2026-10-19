@@ -58,6 +58,8 @@ pnpm --filter web build
 
 `pnpm -r test` includes the Playwright suite of `tests/e2e-web`, which needs the throwaway test stack (below); without it, run `pnpm -r --filter '!e2e-web' test`. After changing a service route or a contract, regenerate the API types: `uv run poe openapi` (checked by `uv run poe openapi-check` and `uv run poe test`), then `pnpm codegen`, and commit the results with the change. Details: [docs/dev/web-app.md](docs/dev/web-app.md).
 
+`pnpm.overrides` in the root `package.json` lifts transitive dependencies with a known advisory whose parent has no fixed release yet, each one scoped to that parent: `xcode>uuid` (`@capacitor/cli`, GHSA-w5hq-g745-h8pq; uuid 11 still ships the CommonJS build xcode requires) and `@sveltejs/kit>cookie` (GHSA-pxg6-pf52-xh8x; cookie 0.7 keeps the `parse`/`serialize` API). Drop an entry once the parent depends on a fixed version itself, then run `pnpm install` and commit the lock file.
+
 ### End-to-end tests
 
 The e2e suites (`tests/e2e-web`, `tests/e2e`) create users, accounts and mowers. Run them **only against the throwaway test stack**, never against the stack you or the household use (`http://localhost`, the LAN address):
