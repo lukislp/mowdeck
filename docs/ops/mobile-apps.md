@@ -120,7 +120,7 @@ Without a keystore the APK is debug-signed. Release signing:
     ```
 
 2. Locally: `MOWDECK_ANDROID_KEYSTORE=mowdeck-release.jks MOWDECK_ANDROID_KEYSTORE_PASSWORD=... MOWDECK_ANDROID_KEY_ALIAS=mowdeck bash apps/mobile/scripts/build-android.sh`.
-3. For the release workflow, add repository secrets: `ANDROID_KEYSTORE_BASE64` (`base64 -w0 mowdeck-release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, optionally `ANDROID_KEY_PASSWORD` (defaults to the keystore password). The job `android` of `release.yml` builds the APK on ubuntu for every `v*` tag and the release attaches it; without the secret the job only warns and the release has no APK. Pull requests never build the native apps (minute budget); the CI job `web` runs the mobile package's lint, `tsc` check and tests.
+3. For the release workflow, add repository secrets: `ANDROID_KEYSTORE_BASE64` (`base64 -w0 mowdeck-release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, optionally `ANDROID_KEY_PASSWORD` (defaults to the keystore password). The job `android` of `release.yml` builds the APK on ubuntu for every release ([Releases](release.md)) and the release attaches it, with its checksum, Sigstore bundle and build provenance; without the secret the job only warns and the release has no APK. Pull requests never build the native apps (minute budget); the CI job `web` runs the mobile package's lint, `tsc` check and tests.
 
 ## Icons and splash screens
 
