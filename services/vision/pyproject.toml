@@ -24,7 +24,9 @@ dependencies = [
   "cryptography>=44.0.0",
   # One client for every vision model family (Anthropic, OpenAI, Gemini, Mistral, Ollama,
   # OpenAI-compatible endpoints). Imported lazily: the fake provider and the tests need it not.
-  "litellm>=1.100.0,<2",
+  # Costs come from the model price map bundled with the release (no download at startup), so
+  # the floor is the first release whose map prices the documented models (claude-*-5-5, gpt-6).
+  "litellm>=1.106.0,<2",
   # multipart/form-data uploads of camera snapshots.
   "python-multipart>=0.0.20",
 ]

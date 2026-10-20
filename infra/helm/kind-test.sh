@@ -9,7 +9,8 @@
 #      job mode migrations) and wait for every pod and job; then upgrade once (revision 2 jobs,
 #      wait-for-schema and wait-for-model with an existing database)
 #   4. optionally run the Phase 1 acceptance test (uv run poe e2e) through a port-forward of
-#      Traefik
+#      Traefik; the cluster gets the e2e marker of infra/compose/docker-compose.e2e.yml first (a
+#      whoami pod at /api/v1/e2e-stack), because the suite refuses any stack without it
 #
 # The MowDeck images must exist locally as $REGISTRY/<image>:$TAG, or set SOURCE_TAG to retag the
 # Compose builds mowdeck/<image>:$SOURCE_TAG (docker compose ... build), or BUILD=1 to build them.
@@ -18,8 +19,8 @@
 #
 # Environment: CLUSTER (mowdeck-test), REGISTRY (ghcr.io/lukislp/mowdeck), TAG (kind),
 # SOURCE_TAG, BUILD, E2E (1: run the acceptance test), E2E_ARGS (extra pytest arguments),
-# KEEP (1: keep the cluster), PORT (18080), NATS_IMAGE, OPENFGA_IMAGE, TRAEFIK_IMAGE (default:
-# the pinned public images of infra/compose/.env.example).
+# KEEP (1: keep the cluster), PORT (18080), NATS_IMAGE, OPENFGA_IMAGE, TRAEFIK_IMAGE, WHOAMI_IMAGE
+# (default: the pinned public images of infra/compose/.env.example).
 set -eu
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -36,6 +37,7 @@ listed() { sed -n "s/^$1=//p" "$root/infra/compose/.env.example"; }
 NATS_IMAGE="${NATS_IMAGE:-$(listed NATS_IMAGE)}"
 OPENFGA_IMAGE="${OPENFGA_IMAGE:-$(listed OPENFGA_IMAGE)}"
 TRAEFIK_IMAGE="${TRAEFIK_IMAGE:-$(listed TRAEFIK_IMAGE)}"
+WHOAMI_IMAGE="${WHOAMI_IMAGE:-$(listed WHOAMI_IMAGE)}"
 ns=mowdeck
 step() { printf '\n== %s\n' "$*"; }
 
@@ -73,7 +75,7 @@ for image in $images; do
   fi
   docker image inspect "$target" > /dev/null
 done
-for image in "$NATS_IMAGE" "$OPENFGA_IMAGE" "$TRAEFIK_IMAGE"; do
+for image in "$NATS_IMAGE" "$OPENFGA_IMAGE" "$TRAEFIK_IMAGE" "$WHOAMI_IMAGE"; do
   docker image inspect "$image" > /dev/null 2>&1 || docker pull -q "$image"
 done
 
@@ -86,7 +88,7 @@ kind load docker-image --name "$CLUSTER" $(for i in $images; do echo "$REGISTRY/
 # containerd image store), which `kind load docker-image` cannot import: save the node's platform.
 arch=$(docker version --format '{{.Server.Arch}}')
 archive=$(mktemp -d)
-for image in "$NATS_IMAGE" "$OPENFGA_IMAGE" "$TRAEFIK_IMAGE"; do
+for image in "$NATS_IMAGE" "$OPENFGA_IMAGE" "$TRAEFIK_IMAGE" "$WHOAMI_IMAGE"; do
   docker save --platform "linux/$arch" -o "$archive/image.tar" "$image"
   kind load image-archive --name "$CLUSTER" "$archive/image.tar"
 done
@@ -132,6 +134,56 @@ echo "upgraded in $(( $(date +%s) - start ))s"
 kubectl -n "$ns" get pods,jobs
 
 if [ -n "${E2E:-}" ]; then
+  step "e2e marker"
+  # The marker of infra/compose/docker-compose.e2e.yml for this throwaway cluster: whoami (host
+  # name mowdeck-kind) at /api/v1/e2e-stack. tests/e2e checks it before it creates any data and
+  # refuses a stack without it, so the suite never runs against a real installation by accident.
+  # Not part of the chart: an installation never carries it.
+  kubectl -n "$ns" apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e2e-marker
+  labels: {app.kubernetes.io/name: e2e-marker}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: e2e-marker}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: e2e-marker}
+    spec:
+      hostname: mowdeck-kind
+      automountServiceAccountToken: false
+      containers:
+        - name: whoami
+          image: $WHOAMI_IMAGE
+          imagePullPolicy: Never
+          ports: [{name: http, containerPort: 80}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: e2e-marker
+spec:
+  selector: {app.kubernetes.io/name: e2e-marker}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: e2e-marker
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /api/v1/e2e-stack
+            pathType: Prefix
+            backend: {service: {name: e2e-marker, port: {name: http}}}
+EOF
+  kubectl -n "$ns" rollout status deployment/e2e-marker --timeout 2m
+
   step "Phase 1 acceptance test through Traefik (port-forward :$PORT)"
   kubectl -n traefik port-forward svc/traefik "$PORT:80" > /dev/null 2>&1 &
   pf_pid=$!
@@ -141,6 +193,11 @@ if [ -n "${E2E:-}" ]; then
   done
   curl -sf "http://localhost:$PORT/.well-known/jwks.json" > /dev/null
   curl -sf "http://localhost:$PORT/healthz" > /dev/null
+  # Traefik picks up the marker's Ingress asynchronously.
+  for _ in $(seq 1 30); do
+    curl -sf "http://localhost:$PORT/api/v1/e2e-stack" | grep -q '^Hostname: mowdeck-kind' && break
+    sleep 1
+  done
   # shellcheck disable=SC2086
   (cd "$root" && MOWDECK_E2E_BASE_URL="http://localhost:$PORT" uv run poe e2e ${E2E_ARGS:-})
 fi

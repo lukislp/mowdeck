@@ -1,6 +1,7 @@
 """The LiteLLM loader heals a half-initialised module and serialises imports."""
 
 import importlib
+import os
 import sys
 import threading
 from types import ModuleType, SimpleNamespace
@@ -49,6 +50,32 @@ def test_loader_replaces_a_partially_initialised_module(monkeypatch: pytest.Monk
     assert imported == ["litellm"]
     assert "litellm.utils" not in sys.modules
     assert fresh.suppress_debug_info is True
+
+
+def test_loader_keeps_the_cost_map_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LITELLM_LOCAL_MODEL_COST_MAP", raising=False)
+    seen: list[str | None] = []
+
+    def fake_import(name: str) -> Any:
+        seen.append(os.environ.get("LITELLM_LOCAL_MODEL_COST_MAP"))
+        sys.modules["litellm"] = module = _complete_module()
+        return module
+
+    monkeypatch.setattr(importlib, "import_module", fake_import)
+    llm.load_litellm()
+    assert seen == ["True"]
+
+
+def test_loader_respects_an_explicit_cost_map_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "False")
+
+    def fake_import(name: str) -> Any:
+        sys.modules["litellm"] = module = _complete_module()
+        return module
+
+    monkeypatch.setattr(importlib, "import_module", fake_import)
+    llm.load_litellm()
+    assert os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] == "False"
 
 
 def test_loader_drops_the_module_when_the_import_fails(monkeypatch: pytest.MonkeyPatch) -> None:
