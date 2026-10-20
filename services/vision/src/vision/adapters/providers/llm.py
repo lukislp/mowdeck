@@ -12,13 +12,17 @@ usual environment variable (``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``, ``GEMINI_
   not validate gets exactly one more try with the validation error.
 * Transient errors (timeout, connection, 429, 5xx) are retried ``retries`` times with backoff.
 * Cost accounting: input and output tokens from the response and LiteLLM's cost estimate
-  (``completion_cost``; None when the model has no price in LiteLLM's map).
+  (``completion_cost``; None when the model has no price in LiteLLM's map). The map is the one
+  bundled with the pinned LiteLLM release: the import would otherwise download the current map
+  from GitHub (three attempts, several seconds, a warning per attempt without egress).
+  ``LITELLM_LOCAL_MODEL_COST_MAP=False`` in the environment brings the download back.
 * Redaction: images and keys are never logged; LiteLLM's own message logging is turned off.
 """
 
 import asyncio
 import importlib
 import logging
+import os
 import sys
 import threading
 import time
@@ -50,6 +54,7 @@ _configured = False
 
 _IMPORT_LOCK = threading.Lock()
 _REQUIRED_ATTRIBUTES: Final = ("acompletion", "exceptions", "supports_response_schema")
+_LOCAL_COST_MAP: Final = "LITELLM_LOCAL_MODEL_COST_MAP"
 
 
 def _complete(module: Any) -> bool:
@@ -70,8 +75,12 @@ def load_litellm() -> Any:
     ``sys.modules`` and every later call failed). A module that is missing its public
     attributes is dropped from ``sys.modules`` and imported again; an import error drops it
     too, so the next caller retries instead of inheriting the broken state.
+
+    The import uses LiteLLM's bundled model cost map unless the environment sets
+    ``LITELLM_LOCAL_MODEL_COST_MAP`` itself (no request to GitHub at startup).
     """
     global _configured
+    os.environ.setdefault(_LOCAL_COST_MAP, "True")
     with _IMPORT_LOCK:
         module = sys.modules.get("litellm")
         if module is None or not _complete(module):

@@ -4,7 +4,9 @@
 
   On the desktop the frame is bound to the viewport: the document never scrolls, the content
   area is the only scroll container (pages with their own scroll boxes, such as the mower
-  detail, fill it exactly) and the rail scrolls inside itself when it does not fit.
+  detail, fill it exactly) and the rail scrolls inside itself when it does not fit. Nothing in
+  the content reaches past the frame: the content area is the containing block of absolutely
+  positioned content.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -61,7 +63,11 @@
       overflow: hidden;
     }
 
+    /* The containing block of absolutely positioned content (visually hidden labels): without
+       it such a box is placed against the viewport at its spot in the scrolled content and
+       stretches the document, a second scrollbar next to this one. */
     .main {
+      position: relative;
       height: var(--md-viewport-height);
       min-height: 0;
       overflow-y: auto;

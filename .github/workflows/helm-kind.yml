@@ -2,13 +2,18 @@ name: helm-kind
 
 # Install test of the Helm chart in a kind cluster (infra/helm/kind-test.sh): CloudNativePG
 # operator, Traefik, the chart with values-homelab.yaml and the in-cluster PostgreSQL, an upgrade,
-# then the Phase 1 acceptance test (uv run poe e2e) through Traefik. About 15 minutes, so it runs
-# only by hand (gh workflow run helm-kind.yml) and for release tags, never on pull requests; the
-# cheap chart checks are the "helm" job of ci.yml.
+# then the Phase 1 acceptance test (uv run poe e2e) through Traefik. About 15 minutes, so besides
+# release tags and by hand (gh workflow run helm-kind.yml) it runs only on pull requests that
+# change the chart, the test script or this workflow, so the release path is exercised before a
+# tag. Not a required check; the cheap chart checks are the "helm" job of ci.yml.
 on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - "infra/helm/**"
+      - ".github/workflows/helm-kind.yml"
 
 concurrency:
   group: helm-kind-${{ github.ref }}
