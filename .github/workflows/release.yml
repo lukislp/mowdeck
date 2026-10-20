@@ -307,6 +307,9 @@ jobs:
         id: args
         env:
           KIND: ${{ matrix.kind }}
+          RELEASE: ${{ needs.version.outputs.release }}
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
           case "$KIND" in
             python) args="PYTHON_IMAGE=$PYTHON_IMAGE
@@ -317,8 +320,13 @@ jobs:
           JQ_IMAGE=$JQ_IMAGE
           BUSYBOX_IMAGE=$BUSYBOX_IMAGE" ;;
           esac
+          # The same version and source arguments as the images job (see there).
+          source_ref="$SHA"
+          [ "$RELEASE" = true ] && source_ref="v$VERSION"
           args="$args
-          MOWDECK_VERSION=$VERSION"
+          MOWDECK_VERSION=$VERSION
+          MOWDECK_SOURCE_URL=$SOURCE_URL
+          MOWDECK_SOURCE_REF=$source_ref"
           printf 'build-args<<EOF\n%s\nEOF\n' "$args" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build (linux/amd64, local only)
@@ -405,6 +413,9 @@ jobs:
         env:
           KIND: ${{ matrix.kind }}
           LATEST: ${{ needs.version.outputs.latest }}
+          RELEASE: ${{ needs.version.outputs.release }}
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
           case "$KIND" in
             python) args="PYTHON_IMAGE=$PYTHON_IMAGE
@@ -415,10 +426,17 @@ jobs:
           JQ_IMAGE=$JQ_IMAGE
           BUSYBOX_IMAGE=$BUSYBOX_IMAGE" ;;
           esac
-          # The release version for every image (ARG MOWDECK_VERSION in a Dockerfile that needs
-          # it, e.g. the web app's source link); the same name as the Compose image tag variable.
+          # Version and source of the build for every image (AGPL-3.0 section 13: the services'
+          # X-Source-Code header and the web app's source link, <MOWDECK_SOURCE_URL>/tree/<ref>):
+          # MOWDECK_VERSION is the release (or test build) version, MOWDECK_SOURCE_REF the tag
+          # v<version> for a release and the exact commit for a test build (it has no tag), and
+          # MOWDECK_SOURCE_URL this repository, so a fork's images point to the fork.
+          source_ref="$SHA"
+          [ "$RELEASE" = true ] && source_ref="v$VERSION"
           args="$args
-          MOWDECK_VERSION=$VERSION"
+          MOWDECK_VERSION=$VERSION
+          MOWDECK_SOURCE_URL=$SOURCE_URL
+          MOWDECK_SOURCE_REF=$source_ref"
           tags="$IMAGE:$VERSION
           $IMAGE:v$VERSION"
           [ "$LATEST" = true ] && tags="$tags
