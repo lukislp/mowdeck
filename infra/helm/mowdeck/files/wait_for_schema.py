@@ -1,6 +1,12 @@
 """Init container: wait until the service database is at the newest migration of this image.
 
 Usage: python wait_for_schema.py <package>.adapters.db.migrate
+       python wait_for_schema.py --reachable
+
+--reachable (init container of the migration Jobs with the in-cluster database) only waits until
+the database accepts the service's login: CloudNativePG starts the cluster and creates the
+per-service roles and databases after the Jobs exist, and a migration started earlier would fail
+(connection refused, database "<service>" does not exist) and burn the Job's retries.
 
 The module's alembic_config() names the packaged migrations. The database URL comes from
 MOWDECK_DATABASE_URL_FILE (or MOWDECK_DATABASE_URL). The database counts as ready when it carries
@@ -30,6 +36,14 @@ def database_url() -> str:
     return f"postgresql://{rest}" if sep and scheme.startswith("postgres") else url
 
 
+async def reachable(url: str) -> None:
+    connection = await asyncpg.connect(url, timeout=5)
+    try:
+        await connection.execute("SELECT 1")
+    finally:
+        await connection.close()
+
+
 async def applied_revisions(url: str) -> set[str]:
     connection = await asyncpg.connect(url, timeout=5)
     try:
@@ -41,12 +55,29 @@ async def applied_revisions(url: str) -> set[str]:
     return {row[0] for row in rows}
 
 
+def wait_reachable(deadline: float) -> int:
+    while True:
+        try:
+            asyncio.run(reachable(database_url()))
+            print("wait-for-database: database reachable", flush=True)
+            return 0
+        except (OSError, asyncpg.PostgresError, TimeoutError) as exc:
+            message = f"database not reachable yet: {exc.__class__.__name__}: {exc}"
+        if time.monotonic() > deadline:
+            print(f"wait-for-database: giving up, {message}", flush=True)
+            return 1
+        print(f"wait-for-database: {message}", flush=True)
+        time.sleep(3)
+
+
 def main() -> int:
+    deadline = time.monotonic() + float(os.environ.get("WAIT_TIMEOUT_SECONDS", "900"))
+    if sys.argv[1] == "--reachable":
+        return wait_reachable(deadline)
     module = importlib.import_module(sys.argv[1])
     script = ScriptDirectory.from_config(module.alembic_config())
     heads = set(script.get_heads())
     known = {revision.revision for revision in script.walk_revisions()}
-    deadline = time.monotonic() + float(os.environ.get("WAIT_TIMEOUT_SECONDS", "900"))
     while True:
         try:
             applied = asyncio.run(applied_revisions(database_url()))

@@ -147,7 +147,7 @@ SOURCE_TAG=dev E2E=1 KEEP=1 sh infra/helm/kind-test.sh        # KEEP: leave the 
 kind delete cluster --name mowdeck-test
 ```
 
-The CI workflow `helm-kind.yml` runs the same script (by hand and for release tags).
+With `E2E=1` the script first deploys the e2e marker of `infra/compose/docker-compose.e2e.yml` into the test cluster (a whoami pod behind an Ingress at `/api/v1/e2e-stack`, not part of the chart): the acceptance test refuses any stack without it. The CI workflow `helm-kind.yml` runs the same script (by hand, for release tags and for pull requests that change `infra/helm/` or the workflow; not a required check).
 
 ## Install in the cloud
 
@@ -264,7 +264,7 @@ helm upgrade mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version <new> -n mow
 Migrations never run inside a service process. How they run depends on where the database comes from (`migrations.mode: auto`):
 
 - **External PostgreSQL (hook mode):** every service's migration Job is a `pre-install,pre-upgrade` hook ordered by `helm.sh/hook-weight` (identity 1, fleet 2, telemetry 3, notifications 4, scheduler 5, entitlements 6, billing 7, planner 8, vision 9; their database URLs come from a hook Secret with weight -10). Helm waits for all of them before it changes any Deployment, and a failed migration stops the upgrade.
-- **In-cluster CloudNativePG (job mode):** the database is created by the release itself and does not exist yet when `pre-install` hooks run, so the migrations are ordinary Jobs named per revision (`mowdeck-<service>-migrate-r<revision>`; Helm removes them with the next upgrade, Kubernetes after `migrations.ttlSecondsAfterFinished`). The new pods wait in `wait-for-schema` until their Job has migrated the database, the old pods keep serving meanwhile.
+- **In-cluster CloudNativePG (job mode):** the database is created by the release itself and does not exist yet when `pre-install` hooks run, so the migrations are ordinary Jobs named per revision (`mowdeck-<service>-migrate-r<revision>`; Helm removes them with the next upgrade, Kubernetes after `migrations.ttlSecondsAfterFinished`). Each Job first waits in its init container `wait-for-database` (at most `migrations.waitTimeoutSeconds`) until the operator has started PostgreSQL and created the service's role and database, so on a fresh install the migration runs once instead of failing and being retried until the database exists. The new pods wait in `wait-for-schema` until their Job has migrated the database, the old pods keep serving meanwhile.
 
 Migrations are backward compatible (the template's rule), so old pods run against a migrated database during the rolling update, and `wait-for-schema` lets an older image start against a newer schema. Configuration changes roll the pods (checksum annotations). The authorization model follows the same pattern: the bootstrap Job of the new revision writes the model, and the new pods start only once the latest model equals the one in their release (`wait-for-model`), so no pod pins an older model. Rolling back: [Releases](release.md#rolling-back).
 
@@ -296,6 +296,7 @@ Every service serves Prometheus metrics at `/metrics` on port 8000 (HTTP request
 | --- | --- |
 | `helm install` fails with `... is required` | a required secret is missing: see [Secrets](#secrets) |
 | `no matches for kind "Cluster" in version "postgresql.cnpg.io/v1"` | the CloudNativePG operator is not installed, or use `postgresql.external` |
+| migration Job pod in `Init:0/1`, log `wait-for-database: database not reachable yet` | PostgreSQL still starting or the operator has not created the database yet (`kubectl get cluster,database`) |
 | pods stay in `Init:0/2`, log `wait-for-schema: database not reachable yet` | PostgreSQL still starting (`kubectl get cluster`), wrong external host or password; check the migration Job's logs |
 | `wait-for-schema: database at [...], waiting for [...]` | the migration Job failed or is still running: `kubectl logs job/mowdeck-<service>-migrate-r<revision>` |
 | `wait-for-model: waiting for the authorization model` | the bootstrap Job has not finished: `kubectl logs job/mowdeck-authz-bootstrap-r<revision>`; OpenFGA not ready (`kubectl get pods -l app.kubernetes.io/name=openfga`) |
@@ -310,4 +311,4 @@ Every service serves Prometheus metrics at `/metrics` on port 8000 (HTTP request
 
 ## Checks in CI
 
-`sh infra/helm/check.sh` (CI job `helm`, about a minute) runs `helm dependency build`, `helm lint --strict` and `helm template` for the default values and both overlays, each also with an external PostgreSQL, validates every rendered manifest with [kubeconform](https://github.com/yannh/kubeconform) `-strict` against the Kubernetes 1.37 schemas and the CloudNativePG and Prometheus Operator schemas of the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog), checks that missing secrets fail with their message, and runs the drift test. Locally it needs `helm` and `kubeconform` on the `PATH`. The kind install test (`helm-kind.yml`, [helm/kind-action](https://github.com/helm/kind-action)) runs only by hand and for release tags.
+`sh infra/helm/check.sh` (CI job `helm`, about a minute) runs `helm dependency build`, `helm lint --strict` and `helm template` for the default values and both overlays, each also with an external PostgreSQL, validates every rendered manifest with [kubeconform](https://github.com/yannh/kubeconform) `-strict` against the Kubernetes 1.37 schemas and the CloudNativePG and Prometheus Operator schemas of the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog), checks that missing secrets fail with their message, and runs the drift test. Locally it needs `helm` and `kubeconform` on the `PATH`. The kind install test (`helm-kind.yml`, [helm/kind-action](https://github.com/helm/kind-action)) runs by hand, for release tags and for pull requests that change `infra/helm/` or the workflow.
