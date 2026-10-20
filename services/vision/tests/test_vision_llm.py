@@ -21,6 +21,7 @@ from vision.adapters.providers.llm import LiteLlmProvider, load_litellm
 from vision.adapters.providers.prompt import ASSESSMENT_SCHEMA, extract_json, system_prompt
 from vision.domain.context import Motion, SceneContext
 from vision.domain.errors import ProviderFailed
+from vision.domain.families import FAMILIES
 from vision.domain.models import Image, ProviderConfig, Situation
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -327,3 +328,20 @@ def test_vision_llm_capabilities_of_the_supported_families() -> None:
     assert module.supports_vision(model="gemini/gemini-2.5-flash")
     assert not module.supports_response_schema(model="ollama/llava")
     assert module.turn_off_message_logging is True
+
+
+def test_vision_llm_bundled_price_map_prices_every_documented_hosted_model() -> None:
+    """The loader keeps LiteLLM on its bundled price map (no download at startup): every hosted
+    example model of the settings page must have a price there, or its cost reads as 0."""
+    module = load_litellm()
+    unpriced = []
+    for family in FAMILIES:
+        if family.local:
+            continue
+        for model in family.examples:
+            prompt, completion = module.cost_per_token(
+                model=model, prompt_tokens=1000, completion_tokens=100
+            )
+            if not prompt + completion > 0:
+                unpriced.append(model)
+    assert unpriced == []
