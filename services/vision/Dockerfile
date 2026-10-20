@@ -69,6 +69,15 @@ RUN if [ "$WITH_CAPTURE" = "true" ]; then \
       && rm -rf /var/lib/apt/lists/* /root/.cache; \
     fi
 WORKDIR /app
+# The build's version and the address of its source code (AGPL-3.0 section 13, LICENSING.md):
+# set by the release build (MOWDECK_SOURCE_REF: the tag v<version>, or the commit of a test
+# build), overridable at runtime. A fork that runs modified code sets its own repository.
+ARG MOWDECK_VERSION=
+ARG MOWDECK_SOURCE_URL=https://github.com/lukislp/mowdeck
+ARG MOWDECK_SOURCE_REF=
+ENV MOWDECK_VERSION=${MOWDECK_VERSION} \
+    MOWDECK_SOURCE_URL=${MOWDECK_SOURCE_URL} \
+    MOWDECK_SOURCE_REF=${MOWDECK_SOURCE_REF}
 USER 10001:10001
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \

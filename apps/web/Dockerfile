@@ -47,6 +47,15 @@ COPY --from=build /repo/apps/web/build /usr/share/nginx/html
 COPY LICENSE LICENSING.md /usr/share/doc/mowdeck/
 COPY LICENSES/ /usr/share/doc/mowdeck/LICENSES/
 LABEL org.opencontainers.image.title="mowdeck-web"       org.opencontainers.image.description="MowDeck web app"       org.opencontainers.image.source="https://github.com/lukislp/mowdeck"       org.opencontainers.image.url="https://github.com/lukislp/mowdeck"       org.opencontainers.image.revision=""       org.opencontainers.image.version=""       org.opencontainers.image.licenses="AGPL-3.0-only AND Apache-2.0"
+# The build's version and the address of its source code (AGPL-3.0 section 13, LICENSING.md):
+# set by the release build (MOWDECK_SOURCE_REF: the tag v<version>, or the commit of a test
+# build), overridable at runtime. A fork that runs modified code sets its own repository.
+ARG MOWDECK_VERSION=
+ARG MOWDECK_SOURCE_URL=https://github.com/lukislp/mowdeck
+ARG MOWDECK_SOURCE_REF=
+ENV MOWDECK_VERSION=${MOWDECK_VERSION} \
+    MOWDECK_SOURCE_URL=${MOWDECK_SOURCE_URL} \
+    MOWDECK_SOURCE_REF=${MOWDECK_SOURCE_REF}
 USER 101
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \

@@ -27,6 +27,7 @@ from mowdeck_service_kit.health import (
 from mowdeck_service_kit.logging import configure_logging, get_logger
 from mowdeck_service_kit.otel import instrument_app
 from mowdeck_service_kit.settings import ServiceSettings
+from mowdeck_service_kit.source import SourceCodeMiddleware
 from mowdeck_service_kit.tenancy import PrincipalResolver
 
 API_PREFIX = "/api/v1"
@@ -92,7 +93,12 @@ def create_app(
         try:
             for hook in on_startup:
                 await hook(app)
-            _log.info("service started", version=descriptor.version)
+            _log.info(
+                "service started",
+                version=descriptor.version,
+                build=settings.version or "dev",
+                source=settings.source_code_url,
+            )
             yield
         finally:
             app.state.draining = True
@@ -129,9 +135,11 @@ def create_app(
             skip_paths=("/metrics", "/healthz", "/readyz"),
             route_templates=route_templates,
         )
-    # Added last = outermost: correlation id is set before errors are logged and rendered.
+    # Added last = outermost: correlation id is set before errors are logged and rendered. The
+    # source code address (AGPL-3.0 section 13) is on every response, errors included.
     app.add_middleware(UnhandledErrorMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
+    app.add_middleware(SourceCodeMiddleware, url=settings.source_code_url)
 
     app.include_router(build_health_router(descriptor, metrics=settings.metrics_enabled))
     for router in routers:

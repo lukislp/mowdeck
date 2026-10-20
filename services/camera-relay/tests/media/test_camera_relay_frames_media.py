@@ -6,7 +6,7 @@ a valid 640x480 JPEG within its size cap, opens a vision lease for the request o
 vision-only session stops after the 15 s grace and is released; a stream yields JPEG parts at
 the requested rate and ends its lease when the client goes away; a low battery is refused
 (409) without asking the gateway; a frame set holds both front cameras of the same moment.
-With the recorded LUBA stream through the fake agora bridge
+With the synthetic LUBA-like H.265 stream through the fake agora bridge
 (H.265 transcoded to H.264): a snapshot is a valid 640x480 JPEG.
 
 Opt-in (Docker): ``MOWDECK_TEST_RELAY_MEDIA=1`` (see relay_media_support.py).
@@ -235,7 +235,7 @@ async def test_a_stream_yields_parts_at_the_requested_rate_and_ends_with_the_cli
     assert time.monotonic() - closed_at >= 14
 
 
-async def test_a_snapshot_of_the_recorded_luba_stream_through_the_agora_bridge(
+async def test_a_snapshot_of_the_synthetic_h265_stream_through_the_agora_bridge(
     media_stack: MediaStack, bus: Client, agora: AgoraGateway
 ) -> None:
     account_id, mower_id = uuid4(), uuid4()

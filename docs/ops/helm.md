@@ -51,6 +51,7 @@ The Entitlements plan file is a ConfigMap built from `infra/helm/mowdeck/files/p
 | `ingress.*` | class, host, TLS, annotations; `ingress.auth` for the login paths |
 | `services.<name>` | `enabled`, `replicas`, `resources`, `autoscaling`, `pdb`, `extraEnv`, `extraVolumes`, scheduling |
 | `migrations.*`, `authzBootstrap.*` | job mode, retries, the wait init containers |
+| `config.SOURCE_URL` | repository of the running code for the source code link and `X-Source-Code` (AGPL-3.0 section 13); empty keeps the images' own value, see [Source code offer](source-code.md) |
 | `metrics.*` | scrape annotations, ServiceMonitor |
 | `nats.*`, `openfga.*` | values of the subcharts |
 

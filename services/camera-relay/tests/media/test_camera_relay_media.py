@@ -6,7 +6,7 @@ Traefik only strips ``/media/whep``) and decodes the frames. Covered: H.264 Cons
 640x480 at about 10 fps; no ticket or a foreign ticket is 401; the answer negotiates NACK, PLI
 and transport-cc; the freeze hook stalls the frames and resuming continues without a burst;
 detach kicks the viewer; after the last lease the 15 s grace ends the fake source and the
-stream is released; the transcoder replays the spike's recorded H.265 stream frame for frame.
+stream is released; the transcoder replays the synthetic H.265 stream frame for frame.
 
 Opt-in (Docker): ``MOWDECK_TEST_RELAY_MEDIA=1`` (see relay_media_support.py).
 """
@@ -377,7 +377,7 @@ async def test_detach_kicks_the_viewer_and_the_grace_ends_and_releases_the_sourc
     assert release.requested_by.kind is PrincipalKind.SERVICE
 
 
-async def test_the_transcoder_keeps_the_frame_count_of_the_recorded_stream(
+async def test_the_transcoder_keeps_the_frame_count_of_the_h265_stream(
     media_stack: MediaStack,
 ) -> None:
     result = await asyncio.to_thread(

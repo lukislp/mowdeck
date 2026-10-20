@@ -10,6 +10,12 @@
 
 name: mowdeck
 
+# The repository of the running code: the web app links it and every service names it in the
+# X-Source-Code response header (AGPL-3.0 section 13, LICENSING.md). A fork that runs modified
+# code sets SOURCE_URL to its own public repository. Version and ref come from the image build.
+x-source-code: &source-code
+  MOWDECK_SOURCE_URL: ${SOURCE_URL:-https://github.com/lukislp/mowdeck}
+
 services:
   traefik:
     image: ${TRAEFIK_IMAGE:-public.ecr.aws/docker/library/traefik:v3.7.14}
@@ -225,6 +231,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -326,6 +333,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -382,6 +390,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -465,6 +474,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -521,6 +531,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -603,6 +614,7 @@ services:
       - notifications-data:/var/lib/notifications
       - ./secrets/apns:/run/secrets/apns:ro
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -692,6 +704,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -767,6 +780,7 @@ services:
     volumes:
       - ../entitlements/plans.yaml:/etc/mowdeck/entitlements/plans.yaml:ro
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -839,6 +853,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -911,6 +926,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -952,6 +968,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -1091,6 +1108,7 @@ services:
     volumes:
       - ../billing/prices.yaml:/etc/mowdeck/billing/prices.yaml:ro
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -1181,6 +1199,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
@@ -1236,6 +1255,7 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
+      <<: *source-code
       # Optional raster tiles under the map (empty: metric grid, no third party). Rendered into
       # /config.json and the CSP img-src at container start.
       MOWDECK_WEB_MAP_TILES: ${WEB_MAP_TILES:-}

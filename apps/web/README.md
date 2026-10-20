@@ -56,6 +56,7 @@ The map draws a metric grid and contacts no third party unless the installation 
 | `MOWDECK_WEB_MAP_ATTRIBUTION` (`WEB_MAP_ATTRIBUTION`) | empty | Attribution text the provider requires; `openstreetmap.org` URLs get "© OpenStreetMap contributors" |
 | `MOWDECK_WEB_MAP_MAX_ZOOM` (`WEB_MAP_MAX_ZOOM`) | `19` | Highest zoom the tile server delivers (1 to 22) |
 | `MOWDECK_WEB_LEGAL_ENABLED` (`WEB_LEGAL_ENABLED`) | `false` | `true` shows links to `/legal/imprint`, `/legal/terms` and `/legal/privacy` on the sign-in page (`legalEnabled` in `/config.json`) |
+| `MOWDECK_SOURCE_URL` (`SOURCE_URL`) | the official repository | Repository of the running code, linked on the sign-in page and under Settings, About (AGPL-3.0 section 13; `source` in `/config.json`). `MOWDECK_VERSION` and `MOWDECK_SOURCE_REF` come from the image build ([Source code offer](../../docs/ops/source-code.md)) |
 
 ```bash
 docker run --read-only --tmpfs /tmp -p 8080:8080 \

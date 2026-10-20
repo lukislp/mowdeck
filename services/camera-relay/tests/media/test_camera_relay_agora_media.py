@@ -1,8 +1,9 @@
-"""The agora source driver end to end, without Agora: the recorded LUBA stream through the bridge
-protocol, the relay's muxer and transcoder, MediaMTX and a WHEP client (ADR 0045 step 7).
+"""The agora source driver end to end, without Agora: a synthetic LUBA-like stream through the
+bridge protocol, the relay's muxer and transcoder, MediaMTX and a WHEP client (ADR 0045 step 7).
 
 The test gateway answers ``agora`` sessions; the stack's agora-bridge server starts
-``fake_bridge.py`` per connection, which replays ``luba-uid1.h265`` (H.265) for uid 1 and 2.
+``fake_bridge.py`` per connection, which replays the synthetic ``camera-h265.h265`` (H.265)
+for uid 1 and 2.
 Covered: H.264 Constrained Baseline 640x480 at about 10 fps from the H.265 source and the
 H.265 ``.../src`` path; a first key frame 4 s after the join followed by a 6 s stall still
 plays (the transcoder waits for ``.../src``), the rear camera that never publishes blocks

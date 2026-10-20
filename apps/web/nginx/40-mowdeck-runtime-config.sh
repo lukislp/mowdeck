@@ -21,6 +21,13 @@
 #                                then connects to Agora (*.agora.io, *.sd-rtn.com, any port) and plays the
 #                                video from blob: URLs; the video goes through Agora's and the
 #                                vendor's servers. Anything else keeps them out of the CSP.
+#
+# The build and its source code (AGPL-3.0 section 13, LICENSING.md), baked into the image by the
+# release build and overridable here; the app shows them on the sign-in page and under Settings:
+#   MOWDECK_VERSION              version of the build (empty: a development build)
+#   MOWDECK_SOURCE_URL           repository of the running code (default the official one); a fork
+#                                that runs modified code sets its own; {ref} makes it a template
+#   MOWDECK_SOURCE_REF           git ref of the build (the tag v<version> or a commit)
 set -eu
 
 out="${MOWDECK_CONFIG_DIR:-/tmp/mowdeck}"
@@ -68,6 +75,22 @@ if [ "$legal_enabled" = true ]; then
   echo "mowdeck: links to the legal pages (/legal/*.md) on the sign-in page"
 fi
 
+# Only an http(s) URL without whitespace, quotes, angle brackets or backslashes, and plain versions
+# and refs; anything else is left out and the app links the official repository.
+source_url="${MOWDECK_SOURCE_URL:-}"
+if ! printf '%s' "$source_url" | grep -Eq '^https?://[^[:space:]"<>\\]+$'; then
+  if [ -n "$source_url" ]; then
+    echo "mowdeck: MOWDECK_SOURCE_URL is not an http(s) URL; linking the official repository" >&2
+  fi
+  source_url=""
+fi
+source_version="${MOWDECK_VERSION:-}"
+printf '%s' "$source_version" | grep -Eq '^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$' || source_version=""
+source_ref="${MOWDECK_SOURCE_REF:-}"
+printf '%s' "$source_ref" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$' || source_ref=""
+source_json="{\"url\":$(json_string "$source_url"),\"version\":$(json_string "$source_version"),\"ref\":$(json_string "$source_ref")}"
+echo "mowdeck: build ${source_version:-dev}, source code at ${source_url:-the official repository}${source_ref:+ ($source_ref)}"
+
 camera_enabled=false
 connect_extra=""
 media_extra=""
@@ -96,7 +119,7 @@ case "${MOWDECK_WEB_CAMERA_ENABLED:-false}" in
     ;;
 esac
 
-printf '{"mapTiles":%s,"legalEnabled":%s,"cameraEnabled":%s}\n' "$map_tiles" "$legal_enabled" "$camera_enabled" > "$out/config.json"
+printf '{"mapTiles":%s,"legalEnabled":%s,"cameraEnabled":%s,"source":%s}\n' "$map_tiles" "$legal_enabled" "$camera_enabled" "$source_json" > "$out/config.json"
 sed -e "s#img-src 'self' data: blob:#img-src 'self' data: blob:${img_extra}#" \
   -e "s#connect-src 'self'#connect-src 'self'${connect_extra}#" \
   -e "s#style-src 'self'#style-src 'self'${style_extra}#" \
