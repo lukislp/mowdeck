@@ -13,6 +13,8 @@ docker compose up -d --wait   # waits until every service is healthy
 
 Then open the web app at `http://localhost`.
 
+This builds the MowDeck images from the checkout. To run a signed release from GHCR instead, set `MOWDECK_IMAGE_REGISTRY=ghcr.io/lukislp/mowdeck` and `MOWDECK_VERSION=<version>` in `.env`, run `./verify-release.sh <version>` and start with `docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait` ([Updating to a release](../../docs/ops/compose.md#updating-to-a-release)).
+
 Optional routing demo (a `whoami` container behind Traefik at `/api/v1/whoami`):
 
 ```bash

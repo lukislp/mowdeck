@@ -12,6 +12,31 @@ docker compose ps
 docker compose down -v          # reset, deletes all data
 ```
 
+## Updating to a release
+
+By default the stack builds the MowDeck images from the checkout (`mowdeck/<service>:dev`). To run a published release instead, the stack pulls the signed images of the release from GHCR: every MowDeck service uses `${MOWDECK_IMAGE_REGISTRY}/<service>:${MOWDECK_VERSION}` (defaults `mowdeck` and `dev`, the local build; `build:` stays, so `up --build` works as before). Set once in `.env`:
+
+```bash
+MOWDECK_IMAGE_REGISTRY=ghcr.io/lukislp/mowdeck   # a fork: ghcr.io/<owner>/mowdeck (and SOURCE_URL)
+```
+
+Each update, from `infra/compose` of the checkout:
+
+```bash
+git fetch --tags && git checkout --detach v<x>      # the Compose files of that release
+docker compose exec -T postgres pg_dumpall -U postgres > ~/mowdeck-before-<x>.sql   # backup
+./verify-release.sh <x>                             # writes docker-compose.release.yml
+sed -i 's/^MOWDECK_VERSION=.*/MOWDECK_VERSION=<x>/' .env
+docker compose -f docker-compose.yml -f docker-compose.release.yml pull
+docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait
+```
+
+`verify-release.sh` reads the image digests from the notes of the GitHub release `v<x>` (with `gh` when it is installed, else the public GitHub API with `curl`; no token), checks that each registry tag `<x>` points to that digest, verifies each digest's Sigstore signature with `cosign` (bound to `https://github.com/<repo>/.github/workflows/release.yml@refs/heads/main` and the issuer `https://token.actions.githubusercontent.com`; cosign from `PATH`, else the pinned cosign container) and fails closed: if one image fails, it writes nothing and exits 1. On success it writes `docker-compose.release.yml` (ignored by git), which sets every service to `<registry>/<service>:<x>@sha256:<digest>`, so `up` runs exactly the verified images even if a tag is moved later. `--print` writes the override to stdout, `--out FILE` elsewhere, `--no-pin` only verifies. The repository comes from `SOURCE_URL` (or `MOWDECK_RELEASE_REPO=<owner>/<repo>`) and must belong to the registry's owner. Instead of a full checkout, fetching `docker-compose.yml`, `verify-release.sh`, `init/` and `mediamtx/` of the tag is enough.
+
+agora-bridge (profile `agora`) is never published: it keeps its local image `mowdeck-local/agora-bridge:local`; build it once with `docker compose --profile agora build agora-bridge` before an `up --no-build`. vision-capture (profile `capture`, retired) is not published either.
+
+**Rollback.** Check out the earlier tag, run `./verify-release.sh <earlier>` (it rewrites the override), set `MOWDECK_VERSION=<earlier>` and run the same `pull` and `up` commands. Migrations are backward compatible, so the older images start against the newer schema ([Rolling back](release.md#rolling-back)); a rollback across a migration that is not needs the backup (`docker compose exec -T postgres psql -U postgres -d postgres < ~/mowdeck-before-<x>.sql` into an empty `postgres-data` volume).
+
 ## Services and ports
 
 | Service | Image | Host port |
