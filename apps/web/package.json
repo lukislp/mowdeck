@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@mowdeck/ui": "workspace:*",
-    "agora-rtc-sdk-ng": "4.24.8",
+    "agora-rtc-sdk-ng": "4.24.9",
     "openapi-fetch": "0.17.0"
   },
   "devDependencies": {
