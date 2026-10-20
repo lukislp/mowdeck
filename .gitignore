@@ -25,6 +25,8 @@ apps/web/src/lib/paraglide/
 .env
 .env.*
 !.env.example
+# Written by infra/compose/verify-release.sh: the verified image digests of this installation
+infra/compose/docker-compose.release.yml
 *.pem
 *.key
 # Owner script output: JSON lines logs and the PyMammotion credential cache (live tokens)

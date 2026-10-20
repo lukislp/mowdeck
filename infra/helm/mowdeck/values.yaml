@@ -20,7 +20,8 @@ fullnameOverride: ""
 # linux/arm64 by .github/workflows/release.yml (docs/ops/release.md). The packages are private
 # like the repository until they are made public; then set imagePullSecrets for a private copy.
 image:
-  # -- Registry and path prefix; the service name is appended (<registry>/identity, ...).
+  # -- Registry and path prefix; the service name is appended (<registry>/identity, ...)
+  # (Compose: MOWDECK_IMAGE_REGISTRY).
   registry: ghcr.io/lukislp/mowdeck
   # -- Image tag of every MowDeck image (Compose: MOWDECK_VERSION). Empty: the chart's appVersion,
   # which the release workflow sets to the released version.
