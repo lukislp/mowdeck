@@ -107,8 +107,8 @@ importers:
         specifier: workspace:*
         version: link:../../libs/mowdeck-ui
       agora-rtc-sdk-ng:
-        specifier: 4.24.8
-        version: 4.24.8
+        specifier: 4.24.9
+        version: 4.24.9
       openapi-fetch:
         specifier: 0.17.0
         version: 0.17.0
@@ -240,17 +240,17 @@ packages:
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
 
-  '@agora-js/media@4.24.8':
-    resolution: {integrity: sha512-ULG18xmKeTA2P462lB+rBx46QK0bffj59e/MciCCivqVcn1ZEntFOUEnmkAOv8FzIn5wISC8tr02PZwUbinQVw==}
+  '@agora-js/media@4.24.9':
+    resolution: {integrity: sha512-DSgb87xdxJz/8YxqlK0ppV20mzDmfD+wCYiMdDtylq1iWZEC8Dp8MlwkBYepThkgYHINIO3Q03E8SONfc7uEiw==}
 
-  '@agora-js/protocol@4.24.8':
-    resolution: {integrity: sha512-DDAJnLPY2JUP1YSyFp+Lcyn3FMM6aK/vCH9jk+O6yH/r4+WmruGijqtpUk3bf4iX3Fn8EU4F92woZOIDjjgQaA==}
+  '@agora-js/protocol@4.24.9':
+    resolution: {integrity: sha512-ittT/FhBsa/vLs2k6S8PhAA4cBGhtCu41jPtgS94wrqzklXzroZcCmGxSk9YjdZLjKI2/1Zgcp2dUOMYzxcxzw==}
 
-  '@agora-js/report@4.24.8':
-    resolution: {integrity: sha512-i4KW+Q632yDIHbRIHNK5w1AZhMUmV6Vh0bL6WxdQQdi7Pmcx2+w4k08W95li8Dcfodl6/ypRD0MbrkYqmEpcRg==}
+  '@agora-js/report@4.24.9':
+    resolution: {integrity: sha512-57OWJ+F56fGYK6baKjW7Jm+QwJ1FS8S7AJ5GFG8s/v0myH5N5Jv7ry5MLAYgNgREMg4pbwy01GrMdVkePxa3Qw==}
 
-  '@agora-js/shared@4.24.8':
-    resolution: {integrity: sha512-N5y8ZD3Rm6mPJT6obuuNYx5xwtjuU1hNIEyHgTrxfAhbfrK41XnH5aLFAaaHQOEJsQwsVRFrHTfEmMb36srkQA==}
+  '@agora-js/shared@4.24.9':
+    resolution: {integrity: sha512-LbgD8XfwzRm6RdT/KezwX17gFT9ouiWvDCaPmZJ7Ww3fEUWkuLIYpdNpVmJwDpBjIe/IolhlIzyH/69mxM2tNA==}
 
   '@apidevtools/json-schema-ref-parser@11.9.3':
     resolution: {integrity: sha512-60vepv88RwcJtSHrD6MjIL6Ta3SOYbgfnkHb+ppAVK+o9mXprRtulx7VlRl3lN3bbvysAfCS7WMVfhUYemB0IQ==}
@@ -1160,8 +1160,8 @@ packages:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
 
-  agora-rtc-sdk-ng@4.24.8:
-    resolution: {integrity: sha512-TkHDu1HxYcjfbvpmOfOAucSgMJRlphODQlVN6fwAMCh7yIKt6J4O3wITNCvUkEVi9aaZTjeJOZ+onFUu/zlnuw==}
+  agora-rtc-sdk-ng@4.24.9:
+    resolution: {integrity: sha512-lfT0agcbxag3T4mfCam4e195NNJvzdcps2/s+xJadqcoHV8TdLuIxUcFnwHIQ6ZhrlDhQdlLRBRQXNhw98gPtg==}
 
   agora-rte-extension-ng@1.0.3:
     resolution: {integrity: sha512-Gkh60IomlIrhq7ljDIy4zHgKEhfNx3c0Kto27wKCQp2wCabmHz9ucHT/7u9telUCA6YcNjnFMhenjdJx1JZeEA==}
@@ -2872,10 +2872,10 @@ snapshots:
 
   '@adobe/css-tools@4.5.0': {}
 
-  '@agora-js/media@4.24.8':
+  '@agora-js/media@4.24.9':
     dependencies:
-      '@agora-js/report': 4.24.8
-      '@agora-js/shared': 4.24.8
+      '@agora-js/report': 4.24.9
+      '@agora-js/shared': 4.24.9
       agora-rte-extension: 1.2.4
       agora-rte-extension-ng: 1.0.3
       axios: 1.20.0
@@ -2884,11 +2884,11 @@ snapshots:
       - debug
       - supports-color
 
-  '@agora-js/protocol@4.24.8':
+  '@agora-js/protocol@4.24.9':
     dependencies:
-      '@agora-js/media': 4.24.8
-      '@agora-js/report': 4.24.8
-      '@agora-js/shared': 4.24.8
+      '@agora-js/media': 4.24.9
+      '@agora-js/report': 4.24.9
+      '@agora-js/shared': 4.24.9
       '@bufbuild/protobuf': 2.10.1
       '@types/pako': 2.0.4
       pako: 2.2.0
@@ -2896,15 +2896,15 @@ snapshots:
       - debug
       - supports-color
 
-  '@agora-js/report@4.24.8':
+  '@agora-js/report@4.24.9':
     dependencies:
-      '@agora-js/shared': 4.24.8
+      '@agora-js/shared': 4.24.9
       axios: 1.20.0
     transitivePeerDependencies:
       - debug
       - supports-color
 
-  '@agora-js/shared@4.24.8':
+  '@agora-js/shared@4.24.9':
     dependencies:
       axios: 1.20.0
       ua-parser-js: 0.7.41
@@ -3765,12 +3765,12 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  agora-rtc-sdk-ng@4.24.8:
+  agora-rtc-sdk-ng@4.24.9:
     dependencies:
-      '@agora-js/media': 4.24.8
-      '@agora-js/protocol': 4.24.8
-      '@agora-js/report': 4.24.8
-      '@agora-js/shared': 4.24.8
+      '@agora-js/media': 4.24.9
+      '@agora-js/protocol': 4.24.9
+      '@agora-js/report': 4.24.9
+      '@agora-js/shared': 4.24.9
       agora-rte-extension: 1.2.4
       agora-rte-extension-ng: 1.0.3
       axios: 1.20.0
