@@ -339,7 +339,17 @@ spec:
 {{/* Settings every Python service gets. */}}
 {{- define "mowdeck.commonEnv" -}}
 {{- $c := .Values.config }}
-{{- dict "MOWDECK_ENVIRONMENT" $c.MOWDECK_ENVIRONMENT "MOWDECK_LOG_LEVEL" $c.MOWDECK_LOG_LEVEL "MOWDECK_LOG_FORMAT" "json" "MOWDECK_NATS_URL" (include "mowdeck.natsUrl" .) | toJson }}
+{{- merge (dict "MOWDECK_ENVIRONMENT" $c.MOWDECK_ENVIRONMENT "MOWDECK_LOG_LEVEL" $c.MOWDECK_LOG_LEVEL "MOWDECK_LOG_FORMAT" "json" "MOWDECK_NATS_URL" (include "mowdeck.natsUrl" .)) (include "mowdeck.sourceEnv" . | fromJson) | toJson }}
+{{- end }}
+
+{{/* The repository of the running code (AGPL-3.0 section 13, LICENSING.md): only when
+config.SOURCE_URL is set; otherwise the image's own value (the repository it was built from). */}}
+{{- define "mowdeck.sourceEnv" -}}
+{{- if .Values.config.SOURCE_URL }}
+{{- dict "MOWDECK_SOURCE_URL" .Values.config.SOURCE_URL | toJson }}
+{{- else }}
+{{- dict | toJson }}
+{{- end }}
 {{- end }}
 
 {{/* OpenFGA settings (the token comes as a file). */}}

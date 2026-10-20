@@ -1,6 +1,6 @@
 """Runs inside the relay container of the media test stack (``docker compose exec``).
 
-Replays the spike's recorded H.265 stream (``luba-uid1.h265``, 271 frames, 10 fps) in real
+Replays the synthetic H.265 stream (``camera-h265.h265``, 271 frames, 10 fps) in real
 time into ``r/<rid>/uid1/src``, runs the relay's generic :class:`Transcoder` on it and prints
 one JSON line: the frames the replay sent, the transcoder's progress (frames written,
 duplicated, dropped) and an ffprobe of the H.264 output. The test asserts that the transcoder
@@ -23,7 +23,7 @@ from camera_relay.adapters.media.pipeline import (
 )
 from camera_relay.adapters.media.process import SupervisedProcess
 
-FIXTURE = "/opt/fixtures/luba-uid1.h265"
+FIXTURE = "/opt/fixtures/camera-h265.h265"
 CAMERA = "uid1"
 
 

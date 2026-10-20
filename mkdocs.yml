@@ -104,6 +104,7 @@ nav:
       - ops/release.md
       - ops/billing.md
       - ops/mobile-apps.md
+      - ops/source-code.md
   - Spikes:
       - spikes/index.md
       - spikes/0001-ble-bridge-and-pymammotion.md

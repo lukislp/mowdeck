@@ -123,6 +123,13 @@ All settings come from environment variables with the prefix `MOWDECK_`. Any set
 | `MOWDECK_ENTITLEMENTS_BILLING_ENABLED` | `false` | Installation switch of the plans (`billing.enabled`); the Entitlements client's fallback when Entitlements does not answer (off: allowed, on: refused) |
 | `MOWDECK_ENTITLEMENTS_TIMEOUT_SECONDS` | `1` | Timeout of one `entitlements.check` request |
 | `MOWDECK_ENTITLEMENTS_CACHE_SECONDS` | `60` | How long an account's plan snapshot is reused (0: no cache) |
+| `MOWDECK_VERSION` | unset | Version of the build; the release build bakes it into the image (unset: a development build) |
+| `MOWDECK_SOURCE_URL` | `https://github.com/lukislp/mowdeck` | Repository of the running code; a fork that runs modified code sets its own (AGPL-3.0 section 13). `{ref}` makes it a template for hosts other than GitHub |
+| `MOWDECK_SOURCE_REF` | unset | Git ref of the build (`v<version>` of a release, a commit of a test build); unset: `v<version>` for a semantic version |
+
+### Source code header (AGPL-3.0 section 13)
+
+Every HTTP response carries `X-Source-Code` with the address of the source of the running build (`mowdeck_service_kit.source`): `<MOWDECK_SOURCE_URL>/tree/<ref>` with the ref from `MOWDECK_SOURCE_REF` or `v<MOWDECK_VERSION>`, and the repository itself for a development build. The web app shows the same link in its footer and under Settings, About (LICENSING.md).
 
 The field docstrings in `settings.py` are the source of this table and become the generated configuration reference later.
 

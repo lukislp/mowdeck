@@ -17,7 +17,7 @@ Licence of this directory: **Apache-2.0** (`LICENSE`), unlike the rest of `integ
 | `src/agora_bridge/server.py` | The TCP server next to the relay: one bridge process per connection |
 | `docker/install_sdk.py`, `Dockerfile` | The image build: pinned downloads with SHA-256, no `pip install` of the wrapper |
 | `tests/` | Protocol, control handling, back-pressure, exit codes, the guard and the server, with a fake SDK (no network, no SDK) |
-| `spike/` | The step 0 spike against the real mower and its recorded stream (`spike/fixtures/luba-uid1.h265`, the relay's test fixture) |
+| `spike/` | The step 0 spike against the real mower; its recordings go to `spike/fixtures/` (ignored by git: camera pictures of a private garden are never committed) |
 
 ## How the relay talks to it
 
@@ -83,4 +83,4 @@ uv run pytest integrations/agora-bridge/tests
 
 The tests run without the SDK and without network: the protocol's byte layout, every control op and its errors (no secret in an error), the exit codes (0, 2, 4, 1), back-pressure (a full queue drops delta frames until the next key frame and reports the count), the adapter against a stand-in for the wrapper's modules, the guard (an installation that would download is refused, TLS verification is restored after an import that disables it) and the server (bytes both ways, the exit record, probes start nothing, the session limit, a vanished relay, the check; the token never in a child's arguments or environment).
 
-The relay's side is tested in `services/camera-relay`: unit tests with a fake bridge server, and the media integration tests, which run this server from source with a stand-in bridge that replays `spike/fixtures/luba-uid1.h265` through the protocol, so the H.265 to H.264 path is checked end to end in CI without Agora.
+The relay's side is tested in `services/camera-relay`: unit tests with a fake bridge server, and the media integration tests, which run this server from source with a stand-in bridge that replays a synthetic H.265 stream (encoded by the test fixture, with the structure of the LUBA's front camera) through the protocol, so the H.265 to H.264 path is checked end to end in CI without Agora.

@@ -3,9 +3,12 @@
  * file at container start from the environment (`MOWDECK_WEB_MAP_TILES`,
  * `MOWDECK_WEB_LEGAL_ENABLED`, `MOWDECK_WEB_CAMERA_ENABLED`, ...), so one image serves every
  * installation without a rebuild. Missing, unreadable or invalid values fall back to the typed
- * default: the metric grid without any tile server, no links to legal pages, and no third-party
- * video (the Agora domains stay out of the CSP).
+ * default: the metric grid without any tile server, no links to legal pages, no third-party
+ * video (the Agora domains stay out of the CSP), and the official repository as the source code
+ * of a development build.
  */
+
+import { DEFAULT_SOURCE, parseSource, type SourceInfo } from '$lib/legal/source';
 
 export interface MapTilesConfig {
   /** URL template with `{z}`, `{x}`, `{y}` and optionally `{s}` and `{r}`. */
@@ -26,12 +29,15 @@ export interface RuntimeConfig {
    * domains. The simulator's test pattern works without it.
    */
   cameraEnabled: boolean;
+  /** The build and where its source code is (AGPL-3.0 section 13, `$lib/legal/source`). */
+  source: SourceInfo;
 }
 
 export const DEFAULT_CONFIG: RuntimeConfig = Object.freeze({
   mapTiles: null,
   legalEnabled: false,
   cameraEnabled: false,
+  source: DEFAULT_SOURCE,
 });
 
 const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
@@ -39,16 +45,18 @@ const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 /** Validate an untrusted config object; anything invalid becomes the default. */
 export function parseConfig(raw: unknown): RuntimeConfig {
   if (!raw || typeof raw !== 'object') return DEFAULT_CONFIG;
-  const { mapTiles, legalEnabled, cameraEnabled } = raw as {
+  const { mapTiles, legalEnabled, cameraEnabled, source } = raw as {
     mapTiles?: unknown;
     legalEnabled?: unknown;
     cameraEnabled?: unknown;
+    source?: unknown;
   };
   const legal = legalEnabled === true;
   const camera = cameraEnabled === true;
   const tiles = parseMapTiles(mapTiles);
-  if (!tiles && !legal && !camera) return DEFAULT_CONFIG;
-  return { mapTiles: tiles, legalEnabled: legal, cameraEnabled: camera };
+  const build = parseSource(source);
+  if (!tiles && !legal && !camera && build === DEFAULT_SOURCE) return DEFAULT_CONFIG;
+  return { mapTiles: tiles, legalEnabled: legal, cameraEnabled: camera, source: build };
 }
 
 function parseMapTiles(tiles: unknown): MapTilesConfig | null {

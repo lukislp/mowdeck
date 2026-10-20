@@ -8,6 +8,11 @@ Runs only with ``MOWDECK_TEST_RELAY_MEDIA=1`` and a built relay image
 
 The stack is a Compose project of its own (``camera-relay-media-test``), removed afterwards
 (``RELAY_TEST_KEEP=1`` keeps it).
+
+The H.265 stream the tests replay is synthetic: :func:`synthetic_h265` encodes it once with the
+relay image's own ffmpeg (libx265) into ``.fixtures/`` (ignored by git) before the stack starts.
+It has the structure of the LUBA 2 AWD X front camera (640x480, 10 fps, 271 frames, P frames
+only, an IDR with VPS/SPS/PPS every 40 frames, the 4 s GOP) and no recorded picture.
 """
 
 import asyncio
@@ -41,6 +46,11 @@ HERE = Path(__file__).parent
 COMPOSE = HERE / "compose.yml"
 PROJECT = "camera-relay-media-test"
 SECRET = "media-test-publisher-secret"  # noqa: S105 - the test stack's fixed secret
+FIXTURES = HERE / ".fixtures"
+H265_FIXTURE = FIXTURES / "camera-h265.h265"
+"""Mounted at ``/opt/fixtures`` in the stack (compose.yml)."""
+H265_FRAMES = 271
+H265_GOP = 40
 
 
 def _port(name: str, default: int) -> int:
@@ -71,10 +81,67 @@ def _compose(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]
     )
 
 
+def synthetic_h265(target: Path = H265_FIXTURE) -> Path:
+    """Encode the synthetic H.265 test stream with the relay image's ffmpeg (once).
+
+    ffmpeg writes Annex-B to stdout, so the container needs no writable mount: a moving test
+    pattern (``testsrc2``), Main profile, no B frames, a closed GOP of ``H265_GOP`` frames
+    without scene cuts and the parameter sets repeated before every key frame, like the mower.
+    """
+    if target.is_file() and target.stat().st_size > 0:
+        return target
+    image = os.environ.get("RELAY_TEST_IMAGE", "mowdeck/camera-relay:dev")
+    x265 = f"log-level=error:keyint={H265_GOP}:min-keyint={H265_GOP}:scenecut=0:bframes=0"
+    encoded = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            image,
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=640x480:rate=10",
+            "-frames:v",
+            str(H265_FRAMES),
+            "-c:v",
+            "libx265",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            "-x265-params",
+            f"{x265}:open-gop=0:repeat-headers=1",
+            "-f",
+            "hevc",
+            "-",
+        ],
+        capture_output=True,
+        check=False,
+        timeout=300,
+    )
+    if encoded.returncode != 0 or not encoded.stdout:
+        pytest.fail(f"cannot encode the synthetic H.265 stream: {encoded.stderr.decode()[-2000:]}")
+    target.parent.mkdir(mode=0o755, exist_ok=True)
+    target.parent.chmod(0o755)  # the containers read it as uid 10001
+    partial = target.with_suffix(".partial")
+    partial.write_bytes(encoded.stdout)
+    partial.chmod(0o644)
+    partial.replace(target)
+    return target
+
+
 @pytest.fixture(scope="session")
 def media_stack() -> Iterator[MediaStack]:
     if os.environ.get("MOWDECK_TEST_RELAY_MEDIA") != "1":
         pytest.skip("set MOWDECK_TEST_RELAY_MEDIA=1 (needs Docker and the relay image)")
+    synthetic_h265()
     _compose("down", "-v", "--remove-orphans", check=False)
     started = _compose("up", "-d", "--wait", "--wait-timeout", "120", check=False)
     if started.returncode != 0:

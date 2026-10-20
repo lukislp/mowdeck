@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_CONFIG, loadConfig, parseConfig, resetConfig } from './config';
+import { DEFAULT_SOURCE } from './legal/source';
 
 const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
@@ -20,6 +21,7 @@ describe('parseConfig', () => {
       mapTiles: null,
       legalEnabled: false,
       cameraEnabled: false,
+      source: DEFAULT_SOURCE,
     });
     expect(parseConfig('nope')).toEqual(DEFAULT_CONFIG);
   });
@@ -31,6 +33,7 @@ describe('parseConfig', () => {
       mapTiles: { url: OSM, attribution: 'Tiles: me', maxZoom: 18 },
       legalEnabled: false,
       cameraEnabled: false,
+      source: DEFAULT_SOURCE,
     });
   });
 
@@ -39,6 +42,7 @@ describe('parseConfig', () => {
       mapTiles: { url: OSM, attribution: '© OpenStreetMap contributors', maxZoom: 19 },
       legalEnabled: false,
       cameraEnabled: false,
+      source: DEFAULT_SOURCE,
     });
     const other = parseConfig({ mapTiles: { url: 'https://t.example/{z}/{x}/{y}.png' } });
     expect(other.mapTiles?.attribution).toBeNull();
@@ -69,12 +73,18 @@ describe('parseConfig legalEnabled', () => {
       mapTiles: null,
       legalEnabled: true,
       cameraEnabled: false,
+      source: DEFAULT_SOURCE,
     });
     const both = parseConfig({ mapTiles: { url: OSM }, legalEnabled: true });
     expect(both.legalEnabled).toBe(true);
     expect(both.mapTiles?.url).toBe(OSM);
     const badTiles = parseConfig({ mapTiles: { url: 'ftp://x/{z}/{x}/{y}' }, legalEnabled: true });
-    expect(badTiles).toEqual({ mapTiles: null, legalEnabled: true, cameraEnabled: false });
+    expect(badTiles).toEqual({
+      mapTiles: null,
+      legalEnabled: true,
+      cameraEnabled: false,
+      source: DEFAULT_SOURCE,
+    });
   });
 });
 
@@ -87,6 +97,7 @@ describe('cameraEnabled', () => {
       mapTiles: null,
       legalEnabled: false,
       cameraEnabled: true,
+      source: DEFAULT_SOURCE,
     });
   });
 });
@@ -117,5 +128,23 @@ describe('loadConfig', () => {
     resetConfig();
     const html = new Response('<!doctype html>', { headers: { 'content-type': 'text/html' } });
     expect(await loadConfig(async () => html)).toEqual(DEFAULT_CONFIG);
+  });
+});
+
+describe('source', () => {
+  it('reads the build and its repository', () => {
+    const config = parseConfig({
+      source: { url: 'https://github.com/someone/fork', version: '0.4.0', ref: 'v0.4.0' },
+    });
+    expect(config.source).toEqual({
+      repository: 'https://github.com/someone/fork',
+      version: '0.4.0',
+      ref: 'v0.4.0',
+    });
+  });
+
+  it('keeps the official repository for a development build', () => {
+    expect(parseConfig({ source: { url: '', version: '', ref: '' } })).toBe(DEFAULT_CONFIG);
+    expect(parseConfig({ source: { url: 'javascript:alert(1)' } }).source).toBe(DEFAULT_SOURCE);
   });
 });

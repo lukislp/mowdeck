@@ -12,6 +12,8 @@ secrets:
 # Documentation address (RFC 5737): renders MediaMTX's MTX_WEBRTCADDITIONALHOSTS.
 config:
   RELAY_ICE_HOSTS: 192.0.2.10
+  # Rendered only when set (otherwise the images' own value): set here so the CI render checks it.
+  SOURCE_URL: https://github.com/lukislp/mowdeck
 # Billing, the capture worker and the camera relay are off by default; the CI render enables
 # them so their templates are linted and checked.
 services:

@@ -20,6 +20,8 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from mowdeck_service_kit.source import source_code_url
+
 ENV_PREFIX = "MOWDECK_"
 FILE_SUFFIX = "_FILE"
 
@@ -119,6 +121,19 @@ class ServiceSettings(BaseSettings):
     """How long a service reuses an account's plan snapshot (``entitlements.plan.changed``
     drops it earlier); 0 disables the cache."""
 
+    version: str | None = None
+    """Version of the build (``MOWDECK_VERSION``, baked into the image by the release build);
+    empty for a development build."""
+
+    source_url: str | None = None
+    """Repository of the running code (``MOWDECK_SOURCE_URL``, default the official one): a fork
+    that runs modified code points it to its own public repository (AGPL-3.0 section 13). A
+    template with ``{ref}`` is allowed (see :mod:`mowdeck_service_kit.source`)."""
+
+    source_ref: str | None = None
+    """Git ref of the build (``MOWDECK_SOURCE_REF``): ``v<version>`` for a release, a commit for
+    a test build. Empty: ``v<version>`` when the version is a semantic version."""
+
     @field_validator("log_level", mode="before")
     @classmethod
     def _upper_log_level(cls, value: Any) -> Any:
@@ -130,6 +145,11 @@ class ServiceSettings(BaseSettings):
         if self.log_format == "auto":
             return "console" if self.environment == "dev" else "json"
         return self.log_format
+
+    @property
+    def source_code_url(self) -> str:
+        """Address of the source code of this build (the ``X-Source-Code`` header)."""
+        return source_code_url(self.source_url, version=self.version, ref=self.source_ref)
 
     @property
     def nats_servers(self) -> list[str]:

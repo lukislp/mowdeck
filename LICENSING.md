@@ -11,6 +11,20 @@ Each library under `libs/` ships its own `LICENSE` file and declares the license
 
 Why: the services and apps are a network service, so AGPL-3.0 ensures that modified hosted versions stay open. The libraries (control, contracts, auth and so on) are meant to be reused by other projects without copyleft obligations. See [ADR 0005](docs/adr/0005-licensing.md).
 
+## Source code for network users (AGPL-3.0 section 13)
+
+Everyone who uses a MowDeck installation over a network gets the source code of the version it runs:
+
+- the sign-in and registration pages show the version, `AGPL-3.0` and a "Source code" link, so no account is needed;
+- Settings, About shows the version, the licence and the full address of the source of this build;
+- every HTTP response of every service carries `X-Source-Code: <address>` (set by `libs/mowdeck-service-kit`).
+
+The address is the repository at the tag of the release (`https://github.com/lukislp/mowdeck/tree/v<version>`), at the commit of a test build, or the repository itself for a local build. The release build bakes `MOWDECK_VERSION`, `MOWDECK_SOURCE_REF` and `MOWDECK_SOURCE_URL` into every image.
+
+**Forks:** whoever runs modified code must offer that code. Publish it, point `SOURCE_URL` (Compose) or `config.SOURCE_URL` (Helm) or the build argument `MOWDECK_SOURCE_URL` to your public repository, and build from a tag or commit that exists there; do not remove the link or the header. Details: [docs/ops/source-code.md](docs/ops/source-code.md).
+
+## Third-party components
+
 Third-party components (Traefik, NATS, PostgreSQL, OpenFGA and so on) keep their own licenses; they are used as unmodified container images.
 
 The Agora SDK (proprietary) is never part of this repository or of a published image: `integrations/agora-bridge` downloads it while the operator builds that image, which means accepting Agora's terms. It is not part of MowDeck and has to be built by each operator; Agora's terms exclude GPLv3/LGPLv3/AGPLv3 code from the applications that use the SDK, which is why the bridge is a separate Apache-2.0 program ([ADR 0045](docs/adr/0045-camera-relay.md), [agora-bridge README](integrations/agora-bridge/README.md)).
