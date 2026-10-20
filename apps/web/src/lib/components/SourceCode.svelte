@@ -90,6 +90,9 @@
 {/if}
 
 <style>
+  /* Positioned against its link (below): without a positioned ancestor the hidden label would
+     be placed against the viewport at its spot deep in the scrolled settings and stretch the
+     document below the app shell, a second scrollbar (the shell's content area scrolls). */
   .sr {
     position: absolute;
     width: 1px;
@@ -110,6 +113,7 @@
   }
 
   a {
+    position: relative;
     color: inherit;
     text-decoration-color: var(--md-color-line-strong);
     text-underline-offset: 3px;
