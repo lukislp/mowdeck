@@ -45,7 +45,7 @@
     "@vitest/coverage-v8": "5.0.5",
     "jsdom": "29.1.1",
     "svelte": "5.57.2",
-    "svelte-check": "4.7.6",
+    "svelte-check": "4.7.7",
     "typescript": "6.0.3",
     "vite": "8.3.4",
     "vitest": "5.0.5"
