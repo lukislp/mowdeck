@@ -12,6 +12,8 @@ docker compose ps
 docker compose down -v          # reset, deletes all data
 ```
 
+**Project name.** `docker-compose.yml` sets `name: mowdeck`, so every `docker compose` command in this guide addresses the project `mowdeck` without `-p`. `-p <name>` and `COMPOSE_PROJECT_NAME` take precedence over it: a stack started under another name has to get the same name on every command, otherwise Compose creates a second stack with its own containers and volumes next to it (and both claim the host ports). Either put `COMPOSE_PROJECT_NAME=<name>` in `.env` or pass `-p <name>` each time (`docker compose -p <name> exec -T postgres pg_dumpall -U postgres`). `docker compose ls` shows the running projects; `docker compose ps` in this directory must list the running containers before an update.
+
 ## Updating to a release
 
 By default the stack builds the MowDeck images from the checkout (`mowdeck/<service>:dev`). To run a published release instead, the stack pulls the signed images of the release from GHCR: every MowDeck service uses `${MOWDECK_IMAGE_REGISTRY}/<service>:${MOWDECK_VERSION}` (defaults `mowdeck` and `dev`, the local build; `build:` stays, so `up --build` works as before). Set once in `.env`:
@@ -20,7 +22,7 @@ By default the stack builds the MowDeck images from the checkout (`mowdeck/<serv
 MOWDECK_IMAGE_REGISTRY=ghcr.io/lukislp/mowdeck   # a fork: ghcr.io/<owner>/mowdeck (and SOURCE_URL)
 ```
 
-Each update, from `infra/compose` of the checkout:
+Each update, from `infra/compose` of the checkout (a stack under another [project name](#start-check-reset) adds its `-p <name>` to every `docker compose` command):
 
 ```bash
 git fetch --tags && git checkout --detach v<x>      # the Compose files of that release

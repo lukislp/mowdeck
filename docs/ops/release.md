@@ -97,7 +97,7 @@ helm upgrade mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version <current> -n
 
 Database migrations are not rolled back: they are backward compatible, and the older images start against the newer schema (their `wait-for-schema` init container accepts a revision it does not know). A rollback across a release whose migrations were not backward compatible needs a database restore ([Backups](helm.md#backups)). The authorization model follows the release: rolling back runs the older bootstrap Job, which writes the older model as the latest one.
 
-With Compose, set `MOWDECK_IMAGE_REGISTRY=ghcr.io/lukislp/mowdeck` in `infra/compose/.env`; `./verify-release.sh <version>` checks the release's images (tag digest equals the release notes, cosign signature) and pins them by digest in `docker-compose.release.yml`, and `docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait` starts them. A rollback runs the same steps with the earlier version ([Updating to a release](compose.md#updating-to-a-release)).
+With Compose, set `MOWDECK_IMAGE_REGISTRY=ghcr.io/lukislp/mowdeck` in `infra/compose/.env`; `./verify-release.sh <version>` checks the release's images (tag digest equals the release notes, cosign signature) and pins them by digest in `docker-compose.release.yml`, and `docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait` starts them (with the stack's `-p <name>` when it does not run as the default project `mowdeck`). A rollback runs the same steps with the earlier version ([Updating to a release](compose.md#updating-to-a-release)).
 
 ## Licences
 
