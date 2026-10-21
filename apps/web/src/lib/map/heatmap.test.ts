@@ -94,6 +94,13 @@ describe('periodWindow', () => {
     expect(periodWindow('job', NOW, commands).to).toBe(NOW.toISOString());
   });
 
+  it('never ends a job before it starts when the browser clock is behind', () => {
+    // Found by the property test: a start stamped by the server just after the browser's now.
+    const start = new Date(NOW.getTime() + 1500).toISOString();
+    const window = periodWindow('job', NOW, [{ kind: 'start_mow', issued_at: start }]);
+    expect(window).toEqual({ from: start, to: start });
+  });
+
   it('falls back to 24 h without a start', () => {
     expect(periodWindow('job', NOW, [{ kind: 'pause_mow', issued_at: 'x' }])).toEqual({
       from: '2026-10-10T12:00:00.000Z',

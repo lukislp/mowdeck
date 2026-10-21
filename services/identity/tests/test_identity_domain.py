@@ -181,6 +181,10 @@ def test_opaque_tokens_and_hashes() -> None:
     assert parse_api_token(token) == (token_id, secret)
     for bad in ("x", "mdk_short_x", f"mdk_{'z' * 32}_{'s' * 43}", f"mdk_{token_id.hex}"):
         assert parse_api_token(bad) is None
+    # Found by fuzzing: UUID() accepted a sign, whitespace and upper case in the id part.
+    for alias in (f"+{token_id.hex[1:]}", f"{token_id.hex[:-1]} ", token_id.hex.upper()):
+        if alias != token_id.hex:
+            assert parse_api_token(f"mdk_{alias}_{secret}") is None
     assert same_hash(sha256_hex(secret), secret)
     assert not same_hash(sha256_hex(secret), secret + "x")
     assert slugify("Gärten & Höfe", "abc").startswith("garten-hofe-")

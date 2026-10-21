@@ -157,3 +157,20 @@ def test_settings_from_env() -> None:
         AuthSettings(jwks_url="ftp://x")
     with pytest.raises(ValueError, match="negative"):
         AuthSettings(jwks_url=TEST_JWKS_URL, leeway_seconds=-1)
+
+
+@pytest.mark.parametrize("document", [None, [], "keys", 3])
+def test_parse_jwks_rejects_a_document_that_is_not_an_object(document: object) -> None:
+    # Found by fuzzing (fuzz/fuzz_access_token.py): JwksCache.refresh passes response.json()
+    # and handles ValueError; a JSON array or null raised AttributeError instead.
+    from mowdeck_auth.jwks import parse_jwks
+
+    with pytest.raises(ValueError, match="not an object"):
+        parse_jwks(document)
+
+
+def test_parse_jwks_skips_a_key_without_its_required_members() -> None:
+    # Found by fuzzing: PyJWK.from_dict raised KeyError for an "oct" key without "k".
+    from mowdeck_auth.jwks import parse_jwks
+
+    assert parse_jwks({"keys": [{"kid": "a", "kty": "oct"}, {"kid": "b", "kty": "OKP"}]}) == {}

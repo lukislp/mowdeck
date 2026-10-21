@@ -12,6 +12,8 @@ from relay_support import T0, at
 
 from camera_relay.adapters.tickets import (
     Ed25519TicketSigner,
+    decode_claims,
+    encode_claims,
     load_private_key,
     verify_ticket,
 )
@@ -154,3 +156,39 @@ def test_keys_load_from_pem_and_seed() -> None:
 def test_bad_keys_are_rejected(value: str) -> None:
     with pytest.raises(ValueError, match="key"):
         load_private_key(value)
+
+
+@pytest.mark.parametrize("junk", [",", "!", "=", "\n"])
+def test_a_ticket_with_foreign_characters_is_rejected(junk: str) -> None:
+    # Found by fuzzing (fuzz/fuzz_relay_ticket.py): urlsafe_b64decode skipped characters
+    # outside the alphabet, so many different strings verified as the same ticket.
+    signer = Ed25519TicketSigner.generate()
+    ticket = signer.sign(_claims())
+    with pytest.raises(InvalidTicketError):
+        signer.verify(ticket[:-2] + junk + ticket[-2:], T0)
+
+
+def test_a_ticket_with_non_canonical_base64_is_rejected() -> None:
+    signer = Ed25519TicketSigner.generate()
+    ticket = signer.sign(_claims())
+    # The last character of the 64-byte signature carries 4 unused bits.
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    last = alphabet.index(ticket[-1])
+    altered = ticket[:-1] + alphabet[last ^ 1]
+    with pytest.raises(InvalidTicketError):
+        signer.verify(altered, T0)
+
+
+@pytest.mark.parametrize(
+    "field", [{"iat": 10**20}, {"exp": 1e300}, {"exp": -(10**20)}, {"iat": 1e400}]
+)
+def test_a_payload_with_a_time_beyond_datetime_is_malformed(field: dict[str, object]) -> None:
+    # Found by fuzzing: datetime.fromtimestamp raised OverflowError or OSError.
+    payload = json.loads(encode_claims(_claims())) | field
+    with pytest.raises(InvalidTicketError, match="malformed"):
+        decode_claims(json.dumps(payload).encode())
+
+
+def test_a_deeply_nested_payload_is_malformed() -> None:
+    with pytest.raises(InvalidTicketError, match="malformed"):
+        decode_claims(b"[" * 100_000)

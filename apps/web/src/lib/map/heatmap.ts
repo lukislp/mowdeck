@@ -95,7 +95,10 @@ export function periodWindow(
       const end = sorted.find(
         (c) => c.kind === 'return_to_dock' && Date.parse(c.issued_at) > startAt,
       );
-      return { from: new Date(startAt).toISOString(), to: end ? end.issued_at : to };
+      // A job the server started after the browser's "now" (clock skew) is open until its start,
+      // so the window never ends before it begins.
+      const open = new Date(Math.max(startAt, now.getTime())).toISOString();
+      return { from: new Date(startAt).toISOString(), to: end ? end.issued_at : open };
     }
   }
 }

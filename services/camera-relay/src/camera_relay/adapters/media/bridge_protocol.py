@@ -69,7 +69,7 @@ def decode_record(record: bytes) -> BridgeRecord:
     if kind == RECORD_EVENT:
         try:
             event = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
             msg = "event record is not JSON"
             raise BridgeProtocolError(msg) from exc
         if not isinstance(event, dict) or not isinstance(event.get("event"), str):

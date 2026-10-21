@@ -32,6 +32,9 @@ describe('legal markdown inline', () => {
     expect(safeHref('/legal/imprint')).toBe('/legal/imprint');
     expect(safeHref('#top')).toBe('#top');
     expect(safeHref('//evil.example')).toBeNull();
+    // Found by the property test: a browser reads "/\host" as "//host", another origin.
+    expect(safeHref('/\\evil.example')).toBeNull();
+    expect(safeHref('/\t/evil.example')).toBeNull();
     expect(safeHref('data:text/html,x')).toBeNull();
     expect(safeHref('relative/path')).toBeNull();
   });

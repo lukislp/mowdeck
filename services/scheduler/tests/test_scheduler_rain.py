@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 
 from scheduler.adapters.weather.open_meteo import OpenMeteoProvider, parse_forecast
 from scheduler.adapters.weather.static import StaticWeatherProvider
@@ -235,3 +236,19 @@ async def test_scheduler_static_rain_decision_marks_past_hours() -> None:
     # the API echoes the settings it applied and the end of the hold (none: it keeps raining)
     assert out.settings.cooldown_hours == 3 and out.pause_until is None
     assert any(h.past for h in out.hours) and any(not h.past for h in out.hours)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"latitude": 1, "longitude": 2, "hourly": {"time": [10**20]}},
+        {"latitude": 1, "longitude": 2, "hourly": {"time": [-(10**20)]}},
+        {"latitude": 10**400, "longitude": 2, "hourly": {"time": []}},
+        {"latitude": 1, "longitude": 2, "hourly": {"time": [0], "rain": [10**400]}},
+    ],
+)
+def test_a_forecast_value_beyond_float_or_datetime_is_a_value_error(body: Any) -> None:
+    # Found by fuzzing (fuzz/fuzz_open_meteo.py): OverflowError escaped the provider, whose
+    # contract is "weather unknown" for any unusable answer.
+    with pytest.raises(ValueError, match="out of range"):
+        parse_forecast(body, datetime(2026, 10, 21, tzinfo=UTC))

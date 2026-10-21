@@ -217,3 +217,20 @@ def test_reverse_segments_keep_the_blades_off_and_old_hashes_stable() -> None:
     assert resolve_turn_style(TurnStyle.MULTI_POINT, None, reverse=True) is TurnStyle.MULTI_POINT
     assert resolve_turn_style(TurnStyle.MULTI_POINT, None, reverse=False) is TurnStyle.ARC
     assert resolve_turn_style(None, TurnStyle.MULTI_POINT, reverse=False) is TurnStyle.ARC
+
+
+@pytest.mark.parametrize("value", [1e17, -1e17, 1e306])
+def test_encode_polyline_rejects_coordinates_it_cannot_decode_again(value: float) -> None:
+    # Found by fuzzing (fuzz/fuzz_polyline.py): such values encoded to strings that
+    # decode_polyline rejects, or raised OverflowError once scaled to centimetres.
+    from mowdeck_contracts.v1 import encode_polyline
+
+    with pytest.raises(ValueError, match="out of range"):
+        encode_polyline([(0.0, 0.0), (value, 1.0)])
+
+
+def test_encode_polyline_round_trips_up_to_its_range() -> None:
+    from mowdeck_contracts.v1 import decode_polyline, encode_polyline
+
+    points = [(4.0e16, -4.0e16), (-4.0e16, 4.0e16)]
+    assert decode_polyline(encode_polyline(points)) == points
