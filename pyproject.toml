@@ -21,6 +21,7 @@ dev = [
   "pytest>=8.3.4",
   "pytest-asyncio>=0.25.0",
   "pytest-cov>=6.0.0",
+  "pytest-timeout>=2.4.0",
   "poethepoet>=0.31.1",
   "pyyaml>=6.0.2",
   "types-pyyaml>=6.0.12",
@@ -152,6 +153,11 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tools", "libs", "services", "integrations/agora-bridge/tests"]
 # The Phase 1 acceptance test (tests/e2e, marker e2e) needs the Compose stack: `poe e2e`.
 addopts = "-ra -m 'not e2e'"
+# A test that hangs ends the run after this many seconds with the stack of every thread
+# (pytest-timeout, thread method: works even when the event loop itself is blocked) instead of
+# blocking the CI job. The acceptance and media tests set longer limits on their command line.
+timeout = 120
+timeout_method = "thread"
 markers = [
   "e2e: acceptance tests against a running Compose stack (uv run poe e2e)",
   "slow: long-running e2e checks such as the idle WebSocket through Traefik",
@@ -170,7 +176,7 @@ _fmt-format = "ruff format ."
 test = "pytest --cov --cov-report=term-missing"
 # Phase 1 acceptance test against the throwaway test stack (`pnpm e2e:stack up`, then
 # `pnpm e2e:stack acceptance`); it refuses a stack without the e2e marker.
-e2e = "pytest tests/e2e -m e2e -p no:cacheprovider"
+e2e = "pytest tests/e2e -m e2e -p no:cacheprovider --timeout 600"
 docs = "mkdocs build --strict"
 wiki = "wiki-sync build --docs docs --mkdocs mkdocs.yml --out build/wiki"
 # OpenAPI documents of the services for the web app's generated types (apps/web/openapi).

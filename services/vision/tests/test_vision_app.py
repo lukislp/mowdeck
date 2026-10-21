@@ -185,3 +185,20 @@ async def test_vision_app_deleted_users_lose_their_provider() -> None:
             ),
         )
         assert len(h.bus.dropped) == before + 1
+
+
+@pytest.mark.timeout(30)
+async def test_vision_idle_returns_while_a_finished_task_waits_for_its_done_callback() -> None:
+    """Regression: ``idle`` spun forever (and blocked the event loop) when it ran between the end
+    of a background task and the done callback that removes it from the tracked set."""
+    async with harness() as h:
+
+        async def quick() -> None:
+            return None
+
+        h.service.spawn(quick(), "vision-test-quick")
+        [task] = [t for t in asyncio.all_tasks() if t.get_name() == "vision-test-quick"]
+        # The task's only step runs in this turn and queues its done callback behind us.
+        await asyncio.sleep(0)
+        assert task.done(), "precondition: the task finished"
+        await h.service.idle()
