@@ -831,7 +831,7 @@ export type components = {
         };
         /**
          * HealthDayOut
-         * @description Totals of one UTC day.
+         * @description Totals of one UTC day (battery_cycles is MowDeck's own count).
          */
         HealthDayOut: {
             /** Battery Cycles */
@@ -1232,9 +1232,20 @@ export type components = {
         MowerHealthOut: {
             /**
              * Battery Cycles
-             * @description Discharges below 20 % followed by a charge above 80 %.
+             * @description Battery charge cycles to show: the mower's own lifetime counter when it reports one (battery_cycles_source device), else MowDeck's count (battery_cycles_tracked).
              */
             battery_cycles: number;
+            /**
+             * Battery Cycles Source
+             * @description Where battery_cycles comes from: the mower's own counter (device) or MowDeck's count (telemetry, battery_cycles_tracked).
+             * @enum {string}
+             */
+            battery_cycles_source: "device" | "telemetry";
+            /**
+             * Battery Cycles Tracked
+             * @description MowDeck's own count since the first state it received: discharges below 20 % followed by a charge above 80 %.
+             */
+            battery_cycles_tracked: number;
             /**
              * Blade Changed At
              * @description The last recorded blade change.
@@ -1260,6 +1271,11 @@ export type components = {
             blade_source: "device" | "telemetry";
             /** Charge Sessions */
             charge_sessions: number;
+            /**
+             * Device Battery Cycles
+             * @description The mower's own lifetime battery cycle counter; null when the mower does not report one.
+             */
+            device_battery_cycles: number | null;
             /**
              * Device Blade Hours
              * @description The mower's own blade counter in hours (reset in the vendor app), as the vendor app shows it; null when the mower does not report one.

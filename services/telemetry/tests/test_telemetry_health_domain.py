@@ -16,6 +16,7 @@ from telemetry.domain.health import (
     HealthRow,
     advance,
     apply_delta,
+    device_count,
     device_seconds,
     haversine_m,
     reset_blade,
@@ -268,3 +269,28 @@ def test_telemetry_health_device_seconds_accepts_positive_numbers_only() -> None
     for bad in (0, -3, True, "12", None, float("nan"), float("inf")):
         assert device_seconds({"x": bad}, "x") is None
     assert device_seconds({}, "x") is None
+
+
+def test_telemetry_health_keeps_the_newest_device_battery_cycle_counter() -> None:
+    row, _, _ = run([state(0), state(10)])
+    assert row.device_battery_cycles is None
+    row, _, _ = run(
+        [
+            state(20, raw={"bat_cycles": 151}),
+            state(30, raw={"bat_cycles": 152}),
+            state(40),  # no counter: the stored one stays
+            state(50, raw={"bat_cycles": 0}),  # zero means not reported
+            state(60, raw={"bat_cycles": True}),  # not a number
+            state(70, raw={"bat_cycles": 1.5}),  # not a whole number
+        ],
+        row=row,
+    )
+    assert row.device_battery_cycles == 152
+    assert row.battery_cycles == 0  # MowDeck's own count is independent
+
+
+def test_telemetry_health_device_count_accepts_whole_positive_numbers() -> None:
+    assert device_count({"n": 7}, "n") == 7
+    assert device_count({"n": 7.0}, "n") == 7
+    for value in (0, -3, 2.5, float("nan"), float("inf"), "7", None, False):
+        assert device_count({"n": value}, "n") is None

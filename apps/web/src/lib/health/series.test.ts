@@ -5,6 +5,7 @@ import {
   batteryExtremes,
   bladeMeter,
   batteryPath,
+  cycleCount,
   batteryQuery,
   dayRange,
   durationParts,
@@ -131,6 +132,35 @@ describe('health series', () => {
     });
     // inconsistent answer (device source without a value): MowDeck's own counter
     expect(bladeMeter({ ...device, device_blade_hours: null }).source).toBe('telemetry');
+  });
+
+  it('takes the battery cycles from the device counter when the mower reports one', () => {
+    const own = {
+      battery_cycles: 2,
+      battery_cycles_tracked: 2,
+      battery_cycles_source: 'telemetry' as const,
+      device_battery_cycles: null,
+    };
+    expect(cycleCount(own)).toEqual({ cycles: 2, source: 'telemetry', tracked: 2 });
+    const device = {
+      ...own,
+      battery_cycles: 152,
+      battery_cycles_source: 'device' as const,
+      device_battery_cycles: 152,
+    };
+    expect(cycleCount(device)).toEqual({ cycles: 152, source: 'device', tracked: 2 });
+    // inconsistent answer (device source without a value): MowDeck's own count
+    expect(cycleCount({ ...device, device_battery_cycles: null })).toEqual({
+      cycles: 2,
+      source: 'telemetry',
+      tracked: 2,
+    });
+    // an older Telemetry without the source fields
+    expect(cycleCount({ battery_cycles: 3 })).toEqual({
+      cycles: 3,
+      source: 'telemetry',
+      tracked: 3,
+    });
   });
 
   it('orders error counts and asks for 15 minute battery bins', () => {

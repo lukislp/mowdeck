@@ -712,6 +712,8 @@
   "health_mowing": "Mowing hours",
   "health_distance": "Distance",
   "health_cycles": "Battery cycles",
+  "health_cycles_device": "Battery cycles (mower, lifetime)",
+  "health_cycles_mowdeck": "Battery cycles (MowDeck)",
   "health_charges": "Charge sessions",
   "health_since": "Recorded since {date}",
   "health_updated": "As of {time}",

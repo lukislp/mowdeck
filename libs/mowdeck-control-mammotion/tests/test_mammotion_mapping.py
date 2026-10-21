@@ -308,6 +308,15 @@ def test_mammotion_raw_carries_the_device_blade_counter_when_reported() -> None:
     assert raw["blade_used_s"] == 12 * 3600 + 30 and "blade_used_warn_s" not in raw
 
 
+def test_mammotion_raw_carries_the_device_battery_cycle_counter_when_reported() -> None:
+    device = sample_device()
+    assert "bat_cycles" not in _state(device).raw
+    device.mower_state.charge_settings.bat_cycle_times = 140
+    assert _state(device).raw["bat_cycles"] == 140
+    device.report_data.maintenance.bat_cycles = 152
+    assert _state(device).raw["bat_cycles"] == 152
+
+
 def test_mammotion_raw_carries_cutter_geometry_and_position_type() -> None:
     device = sample_device()
     raw = _state(device).raw
