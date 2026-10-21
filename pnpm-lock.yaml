@@ -62,28 +62,28 @@ importers:
     dependencies:
       '@capacitor/android':
         specifier: 8.5.2
-        version: 8.5.2(@capacitor/core@8.5.2)
+        version: 8.5.2(@capacitor/core@8.5.3)
       '@capacitor/app':
         specifier: 8.1.1
-        version: 8.1.1(@capacitor/core@8.5.2)
+        version: 8.1.1(@capacitor/core@8.5.3)
       '@capacitor/core':
-        specifier: 8.5.2
-        version: 8.5.2
+        specifier: 8.5.3
+        version: 8.5.3
       '@capacitor/ios':
         specifier: 8.5.3
-        version: 8.5.3(@capacitor/core@8.5.2)
+        version: 8.5.3(@capacitor/core@8.5.3)
       '@capacitor/local-notifications':
         specifier: 8.3.1
-        version: 8.3.1(@capacitor/core@8.5.2)
+        version: 8.3.1(@capacitor/core@8.5.3)
       '@capacitor/push-notifications':
         specifier: 8.1.2
-        version: 8.1.2(@capacitor/core@8.5.2)
+        version: 8.1.2(@capacitor/core@8.5.3)
       '@capacitor/splash-screen':
         specifier: 8.0.2
-        version: 8.0.2(@capacitor/core@8.5.2)
+        version: 8.0.2(@capacitor/core@8.5.3)
       '@capawesome/capacitor-badge':
         specifier: 8.0.4
-        version: 8.0.4(@capacitor/core@8.5.2)
+        version: 8.0.4(@capacitor/core@8.5.3)
       '@mowdeck/ui':
         specifier: workspace:*
         version: link:../../libs/mowdeck-ui
@@ -396,8 +396,8 @@ packages:
     engines: {node: '>=22.0.0'}
     hasBin: true
 
-  '@capacitor/core@8.5.2':
-    resolution: {integrity: sha512-agnQbGdhGw/KZFuLf7H9SY2o+oE7upkr/WPQsYaokXP6f9chaE8iVmbKkfN6SVl4w3pmz7oZ3Ur1hbkmy1hx+w==}
+  '@capacitor/core@8.5.3':
+    resolution: {integrity: sha512-oBE1oGuYE4ZzYYrulC75OuHdSsD6zLUy7d5o1tFwDLG4govGoubY15cxpiI5l0+q87Lm5p0bhbehMdzJg4aFag==}
 
   '@capacitor/ios@8.5.3':
     resolution: {integrity: sha512-HnnV92Jl8+3x0JUloXUMjFcUsQI8wHFVsKwkLn72DfRZXYGZW11tQbmNOWOnRTljaU18FdI1b9ipT09SzzPDNw==}
@@ -3034,13 +3034,13 @@ snapshots:
       hashery: 1.5.1
       keyv: 5.6.0
 
-  '@capacitor/android@8.5.2(@capacitor/core@8.5.2)':
+  '@capacitor/android@8.5.2(@capacitor/core@8.5.3)':
     dependencies:
-      '@capacitor/core': 8.5.2
+      '@capacitor/core': 8.5.3
 
-  '@capacitor/app@8.1.1(@capacitor/core@8.5.2)':
+  '@capacitor/app@8.1.1(@capacitor/core@8.5.3)':
     dependencies:
-      '@capacitor/core': 8.5.2
+      '@capacitor/core': 8.5.3
 
   '@capacitor/cli@8.5.3':
     dependencies:
@@ -3065,29 +3065,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@capacitor/core@8.5.2':
+  '@capacitor/core@8.5.3':
     dependencies:
       tslib: 2.8.1
 
-  '@capacitor/ios@8.5.3(@capacitor/core@8.5.2)':
+  '@capacitor/ios@8.5.3(@capacitor/core@8.5.3)':
     dependencies:
-      '@capacitor/core': 8.5.2
+      '@capacitor/core': 8.5.3
 
-  '@capacitor/local-notifications@8.3.1(@capacitor/core@8.5.2)':
+  '@capacitor/local-notifications@8.3.1(@capacitor/core@8.5.3)':
     dependencies:
-      '@capacitor/core': 8.5.2
+      '@capacitor/core': 8.5.3
 
-  '@capacitor/push-notifications@8.1.2(@capacitor/core@8.5.2)':
+  '@capacitor/push-notifications@8.1.2(@capacitor/core@8.5.3)':
     dependencies:
-      '@capacitor/core': 8.5.2
+      '@capacitor/core': 8.5.3
 
-  '@capacitor/splash-screen@8.0.2(@capacitor/core@8.5.2)':
+  '@capacitor/splash-screen@8.0.2(@capacitor/core@8.5.3)':
     dependencies:
-      '@capacitor/core': 8.5.2
+      '@capacitor/core': 8.5.3
 
-  '@capawesome/capacitor-badge@8.0.4(@capacitor/core@8.5.2)':
+  '@capawesome/capacitor-badge@8.0.4(@capacitor/core@8.5.3)':
     dependencies:
-      '@capacitor/core': 8.5.2
+      '@capacitor/core': 8.5.3
 
   '@csstools/color-helpers@6.1.2': {}
 
