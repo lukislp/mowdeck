@@ -155,3 +155,19 @@ def test_a_bad_line_never_echoes_its_secret() -> None:
 def test_an_overlong_line_is_bad_input() -> None:
     with pytest.raises(BadInputError, match="too long"):
         parse_control('{"op": "leave", "pad": "' + "x" * 70_000 + '"}')
+
+
+def test_a_deeply_nested_control_line_is_bad_input() -> None:
+    # json.loads raises RecursionError for deep nesting: still a malformed line (exit code 2),
+    # not a crash of the bridge.
+    from agora_bridge.protocol import BadInputError, parse_control
+
+    with pytest.raises(BadInputError):
+        parse_control("[" * 60_000)
+
+
+def test_a_deeply_nested_event_record_is_a_protocol_error() -> None:
+    from agora_bridge.protocol import RECORD_EVENT, ProtocolError, decode_record
+
+    with pytest.raises(ProtocolError):
+        decode_record(bytes([RECORD_EVENT]) + b"[" * 100_000)

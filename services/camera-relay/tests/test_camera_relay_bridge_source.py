@@ -870,3 +870,15 @@ async def test_a_muxer_that_cannot_start_fails_the_source_when_the_others_are_si
     h.spawns.fail_stdin = True
     await connection.send(frame(2, key=True, recv_ms=60_000))
     await eventually(lambda: h.failures == [source])
+
+
+def test_a_deeply_nested_bridge_event_is_a_protocol_error() -> None:
+    # The relay's reader of the bridge's records (same finding as the bridge's own reader).
+    from camera_relay.adapters.media.bridge_protocol import (
+        RECORD_EVENT,
+        BridgeProtocolError,
+        decode_record,
+    )
+
+    with pytest.raises(BridgeProtocolError):
+        decode_record(bytes([RECORD_EVENT]) + b"[" * 100_000)

@@ -15,6 +15,7 @@ for a single replica that also verifies its own tickets (tickets live 60 s).
 import base64
 import binascii
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -30,6 +31,7 @@ from camera_relay.domain.tickets import InvalidTicketError, TicketClaims
 
 VERSION = "v1"
 MAX_TICKET_LENGTH = 2048
+_B64URL = re.compile(r"^[A-Za-z0-9_-]*$")
 
 
 def _b64encode(data: bytes) -> str:
@@ -37,7 +39,16 @@ def _b64encode(data: bytes) -> str:
 
 
 def _b64decode(text: str) -> bytes:
-    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    """Strict base64url without padding: one spelling per value, so a ticket cannot be
+    altered (``urlsafe_b64decode`` alone skips foreign characters and ignores unused bits)."""
+    if not _B64URL.match(text):
+        msg = "not base64url"
+        raise ValueError(msg)
+    data = base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    if _b64encode(data) != text:
+        msg = "not canonical base64url"
+        raise ValueError(msg)
+    return data
 
 
 def _epoch(at: datetime) -> int:
@@ -74,7 +85,9 @@ def decode_claims(data: bytes) -> TicketClaims:
             issued_at=datetime.fromtimestamp(int(payload["iat"]), UTC),
             expires_at=datetime.fromtimestamp(int(payload["exp"]), UTC),
         )
-    except (ValueError, KeyError, TypeError) as exc:
+    except (ValueError, KeyError, TypeError, OverflowError, OSError, RecursionError) as exc:
+        # OverflowError and OSError: a time beyond what datetime holds; RecursionError: JSON
+        # nested too deeply.
         msg = "malformed ticket payload"
         raise InvalidTicketError(msg) from exc
 

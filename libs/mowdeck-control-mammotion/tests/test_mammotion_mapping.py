@@ -634,6 +634,47 @@ def test_mammotion_map_without_reference_dock_or_revision() -> None:
     assert ref is not None and ref.rotation_deg == pytest.approx(-10.0)
 
 
+@pytest.mark.parametrize(
+    ("lat", "lon", "yaw"),
+    [(5.3, 0.2, 0.0), (0.8, -4.0, 0.0), (math.nan, 0.2, 0.0), (0.8, 0.2, math.inf)],
+)
+def test_mammotion_an_impossible_rtk_origin_is_no_reference(
+    lat: float, lon: float, yaw: float
+) -> None:
+    """Found by fuzzing (fuzz/fuzz_mammotion_report.py): a corrupt origin (radians beyond the
+    Earth's range) failed GeoReference validation, so map_of and state_of raised."""
+    device = sample_device()
+    device.location.RTK.latitude = lat
+    device.location.RTK.longitude = lon
+    device.location.RTK.yaw = yaw
+    assert mapping.geo_reference_of(device) is None
+    assert mapping.dock_position_of(device) is None
+    mapping.map_of(device)
+    _state(device)
+
+
+def test_mammotion_raw_survives_an_unset_position_type() -> None:
+    """Found by fuzzing: a location whose pos_type arrives with the wrong protobuf wire type
+    is decoded as None by PyMammotion, and int(None) stopped the state update."""
+    device = sample_device()
+    device.location.position_type = None  # type: ignore[assignment]
+    assert _state(device).raw["pos_type"] == 0
+
+
+def test_mammotion_state_survives_unset_numeric_fields() -> None:
+    """Found by fuzzing: the same for the fields PyMammotion copies from other messages."""
+    device = sample_device()
+    device.mower_state.travel_speed = None  # type: ignore[assignment]
+    device.mower_state.turning_mode = None  # type: ignore[assignment]
+    device.report_data.work.knife_height = None  # type: ignore[assignment]
+    device.report_data.dev.battery_val = None  # type: ignore[assignment]
+    device.report_data.dev.sys_status = None  # type: ignore[assignment]
+    state = _state(device)
+    assert state.battery_percent == 0
+    assert state.blade_height_mm is None
+    assert state.drive_speed_mps is None
+
+
 def test_mammotion_area_summary() -> None:
     summary = mapping.area_summary(mapping.map_of(sample_device()))
     assert [(s["name"], s["size_m2"]) for s in summary] == [

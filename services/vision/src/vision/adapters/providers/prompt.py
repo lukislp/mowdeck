@@ -209,8 +209,15 @@ def extract_json(text: str) -> Any:
         return json.loads(stripped)
     except json.JSONDecodeError:
         pass
+    except RecursionError as exc:
+        msg = "the answer is nested too deeply"
+        raise ValueError(msg) from exc
     start, end = stripped.find("{"), stripped.rfind("}")
     if start < 0 or end <= start:
         msg = "no JSON object in the answer"
         raise ValueError(msg)
-    return json.loads(stripped[start : end + 1])
+    try:
+        return json.loads(stripped[start : end + 1])
+    except RecursionError as exc:
+        msg = "the answer is nested too deeply"
+        raise ValueError(msg) from exc

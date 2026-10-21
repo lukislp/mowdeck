@@ -33,9 +33,16 @@ class KeySource(Protocol):
         ...
 
 
-def parse_jwks(document: Mapping[str, Any]) -> dict[str, PyJWK]:
-    """Parse a JWKS document into ``{kid: PyJWK}``; unusable entries are skipped."""
+def parse_jwks(document: Any) -> dict[str, PyJWK]:
+    """Parse a JWKS document into ``{kid: PyJWK}``; unusable entries are skipped.
+
+    ``document`` is any decoded JSON value; ``ValueError`` unless it is an object with a
+    ``keys`` list.
+    """
     keys: dict[str, PyJWK] = {}
+    if not isinstance(document, Mapping):  # any JSON value: the body of the JWKS endpoint
+        msg = "JWKS document is not an object"
+        raise ValueError(msg)
     raw_keys = document.get("keys")
     if not isinstance(raw_keys, list):
         msg = "JWKS document has no 'keys' list"
@@ -47,7 +54,8 @@ def parse_jwks(document: Mapping[str, Any]) -> dict[str, PyJWK]:
             continue
         try:
             keys[entry["kid"]] = PyJWK.from_dict(entry)
-        except (PyJWTError, ValueError, TypeError):
+        # KeyError: PyJWT reads some required members of a key without checking for them.
+        except (PyJWTError, ValueError, TypeError, KeyError):
             _log.warning("skipping unusable JWK", extra={"kid": entry.get("kid")})
     return keys
 

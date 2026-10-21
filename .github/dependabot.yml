@@ -20,6 +20,17 @@ updates:
     reviewers:
       - "lukislp"
     open-pull-requests-limit: 2
+  # The fuzzing toolchain of the ClusterFuzzLite build image (Atheris, PyInstaller, coverage),
+  # pinned with hashes in .clusterfuzzlite/requirements.txt (docs/dev/fuzzing.md).
+  - package-ecosystem: pip
+    directory: /.clusterfuzzlite
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "fix(ci)"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 2
   # One uv workspace with a single uv.lock for every service, library and tool.
   - package-ecosystem: uv
     directory: /

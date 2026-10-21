@@ -256,3 +256,15 @@ def test_mower_state_link_fields_default_to_a_state_from_before_them() -> None:
     assert MowerState.model_validate_json(live.model_dump_json()) == live
     with pytest.raises(ValidationError):
         _state(heartbeat_at="2026-10-08T12:05:00")  # naive times are rejected
+
+
+@pytest.mark.parametrize("stamp", ["0001-01-01T00:00:00+05:00", "9999-12-31T23:59:59-05:00"])
+def test_a_timestamp_outside_the_utc_range_is_a_validation_error(stamp: str) -> None:
+    # Found by fuzzing (fuzz/fuzz_contracts.py): the UTC conversion raised OverflowError, which
+    # pydantic passes through, so the message crashed the consumer instead of being rejected.
+    from mowdeck_contracts.v1 import MowPath
+
+    with pytest.raises(ValidationError, match="out of range"):
+        MowPath.model_validate_json(
+            '{"path_hash":"h","points_total":0,"planned_at":"' + stamp + '"}'
+        )

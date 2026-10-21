@@ -345,3 +345,11 @@ def test_vision_llm_bundled_price_map_prices_every_documented_hosted_model() -> 
             if not prompt + completion > 0:
                 unpriced.append(model)
     assert unpriced == []
+
+
+def test_extract_json_rejects_an_answer_nested_too_deeply() -> None:
+    # json.loads raises RecursionError; the provider retries on ValueError only.
+    with pytest.raises(ValueError, match="nested too deeply"):
+        extract_json("[" * 100_000)
+    with pytest.raises(ValueError, match="nested too deeply"):
+        extract_json('Answer: {"a":' + "[" * 100_000 + "}")

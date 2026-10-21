@@ -27,8 +27,11 @@ export function isLegalPage(value: string): value is LegalPage {
 /** A link target that is safe to render, or null (the link then shows as text). */
 export function safeHref(raw: string): string | null {
   const href = raw.trim();
+  // Browsers drop tabs and line breaks inside a URL, so "/<tab>/host" would become "//host".
+  if (/[\t\n\r]/.test(href)) return null;
   if (/^(https?:|mailto:|tel:)/i.test(href)) return href;
-  if (/^\/(?!\/)/.test(href) || href.startsWith('#')) return href;
+  // "/path" stays on this origin; "//host" and "/\host" (a backslash counts as a slash) do not.
+  if (/^\/(?![/\\])/.test(href) || href.startsWith('#')) return href;
   return null;
 }
 

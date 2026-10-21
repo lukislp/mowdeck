@@ -89,7 +89,7 @@ target-version = "py313"
 # templates/service/template holds Jinja sources; the generated services are linted instead.
 extend-exclude = ["site", "templates/service/template"]
 # Service packages are first-party everywhere (their tests and scripts import them).
-src = [".", "services/*/src", "integrations/agora-bridge/src"]
+src = [".", "services/*/src", "integrations/agora-bridge/src", "fuzz"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "S", "C4", "SIM", "RUF", "ASYNC"]
@@ -97,6 +97,8 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "S", "C4", "SIM", "RUF", "ASYNC"]
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101"]
 "**/test_*.py" = ["S101"]
+# Fuzz targets state their properties as assertions (a failed one is a finding).
+"fuzz/**" = ["S101"]
 # Alembic revision files are named after their revision id.
 "**/migrations/versions/*.py" = ["N999"]
 
@@ -116,6 +118,7 @@ files = [
   "integrations/agora-bridge/src",
   "integrations/agora-bridge/tests",
   "tests/e2e",
+  "fuzz",
 ]
 # Alembic environments and revisions are scripts, not importable modules.
 exclude = ["/migrations/"]
@@ -124,6 +127,11 @@ exclude = ["/migrations/"]
 # are unannotated; missing stubs never fail the build. Our own code stays strict.
 [[tool.mypy.overrides]]
 module = ["pymammotion.*"]
+ignore_missing_imports = true
+
+# Atheris (the fuzzing engine of fuzz/) is installed only in the ClusterFuzzLite build image.
+[[tool.mypy.overrides]]
+module = ["atheris"]
 ignore_missing_imports = true
 
 # The Agora SDK wrapper (agora-python-server-sdk) is installed only in the operator-built

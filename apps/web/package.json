@@ -30,6 +30,7 @@
     "@testing-library/svelte": "5.4.2",
     "@types/node": "22.20.5",
     "@vitest/coverage-v8": "5.0.5",
+    "fast-check": "4.10.2",
     "jsdom": "29.1.1",
     "svelte": "5.57.2",
     "svelte-check": "4.7.7",

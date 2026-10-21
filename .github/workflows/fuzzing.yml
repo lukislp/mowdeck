@@ -1,0 +1,179 @@
+name: fuzzing
+
+# Continuous fuzzing with ClusterFuzzLite (docs/dev/fuzzing.md): the Atheris targets in fuzz/,
+# built by .clusterfuzzlite/build.sh.
+#
+# * pull requests: code-change fuzzing for a few minutes; a crash fails the check and its input
+#   is uploaded as an artifact (and as a code scanning alert);
+# * daily: batch fuzzing for an hour, which grows the corpus;
+# * weekly: corpus pruning and a coverage report.
+#
+# Corpora, crashes and coverage reports live in GitHub Actions artifacts (ClusterFuzzLite's
+# default store without a storage repository), so no extra secret or repository is needed.
+on:
+  pull_request:
+  schedule:
+    - cron: "23 3 * * *" # batch fuzzing
+    - cron: "47 4 * * 0" # corpus pruning and coverage
+  workflow_dispatch:
+    inputs:
+      task:
+        description: What to run
+        type: choice
+        options: [batch, prune, coverage]
+        default: batch
+
+permissions: {}
+
+jobs:
+  pull-request:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: fuzzing-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      # Read the corpus and coverage artifacts of earlier runs.
+      actions: read
+      # Crashes as code scanning alerts (SARIF).
+      security-events: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - name: Build fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sanitizer: address
+      - name: Run fuzzers
+        id: run
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 480
+          mode: code-change
+          sanitizer: address
+          parallel-fuzzing: true
+          output-sarif: true
+      - name: Upload crashes to code scanning
+        if: always() && steps.build.outcome == 'success' && hashFiles('cifuzz-sarif/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+          checkout_path: cifuzz-sarif
+          category: clusterfuzzlite
+
+  batch:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task == 'batch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    concurrency:
+      group: fuzzing-batch
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - name: Build fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sanitizer: address
+      - name: Run fuzzers
+        id: run
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 3600
+          mode: batch
+          sanitizer: address
+          parallel-fuzzing: true
+          output-sarif: true
+      - name: Upload crashes to code scanning
+        if: always() && steps.build.outcome == 'success' && hashFiles('cifuzz-sarif/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: cifuzz-sarif/results.sarif
+          checkout_path: cifuzz-sarif
+          category: clusterfuzzlite
+
+  prune:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '47 4 * * 0') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task == 'prune')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    concurrency:
+      group: fuzzing-batch
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - name: Build fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sanitizer: address
+      - name: Prune the corpus
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          mode: prune
+          sanitizer: address
+
+  coverage:
+    needs: prune
+    if: >-
+      always() && (
+        (github.event_name == 'schedule' && github.event.schedule == '47 4 * * 0') ||
+        (github.event_name == 'workflow_dispatch' && inputs.task == 'coverage')
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - name: Build fuzzers (coverage)
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sanitizer: coverage
+      - name: Coverage report
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fuzz-seconds: 600
+          mode: coverage
+          sanitizer: coverage

@@ -177,7 +177,7 @@ mowing speed and this setting may well be one value on the mower."""
 
 def work_mode(device: MowerDevice) -> WorkMode:
     """The device's work mode (``UNKNOWN`` for unmodelled values)."""
-    return WorkMode(device.report_data.dev.sys_status)
+    return WorkMode(_int(device.report_data.dev.sys_status))
 
 
 def activity_of(device: MowerDevice, *, has_report: bool = True) -> MowerActivity:
@@ -214,19 +214,21 @@ def rtk_source_of(device: MowerDevice, *, has_report: bool = True) -> RtkSource:
 def geo_reference_of(device: MowerDevice) -> GeoReference | None:
     """The map frame anchor: the RTK reference (radians in PyMammotion) and its yaw.
 
-    None while the mower has not reported a reference yet (latitude and longitude 0).
+    None while the mower has not reported a reference yet (latitude and longitude 0), and for a
+    reference no Earth position has (a corrupt frame: beyond +-90/180 degrees, not finite).
     """
     rtk = device.location.RTK
     if rtk.latitude == 0.0 and rtk.longitude == 0.0:
         return None
+    if not all(math.isfinite(value) for value in (rtk.latitude, rtk.longitude, rtk.yaw)):
+        return None
+    lat, lon = math.degrees(rtk.latitude), math.degrees(rtk.longitude)
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        return None
     rotation = math.degrees(rtk.yaw) % 360.0
     if rotation > 180.0:
         rotation -= 360.0
-    return GeoReference(
-        origin_lat=math.degrees(rtk.latitude),
-        origin_lon=math.degrees(rtk.longitude),
-        rotation_deg=rotation,
-    )
+    return GeoReference(origin_lat=lat, origin_lon=lon, rotation_deg=rotation)
 
 
 def position_of(device: MowerDevice) -> GeoPosition | None:
@@ -429,8 +431,22 @@ def raw_of(
         raw["cutter_offset_m"] = float(work.cutter_offset)
     if work.cutter_width > 0:
         raw["cutter_width_m"] = float(work.cutter_width)
-    raw["pos_type"] = int(device.location.position_type)
+    raw["pos_type"] = _int(device.location.position_type)
     return raw
+
+
+def _int(value: object) -> int:
+    """A numeric device field as an int, 0 when it holds no finite number.
+
+    PyMammotion copies many protobuf fields into its device model as they were decoded, and a
+    corrupt frame whose field arrived with the wrong wire type leaves ``None`` (or bytes) there
+    until the next good frame; reading such a field must not stop the state updates."""
+    return int(value) if isinstance(value, int | float) and math.isfinite(value) else 0
+
+
+def _float(value: object) -> float:
+    """Like :func:`_int` for a float field (0.0 when it holds no finite number)."""
+    return float(value) if isinstance(value, int | float) and math.isfinite(value) else 0.0
 
 
 def battery_cycles_of(device: MowerDevice) -> int | None:
@@ -441,16 +457,16 @@ def battery_cycles_of(device: MowerDevice) -> int | None:
     ``mower_state.charge_settings.bat_cycle_times`` (BMS charge settings) is the fallback.
     Zero means "not reported" (models with removable packs never send it).
     """
-    cycles = int(device.report_data.maintenance.bat_cycles or 0)
+    cycles = _int(device.report_data.maintenance.bat_cycles)
     if cycles > 0:
         return cycles
-    bms = int(device.mower_state.charge_settings.bat_cycle_times or 0)
+    bms = _int(device.mower_state.charge_settings.bat_cycle_times)
     return bms if bms > 0 else None
 
 
 def blade_height_of(device: MowerDevice) -> int | None:
     """Current cutting height in millimetres (``report_data.work.knife_height``), if plausible."""
-    height = device.report_data.work.knife_height
+    height = _int(device.report_data.work.knife_height)
     return height if 0 < height <= 200 else None
 
 
@@ -464,10 +480,10 @@ def speed_of(device: MowerDevice) -> float | None:
     divided by 100). Fallback while it is 0 or implausible: the configured
     ``mower_state.travel_speed``. None when neither lies in ``(0, 5]`` m/s.
     """
-    reported = device.report_data.work.man_run_speed / 100
+    reported = _float(device.report_data.work.man_run_speed) / 100
     if 0 < reported <= MAX_PLAUSIBLE_SPEED_MPS:
         return float(reported)
-    speed = float(device.mower_state.travel_speed)
+    speed = _float(device.mower_state.travel_speed)
     return speed if 0 < speed <= MAX_PLAUSIBLE_SPEED_MPS else None
 
 
@@ -514,7 +530,7 @@ def state_of(
     if fault is not None:
         activity = MowerActivity.ERROR
     code, message = error_of(device, activity, fault)
-    battery = device.report_data.dev.battery_val
+    battery = _int(device.report_data.dev.battery_val)
     raw = raw_of(device, device_name, link=link, model=model)
     speed = speed_of(device)
     if speed is not None:
@@ -526,7 +542,7 @@ def state_of(
     if light_on is not None:
         lamp = device.mower_state.lamp_info
         raw["manual_light"] = bool(lamp.manual_light)
-        raw["lamp_bright"] = int(lamp.lamp_bright)
+        raw["lamp_bright"] = _int(lamp.lamp_bright)
     category: errors.ErrorCategory | None = None
     if activity is MowerActivity.ERROR and code is not None:
         numeric = errors.normalise_code(code) is not None
@@ -943,7 +959,7 @@ def drive_speed_of(device: MowerDevice) -> float | None:
     """The speed setting for manual driving the mower reported last
     (``mower_state.travel_speed``, the answer to ``get_speed``); None while it is 0 or
     implausible."""
-    speed = float(device.mower_state.travel_speed)
+    speed = _float(device.mower_state.travel_speed)
     return speed if 0 < speed <= MAX_PLAUSIBLE_SPEED_MPS else None
 
 
@@ -959,7 +975,7 @@ def turn_style_of(device: MowerDevice) -> TurnStyle | None:
 
     PyMammotion has no read request for the parameter and starts at 0, so until the mower
     reports it the value reads as zero-turn (``in_place``)."""
-    return TURNING_MODES.get(int(device.mower_state.turning_mode))
+    return TURNING_MODES.get(_int(device.mower_state.turning_mode))
 
 
 def path_spacing_of(device: MowerDevice, product_key: str = "") -> tuple[int, int] | None:

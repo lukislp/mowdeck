@@ -77,6 +77,11 @@ def resolve_turn_style(
 # --- Polyline encoding ------------------------------------------------------------------------
 
 
+_MAX_SCALED: Final = 2.0**62
+"""Largest scaled coordinate the encoder writes: any difference of two such values is a chunk
+sequence :func:`decode_polyline` reads back (at most 13 five-bit chunks)."""
+
+
 def _encode_value(value: int) -> str:
     shifted = ~(value << 1) if value < 0 else value << 1
     chunks: list[str] = []
@@ -91,7 +96,8 @@ def encode_polyline(points: Iterable[tuple[float, float]], precision: int = SPOT
     """Encode ``points`` as a polyline string with ``precision`` decimal places.
 
     Each coordinate is rounded to ``10**-precision``, stored as the difference to the previous
-    point, zig-zag encoded and written in 5-bit groups as ASCII characters 63 to 126.
+    point, zig-zag encoded and written in 5-bit groups as ASCII characters 63 to 126. Raises
+    ``ValueError`` for a coordinate that is not finite or too large to decode again.
     """
     factor = 10**precision
     last_a = last_b = 0
@@ -100,7 +106,11 @@ def encode_polyline(points: Iterable[tuple[float, float]], precision: int = SPOT
         if not (math.isfinite(a) and math.isfinite(b)):
             msg = "polyline coordinates must be finite"
             raise ValueError(msg)
-        ia, ib = round(a * factor), round(b * factor)
+        scaled_a, scaled_b = a * factor, b * factor
+        if not (abs(scaled_a) < _MAX_SCALED and abs(scaled_b) < _MAX_SCALED):
+            msg = "polyline coordinates out of range"
+            raise ValueError(msg)
+        ia, ib = round(scaled_a), round(scaled_b)
         out.append(_encode_value(ia - last_a))
         out.append(_encode_value(ib - last_b))
         last_a, last_b = ia, ib

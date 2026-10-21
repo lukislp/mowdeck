@@ -100,7 +100,7 @@ def decode_record(record: bytes) -> Frame | dict[str, Any]:
     if kind == RECORD_EVENT:
         try:
             event = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
             msg = "event record is not JSON"
             raise ProtocolError(msg) from exc
         if not isinstance(event, dict) or not isinstance(event.get("event"), str):
@@ -240,7 +240,7 @@ def parse_control(line: str | bytes) -> Control:
         raise BadInputError(msg)
     try:
         data = json.loads(line)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         msg = "control line is not JSON"
         raise BadInputError(msg) from exc
     if not isinstance(data, dict) or not isinstance(data.get("op"), str):

@@ -37,7 +37,19 @@ def _number(values: Any, index: int) -> float | None:
 
 
 def parse_forecast(body: Mapping[str, Any], fetched_at: datetime) -> Forecast:
-    """A :class:`Forecast` from an Open-Meteo response with ``timeformat=unixtime``."""
+    """A :class:`Forecast` from an Open-Meteo response with ``timeformat=unixtime``.
+
+    Raises ``ValueError``, ``KeyError`` or ``TypeError`` for an answer it cannot use (a number
+    beyond what a float or a datetime holds is a ``ValueError``).
+    """
+    try:
+        return _parse_forecast(body, fetched_at)
+    except (OverflowError, OSError) as exc:
+        msg = "forecast value out of range"
+        raise ValueError(msg) from exc
+
+
+def _parse_forecast(body: Mapping[str, Any], fetched_at: datetime) -> Forecast:
     hourly = body["hourly"]
     times = hourly["time"]
     if not isinstance(times, list):
@@ -118,7 +130,8 @@ class OpenMeteoProvider:
             )
             response.raise_for_status()
             return parse_forecast(response.json(), self.clock())
-        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        # RecursionError: JSON nested too deeply for response.json().
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, RecursionError) as exc:
             _log.warning(
                 "open-meteo forecast failed, weather unknown",
                 latitude=latitude,

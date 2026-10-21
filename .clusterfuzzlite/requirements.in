@@ -1,0 +1,5 @@
+# Fuzzing toolchain of the ClusterFuzzLite build image (.clusterfuzzlite/Dockerfile), compiled to
+# requirements.txt with hashes: uv pip compile --generate-hashes (see docs/dev/fuzzing.md).
+atheris==3.1.0
+pyinstaller
+coverage

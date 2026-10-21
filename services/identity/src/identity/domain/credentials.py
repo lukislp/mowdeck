@@ -23,6 +23,7 @@ MAX_PASSWORD_LENGTH = 256
 
 REFRESH_PREFIX = "mdr_"
 API_TOKEN_PREFIX = "mdk_"  # noqa: S105 - token prefix, not a secret
+_TOKEN_ID_HEX = re.compile(r"[0-9a-f]{32}")
 
 COMMON_PASSWORDS = frozenset(
     {
@@ -119,12 +120,11 @@ def parse_api_token(token: str) -> tuple[UUID, str] | None:
         return None
     body = token[len(API_TOKEN_PREFIX) :]
     token_hex, sep, secret = body.partition("_")
-    if not sep or len(token_hex) != 32 or len(secret) < 32:
+    # Exactly the spelling new_api_token writes: UUID() alone also takes a sign, whitespace
+    # and upper case, so several strings would name the same token.
+    if not sep or not _TOKEN_ID_HEX.fullmatch(token_hex) or len(secret) < 32:
         return None
-    try:
-        return UUID(hex=token_hex), secret
-    except ValueError:
-        return None
+    return UUID(hex=token_hex), secret
 
 
 def slugify(name: str, suffix: str) -> str:
