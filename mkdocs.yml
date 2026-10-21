@@ -96,6 +96,7 @@ nav:
       - dev/web-app.md
       - dev/home-assistant.md
       - "Camera source bridge protocol": dev/camera-relay-bridge-protocol.md
+      - "Fuzzing and property-based tests": dev/fuzzing.md
       - dev/wiki.md
   - Operations:
       - ops/compose.md

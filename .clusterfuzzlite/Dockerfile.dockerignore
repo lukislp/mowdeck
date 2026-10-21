@@ -1,0 +1,19 @@
+# Used by BuildKit for .clusterfuzzlite/Dockerfile (build context: repository root).
+# Allow list: the uv workspace (every member's pyproject.toml is needed to read uv.lock), the
+# fuzz targets and the ClusterFuzzLite files.
+*
+!pyproject.toml
+!uv.lock
+!.clusterfuzzlite/
+!fuzz/
+!libs/
+!services/
+!integrations/
+!tools/
+**/__pycache__
+**/*.pyc
+**/tests/
+**/node_modules
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache

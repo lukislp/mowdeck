@@ -1,0 +1,3 @@
+# ClusterFuzzLite project (https://google.github.io/clusterfuzzlite/): Python fuzz targets in
+# fuzz/, built with Atheris by .clusterfuzzlite/build.sh. See docs/dev/fuzzing.md.
+language: python
