@@ -80,6 +80,9 @@ test('health: blade and mowing hours grow after a job; viewer without blade rese
   expect(await value('health-blade-hours')).toBeGreaterThan(0);
   expect(await value('health-mowing-hours')).toBeGreaterThan(0);
   expect(await value('health-distance')).toBeGreaterThan(0);
+  // the simulator has no battery cycle counter: MowDeck's own count, no second readout
+  await expect(page.getByTestId('health-cycles')).toContainText('Akkuzyklen');
+  await expect(page.getByTestId('health-cycles-mowdeck')).toHaveCount(0);
   expect(await value('health-blade-since')).toBeGreaterThan(0);
   await expect(page.getByTestId('health-threshold')).toHaveAttribute('data-level', 'ok');
 

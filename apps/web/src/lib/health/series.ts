@@ -181,6 +181,35 @@ export function bladeMeter(totals: BladeFields): BladeMeter {
   };
 }
 
+/** What the "battery cycles" readout shows. */
+export interface CycleCount {
+  /** The cycles to show. */
+  cycles: number;
+  /** `device`: the mower's own lifetime counter; `telemetry`: MowDeck's count. */
+  source: HealthTotals['battery_cycles_source'];
+  /** MowDeck's own count since it started tracking. */
+  tracked: number;
+}
+
+type CycleFields = Pick<HealthTotals, 'battery_cycles'> &
+  Partial<
+    Pick<HealthTotals, 'battery_cycles_source' | 'battery_cycles_tracked' | 'device_battery_cycles'>
+  >;
+
+/**
+ * Battery cycles: the mower's own lifetime counter when it reports one (MowDeck's count only
+ * starts with its first state), MowDeck's count otherwise. An answer without the source fields
+ * (an older Telemetry) is MowDeck's count.
+ */
+export function cycleCount(totals: CycleFields): CycleCount {
+  const tracked = totals.battery_cycles_tracked ?? totals.battery_cycles;
+  const device = totals.device_battery_cycles;
+  if (totals.battery_cycles_source === 'device' && device != null) {
+    return { cycles: device, source: 'device', tracked };
+  }
+  return { cycles: tracked, source: 'telemetry', tracked };
+}
+
 /** Share of the interval used, 0..1. */
 export function thresholdShare(hours: number, threshold: number): number {
   if (threshold <= 0) return 0;
