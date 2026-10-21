@@ -712,6 +712,8 @@
   "health_mowing": "Mähstunden",
   "health_distance": "Strecke",
   "health_cycles": "Akkuzyklen",
+  "health_cycles_device": "Akkuzyklen (Mäher, gesamt)",
+  "health_cycles_mowdeck": "Akkuzyklen (MowDeck)",
   "health_charges": "Ladevorgänge",
   "health_since": "Erfasst seit {date}",
   "health_updated": "Stand {time}",

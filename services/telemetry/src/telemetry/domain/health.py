@@ -17,6 +17,11 @@ each new state only needs that row:
   ``raw.blade_used_s`` and the warning threshold as ``raw.blade_used_warn_s`` (seconds). The
   newest positive values are kept on the totals row and shown instead of the own counter; a
   state without them keeps the stored values.
+* **Device battery cycles.** Mowers that count battery charge cycles over their lifetime
+  (Mammotion: ``report_data.maintenance.bat_cycles``) send the counter as ``raw.bat_cycles``.
+  The newest positive value is kept on the totals row and shown instead of MowDeck's own
+  count (which only starts with the first state Telemetry received); a state without it keeps
+  the stored value.
 * **Mowing hours.** The same interval accounting with ``activity == mowing``.
 * **Distance.** Haversine metres between consecutive positions. A step longer than
   ``max_step_m`` (RTK jumps) or across a gap longer than ``max_gap`` is skipped; the cursor
@@ -96,6 +101,9 @@ class HealthRow:
     """The mower's own blade counter (``raw.blade_used_s``), None when it never sent one."""
     device_blade_warn_seconds: float | None = None
     """The mower's own blade warning threshold (``raw.blade_used_warn_s``)."""
+    device_battery_cycles: int | None = None
+    """The mower's own lifetime battery cycle counter (``raw.bat_cycles``), None when it never
+    sent one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +194,17 @@ def device_seconds(raw: dict[str, Any], key: str) -> float | None:
         return None
     seconds = float(value)
     return seconds if math.isfinite(seconds) and seconds > 0 else None
+
+
+def device_count(raw: dict[str, Any], key: str) -> int | None:
+    """A positive whole number in ``raw[key]``, else None (booleans and fractions are not)."""
+    value = raw.get(key)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if isinstance(value, float) and not (math.isfinite(value) and value.is_integer()):
+        return None
+    count = int(value)
+    return count if count > 0 else None
 
 
 def is_charging(state: MowerState) -> bool:
@@ -281,6 +300,8 @@ def advance(
         or current.device_blade_seconds,
         device_blade_warn_seconds=device_seconds(state.raw, "blade_used_warn_s")
         or current.device_blade_warn_seconds,
+        device_battery_cycles=device_count(state.raw, "bat_cycles")
+        or current.device_battery_cycles,
     )
     events = Delta(
         day=utc_day(at), battery_cycles=cycles, charge_sessions=sessions, errors=errors, jobs=jobs

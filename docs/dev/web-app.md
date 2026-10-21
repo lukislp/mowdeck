@@ -237,7 +237,7 @@ The live camera of a cloud mower ([ADR 0032](../adr/0032-live-camera-over-agora.
 The health page `/mowers/[id]/health` (pulse icon in the mower page header) shows Telemetry's health history ([ADR 0027](../adr/0027-health-history-and-theft-alarm.md), `services/telemetry/README.md`). Pure helpers in `src/lib/health/series.ts`, unit tested.
 
 - **Blade change interval**: hours since the blade change against `blade_hours_threshold` from `GET /health` as a meter with the 80 % mark and a word and glyph (within range, due soon from 80 %, due). Durations under an hour read in minutes, so a young mower does not show "0.00 h".
-- **Totals**: blade hours, mowing hours, distance (km from 1 000 m), battery cycles, charge sessions, since and as of.
+- **Totals**: blade hours, mowing hours, distance (km from 1 000 m), battery cycles (the mower's own lifetime counter, labelled as such, when it reports one, with MowDeck's own count beside it; MowDeck's count otherwise), charge sessions, since and as of.
 - **Last 30 days** (`/health/daily`, UTC days, absent days are zero): blade time and distance as SVG bar strips in tokens (no chart library; the newest day in ink, the peak and the total as readouts).
 - **Battery** of the last 24 hours (`/battery?from&to&step=15m`) as an SVG line with the band below 20 % in the error tint, a marker on the newest value, min, max and latest as readouts.
 - **Errors by code** and the **blade changes** (`/health/blade-changes`). "Blades replaced" (`POST /health/blade-reset` with an optional note) needs `can_manage_mowers` (asked with `POST /me/permissions` first; a 403 hides it).

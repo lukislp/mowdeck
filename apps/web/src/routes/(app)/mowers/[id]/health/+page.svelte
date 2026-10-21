@@ -1,7 +1,8 @@
 <!--
   Health of one mower (Telemetry, ADR 0027): blade hours since the change against the change
   interval (the mower's own counter and warning threshold when it reports them, as the vendor app
-  shows them; MowDeck's own counter otherwise, which then stays visible in the totals), the running totals, the last 30 UTC days as bar strips, the battery of the last
+  shows them; MowDeck's own counter otherwise, which then stays visible in the totals), the running totals
+  (battery cycles from the mower's own lifetime counter when it reports one, MowDeck's count beside it), the last 30 UTC days as bar strips, the battery of the last
   24 hours, errors by code and the blade changes. "Blades replaced" records a change; it needs
   `can_manage_mowers` (checked first, and hidden for good after a 403).
 -->
@@ -31,6 +32,7 @@
     batteryExtremes,
     batteryQuery,
     bladeMeter,
+    cycleCount,
     dayRange,
     durationParts,
     errorRows,
@@ -176,6 +178,7 @@
   const filled = $derived(fillDays(days, today));
   const dayKeys = $derived(filled.map((d) => d.day));
   const meter = $derived(totals ? bladeMeter(totals) : null);
+  const cycles = $derived(totals ? cycleCount(totals) : null);
   const level = $derived<ThresholdLevel>(
     meter ? thresholdLevel(meter.hours, meter.threshold) : 'ok',
   );
@@ -348,10 +351,19 @@
             testid="health-distance"
           />
           <Readout
-            label={m.health_cycles()}
-            value={totals ? formatNumber(totals.battery_cycles) : null}
+            label={cycles?.source === 'device' ? m.health_cycles_device() : m.health_cycles()}
+            value={cycles ? formatNumber(cycles.cycles) : null}
             emptyText={m.no_data()}
+            testid="health-cycles"
           />
+          {#if cycles?.source === 'device'}
+            <Readout
+              label={m.health_cycles_mowdeck()}
+              value={formatNumber(cycles.tracked)}
+              emptyText={m.no_data()}
+              testid="health-cycles-mowdeck"
+            />
+          {/if}
           <Readout
             label={m.health_charges()}
             value={totals ? formatNumber(totals.charge_sessions) : null}

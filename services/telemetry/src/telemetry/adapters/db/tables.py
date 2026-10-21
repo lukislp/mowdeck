@@ -169,6 +169,7 @@ mower_health = Table(
     Column("updated_at", TS, nullable=False),
     Column("device_blade_seconds", Double),
     Column("device_blade_warn_seconds", Double),
+    Column("device_battery_cycles", Integer),
     Index("ix_mower_health_account", "account_id"),
 )
 

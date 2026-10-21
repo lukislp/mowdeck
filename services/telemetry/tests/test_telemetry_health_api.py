@@ -122,6 +122,8 @@ async def test_telemetry_health_totals_days_and_battery_over_http() -> None:
     assert 66 < body["distance_m"] < 67
     assert (body["battery_cycles"], body["charge_sessions"]) == (0, 1)
     assert body["errors"] == {"E42": 1}
+    assert body["battery_cycles_source"] == "telemetry"  # nor a battery cycle counter
+    assert body["battery_cycles_tracked"] == 0 and body["device_battery_cycles"] is None
     assert daily.status_code == 200, daily.text
     days = daily.json()
     assert (days["from"], days["to"]) == ("2026-10-01", "2026-10-31")
@@ -385,6 +387,36 @@ async def test_telemetry_health_prefers_the_device_blade_counter() -> None:
     assert body["blade_source"] == "device"
     assert (body["device_blade_hours"], body["device_blade_warn_hours"]) == (12.0, 100.0)
     assert body["blade_hours_since_change"] == round(30 / 3600, 4)  # own counter stays
+
+
+async def test_telemetry_health_prefers_the_device_battery_cycle_counter() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        await h.publish_state(make_state(mower_id, owner.account_id, at=T0, battery=10))
+        await h.publish_state(
+            make_state(mower_id, owner.account_id, at=T0 + seconds(10), battery=90)
+        )
+        response = await h.client.get(f"{API}/mowers/{mower_id}/health", headers=owner.headers)
+        own = response.json()
+        await h.publish_state(
+            make_state(
+                mower_id,
+                owner.account_id,
+                at=T0 + seconds(20),
+                battery=90,
+                raw={"bat_cycles": 152},
+            )
+        )
+        response = await h.client.get(f"{API}/mowers/{mower_id}/health", headers=owner.headers)
+    assert response.status_code == 200, response.text
+    assert own["battery_cycles_source"] == "telemetry"
+    assert own["battery_cycles"] == own["battery_cycles_tracked"] == 1
+    assert own["device_battery_cycles"] is None
+    body = response.json()
+    assert body["battery_cycles_source"] == "device"
+    assert (body["battery_cycles"], body["device_battery_cycles"]) == (152, 152)
+    assert body["battery_cycles_tracked"] == 1  # MowDeck's own count stays available
 
 
 async def test_telemetry_health_events_without_a_bus_are_a_no_op() -> None:

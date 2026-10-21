@@ -240,7 +240,21 @@ class MowerHealthOut(BaseModel):
     mowing_hours: float
     distance_m: float
     battery_cycles: int = Field(
-        description="Discharges below 20 % followed by a charge above 80 %."
+        description="Battery charge cycles to show: the mower's own lifetime counter when it "
+        "reports one (battery_cycles_source device), else MowDeck's count "
+        "(battery_cycles_tracked).",
+    )
+    battery_cycles_tracked: int = Field(
+        description="MowDeck's own count since the first state it received: discharges below "
+        "20 % followed by a charge above 80 %.",
+    )
+    device_battery_cycles: int | None = Field(
+        description="The mower's own lifetime battery cycle counter; null when the mower does "
+        "not report one.",
+    )
+    battery_cycles_source: Literal["device", "telemetry"] = Field(
+        description="Where battery_cycles comes from: the mower's own counter (device) or "
+        "MowDeck's count (telemetry, battery_cycles_tracked).",
     )
     charge_sessions: int
     errors: dict[str, int] = Field(description="Error count per error code (unknown: none).")
@@ -261,7 +275,16 @@ class MowerHealthOut(BaseModel):
             blade_source="device" if row.device_blade_seconds is not None else "telemetry",
             mowing_hours=_hours(row.mowing_seconds),
             distance_m=round(row.distance_m, 2),
-            battery_cycles=row.battery_cycles,
+            battery_cycles=(
+                row.device_battery_cycles
+                if row.device_battery_cycles is not None
+                else row.battery_cycles
+            ),
+            battery_cycles_tracked=row.battery_cycles,
+            device_battery_cycles=row.device_battery_cycles,
+            battery_cycles_source="device"
+            if row.device_battery_cycles is not None
+            else "telemetry",
             charge_sessions=row.charge_sessions,
             errors=dict(row.errors),
             updated_at=row.updated_at,
@@ -269,7 +292,7 @@ class MowerHealthOut(BaseModel):
 
 
 class HealthDayOut(BaseModel):
-    """Totals of one UTC day."""
+    """Totals of one UTC day (battery_cycles is MowDeck's own count)."""
 
     day: date
     blade_hours: float

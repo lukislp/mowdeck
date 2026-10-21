@@ -392,7 +392,9 @@ def raw_of(
     The device's own blade counter (``report_data.maintenance.blade_used_time``, seconds since
     the blade was last reset in the Mammotion app) and its warning threshold are added as
     ``blade_used_s`` and ``blade_used_warn_s`` when the device reported them (> 0); Telemetry
-    prefers them over its own blade hours.
+    prefers them over its own blade hours. The device's lifetime battery cycle counter is added
+    as ``bat_cycles`` (see :func:`battery_cycles_of`) when reported; Telemetry prefers it over
+    its own cycle count.
     """
     rd = device.report_data
     rtk = rd.rtk
@@ -419,6 +421,9 @@ def raw_of(
         raw["blade_used_s"] = int(blade.blade_used_time)
     if blade.blade_used_warn_time > 0:
         raw["blade_used_warn_s"] = int(blade.blade_used_warn_time)
+    cycles = battery_cycles_of(device)
+    if cycles is not None:
+        raw["bat_cycles"] = cycles
     work = rd.work
     if work.cutter_offset > 0:
         raw["cutter_offset_m"] = float(work.cutter_offset)
@@ -426,6 +431,21 @@ def raw_of(
         raw["cutter_width_m"] = float(work.cutter_width)
     raw["pos_type"] = int(device.location.position_type)
     return raw
+
+
+def battery_cycles_of(device: MowerDevice) -> int | None:
+    """The battery's lifetime charge cycle counter as the mower reports it, None when unknown.
+
+    PyMammotion fills ``report_data.maintenance.bat_cycles`` from the maintenance block of the
+    device report (the same block as the blade counter) and from the ``networkInfo`` property;
+    ``mower_state.charge_settings.bat_cycle_times`` (BMS charge settings) is the fallback.
+    Zero means "not reported" (models with removable packs never send it).
+    """
+    cycles = int(device.report_data.maintenance.bat_cycles or 0)
+    if cycles > 0:
+        return cycles
+    bms = int(device.mower_state.charge_settings.bat_cycle_times or 0)
+    return bms if bms > 0 else None
 
 
 def blade_height_of(device: MowerDevice) -> int | None:
