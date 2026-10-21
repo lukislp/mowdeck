@@ -590,3 +590,20 @@ async def test_telemetry_db_health_stores_the_device_blade_counter(
     assert without is not None and without.device_blade_seconds is None
     assert stored is not None
     assert (stored.device_blade_seconds, stored.device_blade_warn_seconds) == (7200, 360000)
+
+
+@pytest.mark.parametrize("kind", KINDS)
+async def test_telemetry_db_health_stores_the_device_battery_cycle_counter(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account, mower = uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        services = build_services(store, TelemetryConfig(), lambda: NOW)
+        await services.ingest.record_state(make_state(mower, account, at=NOW))
+        without = await store.health_of(account, mower)
+        await services.ingest.record_state(
+            make_state(mower, account, at=NOW + seconds(10), raw={"bat_cycles": 152})
+        )
+        stored = await store.health_of(account, mower)
+    assert without is not None and without.device_battery_cycles is None
+    assert stored is not None and stored.device_battery_cycles == 152

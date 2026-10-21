@@ -895,7 +895,7 @@
         "type": "object"
       },
       "HealthDayOut": {
-        "description": "Totals of one UTC day.",
+        "description": "Totals of one UTC day (battery_cycles is MowDeck's own count).",
         "properties": {
           "battery_cycles": {
             "title": "Battery Cycles",
@@ -1871,8 +1871,22 @@
         "description": "Running health totals of a mower (since the first state Telemetry received).",
         "properties": {
           "battery_cycles": {
-            "description": "Discharges below 20 % followed by a charge above 80 %.",
+            "description": "Battery charge cycles to show: the mower's own lifetime counter when it reports one (battery_cycles_source device), else MowDeck's count (battery_cycles_tracked).",
             "title": "Battery Cycles",
+            "type": "integer"
+          },
+          "battery_cycles_source": {
+            "description": "Where battery_cycles comes from: the mower's own counter (device) or MowDeck's count (telemetry, battery_cycles_tracked).",
+            "enum": [
+              "device",
+              "telemetry"
+            ],
+            "title": "Battery Cycles Source",
+            "type": "string"
+          },
+          "battery_cycles_tracked": {
+            "description": "MowDeck's own count since the first state it received: discharges below 20 % followed by a charge above 80 %.",
+            "title": "Battery Cycles Tracked",
             "type": "integer"
           },
           "blade_changed_at": {
@@ -1914,6 +1928,18 @@
           "charge_sessions": {
             "title": "Charge Sessions",
             "type": "integer"
+          },
+          "device_battery_cycles": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mower's own lifetime battery cycle counter; null when the mower does not report one.",
+            "title": "Device Battery Cycles"
           },
           "device_blade_hours": {
             "anyOf": [
@@ -1992,6 +2018,9 @@
           "mowing_hours",
           "distance_m",
           "battery_cycles",
+          "battery_cycles_tracked",
+          "device_battery_cycles",
+          "battery_cycles_source",
           "charge_sessions",
           "errors",
           "updated_at"
