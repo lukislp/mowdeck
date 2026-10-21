@@ -54,8 +54,12 @@ export function isHeatPeriod(value: unknown): value is HeatPeriod {
   return typeof value === 'string' && (HEAT_PERIODS as readonly string[]).includes(value);
 }
 
+/**
+ * Only a number is a cell size: `Number(value)` on an arbitrary stored value can throw (an
+ * object whose `toString` is not callable) and would accept strings such as `'1'` or `' 2 '`.
+ */
 export function isHeatCellSize(value: unknown): value is HeatCellSize {
-  return (HEAT_CELL_SIZES as readonly number[]).includes(Number(value));
+  return typeof value === 'number' && (HEAT_CELL_SIZES as readonly number[]).includes(value);
 }
 
 /** A command as the window needs it (Fleet `CommandView`). */
@@ -194,9 +198,7 @@ export function loadHeatPrefs(store: Store | null = defaultStore()): HeatPrefs {
     return {
       layer: isHeatLayer(parsed.layer) ? parsed.layer : DEFAULT_HEAT_PREFS.layer,
       period: isHeatPeriod(parsed.period) ? parsed.period : DEFAULT_HEAT_PREFS.period,
-      cell: isHeatCellSize(parsed.cell)
-        ? (Number(parsed.cell) as HeatCellSize)
-        : DEFAULT_HEAT_PREFS.cell,
+      cell: isHeatCellSize(parsed.cell) ? parsed.cell : DEFAULT_HEAT_PREFS.cell,
     };
   } catch {
     return { ...DEFAULT_HEAT_PREFS };

@@ -8,6 +8,7 @@ import {
   fetchHeatmap,
   heatLayerData,
   heatmapUrl,
+  isHeatCellSize,
   isHeatLayer,
   isHeatPeriod,
   isNoMapYet,
@@ -221,6 +222,14 @@ describe('prefs', () => {
     };
     expect(loadHeatPrefs(throwing)).toEqual(DEFAULT_HEAT_PREFS);
     expect(() => saveHeatPrefs(DEFAULT_HEAT_PREFS, throwing)).not.toThrow();
+  });
+
+  it('accepts only numeric cell sizes and never throws on odd stored values', () => {
+    // fast-check found `{ toString: 0 }`: Number() on it throws instead of answering false.
+    expect(isHeatCellSize({ toString: 0 })).toBe(false);
+    expect(isHeatCellSize('2')).toBe(false);
+    expect(isHeatCellSize(2)).toBe(true);
+    expect(loadHeatPrefs(memory({ [HEAT_PREFS_KEY]: '{"cell":"5"}' }))).toEqual(DEFAULT_HEAT_PREFS);
   });
 });
 

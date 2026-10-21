@@ -6,6 +6,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import {
+  HEAT_CELL_SIZES,
   HEAT_LAYERS,
   HEAT_PERIODS,
   heatmapUrl,
@@ -72,7 +73,9 @@ describe('heat layer properties', () => {
         expect(isHeatPeriod(value)).toBe(
           typeof value === 'string' && (HEAT_PERIODS as readonly string[]).includes(value),
         );
-        if (isHeatCellSize(value)) expect([1, 2, 5]).toContain(Number(value));
+        expect(isHeatCellSize(value)).toBe(
+          typeof value === 'number' && (HEAT_CELL_SIZES as readonly number[]).includes(value),
+        );
       }),
     );
   });
