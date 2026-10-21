@@ -364,9 +364,17 @@ class MowerSession:
             self._supervisor = asyncio.create_task(self._supervise(), name=f"mower-{self.mower_id}")
 
     async def wait_idle(self) -> None:
-        """Wait until every submitted command has published its result."""
+        """Wait until every submitted command has published its result.
+
+        A finished task leaves the set in its done callback on a later loop turn; ``gather`` over
+        finished tasks does not yield, so only running tasks are awaited (else one yield).
+        """
         while self._commands:
-            await asyncio.gather(*list(self._commands), return_exceptions=True)
+            running = [task for task in self._commands if not task.done()]
+            if running:
+                await asyncio.gather(*running, return_exceptions=True)
+            else:
+                await asyncio.sleep(0)
 
     async def close(self) -> None:
         """Answer in-flight commands, then close the controller and publish the disconnect."""

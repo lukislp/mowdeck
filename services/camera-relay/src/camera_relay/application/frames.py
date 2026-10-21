@@ -655,9 +655,17 @@ class FrameTap:
             _log.exception("vision lease not detached", lease_id=str(lease.lease_id))
 
     async def drain(self) -> None:
-        """Wait for detaches still running (shutdown, tests)."""
+        """Wait for detaches still running (shutdown, tests).
+
+        A finished task leaves the set in its done callback on a later loop turn; ``gather`` over
+        finished tasks does not yield, so only running tasks are awaited (else one yield).
+        """
         while self._detaching:
-            await asyncio.gather(*list(self._detaching), return_exceptions=True)
+            running = [task for task in self._detaching if not task.done()]
+            if running:
+                await asyncio.gather(*running, return_exceptions=True)
+            else:
+                await asyncio.sleep(0)
 
     async def _renew(self, lease: _Lease) -> bool:
         """Extend a stream lease; False when it is gone."""

@@ -187,9 +187,19 @@ class VisionService:
         task.add_done_callback(self._tasks.discard)
 
     async def idle(self) -> None:
-        """Wait until every background analysis and execution finished (tests)."""
+        """Wait until every background analysis and execution finished (tests).
+
+        A finished task leaves ``_tasks`` in its done callback, which runs on a later turn of
+        the event loop. ``gather`` over finished tasks completes without yielding, so waiting on
+        them again would spin forever without ever letting that callback run (and would block
+        the whole loop): wait only for the running tasks and otherwise yield once.
+        """
         while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+            running = [task for task in self._tasks if not task.done()]
+            if running:
+                await asyncio.gather(*running, return_exceptions=True)
+            else:
+                await asyncio.sleep(0)
 
     async def close(self) -> None:
         """Cancel running work; executions stop their drive session first."""

@@ -28,6 +28,7 @@ env:
 jobs:
   python:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       postgres:
         # POSTGRES_IMAGE of infra/compose/.env.example through the mirror (the tag is checked by
@@ -126,6 +127,7 @@ jobs:
   # idempotent bootstrap job of the Compose stack (second run must not write a model).
   openfga-model:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -155,6 +157,7 @@ jobs:
 
   docs:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -174,6 +177,7 @@ jobs:
   # native builds do not (Android: release.yml on v* tags, iOS: the owner's Mac).
   web:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -195,6 +199,7 @@ jobs:
 
   compose:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -211,6 +216,7 @@ jobs:
   # latest main commit, which is why scorecard.yml waits for this workflow.
   gradle-wrapper:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -227,6 +233,7 @@ jobs:
   helm:
     if: github.event_name != 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
       KUBECONFORM_VERSION: v0.8.0
       # sha256 of kubeconform-linux-amd64.tar.gz from the release's CHECKSUMS
@@ -259,6 +266,7 @@ jobs:
   docker:
     if: github.event_name != 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -439,7 +447,7 @@ jobs:
           tags: mowdeck/camera-relay:ci
           cache-from: type=gha,scope=camera-relay
       - name: Media plane integration tests
-        run: uv run pytest services/camera-relay/tests/media -v -p no:cacheprovider
+        run: uv run pytest services/camera-relay/tests/media -v -p no:cacheprovider --timeout 300
         env:
           MOWDECK_TEST_RELAY_MEDIA: "1"
           RELAY_TEST_IMAGE: mowdeck/camera-relay:ci
