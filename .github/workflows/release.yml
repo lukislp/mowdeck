@@ -331,6 +331,9 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build (linux/amd64, local only)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          # No build record artifact (*.dockerbuild): it would land among the release assets.
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
@@ -452,6 +455,9 @@ jobs:
       - name: Build and push (linux/amd64, linux/arm64)
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          # No build record artifact (*.dockerbuild): it would land among the release assets.
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
@@ -668,9 +674,12 @@ jobs:
         with:
           path: src
           persist-credentials: false
+      # Only the artifacts of the jobs above; release_assets.py then keeps only the release files
+      # (SBOMs, chart, APK) and ignores anything else an action uploaded.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: assets
+          path: downloads
+          pattern: "{digest-*,sbom-*.spdx.json,chart,android-apk}"
           merge-multiple: true
       # The written offer for the GPL-family components of the images (SOURCE-OFFER.md), from the
       # SPDX SBOMs; checksummed, signed and attested with the other assets below.
@@ -679,8 +688,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -eu
-          mkdir digests
-          mv assets/digest-*.txt digests/
+          python3 src/tools/repo-checks/scripts/release_assets.py select --version "$VERSION" \
+            --downloads downloads --assets assets --digests digests
           python3 src/tools/repo-checks/scripts/source_offer.py --version "$VERSION" \
             --repository "$REPOSITORY" --repo-root src --out assets/SOURCE-OFFER.md \
             assets/sbom-*.spdx.json
@@ -706,6 +715,8 @@ jobs:
               --certificate-oidc-issuer https://token.actions.githubusercontent.com "$file"
           done
           cp "$BUNDLE" "assets/mowdeck-$VERSION.intoto.jsonl"
+          python3 src/tools/repo-checks/scripts/release_assets.py check --version "$VERSION" \
+            --assets assets
       - name: Attach the assets and complete the release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
