@@ -136,6 +136,7 @@ config:
   NOTIFICATIONS_MOWING_MIN_SECONDS: "120"
   NOTIFICATIONS_GEOFENCE_MARGIN_METERS: "5"
   NOTIFICATIONS_ACK_SILENCE_SECONDS: "3600"
+  NOTIFICATIONS_DEFAULT_LANGUAGE: "de"
 
   # --- Scheduler ---
   # open_meteo (needs internet access to api.open-meteo.com) or static (offline).
