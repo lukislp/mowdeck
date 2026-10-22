@@ -7,7 +7,15 @@ import { m } from '$lib/paraglide/messages';
 import { getLocale } from '$lib/paraglide/runtime';
 import type { Locale } from '$lib/schedules/types';
 
-import type { ProposalState, ProposalStep, RiskFlag, StepOutcome, VisionTask } from './api';
+import type {
+  JobArea,
+  ProposalJob,
+  ProposalState,
+  ProposalStep,
+  RiskFlag,
+  StepOutcome,
+  VisionTask,
+} from './api';
 
 /** Below this share of full speed an axis counts as still (the model rounds to 0.05). */
 export const AXIS_DEADBAND = 0.05;
@@ -214,4 +222,39 @@ export function formatCost(
     minimumFractionDigits: 2,
     maximumFractionDigits: usd < 0.01 ? 4 : 2,
   }).format(usd);
+}
+
+/** The status of a planned area of the job (done, current, next, planned). */
+export function jobAreaLabel(status: JobArea['status'], locale: Locale = current()): string {
+  const options = { locale };
+  switch (status) {
+    case 'done':
+      return m.vision_job_area_done({}, options);
+    case 'current':
+      return m.vision_job_area_current({}, options);
+    case 'next':
+      return m.vision_job_area_next({}, options);
+    case 'planned':
+      return m.vision_job_area_planned({}, options);
+  }
+}
+
+/**
+ * What approving a `resume` does, in one sentence: the drive steps first (when there are any),
+ * then the job continues with the current area and the next one ("First the drive steps below,
+ * blades off, then the mower continues the job: Front lawn, then Back lawn.").
+ */
+export function resumePlan(
+  steps: number,
+  job: ProposalJob | null | undefined,
+  locale: Locale = current(),
+): string {
+  const options = { locale };
+  const first =
+    steps > 0 ? m.vision_resume_drive_first({}, options) : m.vision_resume_no_drive({}, options);
+  const area = job?.current_area ?? null;
+  const next = job?.next_area ?? null;
+  if (area && next) return `${first} ${m.vision_resume_target_next({ area, next }, options)}`;
+  if (area) return `${first} ${m.vision_resume_target({ area }, options)}`;
+  return `${first} ${m.vision_resume_target_unknown({}, options)}`;
 }

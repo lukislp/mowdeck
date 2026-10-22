@@ -5,14 +5,17 @@
  * model `fake/recover` and a test call answers ok; (b) a simulated mower that gets stuck after
  * 20 s of mowing (`stuck_after_seconds`, a development option of the simulator that Fleet passes
  * through) shows the error state, the AI assist sheet proposes the fake maneuver (back, turn,
- * forward), the owner approves it (blades off), the outcome is "recovered" with the mower back in
- * idle or mowing, and Fleet lists the drive session with `origin: "vision"`. Stereo: the settings
+ * forward), the owner approves it (blades off), the outcome is "recovered" with the mower free
+ * again (idle, mowing, or paused when the error interrupted its job), and Fleet lists the drive session with `origin: "vision"`. Stereo: the settings
  * page has "Stereo-Bilder, wenn verfügbar" switched on by default; with both front cameras of the
  * simulator side by side in the camera panel the request carries both frames, and the proposal
  * shows "Stereo" with the two images (left and right) and `stereo: true` in the API; Vision adds
  * its top-down map rendering as a third image ("Karte"). (c) Return to dock: with the cautious
  * fake model `fake/decline` ("recovery not recommended") a paused mower on its lawn still gets
  * the labelled dock fallback; approving it sends the normal dock command and no drive session.
+ * (d) Resume: with `fake/resume` a mower stuck during a two-area job gets the proposal to continue
+ * it (the job's areas, current and next, shown in the sheet); approving drives the short maneuver
+ * with the blades off, then `resume_mow` continues the job and the mower mows again.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
@@ -146,7 +149,10 @@ test('vision: fake provider set up, a stuck mower recovered by an approved AI ma
     timeout: 30_000,
   });
   await expect(sheet.getByTestId('assist-outcome')).toContainText('Der Mäher ist wieder frei.');
-  await expect(page.getByTestId('mower-state')).toContainText(/Bereit|Mäht/, { timeout: 30_000 });
+  // Free again: idle, or paused when the error interrupted the job (resume_mow continues it).
+  await expect(page.getByTestId('mower-state')).toContainText(/Bereit|Mäht|Pausiert/, {
+    timeout: 30_000,
+  });
 
   // Fleet records the maneuver as a drive session on behalf of the Vision service.
   await expect
@@ -237,6 +243,74 @@ test('vision: the AI declines, the dock fallback is offered and sends the mower 
   });
   const items = ((await sessions.json()) as { items: { origin?: string | null }[] }).items;
   expect(items.some((item) => item.origin === 'vision')).toBe(false);
+  await sheet.getByTestId('assist-done').click();
+  csp.assertNone();
+});
+
+test('vision: a mower stuck in a two-area job continues it after an approved resume', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(300_000);
+  const csp = watchCsp(page);
+  const owner = await registerByApi(request, actor('vision-resume'));
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  const saved = await request.put('/api/v1/vision/me/provider', {
+    headers: auth,
+    data: { model: 'fake/resume' },
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+  // Stuck after 20 s of mowing the front lawn; the back lawn is still to come.
+  const mowerId = await createStuckMower(request, owner, `Luba resume ${RUN}`);
+  await waitForMap(request, owner, mowerId);
+  await commandByApi(request, owner, mowerId, { kind: 'start_mow', area_ids: ['front', 'back'] });
+  await loginByUi(page, owner);
+  await page.goto(`/mowers/${mowerId}`);
+  await expect(page.getByTestId('mower-state')).toContainText('Fehler', { timeout: 60_000 });
+
+  await page.getByRole('button', { name: 'Mit KI-Hilfe befreien' }).click();
+  const sheet = page.getByRole('dialog', { name: 'KI-Hilfe' });
+  await expect(sheet.getByTestId('assist-provider')).toContainText('fake/resume');
+  await sheet.getByTestId('assist-start').click();
+  await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'proposed', {
+    timeout: 30_000,
+  });
+  await expect(sheet.getByTestId('assist-resume')).toContainText('Mähauftrag fortsetzen');
+  await expect(sheet.getByTestId('assist-resume-plan')).toContainText('Erst die Fahrschritte');
+  await expect(sheet.getByTestId('assist-resume-plan')).toContainText('Back lawn');
+  const areas = sheet.getByTestId('assist-job-areas').getByRole('listitem');
+  await expect(areas).toHaveCount(2);
+  await expect(areas.nth(0)).toContainText('Front lawn');
+  await expect(areas.nth(0)).toContainText('Aktuell');
+  await expect(areas.nth(1)).toContainText('Back lawn');
+  await expect(areas.nth(1)).toContainText('Als Nächstes');
+  await expect(sheet.getByTestId('assist-steps').getByRole('listitem').first()).toContainText(
+    'Zurück',
+  );
+  await expect(page.getByRole('button', { name: 'Not-Stopp' })).toBeVisible();
+  const listed = await request.get(`/api/v1/vision/mowers/${mowerId}/proposals?limit=1`, {
+    headers: auth,
+  });
+  const newest = (
+    (await listed.json()) as {
+      items: { action: string; job: { status: string; next_area: string | null } | null }[];
+    }
+  ).items[0];
+  expect(newest?.action).toBe('resume');
+  expect(newest?.job).toMatchObject({ status: 'paused_by_error', next_area: 'Back lawn' });
+
+  // Approve: the short maneuver (blades off), then the job continues.
+  await sheet.getByRole('button', { name: 'Freigeben und Auftrag fortsetzen' }).click();
+  await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'recovered', {
+    timeout: 45_000,
+  });
+  await expect(sheet.getByTestId('assist-outcome')).toContainText('Der Mähauftrag läuft weiter.');
+  await expect(page.getByTestId('mower-state')).toContainText('Mäht', { timeout: 30_000 });
+  const sessions = await request.get(`/api/v1/fleet/mowers/${mowerId}/drive-sessions`, {
+    headers: auth,
+  });
+  const items = ((await sessions.json()) as { items: { origin?: string | null }[] }).items;
+  expect(items.some((item) => item.origin === 'vision')).toBe(true);
   await sheet.getByTestId('assist-done').click();
   csp.assertNone();
 });

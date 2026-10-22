@@ -368,7 +368,11 @@ class VisionProposalSummary(ContractModel):
     round: int = Field(ge=1, le=10)
     state: VisionProposalState
     final: bool
-    action: Literal["drive", "return_to_dock"] | None = None
+    action: Literal["drive", "return_to_dock", "resume"] | None = Field(
+        default=None,
+        description="`drive`, `return_to_dock`, or `resume` (optional drive steps, then the "
+        "paused job continues); null before the analysis decided one.",
+    )
     steps: int = Field(default=0, ge=0, le=6)
     fallback: bool = False
     confidence: float | None = Field(default=None, ge=0, le=1)

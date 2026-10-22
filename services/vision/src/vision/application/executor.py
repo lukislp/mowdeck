@@ -23,6 +23,21 @@ check (:func:`~vision.domain.dock.dock_route`: no lift, tilt or safety stop, the
 mapped area linked to the dock) runs again on the newest state and map, then the normal
 ``return_to_dock`` goes through ``fleet.commands.issue`` on behalf of the approver; the mower
 drives home by itself.
+
+A proposal with action ``resume`` continues the paused mowing job, in this order:
+
+1. The job context (:func:`~vision.domain.job.job_context`) is built again from the newest
+   state, route and map; without a paused job that ``resume_mow`` can continue (no job, a
+   running job, a spot run, a lift, tilt or safety stop) nothing runs (``aborted``).
+2. Its drive steps, if any, run exactly like a ``drive`` (steps 1 to 5 above, blades off, the
+   same limits and aborts); a run that aborts or does not free the mower ends there
+   (``aborted`` or ``not_recovered``, "the job was not resumed").
+3. Verify before resuming (:func:`~vision.domain.rules.resume_gate`): a recent state without
+   an error, a lift or offline, and the job still paused; otherwise ``not_recovered``.
+4. ``resume_mow`` (the command of the app's "continue") through ``fleet.commands.issue`` on
+   behalf of the approver, then up to ``resume_confirm_seconds`` for the mower to report
+   ``mowing`` (or the command's ``executed`` result): ``recovered``; a refused or failed
+   command is ``not_recovered`` with the mower's reason.
 """
 
 import asyncio
@@ -42,9 +57,11 @@ from mowdeck_contracts.v1 import (
     DriveStopRequest,
     IssueCommandRequest,
     ManualDrive,
+    MowerActivity,
     MowerMap,
     MowerState,
     PrincipalRef,
+    ResumeMow,
     ReturnToDock,
     VisionTask,
     drive_correlation_id,
@@ -62,6 +79,7 @@ from vision.application.ports import (
 )
 from vision.domain.context import Pose, pose_of
 from vision.domain.dock import dock_route
+from vision.domain.job import JobContext, job_context, resume_problem
 from vision.domain.models import (
     Proposal,
     ProposalAction,
@@ -73,6 +91,7 @@ from vision.domain.rules import (
     FRAME_TTL_MS,
     Geofence,
     frames_for,
+    resume_gate,
     start_problem,
     state_abort_reason,
     total_seconds,
@@ -82,7 +101,7 @@ from vision.domain.rules import (
 _log = get_logger("vision.executor")
 
 _NO_STOP_FRAME = ("emergency_stop", "sensor_stop")
-_FLEET_SILENT = "Fleet did not answer return_to_dock"
+_FLEET_SILENT = "Fleet did not answer"
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +116,8 @@ class DriveConfig:
     geofence_margin_m: float = 2.0
     settle_seconds: float = 1.5
     min_move_m: float = 0.2
+    resume_confirm_seconds: float = 20.0
+    """After ``resume_mow``: how long to wait for the mower to report ``mowing``."""
 
 
 @dataclass(slots=True)
@@ -109,6 +130,7 @@ class RunOutcome:
     start_pose: Pose | None = None
     end_pose: Pose | None = None
     return_command_id: UUID | None = None
+    """The command sent after approval: ``return_to_dock`` or ``resume_mow``."""
 
 
 @dataclass(slots=True)
@@ -167,11 +189,34 @@ class Executor:
         cancelled: Cancelled,
         on_verifying: Callable[[UUID | None], Awaitable[None]],
     ) -> RunOutcome:
-        """Drive the proposal's steps and check the outcome."""
+        """Execute the approved proposal (steps, dock command or resume) and check the outcome."""
         assert proposal.assessment is not None  # noqa: S101 - only proposed rows get here
         if proposal.action is ProposalAction.RETURN_TO_DOCK:
             return await self._dock_return(proposal, approver, account_id)
-        steps = proposal.assessment.proposal
+        if proposal.action is ProposalAction.RESUME:
+            return await self._resume(
+                proposal, approver, account_id, cancelled=cancelled, on_verifying=on_verifying
+            )
+        return await self._drive_steps(
+            proposal,
+            approver,
+            account_id,
+            proposal.assessment.proposal,
+            cancelled=cancelled,
+            on_verifying=on_verifying,
+        )
+
+    async def _drive_steps(
+        self,
+        proposal: Proposal,
+        approver: PrincipalRef,
+        account_id: UUID,
+        steps: list[ProposedStep],
+        *,
+        cancelled: Cancelled,
+        on_verifying: Callable[[UUID | None], Awaitable[None]],
+    ) -> RunOutcome:
+        """Drive ``steps`` in a drive session and verify that they helped."""
         watch = self.view.watch(proposal.mower_id)
         try:
             prepared = self._prepare(proposal, approver, account_id, watch)
@@ -227,7 +272,7 @@ class Executor:
             return RunOutcome(ProposalState.ABORTED, detail[:500], start_pose=pose)
         command_id, problem = await self._issue_dock(approver, account_id, proposal.mower_id)
         if problem is not None:
-            failed = problem == _FLEET_SILENT
+            failed = problem.startswith(_FLEET_SILENT)
             state = ProposalState.FAILED if failed else ProposalState.NOT_RECOVERED
             return RunOutcome(state, problem, start_pose=pose)
         _log.info("vision return to dock issued", proposal_id=str(proposal.id))
@@ -242,22 +287,168 @@ class Executor:
         self, approver: PrincipalRef, account_id: UUID, mower_id: UUID
     ) -> tuple[UUID | None, str | None]:
         """``return_to_dock`` through Fleet: the command id, or the problem."""
+        return await self._issue(approver, account_id, mower_id, ReturnToDock())
+
+    async def _issue(
+        self,
+        approver: PrincipalRef,
+        account_id: UUID,
+        mower_id: UUID,
+        command: ReturnToDock | ResumeMow,
+    ) -> tuple[UUID | None, str | None]:
+        """A job command through Fleet on the approver's behalf: the command id, or the
+        problem (starting with :data:`_FLEET_SILENT` when Fleet did not answer)."""
         request = IssueCommandRequest(
             on_behalf_of=approver,
             account_id=account_id,
             mower_id=mower_id,
-            command=CommandRequest(command=ReturnToDock()),
+            command=CommandRequest(command=command),
             origin="vision",
         )
         try:
             reply = await self.fleet.issue(request)
         except Exception as exc:
-            _log.warning("return_to_dock failed", error=repr(exc))
-            return None, _FLEET_SILENT
+            _log.warning("vision command failed", kind=command.kind, error=repr(exc))
+            return None, f"{_FLEET_SILENT} {command.kind}"
         if reply.accepted is None:
             code = reply.error.code if reply.error else "unknown"
-            return None, f"return_to_dock was refused: {code}"
+            return None, f"{command.kind} was refused: {code}"
         return reply.accepted.command_id, None
+
+    # --- resume ---------------------------------------------------------------------------
+
+    def _recent_state(self, proposal: Proposal) -> tuple[MowerState | None, str | None]:
+        """The newest state of the proposal's mower, or why there is none to act on."""
+        observed = self.view.state(proposal.mower_id)
+        now = self.view.monotonic()
+        if observed is None or now - observed.received > self.config.start_state_max_age_seconds:
+            return None, "no_state: no recent state of the mower"
+        if observed.state.account_id != proposal.account_id:
+            return None, "no_state: no state of this account"
+        return observed.state, None
+
+    def _job(self, proposal: Proposal, state: MowerState) -> JobContext | None:
+        """The job context on the newest state, route and map (same account only)."""
+        mapped = self.view.mower_map(proposal.mower_id)
+        mower_map = mapped[1] if mapped is not None and mapped[0] == proposal.account_id else None
+        routed = self.view.mow_path(proposal.mower_id)
+        path = routed[1] if routed is not None and routed[0] == proposal.account_id else None
+        pose = pose_of(state, mower_map)
+        return job_context(
+            state,
+            mower_map=mower_map,
+            here=(pose.x, pose.y) if pose else None,
+            theta_rad=pose.theta_rad if pose else None,
+            path=path,
+            last_start=self.view.last_start(proposal.mower_id),
+        )
+
+    async def _resume(
+        self,
+        proposal: Proposal,
+        approver: PrincipalRef,
+        account_id: UUID,
+        *,
+        cancelled: Cancelled,
+        on_verifying: Callable[[UUID | None], Awaitable[None]],
+    ) -> RunOutcome:
+        """Check the job, drive the optional steps, verify, then ``resume_mow``."""
+        assert proposal.assessment is not None  # noqa: S101 - only proposed rows get here
+        state, missing = self._recent_state(proposal)
+        if state is None:
+            return RunOutcome(ProposalState.ABORTED, missing or "no_state")
+        refused = resume_problem(self._job(proposal, state), state)
+        if refused is not None:
+            return RunOutcome(ProposalState.ABORTED, f"resume refused: {refused}"[:500])
+        steps = proposal.assessment.proposal
+        if not steps:
+            await on_verifying(None)
+            nothing_driven = RunOutcome(ProposalState.RECOVERED, "")
+            return await self._send_resume(proposal, approver, account_id, nothing_driven)
+        driven = await self._drive_steps(
+            proposal, approver, account_id, steps, cancelled=cancelled, on_verifying=on_verifying
+        )
+        if driven.state is not ProposalState.RECOVERED:
+            driven.detail = f"{driven.detail}; the job was not resumed"[:500]
+            return driven
+        return await self._send_resume(proposal, approver, account_id, driven)
+
+    async def _send_resume(
+        self, proposal: Proposal, approver: PrincipalRef, account_id: UUID, outcome: RunOutcome
+    ) -> RunOutcome:
+        """Verify that the error cleared and the job is still paused, send ``resume_mow`` and
+        wait for the mower to mow again; completes ``outcome`` (of the drive, if any)."""
+        before = f"{outcome.detail}; " if outcome.detail else ""
+        state, missing = self._recent_state(proposal)
+        problem = missing or resume_gate(state)
+        job = self._job(proposal, state) if state is not None else None
+        if problem is None and state is not None:
+            problem = resume_problem(job, state)
+            if problem is None and job is not None and job.status != "paused":
+                problem = f"the job is {job.status.replace('_', ' ')}"
+        if problem is not None:
+            outcome.state = ProposalState.NOT_RECOVERED
+            outcome.detail = f"{before}the job was not resumed: {problem}"[:500]
+            return outcome
+        watch = self.view.watch(proposal.mower_id)
+        try:
+            command_id, issue_problem = await self._issue(
+                approver, account_id, proposal.mower_id, ResumeMow()
+            )
+            if issue_problem is not None or command_id is None:
+                issue_problem = issue_problem or "resume_mow was not accepted"
+                failed = issue_problem.startswith(_FLEET_SILENT)
+                outcome.state = ProposalState.FAILED if failed else ProposalState.NOT_RECOVERED
+                outcome.detail = f"{before}{issue_problem}"[:500]
+                return outcome
+            outcome.return_command_id = command_id
+            _log.info("vision resume issued", proposal_id=str(proposal.id))
+            confirmed, why = await self._await_mowing(proposal, watch, command_id)
+        finally:
+            watch.close()
+        target = _job_words(job)
+        if confirmed is False:
+            outcome.state = ProposalState.NOT_RECOVERED
+            outcome.detail = f"{before}resume_mow failed: {why}"[:500]
+        elif confirmed is None:
+            outcome.state = ProposalState.RECOVERED
+            outcome.detail = (
+                f"{before}resume_mow sent{target}; the mower has not reported mowing within "
+                f"{self.config.resume_confirm_seconds:g} s"
+            )[:500]
+        else:
+            outcome.state = ProposalState.RECOVERED
+            outcome.detail = f"{before}the job continues{target}"[:500]
+        return outcome
+
+    async def _await_mowing(
+        self, proposal: Proposal, watch: MowerWatch, command_id: UUID
+    ) -> tuple[bool | None, str]:
+        """True when the mower mows again (or the command executed), False with the reason
+        when it refused or an emergency stop came, None when nothing was heard in time."""
+        deadline = self.view.monotonic() + self.config.resume_confirm_seconds
+        while (remaining := deadline - self.view.monotonic()) > 0:
+            event = await watch.next(remaining)
+            if event is None:
+                break
+            if event.kind == "emergency_stop":
+                return False, "emergency stop"
+            if event.kind == "result" and event.result is not None:
+                result = event.result
+                if result.command_id != command_id:
+                    continue
+                if result.status in (CommandStatus.REJECTED, CommandStatus.FAILED):
+                    return False, result.reason or str(result.status)
+                if result.status is CommandStatus.EXECUTED:
+                    return True, "executed"
+            if (
+                event.kind == "state"
+                and event.state is not None
+                and event.state.account_id == proposal.account_id
+                and event.state.activity is MowerActivity.MOWING
+            ):
+                return True, "mowing"
+        return None, "no confirmation"
 
     # --- start ----------------------------------------------------------------------------
 
@@ -524,3 +715,12 @@ class Executor:
             outcome.detail = f"approached the dock, but {problem}"
             return
         outcome.return_command_id = command_id
+
+
+def _job_words(job: JobContext | None) -> str:
+    """The job's areas for an outcome text: ``(Front lawn, next Back lawn)``, or empty."""
+    if job is None or job.current_area is None:
+        return ""
+    if job.next_area is None:
+        return f" ({job.current_area})"
+    return f" ({job.current_area}, next {job.next_area})"

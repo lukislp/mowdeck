@@ -470,7 +470,10 @@ export type Type11 = "notification"
  */
 export type VisionProposalEvent = ("created" | "updated")
 export type MowerId7 = string
-export type Action = (("drive" | "return_to_dock") | null)
+/**
+ * `drive`, `return_to_dock`, or `resume` (optional drive steps, then the paused job continues); null before the analysis decided one.
+ */
+export type Action = (("drive" | "return_to_dock" | "resume") | null)
 export type Confidence = (number | null)
 export type ErrorCode1 = (string | null)
 /**

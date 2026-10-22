@@ -16,8 +16,10 @@ from mowdeck_contracts.v1 import (
     ManualDrive,
     MowerActivity,
     MowerCommand,
+    PauseMow,
     PrincipalKind,
     PrincipalRef,
+    ResumeMow,
     ReturnToDock,
     SetLight,
     StartMow,
@@ -86,7 +88,8 @@ async def test_control_stuck_after_seconds_of_mowing_and_driven_free() -> None:
     assert sim.stuck
     sim.tick(0.4)
     state = await sim.get_state()
-    assert state.activity is MowerActivity.IDLE
+    # The job the error interrupted waits for resume_mow, like on a real mower.
+    assert state.activity is MowerActivity.PAUSED
     assert state.error_code is None and not state.drive_recoverable
     assert math.dist(sim.local_position, stuck_at) >= 0.3
     await session.update(0.0, 1.0, blade_on=False)
@@ -94,6 +97,40 @@ async def test_control_stuck_after_seconds_of_mowing_and_driven_free() -> None:
     sim.tick(0.5)
     assert sim.theta != before, "turning works again once free"
     await session.close()
+
+
+async def test_control_stuck_job_keeps_its_route_and_resumes_after_being_driven_free() -> None:
+    sim = _sim()
+    await sim.connect()
+    assert (await sim.execute(StartMow(area_ids=["front", "back"]))).status is (
+        CommandStatus.EXECUTED
+    )
+    sim.tick(5)
+    route = sim.current_path()
+    assert route is not None and route.area_ids == ["front", "back"]
+    sim.inject_stuck()
+    stuck = sim.current_path()
+    assert stuck is not None and stuck.path_hash == route.path_hash, "the route stays while stuck"
+    session = await sim.start_drive_session()
+    await session.update(-1.0, 0.0, blade_on=False)
+    sim.tick(0.8)
+    state = await sim.get_state()
+    assert state.activity is MowerActivity.PAUSED and state.error_code is None
+    assert sim.current_path() is not None, "the interrupted job is still there"
+    await session.close()
+    assert (await sim.execute(ResumeMow())).status is CommandStatus.EXECUTED
+    assert (await sim.get_state()).activity is MowerActivity.MOWING
+
+
+async def test_control_manual_drive_still_cancels_a_paused_job() -> None:
+    sim = _sim()
+    await sim.connect()
+    await sim.execute(StartMow(area_ids=["front"]))
+    sim.tick(2)
+    await sim.execute(PauseMow())
+    session = await sim.start_drive_session()
+    await session.close()
+    assert (await sim.execute(ResumeMow())).status is CommandStatus.REJECTED
 
 
 async def test_control_stuck_happens_once_per_job_and_inject_works() -> None:

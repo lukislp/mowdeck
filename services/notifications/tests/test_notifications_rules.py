@@ -628,3 +628,35 @@ def test_notifications_rules_firmware_watch_round_trips() -> None:
     assert data["firmware_state"] == "available" and data["firmware_offered"] == "2"
     restored = MowerWatch.from_json(MOWER, ACCOUNT, data)
     assert restored == run.watch
+
+
+def test_rules_vision_resume_proposal_has_its_own_body() -> None:
+    from mowdeck_contracts.v1 import PrincipalKind, PrincipalRef, VisionProposalCreated, VisionTask
+
+    from notifications.domain.rules import vision_proposal_event
+    from notifications.messages import load_catalog
+
+    mower_id = uuid4()
+    payload = VisionProposalCreated(
+        proposal_id=uuid4(),
+        mower_id=mower_id,
+        account_id=uuid4(),
+        task=VisionTask.RECOVER,
+        round=1,
+        requested_by=PrincipalRef(subject=uuid4(), kind=PrincipalKind.USER),
+        situation="stuck_on_obstacle",
+        confidence=0.8,
+        steps=1,
+        action="resume",
+        expires_at=T0 + timedelta(minutes=5),
+        link=f"/mowers/{mower_id}?assist=1",
+        created_at=T0,
+    )
+    event = vision_proposal_event(payload, 5)
+    assert event.body_key == "vision_proposal.body_resume"
+    catalog = load_catalog()
+    for language in ("de", "en"):
+        assert "vision_proposal.body_resume" in catalog.keys(language)
+        assert "vision_auto_proposal.body_resume" in catalog.keys(language)
+    body = catalog.render("en", event.body_key, event.params)
+    assert body.startswith("Continue the paused mowing job")

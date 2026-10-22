@@ -271,6 +271,39 @@ async def test_realtime_vision_proposals_reach_subscribers_of_the_account() -> N
         await subscribed.nothing()
 
 
+async def test_realtime_resume_proposal_carries_its_action() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        client = await h.connect_as(owner)
+        await client.subscribe(mower_id)
+        event = created(owner.account_id, mower_id).model_copy(
+            update={"action": "resume", "steps": 1}
+        )
+        await _event(h, VISION_PROPOSAL_CREATED, owner.account_id, event)
+        message = await client.expect("vision_proposal")
+        RealtimeServerMessage.model_validate(message)
+        assert message["proposal"]["action"] == "resume" and message["proposal"]["steps"] == 1
+        update = VisionProposalUpdated(
+            proposal_id=event.proposal_id,
+            mower_id=mower_id,
+            account_id=owner.account_id,
+            task=VisionTask.RECOVER,
+            round=1,
+            state=VisionProposalState.RECOVERED,
+            final=True,
+            action="resume",
+            steps=1,
+            link=event.link,
+            updated_at=NOW + timedelta(minutes=1),
+        )
+        await _event(h, VISION_PROPOSAL_UPDATED, owner.account_id, update)
+        done = await client.expect("vision_proposal", event="updated")
+        RealtimeServerMessage.model_validate(done)
+        assert done["proposal"]["action"] == "resume"
+        assert done["proposal"]["state"] == "recovered"
+
+
 async def test_realtime_event_with_mismatching_account_is_dropped() -> None:
     async with harness() as h:
         owner = await h.owner()

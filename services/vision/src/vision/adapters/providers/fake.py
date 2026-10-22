@@ -4,10 +4,12 @@ The model string selects the behaviour: ``fake/recover`` (the default) answers `
 "back 1 s, turn about 30 degrees, forward 1 s" and ``find_dock`` with a turn towards the dock
 and a short approach computed from the scene context; ``fake/dock`` answers
 ``return_to_dock`` whenever the context's ``dock_route`` finds it applicable (else like
-``fake/recover``); ``fake/decline`` recommends nothing, like a cautious model ("recovery not
-recommended", which lets the service's dock fallback step in); ``fake/people`` flags people,
-``fake/low_confidence`` is unsure, ``fake/empty`` proposes nothing, ``fake/fail`` and
-``fake/invalid`` fail like a broken model.
+``fake/recover``); ``fake/resume`` answers ``resume`` whenever the context's ``job`` is
+resumable (with a stuck error first a short backward move and a turn towards the entry of the
+connection to the next area; else like ``fake/recover``); ``fake/decline`` recommends
+nothing, like a cautious model ("recovery not recommended", which lets the service's dock
+fallback step in); ``fake/people`` flags people, ``fake/low_confidence`` is unsure,
+``fake/empty`` proposes nothing, ``fake/fail`` and ``fake/invalid`` fail like a broken model.
 """
 
 import math
@@ -38,6 +40,37 @@ RECOVER_STEPS = (
 
 def _dock_applies(context: SceneContext) -> bool:
     return context.dock_route is not None and context.dock_route.return_to_dock_applicable
+
+
+def _resume_applies(context: SceneContext, task: VisionTask) -> bool:
+    return task is VisionTask.RECOVER and context.job is not None and context.job.resumable
+
+
+def _resume_answer(context: SceneContext) -> AssessmentOut:
+    """Continue the paused job; a stuck mower first backs off and turns to the entry."""
+    steps: list[ProposedStep] = []
+    if context.mower is not None and context.mower.activity == "error":
+        steps.append(ProposedStep(linear=-0.8, angular=0.0, seconds=1.0))
+        link = context.job.connection_to_next if context.job else None
+        if link is not None and abs(link.entry_bearing_deg) > 10:
+            seconds = min(
+                MAX_STEP_SECONDS,
+                abs(link.entry_bearing_deg) / (0.5 * context.motion.turn_deg_per_s_at_1),
+            )
+            steps.append(
+                ProposedStep(
+                    linear=0.0,
+                    angular=math.copysign(0.5, link.entry_bearing_deg),
+                    seconds=round(seconds, 2),
+                )
+            )
+    return AssessmentOut(
+        situation=Situation.STUCK_ON_OBSTACLE,
+        confidence=0.8,
+        action=ProposalAction.RESUME,
+        proposal=steps,
+        rationale="The passage to the next area is clear: back off a little and continue the job.",
+    )
 
 
 class FakeVisionProvider:
@@ -75,6 +108,8 @@ class FakeVisionProvider:
                 rationale="Recovery is not recommended: a safe route cannot be verified.",
                 abort_reasons=["a safe route cannot be verified from the images"],
             )
+        elif self.mode == "resume" and _resume_applies(context, task):
+            answer = _resume_answer(context)
         elif self.mode == "dock" and _dock_applies(context):
             answer = AssessmentOut(
                 situation=Situation.AWAY_FROM_DOCK,
