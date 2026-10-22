@@ -32,13 +32,36 @@ around the mower) and a JSON scene context. Decide what is going on and choose t
 `action`. A human reviews every proposal before anything runs.
 
 Actions:
+- `resume`: continue the paused mowing job (the app's "continue"); the mower then mows the rest \
+of its planned areas by itself. Optionally put a short maneuver in `proposal` that frees the \
+mower or brings it through a narrow spot first (same rules as `drive`); the job continues only \
+after that maneuver worked and the error cleared. Only when `job.resumable` is true and the task \
+is `recover`.
 - `return_to_dock`: the normal dock command. The mower drives home by itself on its mapped areas \
-and transfer paths with its own sensors. This is the lowest-risk option: prefer it whenever \
-`dock_route.return_to_dock_applicable` is true, also for task `recover` (a trapped mower in a \
-mapped area usually finds its way home), unless the images clearly show that the mower is wedged \
-and must first be freed by a short drive. Leave `proposal` empty.
+and transfer paths with its own sensors. Leave `proposal` empty.
 - `drive`: a short maneuver in `proposal`.
 - `none`: nothing is safe; explain in `abort_reasons`.
+
+Choosing between them:
+- A running job comes first. When `job` shows a job that is paused (`paused` or \
+`paused_by_error`, `job.resumable` true) and the images show enough clearance for the mower to \
+go on, choose `resume`, not `return_to_dock`: sending the mower home abandons the rest of the \
+job. This holds in particular when `job.connection_to_next.mower_at_entry` is true: the mower \
+stopped at the entry of the transfer path (channel) to the next planned area, often near a gate, \
+wall or fence where its sensors are cautious. If the passage is wide enough, propose `resume`, \
+with a short, slow drive through or towards the gap when the mower must first be freed or \
+aligned (use `entry_bearing_deg` and `entry_distance_m`; with a stuck error, include at least \
+one small move, the error clears once the mower moved).
+- The mower's obstacle sensitivity can be set high, so it reports "stuck" (for example error \
+1201) or "obstacle" although nothing blocks it. Error 1201 alone is no reason to give up the job \
+or to send the mower home: the images decide whether passing is safe. Judge the clearance in \
+the images (and the stereo pair, if any); the map only tells you where the passage is.
+- `return_to_dock` is the lowest-risk option when continuing is unsafe or impossible: no job \
+(`job` is null) or `job.resumable` is false, the images show a real blockage (the gap is too \
+narrow, something solid or soft lies in the way, the mower is wedged), or task `find_dock`. \
+Prefer it then whenever `dock_route.return_to_dock_applicable` is true, also for task \
+`recover` (a trapped mower in a mapped area usually finds its way home), unless the images \
+clearly show that the mower is wedged and must first be freed by a short drive.
 
 The mower: a robotic lawn mower about 0.7 m long and 0.6 m wide that drives like a tank. \
 `linear` goes from -1 (full speed backward) to 1 (full speed forward), `angular` from -1 (turn \
@@ -53,7 +76,12 @@ Geometry in the context is in the mower frame: `forward` metres ahead, `left` me
 of the mower. `shapes` are the mapped areas, transfer paths, no-go zones and obstacles nearby; \
 `dock` is the charging station with its distance and bearing (left positive). `dock_route` says \
 which area the mower and the dock are in, whether mapped paths link them and whether return to \
-dock is applicable (with the reason). `recent_track` are the last positions with an RTK fix. The \
+dock is applicable (with the reason). `job` is the mowing job the mower was running: its \
+`status`, the planned `areas` in order (each `done`, `current`, `next` or `planned`), \
+`current_area`, `next_area`, whether `resume` fits (`resumable`, `resume_note`) and \
+`connection_to_next`, the transfer path from the current to the next area with its entry seen \
+from the mower (`entry_forward`, `entry_left`, `entry_distance_m`, `entry_bearing_deg`, \
+`mower_at_entry`, `entry_ahead`). `recent_track` are the last positions with an RTK fix. The \
 map image shows the same, heading up (the top edge is ahead of the mower).
 
 Rules:
@@ -67,8 +95,9 @@ normal return to dock). Never try to drive into the dock.
 (pond, pool) or a road, add the matching risk flag. Any risk flag means nothing is executed, so \
 flag honestly.
 - An unusable camera image is no reason to refuse `return_to_dock`: the mower navigates by its \
-map and sensors. For `drive`, if you are unsure, lower `confidence`, explain in `abort_reasons` \
-and choose `none`. A wrong move is worse than no move.
+map and sensors. `resume` needs images that show the way ahead clear; without usable images do \
+not choose `resume`. For `drive`, if you are unsure, lower `confidence`, explain in \
+`abort_reasons` and choose `none`. A wrong move is worse than no move.
 - `rationale`: one to three short sentences a gardener understands.
 - `previous_rounds` lists earlier attempts that did not help; do not repeat them unchanged.
 - When `stereo` is true, images 1 and 2 are the left and right front camera of the same moment. \
@@ -109,12 +138,17 @@ ASSESSMENT_SCHEMA: Final[dict[str, Any]] = {
         "action": {
             "type": "string",
             "enum": [a.value for a in ProposalAction],
-            "description": "return_to_dock (preferred when applicable), drive or none.",
+            "description": (
+                "resume (continue the paused job, when job.resumable and passing is safe), "
+                "return_to_dock (when continuing is unsafe or impossible and it applies), "
+                "drive or none."
+            ),
         },
         "proposal": {
             "type": "array",
             "description": (
-                f"Ordered drive steps for action drive, at most {MAX_STEPS}; empty otherwise."
+                f"Ordered drive steps for action drive, at most {MAX_STEPS}; for resume the "
+                "optional short maneuver before the job continues; empty otherwise."
             ),
             "items": {
                 "type": "object",

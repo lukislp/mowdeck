@@ -6,6 +6,10 @@ Safety rules (ADR 0033, plan "Risiken"):
 * An answer with any risk flag, a confidence below the threshold or no step is never proposed;
   an answer ``return_to_dock`` only when :func:`~vision.domain.dock.dock_route` finds it
   applicable (mower in a mapped area linked to the dock, no lift, tilt or other safety stop).
+* An answer ``resume`` only for task ``recover`` and when the job context
+  (:func:`~vision.domain.job.job_context`) finds a paused job that ``resume_mow`` can continue
+  (no spot run, no lift, tilt or other safety stop). Its optional drive steps follow the drive
+  rules below; ``resume_mow`` is sent only after the error cleared (:func:`resume_gate`).
 * Dock fallback: when the model recommends nothing (or something not allowed) without any risk
   flag and return to dock is applicable, the service still offers ``return_to_dock``, labelled
   as a rule based fallback. Like every proposal it runs only after a human approves it.
@@ -29,6 +33,7 @@ from mowdeck_control.geo import distance, point_in_polygon
 
 from vision.domain.context import Pose
 from vision.domain.dock import DockRoute
+from vision.domain.job import JobContext
 from vision.domain.models import AssessmentOut, ProposalAction, ProposalState, ProposedStep
 
 FRAME_TTL_MS: Final = 1000
@@ -45,9 +50,15 @@ _BUSY_ACTIVITIES: Final = frozenset(
 
 
 def evaluate(
-    answer: AssessmentOut, *, min_confidence: float, dock: DockRoute | None = None
+    answer: AssessmentOut,
+    *,
+    min_confidence: float,
+    dock: DockRoute | None = None,
+    job: JobContext | None = None,
+    task: VisionTask = VisionTask.RECOVER,
 ) -> tuple[ProposalState, str | None]:
-    """``proposed`` or ``rejected_by_ai`` with the reason (the model's answer alone)."""
+    """``proposed`` or ``rejected_by_ai`` with the reason (the model's answer, checked against
+    the dock route and the job)."""
     if answer.risk:
         flags = ", ".join(sorted(r.value for r in answer.risk))
         return ProposalState.REJECTED_BY_AI, f"risk: {flags}"
@@ -60,6 +71,13 @@ def evaluate(
         if dock is None or not dock.return_to_dock_applicable:
             why = dock.reason if dock is not None else "no map with a dock is known"
             return ProposalState.REJECTED_BY_AI, f"return to dock is not applicable: {why}"[:500]
+        return ProposalState.PROPOSED, None
+    if answer.action is ProposalAction.RESUME:
+        if task is not VisionTask.RECOVER:
+            return ProposalState.REJECTED_BY_AI, f"resume continues the job, the task is {task}"
+        if job is None or not job.resumable:
+            why = job.resume_note if job is not None else "no mowing job of the mower is known"
+            return ProposalState.REJECTED_BY_AI, f"resume is not applicable: {why}"[:500]
         return ProposalState.PROPOSED, None
     if answer.action is ProposalAction.NONE or not answer.proposal:
         reasons = "; ".join(answer.abort_reasons) or "the model proposed no safe maneuver"
@@ -92,14 +110,16 @@ def decide(
     min_confidence: float,
     dock: DockRoute | None,
     allow_fallback: bool = True,
+    job: JobContext | None = None,
+    task: VisionTask = VisionTask.RECOVER,
 ) -> Decision:
     """The model's answer through :func:`evaluate`, then the dock fallback (not offered again
     when ``allow_fallback`` is false: an earlier round already tried it without success)."""
-    state, detail = evaluate(answer, min_confidence=min_confidence, dock=dock)
+    state, detail = evaluate(answer, min_confidence=min_confidence, dock=dock, job=job, task=task)
     if state is ProposalState.PROPOSED:
         action = (
-            ProposalAction.RETURN_TO_DOCK
-            if answer.action is ProposalAction.RETURN_TO_DOCK
+            answer.action
+            if answer.action in (ProposalAction.RETURN_TO_DOCK, ProposalAction.RESUME)
             else ProposalAction.DRIVE
         )
         return Decision(state, None, action)
@@ -132,6 +152,20 @@ def start_problem(task: VisionTask, state: MowerState | None) -> str | None:
         return f"the mower is {state.activity}"
     if task is VisionTask.FIND_DOCK and state.activity is MowerActivity.ERROR:
         return "the mower reports an error: use recover first"
+    return None
+
+
+def resume_gate(state: MowerState | None) -> str | None:
+    """Why ``resume_mow`` must not be sent with this state (None: send it): the error that
+    paused the job must have cleared and no sensor stop may be active."""
+    if state is None:
+        return "no state of the mower is known"
+    if state.raw.get("lifted") is True:
+        return "sensor stop: the mower was lifted"
+    if state.activity is MowerActivity.ERROR:
+        return f"the mower still reports error {state.error_code or 'unknown'}"
+    if state.activity is MowerActivity.OFFLINE:
+        return "the mower is offline"
     return None
 
 

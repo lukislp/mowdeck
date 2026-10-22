@@ -28,6 +28,12 @@ fits (``dock_route``). The model may answer ``return_to_dock``; when it recommen
 the dock command fits and no risk flag is set, the service offers it as a labelled fallback
 (``fallback``). Either way it is a proposal: nothing runs before a human approves it.
 
+Resume (:mod:`vision.domain.job`): the context says which mowing job the mower was running
+(``job``: the planned areas in order, done, current and next, the entry of the connection to
+the next area), from the gateway's route of the job, the state and the newest start. The model
+may answer ``resume`` for task ``recover`` when that job is paused and can be continued: after
+approval the optional drive steps run like a ``drive``, then ``resume_mow`` continues the job.
+
 Automatic analyses (ADR 0035, :meth:`VisionService.request_auto`, started by
 :class:`~vision.application.auto.AutoAnalysis`): the same round as a manual request, on behalf
 of the user who opted in, always with the gateway's photo (none: no analysis), recorded with
@@ -546,6 +552,8 @@ class VisionService:
         age = self.view.monotonic() - observed.received if observed and state else 0.0
         mapped = self.view.mower_map(mower_id)
         mower_map = mapped[1] if mapped and mapped[0] == account_id else None
+        routed = self.view.mow_path(mower_id)
+        mow_path = routed[1] if routed and routed[0] == account_id else None
         previous = [
             PreviousRound(
                 round=p.round,
@@ -575,6 +583,8 @@ class VisionService:
             stereo=stereo,
             track=self.view.recent_track(mower_id),
             map_image=map_image,
+            mow_path=mow_path,
+            last_start=self.view.last_start(mower_id) if state is not None else None,
         )
 
     async def _analyse(
@@ -613,9 +623,11 @@ class VisionService:
             min_confidence=self.config.min_confidence,
             dock=context.dock_route,
             allow_fallback=not tried_dock,
+            job=context.job,
+            task=proposal.task,
         )
         state, detail = decision.state, decision.detail
-        drive = decision.action is ProposalAction.DRIVE
+        drive = decision.action in (ProposalAction.DRIVE, ProposalAction.RESUME)
         now = self.clock()
         await self.store.record_request(
             ProviderRequest(
@@ -677,6 +689,13 @@ class VisionService:
             latency_ms=usage.latency_ms,
         )
         if changed and state is ProposalState.PROPOSED:
+            event_action: Literal["drive", "return_to_dock", "resume"] = (
+                "resume"
+                if decision.action is ProposalAction.RESUME
+                else "return_to_dock"
+                if decision.action is ProposalAction.RETURN_TO_DOCK
+                else "drive"
+            )
             await self.events.proposal_created(
                 VisionProposalCreated(
                     proposal_id=proposal.id,
@@ -688,7 +707,7 @@ class VisionService:
                     situation=assessment.result.situation.value,
                     confidence=assessment.result.confidence,
                     steps=len(assessment.result.proposal) if drive else 0,
-                    action="drive" if drive else "return_to_dock",
+                    action=event_action,
                     fallback=decision.fallback,
                     expires_at=expires,
                     link=f"/mowers/{proposal.mower_id}?assist={proposal.id}",

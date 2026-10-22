@@ -41,6 +41,7 @@ from mowdeck_contracts.v1 import (
     IssueCommandRequest,
     MowerCapabilitiesSnapshot,
     MowerMapSnapshot,
+    MowerPathSnapshot,
     MowerState,
     PhotoReply,
     PhotoRequest,
@@ -201,12 +202,31 @@ class SimRig:
         self.publish_states = publish_states
         self.photos = photos
         self.commands: list[CommandEnvelope] = []
+        self._published_path: tuple[str, int] | None = None
         self._tasks: list[asyncio.Task[None]] = []
         self._subscriptions: list[Subscription] = []
 
     async def _state(self, state: MowerState) -> None:
         if self.publish_states:
             await self.bus.publish(telemetry_subject(self.mower_id), state)
+            await self._path()
+
+    async def _path(self) -> None:
+        """The route of the running job, like the gateway's path snapshot (on change)."""
+        path = self.sim.current_path()
+        key = (path.path_hash, path.progress.index if path.progress else -1) if path else None
+        if key == self._published_path:
+            return
+        self._published_path = key
+        await self.bus.publish(
+            device_subject(self.mower_id, "path"),
+            MowerPathSnapshot(
+                mower_id=self.mower_id,
+                account_id=self.account_id,
+                observed_at=utc_now(),
+                path=path,
+            ),
+        )
 
     async def _command(self, message: BusMessage) -> None:
         envelope = message.model(CommandEnvelope)

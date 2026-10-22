@@ -18,6 +18,7 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerMap,
     MowerState,
+    MowPath,
     VisionProposalCreated,
     VisionProposalUpdated,
     VisionTask,
@@ -270,6 +271,16 @@ class MowerView(Protocol):
 
     def recent_track(self, mower_id: UUID) -> list[tuple[float, float, datetime]]:
         """Recent distinct positions ``(lat, lon, observed_at)`` with an RTK fix, oldest first."""
+        ...
+
+    def mow_path(self, mower_id: UUID) -> tuple[UUID, MowPath | None] | None:
+        """The route of the running job (the gateway's path snapshot; None once the job ended)
+        with its account id; None when no snapshot arrived."""
+        ...
+
+    def last_start(self, mower_id: UUID) -> list[str] | None:
+        """The area ids of the newest ``start_mow`` seen for the mower (in order), None when
+        none was seen since the service started or a later dock command ended the job."""
         ...
 
     def watch(self, mower_id: UUID) -> MowerWatch:

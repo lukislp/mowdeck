@@ -223,12 +223,16 @@ class VisionProposalCreated(ContractModel):
     situation: str = Field(max_length=64)
     confidence: float = Field(ge=0, le=1)
     steps: int = Field(
-        ge=0, le=6, description="Number of proposed drive steps (0 for `return_to_dock`)."
+        ge=0,
+        le=6,
+        description="Number of proposed drive steps (0 for `return_to_dock`; `resume` may "
+        "have some before the job continues).",
     )
-    action: Literal["drive", "return_to_dock"] = Field(
+    action: Literal["drive", "return_to_dock", "resume"] = Field(
         default="drive",
         description="`drive`: the drive steps; `return_to_dock`: the normal dock command, the "
-        "mower drives home on its mapped paths by itself.",
+        "mower drives home on its mapped paths by itself; `resume`: the optional drive steps, "
+        "then the paused mowing job continues (`resume_mow`).",
     )
     fallback: bool = Field(
         default=False,

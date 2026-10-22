@@ -157,6 +157,7 @@ def build_app(
                 geofence_margin_m=settings.vision_geofence_margin_m,
                 settle_seconds=settings.vision_settle_seconds,
                 min_move_m=settings.vision_min_move_m,
+                resume_confirm_seconds=settings.vision_resume_confirm_seconds,
             ),
         )
         service = VisionService(

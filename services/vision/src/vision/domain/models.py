@@ -55,6 +55,9 @@ class ProposalAction(StrEnum):
     """The drive steps of ``proposal``, blades off."""
     RETURN_TO_DOCK = "return_to_dock"
     """The generic dock command: the mower drives home on its mapped paths by itself."""
+    RESUME = "resume"
+    """Continue the paused mowing job (``resume_mow``, the app's "continue"), optionally after
+    the short drive steps of ``proposal`` (blades off) that free the mower first."""
     NONE = "none"
     """Nothing (the model found nothing safe to do)."""
 
@@ -79,7 +82,8 @@ class ProposalState(StrEnum):
     VERIFYING = "verifying"
     """The steps were driven; the outcome is being checked."""
     RECOVERED = "recovered"
-    """The mower is free (recover) or on its way to the dock (find_dock)."""
+    """The mower is free (recover), on its way to the dock (find_dock, return to dock) or
+    mowing again (resume)."""
     NOT_RECOVERED = "not_recovered"
     """The steps were driven but did not help; another round may be requested."""
     ABORTED = "aborted"
@@ -132,8 +136,9 @@ class AssessmentOut(BaseModel):
     situation: Situation
     confidence: float = Field(ge=0, le=1)
     action: ProposalAction = ProposalAction.DRIVE
-    """``drive`` (the steps), ``return_to_dock`` (no steps) or ``none``. Answers stored before
-    the field existed get ``drive`` with steps and ``none`` without."""
+    """``drive`` (the steps), ``return_to_dock`` (no steps), ``resume`` (optional steps, then
+    the paused job continues) or ``none``. Answers stored before the field existed get
+    ``drive`` with steps and ``none`` without."""
     proposal: list[ProposedStep] = Field(default_factory=list, max_length=MAX_STEPS)
     rationale: str = ""
     risk: list[RiskFlag] = Field(default_factory=list)
@@ -305,8 +310,11 @@ class Proposal:
     start_pose: dict[str, float] | None = None
     end_pose: dict[str, float] | None = None
     return_command_id: UUID | None = None
+    """The command issued after approval: ``return_to_dock`` or, for ``resume``,
+    ``resume_mow``."""
     action: ProposalAction = ProposalAction.DRIVE
-    """What approval executes: the drive steps or the generic return to dock."""
+    """What approval executes: the drive steps, the generic return to dock or resuming the
+    paused job (after optional drive steps)."""
     fallback: bool = False
     """The model recommended nothing, but return to dock was applicable: the service offers it
     as a rule based fallback (labelled as such; it still needs a human approval)."""

@@ -14,7 +14,7 @@
           "action": {
             "$ref": "#/components/schemas/ProposalAction",
             "default": "drive",
-            "description": "What the model recommended: `drive`, `return_to_dock` or `none`."
+            "description": "What the model recommended: `drive`, `return_to_dock`, `resume` or `none`."
           },
           "confidence": {
             "title": "Confidence",
@@ -340,6 +340,128 @@
         "title": "ImageIn",
         "type": "object"
       },
+      "JobAreaOut": {
+        "description": "One planned area of the job, in driving order.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "current",
+              "next",
+              "planned"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "JobAreaOut",
+        "type": "object"
+      },
+      "JobOut": {
+        "description": "The mowing job the mower was running when the scene was analysed (what `resume`\ncontinues).",
+        "properties": {
+          "areas": {
+            "description": "Planned areas in driving order.",
+            "items": {
+              "$ref": "#/components/schemas/JobAreaOut"
+            },
+            "title": "Areas",
+            "type": "array"
+          },
+          "current_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Area"
+          },
+          "entry_distance_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Distance to the entry of the way to the next area.",
+            "title": "Entry Distance M"
+          },
+          "mower_at_entry": {
+            "default": false,
+            "description": "The mower stood at the entry of the way to the next area.",
+            "title": "Mower At Entry",
+            "type": "boolean"
+          },
+          "next_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Area"
+          },
+          "progress_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Percent"
+          },
+          "resumable": {
+            "title": "Resumable",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "paused",
+              "paused_by_error",
+              "returning",
+              "spot_run"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "areas",
+          "resumable"
+        ],
+        "title": "JobOut",
+        "type": "object"
+      },
       "LastTestOut": {
         "description": "The outcome of the last provider test.",
         "properties": {
@@ -645,6 +767,7 @@
         "enum": [
           "drive",
           "return_to_dock",
+          "resume",
           "none"
         ],
         "title": "ProposalAction",
@@ -656,7 +779,7 @@
           "action": {
             "$ref": "#/components/schemas/ProposalAction",
             "default": "drive",
-            "description": "What approval executes: `drive` (the steps, blades off) or `return_to_dock` (the normal dock command; no steps). `none` only on rejected rows."
+            "description": "What approval executes: `drive` (the steps, blades off), `return_to_dock` (the normal dock command; no steps) or `resume` (the steps, if any, then the paused job continues with `resume_mow`). `none` only on rejected rows."
           },
           "analysed_at": {
             "anyOf": [
@@ -819,6 +942,17 @@
             "title": "Image Count",
             "type": "integer"
           },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mowing job as the model saw it (with action `resume` the job that continues); null when no job was known."
+          },
           "light_used": {
             "description": "The photo was taken with the mower's light switched on (it was too dark).",
             "title": "Light Used",
@@ -864,6 +998,7 @@
                 "type": "null"
               }
             ],
+            "description": "The command sent after approval: `return_to_dock`, or `resume_mow` for action `resume`.",
             "title": "Return Command Id"
           },
           "round": {
