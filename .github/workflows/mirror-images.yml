@@ -101,8 +101,32 @@ jobs:
             ref="${source%@*}"
             tag="${ref##*:}"
             target="$mirror/$alias:$tag"
-            want=$(retry crane digest "$source") || { echo "::error::cannot resolve $source"; failed=1; continue; }
             have=$(crane digest "$target" 2>/dev/null || true)
+            # Pinned by digest and already mirrored at it: nothing to do, and no request to the
+            # source registry (its anonymous quota is shared by every runner behind our egress).
+            case "$source" in
+              *@sha256:*)
+                if [ "$have" = "${source##*@}" ]; then
+                  echo "up to date: $target ($have, pinned)"
+                  echo "- \`$target\` up to date ($have, pinned)" >> "$GITHUB_STEP_SUMMARY"
+                  continue
+                fi
+                ;;
+            esac
+            if ! want=$(retry crane digest "$source"); then
+              # The source registry refuses us (rate limit, outage), but the mirror already has
+              # this tag: keep it and warn instead of failing. Only a missing image is an error.
+              # A digest-pinned source reaching this point differs from the mirror (bumped pin),
+              # so keeping the old copy would be wrong.
+              if [ -n "$have" ] && [ "$ref" = "$source" ]; then
+                echo "::warning::cannot resolve $source; keeping the mirrored $target ($have)"
+                echo "- \`$target\` kept ($have), source unreachable" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "::error::cannot resolve $source and the mirror has no usable copy at $target"
+                failed=1
+              fi
+              continue
+            fi
             if [ "$want" = "$have" ]; then
               echo "up to date: $target ($want)"
               echo "- \`$target\` up to date ($want)" >> "$GITHUB_STEP_SUMMARY"

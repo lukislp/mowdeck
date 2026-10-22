@@ -624,7 +624,16 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter e2e-web
-      - run: pnpm --filter e2e-web exec playwright install --with-deps chromium webkit firefox
+      # apt has no timeout of its own: a hanging Ubuntu mirror (2026-10-22, azure.archive.ubuntu.com)
+      # held this step until the 30-minute job limit. Give up on a stalled connection after 30 s and
+      # retry, so a bad mirror costs minutes instead of the whole run.
+      - name: apt timeouts and retries
+        run: |
+          printf '%s\n' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
+            'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts > /dev/null
+      - name: Playwright browsers and system dependencies
+        timeout-minutes: 12
+        run: pnpm --filter e2e-web exec playwright install --with-deps chromium webkit firefox
       # Firefox on Linux decodes H.264 (the camera relay's codec) only with Cisco's OpenH264
       # plugin, which a normal Firefox downloads by itself and Playwright's build does not. Fetch
       # the same build Firefox's update service names (pinned sha512) and point Firefox at it.
