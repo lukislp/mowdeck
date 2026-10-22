@@ -301,12 +301,57 @@ def test_vision_job_resume_is_proposed_only_for_a_resumable_job() -> None:
     assert evaluate(unsure, min_confidence=0.6, job=job)[0] is ProposalState.REJECTED_BY_AI
 
 
-def test_vision_job_resume_gate_needs_the_error_cleared() -> None:
+def test_vision_job_resume_gate_lets_the_stuck_error_persist() -> None:
+    from mowdeck_contracts.v1 import MowerErrorCategory
+
+    stuck = _state()
     assert resume_gate(None) == "no state of the mower is known"
-    assert resume_gate(_state()) == "the mower still reports error 1201"
-    assert resume_gate(_state(MowerActivity.PAUSED, raw={"lifted": True})) is not None
-    assert resume_gate(_state(MowerActivity.OFFLINE)) == "the mower is offline"
+    # A LUBA keeps error 1201 after a manual drive: the same error is no reason to hold back.
+    assert resume_gate(_state(), stuck) is None
+    assert resume_gate(_state(MowerActivity.PAUSED), stuck) is None
     assert resume_gate(_state(MowerActivity.PAUSED)) is None
+    # What the drive must not have caused or met: another error, a stop, a lift, offline.
+    assert resume_gate(_state(error_code="1202"), stuck) == "new error 1202"
+    assert resume_gate(_state(), None) == "new error 1201", "an error the round did not start with"
+    assert resume_gate(_state(drive_recoverable=False), stuck) == "sensor stop: 1201"
+    tilted = _state(error_category=MowerErrorCategory.LIFT_TILT)
+    assert resume_gate(tilted, stuck) == "sensor stop: 1201 (lift_tilt)"
+    bumped = _state(error_category=MowerErrorCategory.COLLISION)
+    assert resume_gate(bumped, stuck) == "sensor stop: 1201 (collision)"
+    assert resume_gate(_state(MowerActivity.PAUSED, raw={"lifted": True}), stuck) is not None
+    assert resume_gate(_state(MowerActivity.OFFLINE), stuck) == "the mower is offline"
+
+
+def test_vision_job_drive_verification_accepts_the_persisting_error() -> None:
+    from vision.domain.context import Pose
+    from vision.domain.rules import verify
+
+    back = [ProposedStep(linear=-0.8, angular=0.0, seconds=1.0)]
+    start, end = Pose(x=18.0, y=9.2, theta_rad=0.0), Pose(x=17.6, y=9.2, theta_rad=0.0)
+    kept, detail = verify(
+        VisionTask.RECOVER,
+        start=start,
+        end=end,
+        end_state=_state(),
+        steps=back,
+        min_move_m=0.2,
+        initial=_state(),
+    )
+    assert kept and "still reports 1201" in detail
+    other, _ = verify(
+        VisionTask.RECOVER,
+        start=start,
+        end=end,
+        end_state=_state(error_code="1202"),
+        steps=back,
+        min_move_m=0.2,
+        initial=_state(),
+    )
+    assert not other, "a new error is never a successful drive"
+    unknown, _ = verify(
+        VisionTask.RECOVER, start=start, end=end, end_state=_state(), steps=back, min_move_m=0.2
+    )
+    assert not unknown, "without the starting error the error counts as unresolved"
 
 
 # --- prompt and schema ---------------------------------------------------------------------

@@ -359,7 +359,8 @@ async def test_vision_flow_not_recovered_then_retry_with_history_until_the_limit
         await h.client.post(f"{API}/proposals/{first['id']}/approve", headers=owner.headers)
         done = await h.until(first["id"], owner, ProposalState.NOT_RECOVERED, RECOVERED)
         assert done["state"] == "not_recovered"
-        assert "still reports stuck" in done["detail"]
+        # The persisting stuck error alone is no failure; the turn that did not happen is.
+        assert "turned only 0 degrees" in done["detail"]
         assert done["can_retry"] is True and done["rounds_left"] == 1
         retried = await h.client.post(
             f"{API}/proposals/{first['id']}/retry", json={}, headers=owner.headers

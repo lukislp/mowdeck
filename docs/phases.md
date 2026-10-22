@@ -127,7 +127,7 @@ Verification:
 
 Against the Compose stack with simulated mowers:
 
-1. A simulated mower with `stuck_after_seconds` gets stuck while mowing; `POST /recover` yields a proposal, the owner gets the `vision_proposal` notification with a link to it, the approval drives the steps (a drive session with `origin: vision` in Fleet) and the proposal ends `recovered` with the mower free again (`paused` when the error interrupted a job, which `resume` continues).
+1. A simulated mower with `stuck_after_seconds` gets stuck while mowing; `POST /recover` yields a proposal, the owner gets the `vision_proposal` notification with a link to it, the approval drives the steps (a drive session with `origin: vision` in Fleet) and the proposal ends `recovered` with the mower free again (when the error interrupted a job it keeps the error, like a LUBA, until `resume` continues the job).
 2. An answer with a risk flag (for example `fake/people`) is `rejected_by_ai` and never drives; an emergency stop during an execution aborts it at once and no further frame is sent.
 3. A user configures an own provider (key write-only), tests it, and the next request uses it; without an own provider the installation model is used only when the plan has `ai_recover_hosted`, otherwise the answer is `409 vision-provider-missing`.
 4. A real vision model (Anthropic or a local Ollama model) answers a recover request on the simulator's image with a valid assessment; tokens and cost are recorded.
