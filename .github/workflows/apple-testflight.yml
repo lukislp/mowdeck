@@ -76,7 +76,7 @@ jobs:
           gh release view "$TAG" --repo "$REPO" --json tagName --jq .tagName > /dev/null \
             || fail "Tag $TAG has no GitHub release."
           # The commit the tag points to (annotated tags are peeled).
-          SHA="$(gh api "repos/$REPO/commits/tags/$TAG" --jq .sha)"
+          SHA="$(gh api "repos/$REPO/commits/refs/tags/$TAG" --jq .sha)"
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || fail "Could not resolve $TAG to a commit."
           STATUS="$(gh api "repos/$REPO/compare/$SHA...main" --jq .status)"
           case "$STATUS" in
