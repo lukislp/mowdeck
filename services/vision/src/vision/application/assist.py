@@ -764,10 +764,16 @@ class VisionService:
             proposal = await self.store.get_proposal(proposal_id)
             if proposal is None:
                 return
-            drive = proposal.action is ProposalAction.DRIVE
-            action: Literal["drive", "return_to_dock"] | None = None
+            drive = proposal.action in (ProposalAction.DRIVE, ProposalAction.RESUME)
+            action: Literal["drive", "return_to_dock", "resume"] | None = None
             if proposal.action is not ProposalAction.NONE and proposal.assessment is not None:
-                action = "drive" if drive else "return_to_dock"
+                action = (
+                    "resume"
+                    if proposal.action is ProposalAction.RESUME
+                    else "drive"
+                    if drive
+                    else "return_to_dock"
+                )
             steps = len(proposal.assessment.proposal) if proposal.assessment and drive else 0
             await self.events.proposal_updated(
                 VisionProposalUpdated(

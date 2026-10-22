@@ -270,10 +270,14 @@ class VisionProposalUpdated(ContractModel):
     round: int = Field(ge=1, le=10)
     state: VisionProposalState
     final: bool = Field(description="True for a state after which nothing changes any more.")
-    action: Literal["drive", "return_to_dock"] | None = Field(
-        default=None, description="The proposed maneuver; null before the analysis decided one."
+    action: Literal["drive", "return_to_dock", "resume"] | None = Field(
+        default=None,
+        description="The proposed maneuver (`drive`, `return_to_dock`, or `resume`: optional "
+        "drive steps, then the paused job continues); null before the analysis decided one.",
     )
-    steps: int = Field(default=0, ge=0, le=6, description="Number of proposed drive steps.")
+    steps: int = Field(
+        default=0, ge=0, le=6, description="Number of proposed drive steps (also for `resume`)."
+    )
     fallback: bool = False
     expires_at: UtcDateTime | None = Field(
         default=None, description="Approval deadline while `proposed`; null otherwise."
