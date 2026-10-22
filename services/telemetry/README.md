@@ -23,7 +23,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`); Trae
 
 | Method | Path | Required relation | Notes |
 | --- | --- | --- | --- |
-| GET | `/api/v1/telemetry/mowers/{mower_id}/state` | `can_view` on the mower (hide) | latest `MowerState` with `received_at` and `stale`; 404 problem `no-telemetry-yet` ("no telemetry yet") when the mower is visible but silent |
+| GET | `/api/v1/telemetry/mowers/{mower_id}/state` | `can_view` on the mower (hide) | latest `MowerState` (with the typed `job`, `gnss`, `signal`, `self_check` and `error_category` when the connection reports them, see `mowdeck-contracts`) with `received_at` and `stale`; 404 problem `no-telemetry-yet` ("no telemetry yet") when the mower is visible but silent |
 | GET | `/api/v1/telemetry/mowers/{mower_id}/history` | `can_view` (hide) | `?from=&to=&step=`; without `step` the stored rows, with `step` (`5s`, `1m`, `1h`, `1d`) one point per bin: last activity and RTK fix, battery mean, min and max, charging, samples, last position |
 | GET | `/api/v1/telemetry/mowers/{mower_id}/positions` | `can_view` (hide) | `?from=&to=&limit=` the newest `limit` positions, oldest first |
 | GET | `/api/v1/telemetry/mowers/{mower_id}/commands` | `can_view` (hide) | `?limit=` newest first: `command_id`, `status`, `reason`, `at` |

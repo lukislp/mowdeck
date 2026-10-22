@@ -81,6 +81,9 @@ from mowdeck_contracts.v1 import (
     FirmwareInfo,
     FirmwareUpdate,
     GeoReference,
+    GnssSolution,
+    GnssStatus,
+    JobProgress,
     LinkStatus,
     LocalPoint,
     MapArea,
@@ -88,11 +91,13 @@ from mowdeck_contracts.v1 import (
     MapZone,
     MowerActivity,
     MowerCapabilities,
+    MowerErrorCategory,
     MowerMap,
     MowerState,
     MowPath,
     MowPathKind,
     MowPathProgress,
+    NetworkKind,
     PauseMow,
     PositionSource,
     ProxyInfo,
@@ -101,9 +106,12 @@ from mowdeck_contracts.v1 import (
     RtkFixStatus,
     RtkSource,
     ScannedDevice,
+    SelfCheck,
+    SelfCheckResult,
     SetBladeHeight,
     SetLight,
     SetSpeed,
+    SignalStatus,
     SpotMowPlan,
     StartMow,
     TurnStyle,
@@ -129,10 +137,31 @@ _log = logging.getLogger("mowdeck_control.simulator")
 
 DEFAULT_MOWER_ID: Final = UUID("00000000-0000-4000-8000-00000000000a")
 DEFAULT_ACCOUNT_ID: Final = UUID("00000000-0000-4000-8000-00000000000b")
+SIMULATED_CUTTING_WIDTH_M: Final = 0.3
+"""The simulated mower's cutting width (``MowerCapabilities.cutting_width_mm`` 300)."""
+SIMULATED_WIFI_DBM: Final = -58
+"""The Wi-Fi signal the simulated mower reports (``MowerState.signal``)."""
+_SATELLITES: Final[Mapping[RtkFixStatus, int]] = {
+    RtkFixStatus.FIXED: 29,
+    RtkFixStatus.FLOAT: 21,
+    RtkFixStatus.NONE: 7,
+    RtkFixStatus.UNKNOWN: 0,
+}
+_GNSS_SOLUTION: Final[Mapping[RtkFixStatus, GnssSolution]] = {
+    RtkFixStatus.FIXED: GnssSolution.FIXED,
+    RtkFixStatus.FLOAT: GnssSolution.FLOAT,
+    RtkFixStatus.NONE: GnssSolution.SINGLE,
+    RtkFixStatus.UNKNOWN: GnssSolution.UNKNOWN,
+}
+
 LIFT_ERROR_CODE: Final = "lifted"
 SPOT_AREA_ID: Final = "spot"
 """``raw.area_id`` and ``raw.job_areas`` while the simulator follows a spot plan."""
 STUCK_ERROR_CODE: Final = "stuck"
+_ERROR_CATEGORY: Final[Mapping[str, MowerErrorCategory]] = {
+    LIFT_ERROR_CODE: MowerErrorCategory.LIFT_TILT,
+    STUCK_ERROR_CODE: MowerErrorCategory.TRAPPED,
+}
 NIGHT_BRIGHTNESS: Final = 0.12
 """Photo brightness at night (``SimulationConfig.night``) with the light off."""
 NIGHT_LIT_BRIGHTNESS: Final = 0.8
@@ -359,6 +388,8 @@ class _Job:
     mow_length_m: float
     mowed_m: float = 0.0
     plan_hash: str | None = None
+    started_s: float = 0.0
+    """Simulated seconds since the start of the simulator when the job began."""
     mowing_s: float = 0.0
     stuck_done: bool = False
 
@@ -1056,7 +1087,40 @@ class SimulatedMower:
             firmware_info=self.firmware_info(),
             drive_speed_mps=self._drive_speed if self.config.drive_speed_setting else None,
             turn_style=self.config.turn_style,
+            job=self._job_progress(leg),
+            gnss=GnssStatus(
+                satellites=_SATELLITES[self._rtk_fix],
+                correction_age_s=None if self._rtk_fix is RtkFixStatus.NONE else 1.0,
+                rtk_status=_GNSS_SOLUTION[self._rtk_fix],
+            ),
+            signal=SignalStatus(
+                wifi_dbm=SIMULATED_WIFI_DBM, mobile_dbm=None, network=NetworkKind.WIFI
+            ),
+            self_check=SelfCheck(result=SelfCheckResult.OK),
+            error_category=_ERROR_CATEGORY.get(status.error_code or "", MowerErrorCategory.OTHER)
+            if status.activity is MowerActivity.ERROR
+            else None,
             raw=raw,
+        )
+
+    def _job_progress(self, leg: "_Leg | None") -> JobProgress | None:
+        """The running job for ``MowerState.job``: progress, the map area of the current
+        mowing leg (null on transfers and in spot runs), seconds since the start, the remaining
+        mowing length at the mowing speed, and the mowed length times the cutting width."""
+        job = self._job
+        if job is None:
+            return None
+        area_id = leg.area_id if leg is not None and leg.blade else None
+        if area_id is not None and self._map.area(area_id) is None:
+            area_id = None
+        left_m = max(0.0, job.mow_length_m - job.mowed_m)
+        speed = self._mowing_speed if self._mowing_speed > 0 else self.config.mowing_speed_mps
+        return JobProgress(
+            progress_percent=self._progress(),
+            area_id=area_id,
+            elapsed_s=max(0, round(self._elapsed_s - job.started_s)),
+            remaining_s=round(left_m / speed) if speed > 0 else None,
+            mowed_m2=round(job.mowed_m * SIMULATED_CUTTING_WIDTH_M, 1),
         )
 
     # --- Test hooks ---------------------------------------------------------------------------
@@ -1151,7 +1215,12 @@ class SimulatedMower:
         def begin() -> None:
             status = self._status
             self._end_drive_session()
-            self._job = _Job(area_ids=job.area_ids, pattern=job.pattern, mow_length_m=mow_length)
+            self._job = _Job(
+                area_ids=job.area_ids,
+                pattern=job.pattern,
+                mow_length_m=mow_length,
+                started_s=self._elapsed_s,
+            )
             self._path, self._path_done = path, 0
             status.legs = legs
             status.activity = MowerActivity.MOWING
@@ -1247,6 +1316,7 @@ class SimulatedMower:
                 pattern=pattern,
                 mow_length_m=mow_length,
                 plan_hash=plan.plan_hash,
+                started_s=self._elapsed_s,
             )
             status.legs = legs
             status.activity = MowerActivity.MOWING
