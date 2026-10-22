@@ -326,3 +326,19 @@ def test_vision_job_prompt_prefers_resume_at_a_passable_connection() -> None:
         {"situation": "stuck_on_obstacle", "confidence": 0.7, "action": "resume"}
     )
     assert resume.action is ProposalAction.RESUME and resume.proposal == []
+
+
+def test_vision_job_uses_the_mowers_own_job_report() -> None:
+    from mowdeck_contracts.v1 import JobProgress
+
+    # No route and no start seen (a restarted service), but the mower reports its job.
+    reported = _state(job=JobProgress(progress_percent=42, area_id="11"))
+    job = _job(reported, None)
+    assert job is not None and job.status == "paused_by_error" and job.source == "state"
+    assert job.current_area == "Vorderer Garten" and job.progress_percent == 42
+    assert job.resumable
+    # The mower's own area wins over the geometry (RTK noise at an area's edge).
+    elsewhere = _state(job=JobProgress(progress_percent=70, area_id="22"))
+    routed = _job(elsewhere, _route(len(FRONT_ROUTE)))
+    assert routed is not None and routed.current_area == "Hinterer Garten"
+    assert routed.progress_percent == 60, "the route's progress is finer than the report"

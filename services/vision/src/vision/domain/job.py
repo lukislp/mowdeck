@@ -14,14 +14,16 @@ Sources (the authoritative one first):
   publishes it while the mower works on a job (also while paused) and clears it when the job
   ended, so it says which job the mower itself will continue on ``resume_mow``.
 * **The mower state** (Device-Gateway telemetry): activity and error (running, paused, paused by
-  an error, returning) and ``spot_run`` for a spot run MowDeck drives (ADR 0039; ``resume_mow``
-  cannot continue those).
+  an error, returning), ``job`` (the mower's own report of the job: the area it works in and the
+  progress) and ``spot_run`` for a spot run MowDeck drives (ADR 0039; ``resume_mow`` cannot
+  continue those).
 * **The newest ``start_mow``** seen on ``command.mower.<id>`` (Fleet publishes every command,
   whoever issued it: the web app, the Scheduler, Home Assistant): the area order when no route
   is known yet. Areas before the current one then count as done (``inferred``).
 
 Areas are matched to the route's polylines geometrically (most points inside the area); the
-current area is the one that holds the mower, else the one of the route position. The
+current area is the one the mower reports (``MowerState.job.area_id``), else the planned area
+that holds the mower, else the one of the route position. The
 connection to the next area is a mapped transfer path that touches both areas (its end at the
 current area is the entry), else the route's next ``transfer`` line.
 """
@@ -196,7 +198,8 @@ def job_context(
         order, source = list(dict.fromkeys(path.area_ids)), "mow_path"
     elif last_start:
         order, source = list(dict.fromkeys(last_start)), "start_command"
-    if status == "paused_by_error" and source == "state":
+    reported = state.job
+    if status == "paused_by_error" and source == "state" and reported is None:
         return None  # an error without any job evidence: nothing to continue
     areas = {a.id: a for a in mower_map.areas} if mower_map is not None else {}
     planned = [areas[a] for a in order if a in areas]
@@ -218,7 +221,11 @@ def job_context(
                 if area_id is not None:
                     ends[area_id] = start
             done = {a for a, end in ends.items() if end <= index}
-    current = _current_area(here, planned, path, line_areas, index)
+    own = reported.area_id if reported is not None else None
+    if own is not None and (own in order or (not order and own in areas)):
+        current: str | None = own
+    else:
+        current = _current_area(here, planned, path, line_areas, index)
     if index is None and current in order:
         done = set(order[: order.index(current)])  # inferred from the order
     finished = current is not None and current in done
@@ -243,6 +250,8 @@ def job_context(
     progress = None
     if path is not None and path.progress is not None and path.points_total:
         progress = round(100 * min(path.progress.index, path.points_total) / path.points_total)
+    elif reported is not None:
+        progress = reported.progress_percent
     connection = None
     if current is not None and upcoming is not None and here is not None:
         connection = _connection(
