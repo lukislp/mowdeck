@@ -33,7 +33,8 @@ imagePullSecrets: []
 # UV_IMAGE, NODE_IMAGE, NGINX_IMAGE, BUSYBOX_IMAGE, FGA_CLI_IMAGE and JQ_IMAGE are set by the release
 # workflow from infra/compose/.env.example. TRAEFIK_IMAGE and WHOAMI_IMAGE have no counterpart: the cluster's
 # ingress controller replaces Traefik (see `ingress`) and the whoami demo route is Compose only.
-# NTFY_IMAGE and STRIPE_MOCK_IMAGE are run by the CI integration tests alone.
+# NTFY_IMAGE, STRIPE_MOCK_IMAGE and PLAYWRIGHT_IMAGE are run by CI alone (integration tests,
+# the e2e-web browsers).
 
 # --- Plain configuration (ConfigMaps) ---
 # Same names as infra/compose/.env.example; the chart passes them to the services as the

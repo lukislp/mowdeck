@@ -75,7 +75,7 @@ The complete operating notes are in the repository file `infra/compose/README.md
 
 ## Image sources
 
-All third-party images are pinned under "Image sources" in `.env.example` and chosen in `.env` by the same variables: `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images of the MowDeck builds (plus `NTFY_IMAGE` and `STRIPE_MOCK_IMAGE`, which only the CI integration tests run). The defaults are public registries that need no login (ECR Public, `ghcr.io`, Docker Hub for the OpenFGA CLI, ntfy and stripe-mock).
+All third-party images are pinned under "Image sources" in `.env.example` and chosen in `.env` by the same variables: `TRAEFIK_IMAGE`, `NATS_IMAGE`, `POSTGRES_IMAGE`, `OPENFGA_IMAGE`, `WHOAMI_IMAGE` for the infrastructure and `PYTHON_IMAGE`, `UV_IMAGE`, `NODE_IMAGE`, `NGINX_IMAGE`, `BUSYBOX_IMAGE`, `FGA_CLI_IMAGE`, `JQ_IMAGE` for the base images of the MowDeck builds (plus `NTFY_IMAGE`, `STRIPE_MOCK_IMAGE` and `PLAYWRIGHT_IMAGE`, which only CI runs). The defaults are public registries that need no login (ECR Public, `ghcr.io`, Docker Hub for the OpenFGA CLI, ntfy and stripe-mock, `mcr.microsoft.com` for Playwright).
 
 To use another registry at home (a pull-through cache or a mirror on the NAS), copy the images there with the same tags and set the variables in `.env`, for example `POSTGRES_IMAGE=registry.example.org/postgres:17.11-alpine`, or all of them at once with `MOWDECK_IMAGE_MIRROR=registry.example.org/mowdeck sh infra/mirror-env.sh >> infra/compose/.env`; a later line in `.env` overrides an earlier one. Log in to that registry first if it needs credentials.
 

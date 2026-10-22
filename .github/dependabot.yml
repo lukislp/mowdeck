@@ -7,6 +7,8 @@
 #     *_IMAGE variables and build arguments (FROM ${PYTHON_IMAGE}), which Dependabot's docker
 #     ecosystem cannot parse; tools/repo-checks/tests/test_images.py keeps every default equal to
 #     that list, so a partial bump would fail CI. Images are bumped deliberately in that list.
+#     PLAYWRIGHT_IMAGE there follows @playwright/test (npm entry below): the e2e-web job fails
+#     with the line to change when the two differ, so its Dependabot PR gets the image bump too.
 #   * The Capacitor shells in apps/mobile (Gradle, Swift package): their native dependencies come
 #     from the @capacitor/* npm packages, which the npm entry below keeps current.
 version: 2
