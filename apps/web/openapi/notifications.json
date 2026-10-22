@@ -1243,7 +1243,7 @@
     },
     "/api/v1/notifications/preferences": {
       "get": {
-        "description": "The caller's preferences (defaults until saved: subscribed to nothing).",
+        "description": "The caller's preferences (defaults until saved: every mower, the default kinds).",
         "operationId": "get_preferences_api_v1_notifications_preferences_get",
         "responses": {
           "200": {

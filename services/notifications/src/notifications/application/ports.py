@@ -138,7 +138,12 @@ class Store(Protocol):
         ...
 
     async def subscribers(self, account_id: UUID, mower_id: UUID) -> list[Preferences]:
-        """Preferences of every user of the account who follows the mower."""
+        """Stored preferences of every user of the account who follows the mower."""
+        ...
+
+    async def default_recipients(self, account_id: UUID) -> list[UUID]:
+        """Users of the account who registered a delivery target (push subscription, APNs
+        device or ntfy target) but never saved preferences, sorted; they get the defaults."""
         ...
 
     async def try_test(

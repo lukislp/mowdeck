@@ -1,7 +1,10 @@
 """Fan-out: from a derived event to inbox items and queued deliveries per recipient.
 
 Recipients are the users of the mower's account whose preferences follow the mower (``all
-mowers`` or the mower selected) and enable the event's kind. Before anything is stored for
+mowers`` or the mower selected) and enable the event's kind. A user who never saved preferences
+but registered a delivery target in the account (push subscription, APNs device, ntfy target)
+counts with the defaults: every mower, the default kinds, the default channels, no quiet hours
+(:func:`~notifications.domain.preferences.default_preferences`). Before anything is stored for
 them, ``can_view`` on the mower is checked for all of them in one batch, so a user whose access
 was revoked after subscribing never receives data about the mower. Quiet hours (in the user's
 time zone) keep the inbox item but queue no delivery; the theft alarms (``mower_lifted``,
@@ -31,7 +34,7 @@ from notifications.domain.models import (
     Preferences,
     TargetKind,
 )
-from notifications.domain.preferences import in_quiet_hours, wants
+from notifications.domain.preferences import default_preferences, in_quiet_hours, wants
 
 _log = get_logger("notifications.fanout")
 
@@ -77,10 +80,23 @@ class Fanout:
             total += await self._dispatch_one(event)
         return total
 
+    async def recipients(self, account_id: UUID, mower_id: UUID) -> list[Preferences]:
+        """The stored preferences that follow the mower, plus the defaults of every user of
+        the account who registered a target but never saved preferences (once per user)."""
+        found = await self._store.subscribers(account_id, mower_id)
+        seen = {p.user_id for p in found}
+        for user_id in await self._store.default_recipients(account_id):
+            if user_id not in seen:
+                seen.add(user_id)
+                found.append(
+                    default_preferences(user_id, account_id, language=self._config.default_language)
+                )
+        return found
+
     async def _dispatch_one(self, event: NotificationEvent) -> int:
         candidates = [
             p
-            for p in await self._store.subscribers(event.account_id, event.mower_id)
+            for p in await self.recipients(event.account_id, event.mower_id)
             if p.account_id == event.account_id and wants(p, event)
         ]
         if not candidates:

@@ -9,7 +9,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 - Derives notifications from the Device-Gateway's `MowerState` stream and the `mower.connected`/`mower.disconnected` events: mowing finished, mower stuck, battery low, offline and back online, optionally job started. Every state proves contact (the link heartbeat repeats the latest one every 10 s) except the gateway's offline state after a lost link (`connected: false`, [ADR 0040](../../docs/adr/0040-link-heartbeat-for-online-status.md)), which is skipped: `mower.disconnected` and its grace time decide.
 - Theft alarm: mower lifted, mower left the dock without a command, mower outside its mapped garden (geofence from the map snapshots, commands from the command stream). Alarms bypass quiet hours and can be acknowledged.
 - Blade maintenance reminder from Telemetry's `telemetry.blade_hours.threshold` event.
-- Fans them out to the users who subscribed in their preferences, after checking `can_view` on the mower for every recipient; renders them per user in German or English; respects quiet hours in the user's time zone.
+- Fans them out to the users who subscribed in their preferences (or, without saved preferences, to the users with a registered push target, with the defaults), after checking `can_view` on the mower for every recipient; renders them per user in German or English; respects quiet hours in the user's time zone.
 - Keeps each user's inbox (newest 200) and delivers through an outbox with retries: Web Push to the PWA, APNs to the iOS app, ntfy, the service log; further channels are plug-ins.
 - Owns its data (PostgreSQL database `notifications`): preferences, push subscriptions, APNs devices, ntfy targets, inbox, deliveries, a mower directory (account and name), one watch per mower (what the rules remember), one geofence per mower (from its map) and the alarm silences of acknowledged alarms. Scales with the number of messages; every replica consumes states (queue group), sweeps for offline mowers and delivers (`SKIP LOCKED`).
 
@@ -54,7 +54,7 @@ Texts are data: `src/notifications/messages/en.json` and `de.json` map message k
 
 ## Recipients and delivery
 
-1. The users of the mower's account whose preferences follow the mower (`all_mowers` or the mower in `mower_ids`) and enable the kind.
+1. The users of the mower's account whose preferences follow the mower (`all_mowers` or the mower in `mower_ids`) and enable the kind, plus every user of the account who registered a target (Web Push subscription, APNs device or ntfy target) but never saved preferences: they count with the defaults, that is every mower they can view, the default kinds (all rule kinds except `job_started`), the default channels, no quiet hours, UTC and `MOWDECK_NOTIFICATIONS_DEFAULT_LANGUAGE`. Saved preferences always win. A user with neither preferences nor a target gets nothing ([ADR 0022](../../docs/adr/0022-notifications-rules-and-delivery.md#amendment-2026-10-22-defaults-for-users-who-never-saved-preferences)).
 2. `check_many(can_view, mower:<id>)` for all of them in one batch; a user whose access was revoked gets nothing.
 3. Per recipient: render in the user's language, store the inbox item (unique per user and `dedupe_key`) and one delivery per configured target (one per push subscription, one per APNs device, one for the ntfy target, one for `log` or any third-party channel), all in one transaction; during quiet hours no delivery (except for the theft alarms); a user who acknowledged the same alarm within the silence gets nothing. Publish `notifications.sent`.
 4. The delivery worker of any replica claims due deliveries (`FOR UPDATE SKIP LOCKED`, attempts + 1, lease 60 s) and sends them: sent; retry with backoff 30 s doubling to 1 h (or `Retry-After`) up to 8 attempts, then failed; gone (Web Push 404/410: the subscription is deleted; APNs `Unregistered`, `BadDeviceToken`, `DeviceTokenNotForTopic`: the device is deleted); failed (permanent). Finished deliveries are deleted after 7 days.
@@ -87,7 +87,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | Method | Path | Access | Description |
 | --- | --- | --- | --- |
 | GET | `/api/v1/notifications/push/vapid-public-key` | public | `{public_key}` for `pushManager.subscribe` (`applicationServerKey`); 404 without Web Push |
-| GET | `/api/v1/notifications/preferences` | user | Preferences (defaults until saved: nothing followed) plus the available kinds, channels and languages |
+| GET | `/api/v1/notifications/preferences` | user | Preferences (defaults until saved: every mower, the default kinds and channels, no quiet hours) plus the available kinds, channels and languages |
 | PUT | `/api/v1/notifications/preferences` | user | `{enabled_kinds, all_mowers, mower_ids, quiet_hours {start, end}, timezone, language, channels}`; a mower outside the account or not viewable: 404 |
 | GET | `/api/v1/notifications/push-subscriptions` | user | The caller's browser subscriptions (endpoint host, user agent, created) |
 | POST | `/api/v1/notifications/push-subscriptions` | user | Store `PushSubscription.toJSON()`; 201; the same endpoint again replaces it |
@@ -110,7 +110,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 
 The PWA (`apps/web`, [docs/dev/web-app.md](../../docs/dev/web-app.md#notifications-and-web-push)) uses the routes like this:
 
-1. The settings page reads `GET /preferences` (defaults until saved: `stored` false) and saves the whole object with `PUT` (kinds, all mowers or `mower_ids`, quiet hours with the device's IANA time zone, the app language, channels from `available_channels`).
+1. The settings page reads `GET /preferences` (the defaults until saved, `stored` false; a user with a registered target already gets them) and saves the whole object with `PUT` (kinds, all mowers or `mower_ids`, quiet hours with the device's IANA time zone, the app language, channels from `available_channels`).
 2. Web Push, after a user action: `Notification.requestPermission()`, `GET /push/vapid-public-key` (404: no Web Push here), `pushManager.subscribe({userVisibleOnly: true, applicationServerKey})`, `POST /push-subscriptions` with `PushSubscription.toJSON()`; the answer's `id` marks "this device" in `GET /push-subscriptions`, `DELETE` removes one. The service worker shows the `WebPushPayload` (`title`, `body`, `tag`, `url`, `kind`, `mower_id`) and re-subscribes on `pushsubscriptionchange`; it has no token, so the page posts the renewed subscription on its next start. A gone endpoint (404/410 from the push service) is deleted here.
 3. ntfy: `GET`, `PUT`, `DELETE /ntfy`; the token field is write-only in the app.
 4. `POST /test` shows the channels on 202 and a countdown from `Retry-After` on 429.
@@ -159,6 +159,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `..._DOCK_CONFIRM_SECONDS` | `20` | An unexplained departure alarms when a state this much later still shows the mower away without a command (0: at once) |
 | `..._GEOFENCE_MARGIN_METERS` | `5` | Margin around the mapped areas, paths and dock |
 | `..._ACK_SILENCE_SECONDS` | `3600` | Acknowledging an alarm silences repeats of it for the user this long |
+| `..._DEFAULT_LANGUAGE` | `de` | Message language (`de`, `en`) of a user who never saved preferences |
 | `..._CHANNELS` | `webpush,ntfy,apns` | Enabled channels (entry point names); a channel without its configuration is skipped with an info log line |
 | `..._VAPID_PRIVATE_KEY` (`_FILE`) | unset | Web Push private key (base64url raw, DER or PEM) |
 | `..._VAPID_PUBLIC_KEY` | unset | Optional, checked against the private key |

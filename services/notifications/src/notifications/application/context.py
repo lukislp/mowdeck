@@ -36,3 +36,5 @@ class NotificationsConfig:
     """Host suffixes a push endpoint may have (empty: any HTTPS host)."""
     ack_silence: timedelta = timedelta(hours=1)
     """How long acknowledging an alarm silences repeats of it for the user."""
+    default_language: str = "de"
+    """Language of a user who never saved preferences (the app's default language)."""

@@ -241,6 +241,34 @@ async def test_notifications_db_preferences_and_subscribers(
 
 
 @pytest.mark.parametrize("kind", KINDS)
+async def test_notifications_db_default_recipients_have_a_target_and_no_preferences(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account, other_account = uuid4(), uuid4()
+    pusher, iphone, ntfy, saved, bare, foreign = (uuid4() for _ in range(6))
+    async with store_of(kind, monkeypatch) as store:
+        await store.add_push_subscription(
+            PushSubscription(uuid4(), pusher, account, "https://p.test/1", P256DH, AUTH, T0)
+        )
+        await store.add_push_subscription(
+            PushSubscription(uuid4(), pusher, account, "https://p.test/2", P256DH, AUTH, T0)
+        )
+        await store.add_apns_device(ApnsDevice(uuid4(), iphone, account, "b2" * 32, None, T0))
+        await store.add_apns_device(ApnsDevice(uuid4(), pusher, account, "c3" * 32, None, T0))
+        await store.put_ntfy_target(NtfyTarget(ntfy, account, "https://ntfy.test", "t", None, T0))
+        await store.add_apns_device(ApnsDevice(uuid4(), saved, account, "d4" * 32, None, T0))
+        await store.put_preferences(Preferences(user_id=saved, account_id=account))
+        await store.put_preferences(Preferences(user_id=bare, account_id=account))
+        await store.add_apns_device(
+            ApnsDevice(uuid4(), foreign, other_account, "e5" * 32, None, T0)
+        )
+        found = await store.default_recipients(account)
+        assert set(found) == {pusher, iphone, ntfy} and len(found) == 3
+        assert await store.default_recipients(other_account) == [foreign]
+        assert await store.default_recipients(uuid4()) == []
+
+
+@pytest.mark.parametrize("kind", KINDS)
 async def test_notifications_db_targets_are_per_user(
     kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
