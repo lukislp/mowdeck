@@ -183,6 +183,23 @@ def check_source(ios: Path = IOS, release_entitlements: Path = RELEASE_ENTITLEME
         raise CheckError("\n".join(problems))
 
 
+def app_icon_names(info: dict[str, Any]) -> set[str]:
+    """Icon names the compiled Info.plist declares. actool writes the iOS app icon into
+    CFBundleIcons(~ipad) -> CFBundlePrimaryIcon -> CFBundleIconName; a top-level
+    CFBundleIconName counts as well."""
+    names: set[str] = set()
+    top = info.get("CFBundleIconName")
+    if isinstance(top, str):
+        names.add(top)
+    for key in ("CFBundleIcons", "CFBundleIcons~ipad"):
+        icons = info.get(key)
+        primary = icons.get("CFBundlePrimaryIcon") if isinstance(icons, dict) else None
+        name = primary.get("CFBundleIconName") if isinstance(primary, dict) else None
+        if isinstance(name, str):
+            names.add(name)
+    return names
+
+
 def check_app(app: Path, version: str, build: str) -> None:
     """The built App.app before it is signed."""
     info = _load_plist(app / "Info.plist")
@@ -195,10 +212,14 @@ def check_app(app: Path, version: str, build: str) -> None:
         problems.append(f"CFBundleVersion is {info.get('CFBundleVersion')!r}, expected {build!r}")
     if info.get("ITSAppUsesNonExemptEncryption") is not False:
         problems.append("ITSAppUsesNonExemptEncryption is not false")
-    if info.get("CFBundleIconName") != "AppIcon" or not (app / "Assets.car").is_file():
+    icon_names = app_icon_names(info)
+    has_car = (app / "Assets.car").is_file()
+    if "AppIcon" not in icon_names or not has_car:
         problems.append(
             "no compiled app icon (CFBundleIconName AppIcon and Assets.car): App Store Connect "
-            "rejects the build (ITMS-90713)"
+            f"rejects the build (ITMS-90713); found icon names {sorted(icon_names) or 'none'}, "
+            f"Assets.car {'present' if has_car else 'missing'}, "
+            f"Info.plist keys {sorted(k for k in info if 'Icon' in k) or 'none'}"
         )
     if not (app / "public" / "index.html").is_file():
         problems.append("the bundled pages are missing (public/index.html): cap sync did not run")

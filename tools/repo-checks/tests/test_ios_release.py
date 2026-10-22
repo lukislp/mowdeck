@@ -220,6 +220,29 @@ def test_built_app_passes(check: ModuleType, tmp_path: Path) -> None:
     check.check_app(_built_app(tmp_path), "0.3.12", "312")
 
 
+def test_built_app_nested_icon_name_passes(check: ModuleType, tmp_path: Path) -> None:
+    # What actool really writes for an iOS app: the name only inside CFBundlePrimaryIcon.
+    primary = {
+        "CFBundlePrimaryIcon": {
+            "CFBundleIconFiles": ["AppIcon60x60"],
+            "CFBundleIconName": "AppIcon",
+        }
+    }
+    app = _built_app(
+        tmp_path, CFBundleIconName=None, CFBundleIcons=primary, **{"CFBundleIcons~ipad": primary}
+    )
+    check.check_app(app, "0.3.12", "312")
+
+
+def test_built_app_reports_what_it_found(check: ModuleType, tmp_path: Path) -> None:
+    app = _built_app(tmp_path, CFBundleIconName=None)
+    (app / "Assets.car").unlink()
+    with pytest.raises(check.CheckError) as err:
+        check.check_app(app, "0.3.12", "312")
+    assert "Assets.car missing" in str(err.value)
+    assert "icon names none" in str(err.value)
+
+
 def test_built_app_problems(check: ModuleType, tmp_path: Path) -> None:
     app = _built_app(tmp_path, CFBundleVersion="1", CFBundleIconName=None)
     (app / "public" / "assets").mkdir()
