@@ -807,6 +807,34 @@ export type components = {
             rotation_deg: number;
         };
         /**
+         * GnssSolution
+         * @description The satellite position solution as the receiver reports it (finer than
+         *     :class:`~mowdeck_contracts.v1.RtkFixStatus`, which folds ``single`` into ``none``).
+         * @enum {string}
+         */
+        GnssSolution: "none" | "single" | "float" | "fixed" | "unknown";
+        /**
+         * GnssStatus
+         * @description The mower's satellite positioning (``MowerState.gnss``).
+         */
+        GnssStatus: {
+            /**
+             * Correction Age S
+             * @description Age of the last RTK correction data in seconds; null without corrections.
+             */
+            correction_age_s?: number | null;
+            /**
+             * @description The position solution of the receiver.
+             * @default unknown
+             */
+            rtk_status: components["schemas"]["GnssSolution"];
+            /**
+             * Satellites
+             * @description Satellites the receiver uses.
+             */
+            satellites?: number | null;
+        };
+        /**
          * HealthDaily
          * @description Day totals of an inclusive range of UTC days, oldest first (days without data absent).
          */
@@ -951,6 +979,40 @@ export type components = {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * JobProgress
+         * @description The mowing job the mower runs right now (``MowerState.job``).
+         *
+         *     Null on the state when no job runs or the connection reports none. Times have the
+         *     resolution the vendor reports (Mammotion: whole minutes, given here in seconds).
+         */
+        JobProgress: {
+            /**
+             * Area Id
+             * @description The map area (`MowerMap.areas[].id`) the mower works in now; null when it is not one of the mower's map areas or not reported.
+             */
+            area_id?: string | null;
+            /**
+             * Elapsed S
+             * @description Seconds the job has run so far.
+             */
+            elapsed_s?: number | null;
+            /**
+             * Mowed M2
+             * @description Area mowed in this job so far, in square metres.
+             */
+            mowed_m2?: number | null;
+            /**
+             * Progress Percent
+             * @description Share of the job done, 0 to 100.
+             */
+            progress_percent?: number | null;
+            /**
+             * Remaining S
+             * @description Seconds the mower estimates the job still needs.
+             */
+            remaining_s?: number | null;
         };
         /**
          * Layer
@@ -1226,6 +1288,12 @@ export type components = {
             received_at: string;
         };
         /**
+         * MowerErrorCategory
+         * @description What kind of fault ``MowerState.error_code`` names, manufacturer neutral.
+         * @enum {string}
+         */
+        MowerErrorCategory: "trapped" | "obstacle" | "outside" | "wheel_slip" | "lift_tilt" | "collision" | "battery" | "blade_motor" | "rain" | "positioning" | "other";
+        /**
          * MowerHealthOut
          * @description Running health totals of a mower (since the first state Telemetry received).
          */
@@ -1458,6 +1526,8 @@ export type components = {
              * @description The vendor's speed setting for manual driving (`MowerCapabilities.drive_speed_setting`); null when the connection has none or has not read it yet.
              */
             drive_speed_mps?: number | null;
+            /** @description With activity `error`: the manufacturer-neutral kind of the fault; null otherwise or when the connection cannot tell. */
+            error_category?: components["schemas"]["MowerErrorCategory"] | null;
             /** Error Code */
             error_code?: string | null;
             /** Error Message */
@@ -1466,11 +1536,15 @@ export type components = {
             firmware?: string | null;
             /** @description Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor. */
             firmware_info?: components["schemas"]["FirmwareInfo"] | null;
+            /** @description Satellite positioning details (satellites, RTK correction age, solution); null when the connection does not report them. */
+            gnss?: components["schemas"]["GnssStatus"] | null;
             /**
              * Heartbeat At
              * @description When the Device-Gateway last knew its connection to the mower alive (UTC). The gateway sets it on every publish, never an adapter: it advances with each heartbeat while `observed_at` stays the time of the mower's last report. Clients judge online and offline by it (ADR 0040); null in states from before the field, then `observed_at` stands in.
              */
             heartbeat_at?: string | null;
+            /** @description The mowing job the mower runs (progress, current area, elapsed and remaining seconds, mowed square metres); null when none runs or the connection does not report it. */
+            job?: components["schemas"]["JobProgress"] | null;
             /**
              * Light On
              * @description Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).
@@ -1502,7 +1576,7 @@ export type components = {
             position_source: components["schemas"]["PositionSource"];
             /**
              * Raw
-             * @description Adapter specific extras. Consumers must not rely on its structure.
+             * @description Adapter specific extras. Consumers must not rely on its structure; the typed fields above replace the keys they cover.
              */
             raw?: {
                 [key: string]: unknown;
@@ -1511,6 +1585,10 @@ export type components = {
             rtk_fix: components["schemas"]["RtkFixStatus"];
             /** @default unknown */
             rtk_source: components["schemas"]["RtkSource"];
+            /** @description The mower's start self-check (`ok` or `blocked` with the reason); null when the connection does not report it. */
+            self_check?: components["schemas"]["SelfCheck"] | null;
+            /** @description The mower's own Wi-Fi and mobile signal in dBm and its uplink; null when the connection does not report them. */
+            signal?: components["schemas"]["SignalStatus"] | null;
             /** Speed Mps */
             speed_mps?: number | null;
             /** @description The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one. */
@@ -1637,6 +1715,13 @@ export type components = {
              */
             index: number;
         };
+        /**
+         * NetworkKind
+         * @description How the mower itself reaches the internet (its own uplink, not MowDeck's connection to
+         *     it, which is ``MowerState.connection``).
+         * @enum {string}
+         */
+        NetworkKind: "wifi" | "mobile" | "ble" | "none";
         /**
          * PermissionDef
          * @description A permission a module defines, e.g. ``mower.control``.
@@ -1765,6 +1850,42 @@ export type components = {
          * @enum {string}
          */
         RtkSource: "base_station" | "network" | "unknown";
+        /**
+         * SelfCheck
+         * @description The mower's start self-check (``MowerState.self_check``).
+         */
+        SelfCheck: {
+            /**
+             * Detail
+             * @description With `blocked`: what stops the mower as a lower-case key, e.g. `rain`, `lifted`, `low_battery`, `outside_task_area`, `non_working_hours`, `rtk_not_ready`; the adapter's documentation lists its keys. Null with `ok`.
+             */
+            detail?: string | null;
+            result: components["schemas"]["SelfCheckResult"];
+        };
+        /**
+         * SelfCheckResult
+         * @description Outcome of the mower's start self-check.
+         * @enum {string}
+         */
+        SelfCheckResult: "ok" | "blocked";
+        /**
+         * SignalStatus
+         * @description The mower's own radio signal (``MowerState.signal``).
+         */
+        SignalStatus: {
+            /**
+             * Mobile Dbm
+             * @description Mobile network (LTE) signal in dBm; null when not reported.
+             */
+            mobile_dbm?: number | null;
+            /** @description The uplink the mower uses now; null when not reported. */
+            network?: components["schemas"]["NetworkKind"] | null;
+            /**
+             * Wifi Dbm
+             * @description Wi-Fi signal in dBm; null when not reported.
+             */
+            wifi_dbm?: number | null;
+        };
         /**
          * SpotRunStatus
          * @description Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``).

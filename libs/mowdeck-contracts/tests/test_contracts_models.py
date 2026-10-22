@@ -268,3 +268,68 @@ def test_a_timestamp_outside_the_utc_range_is_a_validation_error(stamp: str) -> 
         MowPath.model_validate_json(
             '{"path_hash":"h","points_total":0,"planned_at":"' + stamp + '"}'
         )
+
+
+def test_mower_state_typed_job_gnss_signal_and_self_check_default_to_null() -> None:
+    old = _state()
+    assert old.job is None and old.gnss is None and old.signal is None
+    assert old.self_check is None and old.error_category is None
+
+
+def test_mower_state_typed_job_gnss_signal_and_self_check_round_trip() -> None:
+    from mowdeck_contracts.v1 import (
+        GnssSolution,
+        JobProgress,
+        MowerErrorCategory,
+        NetworkKind,
+        SelfCheckResult,
+    )
+
+    state = _state(
+        activity="error",
+        job={
+            "progress_percent": 42,
+            "area_id": "1234567890",
+            "elapsed_s": 1260,
+            "remaining_s": 1800,
+            "mowed_m2": 310.5,
+        },
+        gnss={"satellites": 31, "correction_age_s": 1, "rtk_status": "fixed"},
+        signal={"wifi_dbm": -61, "mobile_dbm": -88, "network": "mobile"},
+        self_check={"result": "blocked", "detail": "rain"},
+        error_category="trapped",
+    )
+    assert state.job == JobProgress(
+        progress_percent=42, area_id="1234567890", elapsed_s=1260, remaining_s=1800, mowed_m2=310.5
+    )
+    assert state.gnss is not None and state.gnss.rtk_status is GnssSolution.FIXED
+    assert state.gnss.correction_age_s == 1.0
+    assert state.signal is not None and state.signal.network is NetworkKind.MOBILE
+    assert state.self_check is not None and state.self_check.result is SelfCheckResult.BLOCKED
+    assert state.error_category is MowerErrorCategory.TRAPPED
+    assert MowerState.model_validate_json(state.model_dump_json()) == state
+    # Every inner field is optional: a partial report validates.
+    partial = _state(job={}, gnss={}, signal={"network": "wifi"}, self_check={"result": "ok"})
+    assert partial.job == JobProgress() and partial.gnss is not None
+    assert partial.gnss.rtk_status is GnssSolution.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"job": {"progress_percent": 101}},
+        {"job": {"elapsed_s": -1}},
+        {"job": {"mowed_m2": -0.5}},
+        {"gnss": {"satellites": -1}},
+        {"gnss": {"rtk_status": "rtk"}},
+        {"signal": {"wifi_dbm": 0}},
+        {"signal": {"mobile_dbm": -151}},
+        {"signal": {"network": "satellite"}},
+        {"self_check": {"result": "maybe"}},
+        {"self_check": {"detail": "rain"}},
+        {"error_category": "gremlins"},
+    ],
+)
+def test_mower_state_typed_fields_reject_out_of_range_values(overrides: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):
+        _state(**overrides)

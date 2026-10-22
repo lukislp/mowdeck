@@ -722,3 +722,41 @@ async def test_drive_reverse_and_the_turn_setting() -> None:
     forward_only.tick(1)
     assert forward_only.local_position == start
     await session.close()
+
+
+async def test_simulator_reports_typed_job_gnss_signal_and_self_check() -> None:
+    sim = await _connected()
+    docked = await sim.get_state()
+    assert docked.job is None and docked.error_category is None
+    assert docked.gnss is not None and docked.gnss.rtk_status == "fixed"
+    assert docked.gnss.satellites and docked.gnss.correction_age_s == 1.0
+    assert docked.signal is not None and docked.signal.network == "wifi"
+    assert docked.signal.wifi_dbm is not None and docked.signal.wifi_dbm < 0
+    assert docked.self_check is not None and docked.self_check.result == "ok"
+
+    assert (await sim.execute(StartMow(area_ids=["front"]))).status == "executed"
+    states = _run_until(sim, lambda s: s.raw["progress_percent"] >= 20)
+    job = states[-1].job
+    assert job is not None and job.progress_percent == states[-1].raw["progress_percent"]
+    assert job.area_id == "front"
+    assert job.elapsed_s is not None and job.elapsed_s > 0
+    assert job.remaining_s is not None and job.remaining_s > 0
+    assert job.mowed_m2 is not None and job.mowed_m2 > 0
+    later = _run_until(sim, lambda s: s.raw["progress_percent"] >= 60)[-1].job
+    assert later is not None and later.remaining_s is not None and later.mowed_m2 is not None
+    assert later.remaining_s < job.remaining_s and later.mowed_m2 > job.mowed_m2
+
+    sim.set_rtk(RtkFixStatus.NONE)
+    lost = await sim.get_state()
+    assert lost.gnss is not None and lost.gnss.rtk_status == "single"
+    assert lost.gnss.correction_age_s is None
+
+
+async def test_simulator_error_category_of_stuck_and_lifted() -> None:
+    sim = await _connected()
+    assert (await sim.execute(StartMow(area_ids=["front"]))).status == "executed"
+    _run_until(sim, lambda s: s.raw["phase"] == "mowing")
+    sim.inject_stuck()
+    assert (await sim.get_state()).error_category == "trapped"
+    sim.lift()
+    assert (await sim.get_state()).error_category == "lift_tilt"

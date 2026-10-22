@@ -236,6 +236,7 @@ def sample_device(
     rtk.mqtt_rtk_info.rtk_switch = "RTK_USED_NRTK"
     device.report_data.work.knife_height = 55
     device.report_data.connect.used_net = "NET_USED_TYPE_MNET"
+    device.report_data.connect.mnet_rssi = -79
     device.report_data.locations = [LocationData(bol_hash=424242)]
     location = device.location
     location.RTK.latitude = math.radians(RTK_LAT_DEG)
