@@ -422,3 +422,21 @@ async def test_scheduler_starts_from_the_mowers_saved_defaults() -> None:
         "border_laps": 3,
     }
     assert second.command.model_dump()["pattern"]["angle_deg"] == 45.0
+
+
+async def test_scheduler_re_enabling_an_automatically_disabled_schedule_takes_it_over() -> None:
+    async with harness(scheduler_max_permission_skips=1) as h:
+        owner = await h.owner()
+        mower_id = await h.register(owner)
+        manager = await h.member(owner, "manager")
+        created = await h.schedule(manager, target_type="mower", target_id=str(mower_id))
+        await h.revoke(manager)
+        h.clock.set(FIRST)
+        await h.tick()
+        url = f"{API}/schedules/{created['id']}"
+        enabled = await h.client.patch(url, headers=owner.headers, json={"enabled": True})
+    assert enabled.status_code == 200, enabled.text
+    body = enabled.json()
+    assert body["enabled"] is True and body["disabled_reason"] is None
+    # The old owner lost can_control, so the schedule would only be disabled again.
+    assert body["owner"]["subject"] == str(owner.principal.subject)
