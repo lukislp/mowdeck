@@ -865,3 +865,117 @@ def test_mammotion_drive_reverse_follows_the_bluetooth_drive_session() -> None:
     assert caps(True).drive_reverse  # send_movement takes a negative linear speed
     assert not caps(False).drive_reverse
     assert mapping.movement_wire(-1.0, 0.0)[0] < 0
+
+
+# --- typed job, GNSS, signal and self-check ---------------------------------------------------
+
+
+def _packed(high: int, low: int) -> int:
+    return (high << 16) | low
+
+
+def test_job_of_a_running_job_unpacks_progress_area_and_minutes() -> None:
+    device = sample_device()
+    device.report_data.dev.sys_status = int(WorkMode.MODE_WORKING)
+    device.report_data.dev.charge_state = 0
+    device.report_data.work.area = _packed(42, 310)  # 42 %, 310 m2 mowed
+    device.report_data.work.progress = _packed(30, 51)  # 30 min left of 51
+    device.location.work_zone = FRONT_HASH
+    state = _state(device)
+    assert state.job is not None
+    assert state.job.progress_percent == 42
+    assert state.job.mowed_m2 == 310.0
+    assert (state.job.elapsed_s, state.job.remaining_s) == (21 * 60, 30 * 60)
+    assert state.job.area_id == str(FRONT_HASH)
+    # The raw keys stay for older consumers.
+    assert state.raw["progress_percent"] == 42 and state.raw["work_zone"] == FRONT_HASH
+
+
+def test_job_of_unknown_zone_and_missing_estimate_stay_null() -> None:
+    device = sample_device()
+    device.report_data.dev.sys_status = int(WorkMode.MODE_PAUSE)
+    device.report_data.dev.charge_state = 0
+    device.location.work_zone = 987654321  # not an area of the map
+    job = mapping.job_of(device)
+    assert job is not None and job.area_id is None
+    assert job.elapsed_s is None and job.remaining_s is None and job.progress_percent == 0
+
+
+@pytest.mark.parametrize("mode", [WorkMode.MODE_READY, WorkMode.MODE_CHARGING])
+def test_job_of_without_a_job_is_none(mode: WorkMode) -> None:
+    device = sample_device()
+    device.report_data.dev.sys_status = int(mode)
+    device.report_data.work.area = _packed(100, 500)  # left over from the last job
+    assert _state(device).job is None
+    assert mapping.job_of(device, has_report=False) is None
+
+
+def test_gnss_signal_and_self_check_of_the_sample_device() -> None:
+    from mowdeck_contracts.v1 import GnssSolution, NetworkKind, SelfCheckResult
+
+    state = _state(sample_device())
+    assert state.gnss is not None
+    assert (state.gnss.satellites, state.gnss.correction_age_s) == (31, 1.0)
+    assert state.gnss.rtk_status is GnssSolution.FIXED
+    assert state.signal is not None
+    assert (state.signal.wifi_dbm, state.signal.mobile_dbm) == (None, -79)
+    assert state.signal.network is NetworkKind.MOBILE
+    assert state.self_check is not None and state.self_check.result is SelfCheckResult.OK
+    assert state.self_check.detail is None and state.error_category is None
+
+
+def test_gnss_signal_and_self_check_are_null_before_the_first_report() -> None:
+    state = _state(sample_device(), has_report=False)
+    assert state.gnss is None and state.signal is None and state.self_check is None
+    assert state.job is None
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(0, "none"), (1, "single"), (2, "single"), (4, "fixed"), (5, "float"), (9, "unknown")],
+)
+def test_gnss_solution(status: int, expected: str) -> None:
+    device = sample_device()
+    device.report_data.rtk.status = status
+    device.report_data.rtk.age = 0
+    gnss = mapping.gnss_of(device)
+    assert gnss is not None and gnss.rtk_status == expected
+    assert gnss.correction_age_s is None  # age 0: no corrections
+
+
+@pytest.mark.parametrize(
+    ("used_net", "connect_type", "ble_rssi", "expected"),
+    [
+        ("NET_USED_TYPE_WIFI", 0, 0, "wifi"),
+        ("WIFI", 0, 0, "wifi"),
+        ("NET_USED_TYPE_MNET", 0, 0, "mobile"),
+        ("NET_USED_TYPE_TC_MNET", 0, 0, "mobile"),
+        ("NONE", 2, 0, "wifi"),
+        ("NONE", 1, 0, "mobile"),
+        ("NONE", 0, -70, "ble"),
+        ("NONE", 0, 0, "none"),
+    ],
+)
+def test_network_of(used_net: str, connect_type: int, ble_rssi: int, expected: str) -> None:
+    device = sample_device()
+    connect = device.report_data.connect
+    connect.used_net, connect.connect_type, connect.ble_rssi = used_net, connect_type, ble_rssi
+    assert mapping.network_of(device) == expected
+
+
+@pytest.mark.parametrize(("reported", "dbm"), [(-55, -55), (0, None), (12, None), (-200, None)])
+def test_signal_dbm_drops_unreported_and_implausible_values(reported: int, dbm: int | None) -> None:
+    device = sample_device()
+    device.report_data.connect.wifi_rssi = reported
+    signal = mapping.signal_of(device)
+    assert signal is not None and signal.wifi_dbm == dbm
+
+
+def test_self_check_blocked_names_the_reason() -> None:
+    from mowdeck_contracts.v1 import SelfCheckResult
+
+    device = sample_device()
+    device.report_data.dev.self_check_status = 20
+    state = _state(device)
+    assert state.self_check is not None and state.self_check.result is SelfCheckResult.BLOCKED
+    assert state.self_check.detail == "rain" and state.raw["self_check"] == "rain"

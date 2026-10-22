@@ -780,6 +780,137 @@
       "title": "GeoPosition",
       "type": "object"
     },
+    "GnssSolution": {
+      "description": "The satellite position solution as the receiver reports it (finer than\n:class:`~mowdeck_contracts.v1.RtkFixStatus`, which folds ``single`` into ``none``).",
+      "enum": [
+        "none",
+        "single",
+        "float",
+        "fixed",
+        "unknown"
+      ],
+      "title": "GnssSolution",
+      "type": "string"
+    },
+    "GnssStatus": {
+      "description": "The mower's satellite positioning (``MowerState.gnss``).",
+      "properties": {
+        "correction_age_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Age of the last RTK correction data in seconds; null without corrections.",
+          "title": "Correction Age S"
+        },
+        "rtk_status": {
+          "$ref": "#/$defs/GnssSolution",
+          "default": "unknown",
+          "description": "The position solution of the receiver."
+        },
+        "satellites": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Satellites the receiver uses.",
+          "title": "Satellites"
+        }
+      },
+      "title": "GnssStatus",
+      "type": "object"
+    },
+    "JobProgress": {
+      "description": "The mowing job the mower runs right now (``MowerState.job``).\n\nNull on the state when no job runs or the connection reports none. Times have the\nresolution the vendor reports (Mammotion: whole minutes, given here in seconds).",
+      "properties": {
+        "area_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The map area (`MowerMap.areas[].id`) the mower works in now; null when it is not one of the mower's map areas or not reported.",
+          "title": "Area Id"
+        },
+        "elapsed_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds the job has run so far.",
+          "title": "Elapsed S"
+        },
+        "mowed_m2": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Area mowed in this job so far, in square metres.",
+          "title": "Mowed M2"
+        },
+        "progress_percent": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Share of the job done, 0 to 100.",
+          "title": "Progress Percent"
+        },
+        "remaining_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds the mower estimates the job still needs.",
+          "title": "Remaining S"
+        }
+      },
+      "title": "JobProgress",
+      "type": "object"
+    },
     "LinkStatus": {
       "description": "The state of one additional link as the Device-Gateway reports it in ``MowerState.links``.",
       "properties": {
@@ -901,6 +1032,24 @@
       "title": "MowerActivity",
       "type": "string"
     },
+    "MowerErrorCategory": {
+      "description": "What kind of fault ``MowerState.error_code`` names, manufacturer neutral.",
+      "enum": [
+        "trapped",
+        "obstacle",
+        "outside",
+        "wheel_slip",
+        "lift_tilt",
+        "collision",
+        "battery",
+        "blade_motor",
+        "rain",
+        "positioning",
+        "other"
+      ],
+      "title": "MowerErrorCategory",
+      "type": "string"
+    },
     "MowerState": {
       "description": "A telemetry snapshot of one mower, published on ``telemetry.mower.<id>``.\n\nTwo times: ``observed_at`` is when the mower reported the values, ``heartbeat_at`` when the\ngateway's link to it was last alive. A docked mower reports rarely, so old values do not mean\nan offline mower (ADR 0040).",
       "properties": {
@@ -979,6 +1128,18 @@
           "description": "The vendor's speed setting for manual driving (`MowerCapabilities.drive_speed_setting`); null when the connection has none or has not read it yet.",
           "title": "Drive Speed Mps"
         },
+        "error_category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MowerErrorCategory"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "With activity `error`: the manufacturer-neutral kind of the fault; null otherwise or when the connection cannot tell."
+        },
         "error_code": {
           "anyOf": [
             {
@@ -1030,6 +1191,18 @@
           "default": null,
           "description": "Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor."
         },
+        "gnss": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GnssStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Satellite positioning details (satellites, RTK correction age, solution); null when the connection does not report them."
+        },
         "heartbeat_at": {
           "anyOf": [
             {
@@ -1043,6 +1216,18 @@
           "default": null,
           "description": "When the Device-Gateway last knew its connection to the mower alive (UTC). The gateway sets it on every publish, never an adapter: it advances with each heartbeat while `observed_at` stays the time of the mower's last report. Clients judge online and offline by it (ADR 0040); null in states from before the field, then `observed_at` stands in.",
           "title": "Heartbeat At"
+        },
+        "job": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JobProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The mowing job the mower runs (progress, current area, elapsed and remaining seconds, mowed square metres); null when none runs or the connection does not report it."
         },
         "light_on": {
           "anyOf": [
@@ -1094,7 +1279,7 @@
         },
         "raw": {
           "additionalProperties": true,
-          "description": "Adapter specific extras. Consumers must not rely on its structure.",
+          "description": "Adapter specific extras. Consumers must not rely on its structure; the typed fields above replace the keys they cover.",
           "title": "Raw",
           "type": "object"
         },
@@ -1105,6 +1290,30 @@
         "rtk_source": {
           "$ref": "#/$defs/RtkSource",
           "default": "unknown"
+        },
+        "self_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelfCheck"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The mower's start self-check (`ok` or `blocked` with the reason); null when the connection does not report it."
+        },
+        "signal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignalStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The mower's own Wi-Fi and mobile signal in dBm and its uplink; null when the connection does not report them."
         },
         "speed_mps": {
           "anyOf": [
@@ -1155,6 +1364,17 @@
       ],
       "title": "MowerState",
       "type": "object"
+    },
+    "NetworkKind": {
+      "description": "How the mower itself reaches the internet (its own uplink, not MowDeck's connection to\nit, which is ``MowerState.connection``).",
+      "enum": [
+        "wifi",
+        "mobile",
+        "ble",
+        "none"
+      ],
+      "title": "NetworkKind",
+      "type": "string"
     },
     "PongMessage": {
       "description": "Answer to ``ping``.",
@@ -1352,6 +1572,91 @@
       ],
       "title": "RtkSource",
       "type": "string"
+    },
+    "SelfCheck": {
+      "description": "The mower's start self-check (``MowerState.self_check``).",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "With `blocked`: what stops the mower as a lower-case key, e.g. `rain`, `lifted`, `low_battery`, `outside_task_area`, `non_working_hours`, `rtk_not_ready`; the adapter's documentation lists its keys. Null with `ok`.",
+          "title": "Detail"
+        },
+        "result": {
+          "$ref": "#/$defs/SelfCheckResult"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "SelfCheck",
+      "type": "object"
+    },
+    "SelfCheckResult": {
+      "description": "Outcome of the mower's start self-check.",
+      "enum": [
+        "ok",
+        "blocked"
+      ],
+      "title": "SelfCheckResult",
+      "type": "string"
+    },
+    "SignalStatus": {
+      "description": "The mower's own radio signal (``MowerState.signal``).",
+      "properties": {
+        "mobile_dbm": {
+          "anyOf": [
+            {
+              "maximum": -1,
+              "minimum": -150,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mobile network (LTE) signal in dBm; null when not reported.",
+          "title": "Mobile Dbm"
+        },
+        "network": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NetworkKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The uplink the mower uses now; null when not reported."
+        },
+        "wifi_dbm": {
+          "anyOf": [
+            {
+              "maximum": -1,
+              "minimum": -150,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Wi-Fi signal in dBm; null when not reported.",
+          "title": "Wifi Dbm"
+        }
+      },
+      "title": "SignalStatus",
+      "type": "object"
     },
     "SpotRunStatus": {
       "description": "Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``).",

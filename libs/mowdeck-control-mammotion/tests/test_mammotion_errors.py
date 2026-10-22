@@ -126,6 +126,7 @@ def test_mammotion_paused_mower_with_a_fresh_fault_is_in_error(
     assert state.error_message == message
     assert state.drive_recoverable is True
     assert state.raw["error_category"] == category
+    assert state.error_category == category  # the typed field carries the same key
     assert state.raw["error_source"] == "error_log"
     assert state.raw["work_mode"] == "MODE_PAUSE"
     assert "lifted" not in state.raw
@@ -175,6 +176,7 @@ def test_mammotion_error_mode_prefers_the_fresh_fault_and_drops_the_sign() -> No
     state = _state(device)
     assert state.error_code == "mode_system_error"
     assert state.raw["error_category"] == "other" and state.raw["error_source"] == "work_mode"
+    assert state.error_category == "other"
     assert state.drive_recoverable is False
 
 
@@ -184,7 +186,9 @@ def test_mammotion_self_check_is_reported_when_not_normal() -> None:
     device.report_data.dev.self_check_status = 20
     assert _state(device).raw["self_check"] == "rain"
     device.report_data.dev.self_check_status = 77
-    assert _state(device).raw["self_check"] == "other_77"
+    state = _state(device)
+    assert state.raw["self_check"] == "other_77"
+    assert state.self_check is not None and state.self_check.detail == "other_77"
 
 
 # --- connection -------------------------------------------------------------------------------
@@ -286,3 +290,9 @@ async def test_mammotion_docked_pause_reads_no_error_log() -> None:
     await asyncio.sleep(0.05)
     assert _error_log_reads(port) == []
     await conn.disconnect()
+
+
+def test_every_adapter_error_category_is_a_contract_category() -> None:
+    from mowdeck_contracts.v1 import MowerErrorCategory
+
+    assert {str(c) for c in ErrorCategory} == {str(c) for c in MowerErrorCategory}

@@ -20,6 +20,13 @@ from mowdeck_contracts.v1.calibration import (
 )
 from mowdeck_contracts.v1.firmware import FirmwareInfo
 from mowdeck_contracts.v1.links import LinkStatus
+from mowdeck_contracts.v1.mower_status import (
+    GnssStatus,
+    JobProgress,
+    MowerErrorCategory,
+    SelfCheck,
+    SignalStatus,
+)
 from mowdeck_contracts.v1.spot import (
     MAX_SPOT_MOW_SPEED_MPS,
     SpotCircle,
@@ -186,9 +193,36 @@ class MowerState(ContractModel):
         "the vendor setting (read only; ADR 0043). A spot run without its own `turn_style` "
         "uses it; null when the connection does not report one.",
     )
+    job: JobProgress | None = Field(
+        default=None,
+        description="The mowing job the mower runs (progress, current area, elapsed and "
+        "remaining seconds, mowed square metres); null when none runs or the connection does "
+        "not report it.",
+    )
+    gnss: GnssStatus | None = Field(
+        default=None,
+        description="Satellite positioning details (satellites, RTK correction age, solution); "
+        "null when the connection does not report them.",
+    )
+    signal: SignalStatus | None = Field(
+        default=None,
+        description="The mower's own Wi-Fi and mobile signal in dBm and its uplink; null when "
+        "the connection does not report them.",
+    )
+    self_check: SelfCheck | None = Field(
+        default=None,
+        description="The mower's start self-check (`ok` or `blocked` with the reason); null "
+        "when the connection does not report it.",
+    )
+    error_category: MowerErrorCategory | None = Field(
+        default=None,
+        description="With activity `error`: the manufacturer-neutral kind of the fault; null "
+        "otherwise or when the connection cannot tell.",
+    )
     raw: dict[str, Any] = Field(
         default_factory=dict,
-        description="Adapter specific extras. Consumers must not rely on its structure.",
+        description="Adapter specific extras. Consumers must not rely on its structure; the "
+        "typed fields above replace the keys they cover.",
     )
 
     @model_validator(mode="after")

@@ -149,6 +149,13 @@ export type DriveRecoverable = boolean
  * The vendor's speed setting for manual driving (`MowerCapabilities.drive_speed_setting`); null when the connection has none or has not read it yet.
  */
 export type DriveSpeedMps = (number | null)
+/**
+ * What kind of fault ``MowerState.error_code`` names, manufacturer neutral.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "MowerErrorCategory".
+ */
+export type MowerErrorCategory = ("trapped" | "obstacle" | "outside" | "wheel_slip" | "lift_tilt" | "collision" | "battery" | "blade_motor" | "rain" | "positioning" | "other")
 export type ErrorCode = (string | null)
 export type ErrorMessage = (string | null)
 export type Firmware = (string | null)
@@ -178,9 +185,41 @@ export type Progress = (number | null)
 export type ReleaseNotes = (string | null)
 export type UpdateState = ("idle" | "available" | "installing" | "failed" | "unknown")
 /**
+ * Age of the last RTK correction data in seconds; null without corrections.
+ */
+export type CorrectionAgeS = (number | null)
+/**
+ * The position solution of the receiver.
+ */
+export type GnssSolution = ("none" | "single" | "float" | "fixed" | "unknown")
+/**
+ * Satellites the receiver uses.
+ */
+export type Satellites = (number | null)
+/**
  * When the Device-Gateway last knew its connection to the mower alive (UTC). The gateway sets it on every publish, never an adapter: it advances with each heartbeat while `observed_at` stays the time of the mower's last report. Clients judge online and offline by it (ADR 0040); null in states from before the field, then `observed_at` stands in.
  */
 export type HeartbeatAt = (string | null)
+/**
+ * The map area (`MowerMap.areas[].id`) the mower works in now; null when it is not one of the mower's map areas or not reported.
+ */
+export type AreaId = (string | null)
+/**
+ * Seconds the job has run so far.
+ */
+export type ElapsedS = (number | null)
+/**
+ * Area mowed in this job so far, in square metres.
+ */
+export type MowedM2 = (number | null)
+/**
+ * Share of the job done, 0 to 100.
+ */
+export type ProgressPercent = (number | null)
+/**
+ * Seconds the mower estimates the job still needs.
+ */
+export type RemainingS = (number | null)
 /**
  * Whether the mower's light (the camera's headlamp) is on, as the mower reports it; null when not reported (no light, or no answer yet).
  */
@@ -250,6 +289,33 @@ export type RtkFixStatus = ("none" | "float" | "fixed" | "unknown")
  * Where RTK correction data comes from.
  */
 export type RtkSource = ("base_station" | "network" | "unknown")
+/**
+ * With `blocked`: what stops the mower as a lower-case key, e.g. `rain`, `lifted`, `low_battery`, `outside_task_area`, `non_working_hours`, `rtk_not_ready`; the adapter's documentation lists its keys. Null with `ok`.
+ */
+export type Detail = (string | null)
+/**
+ * Outcome of the mower's start self-check.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "SelfCheckResult".
+ */
+export type SelfCheckResult = ("ok" | "blocked")
+/**
+ * Mobile network (LTE) signal in dBm; null when not reported.
+ */
+export type MobileDbm = (number | null)
+/**
+ * How the mower itself reaches the internet (its own uplink, not MowDeck's connection to
+ * it, which is ``MowerState.connection``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "NetworkKind".
+ */
+export type NetworkKind = ("wifi" | "mobile" | "ble" | "none")
+/**
+ * Wi-Fi signal in dBm; null when not reported.
+ */
+export type WifiDbm = (number | null)
 export type SpeedMps = (number | null)
 /**
  * Points reached so far.
@@ -263,7 +329,7 @@ export type DryRun = boolean
  * Points of the plan in total.
  */
 export type PlannedPoints = number
-export type ProgressPercent = number
+export type ProgressPercent1 = number
 /**
  * Why the run ended early or paused, if so.
  */
@@ -352,7 +418,7 @@ export type Type8 = "drive_started"
 export type Seq = number
 export type SessionId1 = string
 export type Type9 = "drive_frame_ack"
-export type Detail = (string | null)
+export type Detail1 = (string | null)
 export type MowerId5 = string
 /**
  * Why a drive session ended.
@@ -413,6 +479,14 @@ export type Type16 = "drive_frame"
 export type RequestId9 = (string | null)
 export type SessionId4 = string
 export type Type17 = "drive_stop"
+/**
+ * The satellite position solution as the receiver reports it (finer than
+ * :class:`~mowdeck_contracts.v1.RtkFixStatus`, which folds ``single`` into ``none``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "GnssSolution".
+ */
+export type GnssSolution1 = ("none" | "single" | "float" | "fixed" | "unknown")
 /**
  * Where :attr:`MowerState.position` comes from, so consumers can judge it.
  * 
@@ -530,6 +604,10 @@ connection: ConnectionKind
 drive_calibration?: (DriveCalibrationStatus | null)
 drive_recoverable?: DriveRecoverable
 drive_speed_mps?: DriveSpeedMps
+/**
+ * With activity `error`: the manufacturer-neutral kind of the fault; null otherwise or when the connection cannot tell.
+ */
+error_category?: (MowerErrorCategory | null)
 error_code?: ErrorCode
 error_message?: ErrorMessage
 firmware?: Firmware
@@ -537,7 +615,15 @@ firmware?: Firmware
  * Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor.
  */
 firmware_info?: (FirmwareInfo | null)
+/**
+ * Satellite positioning details (satellites, RTK correction age, solution); null when the connection does not report them.
+ */
+gnss?: (GnssStatus | null)
 heartbeat_at?: HeartbeatAt
+/**
+ * The mowing job the mower runs (progress, current area, elapsed and remaining seconds, mowed square metres); null when none runs or the connection does not report it.
+ */
+job?: (JobProgress | null)
 light_on?: LightOn
 links?: Links
 mower_id: MowerId1
@@ -547,6 +633,14 @@ position_source?: PositionSource
 raw?: Raw
 rtk_fix?: RtkFixStatus
 rtk_source?: RtkSource
+/**
+ * The mower's start self-check (`ok` or `blocked` with the reason); null when the connection does not report it.
+ */
+self_check?: (SelfCheck | null)
+/**
+ * The mower's own Wi-Fi and mobile signal in dBm and its uplink; null when the connection does not report them.
+ */
+signal?: (SignalStatus | null)
 speed_mps?: SpeedMps
 /**
  * The spot run MowDeck drives on this mower right now (`SpotMow`), with its final state kept until the next run; null when there never was one.
@@ -637,6 +731,33 @@ release_notes?: ReleaseNotes
 update_state?: UpdateState
 }
 /**
+ * The mower's satellite positioning (``MowerState.gnss``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "GnssStatus".
+ */
+export interface GnssStatus {
+correction_age_s?: CorrectionAgeS
+rtk_status?: GnssSolution
+satellites?: Satellites
+}
+/**
+ * The mowing job the mower runs right now (``MowerState.job``).
+ * 
+ * Null on the state when no job runs or the connection reports none. Times have the
+ * resolution the vendor reports (Mammotion: whole minutes, given here in seconds).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "JobProgress".
+ */
+export interface JobProgress {
+area_id?: AreaId
+elapsed_s?: ElapsedS
+mowed_m2?: MowedM2
+progress_percent?: ProgressPercent
+remaining_s?: RemainingS
+}
+/**
  * State of the mower's additional links by kind (e.g. `ble_bridge`); empty for a mower with only its primary connection.
  */
 export interface Links {
@@ -671,10 +792,34 @@ lat: Lat
 lon: Lon
 }
 /**
- * Adapter specific extras. Consumers must not rely on its structure.
+ * Adapter specific extras. Consumers must not rely on its structure; the typed fields above replace the keys they cover.
  */
 export interface Raw {
 [k: string]: unknown | undefined
+}
+/**
+ * The mower's start self-check (``MowerState.self_check``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "SelfCheck".
+ */
+export interface SelfCheck {
+detail?: Detail
+result: SelfCheckResult
+}
+/**
+ * The mower's own radio signal (``MowerState.signal``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "SignalStatus".
+ */
+export interface SignalStatus {
+mobile_dbm?: MobileDbm
+/**
+ * The uplink the mower uses now; null when not reported.
+ */
+network?: (NetworkKind | null)
+wifi_dbm?: WifiDbm
 }
 /**
  * Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``).
@@ -686,7 +831,7 @@ export interface SpotRunStatus {
 driven_points?: DrivenPoints
 dry_run?: DryRun
 planned_points?: PlannedPoints
-progress_percent?: ProgressPercent
+progress_percent?: ProgressPercent1
 reason?: Reason1
 run_id: RunId1
 segment_index?: SegmentIndex
@@ -796,7 +941,7 @@ type: Type9
  * via the `definition` "DriveEndedMessage".
  */
 export interface DriveEndedMessage {
-detail?: Detail
+detail?: Detail1
 mower_id: MowerId5
 reason: DriveEndReason
 session_id: SessionId2

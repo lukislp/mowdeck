@@ -35,6 +35,9 @@ from mowdeck_contracts.v1 import (
     FirmwareInfo,
     GeoPosition,
     GeoReference,
+    GnssSolution,
+    GnssStatus,
+    JobProgress,
     LinkStatus,
     LocalPoint,
     MapArea,
@@ -42,15 +45,20 @@ from mowdeck_contracts.v1 import (
     MapZone,
     MowerActivity,
     MowerCapabilities,
+    MowerErrorCategory,
     MowerMap,
     MowerState,
     MowPath,
     MowPathKind,
     MowPathProgress,
+    NetworkKind,
     PositionSource,
     ProxyInfo,
     RtkFixStatus,
     RtkSource,
+    SelfCheck,
+    SelfCheckResult,
+    SignalStatus,
     StartMow,
     TurnStyle,
 )
@@ -449,6 +457,121 @@ def _float(value: object) -> float:
     return float(value) if isinstance(value, int | float) and math.isfinite(value) else 0.0
 
 
+_GNSS_SOLUTION: Final[Mapping[RTKStatus, GnssSolution]] = {
+    RTKStatus.NONE: GnssSolution.NONE,
+    RTKStatus.SINGLE: GnssSolution.SINGLE,
+    RTKStatus.FLOAT: GnssSolution.FLOAT,
+    RTKStatus.FIX: GnssSolution.FIXED,
+}
+_PACKED_LOW: Final = 0xFFFF
+
+
+def job_area_id(device: MowerDevice) -> str | None:
+    """The map area id (:func:`map_of` keeps the zone hash as text) of the area the mower works
+    in (``location.work_zone``), None when the hash is not one of the map's areas (0, a
+    placeholder, or a map that has not arrived yet)."""
+    zone = _int(device.location.work_zone)
+    return str(zone) if zone and zone in device.map.area else None
+
+
+def job_of(device: MowerDevice, *, has_report: bool = True) -> JobProgress | None:
+    """The running job for ``MowerState.job``, None while no job runs (see
+    :func:`path_job_running`: working, paused, returning).
+
+    ``report_data.work`` packs two 16-bit values into each of two fields (the same reading as
+    Mammotion-HA's ``sensor.py``): ``area`` holds the progress in percent (high half,
+    PyMammotion's ``mow_percent``) and the mowed area in square metres (low half,
+    ``area_mowed``); ``progress`` holds the minutes left (high half) and the job's total
+    minutes (low half), so elapsed is total minus left. Minutes are given in seconds. A total of
+    0 means the mower has not estimated the job yet, then both times are null.
+    """
+    if not has_report or not path_job_running(device):
+        return None
+    work = device.report_data.work
+    area = _int(work.area)
+    packed_time = _int(work.progress)
+    total_min = packed_time & _PACKED_LOW
+    left_min = packed_time >> 16
+    elapsed_s = remaining_s = None
+    if total_min > 0:
+        remaining_s = min(left_min, total_min) * 60
+        elapsed_s = max(0, total_min - left_min) * 60
+    return JobProgress(
+        progress_percent=max(0, min(100, area >> 16)),
+        area_id=job_area_id(device),
+        elapsed_s=elapsed_s,
+        remaining_s=remaining_s,
+        mowed_m2=float(area & _PACKED_LOW),
+    )
+
+
+def gnss_of(device: MowerDevice, *, has_report: bool = True) -> GnssStatus | None:
+    """Satellites (``report_data.rtk.gps_stars``), correction age in seconds (``rtk.age``,
+    null while it is 0, as without corrections) and the receiver's solution (``rtk.status``,
+    PyMammotion's ``RTKStatus``) for ``MowerState.gnss``; None before the first report."""
+    if not has_report:
+        return None
+    rtk = device.report_data.rtk
+    age = _float(rtk.age)
+    return GnssStatus(
+        satellites=max(0, min(255, _int(rtk.gps_stars))),
+        correction_age_s=age if age > 0 else None,
+        rtk_status=_GNSS_SOLUTION.get(RTKStatus.from_value(_int(rtk.status)), GnssSolution.UNKNOWN),
+    )
+
+
+def _dbm(value: object) -> int | None:
+    """A reported signal in dBm, None when it is 0 (not reported) or outside [-150, -1]."""
+    dbm = _int(value)
+    return dbm if -150 <= dbm <= -1 else None
+
+
+def network_of(device: MowerDevice) -> NetworkKind:
+    """The mower's uplink, the order of PyMammotion's ``device_connection``: ``used_net``
+    (``WIFI`` / ``MNET``, also with the ``NET_USED_TYPE_`` prefix; ``TC_MNET`` is mobile), else
+    ``connect_type`` (2 Wi-Fi, 1 mobile), else a Bluetooth RSSI (``ble``), else ``none``."""
+    connect = device.report_data.connect
+    used = str(connect.used_net or "").upper()
+    if used.endswith("WIFI"):
+        return NetworkKind.WIFI
+    if used.endswith("MNET"):
+        return NetworkKind.MOBILE
+    kind = _int(connect.connect_type)
+    if kind == 2:
+        return NetworkKind.WIFI
+    if kind == 1:
+        return NetworkKind.MOBILE
+    if _int(connect.ble_rssi) != 0:
+        return NetworkKind.BLE
+    return NetworkKind.NONE
+
+
+def signal_of(device: MowerDevice, *, has_report: bool = True) -> SignalStatus | None:
+    """Wi-Fi and mobile signal in dBm (``report_data.connect.wifi_rssi`` / ``mnet_rssi``, null
+    when 0 or implausible) and the uplink (:func:`network_of`) for ``MowerState.signal``; None
+    before the first report."""
+    if not has_report:
+        return None
+    connect = device.report_data.connect
+    return SignalStatus(
+        wifi_dbm=_dbm(connect.wifi_rssi),
+        mobile_dbm=_dbm(connect.mnet_rssi),
+        network=network_of(device),
+    )
+
+
+def self_check_of(device: MowerDevice, *, has_report: bool = True) -> SelfCheck | None:
+    """The start self-check (``report_data.dev.self_check_status``) for ``MowerState.self_check``:
+    ``ok`` for the normal values, else ``blocked`` with :func:`errors.self_check_name` as the
+    detail; None before the first report."""
+    if not has_report:
+        return None
+    status = _int(device.report_data.dev.self_check_status)
+    if status in errors.SELF_CHECK_NORMAL:
+        return SelfCheck(result=SelfCheckResult.OK)
+    return SelfCheck(result=SelfCheckResult.BLOCKED, detail=errors.self_check_name(status))
+
+
 def battery_cycles_of(device: MowerDevice) -> int | None:
     """The battery's lifetime charge cycle counter as the mower reports it, None when unknown.
 
@@ -582,6 +705,11 @@ def state_of(
         drive_speed_mps=drive_speed_of(device),
         drive_recoverable=category in errors.RECOVERABLE_CATEGORIES,
         turn_style=turn_style_of(device),
+        job=job_of(device, has_report=has_report),
+        gnss=gnss_of(device, has_report=has_report),
+        signal=signal_of(device, has_report=has_report),
+        self_check=self_check_of(device, has_report=has_report),
+        error_category=MowerErrorCategory(category) if category is not None else None,
         raw=raw,
     )
 
