@@ -5,13 +5,16 @@ A schedule's target (a mower or a group) guards it: ``can_view`` to see it,
 would only skip), ``can_edit_schedule`` to delete it or skip a run. The account is always the
 verified token's; schedules of other accounts and invisible targets are 404. Whoever creates
 or changes a schedule becomes its owner: firings run on the owner's behalf and re-check its
-``can_control``.
+``can_control``. Switching a schedule on or off (``enabled`` alone) and skipping the next run
+keep the owner, so a toggle from an API token (Home Assistant) does not hand the schedule to
+the token; re-enabling a schedule the Scheduler disabled itself (``disabled_reason``, the owner
+lost ``can_control``) makes the caller the owner, else it would be disabled again.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
-from typing import Any
+from typing import Any, Final
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -42,6 +45,9 @@ from scheduler.domain.rules import (
 )
 
 _NOT_FOUND = "schedule not found"
+
+OWNER_NEUTRAL: Final = frozenset({"enabled"})
+"""Fields a change of which alone keeps the schedule's owner."""
 
 EDITABLE = frozenset(
     {
@@ -298,7 +304,8 @@ class ScheduleService:
         schedule_id: UUID,
         changes: Mapping[str, Any],
     ) -> Schedule:
-        """Change the given fields; the editor becomes the owner, the next run is recomputed."""
+        """Change the given fields; the next run is recomputed. The editor becomes the owner
+        unless only ``enabled`` changes (re-enabling after an automatic disable takes over)."""
         found = await self._visible(principal, account_id, schedule_id, CAN_EDIT_SCHEDULE)
         await self._may_edit(principal, found.target_type, found.target_id)
         unknown = set(changes) - EDITABLE
@@ -319,13 +326,19 @@ class ScheduleService:
             if item is None:
                 raise NotFoundError(_NOT_FOUND)
             was_enabled = item.enabled
+            takes_over = bool(set(changes) - OWNER_NEUTRAL) or (
+                item.enabled is False
+                and changes.get("enabled") is True
+                and item.disabled_reason is not None
+            )
             for name, value in changes.items():
                 setattr(item, name, value)
             if target_changed and new_type == "group" and "area_ids" not in changes:
                 item.area_ids = []
             item.timezone = timezone
-            item.owner = principal.ref().model_dump(mode="json")
-            item.owner_subject = principal.subject
+            if takes_over:
+                item.owner = principal.ref().model_dump(mode="json")
+                item.owner_subject = principal.subject
             validate_schedule(item)
             if item.enabled and not was_enabled:
                 item.permission_skips = 0

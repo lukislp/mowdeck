@@ -311,3 +311,24 @@ async def test_scheduler_api_moving_a_schedule_to_a_group_drops_its_areas() -> N
     assert body["area_ids"] == [] and body["target_type"] == "group"
     assert body["owner"]["subject"] == str(manager.principal.subject)  # the editor owns it now
     assert UUID(body["target_id"]) == UUID(north["id"])
+
+
+async def test_scheduler_api_toggling_enabled_keeps_the_owner() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.register(owner)
+        manager = await h.member(owner, "manager")
+        created = await h.schedule(owner, target_type="mower", target_id=str(mower_id))
+        url = f"{API}/schedules/{created['id']}"
+        off = await h.client.patch(url, headers=manager.headers, json={"enabled": False})
+        on = await h.client.patch(url, headers=manager.headers, json={"enabled": True})
+        skipped = await h.client.post(f"{url}/skip-next", headers=manager.headers)
+        renamed = await h.client.patch(url, headers=manager.headers, json={"name": "Evening"})
+    assert off.status_code == 200 and off.json()["enabled"] is False
+    assert on.status_code == 200 and on.json()["next_run_at"] is not None
+    owner_subject = str(owner.principal.subject)
+    assert off.json()["owner"]["subject"] == owner_subject
+    assert on.json()["owner"]["subject"] == owner_subject
+    assert skipped.status_code == 200 and skipped.json()["owner"]["subject"] == owner_subject
+    # Any other change still makes the editor the owner.
+    assert renamed.json()["owner"]["subject"] == str(manager.principal.subject)
