@@ -377,7 +377,7 @@
   "notif_all_mowers": "All mowers",
   "notif_all_mowers_hint": "Including mowers added later.",
   "notif_no_mowers": "No mowers visible.",
-  "notif_not_stored": "Not saved yet: you do not get any alerts so far.",
+  "notif_not_stored": "Not saved yet: you get the default alerts for all your mowers on your registered devices.",
   "notif_quiet_hours": "Quiet hours",
   "notif_quiet_enable": "Quiet hours",
   "notif_quiet_hint": "No push and no ntfy in this window; the inbox still gets the alerts.",

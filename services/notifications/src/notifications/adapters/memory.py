@@ -147,6 +147,13 @@ class MemoryStore:
         found.sort(key=lambda p: str(p.user_id))
         return found
 
+    async def default_recipients(self, account_id: UUID) -> list[UUID]:
+        users = {s.user_id for s in self.data.push.values() if s.account_id == account_id}
+        users |= {d.user_id for d in self.data.apns.values() if d.account_id == account_id}
+        users |= {user for (user, account) in self.data.ntfy if account == account_id}
+        users -= {user for (user, account) in self.data.preferences if account == account_id}
+        return sorted(users, key=str)
+
     async def try_test(
         self, user_id: UUID, account_id: UUID, now: datetime, every: timedelta
     ) -> bool:

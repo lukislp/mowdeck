@@ -35,7 +35,7 @@ from notifications.domain.models import (
     QuietHours,
     silence_key,
 )
-from notifications.domain.preferences import valid_timezone
+from notifications.domain.preferences import default_preferences, valid_timezone
 
 _TOPIC = re.compile(r"^[-_A-Za-z0-9]{1,64}$")
 _APNS_TOKEN = re.compile(r"^[0-9a-f]{64,200}$")
@@ -107,9 +107,12 @@ class UserNotifications:
     # --- preferences ---------------------------------------------------------------------
 
     async def preferences(self, user_id: UUID, account_id: UUID) -> Preferences:
-        """The stored preferences, or the defaults (subscribed to nothing)."""
+        """The stored preferences, or the defaults (every mower, the default kinds and
+        channels, no quiet hours; ``stored`` False)."""
         stored = await self._store.preferences(user_id, account_id)
-        return stored or Preferences(user_id=user_id, account_id=account_id)
+        return stored or default_preferences(
+            user_id, account_id, language=self._config.default_language
+        )
 
     async def put_preferences(
         self, user_id: UUID, account_id: UUID, data: PreferencesInput

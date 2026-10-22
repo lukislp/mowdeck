@@ -163,7 +163,7 @@ export type paths = {
         };
         /**
          * Get Preferences
-         * @description The caller's preferences (defaults until saved: subscribed to nothing).
+         * @description The caller's preferences (defaults until saved: every mower, the default kinds).
          */
         get: operations["get_preferences_api_v1_notifications_preferences_get"];
         /**

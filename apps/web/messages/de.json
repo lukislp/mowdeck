@@ -377,7 +377,7 @@
   "notif_all_mowers": "Alle Mäher",
   "notif_all_mowers_hint": "Auch Mäher, die später dazukommen.",
   "notif_no_mowers": "Keine Mäher sichtbar.",
-  "notif_not_stored": "Noch nicht gespeichert: Du bekommst noch keine Meldungen.",
+  "notif_not_stored": "Noch nicht gespeichert: Du bekommst die Standardmeldungen für alle deine Mäher auf deinen registrierten Geräten.",
   "notif_quiet_hours": "Ruhezeiten",
   "notif_quiet_enable": "Ruhezeit",
   "notif_quiet_hint": "In dieser Zeit kein Push und kein ntfy; das Postfach bekommt die Meldungen trotzdem.",

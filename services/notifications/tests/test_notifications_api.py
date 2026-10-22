@@ -76,7 +76,8 @@ async def test_notifications_api_preferences_round_trip_and_validation() -> None
             ).status_code
             for name, b in bad.items()
         }
-    assert defaults["stored"] is False and defaults["all_mowers"] is False
+    assert defaults["stored"] is False and defaults["all_mowers"] is True
+    assert defaults["quiet_hours"] is None and defaults["language"] == "de"
     assert "job_started" not in defaults["enabled_kinds"] and defaults["channels"]
     assert defaults["available_channels"] == ["log"] and defaults["languages"] == ["de", "en"]
     assert saved.status_code == 200

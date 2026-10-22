@@ -63,7 +63,7 @@ async def get_preferences(
     account_id: CurrentAccountId,
     services: ServicesDep,
 ) -> PreferencesOut:
-    """The caller's preferences (defaults until saved: subscribed to nothing)."""
+    """The caller's preferences (defaults until saved: every mower, the default kinds)."""
     prefs = await services.users.preferences(principal.subject, account_id)
     return _preferences_out(request, prefs)
 

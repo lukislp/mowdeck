@@ -1,9 +1,30 @@
 """Per-user filtering: enabled kinds, mower selection and quiet hours (time zone aware)."""
 
 from datetime import datetime
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from notifications.domain.models import NotificationEvent, Preferences, QuietHours
+
+DEFAULT_TIMEZONE = "UTC"
+"""Time zone of the defaults; it only matters for quiet hours, which the defaults do not have."""
+
+
+def default_preferences(user_id: UUID, account_id: UUID, *, language: str) -> Preferences:
+    """What a user who never saved preferences gets.
+
+    Every mower the user can view (``all_mowers``, still re-checked with ``can_view`` per
+    event), the default kinds (``job_started`` off), the default channels, no quiet hours,
+    ``language`` (the service's default language) and UTC. ``stored`` stays False so the app
+    can tell the user that these are the defaults.
+    """
+    return Preferences(
+        user_id=user_id,
+        account_id=account_id,
+        all_mowers=True,
+        timezone=DEFAULT_TIMEZONE,
+        language=language,
+    )
 
 
 def valid_timezone(name: str) -> bool:

@@ -302,6 +302,26 @@ class SqlStore:
             )
             return [_preferences(row) for row in result.all()]
 
+    async def default_recipients(self, account_id: UUID) -> list[UUID]:
+        targets = sa.union(
+            sa.select(tables.push_subscriptions.c.user_id).where(
+                tables.push_subscriptions.c.account_id == account_id
+            ),
+            sa.select(tables.apns_devices.c.user_id).where(
+                tables.apns_devices.c.account_id == account_id
+            ),
+            sa.select(tables.ntfy_targets.c.user_id).where(
+                tables.ntfy_targets.c.account_id == account_id
+            ),
+        ).subquery()
+        p = tables.preferences.c
+        saved = sa.exists().where(p.account_id == account_id, p.user_id == targets.c.user_id)
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(targets.c.user_id).where(~saved).order_by(targets.c.user_id)
+            )
+            return [row.user_id for row in result.all()]
+
     async def try_test(
         self, user_id: UUID, account_id: UUID, now: datetime, every: timedelta
     ) -> bool:
