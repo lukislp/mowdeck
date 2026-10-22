@@ -4,13 +4,17 @@
 * ``device.mower.*.map`` (ephemeral, newest per subject): the map (geofence and context).
 * ``device.mower.*.capabilities`` (ephemeral, newest per subject): the capabilities (whether
   the light can be switched for a dark photo).
-* ``command.mower.*`` (ephemeral, new messages): recent command kinds for the context, and
-  emergency stops for running executions.
+* ``device.mower.*.path`` (ephemeral, newest per subject): the route of the running job (the
+  job context of :mod:`vision.domain.job`; ``path = None`` once the job ended).
+* ``command.mower.*`` (ephemeral, new messages): recent command kinds for the context, the
+  areas of the newest ``start_mow`` (the job's order when no route is known), and emergency
+  stops for running executions.
 * ``command.result.mower.*`` (ephemeral): refused drive frames for running executions.
 
 Messages naming a different mower in the subject and the payload are dropped. The view keeps
-nothing but the newest state, map and capabilities per mower, the last ten commands and the
-last :data:`MAX_TRACK` distinct positions with an RTK fix (the context's ``recent_track``).
+nothing but the newest state, map, capabilities and route per mower, the last ten commands, the
+areas of the newest start and the last :data:`MAX_TRACK` distinct positions with an RTK fix
+(the context's ``recent_track``).
 """
 
 import asyncio
@@ -29,8 +33,12 @@ from mowdeck_contracts.v1 import (
     MowerCapabilitiesSnapshot,
     MowerMap,
     MowerMapSnapshot,
+    MowerPathSnapshot,
     MowerState,
+    MowPath,
+    ReturnToDock,
     RtkFixStatus,
+    StartMow,
 )
 
 from vision.application.ports import ObservedState, WatchEvent
@@ -84,6 +92,8 @@ class BusMowerView:
         self._capabilities: dict[UUID, tuple[UUID, MowerCapabilities]] = {}
         self._commands: dict[UUID, deque[tuple[str, datetime, str]]] = {}
         self._tracks: dict[UUID, deque[tuple[float, float, datetime]]] = {}
+        self._paths: dict[UUID, tuple[UUID, MowPath | None, datetime]] = {}
+        self._starts: dict[UUID, list[str]] = {}
         self._watches: dict[UUID, set[_Watch]] = {}
 
     # --- port -----------------------------------------------------------------------------
@@ -111,6 +121,17 @@ class BusMowerView:
     def recent_track(self, mower_id: UUID) -> list[tuple[float, float, datetime]]:
         """Recent positions ``(lat, lon, observed_at)`` with an RTK fix, oldest first."""
         return list(self._tracks.get(mower_id, ()))
+
+    def mow_path(self, mower_id: UUID) -> tuple[UUID, MowPath | None] | None:
+        """The route of the running job (None once it ended) and its account."""
+        found = self._paths.get(mower_id)
+        return (found[0], found[1]) if found is not None else None
+
+    def last_start(self, mower_id: UUID) -> list[str] | None:
+        """The areas of the newest ``start_mow`` (None: none seen, or a dock command that ended
+        the job came later)."""
+        found = self._starts.get(mower_id)
+        return list(found) if found is not None else None
 
     def watch(self, mower_id: UUID) -> _Watch:
         """Live events of a mower until ``close()``."""
@@ -156,6 +177,13 @@ class BusMowerView:
         """A map snapshot."""
         self._maps[snapshot.mower_id] = (snapshot.account_id, snapshot.map)
 
+    def on_path(self, snapshot: MowerPathSnapshot) -> None:
+        """A path snapshot (older ones delivered late are ignored)."""
+        current = self._paths.get(snapshot.mower_id)
+        if current is not None and current[2] > snapshot.observed_at:
+            return
+        self._paths[snapshot.mower_id] = (snapshot.account_id, snapshot.path, snapshot.observed_at)
+
     def on_capabilities(self, snapshot: MowerCapabilitiesSnapshot) -> None:
         """A capabilities snapshot."""
         self._capabilities[snapshot.mower_id] = (snapshot.account_id, snapshot.capabilities)
@@ -169,6 +197,11 @@ class BusMowerView:
             history[-1] = (kind, envelope.issued_at, correlation)
         else:
             history.append((kind, envelope.issued_at, correlation))
+        command = envelope.command
+        if isinstance(command, StartMow):
+            self._starts[envelope.mower_id] = list(command.area_ids)
+        elif isinstance(command, ReturnToDock) and command.end_job:
+            self._starts.pop(envelope.mower_id, None)
         if kind == "emergency_stop":
             self._push(envelope.mower_id, WatchEvent("emergency_stop", self._monotonic()))
 

@@ -1,7 +1,8 @@
 <!--
   AI assist ("KI-Hilfe") for one mower: which provider answers, the analysis, the proposed
-  maneuver (situation, confidence, readable steps, risks, rationale, expiry), the decision
-  (approve drives the mower with the blades off, reject), the execution step by step and the
+  maneuver (situation, confidence, readable steps, risks, rationale, expiry; for `resume` the
+  paused job with its areas, done, current and next), the decision (approve drives the mower
+  with the blades off, sends it home or continues the job; reject), the execution step by step and the
   outcome with a retry. A non-modal sheet above the command bar, so the emergency stop stays
   visible and usable the whole time. With both front cameras live in the camera panel (and the
   user's stereo preference on) both frames of the same moment are sent; the proposal then shows
@@ -21,6 +22,8 @@
   import {
     confidencePercent,
     expiryCountdown,
+    jobAreaLabel,
+    resumePlan,
     riskLabel,
     situationLabel,
     stateLabel,
@@ -269,6 +272,29 @@
         </section>
       {/if}
 
+      {#if proposal.action === 'resume'}
+        <section class="resume-plan" data-testid="assist-resume">
+          <h3>{m.vision_resume_title()}</h3>
+          <p data-testid="assist-resume-plan">{resumePlan(proposal.steps.length, proposal.job)}</p>
+          {#if proposal.job?.areas.length}
+            <ol class="job-areas" aria-label={m.vision_job_areas()} data-testid="assist-job-areas">
+              {#each proposal.job.areas as area (area.id)}
+                <li data-status={area.status}>
+                  <span class="area-name">{area.name ?? area.id}</span>
+                  <span class="area-status mono">{jobAreaLabel(area.status)}</span>
+                </li>
+              {/each}
+            </ol>
+          {/if}
+          {#if proposal.job?.mower_at_entry && proposal.job.entry_distance_m != null}
+            <p class="quiet small" data-testid="assist-resume-entry">
+              {m.vision_resume_at_entry({ distance: formatNumber(proposal.job.entry_distance_m) })}
+            </p>
+          {/if}
+          <p class="quiet small">{m.vision_resume_guard()}</p>
+        </section>
+      {/if}
+
       {#if triggerNote(proposal)}
         <p class="trigger-note" data-testid="assist-trigger" title={m.vision_trigger_error_hint()}>
           <span class="mark" aria-hidden="true"></span>
@@ -361,9 +387,11 @@
             <p>
               {proposal.action === 'return_to_dock'
                 ? m.vision_outcome_dock_sent()
-                : proposal.task === 'find_dock'
-                  ? m.vision_outcome_docking()
-                  : m.vision_outcome_recovered()}
+                : proposal.action === 'resume'
+                  ? m.vision_outcome_resumed()
+                  : proposal.task === 'find_dock'
+                    ? m.vision_outcome_docking()
+                    : m.vision_outcome_recovered()}
             </p>
           {:else if proposal.state === 'not_recovered'}
             <p>{m.vision_outcome_not_recovered()}</p>
@@ -411,7 +439,9 @@
           testid="assist-approve"
           >{proposal?.action === 'return_to_dock'
             ? m.vision_approve_dock()
-            : m.vision_approve()}</Button
+            : proposal?.action === 'resume'
+              ? m.vision_approve_resume()
+              : m.vision_approve()}</Button
         >
         <Button
           full
@@ -645,6 +675,64 @@
   .dock-plan h3,
   .dock-plan p {
     margin: 0;
+  }
+
+  /* Resume: the paused job continues; its areas in driving order, status as text. */
+  .resume-plan {
+    display: grid;
+    gap: var(--md-space-1);
+    padding: var(--md-space-2) var(--md-space-3);
+    border-inline-start: 3px solid var(--md-state-mowing);
+    background: var(--md-state-mowing-bg);
+  }
+
+  .resume-plan h3,
+  .resume-plan p {
+    margin: 0;
+  }
+
+  .job-areas {
+    display: grid;
+    gap: var(--md-space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: area;
+  }
+
+  .job-areas li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    column-gap: var(--md-space-2);
+    min-height: 32px;
+    counter-increment: area;
+  }
+
+  .job-areas li::before {
+    content: counter(area);
+    font-family: var(--md-font-mono);
+    color: var(--md-color-ink-muted);
+  }
+
+  .job-areas li[data-status='done'] .area-name {
+    color: var(--md-color-ink-muted);
+  }
+
+  .job-areas li[data-status='current'] .area-name,
+  .job-areas li[data-status='next'] .area-name {
+    font-weight: var(--md-weight-medium);
+  }
+
+  .area-status {
+    font-size: var(--md-font-size-12);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--md-color-ink-muted);
+  }
+
+  .job-areas li[data-status='current'] .area-status {
+    color: var(--md-state-mowing);
   }
 
   .fallback-note {

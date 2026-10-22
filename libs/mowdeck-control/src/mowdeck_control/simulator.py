@@ -17,7 +17,8 @@ What it simulates:
 * error injection and a lift sensor that stops everything and cannot be cleared by a command;
 * getting stuck (:meth:`SimulatedMower.inject_stuck`, or after ``stuck_after_seconds`` of
   mowing): ``error`` with code ``stuck`` and ``drive_recoverable``; the wheels only move
-  backwards until a backward move of at least ``unstuck_backward_m`` frees the mower;
+  backwards until a backward move of at least ``unstuck_backward_m`` frees the mower; a job the
+  error interrupted then stays ``paused`` (its route stays published) until ``ResumeMow``;
 * manual driving through a :class:`SimulatedDriveSession`;
 * a camera: :meth:`SimulatedMower.get_camera_session` returns a session with ``provider``
   ``fake`` (no video; the web app draws a test pattern) and two front cameras (``front_left``
@@ -742,11 +743,16 @@ class SimulatedMower:
         if status.activity in (MowerActivity.MOWING, MowerActivity.RETURNING):
             raise CommandRejected("pause or end the job before driving manually")
         self._end_drive_session()
-        if status.activity is MowerActivity.PAUSED:
-            _log.info("manual drive cancels the paused job")
-        self._job = None
-        status.legs = []
-        status.resume_activity = None
+        if self.stuck and status.resume_activity is not None:
+            # Driving a stuck mower free is part of the job's recovery: the job the error
+            # interrupted stays and waits for ``ResumeMow`` once the mower is free.
+            _log.info("manual drive frees the mower, the interrupted job stays")
+        else:
+            if status.activity is MowerActivity.PAUSED:
+                _log.info("manual drive cancels the paused job")
+            self._job = None
+            status.legs = []
+            status.resume_activity = None
         status.emergency_stopped = False
         if not self.stuck:
             status.activity = MowerActivity.IDLE
@@ -790,7 +796,9 @@ class SimulatedMower:
         path = self._path
         if path is None:
             return None
-        if self._status.activity not in _PATH_ACTIVITIES:
+        status = self._status
+        interrupted = status.activity is MowerActivity.ERROR and status.resume_activity is not None
+        if status.activity not in _PATH_ACTIVITIES and not interrupted:
             self._path = None
             return None
         index = min(self._path_done, path.points_total)
@@ -1145,7 +1153,8 @@ class SimulatedMower:
     def inject_stuck(self, message: str | None = None) -> None:
         """Get stuck (wheel slip on an obstacle): ``error`` with code ``stuck`` and
         ``drive_recoverable``. Forward moves and turns do nothing until the mower was driven
-        backwards by at least ``unstuck_backward_m``; then it is ``idle`` again."""
+        backwards by at least ``unstuck_backward_m``; then it is ``paused`` when the error
+        interrupted a job (``ResumeMow`` continues it, like a real mower), else ``idle``."""
         self._backed_off_m = 0.0
         self._enter_error(STUCK_ERROR_CODE, message or "the mower is stuck on an obstacle")
 
@@ -1502,7 +1511,9 @@ class SimulatedMower:
             return self._charge(t)
         if self._undock_target is not None and activity is MowerActivity.IDLE:
             return self._undock_step(t)
-        if self._drive is not None and (activity is MowerActivity.IDLE or self.stuck):
+        # PAUSED: a stuck mower driven free keeps the interrupted job (``start_drive_session``).
+        driveable = activity in (MowerActivity.IDLE, MowerActivity.PAUSED) or self.stuck
+        if self._drive is not None and driveable:
             return self._drive_step(t)
         self._drain(t, self.config.drain_idle_per_h)
         return t
@@ -1634,10 +1645,12 @@ class SimulatedMower:
         self._backed_off_m += abs(speed) * step
         if self._backed_off_m >= self.config.unstuck_backward_m - 1e-9:
             status = self._status
-            status.activity = MowerActivity.IDLE
+            # A job the error interrupted waits for ``ResumeMow`` (like ``clear_error``).
+            status.activity = (
+                MowerActivity.PAUSED if status.resume_activity is not None else MowerActivity.IDLE
+            )
             status.error_code = None
             status.error_message = None
-            status.resume_activity = None
             _log.info("simulated mower %s is free again", self.mower_id)
             self._publish()
         return step

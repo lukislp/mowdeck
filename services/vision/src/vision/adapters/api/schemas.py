@@ -14,6 +14,7 @@ from vision.application.auto import AutoView
 from vision.application.providers import ProviderView, TestResult
 from vision.domain.errors import InvalidInput
 from vision.domain.families import Family
+from vision.domain.job import JobContext
 from vision.domain.models import (
     RETRY_STATES,
     CameraSide,
@@ -79,7 +80,7 @@ class AssessmentOut(BaseModel):
     confidence: float
     action: ProposalAction = Field(
         default=ProposalAction.DRIVE,
-        description="What the model recommended: `drive`, `return_to_dock` or `none`.",
+        description="What the model recommended: `drive`, `return_to_dock`, `resume` or `none`.",
     )
     rationale: str
     risk: list[RiskFlag]
@@ -139,6 +140,54 @@ class FrameOut(BaseModel):
         )
 
 
+class JobAreaOut(BaseModel):
+    """One planned area of the job, in driving order."""
+
+    id: str
+    name: str | None = None
+    status: Literal["done", "current", "next", "planned"]
+
+
+class JobOut(BaseModel):
+    """The mowing job the mower was running when the scene was analysed (what `resume`
+    continues)."""
+
+    status: Literal["running", "paused", "paused_by_error", "returning", "spot_run"]
+    areas: list[JobAreaOut] = Field(description="Planned areas in driving order.")
+    current_area: str | None = None
+    next_area: str | None = None
+    progress_percent: int | None = None
+    resumable: bool
+    entry_distance_m: float | None = Field(
+        default=None, description="Distance to the entry of the way to the next area."
+    )
+    mower_at_entry: bool = Field(
+        default=False, description="The mower stood at the entry of the way to the next area."
+    )
+
+    @classmethod
+    def of(cls, context: dict[str, object]) -> "JobOut | None":
+        """From the stored scene context (None without a job or for an unreadable one)."""
+        raw = context.get("job")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            job = JobContext.model_validate(raw)
+        except ValueError:
+            return None
+        link = job.connection_to_next
+        return cls(
+            status=job.status,
+            areas=[JobAreaOut(id=a.id, name=a.name, status=a.status) for a in job.areas],
+            current_area=job.current_area,
+            next_area=job.next_area,
+            progress_percent=job.progress_percent,
+            resumable=job.resumable,
+            entry_distance_m=link.entry_distance_m if link else None,
+            mower_at_entry=link.mower_at_entry if link else False,
+        )
+
+
 class ProposalOut(BaseModel):
     """A proposal of AI assist (poll it while ``final`` is false)."""
 
@@ -158,14 +207,20 @@ class ProposalOut(BaseModel):
     assessment: AssessmentOut | None
     action: ProposalAction = Field(
         default=ProposalAction.DRIVE,
-        description="What approval executes: `drive` (the steps, blades off) or "
-        "`return_to_dock` (the normal dock command; no steps). `none` only on rejected rows.",
+        description="What approval executes: `drive` (the steps, blades off), "
+        "`return_to_dock` (the normal dock command; no steps) or `resume` (the steps, if any, "
+        "then the paused job continues with `resume_mow`). `none` only on rejected rows.",
     )
     fallback: bool = Field(
         default=False,
         description="The model recommended nothing; Vision offers return to dock as a rule "
         "based fallback because it applies (mower in a mapped area linked to the dock, no "
         "safety stop). It still needs an approval.",
+    )
+    job: JobOut | None = Field(
+        default=None,
+        description="The mowing job as the model saw it (with action `resume` the job that "
+        "continues); null when no job was known.",
     )
     steps: list[StepOut]
     image_count: int
@@ -196,7 +251,10 @@ class ProposalOut(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     drive_session_id: UUID | None
-    return_command_id: UUID | None
+    return_command_id: UUID | None = Field(
+        description="The command sent after approval: `return_to_dock`, or `resume_mow` for "
+        "action `resume`."
+    )
     can_retry: bool
     rounds_left: int
 
@@ -213,7 +271,10 @@ class ProposalOut(BaseModel):
         answer = proposal.assessment
         if steps:
             step_out = [StepOut.of(s) for s in steps]
-        elif answer is not None and proposal.action is ProposalAction.DRIVE:
+        elif answer is not None and proposal.action in (
+            ProposalAction.DRIVE,
+            ProposalAction.RESUME,
+        ):
             step_out = [
                 StepOut(
                     index=i,
@@ -252,6 +313,7 @@ class ProposalOut(BaseModel):
             else None,
             action=proposal.action,
             fallback=proposal.fallback,
+            job=JobOut.of(proposal.context),
             steps=step_out,
             image_count=proposal.image_count,
             light_used=proposal.light_used,

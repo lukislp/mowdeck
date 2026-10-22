@@ -122,6 +122,10 @@ class Settings(ServiceSettings):
     vision_min_move_m: float = Field(default=0.2, ge=0, le=5)
     """Displacement that counts as "moved as planned"."""
 
+    vision_resume_confirm_seconds: float = Field(default=20.0, gt=0, le=300)
+    """After ``resume_mow`` of an approved ``resume``: how long to wait for the mower to report
+    ``mowing`` before the outcome says it was sent but not confirmed."""
+
     vision_linear_mps_at_1: float = Field(default=0.5, gt=0, le=3)
     """Typical speed at ``linear = 1`` (told to the model)."""
 

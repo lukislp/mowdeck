@@ -106,6 +106,9 @@ async def test_vision_llm_anthropic_recorded_response_and_request_shape() -> Non
     structured = body.get("output_format") or body.get("output_config", {}).get("format")
     assert structured is not None and structured["type"] == "json_schema"
     assert set(structured["schema"]["properties"]) == set(ASSESSMENT_SCHEMA["properties"])
+    # The native structured output of the Anthropic family carries every action, resume included.
+    actions = structured["schema"]["properties"]["action"]["enum"]
+    assert set(actions) == {"drive", "return_to_dock", "resume", "none"}
 
 
 async def test_vision_llm_openai_compatible_endpoint_request_shape() -> None:

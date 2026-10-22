@@ -26,6 +26,7 @@ from mowdeck_contracts.v1 import (
     EventEnvelope,
     MowerCapabilitiesSnapshot,
     MowerMapSnapshot,
+    MowerPathSnapshot,
     MowerState,
     UserChanged,
 )
@@ -76,7 +77,7 @@ def state_handler(view: BusMowerView) -> MessageHandler:
 
 
 def snapshot_handler(view: BusMowerView) -> MessageHandler:
-    """Remember the newest map and capabilities."""
+    """Remember the newest map, capabilities and route of the running job."""
 
     async def handle(message: BusMessage) -> None:
         try:
@@ -92,6 +93,16 @@ def snapshot_handler(view: BusMowerView) -> MessageHandler:
             if capabilities.mower_id != mower_id:
                 raise DropMessage("subject does not match the snapshot's mower")
             view.on_capabilities(capabilities)
+            return
+        if kind == "path":
+            try:
+                route = message.model(MowerPathSnapshot)
+            except ValidationError as exc:
+                msg = f"invalid path snapshot: {exc.error_count()} errors"
+                raise DropMessage(msg) from exc
+            if route.mower_id != mower_id:
+                raise DropMessage("subject does not match the snapshot's mower")
+            view.on_path(route)
             return
         if kind != "map":
             return

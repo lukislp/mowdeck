@@ -108,6 +108,7 @@ FAKE: Final = Family(
     (
         "fake/recover",
         "fake/dock",
+        "fake/resume",
         "fake/decline",
         "fake/people",
         "fake/low_confidence",

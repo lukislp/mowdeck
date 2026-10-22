@@ -604,9 +604,12 @@ def vision_proposal_event(payload: VisionProposalCreated, minutes: int) -> Notif
     """``vision_proposal`` for a proposal of AI assist, ``vision_auto_proposal`` when the mower's
     error started it automatically (ADR 0035, with ``error_code``): recipients need
     ``can_drive``, the notification opens the proposal (``payload.link``), the body varies by
-    task, or is the return to dock body when the proposal is the dock command."""
+    task, or is the return to dock or resume body when the proposal is the dock command or
+    continues the paused job."""
     automatic = payload.trigger is VisionTrigger.ERROR
-    variant = "return_to_dock" if payload.action == "return_to_dock" else payload.task.value
+    variant = (
+        payload.action if payload.action in ("return_to_dock", "resume") else payload.task.value
+    )
     return NotificationEvent.of(
         NotificationKind.VISION_AUTO_PROPOSAL if automatic else NotificationKind.VISION_PROPOSAL,
         payload.mower_id,

@@ -2094,7 +2094,8 @@
             {
               "enum": [
                 "drive",
-                "return_to_dock"
+                "return_to_dock",
+                "resume"
               ],
               "type": "string"
             },
@@ -2103,6 +2104,7 @@
             }
           ],
           "default": null,
+          "description": "`drive`, `return_to_dock`, or `resume` (optional drive steps, then the paused job continues); null before the analysis decided one.",
           "title": "Action"
         },
         "confidence": {

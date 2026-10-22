@@ -4,19 +4,29 @@ Geometry is given in the **mower frame**: ``forward`` metres ahead of the mower 
 metres to its left, so the model can plan maneuvers without converting map coordinates. Only
 the map around the mower (``radius_m``) is included: areas, transfer paths, no-go zones,
 obstacles and the dock with its distance and bearing. ``dock_route`` says whether the generic
-return to dock fits (:mod:`vision.domain.dock`), ``recent_track`` where the mower was shortly
+return to dock fits (:mod:`vision.domain.dock`), ``job`` which mowing job the mower was running
+and how it continues (:mod:`vision.domain.job`), ``recent_track`` where the mower was shortly
 before. No account, user or mower names are sent (area names are the user's own labels).
 """
 
 import math
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Literal
 
-from mowdeck_contracts.v1 import LocalPoint, MowerActivity, MowerMap, MowerState, VisionTask
+from mowdeck_contracts.v1 import (
+    LocalPoint,
+    MowerActivity,
+    MowerMap,
+    MowerState,
+    MowPath,
+    VisionTask,
+)
 from mowdeck_control.geo import distance, from_wgs84, local_angle, point_in_polygon
 from pydantic import BaseModel, Field
 
 from vision.domain.dock import DockRoute, dock_route
+from vision.domain.job import JobContext, job_context
 from vision.domain.models import MAX_STEP_SECONDS, MAX_STEPS
 
 TRACK_POINTS = 10
@@ -105,7 +115,7 @@ class PreviousRound(BaseModel):
 
     round: int
     situation: str | None = None
-    action: str = Field(default="drive", description="`drive` or `return_to_dock`.")
+    action: str = Field(default="drive", description="`drive`, `return_to_dock` or `resume`.")
     steps: list[dict[str, float]] = Field(default_factory=list)
     outcome: str
     detail: str | None = None
@@ -127,6 +137,11 @@ class SceneContext(BaseModel):
     mower: MowerSnapshot | None = None
     map: MapExcerpt | None = None
     dock_route: DockRoute | None = None
+    job: JobContext | None = Field(
+        default=None,
+        description="The mowing job the mower was running (planned areas in order, done, "
+        "current and next area, the connection to the next area); null: no job is known.",
+    )
     recent_track: list[TrackPoint] = Field(
         default_factory=list, description="Recent positions with an RTK fix, oldest first."
     )
@@ -241,9 +256,13 @@ def build_context(
     stereo: bool = False,
     track: list[tuple[float, float, datetime]] | None = None,
     map_image: bool = False,
+    mow_path: MowPath | None = None,
+    last_start: Sequence[str] | None = None,
 ) -> SceneContext:
     """Assemble the context from what the service knows about the mower; ``track`` are recent
-    WGS84 positions ``(lat, lon, observed_at)``, oldest first."""
+    WGS84 positions ``(lat, lon, observed_at)``, oldest first; ``mow_path`` is the route of the
+    running job (the gateway's path snapshot) and ``last_start`` the areas of the newest
+    ``start_mow``."""
     snapshot = None
     excerpt = None
     pose = None
@@ -274,6 +293,14 @@ def build_context(
                 forward, left = to_mower_frame(from_wgs84(mower_map, lat, lon), pose)
                 age = round(max(0.0, (now - at).total_seconds()), 1)
                 points.append(TrackPoint(forward=forward, left=left, seconds_ago=age))
+    job = job_context(
+        state,
+        mower_map=mower_map,
+        here=(pose.x, pose.y) if pose else None,
+        theta_rad=pose.theta_rad if pose else None,
+        path=mow_path,
+        last_start=last_start,
+    )
     recent = [
         RecentCommand(kind=kind, seconds_ago=round(max(0.0, (now - at).total_seconds()), 1))
         for kind, at in commands[-10:]
@@ -283,6 +310,7 @@ def build_context(
         mower=snapshot,
         map=excerpt,
         dock_route=route,
+        job=job,
         recent_track=points,
         recent_commands=recent,
         last_drive=last_drive,

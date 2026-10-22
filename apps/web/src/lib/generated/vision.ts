@@ -323,7 +323,7 @@ export type components = {
             /** Abort Reasons */
             abort_reasons: string[];
             /**
-             * @description What the model recommended: `drive`, `return_to_dock` or `none`.
+             * @description What the model recommended: `drive`, `return_to_dock`, `resume` or `none`.
              * @default drive
              */
             action: components["schemas"]["ProposalAction"];
@@ -461,6 +461,57 @@ export type components = {
              * @description `left` or `right`: the frame is one of the two front cameras (stereo).
              */
             side?: ("left" | "right") | null;
+        };
+        /**
+         * JobAreaOut
+         * @description One planned area of the job, in driving order.
+         */
+        JobAreaOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "done" | "current" | "next" | "planned";
+        };
+        /**
+         * JobOut
+         * @description The mowing job the mower was running when the scene was analysed (what `resume`
+         *     continues).
+         */
+        JobOut: {
+            /**
+             * Areas
+             * @description Planned areas in driving order.
+             */
+            areas: components["schemas"]["JobAreaOut"][];
+            /** Current Area */
+            current_area?: string | null;
+            /**
+             * Entry Distance M
+             * @description Distance to the entry of the way to the next area.
+             */
+            entry_distance_m?: number | null;
+            /**
+             * Mower At Entry
+             * @description The mower stood at the entry of the way to the next area.
+             * @default false
+             */
+            mower_at_entry: boolean;
+            /** Next Area */
+            next_area?: string | null;
+            /** Progress Percent */
+            progress_percent?: number | null;
+            /** Resumable */
+            resumable: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "paused" | "paused_by_error" | "returning" | "spot_run";
         };
         /**
          * LastTestOut
@@ -608,14 +659,14 @@ export type components = {
          * @description What a proposal does once a human approves it.
          * @enum {string}
          */
-        ProposalAction: "drive" | "return_to_dock" | "none";
+        ProposalAction: "drive" | "return_to_dock" | "resume" | "none";
         /**
          * ProposalOut
          * @description A proposal of AI assist (poll it while ``final`` is false).
          */
         ProposalOut: {
             /**
-             * @description What approval executes: `drive` (the steps, blades off) or `return_to_dock` (the normal dock command; no steps). `none` only on rejected rows.
+             * @description What approval executes: `drive` (the steps, blades off), `return_to_dock` (the normal dock command; no steps) or `resume` (the steps, if any, then the paused job continues with `resume_mow`). `none` only on rejected rows.
              * @default drive
              */
             action: components["schemas"]["ProposalAction"];
@@ -677,6 +728,8 @@ export type components = {
             id: string;
             /** Image Count */
             image_count: number;
+            /** @description The mowing job as the model saw it (with action `resume` the job that continues); null when no job was known. */
+            job?: components["schemas"]["JobOut"] | null;
             /**
              * Light Used
              * @description The photo was taken with the mower's light switched on (it was too dark).
@@ -692,7 +745,10 @@ export type components = {
             /** Provider Model */
             provider_model: string | null;
             requested_by: components["schemas"]["PrincipalRef"];
-            /** Return Command Id */
+            /**
+             * Return Command Id
+             * @description The command sent after approval: `return_to_dock`, or `resume_mow` for action `resume`.
+             */
             return_command_id: string | null;
             /** Round */
             round: number;

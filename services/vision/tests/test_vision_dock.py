@@ -309,7 +309,7 @@ def _latlon(x: float, y: float) -> tuple[float, float]:
 
 def test_vision_dock_prompt_and_schema_offer_return_to_dock() -> None:
     action = ASSESSMENT_SCHEMA["properties"]["action"]
-    assert set(action["enum"]) == {"drive", "return_to_dock", "none"}
+    assert set(action["enum"]) == {"drive", "return_to_dock", "resume", "none"}
     assert "action" in ASSESSMENT_SCHEMA["required"]
     assert "`return_to_dock`" in SYSTEM_PROMPT and "lowest-risk" in SYSTEM_PROMPT
     assert "sensor_stop" in SYSTEM_PROMPT and "map image" in SYSTEM_PROMPT
