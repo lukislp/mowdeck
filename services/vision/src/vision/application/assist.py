@@ -37,10 +37,10 @@ of the user who opted in, always with the gateway's photo (none: no analysis), r
 import asyncio
 import contextlib
 import time
-from collections.abc import Coroutine
+from collections.abc import Collection, Coroutine, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
@@ -51,6 +51,8 @@ from mowdeck_contracts.v1 import (
     PrincipalRef,
     SetLight,
     VisionProposalCreated,
+    VisionProposalState,
+    VisionProposalUpdated,
     VisionTask,
     VisionTrigger,
 )
@@ -645,7 +647,7 @@ class VisionService:
                     for i, s in enumerate(assessment.result.proposal)
                 ]
             )
-        changed = await self.store.update_proposal(
+        changed = await self._update(
             proposal.id,
             {
                 "state": state,
@@ -716,12 +718,61 @@ class VisionService:
                 detail=detail[:500],
             )
         )
-        await self.store.update_proposal(
+        await self._update(
             proposal.id,
             {"state": ProposalState.FAILED, "detail": detail[:500], "updated_at": now},
             states={ProposalState.ANALYSING},
         )
         _log.warning("vision analysis failed", proposal_id=str(proposal.id), detail=detail)
+
+    async def _update(
+        self,
+        proposal_id: UUID,
+        changes: Mapping[str, Any],
+        *,
+        states: Collection[ProposalState] | None = None,
+    ) -> bool:
+        """``store.update_proposal`` plus ``vision.proposal.updated`` after a state change (not
+        for ``proposed``, which ``vision.proposal.created`` announces)."""
+        changed = await self.store.update_proposal(proposal_id, changes, states=states)
+        state = changes.get("state")
+        if changed and state is not None and state is not ProposalState.PROPOSED:
+            await self._announce(proposal_id)
+        return changed
+
+    async def _announce(self, proposal_id: UUID) -> None:
+        try:
+            proposal = await self.store.get_proposal(proposal_id)
+            if proposal is None:
+                return
+            drive = proposal.action is ProposalAction.DRIVE
+            action: Literal["drive", "return_to_dock"] | None = None
+            if proposal.action is not ProposalAction.NONE and proposal.assessment is not None:
+                action = "drive" if drive else "return_to_dock"
+            steps = len(proposal.assessment.proposal) if proposal.assessment and drive else 0
+            await self.events.proposal_updated(
+                VisionProposalUpdated(
+                    proposal_id=proposal.id,
+                    mower_id=proposal.mower_id,
+                    account_id=proposal.account_id,
+                    task=proposal.task,
+                    round=proposal.round,
+                    state=VisionProposalState(proposal.state.value),
+                    final=proposal.final,
+                    action=action,
+                    steps=min(steps, 6),
+                    fallback=proposal.fallback,
+                    expires_at=proposal.expires_at
+                    if proposal.state is ProposalState.PROPOSED
+                    else None,
+                    link=f"/mowers/{proposal.mower_id}?assist={proposal.id}",
+                    trigger=proposal.trigger,
+                    error_code=proposal.trigger_error_code,
+                    updated_at=proposal.updated_at,
+                )
+            )
+        except Exception:
+            _log.exception("announcing a proposal update failed", proposal_id=str(proposal_id))
 
     # --- decisions ------------------------------------------------------------------------
 
@@ -735,14 +786,14 @@ class VisionService:
             raise ConflictError(f"the proposal is {proposal.state}")
         now = self.clock()
         if proposal.expires_at is None or proposal.expires_at <= now:
-            await self.store.update_proposal(
+            await self._update(
                 proposal_id,
                 {"state": ProposalState.EXPIRED, "updated_at": now},
                 states={ProposalState.PROPOSED},
             )
             raise ProposalExpired("the proposal expired: request a new analysis")
         approver = principal.ref()
-        changed = await self.store.update_proposal(
+        changed = await self._update(
             proposal_id,
             {
                 "state": ProposalState.EXECUTING,
@@ -780,7 +831,7 @@ class VisionService:
             return event.is_set()
 
         async def on_verifying(session_id: UUID | None) -> None:
-            await self.store.update_proposal(
+            await self._update(
                 proposal.id,
                 {
                     "state": ProposalState.VERIFYING,
@@ -819,7 +870,7 @@ class VisionService:
         }
         if outcome.session_id is not None:
             changes["drive_session_id"] = outcome.session_id
-        await self.store.update_proposal(
+        await self._update(
             proposal.id, changes, states={ProposalState.EXECUTING, ProposalState.VERIFYING}
         )
         _log.info(
@@ -836,7 +887,7 @@ class VisionService:
         now = self.clock()
         who = principal.ref()
         if proposal.state is ProposalState.PROPOSED:
-            changed = await self.store.update_proposal(
+            changed = await self._update(
                 proposal_id,
                 {
                     "state": ProposalState.REJECTED,
@@ -849,7 +900,7 @@ class VisionService:
             if not changed:
                 raise ConflictError("the proposal was decided by someone else")
         elif proposal.state in (ProposalState.EXECUTING, ProposalState.VERIFYING):
-            await self.store.update_proposal(
+            await self._update(
                 proposal_id,
                 {"cancel_requested_at": now, "decided_by": who, "decided_at": now},
             )
@@ -911,7 +962,7 @@ class VisionService:
         ):
             if proposal.expires_at is not None and proposal.expires_at > now:
                 continue
-            if await self.store.update_proposal(
+            if await self._update(
                 proposal.id,
                 {"state": ProposalState.EXPIRED, "updated_at": now},
                 states={ProposalState.PROPOSED},
@@ -921,7 +972,7 @@ class VisionService:
         for proposal in await self.store.proposals_in(
             {ProposalState.ANALYSING}, updated_before=stale
         ):
-            if await self.store.update_proposal(
+            if await self._update(
                 proposal.id,
                 {
                     "state": ProposalState.FAILED,
@@ -935,7 +986,7 @@ class VisionService:
         for proposal in await self.store.proposals_in(running, updated_before=stale):
             if proposal.id in self._cancel:
                 continue  # still running in this instance
-            if await self.store.update_proposal(
+            if await self._update(
                 proposal.id,
                 {
                     "state": ProposalState.ABORTED,

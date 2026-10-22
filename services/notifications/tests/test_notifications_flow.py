@@ -432,3 +432,71 @@ async def test_notifications_flow_defaults_still_need_can_view_and_a_target() ->
         assert await h.store.inbox(no_target.user_id, owner.account_id, 10, unread_only=False) == []
         checks = [c for c in h.authz.checks if str(no_grant.user_id) in str(c)]
     assert checks  # can_view was asked for the default recipient and denied
+
+
+def raised_events(h: Harness) -> list[Any]:
+    from mowdeck_contracts.v1 import NotificationRaised
+
+    return [
+        m.model(EventEnvelope[NotificationRaised])
+        for m in h.bus.published
+        if m.subject == "event.notifications.raised"
+    ]
+
+
+async def test_notifications_flow_raises_every_event_for_the_account() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner, name="Backyard")
+        # The owner never saved preferences; members of the account have no grant: the account
+        # copy does not depend on who receives the per-user items.
+        await finish_a_mow(h, owner, mower_id)
+        envelopes = raised_events(h)
+    raised = [e.payload for e in envelopes]
+    kinds = [r.kind.value for r in raised]
+    # Every derived event, also the dock departure alarm nobody had a command for.
+    assert {"job_started", "mower_left_dock_unexpectedly", "mowing_finished"} <= set(kinds)
+    assert kinds[-1] == "mowing_finished"
+    finished = raised[-1]
+    assert finished.account_id == owner.account_id and finished.mower_id == mower_id
+    assert finished.title == "Backyard finished mowing"  # English, the account has no language
+    assert finished.url == f"/mowers/{mower_id}" and finished.required_relation == "can_view"
+    assert envelopes[-1].id == finished.notification_id  # the stable id is the msg id
+    assert envelopes[-1].account_id == owner.account_id
+
+
+async def test_notifications_flow_raised_id_is_stable_per_occurrence() -> None:
+    from notifications.application.fanout import raised_id
+
+    account = uuid4()
+    assert raised_id(account, "mowing_finished:x:1") == raised_id(account, "mowing_finished:x:1")
+    assert raised_id(account, "mowing_finished:x:1") != raised_id(account, "mowing_finished:x:2")
+    assert raised_id(account, "k") != raised_id(uuid4(), "k")
+
+
+async def test_notifications_flow_sent_event_carries_created_at() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        await h.subscribe_all(owner)
+        await finish_a_mow(h, owner, mower_id)
+        events = sent_events(h)
+    assert events and all(e.created_at is not None for e in events)
+
+
+async def test_notifications_flow_default_recipient_and_account_copy_together() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner, name="Garten")
+        await register_iphone(h, owner)  # no saved preferences: the defaults apply
+        await get_stuck(h, owner, mower_id)
+        items = await h.inbox(owner)
+        sent = sent_events(h)
+        raised = [e.payload for e in raised_events(h)]
+    stuck = next(i for i in items if i["kind"] == "mower_stuck")
+    [sent_stuck] = [e for e in sent if e.kind.value == "mower_stuck"]
+    assert str(sent_stuck.notification_id) == stuck["id"] and sent_stuck.created_at is not None
+    [raised_stuck] = [r for r in raised if r.kind.value == "mower_stuck"]
+    # The person's copy is German (default language), the account copy English, ids differ.
+    assert raised_stuck.notification_id != sent_stuck.notification_id
+    assert "Garten" in raised_stuck.title and raised_stuck.title != stuck["title"]

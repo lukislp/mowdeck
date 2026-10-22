@@ -281,3 +281,12 @@ def test_vision_domain_verify_counts_the_travelled_path() -> None:
         travelled_m=0.7,
     )
     assert (ok, detail) == (True, "free again, moved 0.70 m")
+
+
+def test_vision_proposal_states_match_the_contract() -> None:
+    from mowdeck_contracts.v1 import VISION_FINAL_STATES, VisionProposalState
+
+    from vision.domain.models import FINAL_STATES, ProposalState
+
+    assert {s.value for s in ProposalState} == {s.value for s in VisionProposalState}
+    assert {s.value for s in FINAL_STATES} == {s.value for s in VISION_FINAL_STATES}

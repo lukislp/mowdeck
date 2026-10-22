@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "NotificationKind": {
+      "description": "What a notification is about.",
+      "enum": [
+        "mowing_finished",
+        "mower_stuck",
+        "battery_low",
+        "mower_offline",
+        "mower_online",
+        "job_started",
+        "mower_lifted",
+        "mower_left_dock_unexpectedly",
+        "geofence_exit",
+        "blade_maintenance",
+        "vision_proposal",
+        "vision_auto_proposal",
+        "firmware_update_available",
+        "firmware_update_finished",
+        "firmware_update_failed",
+        "test"
+      ],
+      "title": "NotificationKind",
+      "type": "string"
+    },
+    "NotificationSeverity": {
+      "description": "How urgent a notification is; channels map it to TTL, urgency or priority.",
+      "enum": [
+        "info",
+        "warning",
+        "critical"
+      ],
+      "title": "NotificationSeverity",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``notifications.raised``: one notification derived for an account.\n\nPublished once per derived notification (mower rules, theft alarms, AI assist, blade\nmaintenance, firmware), independent of user preferences, quiet hours and channels, and\nrendered in English. ``notification_id`` is stable for the occurrence (derived from the\naccount and the ``dedupe_key``), so a redelivered event carries the same id.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "body": {
+      "maxLength": 1000,
+      "title": "Body",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "dedupe_key": {
+      "description": "Identifies the occurrence.",
+      "maxLength": 200,
+      "title": "Dedupe Key",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/NotificationKind"
+    },
+    "mower_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mower Id"
+    },
+    "notification_id": {
+      "format": "uuid",
+      "title": "Notification Id",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "required_relation": {
+      "default": "can_view",
+      "description": "Relation a receiver needs on the mower: `can_drive` for the AI assist kinds (only those who may approve a maneuver hear about it), else `can_view`.",
+      "enum": [
+        "can_view",
+        "can_drive"
+      ],
+      "title": "Required Relation",
+      "type": "string"
+    },
+    "severity": {
+      "$ref": "#/$defs/NotificationSeverity"
+    },
+    "title": {
+      "maxLength": 200,
+      "title": "Title",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    }
+  },
+  "required": [
+    "notification_id",
+    "account_id",
+    "kind",
+    "severity",
+    "title",
+    "body",
+    "occurred_at",
+    "created_at",
+    "dedupe_key"
+  ],
+  "title": "NotificationRaised",
+  "type": "object"
+}

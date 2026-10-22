@@ -114,9 +114,11 @@ The PWA (`apps/web`, [docs/dev/web-app.md](../../docs/dev/web-app.md#notificatio
 2. Web Push, after a user action: `Notification.requestPermission()`, `GET /push/vapid-public-key` (404: no Web Push here), `pushManager.subscribe({userVisibleOnly: true, applicationServerKey})`, `POST /push-subscriptions` with `PushSubscription.toJSON()`; the answer's `id` marks "this device" in `GET /push-subscriptions`, `DELETE` removes one. The service worker shows the `WebPushPayload` (`title`, `body`, `tag`, `url`, `kind`, `mower_id`) and re-subscribes on `pushsubscriptionchange`; it has no token, so the page posts the renewed subscription on its next start. A gone endpoint (404/410 from the push service) is deleted here.
 3. ntfy: `GET`, `PUT`, `DELETE /ntfy`; the token field is write-only in the app.
 4. `POST /test` shows the channels on 202 and a countdown from `Retry-After` on 429.
-5. The inbox polls `GET /inbox` every 60 s and on focus (no Realtime message for `notifications.sent` yet) and marks items with `POST /inbox/{id}/read`.
+5. The inbox polls `GET /inbox` every 60 s and on focus and marks items with `POST /inbox/{id}/read`. Realtime now also pushes each new item to the person's open sockets (`notification` with `scope` `user`, `id` the inbox id); the app does not use it yet.
 
 The module descriptor announces the `ui_area` `/notifications` (required permission `mower.view`), so the app shows the bell only where this service runs.
+
+**API tokens (Home Assistant).** Inbox items, preferences and channels belong to people; an API token has no inbox and gets 403 on these routes. It receives the account's notifications over the Realtime socket instead (`notification` with `scope` `account`, from `notifications.raised`) when its token holds `notifications.view`: an account key of this module, implied by `mower.view` on the whole account, so a token with `mower.view` on the account has it; it applies per subscribed mower, and the AI assist kinds need `mower.drive` (`can_drive`) as well. Reading or acknowledging needs no call (there is no inbox item); alarms are not silenced by a token.
 
 "user": a person (`user` or `subuser` principal) of an account who holds `notifications.manage` in the token (an account key implied by `mower.view`, so it follows account-wide viewing) or may view at least one mower (a viewer of one group). API tokens and services get 403.
 
@@ -134,7 +136,8 @@ Metrics: `mowdeck_notifications_deliveries_total{channel, status}` (`sent`, `ret
 | consumed | `event.telemetry.>` | durable queue `notifications-telemetry` | `telemetry.blade_hours.threshold` (`BladeHoursThreshold`): `blade_maintenance`; other telemetry events ignored |
 | consumed | `event.identity.grants.changed` | every instance | drop cached authorization decisions |
 | request | `fleet.mowers.list` | at startup, retried | seeds the directory (`MowerListRequest` with one shard) |
-| produced | `event.notifications.sent` | | `NotificationSent`: one rendered notification for one user and the channels it was queued for |
+| produced | `event.notifications.sent` | | `NotificationSent`: one rendered notification for one user and the channels it was queued for, with `created_at` (the inbox item's) |
+| produced | `event.notifications.raised` | | `NotificationRaised`: every derived notification once per account, before the per-user fan-out (also without any subscriber), rendered in English, with `dedupe_key`, `required_relation` (`can_drive` for the AI assist kinds) and a `notification_id` derived from account and `dedupe_key` (also the event id, so a repeat is a JetStream duplicate). Realtime forwards it to API tokens |
 
 Malformed messages, a subject naming another mower, and an account that differs from the directory (states, commands, map snapshots, telemetry events, connection events) are dropped with a warning (never redelivered).
 

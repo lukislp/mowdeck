@@ -59,7 +59,8 @@ Proposal states: `analysing`, then `proposed` (waits for approval until `expires
 
 | Direction | Subject | Contract | Notes |
 | --- | --- | --- | --- |
-| publishes | `event.vision.proposal.created` | `VisionProposalCreated` (with `trigger`, `error_code`) | Notifications turns it into `vision_proposal`, or `vision_auto_proposal` for an automatic one, for users with `can_drive` |
+| publishes | `event.vision.proposal.created` | `VisionProposalCreated` (with `trigger`, `error_code`) | Notifications turns it into `vision_proposal`, or `vision_auto_proposal` for an automatic one, for users with `can_drive`; Realtime pushes it as `vision_proposal` `created` |
+| publishes | `event.vision.proposal.updated` | `VisionProposalUpdated` (`proposal_id`, `mower_id`, `account_id`, `task`, `round`, `state`, `final`, `action`, `steps`, `fallback`, `expires_at`, `link`, `trigger`, `error_code`, `updated_at`; no images) | after every state change except to `proposed` (approve, verify, finish, reject, expire, sweep); Realtime pushes it as `vision_proposal` `updated` |
 | publishes | `command.mower.<id>` | `CommandEnvelope` (`ManualDrive`) | frames of an approved maneuver, `correlation_id` `drive:<session>` |
 | requests | `fleet.drive.start`, `fleet.drive.stop` | `DriveStartRequest` (`origin: vision`), `DriveStopRequest` (`completed`, `aborted`) | on behalf of the approver |
 | requests | `fleet.commands.issue` | `IssueCommandRequest` (`origin: vision`) | `return_to_dock` after a successful Find Dock; `set_light` on and off around a dark photo (on the requester's behalf) |

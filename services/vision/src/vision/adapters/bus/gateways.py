@@ -14,6 +14,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import (
     VISION_FRAME_SET_MAX_FRAMES,
     VISION_PROPOSAL_CREATED,
+    VISION_PROPOSAL_UPDATED,
     CommandEnvelope,
     DriveStartReply,
     DriveStartRequest,
@@ -26,6 +27,7 @@ from mowdeck_contracts.v1 import (
     PhotoRequest,
     VisionDemand,
     VisionProposalCreated,
+    VisionProposalUpdated,
 )
 from mowdeck_contracts.v1.subjects import (
     FLEET_COMMANDS_ISSUE,
@@ -183,21 +185,38 @@ class BusPublisher:
 
     async def proposal_created(self, event: VisionProposalCreated) -> None:
         """Publish ``vision.proposal.created``; failures are logged."""
+        await self._publish(VISION_PROPOSAL_CREATED, event.account_id, event)
+
+    async def proposal_updated(self, event: VisionProposalUpdated) -> None:
+        """Publish ``vision.proposal.updated``; failures are logged."""
+        await self._publish(VISION_PROPOSAL_UPDATED, event.account_id, event)
+
+    async def _publish(
+        self,
+        event_type: str,
+        account_id: UUID,
+        payload: VisionProposalCreated | VisionProposalUpdated,
+    ) -> None:
         if self.bus is None:
-            _log.info("event not published (no bus)", event_type=VISION_PROPOSAL_CREATED)
+            _log.info("event not published (no bus)", event_type=event_type)
             return
         values: dict[str, object] = {
-            "type": VISION_PROPOSAL_CREATED,
+            "type": event_type,
             "producer": self.producer,
-            "account_id": event.account_id,
-            "payload": event,
+            "account_id": account_id,
+            "payload": payload,
         }
         correlation_id = get_correlation_id()
         if correlation_id:
             values["correlation_id"] = correlation_id
         try:
-            await publish_event(
-                self.bus, EventEnvelope[VisionProposalCreated].model_validate(values)
-            )
+            if isinstance(payload, VisionProposalCreated):
+                await publish_event(
+                    self.bus, EventEnvelope[VisionProposalCreated].model_validate(values)
+                )
+            else:
+                await publish_event(
+                    self.bus, EventEnvelope[VisionProposalUpdated].model_validate(values)
+                )
         except Exception:
-            _log.exception("publishing an event failed", event_type=VISION_PROPOSAL_CREATED)
+            _log.exception("publishing an event failed", event_type=event_type)

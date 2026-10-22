@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
-from mowdeck_contracts.v1 import NotificationSent
+from mowdeck_contracts.v1 import NotificationRaised, NotificationSent
 
 from notifications.domain.geofence import MowerFence
 from notifications.domain.models import (
@@ -76,6 +76,10 @@ class EventPublisher(Protocol):
 
     async def notification_sent(self, payload: NotificationSent) -> None:
         """Publish ``notifications.sent``."""
+        ...
+
+    async def notification_raised(self, payload: NotificationRaised) -> None:
+        """Publish ``notifications.raised`` (the account-scoped event, for API tokens)."""
         ...
 
 

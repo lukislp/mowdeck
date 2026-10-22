@@ -55,6 +55,20 @@
       "title": "Channels",
       "type": "array"
     },
+    "created_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the inbox item was stored; null in events from before the field.",
+      "title": "Created At"
+    },
     "kind": {
       "$ref": "#/$defs/NotificationKind"
     },

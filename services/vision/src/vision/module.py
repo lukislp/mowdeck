@@ -9,6 +9,7 @@ from mowdeck_contracts.v1 import (
     FEATURE_AI_RECOVER,
     FEATURE_AI_RECOVER_HOSTED,
     VISION_PROPOSAL_CREATED,
+    VISION_PROPOSAL_UPDATED,
     EventDef,
     FeatureDef,
     ModuleDescriptor,
@@ -34,7 +35,11 @@ DESCRIPTOR = ModuleDescriptor(
         EventDef(
             type=VISION_PROPOSAL_CREATED,
             schema_ref="mowdeck-contracts:schemas/v1/VisionProposalCreated.json",
-        )
+        ),
+        EventDef(
+            type=VISION_PROPOSAL_UPDATED,
+            schema_ref="mowdeck-contracts:schemas/v1/VisionProposalUpdated.json",
+        ),
     ],
     ui_areas=[
         UiAreaDef(

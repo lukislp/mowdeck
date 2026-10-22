@@ -43,6 +43,9 @@ from mowdeck_contracts.v1.relay import (
 
 VISION_PROPOSAL_CREATED: Final = "vision.proposal.created"
 """Event type: AI assist proposed a maneuver (payload :class:`VisionProposalCreated`)."""
+VISION_PROPOSAL_UPDATED: Final = "vision.proposal.updated"
+"""Event type: the state of a proposal changed (payload :class:`VisionProposalUpdated`); not
+for the change to ``proposed``, which is ``vision.proposal.created``."""
 
 FEATURE_AI_RECOVER: Final = "ai_recover"
 """Plan feature: AI assist (Ai Recover and Find Dock) with the user's own provider."""
@@ -70,6 +73,47 @@ class VisionTrigger(StrEnum):
     ERROR = "error"
     """The mower entered a recoverable error and a user of the account opted in to automatic
     analyses (ADR 0035). The proposal still waits for a human approval."""
+
+
+class VisionProposalState(StrEnum):
+    """Lifecycle of an AI assist proposal (one round)."""
+
+    ANALYSING = "analysing"
+    """The scene is with the vision model."""
+    PROPOSED = "proposed"
+    """A maneuver waits for approval until ``expires_at``."""
+    REJECTED_BY_AI = "rejected_by_ai"
+    """Risk flags, low confidence or no safe maneuver: nothing will be executed."""
+    FAILED = "failed"
+    """The analysis or the execution failed for a technical reason."""
+    REJECTED = "rejected"
+    """A user rejected the proposal."""
+    EXPIRED = "expired"
+    """Nobody approved it in time."""
+    EXECUTING = "executing"
+    """Approved: the steps are being driven."""
+    VERIFYING = "verifying"
+    """The steps were driven; the outcome is being checked."""
+    RECOVERED = "recovered"
+    """The mower is free (recover) or on its way to the dock (find_dock)."""
+    NOT_RECOVERED = "not_recovered"
+    """The steps were driven but did not help; another round may be requested."""
+    ABORTED = "aborted"
+    """Execution stopped early (emergency stop, sensor stop, geofence, no state, cancelled)."""
+
+
+VISION_FINAL_STATES: Final = frozenset(
+    {
+        VisionProposalState.REJECTED_BY_AI,
+        VisionProposalState.FAILED,
+        VisionProposalState.REJECTED,
+        VisionProposalState.EXPIRED,
+        VisionProposalState.RECOVERED,
+        VisionProposalState.NOT_RECOVERED,
+        VisionProposalState.ABORTED,
+    }
+)
+"""Proposal states after which nothing changes any more."""
 
 
 class PhotoRequest(ContractModel):
@@ -205,6 +249,35 @@ class VisionProposalCreated(ContractModel):
         max_length=64,
         description="With trigger `error`: the mower's error code that started the analysis.",
     )
+
+
+class VisionProposalUpdated(ContractModel):
+    """Payload of ``vision.proposal.updated``: a proposal changed its state.
+
+    Published after every state change except the one to ``proposed`` (that is
+    ``vision.proposal.created``). A summary only: the images and the model's full answer stay
+    behind ``GET /api/v1/vision/proposals/{id}``.
+    """
+
+    proposal_id: UUID
+    mower_id: UUID
+    account_id: UUID
+    task: VisionTask
+    round: int = Field(ge=1, le=10)
+    state: VisionProposalState
+    final: bool = Field(description="True for a state after which nothing changes any more.")
+    action: Literal["drive", "return_to_dock"] | None = Field(
+        default=None, description="The proposed maneuver; null before the analysis decided one."
+    )
+    steps: int = Field(default=0, ge=0, le=6, description="Number of proposed drive steps.")
+    fallback: bool = False
+    expires_at: UtcDateTime | None = Field(
+        default=None, description="Approval deadline while `proposed`; null otherwise."
+    )
+    link: str = Field(max_length=300, description="App path of the proposal.")
+    trigger: VisionTrigger = VisionTrigger.MANUAL
+    error_code: str | None = Field(default=None, max_length=64)
+    updated_at: UtcDateTime
 
 
 CAPTURE_MAX_BYTES: Final = 512 * 1024

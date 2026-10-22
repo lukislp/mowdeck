@@ -171,3 +171,22 @@ def test_notifications_vision_auto_proposal_is_a_default_warning() -> None:
     kind = NotificationKind.VISION_AUTO_PROPOSAL
     assert kind in DEFAULT_KINDS
     assert SEVERITY[kind] is NotificationSeverity.WARNING
+
+
+async def test_notifications_vision_proposal_is_raised_for_the_account_with_can_drive() -> None:
+    from mowdeck_contracts.v1 import NotificationRaised
+
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner, name="Vorgarten")
+        proposal = _proposal(h, mower_id, owner.account_id)
+        await _publish(h, proposal, owner.account_id)  # nobody subscribed to anything
+        raised = [
+            m.model(EventEnvelope[NotificationRaised]).payload
+            for m in h.bus.published
+            if m.subject == "event.notifications.raised"
+        ]
+        assert [r.kind for r in raised] == [NotificationKind.VISION_PROPOSAL]
+        assert raised[0].required_relation == "can_drive"
+        assert raised[0].severity is NotificationSeverity.WARNING
+        assert raised[0].title == "Vorgarten: AI assist has a proposal"

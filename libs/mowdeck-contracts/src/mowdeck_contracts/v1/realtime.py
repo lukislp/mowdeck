@@ -24,6 +24,8 @@ server -> client    ``pong``                  answer to ``ping``
 server -> client    ``drive_started``         the drive session is open; send frames now
 server -> client    ``drive_frame_ack``       a frame with ``seq`` was published to the mower
 server -> client    ``drive_ended``           the drive session ended (with the reason)
+server -> client    ``notification``          a notification for the principal (no subscribe)
+server -> client    ``vision_proposal``       an AI assist proposal of a subscribed mower
 ==================  ========================  ==================================================
 
 Close codes are listed in :class:`RealtimeCloseCode`. Manual driving is described in
@@ -42,7 +44,9 @@ from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 from mowdeck_contracts.v1.drive import DriveEndReason
 from mowdeck_contracts.v1.envelopes import CommandResult
 from mowdeck_contracts.v1.mower import MowerState
+from mowdeck_contracts.v1.notifications import NotificationKind, NotificationSeverity
 from mowdeck_contracts.v1.principal import PrincipalKind
+from mowdeck_contracts.v1.vision import VisionProposalState, VisionTask, VisionTrigger
 
 RequestId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._:-]{1,64}$")]
 """Chosen by the client and echoed in the answer, so it can match answers to requests."""
@@ -304,6 +308,89 @@ class DriveEndedMessage(ContractModel):
     detail: str | None = Field(default=None, max_length=500)
 
 
+class NotificationScope(StrEnum):
+    """Whose notification a ``notification`` message carries."""
+
+    USER = "user"
+    """An item of the person's own inbox (`id` is the inbox item id: mark it read with
+    `POST /api/v1/notifications/inbox/{id}/read`)."""
+    ACCOUNT = "account"
+    """A notification of the account for an API token (no inbox item; rendered in English)."""
+
+
+class RealtimeNotification(ContractModel):
+    """A notification as the inbox API returns it (``InboxItemOut``), plus ``scope``."""
+
+    id: UUID
+    scope: NotificationScope
+    mower_id: UUID | None = None
+    kind: NotificationKind
+    severity: NotificationSeverity
+    title: str = Field(max_length=200)
+    body: str = Field(max_length=1000)
+    url: str | None = Field(default=None, max_length=500)
+    occurred_at: UtcDateTime
+    created_at: UtcDateTime
+    read: bool = False
+    read_at: UtcDateTime | None = None
+    acked: bool = False
+    acked_at: UtcDateTime | None = None
+
+
+class NotificationMessage(ContractModel):
+    """A new notification for the principal, without a subscription.
+
+    People get the items of their own inbox (``scope`` ``user``, after Notifications checked
+    their preferences and access). API tokens get the account's notifications (``scope``
+    ``account``) when the token holds ``notifications.view`` and may view the mower (``can_drive``
+    for the AI assist kinds); a notification about a mower needs a subscription to it.
+    """
+
+    type: Literal["notification"] = "notification"
+    notification: RealtimeNotification
+
+
+class VisionProposalEvent(StrEnum):
+    """What happened to a proposal."""
+
+    CREATED = "created"
+    """A maneuver waits for approval (state ``proposed``)."""
+    UPDATED = "updated"
+    """The state changed (approved, rejected, expired, executed, ...)."""
+
+
+class VisionProposalSummary(ContractModel):
+    """An AI assist proposal without images (details: ``GET /api/v1/vision/proposals/{id}``)."""
+
+    id: UUID
+    mower_id: UUID
+    task: VisionTask
+    round: int = Field(ge=1, le=10)
+    state: VisionProposalState
+    final: bool
+    action: Literal["drive", "return_to_dock"] | None = None
+    steps: int = Field(default=0, ge=0, le=6)
+    fallback: bool = False
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    situation: str | None = Field(default=None, max_length=64)
+    trigger: VisionTrigger = VisionTrigger.MANUAL
+    error_code: str | None = Field(default=None, max_length=64)
+    expires_at: UtcDateTime | None = Field(
+        default=None, description="Approval deadline while `proposed`; null otherwise."
+    )
+    link: str = Field(max_length=300, description="App path of the proposal.")
+    updated_at: UtcDateTime
+
+
+class VisionProposalMessage(ContractModel):
+    """An AI assist proposal of a subscribed mower was created or changed its state."""
+
+    type: Literal["vision_proposal"] = "vision_proposal"
+    event: VisionProposalEvent
+    mower_id: UUID
+    proposal: VisionProposalSummary
+
+
 ServerMessage = Annotated[
     ReadyMessage
     | SubscribedMessage
@@ -315,7 +402,9 @@ ServerMessage = Annotated[
     | PongMessage
     | DriveStartedMessage
     | DriveFrameAckMessage
-    | DriveEndedMessage,
+    | DriveEndedMessage
+    | NotificationMessage
+    | VisionProposalMessage,
     Field(discriminator="type"),
 ]
 """Any message the server sends."""
