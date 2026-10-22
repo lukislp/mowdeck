@@ -35,7 +35,7 @@ Options considered:
 1. **(B) Bundled web build with `CapacitorHttp` / `CapacitorCookies` and an API base URL**: the refresh cookie becomes a cross-site cookie (or the native cookie jar), every service needs CORS with credentials and a configurable base URL, the realtime WebSocket needs another origin check, and each server update needs a new app build. Rejected; it duplicates the web build and weakens the cookie model of ADR 0021.
 2. **A generous `allowNavigation: ['*']` with a bundled launcher that just navigates to the server**: works on iOS, but Android injects the bridge only for the app origin, so plugins would be missing until the next cold start, and every link to any site would open inside the app. Rejected in favour of setting `server.url` natively.
 3. **Firebase Cloud Messaging for Android**: rejected by the owner (Google dependency, Firebase project, `google-services.json`); ntfy covers the background without it.
-4. **TestFlight or the App Store**: the owner installs directly from the Mac; not needed for an app that points at a private server.
+4. **TestFlight or the App Store**: the owner installs directly from the Mac; not needed for an app that points at a private server. Revised on 2026-10-22 for TestFlight, see the amendment below.
 5. **React Native, Flutter or MAUI**: a second UI code base. Rejected.
 
 ## Consequences
@@ -46,3 +46,7 @@ Options considered:
 - iOS background notifications need the owner's APNs auth key on the server and `MOWDECK_APNS_ENVIRONMENT=development`, because a build installed from Xcode with a development profile registers with the APNs sandbox. Android background notifications need the ntfy app and a topic; while the app is open, it notifies by itself.
 - A paid developer account is required for APNs on iOS; the profiles are renewed once a year by running `provision.sh` again.
 - Verified only by reading the sources and with the unit tests: the iOS and Android builds, the device install, APNs delivery and the remote bridge behaviour run on the owner's Mac and phones (docs/ops/mobile-apps.md lists the checks).
+
+### Amendment 2026-10-22: TestFlight from GitHub Actions
+
+The owner wants the app on iPhone and iPad without the Mac at hand. The on-demand workflow `.github/workflows/apple-testflight.yml` builds an existing release, signs it with an Apple Distribution certificate and an App Store profile and uploads it to TestFlight for internal testing (no App Review, no public App Store listing). The Apple signing secrets are no longer kept only on the Mac: they live in the GitHub Environment `release` (required reviewer: the owner, deployment branch `main` only) and only that job reads them, after an approval. Devices: iPhone and iPad; Apple silicon Macs run the iPad app, there is no Mac Catalyst build. TestFlight builds use production APNs (`aps-environment = production`, `APNS_ENVIRONMENT=production` on the server); the Mac path with development signing stays for direct installs. Details: [docs/ops/mobile-apps.md](../ops/mobile-apps.md), "TestFlight".

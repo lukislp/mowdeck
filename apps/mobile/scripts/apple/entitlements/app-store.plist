@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Entitlements of the TestFlight build of app.mowdeck.mobile (release-ios.sh). The same
+     capabilities as ios/App/App/App.entitlements (the development build from the Mac), with the
+     production APNs environment; tools/repo-checks/scripts/ios_release_check.py keeps the two
+     in step. ios_signing.py adds the identity keys of the App Store profile and fails if the
+     profile does not grant one of these. -->
+<plist version="1.0">
+<dict>
+	<!-- TestFlight and App Store builds register with production APNs: the server needs
+	     APNS_ENVIRONMENT=production (docs/ops/mobile-apps.md). -->
+	<key>aps-environment</key>
+	<string>production</string>
+	<!-- Theft alarms are sent as time-sensitive notifications (they break through Focus). -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+</dict>
+</plist>

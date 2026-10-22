@@ -1,0 +1,207 @@
+name: Apple TestFlight
+
+# On demand only (Actions -> "Apple TestFlight" -> Run workflow): builds the iOS app shell
+# (apps/mobile, iPhone and iPad) of an EXISTING release, signs it with the Apple secrets of the
+# GitHub Environment "release" and uploads it to TestFlight. Releases (release.yml) never wait for
+# this workflow; the owner decides when a release goes to TestFlight and approves each run in the
+# environment. docs/ops/mobile-apps.md, "TestFlight".
+#
+# Only a tag of the form vX.Y.Z that has a GitHub release and whose commit is on main is
+# accepted; the job checks out exactly that commit (no free-form ref, no caches). The app is a
+# shell that loads the web app from the owner's server: it bundles two small pages and the
+# Capacitor plugins, never the web app or the Agora SDK (ios_release_check.py app).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to ship, e.g. v0.3.12. Empty means the latest release."
+        required: false
+        default: ""
+        type: string
+      rebuild:
+        description: "Only to upload the same tag again: 1-99 turns the build number into <code>.<n> (e.g. 312.1). Empty for the first upload."
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: apple-testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    # The environment "release" deploys from main only anyway; this fails a dispatch from another
+    # branch right away instead of after the approval.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      sha: ${{ steps.tag.outputs.sha }}
+      version: ${{ steps.tag.outputs.version }}
+      rebuild: ${{ steps.tag.outputs.rebuild }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+      - name: Resolve and validate the release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_REBUILD: ${{ inputs.rebuild }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          TAG="$INPUT_TAG"
+          if [ -z "$TAG" ]; then
+            TAG="$(gh release view --repo "$REPO" --json tagName --jq .tagName)" || fail "There is no release yet."
+          fi
+          # Minor and patch stay below 100: the build number formula (ios_release_check.py
+          # build-number, the Android versionCode).
+          [[ "$TAG" =~ ^v(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]] \
+            || fail "'$TAG' is not a release tag of the form vMAJOR.MINOR.PATCH."
+          [[ "$INPUT_REBUILD" =~ ^([1-9][0-9]?)?$ ]] || fail "rebuild must be empty or a number from 1 to 99."
+          gh api "repos/$REPO/git/ref/tags/$TAG" --silent || fail "Tag $TAG does not exist."
+          gh release view "$TAG" --repo "$REPO" --json tagName --jq .tagName > /dev/null \
+            || fail "Tag $TAG has no GitHub release."
+          # The commit the tag points to (annotated tags are peeled).
+          SHA="$(gh api "repos/$REPO/commits/tags/$TAG" --jq .sha)"
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || fail "Could not resolve $TAG to a commit."
+          STATUS="$(gh api "repos/$REPO/compare/$SHA...main" --jq .status)"
+          case "$STATUS" in
+            ahead | identical) ;;
+            *) fail "$TAG ($SHA) is not on main." ;;
+          esac
+          {
+            echo "tag=$TAG"
+            echo "sha=$SHA"
+            echo "version=${TAG#v}"
+            echo "rebuild=$INPUT_REBUILD"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### TestFlight run"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Tag | \`$TAG\` |"
+            echo "| Commit | \`$SHA\` |"
+            echo "| Rebuild | \`${INPUT_REBUILD:-none}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # CFBundleShortVersionString = the release version, CFBundleVersion = the Android versionCode
+  # formula (major * 10000 + minor * 100 + patch), with ".<rebuild>" on a repeated upload.
+  testflight-ios:
+    needs: [resolve]
+    runs-on: macos-latest
+    timeout-minutes: 75
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          # vars.APPLE_RELEASE_EGRESS_POLICY=audit is the escape hatch if Apple or GitHub move a
+          # host (docs/ops/mobile-apps.md, "TestFlight"); a re-run of the failed job picks it up.
+          egress-policy: ${{ vars.APPLE_RELEASE_EGRESS_POLICY || 'block' }}
+          # registry.npmjs.org: pnpm and the shell's packages. github.com and the release asset
+          # hosts: Swift Package Manager clones capacitor-swift-pm and downloads its binary
+          # frameworks. *.object-storage.apple.com: altool sends the binary to a regional host
+          # there; blocked, the upload hangs without any output.
+          allowed-endpoints: >
+            api.appstoreconnect.apple.com:443
+            api.github.com:443
+            appstoreconnect.apple.com:443
+            *.blob.core.windows.net:443
+            contentdelivery.itunes.apple.com:443
+            crl3.digicert.com:80
+            github.com:443
+            *.githubapp.com:443
+            nodejs.org:443
+            *.object-storage.apple.com:443
+            objects.githubusercontent.com:443
+            ocsp.apple.com:80
+            raw.githubusercontent.com:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            run-actions-*.actions.githubusercontent.com:443
+            timestamp.apple.com:443
+            timestamp.apple.com:80
+            token.actions.githubusercontent.com:443
+            www.apple.com:443
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Apple signing secrets configured?
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          APPLE_PROFILE_IOS_BASE64: ${{ secrets.APPLE_PROFILE_IOS_BASE64 }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: bash apps/mobile/scripts/apple/keychain.sh check
+      # Icon, Info.plist, entitlements and project settings App Store Connect would reject only
+      # after the upload (the same checks run in the python CI job on every pull request).
+      - name: App Store readiness of the project
+        run: python3 tools/repo-checks/scripts/ios_release_check.py source
+      - name: Build number
+        id: build
+        env:
+          APP_VERSION: ${{ needs.resolve.outputs.version }}
+          REBUILD: ${{ needs.resolve.outputs.rebuild }}
+        run: |
+          set -euo pipefail
+          number="$(python3 tools/repo-checks/scripts/ios_release_check.py build-number "$APP_VERSION" --rebuild "$REBUILD")"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "CFBundleVersion $number"
+          xcodebuild -version
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          # No dependency cache in release jobs (cache poisoning, see release.yml).
+          package-manager-cache: false
+      - name: Import the certificate, the profile and the API key
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          APPLE_PROFILE_IOS_BASE64: ${{ secrets.APPLE_PROFILE_IOS_BASE64 }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: bash apps/mobile/scripts/apple/keychain.sh setup
+      - name: Build and sign for TestFlight
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_VERSION: ${{ needs.resolve.outputs.version }}
+          BUILD_NUMBER: ${{ steps.build.outputs.number }}
+          IPA_OUTPUT: apps/mobile/build/MowDeck-ios.ipa
+        run: bash apps/mobile/scripts/apple/release-ios.sh
+      - name: Upload to TestFlight
+        # upload-testflight.sh stops altool after 30 minutes with a clear error; this is the
+        # backstop (an upload normally takes a few minutes).
+        timeout-minutes: 40
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          UPLOAD_TIMEOUT_SECONDS: "1800"
+        run: bash apps/mobile/scripts/apple/upload-testflight.sh apps/mobile/build/MowDeck-ios.ipa
+      - name: Remove the signing keychain and decoded files
+        if: always()
+        run: if [ -f apps/mobile/scripts/apple/keychain.sh ]; then bash apps/mobile/scripts/apple/keychain.sh cleanup; fi
