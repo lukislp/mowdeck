@@ -49,8 +49,11 @@ describe('heat layer properties', () => {
   });
 
   it('keeps the mower id inside its path segment', () => {
+    // '.' and '..' are dot segments: every URL parser resolves them away, and percent-encoding
+    // does not help (WHATWG URL treats %2E like '.'). No id can travel as one; mower ids are UUIDs.
+    const mowerIdArb = fc.string().filter((id) => id !== '.' && id !== '..');
     fc.assert(
-      fc.property(fc.string(), instant, fc.constantFrom(1, 2, 5), (mowerId, now, cell) => {
+      fc.property(mowerIdArb, instant, fc.constantFrom(1, 2, 5), (mowerId, now, cell) => {
         const url = new URL(
           heatmapUrl(mowerId, 'coverage', periodWindow('24h', now), cell),
           'https://mowdeck.example',
