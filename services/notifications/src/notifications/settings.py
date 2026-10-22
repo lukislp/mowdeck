@@ -87,6 +87,10 @@ class Settings(ServiceSettings):
     """Acknowledging an alarm silences repeats of it (same kind and mower) for the user this
     long."""
 
+    notifications_default_language: Literal["de", "en"] = "de"
+    """Language of the messages for a user who never saved preferences (the app's default
+    language); a saved preference names its own."""
+
     # --- delivery --------------------------------------------------------------------------
 
     notifications_channels: str = "webpush,ntfy,apns"
@@ -245,4 +249,5 @@ class Settings(ServiceSettings):
             ntfy_allowed_servers=self.ntfy_servers,
             webpush_allowed_hosts=self.webpush_hosts,
             ack_silence=timedelta(seconds=self.notifications_ack_silence_seconds),
+            default_language=self.notifications_default_language,
         )

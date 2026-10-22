@@ -31,7 +31,7 @@ from notifications_support import (
 )
 
 from notifications.adapters.bus.fleet import seed_directory
-from notifications.domain.models import DeliveryStatus, NotificationEvent, TargetKind
+from notifications.domain.models import ApnsDevice, DeliveryStatus, NotificationEvent, TargetKind
 
 
 async def finish_a_mow(h: Harness, owner: Person, mower_id: Any) -> None:
@@ -348,3 +348,87 @@ async def test_notifications_flow_offline_state_after_a_lost_link_is_no_contact(
         h.clock.advance(31)
         swept = await h.services.watcher.sweep_offline()
     assert [e.kind.value for e in swept] == ["mower_offline"]
+
+
+# --- users who never saved preferences -----------------------------------------------------
+
+APNS_TOKEN = "a1" * 32
+
+
+async def register_iphone(h: Harness, person: Person) -> None:
+    """An APNs device of ``person`` (what the iOS app registers), without saving preferences."""
+    await h.store.add_apns_device(
+        ApnsDevice(uuid4(), person.user_id, person.account_id, APNS_TOKEN, "iPhone", h.clock.now)
+    )
+
+
+async def get_stuck(h: Harness, owner: Person, mower_id: Any) -> None:
+    """Mowing, then the mower reports error 1201 ("The robot is stuck")."""
+    h.clock.advance(10)
+    await h.publish_state(
+        make_state(mower_id, owner.account_id, at=h.clock.now, activity=MowerActivity.MOWING)
+    )
+    h.clock.advance(30)
+    await h.publish_state(
+        make_state(
+            mower_id,
+            owner.account_id,
+            at=h.clock.now,
+            activity=MowerActivity.ERROR,
+            error_code="1201",
+            error_message="The robot is stuck",
+        )
+    )
+
+
+async def test_notifications_flow_user_without_preferences_gets_the_default_kinds() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner, name="Garten")
+        await register_iphone(h, owner)
+        assert await h.store.preferences(owner.user_id, owner.account_id) is None
+        await get_stuck(h, owner, mower_id)
+        h.clock.advance(600)
+        await finish_a_mow(h, owner, mower_id)
+        items = await h.inbox(owner)
+    kinds = [i["kind"] for i in items]
+    assert "mower_stuck" in kinds and "mowing_finished" in kinds
+    assert "job_started" not in kinds
+    stuck = next(i for i in items if i["kind"] == "mower_stuck")
+    assert "Garten" in stuck["title"] and "1201" in stuck["body"]
+    finished = next(i for i in items if i["kind"] == "mowing_finished")
+    assert finished["title"] == "Garten ist fertig mit Mähen"  # the default language is German
+    deliveries = [r for r in h.store.data.deliveries.values() if r.user_id == owner.user_id]
+    assert deliveries and {r.channel for r in deliveries} == {"log"}  # the configured channel
+
+
+async def test_notifications_flow_saved_preferences_win_over_the_defaults() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        await register_iphone(h, owner)
+        await h.subscribe_all(owner, enabled_kinds=["battery_low"])
+        await get_stuck(h, owner, mower_id)
+        h.clock.advance(600)
+        await finish_a_mow(h, owner, mower_id)
+        assert await h.inbox(owner) == []
+        await h.subscribe_all(owner, enabled_kinds=["mowing_finished", "job_started"])
+        h.clock.advance(600)
+        await finish_a_mow(h, owner, mower_id)
+        kinds = [i["kind"] for i in await h.inbox(owner)]
+    assert sorted(kinds) == ["job_started", "mowing_finished"]
+
+
+async def test_notifications_flow_defaults_still_need_can_view_and_a_target() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        no_grant = await h.member(owner)
+        await register_iphone(h, no_grant)
+        no_target = await h.member(owner)
+        await h.grant_view(no_target, mower_id)
+        await finish_a_mow(h, owner, mower_id)
+        assert await h.store.inbox(no_grant.user_id, owner.account_id, 10, unread_only=False) == []
+        assert await h.store.inbox(no_target.user_id, owner.account_id, 10, unread_only=False) == []
+        checks = [c for c in h.authz.checks if str(no_grant.user_id) in str(c)]
+    assert checks  # can_view was asked for the default recipient and denied
