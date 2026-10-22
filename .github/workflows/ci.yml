@@ -612,6 +612,17 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [web, docker]
     timeout-minutes: 30
+    env:
+      # The browsers and their system libraries, prebuilt: no apt and no browser download per run
+      # (which on 2026-10-22 crawled or hung on azure.archive.ubuntu.com). The one image pinned
+      # outside infra/compose/.env.example: it bundles Chrome for Testing (Google's terms, Widevine
+      # CDM) next to Playwright (Apache-2.0), Firefox (MPL-2.0) and WebKit (LGPL-2.1/BSD), so the
+      # public GHCR mirror must not republish it (tools/repo-checks/tests/
+      # test_release_licences.py, NOT_MIRRORED). CI-only, never part of a release. The tag must
+      # equal the @playwright/test version of tests/e2e-web; after a Dependabot bump of that
+      # package set v<version>-noble and the "Digest" line of
+      # `docker buildx imagetools inspect mcr.microsoft.com/playwright:v<version>-noble`.
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -626,18 +637,15 @@ jobs:
       - run: pnpm install --frozen-lockfile --filter e2e-web
       - *ghcr-login
       - *mirror-env
-      # The browsers and their system libraries come prebuilt in PLAYWRIGHT_IMAGE (pinned by digest
-      # in infra/compose/.env.example, pulled through the mirror): no apt and no browser download
-      # per run, which on 2026-10-22 crawled or hung on azure.archive.ubuntu.com. The image only
-      # fits the @playwright/test version it was built for, so a Dependabot bump of that package
-      # fails here, with the line to change, instead of later with missing browser builds.
+      # The image only fits the @playwright/test version it was built for, so a Dependabot bump of
+      # that package fails here, with the line to change, instead of later with missing browsers.
       - name: Playwright image matches @playwright/test
         run: |
           installed=$(pnpm --filter e2e-web exec playwright --version | sed -n 's/^Version //p')
           image=${PLAYWRIGHT_IMAGE%%@*}
           tag=${image##*:}
           if [ -z "$installed" ] || [ "$tag" != "v${installed}-noble" ]; then
-            echo "::error file=infra/compose/.env.example::PLAYWRIGHT_IMAGE is ${tag}, but tests/e2e-web installs @playwright/test ${installed:-(unknown)}: set PLAYWRIGHT_IMAGE to mcr.microsoft.com/playwright:v${installed}-noble@<digest> (docker buildx imagetools inspect)"
+            echo "::error file=.github/workflows/ci.yml::PLAYWRIGHT_IMAGE (job e2e-web) is ${tag}, but tests/e2e-web installs @playwright/test ${installed:-(unknown)}: set it to mcr.microsoft.com/playwright:v${installed}-noble@<digest> (docker buildx imagetools inspect)"
             exit 1
           fi
           echo "@playwright/test ${installed} = ${tag}"
