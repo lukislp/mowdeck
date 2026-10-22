@@ -6,12 +6,18 @@ channels such as Web Push and ntfy. For every notification it creates for a user
 ``notifications.sent`` on ``event.notifications.sent`` (stream ``EVENTS``) with a
 :class:`NotificationSent` payload, so an app can show an in-app feed.
 
+Inbox items belong to people (``user`` and ``subuser`` principals). An API token (Home
+Assistant) has no inbox; for it the service publishes every notification it derives once per
+account as ``notifications.raised`` (:class:`NotificationRaised`, rendered in English) before the
+per-user fan-out, whether or not a user subscribed to it. Realtime forwards it to API-token
+sockets of the account that hold :data:`NOTIFICATIONS_VIEW_PERMISSION`.
+
 :class:`WebPushPayload` is the JSON a browser's service worker receives in the ``push`` event
 (encrypted with ``aes128gcm``); its size stays well below the 4 KiB Web Push limit.
 """
 
 from enum import StrEnum
-from typing import Final
+from typing import Final, Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -20,6 +26,12 @@ from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 
 NOTIFICATION_SENT: Final = "notifications.sent"
 """Event type: a notification was created for one user (payload :class:`NotificationSent`)."""
+NOTIFICATION_RAISED: Final = "notifications.raised"
+"""Event type: a notification was derived for an account, before the per-user fan-out
+(payload :class:`NotificationRaised`)."""
+NOTIFICATIONS_VIEW_PERMISSION: Final = "notifications.view"
+"""Account permission key: receive the account's notifications (``notifications.raised``) over
+the Realtime socket. Meant for API tokens; implied by ``mower.view`` on the whole account."""
 
 
 class NotificationKind(StrEnum):
@@ -83,6 +95,37 @@ class NotificationSent(ContractModel):
     occurred_at: UtcDateTime
     channels: list[str] = Field(
         default_factory=list, description="Channels a delivery was queued for (may be empty)."
+    )
+    created_at: UtcDateTime | None = Field(
+        default=None,
+        description="When the inbox item was stored; null in events from before the field.",
+    )
+
+
+class NotificationRaised(ContractModel):
+    """Payload of ``notifications.raised``: one notification derived for an account.
+
+    Published once per derived notification (mower rules, theft alarms, AI assist, blade
+    maintenance, firmware), independent of user preferences, quiet hours and channels, and
+    rendered in English. ``notification_id`` is stable for the occurrence (derived from the
+    account and the ``dedupe_key``), so a redelivered event carries the same id.
+    """
+
+    notification_id: UUID
+    account_id: UUID
+    mower_id: UUID | None = None
+    kind: NotificationKind
+    severity: NotificationSeverity
+    title: str = Field(max_length=200)
+    body: str = Field(max_length=1000)
+    url: str | None = Field(default=None, max_length=500)
+    occurred_at: UtcDateTime
+    created_at: UtcDateTime
+    dedupe_key: str = Field(max_length=200, description="Identifies the occurrence.")
+    required_relation: Literal["can_view", "can_drive"] = Field(
+        default="can_view",
+        description="Relation a receiver needs on the mower: `can_drive` for the AI assist "
+        "kinds (only those who may approve a maneuver hear about it), else `can_view`.",
     )
 
 

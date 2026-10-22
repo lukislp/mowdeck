@@ -111,3 +111,52 @@ def test_realtime_close_codes_are_stable() -> None:
     assert int(RealtimeCloseCode.LIMIT_EXCEEDED) == 4429
     assert int(RealtimeCloseCode.SLOW_CONSUMER) == 4430
     assert int(RealtimeCloseCode.GOING_AWAY) == 1001
+
+
+def test_realtime_notification_and_vision_proposal_messages_parse() -> None:
+    from uuid import uuid4
+
+    from mowdeck_contracts.v1.realtime import (
+        NotificationMessage,
+        RealtimeServerMessage,
+        VisionProposalMessage,
+    )
+
+    mower_id = str(uuid4())
+    note = RealtimeServerMessage.model_validate(
+        {
+            "type": "notification",
+            "notification": {
+                "id": str(uuid4()),
+                "scope": "account",
+                "mower_id": mower_id,
+                "kind": "mower_lifted",
+                "severity": "critical",
+                "title": "t",
+                "body": "b",
+                "occurred_at": "2026-10-22T12:00:00Z",
+                "created_at": "2026-10-22T12:00:01Z",
+            },
+        }
+    ).root
+    assert isinstance(note, NotificationMessage)
+    assert note.notification.read is False and note.notification.acked_at is None
+    proposal = RealtimeServerMessage.model_validate(
+        {
+            "type": "vision_proposal",
+            "event": "updated",
+            "mower_id": mower_id,
+            "proposal": {
+                "id": str(uuid4()),
+                "mower_id": mower_id,
+                "task": "find_dock",
+                "round": 2,
+                "state": "expired",
+                "final": True,
+                "link": "/mowers/x?assist=y",
+                "updated_at": "2026-10-22T12:00:00Z",
+            },
+        }
+    ).root
+    assert isinstance(proposal, VisionProposalMessage)
+    assert proposal.proposal.action is None and proposal.proposal.steps == 0

@@ -7,7 +7,7 @@
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
  * via the `definition` "RealtimeServerMessage".
  */
-export type RealtimeServerMessage = (ReadyMessage | SubscribedMessage | UnsubscribedMessage | StateMessage | CommandResultMessage | RevokedMessage | ErrorMessage1 | PongMessage | DriveStartedMessage | DriveFrameAckMessage | DriveEndedMessage)
+export type RealtimeServerMessage = (ReadyMessage | SubscribedMessage | UnsubscribedMessage | StateMessage | CommandResultMessage | RevokedMessage | ErrorMessage1 | PongMessage | DriveStartedMessage | DriveFrameAckMessage | DriveEndedMessage | NotificationMessage | VisionProposalMessage)
 export type ConnectionId = string
 export type AccountId = string
 export type DisplayName = (string | null)
@@ -429,6 +429,85 @@ export type MowerId5 = string
 export type DriveEndReason = ("client_stop" | "socket_closed" | "revoked" | "token_expired" | "max_duration" | "mower_refused" | "mower_busy" | "replaced" | "expired" | "completed" | "aborted")
 export type SessionId2 = string
 export type Type10 = "drive_ended"
+export type Acked = boolean
+export type AckedAt = (string | null)
+export type Body = string
+export type CreatedAt = string
+export type Id = string
+/**
+ * What a notification is about.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "NotificationKind".
+ */
+export type NotificationKind = ("mowing_finished" | "mower_stuck" | "battery_low" | "mower_offline" | "mower_online" | "job_started" | "mower_lifted" | "mower_left_dock_unexpectedly" | "geofence_exit" | "blade_maintenance" | "vision_proposal" | "vision_auto_proposal" | "firmware_update_available" | "firmware_update_finished" | "firmware_update_failed" | "test")
+export type MowerId6 = (string | null)
+export type OccurredAt = string
+export type Read = boolean
+export type ReadAt = (string | null)
+/**
+ * Whose notification a ``notification`` message carries.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "NotificationScope".
+ */
+export type NotificationScope = ("user" | "account")
+/**
+ * How urgent a notification is; channels map it to TTL, urgency or priority.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "NotificationSeverity".
+ */
+export type NotificationSeverity = ("info" | "warning" | "critical")
+export type Title = string
+export type Url = (string | null)
+export type Type11 = "notification"
+/**
+ * What happened to a proposal.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "VisionProposalEvent".
+ */
+export type VisionProposalEvent = ("created" | "updated")
+export type MowerId7 = string
+export type Action = (("drive" | "return_to_dock") | null)
+export type Confidence = (number | null)
+export type ErrorCode1 = (string | null)
+/**
+ * Approval deadline while `proposed`; null otherwise.
+ */
+export type ExpiresAt = (string | null)
+export type Fallback = boolean
+export type Final = boolean
+export type Id1 = string
+/**
+ * App path of the proposal.
+ */
+export type Link = string
+export type MowerId8 = string
+export type Round = number
+export type Situation = (string | null)
+/**
+ * Lifecycle of an AI assist proposal (one round).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "VisionProposalState".
+ */
+export type VisionProposalState = ("analysing" | "proposed" | "rejected_by_ai" | "failed" | "rejected" | "expired" | "executing" | "verifying" | "recovered" | "not_recovered" | "aborted")
+export type Steps2 = number
+/**
+ * What AI assist is asked to do.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "VisionTask".
+ */
+export type VisionTask = ("recover" | "find_dock")
+/**
+ * Who started an analysis.
+ */
+export type VisionTrigger = ("manual" | "error")
+export type UpdatedAt = string
+export type Type12 = "vision_proposal"
 /**
  * Parses (and documents) one client message: ``RealtimeClientMessage.model_validate_json``.
  * 
@@ -437,30 +516,30 @@ export type Type10 = "drive_ended"
  */
 export type RealtimeClientMessage = (AuthMessage | SubscribeMessage | UnsubscribeMessage | PingMessage | DriveStartMessage | DriveFrameMessage | DriveStopMessage)
 export type Token = string
-export type Type11 = "auth"
+export type Type13 = "auth"
 /**
  * @minItems 1
  * @maxItems 1000
  */
 export type MowerIds3 = [string, ...(string)[]]
 export type RequestId5 = (string | null)
-export type Type12 = "subscribe"
+export type Type14 = "subscribe"
 /**
  * @minItems 1
  * @maxItems 1000
  */
 export type MowerIds4 = [string, ...(string)[]]
 export type RequestId6 = (string | null)
-export type Type13 = "unsubscribe"
+export type Type15 = "unsubscribe"
 export type RequestId7 = (string | null)
-export type Type14 = "ping"
+export type Type16 = "ping"
 /**
  * Allow frames with `blade_on` in this session (the mower must support it).
  */
 export type BladeOnAllowed1 = boolean
-export type MowerId6 = string
+export type MowerId9 = string
 export type RequestId8 = (string | null)
-export type Type15 = "drive_start"
+export type Type17 = "drive_start"
 /**
  * Turn left (+) / right (-), normalised.
  */
@@ -475,10 +554,10 @@ export type Linear = number
  */
 export type Seq1 = (number | null)
 export type SessionId3 = string
-export type Type16 = "drive_frame"
+export type Type18 = "drive_frame"
 export type RequestId9 = (string | null)
 export type SessionId4 = string
-export type Type17 = "drive_stop"
+export type Type19 = "drive_stop"
 /**
  * The satellite position solution as the receiver reports it (finer than
  * :class:`~mowdeck_contracts.v1.RtkFixStatus`, which folds ``single`` into ``none``).
@@ -514,6 +593,13 @@ export type RtkFixStatus1 = ("none" | "float" | "fixed" | "unknown")
  * via the `definition` "RtkSource".
  */
 export type RtkSource1 = ("base_station" | "network" | "unknown")
+/**
+ * Who started an analysis.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "VisionTrigger".
+ */
+export type VisionTrigger1 = ("manual" | "error")
 
 export interface RealtimeProtocol {
 server?: RealtimeServerMessage
@@ -948,6 +1034,79 @@ session_id: SessionId2
 type: Type10
 }
 /**
+ * A new notification for the principal, without a subscription.
+ * 
+ * People get the items of their own inbox (``scope`` ``user``, after Notifications checked
+ * their preferences and access). API tokens get the account's notifications (``scope``
+ * ``account``) when the token holds ``notifications.view`` and may view the mower (``can_drive``
+ * for the AI assist kinds); a notification about a mower needs a subscription to it.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "NotificationMessage".
+ */
+export interface NotificationMessage {
+notification: RealtimeNotification
+type: Type11
+}
+/**
+ * A notification as the inbox API returns it (``InboxItemOut``), plus ``scope``.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "RealtimeNotification".
+ */
+export interface RealtimeNotification {
+acked?: Acked
+acked_at?: AckedAt
+body: Body
+created_at: CreatedAt
+id: Id
+kind: NotificationKind
+mower_id?: MowerId6
+occurred_at: OccurredAt
+read?: Read
+read_at?: ReadAt
+scope: NotificationScope
+severity: NotificationSeverity
+title: Title
+url?: Url
+}
+/**
+ * An AI assist proposal of a subscribed mower was created or changed its state.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "VisionProposalMessage".
+ */
+export interface VisionProposalMessage {
+event: VisionProposalEvent
+mower_id: MowerId7
+proposal: VisionProposalSummary
+type: Type12
+}
+/**
+ * An AI assist proposal without images (details: ``GET /api/v1/vision/proposals/{id}``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "VisionProposalSummary".
+ */
+export interface VisionProposalSummary {
+action?: Action
+confidence?: Confidence
+error_code?: ErrorCode1
+expires_at?: ExpiresAt
+fallback?: Fallback
+final: Final
+id: Id1
+link: Link
+mower_id: MowerId8
+round: Round
+situation?: Situation
+state: VisionProposalState
+steps?: Steps2
+task: VisionTask
+trigger?: VisionTrigger
+updated_at: UpdatedAt
+}
+/**
  * The access token; the first message of every connection, later to refresh it.
  * 
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
@@ -955,7 +1114,7 @@ type: Type10
  */
 export interface AuthMessage {
 token: Token
-type: Type11
+type: Type13
 }
 /**
  * Subscribe to mowers (each id is checked with ``can_view``).
@@ -966,7 +1125,7 @@ type: Type11
 export interface SubscribeMessage {
 mower_ids: MowerIds3
 request_id?: RequestId5
-type: Type12
+type: Type14
 }
 /**
  * Stop the updates of mowers.
@@ -977,7 +1136,7 @@ type: Type12
 export interface UnsubscribeMessage {
 mower_ids: MowerIds4
 request_id?: RequestId6
-type: Type13
+type: Type15
 }
 /**
  * Ask for a ``pong`` (browsers cannot see WebSocket protocol pings).
@@ -987,7 +1146,7 @@ type: Type13
  */
 export interface PingMessage {
 request_id?: RequestId7
-type: Type14
+type: Type16
 }
 /**
  * Open a manual drive session (``can_drive`` on the mower, at most one per mower).
@@ -997,9 +1156,9 @@ type: Type14
  */
 export interface DriveStartMessage {
 blade_on_allowed?: BladeOnAllowed1
-mower_id: MowerId6
+mower_id: MowerId9
 request_id?: RequestId8
-type: Type15
+type: Type17
 }
 /**
  * One joystick sample; send about ten per second while the stick is held.
@@ -1013,7 +1172,7 @@ blade_on?: BladeOn
 linear: Linear
 seq?: Seq1
 session_id: SessionId3
-type: Type16
+type: Type18
 }
 /**
  * End a drive session; a zero frame is sent and the mower stops.
@@ -1024,5 +1183,5 @@ type: Type16
 export interface DriveStopMessage {
 request_id?: RequestId9
 session_id: SessionId4
-type: Type17
+type: Type19
 }

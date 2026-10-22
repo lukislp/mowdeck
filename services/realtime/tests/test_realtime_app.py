@@ -92,7 +92,7 @@ async def test_realtime_one_subscription_per_family_without_queue_group() -> Non
     async with lifespan_client(app):
         subscriptions = app.state.realtime_subscriptions
         assert subscriptions is not None
-        assert len(subscriptions.all()) == 4
+        assert len(subscriptions.all()) == 6
         # Malformed or mismatching messages are dropped, never redelivered.
         mower_id = uuid4()
         await bus.publish(telemetry_subject(mower_id), b"{}")
@@ -100,7 +100,9 @@ async def test_realtime_one_subscription_per_family_without_queue_group() -> Non
         await bus.publish(command_result_subject(mower_id), b"[]")
         await bus.publish("event.identity.grants.changed", b"{}")
         await bus.publish(f"device.mower.{mower_id}.capabilities", b"{}")
-        assert len(bus.dropped) == 5
+        await bus.publish("event.notifications.sent", b"{}")
+        await bus.publish("event.vision.proposal.created", b"[]")
+        assert len(bus.dropped) == 7
     assert app.state.hub.accepting is False
 
 

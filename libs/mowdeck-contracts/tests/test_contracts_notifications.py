@@ -48,3 +48,53 @@ def test_web_push_payload_validates() -> None:
         WebPushPayload(title="t" * 201, body="b", tag="x", kind=NotificationKind.TEST)
     with pytest.raises(ValidationError):
         WebPushPayload.model_validate({"title": "t", "body": "b", "tag": "x", "kind": "nope"})
+
+
+def test_notification_raised_round_trip_and_defaults() -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    import pytest
+    from mowdeck_contracts.v1 import (
+        NOTIFICATION_RAISED,
+        NOTIFICATIONS_VIEW_PERMISSION,
+        NotificationKind,
+        NotificationRaised,
+        NotificationSent,
+        NotificationSeverity,
+    )
+    from pydantic import ValidationError
+
+    now = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
+    raised = NotificationRaised(
+        notification_id=uuid4(),
+        account_id=uuid4(),
+        mower_id=uuid4(),
+        kind=NotificationKind.MOWER_LIFTED,
+        severity=NotificationSeverity.CRITICAL,
+        title="Backyard was lifted",
+        body="The lift sensor stopped the mower.",
+        occurred_at=now,
+        created_at=now,
+        dedupe_key="mower_lifted:x:1",
+    )
+    assert raised.required_relation == "can_view"
+    assert NotificationRaised.model_validate_json(raised.model_dump_json()) == raised
+    assert NOTIFICATION_RAISED == "notifications.raised"
+    assert NOTIFICATIONS_VIEW_PERMISSION == "notifications.view"
+    with pytest.raises(ValidationError):
+        NotificationRaised.model_validate(
+            {**raised.model_dump(), "required_relation": "can_control"}
+        )
+    # notifications.sent from before created_at still validates.
+    old = NotificationSent(
+        notification_id=uuid4(),
+        user_id=uuid4(),
+        account_id=uuid4(),
+        kind=NotificationKind.TEST,
+        severity=NotificationSeverity.INFO,
+        title="t",
+        body="b",
+        occurred_at=now,
+    )
+    assert old.created_at is None

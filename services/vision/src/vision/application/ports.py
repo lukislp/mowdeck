@@ -19,6 +19,7 @@ from mowdeck_contracts.v1 import (
     MowerMap,
     MowerState,
     VisionProposalCreated,
+    VisionProposalUpdated,
     VisionTask,
     VisionTrigger,
 )
@@ -327,4 +328,8 @@ class EventPublisher(Protocol):
 
     async def proposal_created(self, event: VisionProposalCreated) -> None:
         """``vision.proposal.created`` (failures are logged, never raised)."""
+        ...
+
+    async def proposal_updated(self, event: VisionProposalUpdated) -> None:
+        """``vision.proposal.updated`` (failures are logged, never raised)."""
         ...

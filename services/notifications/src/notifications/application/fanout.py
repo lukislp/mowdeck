@@ -10,15 +10,25 @@ was revoked after subscribing never receives data about the mower. Quiet hours (
 time zone) keep the inbox item but queue no delivery; the theft alarms (``mower_lifted``,
 ``mower_left_dock_unexpectedly``, ``geofence_exit``) bypass quiet hours. A user who acknowledged
 an alarm gets no repeat of it (same kind and mower) while the silence lasts.
+
+Before the per-user fan-out every event is published once for its account as
+``notifications.raised`` (rendered in English, independent of preferences, quiet hours and
+recipients), so API tokens such as Home Assistant's, which have no inbox, can receive the
+account's notifications over Realtime.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
-from uuid import UUID, uuid4
+from typing import Any, Literal
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from mowdeck_contracts.v1 import NotificationKind, NotificationSent, NotificationSeverity
+from mowdeck_contracts.v1 import (
+    NotificationKind,
+    NotificationRaised,
+    NotificationSent,
+    NotificationSeverity,
+)
 from mowdeck_service_kit import get_logger
 
 from notifications.application.context import NotificationsConfig
@@ -41,6 +51,14 @@ _log = get_logger("notifications.fanout")
 WEBPUSH = "webpush"
 NTFY = "ntfy"
 APNS = "apns"
+ACCOUNT_LANGUAGE = "en"
+"""Language of ``notifications.raised`` (an account has no language of its own)."""
+
+
+def raised_id(account_id: UUID, dedupe_key: str) -> UUID:
+    """The stable id of an account-scoped notification: the same occurrence (account and
+    ``dedupe_key``) always gets the same id."""
+    return uuid5(NAMESPACE_URL, f"mowdeck:notifications.raised:{account_id}:{dedupe_key}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +112,9 @@ class Fanout:
         return found
 
     async def _dispatch_one(self, event: NotificationEvent) -> int:
+        entry = await self._store.directory_entry(event.mower_id)
+        name = entry.name if entry is not None and entry.account_id == event.account_id else None
+        await self._raise(event, name)
         candidates = [
             p
             for p in await self.recipients(event.account_id, event.mower_id)
@@ -114,8 +135,6 @@ class Fanout:
                 self._clock(),
             )
         url = self.url_for(event.mower_id, event.link)
-        entry = await self._store.directory_entry(event.mower_id)
-        name = entry.name if entry is not None and entry.account_id == event.account_id else None
         created = 0
         for preferences, ok in zip(candidates, allowed, strict=True):
             if not ok:
@@ -265,6 +284,35 @@ class Fanout:
                 result.append(NewDelivery(user, account, name, message))
         return result
 
+    async def _raise(self, event: NotificationEvent, mower_name: str | None) -> None:
+        """Publish the account-scoped ``notifications.raised`` (failures are logged only)."""
+        if self._publisher is None:
+            return
+        try:
+            params = {**event.params, "mower": mower_name}
+            title, body = self.render(ACCOUNT_LANGUAGE, event.title_key, event.body_key, params)
+            relation: Literal["can_view", "can_drive"] = (
+                "can_drive" if event.relation == "can_drive" else "can_view"
+            )
+            await self._publisher.notification_raised(
+                NotificationRaised(
+                    notification_id=raised_id(event.account_id, event.dedupe_key),
+                    account_id=event.account_id,
+                    mower_id=event.mower_id,
+                    kind=event.kind,
+                    severity=event.severity,
+                    title=title,
+                    body=body,
+                    url=self.url_for(event.mower_id, event.link),
+                    occurred_at=event.occurred_at,
+                    created_at=self._clock(),
+                    dedupe_key=event.dedupe_key[:200],
+                    required_relation=relation,
+                )
+            )
+        except Exception as exc:
+            _log.warning("publishing notifications.raised failed", error=repr(exc))
+
     async def _publish(self, item: InboxItem, channels: list[str]) -> None:
         if self._publisher is None:
             return
@@ -282,6 +330,7 @@ class Fanout:
                     url=item.url,
                     occurred_at=item.occurred_at,
                     channels=channels,
+                    created_at=item.created_at,
                 )
             )
         except Exception as exc:

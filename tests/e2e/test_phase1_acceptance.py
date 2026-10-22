@@ -15,8 +15,15 @@ The criterion, step by step (usernames are unique per run):
    account) gets 403 on ``start_mow`` and 202 on ``emergency_stop``.
 9. Anna's socket stays open for 90 s without traffic through Traefik and still receives a
    state afterwards (marker ``slow``).
+
+Before step 6 (so the job start is not inside the notification cooldown of a later job): an
+API token of Lukas with ``mower.view`` on the account (as Home Assistant uses one) opens the
+socket, subscribes and receives the account's ``notification`` ``job_started`` when Lukas
+starts a job; the token holds ``notifications.view`` through ``mower.view``.
 """
 
+import base64
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -117,6 +124,80 @@ async def send_command(
     return await http.post(
         f"{FLEET}/mowers/{mower_id}/commands", headers=actor.headers, json={"command": command}
     )
+
+
+def _claims(access_token: str) -> dict[str, Any]:
+    """The (unverified) claims of a JWT, to wait for the permission catalogue."""
+    payload = access_token.split(".")[1]
+    data: dict[str, Any] = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    return data
+
+
+async def test_phase1_api_token_receives_account_notifications(
+    http: httpx.AsyncClient, cfg: E2EConfig, lukas: Actor, mower: str
+) -> None:
+    created = await http.post(
+        f"{IDENTITY}/accounts/{lukas.account_id}/api-tokens",
+        headers=lukas.headers,
+        json={
+            "name": f"e2e home automation {cfg.run_id}",
+            "grants": [
+                {
+                    "level": {"type": "account", "id": lukas.account_id},
+                    "permissions": ["mower.view"],
+                }
+            ],
+        },
+    )
+    assert created.status_code == 201, describe(created)
+    secret = created.json()["token"]
+
+    # Identity learns notifications.view from the Notifications module descriptor; wait until
+    # the exchanged token carries it (implied by mower.view on the account).
+    async def exchanged() -> tuple[str | None, Any]:
+        response = await http.post(
+            f"{IDENTITY}/token", json={"grant_type": "api_token", "token": secret}
+        )
+        if response.status_code != 200:
+            return None, describe(response)
+        token: str = response.json()["access_token"]
+        perms = _claims(token).get("perms", [])
+        return (token if "notifications.view" in perms else None), perms
+
+    # A slow poll: logins and token exchanges share a rate limit per client address.
+    access = await wait_for(
+        exchanged, cfg.ready_timeout, "an API token with notifications.view", interval=5.0
+    )
+    token_actor = Actor(
+        username="api-token", password="", token=access, account_id=lukas.account_id
+    )
+    live = await open_socket(cfg, token_actor)
+    try:
+        await live.send({"type": "subscribe", "request_id": "ha", "mower_ids": [mower]})
+        subscribed = await live.expect(
+            is_type("subscribed", request_id="ha"), cfg.http_timeout, "subscribed"
+        )
+        assert subscribed["mower_ids"] == [mower], subscribed
+        response = await send_command(
+            http, lukas, mower, {"kind": "start_mow", "area_ids": ["front"]}
+        )
+        assert response.status_code == 202, describe(response)
+        note = await live.expect(
+            is_type("notification", notification__kind="job_started", notification__mower_id=mower),
+            cfg.live_timeout,
+            "notification job_started for the API token",
+        )
+        assert note["notification"]["scope"] == "account", note
+        response = await send_command(http, lukas, mower, {"kind": "return_to_dock"})
+        assert response.status_code == 202, describe(response)
+        await live.expect(
+            is_type("state", mower_id=mower, state__activity="docked"),
+            cfg.dock_timeout,
+            "state docked after the API token test",
+            after=live.mark(),
+        )
+    finally:
+        await live.close()
 
 
 async def test_phase1_operator_starts_and_docks_with_live_status(

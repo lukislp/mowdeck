@@ -220,3 +220,35 @@ def test_camera_snapshot_request_bounds_and_keeps_the_token_out_of_repr() -> Non
     ):
         with pytest.raises(ValidationError):
             CameraSnapshotRequest.model_validate({"session": session, **bad})
+
+
+def test_vision_proposal_updated_round_trip() -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from mowdeck_contracts.v1 import (
+        VISION_FINAL_STATES,
+        VISION_PROPOSAL_UPDATED,
+        VisionProposalState,
+        VisionProposalUpdated,
+        VisionTask,
+    )
+
+    event = VisionProposalUpdated(
+        proposal_id=uuid4(),
+        mower_id=uuid4(),
+        account_id=uuid4(),
+        task=VisionTask.RECOVER,
+        round=1,
+        state=VisionProposalState.EXECUTING,
+        final=False,
+        action="drive",
+        steps=2,
+        link="/mowers/x?assist=y",
+        updated_at=datetime(2026, 10, 22, 12, 0, tzinfo=UTC),
+    )
+    assert VisionProposalUpdated.model_validate_json(event.model_dump_json()) == event
+    assert event.expires_at is None and event.trigger == "manual"
+    assert VISION_PROPOSAL_UPDATED == "vision.proposal.updated"
+    assert VisionProposalState.PROPOSED not in VISION_FINAL_STATES
+    assert VisionProposalState.RECOVERED in VISION_FINAL_STATES

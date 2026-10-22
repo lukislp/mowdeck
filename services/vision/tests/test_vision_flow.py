@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from mowdeck_contracts.v1 import (
     VISION_PROPOSAL_CREATED,
+    VISION_PROPOSAL_UPDATED,
     DriveEndReason,
     DriveErrorCode,
     EventEnvelope,
@@ -36,6 +37,15 @@ RECOVERED = ProposalState.RECOVERED
 
 def _png_b64() -> str:
     return base64.b64encode(flat_png(8, 6, (1, 2, 3))).decode()
+
+
+def _updates(h: Any) -> list[dict[str, Any]]:
+    """Payloads of the ``vision.proposal.updated`` events published so far."""
+    return [
+        EventEnvelope[dict[str, Any]].model_validate_json(m.data).payload
+        for m in h.bus.published
+        if m.subject == event_subject_for_type(VISION_PROPOSAL_UPDATED)
+    ]
 
 
 async def test_vision_flow_recover_stuck_mower_end_to_end() -> None:
@@ -105,6 +115,13 @@ async def test_vision_flow_recover_stuck_mower_end_to_end() -> None:
         assert not rig.sim.stuck
         state = await rig.sim.get_state()
         assert state.activity in (MowerActivity.IDLE, MowerActivity.MOWING)
+        # Every later state change is announced as vision.proposal.updated (no images).
+        updates = _updates(h)
+        assert [u["state"] for u in updates] == ["executing", "verifying", "recovered"]
+        assert all(u["proposal_id"] == created["id"] for u in updates)
+        assert updates[-1]["final"] is True and updates[0]["final"] is False
+        assert updates[0]["action"] == "drive" and updates[0]["steps"] == 2
+        assert updates[0]["expires_at"] is None
         # Cost accounting of the analysis.
         [request] = h.store.requests
         assert (request.input_tokens, request.output_tokens) == (1200, 150)
@@ -136,6 +153,9 @@ async def test_vision_flow_risk_flag_is_rejected_by_ai_and_never_executes() -> N
             for m in h.bus.published
             if m.subject == event_subject_for_type(VISION_PROPOSAL_CREATED)
         ]
+        [update] = _updates(h)
+        assert update["state"] == "rejected_by_ai" and update["final"] is True
+        assert update["account_id"] == str(owner.account_id)
         assert rejected["can_retry"] is True
 
 

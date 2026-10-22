@@ -1,0 +1,161 @@
+{
+  "$defs": {
+    "VisionProposalState": {
+      "description": "Lifecycle of an AI assist proposal (one round).",
+      "enum": [
+        "analysing",
+        "proposed",
+        "rejected_by_ai",
+        "failed",
+        "rejected",
+        "expired",
+        "executing",
+        "verifying",
+        "recovered",
+        "not_recovered",
+        "aborted"
+      ],
+      "title": "VisionProposalState",
+      "type": "string"
+    },
+    "VisionTask": {
+      "description": "What AI assist is asked to do.",
+      "enum": [
+        "recover",
+        "find_dock"
+      ],
+      "title": "VisionTask",
+      "type": "string"
+    },
+    "VisionTrigger": {
+      "description": "Who started an analysis.",
+      "enum": [
+        "manual",
+        "error"
+      ],
+      "title": "VisionTrigger",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``vision.proposal.updated``: a proposal changed its state.\n\nPublished after every state change except the one to ``proposed`` (that is\n``vision.proposal.created``). A summary only: the images and the model's full answer stay\nbehind ``GET /api/v1/vision/proposals/{id}``.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "action": {
+      "anyOf": [
+        {
+          "enum": [
+            "drive",
+            "return_to_dock"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The proposed maneuver; null before the analysis decided one.",
+      "title": "Action"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Approval deadline while `proposed`; null otherwise.",
+      "title": "Expires At"
+    },
+    "fallback": {
+      "default": false,
+      "title": "Fallback",
+      "type": "boolean"
+    },
+    "final": {
+      "description": "True for a state after which nothing changes any more.",
+      "title": "Final",
+      "type": "boolean"
+    },
+    "link": {
+      "description": "App path of the proposal.",
+      "maxLength": 300,
+      "title": "Link",
+      "type": "string"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "proposal_id": {
+      "format": "uuid",
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "round": {
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Round",
+      "type": "integer"
+    },
+    "state": {
+      "$ref": "#/$defs/VisionProposalState"
+    },
+    "steps": {
+      "default": 0,
+      "description": "Number of proposed drive steps.",
+      "maximum": 6,
+      "minimum": 0,
+      "title": "Steps",
+      "type": "integer"
+    },
+    "task": {
+      "$ref": "#/$defs/VisionTask"
+    },
+    "trigger": {
+      "$ref": "#/$defs/VisionTrigger",
+      "default": "manual"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "mower_id",
+    "account_id",
+    "task",
+    "round",
+    "state",
+    "final",
+    "link",
+    "updated_at"
+  ],
+  "title": "VisionProposalUpdated",
+  "type": "object"
+}

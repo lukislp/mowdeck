@@ -13,6 +13,18 @@ Manual driving (ADR 0026): the hub knows the open drive sessions of its sockets,
 frame result ends the session that sent it, and it keeps the newest capabilities of every
 mower (``manual_drive``). Accepted frame results (ten per second) are not fanned out; the
 driving client gets ``drive_frame_ack`` instead.
+
+Notifications and AI assist proposals (``notification``, ``vision_proposal``):
+
+* ``notifications.sent`` is one item of a person's inbox; Notifications already checked the
+  person's preferences and access. It goes to every session of that person (``user`` or
+  ``subuser`` principal with the same subject and account), without a subscription.
+* ``notifications.raised`` is the account's copy for API tokens, which have no inbox. It goes to
+  the API-token sessions of the account whose token holds ``notifications.view``; one about a
+  mower only to sessions subscribed to it (``can_view`` checked and re-checked like states), and
+  for the AI assist kinds (``required_relation`` ``can_drive``) only after ``can_drive``.
+* ``vision.proposal.created`` / ``.updated`` go to the sessions subscribed to the proposal's
+  mower within its account, exactly like states (the proposal API needs ``can_view`` too).
 """
 
 import asyncio
@@ -23,16 +35,34 @@ from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    NOTIFICATIONS_VIEW_PERMISSION,
+    VISION_FINAL_STATES,
     CommandResult,
     CommandStatus,
     MowerCapabilities,
     MowerCapabilitiesSnapshot,
     MowerState,
+    NotificationRaised,
+    NotificationSent,
     Principal,
+    PrincipalKind,
+    VisionProposalCreated,
+    VisionProposalState,
+    VisionProposalUpdated,
     drive_session_of,
     utc_now,
 )
-from mowdeck_contracts.v1.realtime import CommandResultMessage, RealtimeCloseCode, StateMessage
+from mowdeck_contracts.v1.realtime import (
+    CommandResultMessage,
+    NotificationMessage,
+    NotificationScope,
+    RealtimeCloseCode,
+    RealtimeNotification,
+    StateMessage,
+    VisionProposalEvent,
+    VisionProposalMessage,
+    VisionProposalSummary,
+)
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.entitlements import Entitlements
 
@@ -51,6 +81,18 @@ from realtime.application.session import Session, frame_of
 from realtime.domain.errors import LimitExceededError
 
 _log = get_logger("realtime.hub")
+
+PERSON_KINDS = frozenset({PrincipalKind.USER, PrincipalKind.SUBUSER})
+"""Principals with an inbox of their own."""
+
+
+def receives_account_notifications(principal: Principal | None) -> bool:
+    """An API token that holds ``notifications.view`` (people get their own inbox items)."""
+    return (
+        principal is not None
+        and principal.kind is PrincipalKind.API_TOKEN
+        and principal.has_permission(NOTIFICATIONS_VIEW_PERMISSION)
+    )
 
 
 class Hub:
@@ -237,6 +279,99 @@ class Hub:
         for session in subscribers:
             session.offer(frame)
 
+    # --- notifications and AI assist ------------------------------------------------------------
+
+    def publish_user_notification(self, sent: NotificationSent) -> None:
+        """Hand an inbox item to every session of its person (no subscription needed)."""
+        sessions = tuple(self._by_user.get(sent.user_id, ()))
+        if not sessions:
+            return
+        frame = frame_of(
+            NotificationMessage(
+                notification=RealtimeNotification(
+                    id=sent.notification_id,
+                    scope=NotificationScope.USER,
+                    mower_id=sent.mower_id,
+                    kind=sent.kind,
+                    severity=sent.severity,
+                    title=sent.title,
+                    body=sent.body,
+                    url=sent.url,
+                    occurred_at=sent.occurred_at,
+                    created_at=sent.created_at or sent.occurred_at,
+                )
+            )
+        )
+        for session in sessions:
+            principal = session.principal
+            if (
+                principal is None
+                or principal.account_id != sent.account_id
+                or principal.kind not in PERSON_KINDS
+            ):
+                self.metrics.dropped("account_mismatch")
+                continue
+            session.offer(frame)
+
+    def publish_account_notification(self, raised: NotificationRaised) -> None:
+        """Hand the account's notification to its API-token sessions with
+        ``notifications.view`` (and the mower subscribed; ``can_drive`` where required)."""
+        targets = [
+            session
+            for session in tuple(self._by_account.get(raised.account_id, ()))
+            if receives_account_notifications(session.principal)
+            and session.account_id == raised.account_id
+            and (raised.mower_id is None or raised.mower_id in session.subscriptions)
+        ]
+        if not targets:
+            return
+        frame = frame_of(
+            NotificationMessage(
+                notification=RealtimeNotification(
+                    id=raised.notification_id,
+                    scope=NotificationScope.ACCOUNT,
+                    mower_id=raised.mower_id,
+                    kind=raised.kind,
+                    severity=raised.severity,
+                    title=raised.title,
+                    body=raised.body,
+                    url=raised.url,
+                    occurred_at=raised.occurred_at,
+                    created_at=raised.created_at,
+                )
+            )
+        )
+        if raised.required_relation == "can_drive" and raised.mower_id is not None:
+            self._spawn(
+                self._offer_to_drivers(targets, raised.mower_id, frame),
+                "realtime-notification-drivers",
+            )
+            return
+        for session in targets:
+            session.offer(frame)
+
+    async def _offer_to_drivers(
+        self, sessions: list[Session], mower_id: UUID, frame: Frame
+    ) -> None:
+        for session in sessions:
+            principal = session.principal
+            if principal is None or session.outbox.closing:
+                continue
+            if await self.access.can_drive(principal, mower_id):
+                session.offer(frame)
+
+    def publish_proposal(self, event: VisionProposalCreated | VisionProposalUpdated) -> None:
+        """Hand a proposal summary to the subscribed sessions of the proposal's account."""
+        subscribers = tuple(self._by_mower.get(event.mower_id, ()))
+        if not subscribers:
+            return
+        frame = frame_of(proposal_message(event))
+        for session in subscribers:
+            if session.account_id != event.account_id:
+                self.metrics.dropped("account_mismatch")
+                continue
+            session.offer(frame)
+
     # --- manual driving -----------------------------------------------------------------------
 
     def publish_capabilities(self, snapshot: MowerCapabilitiesSnapshot) -> None:
@@ -337,3 +472,48 @@ class Hub:
                 await self._idle.wait()
         if self.sessions:
             _log.warning("sessions still open after close", count=len(self.sessions))
+
+
+def proposal_message(
+    event: VisionProposalCreated | VisionProposalUpdated,
+) -> VisionProposalMessage:
+    """The ``vision_proposal`` message of a Vision event (a summary, never images)."""
+    if isinstance(event, VisionProposalCreated):
+        summary = VisionProposalSummary(
+            id=event.proposal_id,
+            mower_id=event.mower_id,
+            task=event.task,
+            round=event.round,
+            state=VisionProposalState.PROPOSED,
+            final=False,
+            action=event.action,
+            steps=event.steps,
+            fallback=event.fallback,
+            confidence=event.confidence,
+            situation=event.situation,
+            trigger=event.trigger,
+            error_code=event.error_code,
+            expires_at=event.expires_at,
+            link=event.link,
+            updated_at=event.created_at,
+        )
+        kind = VisionProposalEvent.CREATED
+    else:
+        summary = VisionProposalSummary(
+            id=event.proposal_id,
+            mower_id=event.mower_id,
+            task=event.task,
+            round=event.round,
+            state=event.state,
+            final=event.final or event.state in VISION_FINAL_STATES,
+            action=event.action,
+            steps=event.steps,
+            fallback=event.fallback,
+            trigger=event.trigger,
+            error_code=event.error_code,
+            expires_at=event.expires_at,
+            link=event.link,
+            updated_at=event.updated_at,
+        )
+        kind = VisionProposalEvent.UPDATED
+    return VisionProposalMessage(event=kind, mower_id=event.mower_id, proposal=summary)

@@ -1376,6 +1376,67 @@
       "title": "NetworkKind",
       "type": "string"
     },
+    "NotificationKind": {
+      "description": "What a notification is about.",
+      "enum": [
+        "mowing_finished",
+        "mower_stuck",
+        "battery_low",
+        "mower_offline",
+        "mower_online",
+        "job_started",
+        "mower_lifted",
+        "mower_left_dock_unexpectedly",
+        "geofence_exit",
+        "blade_maintenance",
+        "vision_proposal",
+        "vision_auto_proposal",
+        "firmware_update_available",
+        "firmware_update_finished",
+        "firmware_update_failed",
+        "test"
+      ],
+      "title": "NotificationKind",
+      "type": "string"
+    },
+    "NotificationMessage": {
+      "description": "A new notification for the principal, without a subscription.\n\nPeople get the items of their own inbox (``scope`` ``user``, after Notifications checked\ntheir preferences and access). API tokens get the account's notifications (``scope``\n``account``) when the token holds ``notifications.view`` and may view the mower (``can_drive``\nfor the AI assist kinds); a notification about a mower needs a subscription to it.",
+      "properties": {
+        "notification": {
+          "$ref": "#/$defs/RealtimeNotification"
+        },
+        "type": {
+          "const": "notification",
+          "default": "notification",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "notification"
+      ],
+      "title": "NotificationMessage",
+      "type": "object"
+    },
+    "NotificationScope": {
+      "description": "Whose notification a ``notification`` message carries.",
+      "enum": [
+        "user",
+        "account"
+      ],
+      "title": "NotificationScope",
+      "type": "string"
+    },
+    "NotificationSeverity": {
+      "description": "How urgent a notification is; channels map it to TTL, urgency or priority.",
+      "enum": [
+        "info",
+        "warning",
+        "critical"
+      ],
+      "title": "NotificationSeverity",
+      "type": "string"
+    },
     "PongMessage": {
       "description": "Answer to ``ping``.",
       "properties": {
@@ -1515,6 +1576,119 @@
       ],
       "title": "RealtimeErrorCode",
       "type": "string"
+    },
+    "RealtimeNotification": {
+      "description": "A notification as the inbox API returns it (``InboxItemOut``), plus ``scope``.",
+      "properties": {
+        "acked": {
+          "default": false,
+          "title": "Acked",
+          "type": "boolean"
+        },
+        "acked_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acked At"
+        },
+        "body": {
+          "maxLength": 1000,
+          "title": "Body",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/NotificationKind"
+        },
+        "mower_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mower Id"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "read": {
+          "default": false,
+          "title": "Read",
+          "type": "boolean"
+        },
+        "read_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Read At"
+        },
+        "scope": {
+          "$ref": "#/$defs/NotificationScope"
+        },
+        "severity": {
+          "$ref": "#/$defs/NotificationSeverity"
+        },
+        "title": {
+          "maxLength": 200,
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "kind",
+        "severity",
+        "title",
+        "body",
+        "occurred_at",
+        "created_at"
+      ],
+      "title": "RealtimeNotification",
+      "type": "object"
     },
     "RevokeReason": {
       "description": "Why subscriptions ended without an ``unsubscribe``.",
@@ -1855,6 +2029,220 @@
       },
       "title": "UnsubscribedMessage",
       "type": "object"
+    },
+    "VisionProposalEvent": {
+      "description": "What happened to a proposal.",
+      "enum": [
+        "created",
+        "updated"
+      ],
+      "title": "VisionProposalEvent",
+      "type": "string"
+    },
+    "VisionProposalMessage": {
+      "description": "An AI assist proposal of a subscribed mower was created or changed its state.",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/VisionProposalEvent"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "proposal": {
+          "$ref": "#/$defs/VisionProposalSummary"
+        },
+        "type": {
+          "const": "vision_proposal",
+          "default": "vision_proposal",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event",
+        "mower_id",
+        "proposal"
+      ],
+      "title": "VisionProposalMessage",
+      "type": "object"
+    },
+    "VisionProposalState": {
+      "description": "Lifecycle of an AI assist proposal (one round).",
+      "enum": [
+        "analysing",
+        "proposed",
+        "rejected_by_ai",
+        "failed",
+        "rejected",
+        "expired",
+        "executing",
+        "verifying",
+        "recovered",
+        "not_recovered",
+        "aborted"
+      ],
+      "title": "VisionProposalState",
+      "type": "string"
+    },
+    "VisionProposalSummary": {
+      "description": "An AI assist proposal without images (details: ``GET /api/v1/vision/proposals/{id}``).",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "enum": [
+                "drive",
+                "return_to_dock"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Approval deadline while `proposed`; null otherwise.",
+          "title": "Expires At"
+        },
+        "fallback": {
+          "default": false,
+          "title": "Fallback",
+          "type": "boolean"
+        },
+        "final": {
+          "title": "Final",
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "link": {
+          "description": "App path of the proposal.",
+          "maxLength": 300,
+          "title": "Link",
+          "type": "string"
+        },
+        "mower_id": {
+          "format": "uuid",
+          "title": "Mower Id",
+          "type": "string"
+        },
+        "round": {
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Round",
+          "type": "integer"
+        },
+        "situation": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Situation"
+        },
+        "state": {
+          "$ref": "#/$defs/VisionProposalState"
+        },
+        "steps": {
+          "default": 0,
+          "maximum": 6,
+          "minimum": 0,
+          "title": "Steps",
+          "type": "integer"
+        },
+        "task": {
+          "$ref": "#/$defs/VisionTask"
+        },
+        "trigger": {
+          "$ref": "#/$defs/VisionTrigger",
+          "default": "manual"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "mower_id",
+        "task",
+        "round",
+        "state",
+        "final",
+        "link",
+        "updated_at"
+      ],
+      "title": "VisionProposalSummary",
+      "type": "object"
+    },
+    "VisionTask": {
+      "description": "What AI assist is asked to do.",
+      "enum": [
+        "recover",
+        "find_dock"
+      ],
+      "title": "VisionTask",
+      "type": "string"
+    },
+    "VisionTrigger": {
+      "description": "Who started an analysis.",
+      "enum": [
+        "manual",
+        "error"
+      ],
+      "title": "VisionTrigger",
+      "type": "string"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1866,12 +2254,14 @@
       "drive_frame_ack": "#/$defs/DriveFrameAckMessage",
       "drive_started": "#/$defs/DriveStartedMessage",
       "error": "#/$defs/ErrorMessage",
+      "notification": "#/$defs/NotificationMessage",
       "pong": "#/$defs/PongMessage",
       "ready": "#/$defs/ReadyMessage",
       "revoked": "#/$defs/RevokedMessage",
       "state": "#/$defs/StateMessage",
       "subscribed": "#/$defs/SubscribedMessage",
-      "unsubscribed": "#/$defs/UnsubscribedMessage"
+      "unsubscribed": "#/$defs/UnsubscribedMessage",
+      "vision_proposal": "#/$defs/VisionProposalMessage"
     },
     "propertyName": "type"
   },
@@ -1908,6 +2298,12 @@
     },
     {
       "$ref": "#/$defs/DriveEndedMessage"
+    },
+    {
+      "$ref": "#/$defs/NotificationMessage"
+    },
+    {
+      "$ref": "#/$defs/VisionProposalMessage"
     }
   ],
   "title": "RealtimeServerMessage"
