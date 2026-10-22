@@ -10,7 +10,8 @@ The MowDeck apps for iPhone and Android: Capacitor 8 shells that load the web ap
 | `ios/` | Xcode project (Swift Package Manager). `MainViewController.swift` sets the server, `MowDeckShellPlugin.swift`, `App.entitlements` (push) |
 | `android/` | Gradle project. `MainActivity.java`, `ShellSettings.java`, `MowDeckShellPlugin.java`, release signing from the environment |
 | `resources/` | Icon and splash sources (`scripts/make-resources.py`), sizes by `pnpm assets` |
-| `scripts/` | `provision.sh`, `build-ios.sh`, `sign-and-install.sh` (Mac), `build-android.sh` |
+| `scripts/` | `provision.sh`, `build-ios.sh`, `sign-and-install.sh` (Mac, development signing), `build-android.sh` |
+| `scripts/apple/` | TestFlight from GitHub Actions (`.github/workflows/apple-testflight.yml`): `keychain.sh` (temporary keychain from the `release` environment's secrets), `release-ios.sh` (unsigned build, App Store signature), `upload-testflight.sh` (altool), `entitlements/app-store.plist` (production APNs) |
 
 The web app's side of the bridge (detection, deep links, notifications, badge, APNs registration) is `apps/web/src/lib/native/`; it uses the bridge the shell injects, so the web app has no Capacitor dependency.
 

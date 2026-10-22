@@ -594,7 +594,8 @@ jobs:
   # The Android app shell (Capacitor). No Firebase, no Play Store: the APK is attached to the
   # GitHub release. Secrets: ANDROID_KEYSTORE_BASE64 (the .jks as base64), ANDROID_KEYSTORE_PASSWORD,
   # ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (optional, defaults to the keystore password). The
-  # iOS app is built and installed on the owner's Mac (apps/mobile/scripts), never in CI.
+  # iOS app goes to TestFlight on demand from an existing release (apple-testflight.yml) or is
+  # built and installed on the owner's Mac (apps/mobile/scripts), never in this workflow.
   android:
     needs: [version, tag]
     if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
@@ -736,7 +737,7 @@ jobs:
             echo "  -n mowdeck --create-namespace -f my-values.yaml"
             echo '```'
             echo
-            echo "Operations manual: docs/ops/helm.md. Android app: \`mowdeck-$VERSION.apk\` below (if attached); iPhone app: built and installed from the Mac (docs/ops/mobile-apps.md)."
+            echo "Operations manual: docs/ops/helm.md. Android app: \`mowdeck-$VERSION.apk\` below (if attached); iPhone and iPad app: TestFlight or built from the Mac (docs/ops/mobile-apps.md)."
             echo
             echo "## Images and chart (linux/amd64, linux/arm64)"
             echo

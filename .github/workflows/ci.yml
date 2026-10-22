@@ -174,7 +174,8 @@ jobs:
   # The web frontend (pnpm workspace): lint (ESLint, Prettier, Stylelint, i18n), svelte-check,
   # unit tests with coverage, generated types up to date, production build with CSP hashes.
   # apps/mobile is part of the workspace, so its lint, `tsc` check and tests run here too; the
-  # native builds do not (Android: release.yml on v* tags, iOS: the owner's Mac).
+  # native builds do not (Android: release.yml on v* tags, iOS: apple-testflight.yml on demand
+  # or the owner's Mac; its App Store readiness checks run in the python job).
   web:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

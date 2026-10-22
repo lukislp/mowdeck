@@ -65,12 +65,15 @@ build_number() {
     git -C "$REPO_DIR" rev-list --count HEAD 2> /dev/null || echo 1
 }
 
-# Install the workspace and copy the bundled pages and the plugin list into the platform
-# projects (`cap sync` also writes the Swift package list and Gradle settings).
+# Install the app shell's packages and copy the bundled pages and the plugin list into the
+# platform projects (`cap sync` also writes the Swift package list and Gradle settings). Only
+# `mobile` and the workspace packages it depends on are installed (`--filter mobile...`): the
+# shell never needs the web app's dependencies, so the Agora Web SDK of apps/web is not even
+# downloaded for an app build (LICENSING.md).
 sync_platform() {
     local platform="$1"
     command -v pnpm > /dev/null || die "pnpm not found: install Node.js 22 and run 'corepack enable'"
-    (cd "$REPO_DIR" && pnpm install --frozen-lockfile)
+    (cd "$REPO_DIR" && pnpm install --frozen-lockfile --filter 'mobile...')
     (cd "$MOBILE_DIR" && pnpm build && pnpm exec cap sync "$platform")
 }
 
