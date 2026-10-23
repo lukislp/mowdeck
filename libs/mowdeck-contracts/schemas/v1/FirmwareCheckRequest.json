@@ -12,6 +12,16 @@
       "format": "uuid",
       "title": "Mower Id",
       "type": "string"
+    },
+    "target": {
+      "default": "mower",
+      "description": "`mower`: the mower's own firmware; `base_station`: the firmware of the RTK base station the mower is linked to, asked through the mower's connection (ADR 0047).",
+      "enum": [
+        "mower",
+        "base_station"
+      ],
+      "title": "Target",
+      "type": "string"
     }
   },
   "required": [

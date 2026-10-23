@@ -24,6 +24,7 @@ from mowdeck_service_kit.entitlements import Entitlements
 from fleet.adapters.crypto import DisabledCipher
 from fleet.application.access import Access
 from fleet.application.area_names import AreaNameService
+from fleet.application.base_stations import BaseStationService
 from fleet.application.camera import CameraService
 from fleet.application.commands import CommandService
 from fleet.application.context import FleetConfig
@@ -66,6 +67,7 @@ class Services:
     path_preview: PathPreviewService
     linked_accounts: LinkedAccountService
     links: LinkService
+    base_stations: BaseStationService
     access: Access
     writer: TupleWriter
 
@@ -97,12 +99,14 @@ def build_services(
     access = Access(authorizer)
     sites = SiteService(uow, store, access, config, clock, entitlements)
     vault = CredentialVault(cipher or DisabledCipher())
+    command_service = CommandService(store, access, commands, config, clock, entitlements)
+    firmware = firmware_check_gateway or _NoFirmwareCheckGateway()
     return Services(
         sites=sites,
         groups=GroupService(uow, store, access, clock, entitlements),
         mowers=MowerService(uow, store, access, sites, config, clock, entitlements, vault),
         area_names=AreaNameService(uow, store, clock),
-        commands=CommandService(store, access, commands, config, clock, entitlements),
+        commands=command_service,
         drive=DriveService(store, access, clock),
         camera=CameraService(
             store,
@@ -130,9 +134,12 @@ def build_services(
             store,
             vault,
             bridge_scan_gateway or _NoBridgeScanGateway(),
-            firmware_check_gateway or _NoFirmwareCheckGateway(),
+            firmware,
             config,
             clock,
+        ),
+        base_stations=BaseStationService(
+            uow, store, access, vault, firmware, command_service, config, clock
         ),
         access=access,
         writer=writer,

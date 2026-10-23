@@ -22,6 +22,9 @@ from typing import Any, Final
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    BaseStationPosition,
+    BaseStationRef,
+    BaseStationState,
     CameraAccess,
     CameraEncryption,
     CameraInfo,
@@ -55,6 +58,7 @@ from mowdeck_contracts.v1 import (
     NetworkKind,
     PositionSource,
     ProxyInfo,
+    RtkCorrectionLink,
     RtkFixStatus,
     RtkSource,
     SelfCheck,
@@ -65,6 +69,7 @@ from mowdeck_contracts.v1 import (
     StartMow,
     TurnStyle,
 )
+from mowdeck_contracts.v1 import DeviceType as DiscoveredType
 from mowdeck_control.geo import to_wgs84
 from mowdeck_control.translation import MowRequest, NativeJob, Pattern, plan_to_native_job
 
@@ -633,8 +638,11 @@ def state_of(
     warnings: Sequence[FaultWarning] = (),
     settings: Mapping[str, SettingValue] | None = None,
     rain_detected: bool | None = None,
+    base_station: BaseStationState | None = None,
 ) -> MowerState:
     """Build the :class:`MowerState` snapshot of ``device``.
+
+    ``base_station`` is the linked RTK base station (:func:`base_station_of`, ADR 0047).
 
     ``light_reported``: the mower answered a headlamp read (see :func:`light_on_of`).
     ``speed_setpoint_mps``: the speed the next job will use (the adapter's last ``SetSpeed`` or
@@ -719,6 +727,7 @@ def state_of(
         error_category=MowerErrorCategory(category) if category is not None else None,
         settings=dict(settings) if settings else {},
         rain_detected=rain_detected,
+        base_station=base_station,
         raw=raw,
     )
 
@@ -1045,6 +1054,138 @@ def is_mower(device_name: str, product_key: str = "") -> bool:
     return not (
         DeviceType.is_rtk(device_name, product_key)
         or DeviceType.is_swimming_pool(device_name, product_key)
+    )
+
+
+def is_rtk_base(device_name: str, product_key: str = "") -> bool:
+    """True for RTK base stations: PyMammotion's ``DeviceType.is_rtk`` (names ``RTK…``,
+    ``RBS03A0/1/2…``, ``NB…`` and the RTK product keys)."""
+    return bool(DeviceType.is_rtk(device_name, product_key))
+
+
+def device_type_of(device_name: str, product_key: str = "", *, mower: bool) -> DiscoveredType:
+    """What a discovered device is (ADR 0047): ``mower`` when ``mower`` (the caller checked the
+    device model and :func:`is_mower`), ``rtk_base`` for :func:`is_rtk_base`, else ``other``."""
+    if mower:
+        return DiscoveredType.MOWER
+    if is_rtk_base(device_name, product_key):
+        return DiscoveredType.RTK_BASE
+    return DiscoveredType.OTHER
+
+
+# --- RTK base station (ADR 0047) --------------------------------------------------------------
+
+_CORRECTION_LINK: Final[Mapping[str, RtkCorrectionLink]] = {
+    "RTK_USED_LORA": RtkCorrectionLink.LORA,
+    "RTK_USED_INTERNET": RtkCorrectionLink.INTERNET,
+    "RTK_USED_NRTK": RtkCorrectionLink.NETWORK,
+}
+"""``report_data.rtk.mqtt_rtk_info.rtk_switch`` (the proto enum name) to the correction link."""
+
+
+@dataclass(frozen=True, slots=True)
+class BaseDetails:
+    """What the mower answered to ``basestation_info`` (``ResponseBasestationInfoT``), kept by
+    the adapter: the next report replaces ``report_data.basestation_info`` and with it these
+    fields."""
+
+    satellites: int | None
+    rtk_status: GnssSolution
+    wifi_dbm: int | None
+    lora_channel: int | None
+    at: datetime
+
+
+def base_details_of(reply: object, device: MowerDevice, *, now: datetime) -> BaseDetails | None:
+    """The details of a ``basestation_info`` answer: from the reply's ``base.to_app`` when it
+    carries one, else from ``report_data.basestation_info`` as PyMammotion's reducer stored it
+    (``_update_base_data``). None when neither holds a value (no answer)."""
+    source: object = getattr(getattr(reply, "base", None), "to_app", None)
+    if source is None:
+        source = device.report_data.basestation_info
+    satellites = _int(getattr(source, "sats_num", 0))
+    status = _int(getattr(source, "rtk_status", 0))
+    wifi = _dbm(getattr(source, "wifi_rssi", 0))
+    channel = _int(getattr(source, "lora_channel", 0))
+    if not (satellites or status or wifi is not None or channel):
+        return None
+    return BaseDetails(
+        satellites=min(255, satellites) if satellites > 0 else None,
+        rtk_status=_GNSS_SOLUTION.get(RTKStatus.from_value(status), GnssSolution.UNKNOWN),
+        wifi_dbm=wifi,
+        lora_channel=channel if 0 < channel <= 255 else None,
+        at=now,
+    )
+
+
+def base_position_of(device: MowerDevice) -> BaseStationPosition | None:
+    """Where the base station stands: ``rtk.mqtt_rtk_info.latitude``/``longitude`` (degrees;
+    PyMammotion converts them with ``math.radians`` for its RTK origin fallback). ``0, 0`` means
+    not known, ``-1, -1`` no GGA from the base station: both None."""
+    info = device.report_data.rtk.mqtt_rtk_info
+    lat, lon = _float(info.latitude), _float(info.longitude)
+    if (lat, lon) in ((0.0, 0.0), (-1.0, -1.0)):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    return BaseStationPosition(lat=lat, lon=lon)
+
+
+def base_firmware_of(device: MowerDevice) -> str | None:
+    """The base station's version as the mower reports it (``rpt_basestation_info``
+    ``ver_major.ver_minor.ver_patch.ver_build``); None while all parts are 0."""
+    info = device.report_data.basestation_info
+    parts = [_int(info.ver_major), _int(info.ver_minor), _int(info.ver_patch), _int(info.ver_build)]
+    if not any(parts):
+        return None
+    return ".".join(str(p) for p in parts)[:64]
+
+
+def base_station_of(
+    device: MowerDevice,
+    *,
+    ref: BaseStationRef,
+    has_report: bool = True,
+    details: BaseDetails | None = None,
+    firmware_info: FirmwareInfo | None = None,
+) -> BaseStationState:
+    """The linked base station for ``MowerState.base_station`` from the mower's own view.
+
+    From every report (``report_data.rtk``): the correction link (``mqtt_rtk_info.rtk_switch``:
+    LoRa, internet or network RTK), over LoRa the radio link (``lora_info``
+    ``lora_connection_status > 0``) and its channel (``pair_code_channel``), the base position
+    (:func:`base_position_of`) and whether it was moved (``score_info.base_moved`` or
+    ``base_moving``). The version from ``rpt_basestation_info``; satellites, solution and Wi-Fi
+    from the last ``basestation_info`` answer (``details``); the firmware state from the vendor.
+    Before the first report only the reference, the details and the firmware are known.
+    """
+    base = BaseStationState(
+        base_station_id=ref.base_station_id,
+        firmware_info=firmware_info,
+        satellites=details.satellites if details else None,
+        rtk_status=details.rtk_status if details else GnssSolution.UNKNOWN,
+        wifi_dbm=details.wifi_dbm if details else None,
+        lora_channel=details.lora_channel if details else None,
+        details_at=details.at if details else None,
+    )
+    if not has_report:
+        return base
+    rtk = device.report_data.rtk
+    link = _CORRECTION_LINK.get(str(rtk.mqtt_rtk_info.rtk_switch), RtkCorrectionLink.UNKNOWN)
+    lora = rtk.lora_info
+    channel = _int(lora.pair_code_channel)
+    score = rtk.score_info
+    return base.model_copy(
+        update={
+            "correction_link": link,
+            "link_up": _int(lora.lora_connection_status) > 0
+            if link is RtkCorrectionLink.LORA
+            else None,
+            "lora_channel": base.lora_channel or (channel if 0 < channel <= 255 else None),
+            "position": base_position_of(device),
+            "moved": bool(_int(score.base_moved) or _int(score.base_moving)),
+            "firmware": base_firmware_of(device),
+        }
     )
 
 

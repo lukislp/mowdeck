@@ -167,6 +167,12 @@ class MowerCapabilities(ContractModel):
         "`sync_map`, `relocate_dock`, `leave_dock` (only together with `undock`), "
         "`resync_rtk`. Clients offer only these; empty when the connection has none.",
     )
+    base_station_firmware_update: bool = Field(
+        default=False,
+        description="The connection can ask the manufacturer's firmware service for the linked "
+        "RTK base station and install its updates (`firmware_check` with target "
+        "`base_station`, `base_station_firmware_update`; ADR 0047).",
+    )
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:

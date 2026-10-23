@@ -14,7 +14,7 @@ mower still gets its own connection, port and controller.
 from collections.abc import Sequence
 from typing import Any
 
-from mowdeck_contracts.v1 import ConnectionKind, MowerRegistration
+from mowdeck_contracts.v1 import BASE_STATION_OPTION, ConnectionKind, MowerRegistration
 from mowdeck_control import (
     ConnectionConfig,
     ConnectionFactory,
@@ -48,11 +48,14 @@ class RegistryConnectionProvider:
 
         The additional links of the registration (ADR 0038) travel in the option ``links``
         (``{kind: options}``, with the secrets the session merged), so an adapter that supports
-        them opens them next to its primary connection.
+        them opens them next to its primary connection. The linked RTK base station (ADR 0047)
+        travels in the option ``base_station`` (a ``BaseStationRef`` as JSON).
         """
         options: dict[str, Any] = dict(registration.connection_options)
         if registration.links:
             options["links"] = {k: dict(v) for k, v in registration.links.items()}
+        if registration.base_station is not None:
+            options[BASE_STATION_OPTION] = registration.base_station.model_dump(mode="json")
         if registration.connection_kind is ConnectionKind.SIMULATED:
             options.setdefault("time_scale", self._sim_time_scale)
         config = ConnectionConfig(

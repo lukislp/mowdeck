@@ -107,6 +107,13 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    keeps an open drive session. ``sync_map`` holds the queue only for its checks: the transfer
    runs outside it (one at a time; a restart is refused meanwhile), and afterwards the controller
    reads the map again from the adapter, so :meth:`MowerController.mower_map` returns the new one.
+16. A ``BaseStationFirmwareUpdate`` (ADR 0047) needs ``capabilities.base_station_firmware_update``
+   and a connection implementing :class:`~mowdeck_control.connection.BaseStationPort`, and passes
+   :func:`mowdeck_control.safety.base_station_firmware_update_problem`: the offered version of the
+   linked base station only, nothing installing, the mower not mowing, returning, updating or
+   driving, no pending confirmation. It does not end a drive session (it is refused while one is
+   open) and is answered ``accepted`` once the vendor took the request; the state's
+   ``base_station.firmware_info`` follows the update.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -126,6 +133,7 @@ from typing import Any, Self
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    BaseStationFirmwareUpdate,
     CommandEnvelope,
     CommandResult,
     CommandStatus,
@@ -179,6 +187,7 @@ from mowdeck_control.connection import (
     Outcome,
     PathPreviewCapable,
     UndockCapable,
+    base_station_port_of,
     current_map_of,
     current_path_of,
     dispatch_of,
@@ -190,6 +199,7 @@ from mowdeck_control.connection import (
 from mowdeck_control.errors import CommandRejected, NotConnected, UnsupportedPattern
 from mowdeck_control.safety import (
     FIRMWARE_UPDATE_RUNNING,
+    base_station_firmware_update_problem,
     decide_manual_blade,
     firmware_update_problem,
     maintenance_problem,
@@ -620,6 +630,8 @@ class MowerController:
                 return await self._set_drive_speed(envelope, command)
             if isinstance(command, SetSetting):
                 return await self._set_setting(envelope, command)
+            if isinstance(command, BaseStationFirmwareUpdate):
+                return await self._base_station_firmware_update(envelope, command)
             if not isinstance(command, SetLight):
                 await self._end_drive(f"ended by {command.kind}")
             problem = await self._validate(command)
@@ -1267,6 +1279,49 @@ class MowerController:
         except Exception as exc:
             self._log.exception("command %s: %s failed", envelope.command_id, kind)
             return Outcome.failed(f"adapter error: {type(exc).__name__}")
+
+    async def _base_station_firmware_update(
+        self, envelope: CommandEnvelope, command: BaseStationFirmwareUpdate
+    ) -> CommandResult:
+        """``BaseStationFirmwareUpdate`` (rule 16, ADR 0047): the vendor installs the offered
+        firmware on the mower's RTK base station; the mower only relays the request."""
+        caps = await self.capabilities()
+        port = base_station_port_of(self._connection)
+        if port is None or not caps.base_station_firmware_update:
+            return self._result(
+                envelope,
+                CommandStatus.REJECTED,
+                "this connection cannot update a base station",
+            )
+        try:
+            state = await self._connection.get_state()
+        except NotConnected:
+            return self._result(envelope, CommandStatus.FAILED, "mower is not connected")
+        if self._confirming:
+            return self._result(
+                envelope, CommandStatus.REJECTED, "a command is still waiting for its confirmation"
+            )
+        problem = base_station_firmware_update_problem(
+            command.version, state, caps, drive_session_open=self._session is not None
+        )
+        if problem is not None:
+            return self._result(envelope, CommandStatus.REJECTED, problem)
+        try:
+            await port.start_base_station_firmware_update(command.version)
+        except CommandRejected as exc:
+            return self._result(envelope, CommandStatus.REJECTED, exc.reason)
+        except NotConnected:
+            return self._result(envelope, CommandStatus.FAILED, "mower is not connected")
+        except Exception as exc:
+            self._log.exception("command %s: base station update failed", envelope.command_id)
+            return self._result(
+                envelope, CommandStatus.FAILED, f"adapter error: {type(exc).__name__}"
+            )
+        return self._result(
+            envelope,
+            CommandStatus.ACCEPTED,
+            f"base station firmware update to {command.version} requested",
+        )
 
     def _on_spot_status(self, status: SpotRunStatus) -> None:
         self._spot_status = status

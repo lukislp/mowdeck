@@ -16,6 +16,11 @@ bridge scan (:func:`fake_scan_proxy`) answers any host with the account's online
 -62 dBm (a host containing ``unreachable`` is ``unreachable``, a key that is not 32 base64
 bytes ``auth_failed``); a mower registered with a ``ble_bridge`` link gets a dual connection
 whose bridge "connects" at once (:func:`fake_open_proxy`).
+
+RTK base station (ADR 0047): ``RTK-FAKE0001`` is listed with ``device_type`` ``rtk_base``; a mower
+registered with that base station linked (connection option ``base_station``) reports it over
+LoRa, answers ``basestation_info`` and gets a base station firmware offer
+(:func:`fake_base_station`).
 """
 
 import base64
@@ -26,9 +31,11 @@ from pathlib import Path
 from typing import Any, Final
 
 from mowdeck_contracts.v1 import (
+    BASE_STATION_OPTION,
     BridgeScanError,
     BridgeScanErrorCode,
     BridgeScanReply,
+    DeviceType,
     DiscoveredDevice,
     ScannedDevice,
 )
@@ -43,7 +50,14 @@ from mowdeck_control_mammotion.esphome import (
     proxy_info_of,
     scan_reply_from,
 )
-from mowdeck_control_mammotion.fake import SAMPLE_PRODUCT_KEY, FakeMammotionPort, firmware_offer
+from mowdeck_control_mammotion.fake import (
+    SAMPLE_BASE_FIRMWARE,
+    SAMPLE_BASE_IOT_ID,
+    SAMPLE_BASE_NEWER_FIRMWARE,
+    SAMPLE_PRODUCT_KEY,
+    FakeMammotionPort,
+    firmware_offer,
+)
 from mowdeck_control_mammotion.options import CloudOptions
 from mowdeck_control_mammotion.port import AuthError
 from mowdeck_control_mammotion.session import CloudSessionPool, SessionLease
@@ -72,11 +86,12 @@ FAKE_DEVICES: Final = (
     ),
     DiscoveredDevice(
         device_name="RTK-FAKE0001",
-        iot_id="fakeiot0003",
+        iot_id=SAMPLE_BASE_IOT_ID,
         product_key=None,
         model="RTK",
         online=True,
         is_mower=False,
+        device_type=DeviceType.RTK_BASE,
     ),
 )
 
@@ -257,6 +272,21 @@ class PooledFakePort(FakeMammotionPort):
             await lease.release()
 
 
+def fake_base_station(port: FakeMammotionPort) -> None:
+    """A mower linked to the fake account's RTK base station (ADR 0047): it reports its
+    corrections over LoRa from ``RTK-FAKE0001``, and the fake vendor offers that base station
+    :data:`~mowdeck_control_mammotion.fake.SAMPLE_BASE_NEWER_FIRMWARE`, installed by itself within
+    :data:`FAKE_OTA_SECONDS` once started."""
+    port.use_base_station()
+    port.device_firmware[SAMPLE_BASE_IOT_ID] = firmware_offer(
+        current=SAMPLE_BASE_FIRMWARE,
+        available=SAMPLE_BASE_NEWER_FIRMWARE,
+        release_note="Improves the LoRa range of the base station.",
+        iot_id=SAMPLE_BASE_IOT_ID,
+    )
+    port.device_update_seconds = FAKE_OTA_SECONDS
+
+
 def fake_cloud_connection_factory(
     pool: CloudSessionPool,
 ) -> Callable[[ConnectionConfig], MammotionCloudConnection]:
@@ -268,6 +298,8 @@ def fake_cloud_connection_factory(
         options = CloudOptions.parse(plain)
         link = dual_link_options(config.options)
         port = PooledFakePort(pool, options)
+        if config.options.get(BASE_STATION_OPTION) is not None:
+            fake_base_station(port)
         if link is not None:
             return MammotionDualConnection(
                 port, config, options, link, opener=fake_open_proxy, scanner=fake_scan_proxy

@@ -32,6 +32,7 @@ function device(name: string, extra: Partial<LinkedDevice> = {}): LinkedDevice {
     product_key: null,
     online: null,
     is_mower: true,
+    device_type: 'mower',
     registered: false,
     mower_id: null,
     registered_elsewhere: false,
@@ -41,7 +42,7 @@ function device(name: string, extra: Partial<LinkedDevice> = {}): LinkedDevice {
 
 // The fake Mammotion cloud of the e2e stack, plus one mower of this and one of another account.
 const DEVICES: LinkedDevice[] = [
-  device('RTK-FAKE0001', { is_mower: false, online: true }),
+  device('RTK-FAKE0001', { is_mower: false, device_type: 'rtk_base', online: true }),
   device('Luba-FAKE0002', { online: false, iot_id: 'fakeiot0002' }),
   device('Luba-ADDED', { registered: true, mower_id: 'm-1' }),
   device('Luba-FOREIGN', { registered_elsewhere: true }),

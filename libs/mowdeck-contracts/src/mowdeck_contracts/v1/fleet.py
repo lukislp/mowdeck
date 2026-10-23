@@ -30,6 +30,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime, utc_now
+from mowdeck_contracts.v1.base_station import BaseStationRef
 from mowdeck_contracts.v1.mower import ConnectionKind
 
 MOWER_REGISTERED: Final = "mower.registered"
@@ -77,6 +78,11 @@ class MowerRegistration(ContractModel):
         description="Additional links by kind (e.g. `ble_bridge`, ADR 0038): their public "
         'options plus `credentials: "fleet"` and `credentials_rev` when secrets were withheld. '
         "Empty for a mower with only its primary connection.",
+    )
+    base_station: BaseStationRef | None = Field(
+        default=None,
+        description="The RTK base station the mower is linked to (ADR 0047); null without one. "
+        "Carries no secrets.",
     )
 
     def __repr_args__(self) -> Any:

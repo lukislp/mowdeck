@@ -48,8 +48,11 @@ primary one plus e.g. a Bluetooth bridge) lists the extra kinds in
 adapter that can ask the manufacturer for firmware updates sets
 ``MowerCapabilities.firmware_update`` and implements :class:`FirmwarePort` (see
 :func:`firmware_port_of`); one that can look for the mower through a Bluetooth bridge implements
-:class:`BridgeScanCapable` (see :func:`bridge_scanner_of`). The safety rules of a firmware update
-live in :mod:`mowdeck_control.safety` and are enforced by the controller for every adapter.
+:class:`BridgeScanCapable` (see :func:`bridge_scanner_of`). An adapter that reaches the firmware
+service of the mower's RTK base station sets ``MowerCapabilities.base_station_firmware_update``
+and implements :class:`BaseStationPort` (ADR 0047, see :func:`base_station_port_of`). The safety
+rules of a firmware update live in :mod:`mowdeck_control.safety` and are enforced by the
+controller for every adapter.
 """
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
@@ -588,6 +591,37 @@ class FirmwarePort(Protocol):
 def firmware_port_of(connection: object) -> FirmwarePort | None:
     """``connection`` as a :class:`FirmwarePort`, or None when it does not implement it."""
     return connection if isinstance(connection, FirmwarePort) else None
+
+
+@runtime_checkable
+class BaseStationPort(Protocol):
+    """Optional capability of a :class:`MowerConnection`: the firmware of the RTK base station
+    the mower is linked to (ADR 0047), declared with
+    ``MowerCapabilities.base_station_firmware_update``.
+
+    The base station has no connection of its own: the mower's connection asks the
+    manufacturer's firmware service with the base station's id (the connection option
+    ``base_station``) and keeps the answer in ``MowerState.base_station.firmware_info``. The
+    rules of an update (:func:`mowdeck_control.safety.base_station_firmware_update_problem`) are
+    the controller's. Both methods raise :class:`~mowdeck_control.errors.NotConnected` without a
+    usable link to the vendor.
+    """
+
+    async def check_base_station_firmware(self) -> FirmwareInfo | None:
+        """Ask the vendor what the base station runs and what is offered; None when the mower
+        has no base station or the vendor cannot say."""
+        ...
+
+    async def start_base_station_firmware_update(self, version: str) -> None:
+        """Ask the vendor to install ``version`` on the base station (the controller checked the
+        preconditions). Raises :class:`~mowdeck_control.errors.CommandRejected` when the vendor
+        refuses."""
+        ...
+
+
+def base_station_port_of(connection: object) -> BaseStationPort | None:
+    """``connection`` as a :class:`BaseStationPort`, or None when it does not implement it."""
+    return connection if isinstance(connection, BaseStationPort) else None
 
 
 @runtime_checkable

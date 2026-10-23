@@ -14,6 +14,7 @@ from fleet.application.ports import Gt, In, Lt
 from fleet.domain.errors import ConflictError
 from fleet.domain.models import (
     AuditEntry,
+    BaseStation,
     CommandRecord,
     DriveSession,
     Group,
@@ -145,6 +146,7 @@ class MemoryTables:
     drive_sessions: MemoryTable[DriveSession]
     linked_accounts: MemoryTable[LinkedAccount]
     mower_links: MemoryTable[MowerLink]
+    base_stations: MemoryTable[BaseStation]
 
 
 class MemoryTx:
@@ -193,6 +195,10 @@ class MemoryTx:
     def mower_links(self) -> MemoryTable[MowerLink]:
         return self._tables.mower_links
 
+    @property
+    def base_stations(self) -> MemoryTable[BaseStation]:
+        return self._tables.base_stations
+
     async def try_lock(self, key: int) -> bool:
         """Transactions run one at a time, so the lock is always free."""
         del key
@@ -215,6 +221,7 @@ class MemoryStore:
             drive_sessions=MemoryTable("id"),
             linked_accounts=MemoryTable("id", [("account_id", "email_key")]),
             mower_links=MemoryTable("id", [("pair_key",)]),
+            base_stations=MemoryTable("id", [("iot_id",)]),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

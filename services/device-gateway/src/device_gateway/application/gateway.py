@@ -442,7 +442,8 @@ class DeviceGateway:
 
         The account of the request must own the mower (like commands). The check goes through
         the connection's firmware port when it has one (``unsupported`` otherwise) and
-        publishes the state with the answer.
+        publishes the state with the answer; ``target`` ``base_station`` asks for the mower's
+        linked RTK base station through its base station port (ADR 0047).
         """
         if not self.shard.owns(request.mower_id):
             return None
@@ -458,7 +459,7 @@ class DeviceGateway:
             )
             return _firmware_error(code, detail)
         try:
-            info = await session.check_firmware()
+            info = await session.check_firmware(request.target)
         except NotConnected as exc:
             return _firmware_error(FirmwareCheckErrorCode.UNAVAILABLE, str(exc))
         except FirmwareUnsupported as exc:
@@ -477,6 +478,7 @@ class DeviceGateway:
         _log.info(
             "firmware check answered",
             mower_id=str(request.mower_id),
+            target=request.target,
             installed=info.installed,
             update_state=info.update_state,
         )

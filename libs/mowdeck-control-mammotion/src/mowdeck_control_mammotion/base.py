@@ -79,6 +79,15 @@ frame, ``failed`` on a failed frame (with the mower's message) and ``unknown`` a
 ``FIRMWARE_UPDATE_MAX_S``. When it ended, the device information rounds run again and the
 vendor is asked once more after :data:`FIRMWARE_RECHECK_S`.
 
+RTK base station (ADR 0047): with the connection option ``base_station`` (the base station Fleet
+linked to the mower) the state carries ``base_station`` (:func:`mapping.base_station_of`): the
+correction link from every report, the details from a ``basestation_info`` request the mower
+answers (after :data:`BASE_DETAILS_DELAY_S`, then every :data:`BASE_DETAILS_INTERVAL_S`), and on
+a cloud link the base station's firmware from the vendor's firmware service with the base
+station's IoT id (:class:`~mowdeck_control.BaseStationPort`). A base station update MowDeck
+requested is followed by asking the vendor every :data:`BASE_INSTALL_RECHECK_S` until it or the
+mower's report shows the target version.
+
 Confirmation: every confirmed command is sent first and then confirmed through the reported
 state (:class:`~mowdeck_control.TwoPhaseExecution`: :meth:`MammotionBase.dispatch` sends,
 the returned ``confirm`` only waits). A missing confirmation within ``confirm_timeout_s`` is
@@ -141,6 +150,9 @@ from datetime import datetime, timedelta
 from typing import Any, Final
 
 from mowdeck_contracts.v1 import (
+    BASE_STATION_OPTION,
+    BaseStationRef,
+    BaseStationState,
     CameraSession,
     ConnectionKind,
     EmergencyStop,
@@ -180,12 +192,14 @@ from mowdeck_control import (
     StateBroadcaster,
     StateSubscription,
     UnsupportedPattern,
+    base_station_firmware_update_problem,
     firmware_update_problem,
     maintenance_problem,
 )
 
 from mowdeck_control_mammotion import errors, mapping, settings
 from mowdeck_control_mammotion.port import (
+    CheckDeviceVersion,
     CommandTimeoutError,
     FirmwareRefused,
     GenerateRouteInformation,
@@ -305,6 +319,31 @@ Mammotion-HA's "relocate charging station" button sends it (``async_relocate_cha
 fire and forget)."""
 RTK_RESYNC_WAIT_S: Final = 10.0
 """How long ``resync_rtk`` waits for the dock buffer to show a new RTK origin or dock pose."""
+BASE_STATION_COMMAND: Final = "basestation_info"
+BASE_STATION_REPLY: Final = "to_app"
+"""``basestation_info`` (``BaseStation(to_dev=RequestBasestationInfoT(request_type=1))``, sent
+to the mower) is answered with ``base.to_app`` (``ResponseBasestationInfoT``: satellites,
+solution, Wi-Fi, LoRa channel of the base station); PyMammotion's reducer copies it into
+``report_data.basestation_info`` until the next report replaces that (ADR 0047)."""
+BASE_STATION_TIMEOUT_S: Final = 10.0
+BASE_DETAILS_DELAY_S: Final = 20.0
+"""Wait after a connect before the first base station request (after the device information)."""
+BASE_DETAILS_INTERVAL_S: Final = 3600.0
+"""Then ask again this often (the correction link itself is in every report)."""
+BASE_INSTALL_RECHECK_S: Final = 300.0
+"""While a base station update runs: ask the mower and the vendor this often."""
+
+
+def _base_station_ref(config: ConnectionConfig) -> BaseStationRef | None:
+    """The linked RTK base station from the connection option ``base_station`` (ADR 0047)."""
+    raw = config.options.get(BASE_STATION_OPTION)
+    if raw is None:
+        return None
+    try:
+        return BaseStationRef.model_validate(raw)
+    except ValueError:
+        _log.warning("ignoring an invalid base_station option of mower %s", config.mower_id)
+        return None
 
 
 async def _cancel(task: asyncio.Task[Any] | None, what: str) -> None:
@@ -405,6 +444,16 @@ class MammotionBase:
         self._error_log_task: asyncio.Task[None] | None = None
         self._unsubscribe_notifications: Callable[[], None] | None = None
         self.error_log_delays_s: tuple[float, ...] = ERROR_LOG_DELAYS_S
+        self._base_ref = _base_station_ref(config)
+        self._base_details: mapping.BaseDetails | None = None
+        self._base_firmware: FirmwareInfo | None = None
+        self._base_update: tuple[str, float] | None = None
+        """``(target version, loop time)`` of a base station update MowDeck requested."""
+        self._base_task: asyncio.Task[None] | None = None
+        self._base_wake = asyncio.Event()
+        self.base_details_delay_s = BASE_DETAILS_DELAY_S
+        self.base_details_interval_s = BASE_DETAILS_INTERVAL_S
+        self.base_install_recheck_s = BASE_INSTALL_RECHECK_S
 
     # --- MowerConnection: lifecycle -------------------------------------------------------
 
@@ -454,6 +503,10 @@ class MammotionBase:
             self._device_info_task = asyncio.create_task(
                 self._request_device_info(), name=f"device-info-{device_name}"
             )
+            if self._base_ref is not None:
+                self._base_task = asyncio.create_task(
+                    self._base_station_loop(), name=f"base-station-{device_name}"
+                )
             _log.info("mammotion %s connected over %s", device_name, self.kind)
 
     async def disconnect(self) -> None:
@@ -474,6 +527,8 @@ class MammotionBase:
                     await self._stop_path_fetch()
                     await self._stop_firmware_recheck()
                     await self._stop_error_log()
+                    task, self._base_task = self._base_task, None
+                    await _cancel(task, "base station requests")
                     unsubscribe, self._unsubscribe = self._unsubscribe, None
                     if unsubscribe is not None:
                         with contextlib.suppress(Exception):
@@ -905,7 +960,7 @@ class MammotionBase:
 
     async def capabilities(self) -> MowerCapabilities:
         self._require_connected()
-        return mapping.capabilities_of(
+        caps = mapping.capabilities_of(
             self._port.device(),
             device_name=self._port.device_name,
             product_key=self._port.product_key(),
@@ -922,6 +977,9 @@ class MammotionBase:
             ),
             maintenance=True,
         )
+        if self._base_offered():
+            caps = caps.model_copy(update={"base_station_firmware_update": True})
+        return caps
 
     async def get_state(self) -> MowerState:
         self._require_connected()
@@ -1320,6 +1378,164 @@ class MammotionBase:
         finally:
             self._firmware_recheck = None
 
+    # --- RTK base station (BaseStationPort, ADR 0047) -----------------------------------------
+
+    def _base_offered(self) -> bool:
+        """Whether the base station's firmware can be asked for: a linked base station with an
+        IoT id on a connection that reaches the vendor's firmware service (the cloud)."""
+        ref = self._base_ref
+        return ref is not None and bool(ref.iot_id) and self._firmware_offered()
+
+    def _base_state(self, device: MowerDevice) -> BaseStationState | None:
+        ref = self._base_ref
+        if ref is None:
+            return None
+        return mapping.base_station_of(
+            device,
+            ref=ref,
+            has_report=self._port.has_report,
+            details=self._base_details,
+            firmware_info=self._base_firmware,
+        )
+
+    async def _base_station_loop(self) -> None:
+        """Ask the mower about its base station (``basestation_info``) after
+        ``base_details_delay_s`` and then every ``base_details_interval_s`` (every
+        ``base_install_recheck_s`` while a base station update runs, which also asks the vendor
+        again); background priority, failures only logged. A started update wakes it."""
+        await asyncio.sleep(self.base_details_delay_s)
+        while self._connected:
+            await self._request_base_details()
+            if self._base_update is not None and self._base_offered():
+                with contextlib.suppress(NotConnected):
+                    await self.check_base_station_firmware()
+            wait = (
+                self.base_install_recheck_s
+                if self._base_update is not None
+                else self.base_details_interval_s
+            )
+            self._base_wake.clear()
+            with contextlib.suppress(TimeoutError):
+                async with asyncio.timeout(wait):
+                    await self._base_wake.wait()
+
+    async def _request_base_details(self) -> None:
+        """One ``basestation_info`` request; the answer is kept (the next report would reset
+        PyMammotion's copy) and published."""
+        try:
+            reply = await self._port.send_and_wait(
+                BASE_STATION_COMMAND,
+                BASE_STATION_REPLY,
+                priority=Priority.BACKGROUND,
+                timeout_s=BASE_STATION_TIMEOUT_S,
+            )
+            details = mapping.base_details_of(reply, self._port.device(), now=self._clock())
+        except Exception:
+            _log.debug("base station request of %s failed", self._port.device_name, exc_info=True)
+            return
+        if details is not None:
+            self._base_details = details
+            if self._connected:
+                self._publish(force=True)
+
+    async def check_base_station_firmware(self) -> FirmwareInfo | None:
+        """:class:`~mowdeck_control.BaseStationPort`: ask the Mammotion cloud what the linked
+        base station runs and what is offered (``get_device_ota_firmware`` with its IoT id);
+        None without a base station or a cloud link. Raises
+        :class:`~mowdeck_control.NotConnected` when the cloud does not answer."""
+        self._require_connected()
+        ref = self._base_ref
+        if ref is None or not ref.iot_id or not self._base_offered():
+            return None
+        try:
+            check = await self._port.check_device_firmware(ref.iot_id)
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("the Mammotion cloud session is not open") from exc
+        except Exception as exc:
+            _log.warning("base station firmware check failed: %s", type(exc).__name__)
+            raise NotConnected("the Mammotion cloud did not answer the firmware check") from exc
+        info = self._base_firmware_of(check)
+        self._base_firmware = info
+        _log.info(
+            "base station firmware of %s: installed %s, %s",
+            self._port.device_name,
+            info.installed,
+            info.update_state,
+        )
+        if self._connected:
+            self._publish(force=True)
+        return info
+
+    def _base_firmware_of(self, check: CheckDeviceVersion | None) -> FirmwareInfo:
+        """The base station's firmware state from a vendor check, following an update
+        MowDeck requested: it ends ``idle`` once the vendor (or the mower's report) shows the
+        target version and ``unknown`` after :data:`mapping.FIRMWARE_UPDATE_MAX_S`."""
+        now = self._clock()
+        reported = mapping.base_firmware_of(self._port.device()) or ""
+        installed = (check.current_version if check is not None else "") or reported
+        update = self._base_update
+        if update is None:
+            return mapping.firmware_info_of(check, installed=installed, checked_at=now)
+        target, started = update
+        if installed == target or reported == target:
+            self._base_update = None
+            return FirmwareInfo(installed=target, update_state="idle", checked_at=now)
+        if self._clock_s() - started > mapping.FIRMWARE_UPDATE_MAX_S:
+            self._base_update = None
+            return FirmwareInfo(
+                installed=installed or None,
+                update_state="unknown",
+                failure_reason="the base station did not report the new version in time",
+                checked_at=now,
+            )
+        progress = check.progress if check is not None and check.isupgrading else None
+        return FirmwareInfo(
+            installed=installed or None,
+            available=target,
+            update_state="installing",
+            progress=progress if progress is not None and 0 <= progress <= 100 else None,
+            checked_at=now,
+        )
+
+    async def start_base_station_firmware_update(self, version: str) -> None:
+        """:class:`~mowdeck_control.BaseStationPort`: ask the Mammotion cloud to install
+        ``version`` on the linked base station (``start_ota_upgrade`` with its IoT id) after
+        the rules of :func:`~mowdeck_control.base_station_firmware_update_problem`; raises
+        :class:`~mowdeck_control.CommandRejected` otherwise. Returns once the vendor took it."""
+        self._require_connected()
+        ref = self._base_ref
+        if ref is None or not ref.iot_id or not self._base_offered():
+            raise CommandRejected("base station updates need the cloud link and a base station")
+        problem = base_station_firmware_update_problem(
+            version, self._snapshot(), await self.capabilities()
+        )
+        if problem is not None:
+            raise CommandRejected(problem)
+        try:
+            await self._port.start_device_firmware_update(ref.iot_id, version)
+        except FirmwareRefused as exc:
+            raise CommandRejected(str(exc)) from exc
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("the Mammotion cloud session is not open") from exc
+        self._base_update = (version, self._clock_s())
+        previous = self._base_firmware or FirmwareInfo()
+        self._base_firmware = previous.model_copy(
+            update={"available": version, "update_state": "installing", "progress": 0}
+        )
+        _log.info("base station firmware update of %s to %s requested", ref.name, version)
+        self._publish(force=True)
+        self._base_wake.set()
+
+    def _track_base_update(self, device: MowerDevice) -> None:
+        """A requested base station update ends when the mower reports the target version."""
+        update = self._base_update
+        if update is None or mapping.base_firmware_of(device) != update[0]:
+            return
+        self._base_update = None
+        self._base_firmware = FirmwareInfo(
+            installed=update[0], update_state="idle", checked_at=self._clock()
+        )
+
     # --- commands -------------------------------------------------------------------------
 
     async def _send(
@@ -1626,8 +1842,9 @@ class MammotionBase:
     # --- state ----------------------------------------------------------------------------
 
     def _snapshot(self) -> MowerState:
+        device = self._port.device()
         return mapping.state_of(
-            self._port.device(),
+            device,
             mower_id=self._config.mower_id,
             account_id=self._config.account_id,
             connection=self._connection_kind(),
@@ -1647,6 +1864,7 @@ class MammotionBase:
             rain_detected=settings.rain_detected_of(
                 self._port.device(), has_report=self._port.has_report
             ),
+            base_station=self._base_state(device),
         )
 
     async def _on_device_update(self) -> None:
@@ -1658,6 +1876,7 @@ class MammotionBase:
     def _publish(self, *, force: bool = False) -> None:
         try:
             self._track_firmware(self._port.device())
+            self._track_base_update(self._port.device())
             self._track_fault_window()
             state = self._snapshot()
         except Exception:

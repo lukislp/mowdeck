@@ -41,6 +41,7 @@ from fleet.application.ports import Gt, In, Lt, Store
 from fleet.domain.errors import ConflictError
 from fleet.domain.models import (
     AuditEntry,
+    BaseStation,
     CommandRecord,
     DriveSession,
     Group,
@@ -253,6 +254,44 @@ async def test_fleet_db_store_contract(kind: str, monkeypatch: pytest.MonkeyPatc
         async with store.transaction() as tx:
             assert await tx.mowers.get(id=m3.id) is not None
             assert {c.status for c in await tx.commands.find(account_id=acc)} == {"executed"}
+
+
+@pytest.mark.parametrize("kind", STORES)
+async def test_fleet_db_base_stations(kind: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """RTK base stations (ADR 0047): one physical base station (IoT id) per installation, the
+    mower's link, and ``ON DELETE SET NULL`` in PostgreSQL (the use case clears it first)."""
+    acc, other = uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        async with store.transaction() as tx:
+            home = await tx.sites.add(site_row(acc, "Home"))
+            base = BaseStation(uuid4(), acc, "Garden", "cloud", NOW, NOW, iot_id="iot-rtk")
+            sim = BaseStation(uuid4(), acc, "Sim", "simulated", NOW, NOW)
+            await tx.base_stations.add(base)
+            await tx.base_stations.add(sim)
+            await tx.base_stations.add(BaseStation(uuid4(), other, "Sim", "simulated", NOW, NOW))
+            with pytest.raises(ConflictError):
+                await tx.base_stations.add(
+                    BaseStation(uuid4(), other, "Copy", "cloud", NOW, NOW, iot_id="iot-rtk")
+                )
+            mower = Mower(uuid4(), acc, home.id, "M", "simulated", uuid4(), NOW, NOW)
+            mower.base_station_id = sim.id
+            await tx.mowers.add(mower)
+        async with store.transaction() as tx:
+            assert await tx.base_stations.get(id=base.id) == base
+            assert await tx.base_stations.get(id=base.id, account_id=other) is None
+            assert [
+                b.name for b in await tx.base_stations.find(account_id=acc, order_by="name")
+            ] == [
+                "Garden",
+                "Sim",
+            ]
+            linked = await tx.mowers.find(base_station_id=sim.id)
+            assert [m.id for m in linked] == [mower.id]
+            await tx.base_stations.delete(id=sim.id)
+        async with store.transaction() as tx:
+            if kind == "postgres":
+                assert (await tx.mowers.get(id=mower.id)).base_station_id is None  # type: ignore[union-attr]
+            assert await tx.base_stations.count(account_id=acc) == 1
 
 
 def test_fleet_db_mow_defaults_codec_keeps_the_stored_shape() -> None:

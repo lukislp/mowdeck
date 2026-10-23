@@ -73,6 +73,26 @@ RTK_YAW_DEG: Final = 12.5
 DOCK_X: Final = -1.0
 DOCK_Y: Final = 1.0
 DOCK_ROTATION_DEG: Final = 0
+SAMPLE_BASE_IOT_ID: Final = "fakeiot0003"
+"""The IoT id of the fake account's RTK base station (``RTK-FAKE0001``)."""
+SAMPLE_BASE_FIRMWARE: Final = "1.2.3.4"
+SAMPLE_BASE_NEWER_FIRMWARE: Final = "1.2.5.0"
+SAMPLE_BASE_VERSION: Final = (1, 2, 3, 4)
+SAMPLE_BASE_LAT_DEG: Final = 48.137100
+SAMPLE_BASE_LON_DEG: Final = 11.576050
+SAMPLE_BASE_LORA_CHANNEL: Final = 12
+SAMPLE_BASE_ANSWER: Final[dict[str, int]] = {
+    "sats_num": 34,
+    "rtk_status": 4,
+    "rtk_channel": 12,
+    "rtk_switch": 0,
+    "wifi_rssi": -57,
+    "lora_channel": 12,
+    "mqtt_rtk_status": 1,
+    "app_connect_type": 1,
+}
+"""What a LUBA 2 answers ``basestation_info`` with in the fake (``ResponseBasestationInfoT``;
+``rtk_status`` 4 is a fixed solution in PyMammotion's ``RTKStatus``)."""
 
 PathLine = tuple[int, int, int, list[tuple[float, float]]]
 """One line of a planned route: ``(line_hash, path_type, zone_hash, points)``; ``path_type`` 0 is
@@ -441,6 +461,21 @@ class FakeMammotionPort:
         """When set, a started update progresses by itself (real seconds) to completion with the
         new version, like the fake cloud's mowers; None: tests deliver the progress."""
         self._ota_task: asyncio.Task[None] | None = None
+        self.device_firmware: dict[str, CheckDeviceVersion] = {}
+        """What :meth:`check_device_firmware` answers per IoT id (the RTK base station, ADR
+        0047); a missing id answers None."""
+        self.device_firmware_checks: list[str] = []
+        self.device_ota_started: list[tuple[str, str]] = []
+        """``(iot_id, version)`` of every :meth:`start_device_firmware_update`, in order."""
+        self.device_ota_error: Exception | None = None
+        self.device_update_seconds: float | None = None
+        """When set, a started base station update is done after this many real seconds: the
+        vendor then reports the new version as current (``device_firmware``)."""
+        self.base_station_answer: dict[str, int] | None = dict(SAMPLE_BASE_ANSWER)
+        """The ``ResponseBasestationInfoT`` fields the mower answers ``basestation_info`` with,
+        stored like PyMammotion's reducer in ``report_data.basestation_info``; None: no answer
+        (the request times out)."""
+        self._device_ota_task: asyncio.Task[None] | None = None
         self._emitted = asyncio.Event()
         self._listeners: list[StateListener] = []
         self._notification_listeners: list[NotificationListener] = []
@@ -478,9 +513,10 @@ class FakeMammotionPort:
         self.closed += 1
         self._open = False
         self.ble = False
-        task, self._ota_task = self._ota_task, None
-        if task is not None:
-            task.cancel()
+        for task in (self._ota_task, self._device_ota_task):
+            if task is not None:
+                task.cancel()
+        self._ota_task = self._device_ota_task = None
 
     def device(self) -> MowerDevice:
         if not self._open:
@@ -574,6 +610,11 @@ class FakeMammotionPort:
                 raise CommandTimeoutError(expected_field, 2)
             await self.emit()
             return {expected_field: {}}
+        if command == "basestation_info":
+            if self.base_station_answer is None:
+                raise CommandTimeoutError(expected_field, 2)
+            await self.deliver_base_station_info(self.base_station_answer)
+            return {expected_field: dict(self.base_station_answer)}
         await self._apply(command, kwargs)
         return {expected_field: {}}
 
@@ -706,6 +747,36 @@ class FakeMammotionPort:
                 self._run_ota(version, self.firmware_update_seconds)
             )
 
+    async def check_device_firmware(self, iot_id: str) -> CheckDeviceVersion | None:
+        if not self._open:
+            raise PortClosedError("fake port is closed")
+        self.device_firmware_checks.append(iot_id)
+        if self.firmware_check_error is not None:
+            raise self.firmware_check_error
+        return self.device_firmware.get(iot_id)
+
+    async def start_device_firmware_update(self, iot_id: str, version: str) -> None:
+        if not self._open:
+            raise PortClosedError("fake port is closed")
+        if self.device_ota_error is not None:
+            raise self.device_ota_error
+        self.device_ota_started.append((iot_id, version))
+        if self.device_update_seconds is not None:
+            self._device_ota_task = asyncio.create_task(
+                self._run_device_ota(iot_id, version, self.device_update_seconds)
+            )
+
+    async def _run_device_ota(self, iot_id: str, version: str, seconds: float) -> None:
+        """The vendor reports ``version`` as the base station's current one after ``seconds``."""
+        await asyncio.sleep(seconds)
+        self.finish_device_update(iot_id, version)
+
+    def finish_device_update(self, iot_id: str, version: str) -> None:
+        """The vendor now reports ``version`` as current and offers nothing newer (for tests)."""
+        self.device_firmware[iot_id] = firmware_offer(
+            current=version, available=None, iot_id=iot_id
+        )
+
     async def _run_ota(self, version: str, seconds: float) -> None:
         """Progress like a mower pushing ``toapp_upgrade_report`` frames, then the new version."""
         steps = 5
@@ -782,6 +853,38 @@ class FakeMammotionPort:
         """Store an answer to ``get_speed`` like PyMammotion's reducer and notify the listeners."""
         self._device.mower_state.travel_speed = speed
         await self.emit()
+
+    async def deliver_base_station_info(self, answer: dict[str, int]) -> None:
+        """Store a ``basestation_info`` answer (``base.to_app``) like PyMammotion's reducer in
+        ``report_data.basestation_info`` and notify the listeners."""
+        info = self._device.report_data.basestation_info
+        for key, value in answer.items():
+            setattr(info, key, value)
+        await self.emit()
+
+    def use_base_station(
+        self,
+        *,
+        switch: str = "RTK_USED_LORA",
+        lora_connected: bool = True,
+        lat_deg: float = SAMPLE_BASE_LAT_DEG,
+        lon_deg: float = SAMPLE_BASE_LON_DEG,
+        version: tuple[int, int, int, int] = SAMPLE_BASE_VERSION,
+        moved: bool = False,
+    ) -> None:
+        """Make the mower report an own RTK base station like a LUBA 2 on LoRa (ADR 0047):
+        ``rtk.mqtt_rtk_info`` (switch, base position in degrees), ``rtk.lora_info`` (link and
+        channel), ``rtk.score_info.base_moved`` and the version in ``basestation_info``."""
+        rtk = self._device.report_data.rtk
+        rtk.mqtt_rtk_info.rtk_switch = switch
+        rtk.mqtt_rtk_info.latitude = lat_deg
+        rtk.mqtt_rtk_info.longitude = lon_deg
+        rtk.lora_info.lora_connection_status = 1 if lora_connected else 0
+        rtk.lora_info.pair_code_channel = SAMPLE_BASE_LORA_CHANNEL
+        rtk.score_info.base_moved = 1 if moved else 0
+        info = self._device.report_data.basestation_info
+        info.ver_major, info.ver_minor, info.ver_patch, info.ver_build = version
+        info.basestation_status = 1
 
     async def deliver_dock_buffer(self, buffer: SystemUpdateBufMsg | None = None) -> None:
         """Apply a dock buffer (default: :func:`dock_buffer`) like PyMammotion's reducer and
@@ -929,6 +1032,14 @@ __all__ = [
     "NOGO_HASH",
     "OBSTACLE_HASH",
     "PATH_HASH",
+    "SAMPLE_BASE_ANSWER",
+    "SAMPLE_BASE_FIRMWARE",
+    "SAMPLE_BASE_IOT_ID",
+    "SAMPLE_BASE_LAT_DEG",
+    "SAMPLE_BASE_LON_DEG",
+    "SAMPLE_BASE_LORA_CHANNEL",
+    "SAMPLE_BASE_NEWER_FIRMWARE",
+    "SAMPLE_BASE_VERSION",
     "SAMPLE_DEVICE_NAME",
     "SAMPLE_FIRMWARE",
     "SAMPLE_IOT_ID",

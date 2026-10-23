@@ -29,6 +29,16 @@
       "title": "CloudDiscoverErrorCode",
       "type": "string"
     },
+    "DeviceType": {
+      "description": "What a discovered device is (ADR 0047).",
+      "enum": [
+        "mower",
+        "rtk_base",
+        "other"
+      ],
+      "title": "DeviceType",
+      "type": "string"
+    },
     "DiscoveredDevice": {
       "description": "One device of a vendor cloud account as the discovery saw it.",
       "properties": {
@@ -38,6 +48,11 @@
           "minLength": 1,
           "title": "Device Name",
           "type": "string"
+        },
+        "device_type": {
+          "$ref": "#/$defs/DeviceType",
+          "default": "other",
+          "description": "`mower`, `rtk_base` (registered as a base station, ADR 0047) or `other`; derived from `is_mower` when a sender does not set it."
         },
         "iot_id": {
           "anyOf": [
@@ -54,7 +69,7 @@
           "title": "Iot Id"
         },
         "is_mower": {
-          "description": "False for RTK base stations, pool cleaners and other non-mowers, which cannot be registered.",
+          "description": "False for RTK base stations, pool cleaners and other non-mowers, which cannot be registered as mowers.",
           "title": "Is Mower",
           "type": "boolean"
         },

@@ -27,6 +27,12 @@ PyMammotion API names used (file references are relative to the installed packag
   ``clear_version_info`` and ``update_check`` (progress from the MQTT property ``otaProgress``
   and the BLE ``toapp_upgrade_report``, see ``Device.apply_ota_progress``);
   ``events.ota_progress`` (``OTAProgress`` with ``is_complete`` and ``is_failed``).
+* RTK base station (ADR 0047): the same two firmware calls with the base station's IoT id
+  (:meth:`MammotionPort.check_device_firmware`, :meth:`MammotionPort.start_device_firmware_update`;
+  the mower's device model is not touched); the mower's ``basestation_info`` request
+  (``mammotion/commands/messages/basestation.py``, reply field ``to_app``,
+  ``ResponseBasestationInfoT``); ``RTKBaseStationDevice`` marks a base station in the device
+  registry.
 * Dual link (ADR 0038): ``MammotionClient.add_ble_to_device(device_name, ble_device,
   account_id, rssi)`` attaches a BLE transport to the registered cloud device,
   ``connect_ble(device_name, account_id)`` opens it, ``DeviceHandle.set_prefer_ble`` prefers it,
@@ -71,7 +77,7 @@ from pymammotion.data.error_codes import bundled_error_codes
 from pymammotion.data.error_codes import describe as describe_error
 from pymammotion.data.error_codes import get_error_info as error_info
 from pymammotion.data.model.coordinates import CoordinateConverter
-from pymammotion.data.model.device import MowerDevice, create_device
+from pymammotion.data.model.device import MowerDevice, RTKBaseStationDevice, create_device
 from pymammotion.data.model.device_capabilities import DeviceConfig
 from pymammotion.data.model.device_config import OperationSettings, build_route_information
 from pymammotion.data.model.device_info import (
@@ -178,6 +184,7 @@ __all__ = [
     "PortClosedError",
     "Priority",
     "ProductVersionInfo",
+    "RTKBaseStationDevice",
     "RTKStatus",
     "RootHashList",
     "StateListener",
@@ -549,6 +556,18 @@ class MammotionPort(Protocol):
 
     async def start_firmware_update(self, version: str) -> None:
         """Ask the vendor cloud to install ``version``; raises :class:`FirmwareRefused`."""
+        ...
+
+    async def check_device_firmware(self, iot_id: str) -> CheckDeviceVersion | None:
+        """Ask the vendor cloud for the firmware state of another device of the account (the
+        RTK base station, ADR 0047) by its IoT id; None when the cloud API is not available or
+        answered without data. Changes nothing on the mower's device model. Raises
+        :class:`FirmwareRefused` for a refused request."""
+        ...
+
+    async def start_device_firmware_update(self, iot_id: str, version: str) -> None:
+        """Ask the vendor cloud to install ``version`` on the device ``iot_id`` (the RTK base
+        station); raises :class:`FirmwareRefused`."""
         ...
 
 
@@ -1057,6 +1076,35 @@ class ClientPort:
             msg = f"the firmware service refused the update (code {code})"
             raise FirmwareRefused(msg)
         _log.info("firmware update of %s to %s requested", handle.device_name, version)
+
+    async def check_device_firmware(self, iot_id: str) -> CheckDeviceVersion | None:
+        client = self._require_client()
+        http = client.mammotion_http
+        if http is None or not iot_id:
+            return None
+        response = await http.get_device_ota_firmware([iot_id])
+        data = getattr(response, "data", None) or []
+        check = next(
+            (c for c in data if isinstance(c, CheckDeviceVersion) and c.device_id == iot_id), None
+        )
+        if check is None:
+            code = getattr(response, "code", None)
+            if not vendor_call_succeeded(code):
+                msg = f"the firmware check failed with code {code}"
+                raise FirmwareRefused(msg)
+        return check
+
+    async def start_device_firmware_update(self, iot_id: str, version: str) -> None:
+        client = self._require_client()
+        http = client.mammotion_http
+        if http is None or not iot_id:
+            raise FirmwareRefused("firmware updates need the cloud link")
+        response = await http.start_ota_upgrade(iot_id, version)
+        code = getattr(response, "code", None)
+        if not vendor_call_succeeded(code):
+            msg = f"the firmware service refused the update (code {code})"
+            raise FirmwareRefused(msg)
+        _log.info("firmware update of device %s to %s requested", iot_id, version)
 
     # --- helpers --------------------------------------------------------------------------
 

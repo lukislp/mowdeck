@@ -16,7 +16,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 
-from mowdeck_contracts.v1 import ConnectionKind, MowerActivity, utc_now
+from mowdeck_contracts.v1 import BASE_STATION_OPTION, ConnectionKind, MowerActivity, utc_now
 from mowdeck_control import CommandRejected, ConnectionConfig, DriveSession
 
 from mowdeck_control_mammotion import mapping
@@ -154,6 +154,9 @@ class MammotionBleProxyConnection(MammotionBase):
 
 def create_ble_bridge_connection(config: ConnectionConfig) -> MammotionBleProxyConnection:
     """Connection factory for ``ConnectionKind.BLE_BRIDGE`` (entry point group
-    ``mowdeck.connections``)."""
-    options = BleProxyOptions.parse(config.options)
+    ``mowdeck.connections``). A linked RTK base station (option ``base_station``, ADR 0047) is
+    ignored: Fleet links base stations to cloud mowers only."""
+    options = BleProxyOptions.parse(
+        {k: v for k, v in config.options.items() if k != BASE_STATION_OPTION}
+    )
     return MammotionBleProxyConnection(BleProxyPort(options), config, options)

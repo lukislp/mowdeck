@@ -126,6 +126,23 @@ class LinkedAccountInUseError(ConflictError):
         self.mowers = tuple(mowers)
 
 
+class BaseStationAlreadyRegisteredError(ConflictError):
+    """The physical RTK base station (vendor IoT id) is registered already, in this or another
+    MowDeck account (409 ``base-station-already-registered``, ADR 0047); the message never names
+    the other account."""
+
+
+class BaseStationNotApplicableError(ConflictError):
+    """The base station cannot serve this mower: a cloud base station needs a cloud mower of
+    the same linked account, the simulated one a simulated mower (409
+    ``base-station-not-applicable``, ADR 0047)."""
+
+
+class BaseStationNotLinkedError(ConflictError):
+    """No mower is linked to the base station (or the mower to none), so nothing can relay a
+    request to it (409 ``base-station-not-linked``, ADR 0047)."""
+
+
 class MowerAlreadyRegisteredError(ConflictError):
     """The physical mower (vendor IoT id) is registered already, in this or another MowDeck
     account (409 ``mower-already-registered``); the message never names the other account."""

@@ -23,6 +23,9 @@ FirmwareUpdateState = Literal["idle", "available", "installing", "failed", "unkn
 version can be installed), ``installing`` (an update runs), ``failed`` (the last update failed,
 see ``failure_reason``) or ``unknown`` (no check possible, e.g. a mower without cloud link)."""
 
+FirmwareTarget = Literal["mower", "base_station"]
+"""Whose firmware a check asks for: the mower's or its RTK base station's (ADR 0047)."""
+
 
 class FirmwareInfo(ContractModel):
     """The firmware state of a mower (``MowerState.firmware_info``)."""
@@ -56,6 +59,11 @@ class FirmwareCheckRequest(ContractModel):
 
     mower_id: UUID
     account_id: UUID = Field(description="The mower's account as Fleet knows it.")
+    target: FirmwareTarget = Field(
+        default="mower",
+        description="`mower`: the mower's own firmware; `base_station`: the firmware of the RTK "
+        "base station the mower is linked to, asked through the mower's connection (ADR 0047).",
+    )
 
 
 class FirmwareCheckErrorCode(StrEnum):

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Install the firmware the vendor offers for the mower's RTK base station\n(``MowerState.base_station.firmware_info.available``, ADR 0047).\n\nSent to a mower linked to the base station: its connection asks the vendor's firmware\nservice with the base station's id. Refused unless the base station's ``update_state`` is\n``available`` and ``version`` equals ``available``, no update of the base station is already\ninstalling, and the mower runs no job, spot run or drive session (it loses its RTK\ncorrections while the base station restarts).",
+  "properties": {
+    "kind": {
+      "const": "base_station_firmware_update",
+      "default": "base_station_firmware_update",
+      "title": "Kind",
+      "type": "string"
+    },
+    "version": {
+      "description": "The version to install, as offered.",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "title": "BaseStationFirmwareUpdate",
+  "type": "object"
+}

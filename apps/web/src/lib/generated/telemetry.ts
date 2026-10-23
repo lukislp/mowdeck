@@ -383,6 +383,78 @@ export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
         /**
+         * BaseStationPosition
+         * @description Where the base station stands (WGS84 degrees), as the mower knows it.
+         */
+        BaseStationPosition: {
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+        };
+        /**
+         * BaseStationState
+         * @description The RTK base station of a mower as its connection sees it (``MowerState.base_station``).
+         *
+         *     Null on the mower state when the mower is linked to no base station in Fleet.
+         */
+        BaseStationState: {
+            /**
+             * Base Station Id
+             * @description Fleet's id of the base station (from the registration).
+             */
+            base_station_id?: string | null;
+            /**
+             * @description How the corrections reach the mower now; `network` means the mower does not use its base station at the moment.
+             * @default unknown
+             */
+            correction_link: components["schemas"]["RtkCorrectionLink"];
+            /**
+             * Details At
+             * @description When the details (`satellites`, `rtk_status`, `wifi_dbm`) were last reported; null when never.
+             */
+            details_at?: string | null;
+            /**
+             * Firmware
+             * @description The base station's firmware, as reported.
+             */
+            firmware?: string | null;
+            /** @description Installed and offered firmware of the base station from the vendor's firmware service, and the update state; null before a check. */
+            firmware_info?: components["schemas"]["FirmwareInfo"] | null;
+            /**
+             * Link Up
+             * @description Whether the mower receives the base station: over LoRa the radio link the mower reports, over the internet whether corrections arrive; null when the mower does not say (or uses network RTK).
+             */
+            link_up?: boolean | null;
+            /**
+             * Lora Channel
+             * @description The LoRa channel of the pairing, if reported.
+             */
+            lora_channel?: number | null;
+            /**
+             * Moved
+             * @description The mower reports that the base station was moved since the map was recorded (positions may be shifted); null when not reported.
+             */
+            moved?: boolean | null;
+            /** @description Where the base station stands; null while not reported. */
+            position?: components["schemas"]["BaseStationPosition"] | null;
+            /**
+             * @description The base station's own position solution.
+             * @default unknown
+             */
+            rtk_status: components["schemas"]["GnssSolution"];
+            /**
+             * Satellites
+             * @description Satellites the base station's receiver uses.
+             */
+            satellites?: number | null;
+            /**
+             * Wifi Dbm
+             * @description The base station's Wi-Fi signal in dBm; null when not reported.
+             */
+            wifi_dbm?: number | null;
+        };
+        /**
          * BatteryPointOut
          * @description One bin (or one row) of the battery series.
          */
@@ -1183,6 +1255,12 @@ export type components = {
          */
         MowerCapabilities: {
             /**
+             * Base Station Firmware Update
+             * @description The connection can ask the manufacturer's firmware service for the linked RTK base station and install its updates (`firmware_check` with target `base_station`, `base_station_firmware_update`; ADR 0047).
+             * @default false
+             */
+            base_station_firmware_update: boolean;
+            /**
              * Blade Height Range Mm
              * @description Inclusive (min, max) blade height in millimetres, if settable.
              */
@@ -1548,6 +1626,8 @@ export type components = {
              */
             account_id: string;
             activity: components["schemas"]["MowerActivity"];
+            /** @description The RTK base station the mower is linked to in Fleet, as the mower's connection sees it (correction link, satellites, position, firmware; ADR 0047); null for a mower without a linked base station. */
+            base_station?: components["schemas"]["BaseStationState"] | null;
             /** Battery Percent */
             battery_percent: number;
             /** Blade Height Mm */
@@ -1901,6 +1981,12 @@ export type components = {
              */
             truncated: boolean;
         };
+        /**
+         * RtkCorrectionLink
+         * @description How the RTK corrections reach the mower.
+         * @enum {string}
+         */
+        RtkCorrectionLink: "lora" | "internet" | "network" | "unknown";
         /**
          * RtkFixStatus
          * @description Quality of the RTK position fix.

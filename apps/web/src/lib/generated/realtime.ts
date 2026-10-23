@@ -41,6 +41,73 @@ export type AccountId1 = string
  * via the `definition` "MowerActivity".
  */
 export type MowerActivity = ("idle" | "mowing" | "paused" | "returning" | "docked" | "charging" | "error" | "offline" | "updating" | "unknown")
+/**
+ * Fleet's id of the base station (from the registration).
+ */
+export type BaseStationId = (string | null)
+/**
+ * How the corrections reach the mower now; `network` means the mower does not use its base station at the moment.
+ */
+export type RtkCorrectionLink = ("lora" | "internet" | "network" | "unknown")
+/**
+ * When the details (`satellites`, `rtk_status`, `wifi_dbm`) were last reported; null when never.
+ */
+export type DetailsAt = (string | null)
+/**
+ * The base station's firmware, as reported.
+ */
+export type Firmware = (string | null)
+/**
+ * The newest version the vendor offers for this mower; null when none or unknown.
+ */
+export type Available = (string | null)
+/**
+ * When the vendor was last asked; null when never.
+ */
+export type CheckedAt = (string | null)
+/**
+ * Why the last update failed, if known.
+ */
+export type FailureReason = (string | null)
+/**
+ * The version running on the mower.
+ */
+export type Installed = (string | null)
+/**
+ * Percent done while `installing`, if reported.
+ */
+export type Progress = (number | null)
+/**
+ * Release notes of `available`, if given.
+ */
+export type ReleaseNotes = (string | null)
+export type UpdateState = ("idle" | "available" | "installing" | "failed" | "unknown")
+/**
+ * Whether the mower receives the base station: over LoRa the radio link the mower reports, over the internet whether corrections arrive; null when the mower does not say (or uses network RTK).
+ */
+export type LinkUp = (boolean | null)
+/**
+ * The LoRa channel of the pairing, if reported.
+ */
+export type LoraChannel = (number | null)
+/**
+ * The mower reports that the base station was moved since the map was recorded (positions may be shifted); null when not reported.
+ */
+export type Moved = (boolean | null)
+export type Lat = number
+export type Lon = number
+/**
+ * The base station's own position solution.
+ */
+export type GnssSolution = ("none" | "single" | "float" | "fixed" | "unknown")
+/**
+ * Satellites the base station's receiver uses.
+ */
+export type Satellites = (number | null)
+/**
+ * The base station's Wi-Fi signal in dBm; null when not reported.
+ */
+export type WifiDbm = (number | null)
 export type BatteryPercent = number
 export type BladeHeightMm = (number | null)
 export type Charging = boolean
@@ -158,32 +225,7 @@ export type DriveSpeedMps = (number | null)
 export type MowerErrorCategory = ("trapped" | "obstacle" | "outside" | "wheel_slip" | "lift_tilt" | "collision" | "battery" | "blade_motor" | "rain" | "positioning" | "other")
 export type ErrorCode = (string | null)
 export type ErrorMessage = (string | null)
-export type Firmware = (string | null)
-/**
- * The newest version the vendor offers for this mower; null when none or unknown.
- */
-export type Available = (string | null)
-/**
- * When the vendor was last asked; null when never.
- */
-export type CheckedAt = (string | null)
-/**
- * Why the last update failed, if known.
- */
-export type FailureReason = (string | null)
-/**
- * The version running on the mower.
- */
-export type Installed = (string | null)
-/**
- * Percent done while `installing`, if reported.
- */
-export type Progress = (number | null)
-/**
- * Release notes of `available`, if given.
- */
-export type ReleaseNotes = (string | null)
-export type UpdateState = ("idle" | "available" | "installing" | "failed" | "unknown")
+export type Firmware1 = (string | null)
 /**
  * Age of the last RTK correction data in seconds; null without corrections.
  */
@@ -191,11 +233,11 @@ export type CorrectionAgeS = (number | null)
 /**
  * The position solution of the receiver.
  */
-export type GnssSolution = ("none" | "single" | "float" | "fixed" | "unknown")
+export type GnssSolution1 = ("none" | "single" | "float" | "fixed" | "unknown")
 /**
  * Satellites the receiver uses.
  */
-export type Satellites = (number | null)
+export type Satellites1 = (number | null)
 /**
  * When the Device-Gateway last knew its connection to the mower alive (UTC). The gateway sets it on every publish, never an adapter: it advances with each heartbeat while `observed_at` stays the time of the mower's last report. Clients judge online and offline by it (ADR 0040); null in states from before the field, then `observed_at` stands in.
  */
@@ -272,11 +314,11 @@ export type Heading = (number | null)
 /**
  * Latitude in degrees.
  */
-export type Lat = number
+export type Lat1 = number
 /**
  * Longitude in degrees.
  */
-export type Lon = number
+export type Lon1 = number
 /**
  * Where `position` comes from; `unknown` whenever `position` is null.
  */
@@ -327,7 +369,7 @@ export type NetworkKind = ("wifi" | "mobile" | "ble" | "none")
 /**
  * Wi-Fi signal in dBm; null when not reported.
  */
-export type WifiDbm = (number | null)
+export type WifiDbm1 = (number | null)
 export type SpeedMps = (number | null)
 /**
  * Points reached so far.
@@ -580,7 +622,7 @@ export type Type19 = "drive_stop"
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
  * via the `definition` "GnssSolution".
  */
-export type GnssSolution1 = ("none" | "single" | "float" | "fixed" | "unknown")
+export type GnssSolution2 = ("none" | "single" | "float" | "fixed" | "unknown")
 /**
  * Where :attr:`MowerState.position` comes from, so consumers can judge it.
  * 
@@ -594,6 +636,13 @@ export type GnssSolution1 = ("none" | "single" | "float" | "fixed" | "unknown")
  * via the `definition` "PositionSource".
  */
 export type PositionSource1 = ("rtk" | "gnss" | "dock" | "unknown")
+/**
+ * How the RTK corrections reach the mower.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "RtkCorrectionLink".
+ */
+export type RtkCorrectionLink1 = ("lora" | "internet" | "network" | "unknown")
 /**
  * Quality of the RTK position fix.
  * 
@@ -694,6 +743,10 @@ type: Type3
 export interface MowerState {
 account_id: AccountId1
 activity: MowerActivity
+/**
+ * The RTK base station the mower is linked to in Fleet, as the mower's connection sees it (correction link, satellites, position, firmware; ADR 0047); null for a mower without a linked base station.
+ */
+base_station?: (BaseStationState | null)
 battery_percent: BatteryPercent
 blade_height_mm?: BladeHeightMm
 charging?: Charging
@@ -711,7 +764,7 @@ drive_speed_mps?: DriveSpeedMps
 error_category?: (MowerErrorCategory | null)
 error_code?: ErrorCode
 error_message?: ErrorMessage
-firmware?: Firmware
+firmware?: Firmware1
 /**
  * Installed and available firmware and the update state; null when the adapter has not checked (or cannot check) the vendor.
  */
@@ -753,6 +806,59 @@ spot_run?: (SpotRunStatus | null)
  * How the mower turns at lane ends in its own jobs, as its connection reports the vendor setting (read only; ADR 0043). A spot run without its own `turn_style` uses it; null when the connection does not report one.
  */
 turn_style?: (TurnStyle | null)
+}
+/**
+ * The RTK base station of a mower as its connection sees it (``MowerState.base_station``).
+ * 
+ * Null on the mower state when the mower is linked to no base station in Fleet.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "BaseStationState".
+ */
+export interface BaseStationState {
+base_station_id?: BaseStationId
+correction_link?: RtkCorrectionLink
+details_at?: DetailsAt
+firmware?: Firmware
+/**
+ * Installed and offered firmware of the base station from the vendor's firmware service, and the update state; null before a check.
+ */
+firmware_info?: (FirmwareInfo | null)
+link_up?: LinkUp
+lora_channel?: LoraChannel
+moved?: Moved
+/**
+ * Where the base station stands; null while not reported.
+ */
+position?: (BaseStationPosition | null)
+rtk_status?: GnssSolution
+satellites?: Satellites
+wifi_dbm?: WifiDbm
+}
+/**
+ * The firmware state of a mower (``MowerState.firmware_info``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "FirmwareInfo".
+ */
+export interface FirmwareInfo {
+available?: Available
+checked_at?: CheckedAt
+failure_reason?: FailureReason
+installed?: Installed
+progress?: Progress
+release_notes?: ReleaseNotes
+update_state?: UpdateState
+}
+/**
+ * Where the base station stands (WGS84 degrees), as the mower knows it.
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "BaseStationPosition".
+ */
+export interface BaseStationPosition {
+lat: Lat
+lon: Lon
 }
 /**
  * Progress of the drive calibration on this mower (``MowerState.drive_calibration``).
@@ -819,21 +925,6 @@ turned_deg?: TurnedDeg
 window_s?: WindowS
 }
 /**
- * The firmware state of a mower (``MowerState.firmware_info``).
- * 
- * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
- * via the `definition` "FirmwareInfo".
- */
-export interface FirmwareInfo {
-available?: Available
-checked_at?: CheckedAt
-failure_reason?: FailureReason
-installed?: Installed
-progress?: Progress
-release_notes?: ReleaseNotes
-update_state?: UpdateState
-}
-/**
  * The mower's satellite positioning (``MowerState.gnss``).
  * 
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
@@ -841,8 +932,8 @@ update_state?: UpdateState
  */
 export interface GnssStatus {
 correction_age_s?: CorrectionAgeS
-rtk_status?: GnssSolution
-satellites?: Satellites
+rtk_status?: GnssSolution1
+satellites?: Satellites1
 }
 /**
  * The mowing job the mower runs right now (``MowerState.job``).
@@ -891,8 +982,8 @@ since?: Since
 export interface GeoPosition {
 alt?: Alt
 heading?: Heading
-lat: Lat
-lon: Lon
+lat: Lat1
+lon: Lon1
 }
 /**
  * Adapter specific extras. Consumers must not rely on its structure; the typed fields above replace the keys they cover.
@@ -943,7 +1034,7 @@ mobile_dbm?: MobileDbm
  * The uplink the mower uses now; null when not reported.
  */
 network?: (NetworkKind | null)
-wifi_dbm?: WifiDbm
+wifi_dbm?: WifiDbm1
 }
 /**
  * Progress of the spot run MowDeck drives on this mower (``MowerState.spot_run``).

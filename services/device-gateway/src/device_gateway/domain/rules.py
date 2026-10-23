@@ -202,12 +202,19 @@ def drive_calibration_of(registration: MowerRegistration) -> DriveCalibration | 
 
 def same_link(old: MowerRegistration, new: MowerRegistration) -> bool:
     """True when ``new`` opens the same connection as ``old``: a change of the drive
-    calibration alone does not reopen the link (the controller reads it on every run)."""
+    calibration alone does not reopen the link (the controller reads it on every run). A new
+    or removed RTK base station (ADR 0047) reopens it: the adapter reads it at connect."""
     before, after = without_calibration(old), without_calibration(new)
-    return (before.connection_kind, before.connection_options, before.links) == (
+    return (
+        before.connection_kind,
+        before.connection_options,
+        before.links,
+        before.base_station,
+    ) == (
         after.connection_kind,
         after.connection_options,
         after.links,
+        after.base_station,
     )
 
 

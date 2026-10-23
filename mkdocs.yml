@@ -87,6 +87,7 @@ nav:
       - adr/0044-drive-view-with-camera.md
       - adr/0045-camera-relay.md
       - adr/0046-device-settings-as-capabilities.md
+      - adr/0047-rtk-base-station-as-a-fleet-device.md
       - adr/0048-maintenance-commands.md
   - Development:
       - dev/getting-started.md

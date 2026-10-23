@@ -31,10 +31,12 @@ from mowdeck_contracts.v1 import (
     CREDENTIALS_OPTION,
     MOWER_UPDATED,
     SECRET_OPTION_KEYS,
+    BaseStationRef,
     CloudDiscoverErrorCode,
     CloudDiscoverRequest,
     CloudProvider,
     ConnectionKind,
+    DeviceType,
     DiscoveredDevice,
     MowerCredentialsReply,
     MowerCredentialsRequest,
@@ -57,7 +59,7 @@ from fleet.domain.errors import (
     NotFoundError,
     Unavailable,
 )
-from fleet.domain.models import LinkedAccount, Mower, MowerLink
+from fleet.domain.models import BaseStation, LinkedAccount, Mower, MowerLink
 from fleet.domain.rules import CAN_MANAGE_MOWERS, validate_email
 
 _log = get_logger("fleet.linked_accounts")
@@ -94,6 +96,8 @@ class DeviceView:
     device: DiscoveredDevice
     mower_id: UUID | None = None
     elsewhere: bool = False
+    base_station_id: UUID | None = None
+    """Set when the device is an RTK base station of the caller's account (ADR 0047)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,14 +142,28 @@ def public_link(link: MowerLink) -> dict[str, Any]:
     }
 
 
+def base_station_ref(base: BaseStation) -> BaseStationRef:
+    """The base station as a registration carries it (ADR 0047; no secrets in it)."""
+    return BaseStationRef(
+        base_station_id=base.id,
+        name=base.name,
+        source="simulated" if base.source == "simulated" else "cloud",
+        device_name=base.device_name,
+        iot_id=base.iot_id,
+    )
+
+
 def public_registration(
-    item: Mower, linked: LinkedAccount | None = None, links: Sequence[MowerLink] = ()
+    item: Mower,
+    linked: LinkedAccount | None = None,
+    links: Sequence[MowerLink] = (),
+    base: BaseStation | None = None,
 ) -> MowerRegistration:
     """The registration as Fleet publishes it: without passwords, ESPHome keys and the vendor
     account. When anything was withheld (or the mower uses a linked account) the options say
     ``credentials: "fleet"`` and the gateway fetches the secrets on ``fleet.mowers.credentials``.
     ``links`` are the mower's additional links (ADR 0038), published by kind under the same
-    rule (:func:`public_link`).
+    rule (:func:`public_link`); ``base`` is the mower's RTK base station (ADR 0047).
     """
     stored = item.connection_options
     options: dict[str, Any] = {k: v for k, v in stored.items() if k not in SECRET_OPTION_KEYS}
@@ -164,6 +182,9 @@ def public_registration(
         connection_kind=ConnectionKind(item.connection_kind),
         connection_options=options,
         links={link.kind: public_link(link) for link in sorted(links, key=lambda x: x.kind)},
+        base_station=base_station_ref(base)
+        if base is not None and base.id == item.base_station_id
+        else None,
     )
 
 
@@ -212,9 +233,11 @@ class CredentialVault:
         item: Mower,
         cache: dict[UUID, LinkedAccount | None] | None = None,
         links: Sequence[MowerLink] | None = None,
+        bases: Mapping[UUID, BaseStation] | None = None,
     ) -> MowerRegistration:
-        """:func:`public_registration` with the linked account loaded (for its revision) and the
-        mower's links (loaded unless ``links`` are given)."""
+        """:func:`public_registration` with the linked account loaded (for its revision), the
+        mower's links (loaded unless ``links`` are given) and its base station (from ``bases``
+        or loaded)."""
         linked_id = item.linked_account_id
         linked: LinkedAccount | None = None
         if linked_id is not None:
@@ -226,7 +249,15 @@ class CredentialVault:
                     cache[linked_id] = linked
         if links is None:
             links = await tx.mower_links.find(mower_id=item.id, account_id=item.account_id)
-        return public_registration(item, linked, links)
+        base: BaseStation | None = None
+        if item.base_station_id is not None:
+            if bases is not None:
+                base = bases.get(item.base_station_id)
+            else:
+                base = await tx.base_stations.get(
+                    id=item.base_station_id, account_id=item.account_id
+                )
+        return public_registration(item, linked, links, base)
 
     async def credentials(self, tx: Tx, request: MowerCredentialsRequest) -> MowerCredentialsReply:
         """``fleet.mowers.credentials``: the withheld options of one mower of the account.
@@ -387,8 +418,23 @@ class LinkedAccountService:
         by_iot = {m.iot_id: m for m in holders}
         own = await tx.mowers.find(account_id=row.account_id, linked_account_id=row.id)
         by_name = {str(m.connection_options.get("device_name")): m for m in own}
+        # Base stations (ADR 0047): the same rule, from the base_stations table.
+        base_holders = await tx.base_stations.find(iot_id=In(iot_ids)) if iot_ids else []
+        bases_by_iot = {b.iot_id: b for b in base_holders}
+        own_bases = await tx.base_stations.find(account_id=row.account_id, linked_account_id=row.id)
+        bases_by_name = {b.device_name: b for b in own_bases if b.device_name}
         views: list[DeviceView] = []
         for device in devices:
+            if device.device_type is DeviceType.RTK_BASE:
+                base = bases_by_iot.get(device.iot_id) if device.iot_id else None
+                base = base or bases_by_name.get(device.device_name)
+                if base is None:
+                    views.append(DeviceView(device))
+                elif base.account_id == row.account_id:
+                    views.append(DeviceView(device, base_station_id=base.id))
+                else:
+                    views.append(DeviceView(device, elsewhere=True))
+                continue
             holder = by_iot.get(device.iot_id) if device.iot_id else None
             if holder is None:
                 holder = by_name.get(device.device_name)
@@ -530,6 +576,13 @@ class LinkedAccountService:
                     f"mowers still connect through this account: {names}; remove them first",
                     [(str(m.id), m.name) for m in users],
                 )
+            bases = await work.tx.base_stations.find(
+                account_id=account_id, linked_account_id=row.id, order_by="name"
+            )
+            if bases:
+                names = ", ".join(b.name for b in bases)
+                msg = f"base stations come from this account: {names}; remove them first"
+                raise ConflictError(msg)
             await work.tx.linked_accounts.delete(id=row.id)
             await work.audit(actor, "linked_account.removed", account_id, "linked_account", row.id)
 

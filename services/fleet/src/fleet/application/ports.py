@@ -41,6 +41,7 @@ from pydantic import BaseModel
 
 from fleet.domain.models import (
     AuditEntry,
+    BaseStation,
     CommandRecord,
     DriveSession,
     Group,
@@ -172,6 +173,11 @@ class Tx(Protocol):
     @property
     def mower_links(self) -> Table[MowerLink]:
         """Additional links of mowers (one row per mower and kind, ADR 0038)."""
+        ...
+
+    @property
+    def base_stations(self) -> Table[BaseStation]:
+        """RTK base stations (ADR 0047)."""
         ...
 
     async def try_lock(self, key: int) -> bool:

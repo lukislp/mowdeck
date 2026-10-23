@@ -34,6 +34,10 @@ running firmware update, spot run or drive calibration refuses them like every o
 * ``sync_map``: no motion, any activity, but not during an open drive session (the transfer
   occupies the mower's command queue for up to minutes);
 * ``resync_rtk``: no motion, a read; allowed in every activity.
+
+RTK base station updates (ADR 0047, :func:`base_station_firmware_update_problem`): only the
+offered version, nothing already installing, and the relaying mower neither mows, returns,
+updates nor drives (its corrections stop while the base station restarts).
 """
 
 from dataclasses import dataclass
@@ -152,4 +156,51 @@ def maintenance_problem(
         return "a manual drive session is open; stop driving first"
     if confirmation_pending and action in _CONFIRMATION_BLOCKED:
         return "a command is still waiting for its confirmation"
+    return None
+
+
+_BASE_UPDATE_BLOCKING: Final = frozenset(
+    {
+        MowerActivity.MOWING,
+        MowerActivity.PAUSED,
+        MowerActivity.RETURNING,
+        MowerActivity.UPDATING,
+    }
+)
+"""Activities in which the mower needs its RTK corrections (or is busy): no base station
+update then."""
+
+
+def base_station_firmware_update_problem(
+    version: str,
+    state: MowerState,
+    capabilities: MowerCapabilities,
+    *,
+    drive_session_open: bool = False,
+) -> str | None:
+    """Why the base station update to ``version`` must not start now, or None when it may
+    (ADR 0047).
+
+    The base station restarts while it installs, and every mower that uses it loses its RTK
+    corrections meanwhile, so the mower that relays the request must not mow, return, drive or
+    update itself. Only the offered version, and nothing already installing.
+    """
+    if not capabilities.base_station_firmware_update:
+        return "base station firmware updates are not supported on this connection"
+    base = state.base_station
+    if base is None:
+        return "the mower is linked to no base station"
+    info = base.firmware_info
+    if info is None:
+        return "no base station firmware check yet; check for updates first"
+    if info.update_state == "installing":
+        return "a base station firmware update is already installing"
+    if info.update_state != "available" or not info.available:
+        return "no base station firmware update is available"
+    if version != info.available:
+        return f"version {version} is not the offered one ({info.available}); check again"
+    if state.activity in _BASE_UPDATE_BLOCKING:
+        return f"the mower is {state.activity.value}; update the base station when it rests"
+    if drive_session_open:
+        return "a manual drive session is open; stop driving first"
     return None

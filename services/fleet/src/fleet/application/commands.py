@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from mowdeck_authz import mower
+from mowdeck_authz import account, mower
 from mowdeck_contracts.v1 import (
     BulkCommandAccepted,
     BulkCommandItem,
@@ -52,6 +52,7 @@ from fleet.application.plan import (
 )
 from fleet.application.ports import Clock, CommandPublisher, In, Lt, Store
 from fleet.domain.errors import (
+    BaseStationNotLinkedError,
     FeatureNotInPlanError,
     ForbiddenError,
     InvalidInput,
@@ -60,6 +61,7 @@ from fleet.domain.errors import (
 )
 from fleet.domain.models import CommandRecord, Mower
 from fleet.domain.rules import (
+    CAN_MANAGE_MOWERS,
     CAN_VIEW,
     SINGLE_MOWER_KINDS,
     advances_from,
@@ -73,6 +75,8 @@ _log = logging.getLogger("fleet.commands")
 RETENTION_LOCK = 0x466C6565_74436D64  # "FleetCmd": one replica purges at a time
 _CORRELATION = re.compile(r"^[A-Za-z0-9._:\-]{1,128}$")
 NOT_PUBLISHED = "not published: the event bus is not reachable"
+BASE_STATION_UPDATE = "base_station_firmware_update"
+"""Command kind that needs ``can_manage_mowers`` on the account and a linked base station."""
 
 
 def _refused(code: IssueCommandErrorCode, detail: str) -> IssueCommandReply:
@@ -279,11 +283,19 @@ class CommandService:
         ``spot_mowing`` (``fleet.domain.rules.command_features``).
         """
         await self._check_features(account_id, request)
+        base_update = request.command.kind == BASE_STATION_UPDATE
+        if base_update:
+            # The base station serves every mower linked to it (ADR 0047).
+            await self.access.require(
+                actor.principal, CAN_MANAGE_MOWERS, account(account_id), hide=False
+            )
         now = self.clock()
         async with self.store.transaction() as tx:
             target = await tx.mowers.get(id=mower_id, account_id=account_id)
             if target is None:
                 raise NotFoundError("mower not found")
+            if base_update and target.base_station_id is None:
+                raise BaseStationNotLinkedError("the mower is linked to no base station")
             envelope = self._envelope(actor, target, request, now)
             await tx.commands.add(self._record(envelope, origin=origin, schedule_id=schedule_id))
         if not await self._publish(envelope):
@@ -421,7 +433,7 @@ class CommandService:
             return _refused(IssueCommandErrorCode.NOT_IN_PLAN, exc.message)
         except ForbiddenError as exc:
             return _refused(IssueCommandErrorCode.FORBIDDEN, exc.message)
-        except InvalidInput as exc:
+        except (InvalidInput, BaseStationNotLinkedError) as exc:
             return _refused(IssueCommandErrorCode.INVALID, exc.message)
         except Unavailable as exc:
             return _refused(IssueCommandErrorCode.UNAVAILABLE, exc.message)
