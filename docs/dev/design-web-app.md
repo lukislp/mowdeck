@@ -424,7 +424,7 @@ Runs against the Compose stack including the new `web` service through Traefik (
 | 11 (Task 11) | Map shows areas, dock and a moving marker while mowing; driven route has at least 2 points |
 | 12 (Task 13) | Settings: connection kind switch saves and the gateway reconnects (simulated) |
 
-CI job `e2e-web` (`needs: [web, docker]`) reuses the steps of `e2e` (build cached images, `cp .env.example .env`, `docker compose up -d --build --wait`), then `pnpm --filter e2e-web exec playwright install --with-deps chromium` and `pnpm --filter e2e-web test`, uploads the HTML report and traces on failure plus `docker compose logs`. Running both suites in one job against one stack would save about two minutes of startup; kept as two jobs for clear failure attribution, revisit if CI minutes matter.
+CI job `e2e-web` (`needs: [web, docker]`) reuses the steps of `e2e` (build cached images, `cp .env.example .env`, `docker compose up -d --build --wait`), then runs `pnpm --filter e2e-web test` in the Playwright image `PLAYWRIGHT_IMAGE` (browsers and system libraries prebuilt, host network, see tests/e2e-web/README.md), uploads the HTML report and traces on failure plus `docker compose logs`. Running both suites in one job against one stack would save about two minutes of startup; kept as two jobs for clear failure attribution, revisit if CI minutes matter.
 
 ### 8.3 Phase 2 gate text for `docs/phases.md`
 

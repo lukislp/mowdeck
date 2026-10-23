@@ -612,6 +612,17 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [web, docker]
     timeout-minutes: 30
+    env:
+      # The browsers and their system libraries, prebuilt: no apt and no browser download per run
+      # (which on 2026-10-22 crawled or hung on azure.archive.ubuntu.com). The one image pinned
+      # outside infra/compose/.env.example: it bundles Chrome for Testing (Google's terms, Widevine
+      # CDM) next to Playwright (Apache-2.0), Firefox (MPL-2.0) and WebKit (LGPL-2.1/BSD), so the
+      # public GHCR mirror must not republish it (tools/repo-checks/tests/
+      # test_release_licences.py, NOT_MIRRORED). CI-only, never part of a release. The tag must
+      # equal the @playwright/test version of tests/e2e-web; after a Dependabot bump of that
+      # package set v<version>-noble and the "Digest" line of
+      # `docker buildx imagetools inspect mcr.microsoft.com/playwright:v<version>-noble`.
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -624,16 +635,23 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter e2e-web
-      # apt has no timeout of its own: a hanging Ubuntu mirror (2026-10-22, azure.archive.ubuntu.com)
-      # held this step until the 30-minute job limit. Give up on a stalled connection after 30 s and
-      # retry, so a bad mirror costs minutes instead of the whole run.
-      - name: apt timeouts and retries
+      - *ghcr-login
+      - *mirror-env
+      # The image only fits the @playwright/test version it was built for, so a Dependabot bump of
+      # that package fails here, with the line to change, instead of later with missing browsers.
+      - name: Playwright image matches @playwright/test
         run: |
-          printf '%s\n' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
-            'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts > /dev/null
-      - name: Playwright browsers and system dependencies
-        timeout-minutes: 12
-        run: pnpm --filter e2e-web exec playwright install --with-deps chromium webkit firefox
+          installed=$(pnpm --filter e2e-web exec playwright --version | sed -n 's/^Version //p')
+          image=${PLAYWRIGHT_IMAGE%%@*}
+          tag=${image##*:}
+          if [ -z "$installed" ] || [ "$tag" != "v${installed}-noble" ]; then
+            echo "::error file=.github/workflows/ci.yml::PLAYWRIGHT_IMAGE (job e2e-web) is ${tag}, but tests/e2e-web installs @playwright/test ${installed:-(unknown)}: set it to mcr.microsoft.com/playwright:v${installed}-noble@<digest> (docker buildx imagetools inspect)"
+            exit 1
+          fi
+          echo "@playwright/test ${installed} = ${tag}"
+      - name: Pull the Playwright image
+        timeout-minutes: 10
+        run: docker pull "$PLAYWRIGHT_IMAGE"
       # Firefox on Linux decodes H.264 (the camera relay's codec) only with Cisco's OpenH264
       # plugin, which a normal Firefox downloads by itself and Playwright's build does not. Fetch
       # the same build Firefox's update service names (pinned sha512) and point Firefox at it.
@@ -645,8 +663,6 @@ jobs:
           echo "f5246bf14d038adf4ce0c4360262ab722bc3de4220f047c3d542b4c564074b4877dc8659e3125c5171c749e7ce93f20cc63777eb5e1539e960670cbc5f30ac85  $RUNNER_TEMP/openh264.zip" | sha512sum -c -
           unzip -q "$RUNNER_TEMP/openh264.zip" -d "$dir"
           echo "MOZ_GMP_PATH=$dir" >> "$GITHUB_ENV"
-      - *ghcr-login
-      - *mirror-env
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build images (cached)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -714,10 +730,25 @@ jobs:
           grep '^[A-Z_]*=' tests/e2e-web/stack.env >> infra/compose/.env
       - name: Start the stack
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml up -d --build --wait --wait-timeout 600
+      # The suite runs in the Playwright image while the stack stays on the runner. Host networking
+      # keeps every address the same as on the runner: the web app at http://localhost and the
+      # camera relay's ICE port on 127.0.0.1, which Firefox reaches only over loopback. The
+      # workspace (with node_modules from the install above) and the OpenH264 plugin are mounted
+      # at their runner paths, so pnpm's links and MOZ_GMP_PATH resolve unchanged. The `docker
+      # exec` helpers of tests/support.ts use the runner's docker CLI (same Ubuntu release as the
+      # image) against the runner's daemon. `npm test` runs the package's test script; the image
+      # brings node and npm, not pnpm.
       - name: Phase 2 gate (Playwright)
-        run: pnpm --filter e2e-web test
         env:
           MOWDECK_E2E_BASE_URL: http://localhost
+        run: |
+          docker run --rm --init --ipc=host --network=host \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/tests/e2e-web" \
+            -v "$RUNNER_TEMP/gmp:$RUNNER_TEMP/gmp:ro" \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$(command -v docker):/usr/local/bin/docker:ro" \
+            -e CI -e MOWDECK_E2E_BASE_URL -e MOZ_GMP_PATH \
+            "$PLAYWRIGHT_IMAGE" npm test
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml logs --no-color --timestamps > e2e-web-logs.txt
