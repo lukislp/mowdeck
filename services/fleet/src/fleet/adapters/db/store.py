@@ -19,6 +19,7 @@ from fleet.application.ports import Gt, In, Lt
 from fleet.domain.errors import ConflictError
 from fleet.domain.models import (
     AuditEntry,
+    BaseStation,
     CommandRecord,
     DriveSession,
     Group,
@@ -178,6 +179,7 @@ class SqlTx:
     drive_sessions: SqlTable[DriveSession]
     linked_accounts: SqlTable[LinkedAccount]
     mower_links: SqlTable[MowerLink]
+    base_stations: SqlTable[BaseStation]
 
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
@@ -195,6 +197,7 @@ class SqlTx:
             drive_sessions=SqlTable(conn, tables.drive_sessions, DriveSession, "id"),
             linked_accounts=SqlTable(conn, tables.linked_accounts, LinkedAccount, "id"),
             mower_links=SqlTable(conn, tables.mower_links, MowerLink, "id"),
+            base_stations=SqlTable(conn, tables.base_stations, BaseStation, "id"),
         )
 
     async def try_lock(self, key: int) -> bool:

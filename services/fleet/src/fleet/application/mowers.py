@@ -17,6 +17,7 @@ from mowdeck_contracts.v1 import (
     MOWER_REGISTERED,
     MOWER_REMOVED,
     MOWER_UPDATED,
+    DeviceType,
     DiscoveredDevice,
     MowerRegistration,
     ResolveTargetReply,
@@ -301,8 +302,10 @@ class MowerService:
             links_of: dict[UUID, list[MowerLink]] = {}
             for link in await tx.mower_links.find(order_by="kind"):
                 links_of.setdefault(link.mower_id, []).append(link)
+            bases = {b.id: b for b in await tx.base_stations.find()}
             return [
-                await self.vault.registration(tx, m, cache, links_of.get(m.id, [])) for m in mine
+                await self.vault.registration(tx, m, cache, links_of.get(m.id, []), bases)
+                for m in mine
             ]
 
     async def resolve_target(self, request: ResolveTargetRequest) -> ResolveTargetReply:
@@ -473,7 +476,11 @@ class MowerService:
             msg = f"the linked account has no device {device_name!r}; read the account again"
             raise InvalidInput(msg, fields=[FieldProblem("device_name", msg, "unknown_device")])
         if not device.is_mower:
-            msg = f"{device_name} is not a mower (RTK base stations cannot be registered)"
+            msg = (
+                f"{device_name} is an RTK base station: register it as a base station"
+                if device.device_type is DeviceType.RTK_BASE
+                else f"{device_name} is not a mower"
+            )
             raise InvalidInput(msg, fields=[FieldProblem("device_name", msg, "not_a_mower")])
         return device
 
@@ -605,6 +612,9 @@ class MowerService:
                 work.delete(mower_site_parent(item.id, item.site_id))
                 work.write(mower_site_parent(item.id, new_site))
                 item.site_id = new_site
+            if item.connection_kind != before[1]:
+                # A base station serves one connection kind (ADR 0047): a new kind drops it.
+                item.base_station_id = None
             item.updated_at = self.clock()
             try:
                 await work.tx.mowers.update(item)

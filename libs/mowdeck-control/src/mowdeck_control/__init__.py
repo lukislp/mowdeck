@@ -4,7 +4,8 @@
 * :class:`MowerController`: expiry, de-duplication, emergency stop priority, serialization,
   dead-man switch, blade rules, firmware update rules and capability checks for every adapter.
 * :class:`FirmwarePort` and :class:`BridgeScanCapable`: optional capabilities of a connection
-  (firmware checks and updates, scans through a Bluetooth bridge, ADR 0038).
+  (firmware checks and updates, scans through a Bluetooth bridge, ADR 0038);
+  :class:`BaseStationPort` the firmware of the mower's RTK base station (ADR 0047).
 * :class:`SpotMowRun`: spot mowing driven by MowDeck along a Planner route (ADR 0039), with
   its geofence and pure-pursuit steering, fed by the generic drive channel and state; it
   undocks, drives a transit planned by :func:`plan_transit` and sends the mower home
@@ -34,6 +35,7 @@ from mowdeck_control.calibration import (
     room_ahead_problem,
 )
 from mowdeck_control.connection import (
+    BaseStationPort,
     BridgeScanCapable,
     CameraCapable,
     CameraSessionRelease,
@@ -57,6 +59,7 @@ from mowdeck_control.connection import (
     SettingsCapable,
     TwoPhaseExecution,
     UndockCapable,
+    base_station_port_of,
     bridge_scanner_of,
     camera_session_of,
     current_map_of,
@@ -100,6 +103,7 @@ from mowdeck_control.safety import (
     FIRMWARE_MIN_BATTERY_PERCENT,
     FIRMWARE_UPDATE_RUNNING,
     BladeDecision,
+    base_station_firmware_update_problem,
     decide_manual_blade,
     firmware_update_problem,
     maintenance_problem,
@@ -152,6 +156,7 @@ __all__ = [
     "FIRMWARE_UPDATE_RUNNING",
     "STUCK_ERROR_CODE",
     "AsyncioTimerFactory",
+    "BaseStationPort",
     "BladeDecision",
     "BridgeScanCapable",
     "CalibrationConfig",
@@ -213,6 +218,8 @@ __all__ = [
     "UnknownConnectionKind",
     "UnsupportedPattern",
     "available_kinds",
+    "base_station_firmware_update_problem",
+    "base_station_port_of",
     "bridge_scanner_of",
     "calibration_start_problem",
     "camera_session_of",

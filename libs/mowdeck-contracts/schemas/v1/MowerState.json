@@ -1,5 +1,182 @@
 {
   "$defs": {
+    "BaseStationPosition": {
+      "description": "Where the base station stands (WGS84 degrees), as the mower knows it.",
+      "properties": {
+        "lat": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lon": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Lon",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lat",
+        "lon"
+      ],
+      "title": "BaseStationPosition",
+      "type": "object"
+    },
+    "BaseStationState": {
+      "description": "The RTK base station of a mower as its connection sees it (``MowerState.base_station``).\n\nNull on the mower state when the mower is linked to no base station in Fleet.",
+      "properties": {
+        "base_station_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Fleet's id of the base station (from the registration).",
+          "title": "Base Station Id"
+        },
+        "correction_link": {
+          "$ref": "#/$defs/RtkCorrectionLink",
+          "default": "unknown",
+          "description": "How the corrections reach the mower now; `network` means the mower does not use its base station at the moment."
+        },
+        "details_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the details (`satellites`, `rtk_status`, `wifi_dbm`) were last reported; null when never.",
+          "title": "Details At"
+        },
+        "firmware": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The base station's firmware, as reported.",
+          "title": "Firmware"
+        },
+        "firmware_info": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirmwareInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Installed and offered firmware of the base station from the vendor's firmware service, and the update state; null before a check."
+        },
+        "link_up": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether the mower receives the base station: over LoRa the radio link the mower reports, over the internet whether corrections arrive; null when the mower does not say (or uses network RTK).",
+          "title": "Link Up"
+        },
+        "lora_channel": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The LoRa channel of the pairing, if reported.",
+          "title": "Lora Channel"
+        },
+        "moved": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The mower reports that the base station was moved since the map was recorded (positions may be shifted); null when not reported.",
+          "title": "Moved"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BaseStationPosition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where the base station stands; null while not reported."
+        },
+        "rtk_status": {
+          "$ref": "#/$defs/GnssSolution",
+          "default": "unknown",
+          "description": "The base station's own position solution."
+        },
+        "satellites": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Satellites the base station's receiver uses.",
+          "title": "Satellites"
+        },
+        "wifi_dbm": {
+          "anyOf": [
+            {
+              "maximum": -1,
+              "minimum": -150,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The base station's Wi-Fi signal in dBm; null when not reported.",
+          "title": "Wifi Dbm"
+        }
+      },
+      "title": "BaseStationState",
+      "type": "object"
+    },
     "ConnectionKind": {
       "description": "How the Device-Gateway is connected to the mower.",
       "enum": [
@@ -765,6 +942,17 @@
       "title": "PositionSource",
       "type": "string"
     },
+    "RtkCorrectionLink": {
+      "description": "How the RTK corrections reach the mower.",
+      "enum": [
+        "lora",
+        "internet",
+        "network",
+        "unknown"
+      ],
+      "title": "RtkCorrectionLink",
+      "type": "string"
+    },
     "RtkFixStatus": {
       "description": "Quality of the RTK position fix.",
       "enum": [
@@ -1002,6 +1190,18 @@
     },
     "activity": {
       "$ref": "#/$defs/MowerActivity"
+    },
+    "base_station": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BaseStationState"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The RTK base station the mower is linked to in Fleet, as the mower's connection sees it (correction link, satellites, position, firmware; ADR 0047); null for a mower without a linked base station."
     },
     "battery_percent": {
       "maximum": 100,

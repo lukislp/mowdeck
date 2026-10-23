@@ -1,5 +1,67 @@
 {
   "$defs": {
+    "BaseStationRef": {
+      "description": "The base station a registered mower uses (``MowerRegistration.base_station``).",
+      "properties": {
+        "base_station_id": {
+          "description": "Fleet's id of the base station.",
+          "format": "uuid",
+          "title": "Base Station Id",
+          "type": "string"
+        },
+        "device_name": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vendor's device name, e.g. `RTK12345678`.",
+          "title": "Device Name"
+        },
+        "iot_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The vendor's device id; the key of the firmware service.",
+          "title": "Iot Id"
+        },
+        "name": {
+          "description": "The name the owner gave it.",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "default": "cloud",
+          "description": "`cloud`: a device of a linked vendor account (`device_name`, `iot_id` set); `simulated`: the simulator's base station.",
+          "enum": [
+            "cloud",
+            "simulated"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_station_id",
+        "name"
+      ],
+      "title": "BaseStationRef",
+      "type": "object"
+    },
     "ConnectionKind": {
       "description": "How the Device-Gateway is connected to the mower.",
       "enum": [
@@ -20,6 +82,18 @@
       "format": "uuid",
       "title": "Account Id",
       "type": "string"
+    },
+    "base_station": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BaseStationRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The RTK base station the mower is linked to (ADR 0047); null without one. Carries no secrets."
     },
     "connection_kind": {
       "$ref": "#/$defs/ConnectionKind"

@@ -31,6 +31,9 @@ COMMAND_RELATION: Final[Mapping[str, str]] = {
     "set_speed": CAN_CONTROL,
     "set_light": CAN_CONTROL,
     "firmware_update": CAN_MANAGE_MOWERS,  # changes the device itself, like its settings
+    # The base station serves every mower linked to it; the use case also asks for
+    # can_manage_mowers on the account (ADR 0047).
+    "base_station_firmware_update": CAN_MANAGE_MOWERS,
     "spot_mow": CAN_DRIVE,  # MowDeck steers the mower with joystick frames
     "spot_stop": CAN_CONTROL,
     "manual_drive": CAN_DRIVE,
@@ -92,12 +95,14 @@ SINGLE_MOWER_KINDS: Final = frozenset(
         "relocate_dock",
         "leave_dock",
         "resync_rtk",
+        "base_station_firmware_update",
     }
 )
 """Kinds that only make sense for one mower, never sent to a site or group: a route computed
 for one mower, a drive calibration (one mower in front of its user), the per-mower vendor
-setting for manual driving and the maintenance commands (ADR 0048: a deliberate action on one
-device, not something to fire at a whole site)."""
+setting for manual driving the maintenance commands (ADR 0048: a deliberate action on one
+device, not something to fire at a whole site) and a base station update (one mower relays it,
+ADR 0047)."""
 
 
 def bulk_gate_relation(kind: str) -> str:

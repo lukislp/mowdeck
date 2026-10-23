@@ -3,8 +3,9 @@
 :func:`discover_devices` borrows the account's shared session from a
 :class:`~mowdeck_control_mammotion.session.CloudSessionPool` (logging in only when no session for
 these credentials is open, so mowers that are connected keep their session) and lists every
-device PyMammotion registered at login: the mowers, and the RTK base stations and pool cleaners
-that :func:`~mowdeck_control_mammotion.mapping.is_mower` marks as not registrable.
+device PyMammotion registered at login: the mowers, the RTK base stations (``device_type``
+``rtk_base``: PyMammotion's ``RTKBaseStationDevice`` or ``DeviceType.is_rtk``, registered in
+Fleet as base stations, ADR 0047) and the pool cleaners (``other``, not registrable).
 
 The list is what PyMammotion knows from its login: a device added in the Mammotion app later
 appears once the session is opened again (no mower of the account connected for
@@ -16,10 +17,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from mowdeck_contracts.v1 import DiscoveredDevice
+from mowdeck_contracts.v1 import DeviceType, DiscoveredDevice
 
 from mowdeck_control_mammotion import mapping
-from mowdeck_control_mammotion.port import AuthError, MowerDevice, model_of
+from mowdeck_control_mammotion.port import (
+    AuthError,
+    MowerDevice,
+    RTKBaseStationDevice,
+    model_of,
+)
 from mowdeck_control_mammotion.session import CloudSessionPool
 
 _log = logging.getLogger("mowdeck_control_mammotion.discovery")
@@ -59,13 +65,19 @@ def device_of(handle: Any) -> DiscoveredDevice:
     except Exception:  # the model is informational
         model = ""
     online = getattr(raw, "online", None)
+    mower = isinstance(raw, MowerDevice) and mapping.is_mower(name, product_key)
+    if not mower and isinstance(raw, RTKBaseStationDevice):
+        device_type = DeviceType.RTK_BASE
+    else:
+        device_type = mapping.device_type_of(name, product_key, mower=mower)
     return DiscoveredDevice(
         device_name=name[:100],
         iot_id=_text(getattr(handle, "iot_id", None), 100),
         product_key=_text(product_key, 64),
         model=_text(model, 100),
         online=online if isinstance(online, bool) else None,
-        is_mower=isinstance(raw, MowerDevice) and mapping.is_mower(name, product_key),
+        is_mower=mower,
+        device_type=device_type,
     )
 
 

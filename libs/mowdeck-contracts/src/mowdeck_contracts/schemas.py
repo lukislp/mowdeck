@@ -50,6 +50,8 @@ V1_MODELS: Mapping[str, type[BaseModel]] = {
     "BridgeScanReply": v1.BridgeScanReply,
     "FirmwareCheckRequest": v1.FirmwareCheckRequest,
     "FirmwareCheckReply": v1.FirmwareCheckReply,
+    "BaseStationRef": v1.BaseStationRef,
+    "BaseStationState": v1.BaseStationState,
     "AreaNamesChanged": v1.AreaNamesChanged,
     "AccountCreated": v1.AccountCreated,
     "UserChanged": v1.UserChanged,

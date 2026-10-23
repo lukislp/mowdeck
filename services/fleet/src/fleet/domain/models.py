@@ -91,6 +91,32 @@ class Mower:
     can be registered in one MowDeck account only, installation-wide (``uq_mowers_iot_id``)."""
     mow_defaults: MowDefaults | None = None
     """The mowing defaults every client starts with; None until someone saved them."""
+    base_station_id: UUID | None = None
+    """The RTK base station the mower takes its corrections from (ADR 0047); None without."""
+
+
+@dataclass(slots=True)
+class BaseStation:
+    """An RTK base station of the account (ADR 0047), linked to the mowers that use it.
+
+    It has no connection of its own: the Device-Gateway reports it through the connection of a
+    linked mower. ``source`` ``cloud``: a device of a linked vendor account (``linked_account_id``,
+    ``device_name`` and ``iot_id`` from its device list; one physical base station in one
+    MowDeck account, ``uq_base_stations_iot_id``); ``simulated``: the simulator's base station
+    for simulated mowers (no device fields).
+    """
+
+    id: UUID
+    account_id: UUID
+    name: str
+    source: str
+    created_at: datetime
+    updated_at: datetime
+    linked_account_id: UUID | None = None
+    device_name: str | None = None
+    iot_id: str | None = None
+    model: str | None = None
+    created_by: UUID | None = None
 
 
 @dataclass(slots=True)

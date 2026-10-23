@@ -12,7 +12,7 @@ the internal bus, like the credentials in a ``MowerRegistration``.
 """
 
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -26,8 +26,28 @@ class CloudProvider(StrEnum):
     MAMMOTION = "mammotion"
 
 
+class DeviceType(StrEnum):
+    """What a discovered device is (ADR 0047)."""
+
+    MOWER = "mower"
+    """A mower: registered as a mower."""
+    RTK_BASE = "rtk_base"
+    """An RTK base station: registered as a base station and linked to mowers."""
+    OTHER = "other"
+    """Anything else (a pool cleaner, ...): not registrable."""
+
+
 class DiscoveredDevice(ContractModel):
     """One device of a vendor cloud account as the discovery saw it."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _device_type_from_is_mower(cls, data: Any) -> Any:
+        """Lists cached before ``device_type`` existed carry only ``is_mower``: a mower stays a
+        mower, anything else becomes ``other`` until the account is read again."""
+        if isinstance(data, dict) and data.get("device_type") is None:
+            return {**data, "device_type": "mower" if data.get("is_mower") else "other"}
+        return data
 
     device_name: str = Field(
         min_length=1,
@@ -48,7 +68,12 @@ class DiscoveredDevice(ContractModel):
     )
     is_mower: bool = Field(
         description="False for RTK base stations, pool cleaners and other non-mowers, which "
-        "cannot be registered."
+        "cannot be registered as mowers."
+    )
+    device_type: DeviceType = Field(
+        default=DeviceType.OTHER,
+        description="`mower`, `rtk_base` (registered as a base station, ADR 0047) or `other`; "
+        "derived from `is_mower` when a sender does not set it.",
     )
 
 

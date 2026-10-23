@@ -177,6 +177,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Feature flags and limits of one mower behind one connection.\n\nAll fields default to \"not supported\", so an adapter only declares what it really offers.",
   "properties": {
+    "base_station_firmware_update": {
+      "default": false,
+      "description": "The connection can ask the manufacturer's firmware service for the linked RTK base station and install its updates (`firmware_check` with target `base_station`, `base_station_firmware_update`; ADR 0047).",
+      "title": "Base Station Firmware Update",
+      "type": "boolean"
+    },
     "blade_height_range_mm": {
       "anyOf": [
         {

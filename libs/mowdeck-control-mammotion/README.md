@@ -33,7 +33,7 @@ flowchart LR
 | `cloud` | `MammotionCloudConnection` (also the `FirmwarePort` and `BridgeScanCapable` of a Mammotion mower), `create_cloud_connection` (entry point `cloud`), `cloud_connection_factory(pool)` (a registration with a `ble_bridge` link gets the dual connection), `default_pool()` |
 | `dual` | `MammotionDualConnection` and `BridgeWatcher`: the cloud plus a Bluetooth bridge as the second link ([ADR 0038](../../docs/adr/0038-dual-link-per-mower-and-firmware-updates.md), see [Dual link](#dual-link-cloud-plus-bluetooth-bridge)) |
 | `session` | `CloudSessionPool`: one logged-in client per set of credentials, shared by the mowers of an account and the discovery ([ADR 0034](../../docs/adr/0034-linked-cloud-accounts-and-device-discovery.md)) |
-| `discovery` | `discover_devices`: the devices of an account as `DiscoveredDevice` (mowers first; `is_mower` false for RTK base stations and pool cleaners) |
+| `discovery` | `discover_devices`: the devices of an account as `DiscoveredDevice` (mowers first; `is_mower` false for RTK base stations and pool cleaners; `device_type` `rtk_base` for base stations, ADR 0047) |
 | `fake_cloud` | the fake Mammotion cloud (`*@fake.mowdeck.test`, password `fake-cloud-password`) for development and the browser tests |
 | `ble`, `drive`, `esphome` | `MammotionBleProxyConnection`, `BleDriveSession`, ESPHome proxy wiring (`open_proxy`, `scan_proxy`, `proxy_info_of` with the bridge firmware constants `BRIDGE_MIN_ESPHOME` and `BRIDGE_TEMPLATE_VERSION`), `create_ble_bridge_connection` (entry point `ble_bridge`) |
 | `options` | `CloudOptions`, `BleProxyOptions`, secret references |
@@ -237,6 +237,23 @@ So during the first real spot run the mower drove with whatever `max_run_speed` 
 The cloud connection is the `FirmwarePort` of a Mammotion mower (`capabilities.firmware_update`); the BLE-only connection has none (the vendor's firmware service is HTTPS). `check_firmware()` calls `MammotionHTTP.get_device_ota_firmware([iot_id])` (`POST /device-server/v1/devices/version/check`) and maps the `CheckDeviceVersion` to a `FirmwareInfo`: `installed` (the adapter's firmware version, else the check's `current_version`), `available` and `release_notes` from `product_version_info_vo` when `upgradeable`, `update_state` `available`, `idle`, `installing` (`isupgrading`) or `unknown`. The Device-Gateway asks once after the connect and daily, and on `gateway.mower.<id>.firmware.check`.
 
 A `FirmwareUpdate {version}` passes the controller's safety rules (the adapter applies them once more for direct callers), then `MowerDevice.clear_version_info()` and `MammotionHTTP.start_ota_upgrade(iot_id, version)` (`POST /device-server/v1/ota/device/upgrade`); the command is confirmed by `update_check.isupgrading` or the work mode `MODE_UPDATING` (mapped to the activity `updating`, during which the controller refuses everything but the emergency stop). A `FirmwareTracker` (`mapping.py`) follows the update through the device updates: progress from `update_check` (the MQTT property `otaProgress` and the BLE `toapp_upgrade_report` both land there, PyMammotion's `Device.apply_ota_progress`), the end on a report with a new firmware version or a completed OTA frame (`idle`, then the device information rounds run again and the vendor is asked once more after 60 s), a failed frame (`failed` with the mower's message), or 45 minutes without either (`unknown`). An update started in the vendor app is picked up the same way. The MQTT drop while the mower reboots is PyMammotion's normal reconnect. Nothing here talks to Aliyun directly.
+
+### RTK base station
+
+[ADR 0047](../../docs/adr/0047-rtk-base-station-as-a-fleet-device.md). A registration with a linked base station (connection option `base_station`, a `BaseStationRef`) reports it in `MowerState.base_station`, from the mower's side only (the base station's own cloud device is not opened):
+
+| Field | Source (LUBA 2 family; inferred from PyMammotion and Mammotion-HA, not yet verified on hardware) |
+| --- | --- |
+| `correction_link` | `report_data.rtk.mqtt_rtk_info.rtk_switch`: `RTK_USED_LORA` `lora`, `RTK_USED_INTERNET` `internet`, `RTK_USED_NRTK` `network` (the base station is not used) |
+| `link_up` | over LoRa: `rtk.lora_info.lora_connection_status > 0`; null otherwise |
+| `lora_channel` | the `basestation_info` answer's `lora_channel`, else `rtk.lora_info.pair_code_channel` |
+| `position` | `rtk.mqtt_rtk_info.latitude`/`longitude` in degrees; `0, 0` (unknown) and `-1, -1` (no GGA) are null |
+| `moved` | `rtk.score_info.base_moved` or `base_moving` |
+| `firmware` | `report_data.basestation_info.ver_major.ver_minor.ver_patch.ver_build` (`rpt_basestation_info`) |
+| `satellites`, `rtk_status`, `wifi_dbm`, `details_at` | the answer to `basestation_info` sent to the mower (reply field `to_app`, `ResponseBasestationInfoT`; `rtk_status` read with PyMammotion's `RTKStatus`), 20 s after the connect, then hourly (every five minutes while an update runs); the adapter keeps it, since the next report resets PyMammotion's copy |
+| `firmware_info` | the vendor's version check with the base station's IoT id (`get_device_ota_firmware([iot_id])`) through the mower's cloud session (cloud and dual connections; `capabilities.base_station_firmware_update`) |
+
+`start_base_station_firmware_update(version)` (`BaseStationPort`) applies `base_station_firmware_update_problem` and calls `start_ota_upgrade(base_iot_id, version)`; the mower's own firmware state is not touched. The update ends `idle` when the vendor's check or the mower's report shows the target version, `unknown` after 45 minutes. Resetting the base station, switching its correction source and the LoRa pairing are out of scope. The fake cloud lists `RTK-FAKE0001` as `rtk_base`; a fake mower with that base station linked reports it over LoRa, answers `basestation_info` and gets the base station firmware `1.2.5.0` offered.
 
 ### Fake cloud: bridge and firmware
 

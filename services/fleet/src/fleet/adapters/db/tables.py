@@ -110,6 +110,28 @@ linked_accounts = Table(
     ),
 )
 
+# RTK base stations (ADR 0047): devices of a linked account or the simulator's base station.
+base_stations = Table(
+    "base_stations",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("account_id", Uuid, nullable=False),
+    Column("name", String(100), nullable=False),
+    Column("source", String(16), nullable=False),
+    Column("linked_account_id", Uuid, ForeignKey("linked_accounts.id", ondelete="RESTRICT")),
+    Column("device_name", String(100)),
+    # The vendor's device id: one physical base station in one MowDeck account, across accounts.
+    Column("iot_id", String(100)),
+    Column("model", String(100)),
+    Column("created_by", Uuid),
+    Column("created_at", TS, nullable=False),
+    Column("updated_at", TS, nullable=False),
+    CheckConstraint("source IN ('cloud', 'simulated')", name="source"),
+    Index("ix_base_stations_account_id", "account_id"),
+    Index("ix_base_stations_linked_account_id", "linked_account_id"),
+    Index("uq_base_stations_iot_id", "iot_id", unique=True),
+)
+
 mowers = Table(
     "mowers",
     metadata,
@@ -130,11 +152,14 @@ mowers = Table(
     Column("iot_id", String(100)),
     # The mowing defaults of every client ({"pattern": MowPattern}); NULL until saved.
     Column("mow_defaults", JSONB),
+    # The RTK base station the mower uses (ADR 0047); NULL without, and when it is removed.
+    Column("base_station_id", Uuid, ForeignKey("base_stations.id", ondelete="SET NULL")),
     # Serial numbers are unique per account (several NULLs are allowed).
     UniqueConstraint("account_id", "serial", name="uq_mowers_account_serial"),
     Index("ix_mowers_account_site", "account_id", "site_id"),
     Index("ix_mowers_linked_account_id", "linked_account_id"),
     Index("uq_mowers_iot_id", "iot_id", unique=True),
+    Index("ix_mowers_base_station_id", "base_station_id"),
 )
 
 mower_groups = Table(

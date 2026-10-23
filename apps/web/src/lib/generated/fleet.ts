@@ -18,6 +18,105 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fleet/base-stations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Base Stations
+         * @description The RTK base stations of the caller's account with their linked mowers (``can_view``).
+         */
+        get: operations["list_base_stations_api_v1_fleet_base_stations_get"];
+        put?: never;
+        /**
+         * Register Base Station
+         * @description Register an RTK base station (``can_manage_mowers``): a device of a linked account that
+         *     its device list marks ``rtk_base``, or (``source`` ``simulated``) the simulator's base
+         *     station. 409 ``base-station-already-registered`` when that physical base station is
+         *     registered already (in this or another account, which is not named).
+         */
+        post: operations["register_base_station_api_v1_fleet_base_stations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/base-stations/{base_station_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Base Station
+         * @description One base station (``can_view``).
+         */
+        get: operations["get_base_station_api_v1_fleet_base_stations__base_station_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Base Station
+         * @description Remove the base station (``can_manage_mowers``); its mowers lose the link.
+         */
+        delete: operations["delete_base_station_api_v1_fleet_base_stations__base_station_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Base Station
+         * @description Rename the base station (``can_manage_mowers``).
+         */
+        patch: operations["update_base_station_api_v1_fleet_base_stations__base_station_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/fleet/base-stations/{base_station_id}/firmware/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Base Station Firmware
+         * @description Ask the vendor for the base station's firmware through a linked mower (``can_view``);
+         *     the answer also lands in the linked mowers' state (`MowerState.base_station`).
+         */
+        post: operations["check_base_station_firmware_api_v1_fleet_base_stations__base_station_id__firmware_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/base-stations/{base_station_id}/firmware/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Base Station Firmware
+         * @description Install the offered firmware (``can_manage_mowers`` and the plan feature ``control``):
+         *     the command ``base_station_firmware_update`` goes to a linked mower, which relays it to the
+         *     vendor; follow it at ``status_url``. The mower refuses it while it mows, returns, updates
+         *     or drives, or when the version is not the offered one.
+         */
+        post: operations["update_base_station_firmware_api_v1_fleet_base_stations__base_station_id__firmware_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fleet/commands/{command_id}": {
         parameters: {
             query?: never;
@@ -343,6 +442,29 @@ export type paths = {
          *     custom names of the mower.
          */
         put: operations["set_area_name_api_v1_fleet_mowers__mower_id__area_names__area_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/mowers/{mower_id}/base-station": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Mower Base Station
+         * @description Link the mower to an RTK base station of the account, or unlink it with ``null``
+         *     (``can_manage_mowers`` on the mower). A cloud base station serves cloud mowers of its own
+         *     linked account, the simulated one simulated mowers. Publishes ``mower.updated``: the
+         *     Device-Gateway reconnects the mower with the base station.
+         */
+        put: operations["set_mower_base_station_api_v1_fleet_mowers__mower_id__base_station_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -834,6 +956,134 @@ export type components = {
             };
         };
         /**
+         * BaseStationFirmwareUpdate
+         * @description Install the firmware the vendor offers for the mower's RTK base station
+         *     (``MowerState.base_station.firmware_info.available``, ADR 0047).
+         *
+         *     Sent to a mower linked to the base station: its connection asks the vendor's firmware
+         *     service with the base station's id. Refused unless the base station's ``update_state`` is
+         *     ``available`` and ``version`` equals ``available``, no update of the base station is already
+         *     installing, and the mower runs no job, spot run or drive session (it loses its RTK
+         *     corrections while the base station restarts).
+         */
+        BaseStationFirmwareUpdate: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "base_station_firmware_update";
+            /**
+             * Version
+             * @description The version to install, as offered.
+             */
+            version: string;
+        };
+        /**
+         * BaseStationFirmwareUpdateIn
+         * @description ``POST /base-stations/{id}/firmware/update``.
+         */
+        BaseStationFirmwareUpdateIn: {
+            /**
+             * Mower Id
+             * @description The linked mower that relays the request; default the first by name.
+             */
+            mower_id?: string | null;
+            /**
+             * Version
+             * @description The offered version (`firmware_info.available`).
+             */
+            version: string;
+        };
+        /**
+         * BaseStationIn
+         * @description ``POST /base-stations``: a device of a linked account (``source`` ``cloud``) or the
+         *     simulator's base station (``simulated``).
+         */
+        BaseStationIn: {
+            /**
+             * Device Name
+             * @description `cloud`: the device (`device_type` `rtk_base` in the device list).
+             */
+            device_name?: string | null;
+            /**
+             * Linked Account Id
+             * @description `cloud`: the linked account whose device list names it.
+             */
+            linked_account_id?: string | null;
+            /**
+             * Name
+             * @description Defaults to the device name (`Simulated base station`).
+             */
+            name?: string | null;
+            /**
+             * Source
+             * @default cloud
+             * @enum {string}
+             */
+            source: "cloud" | "simulated";
+        };
+        /**
+         * BaseStationList
+         * @description ``GET /base-stations``.
+         */
+        BaseStationList: {
+            /** Items */
+            items: components["schemas"]["BaseStationOut"][];
+        };
+        /**
+         * BaseStationOut
+         * @description An RTK base station. Its live state comes with the linked mowers' telemetry
+         *     (`MowerState.base_station`).
+         */
+        BaseStationOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Device Name */
+            device_name: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Iot Id
+             * @description The vendor's device id (unique across accounts).
+             */
+            iot_id: string | null;
+            /** Linked Account Id */
+            linked_account_id: string | null;
+            /** Model */
+            model: string | null;
+            /**
+             * Mower Ids
+             * @description The mowers linked to it, by name.
+             */
+            mower_ids: string[];
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "cloud" | "simulated";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * BaseStationPatch
+         * @description ``PATCH /base-stations/{id}``.
+         */
+        BaseStationPatch: {
+            /** Name */
+            name: string;
+        };
+        /**
          * BridgeLinkIn
          * @description ``PUT /mowers/{id}/links/ble_bridge``: a Bluetooth bridge (an ESPHome Bluetooth proxy)
          *     next to the mower's connection. ``noise_psk`` is write-only; ``***`` keeps the stored key.
@@ -1180,7 +1430,7 @@ export type components = {
          */
         CommandRequest: {
             /** Command */
-            command: components["schemas"]["StartMow"] | components["schemas"]["PauseMow"] | components["schemas"]["ResumeMow"] | components["schemas"]["ReturnToDock"] | components["schemas"]["EmergencyStop"] | components["schemas"]["SetBladeHeight"] | components["schemas"]["SetSpeed"] | components["schemas"]["SetLight"] | components["schemas"]["FirmwareUpdate"] | components["schemas"]["SpotMow"] | components["schemas"]["SpotStop"] | components["schemas"]["DriveCalibrate"] | components["schemas"]["SetDriveSpeed"] | components["schemas"]["SetSetting"] | components["schemas"]["RestartMower"] | components["schemas"]["SyncMap"] | components["schemas"]["RelocateDock"] | components["schemas"]["LeaveDock"] | components["schemas"]["ResyncRtk"] | components["schemas"]["ManualDrive"];
+            command: components["schemas"]["StartMow"] | components["schemas"]["PauseMow"] | components["schemas"]["ResumeMow"] | components["schemas"]["ReturnToDock"] | components["schemas"]["EmergencyStop"] | components["schemas"]["SetBladeHeight"] | components["schemas"]["SetSpeed"] | components["schemas"]["SetLight"] | components["schemas"]["FirmwareUpdate"] | components["schemas"]["BaseStationFirmwareUpdate"] | components["schemas"]["SpotMow"] | components["schemas"]["SpotStop"] | components["schemas"]["DriveCalibrate"] | components["schemas"]["SetDriveSpeed"] | components["schemas"]["SetSetting"] | components["schemas"]["RestartMower"] | components["schemas"]["SyncMap"] | components["schemas"]["RelocateDock"] | components["schemas"]["LeaveDock"] | components["schemas"]["ResyncRtk"] | components["schemas"]["ManualDrive"];
             /** Ttl Seconds */
             ttl_seconds?: number | null;
         };
@@ -1365,6 +1615,12 @@ export type components = {
              */
             type: "string" | "integer" | "number" | "boolean";
         };
+        /**
+         * DeviceType
+         * @description What a discovered device is (ADR 0047).
+         * @enum {string}
+         */
+        DeviceType: "mower" | "rtk_base" | "other";
         /**
          * DriveCalibrate
          * @description Measure what the stick values mean on the ground (ADR 0042).
@@ -1794,8 +2050,18 @@ export type components = {
          * @description A device of a linked account as its last device list showed it.
          */
         LinkedDeviceOut: {
+            /**
+             * Base Station Id
+             * @description That base station, when `registered` as a base station.
+             */
+            base_station_id?: string | null;
             /** Device Name */
             device_name: string;
+            /**
+             * @description `mower`, `rtk_base` (register it with `POST /base-stations`, ADR 0047) or `other` (not registrable).
+             * @default other
+             */
+            device_type: components["schemas"]["DeviceType"];
             /** Iot Id */
             iot_id: string | null;
             /**
@@ -1807,7 +2073,7 @@ export type components = {
             model: string | null;
             /**
              * Mower Id
-             * @description That mower, when `registered`.
+             * @description That mower, when `registered` as a mower.
              */
             mower_id: string | null;
             /** Online */
@@ -1816,7 +2082,7 @@ export type components = {
             product_key: string | null;
             /**
              * Registered
-             * @description Registered as a mower of this account.
+             * @description Registered in this account: as a mower, or as a base station.
              */
             registered: boolean;
             /**
@@ -1968,6 +2234,17 @@ export type components = {
             pattern: components["schemas"]["MowPatternIn"] | null;
         };
         /**
+         * MowerBaseStationIn
+         * @description ``PUT /mowers/{id}/base-station``: link the mower to a base station, or unlink it.
+         */
+        MowerBaseStationIn: {
+            /**
+             * Base Station Id
+             * @description null removes the link.
+             */
+            base_station_id: string | null;
+        };
+        /**
          * MowerGroupsIn
          * @description ``PUT /mowers/{id}/groups``: the complete set of groups.
          */
@@ -2028,6 +2305,11 @@ export type components = {
             area_names?: {
                 [key: string]: string;
             };
+            /**
+             * Base Station Id
+             * @description The RTK base station the mower is linked to (`PUT /mowers/{id}/base-station`, ADR 0047); its state is in the mower's telemetry (`MowerState.base_station`).
+             */
+            base_station_id?: string | null;
             /** Connection Kind */
             connection_kind: string;
             /** Connection Options */
@@ -2960,6 +3242,342 @@ export interface operations {
             };
         };
     };
+    list_base_stations_api_v1_fleet_base_stations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseStationList"];
+                };
+            };
+            /** @description The caller lacks the relation on the account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such base station in the caller's account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    register_base_station_api_v1_fleet_base_stations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BaseStationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseStationOut"];
+                };
+            };
+            /** @description The caller lacks the relation on the account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such base station in the caller's account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `base-station-already-registered`, or the account's limit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown linked account or device, or not an RTK base station. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_base_station_api_v1_fleet_base_stations__base_station_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                base_station_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseStationOut"];
+                };
+            };
+            /** @description The caller lacks the relation on the account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such base station in the caller's account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_base_station_api_v1_fleet_base_stations__base_station_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                base_station_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The caller lacks the relation on the account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such base station in the caller's account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_base_station_api_v1_fleet_base_stations__base_station_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                base_station_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BaseStationPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseStationOut"];
+                };
+            };
+            /** @description The caller lacks the relation on the account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such base station in the caller's account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_base_station_firmware_api_v1_fleet_base_stations__base_station_id__firmware_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                base_station_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareInfo"];
+                };
+            };
+            /** @description The caller lacks the relation on the account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such base station in the caller's account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `base-station-not-linked`: no mower is linked to it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description No Device-Gateway holding a linked mower answered. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_base_station_firmware_api_v1_fleet_base_stations__base_station_id__firmware_update_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                base_station_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BaseStationFirmwareUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandAccepted"];
+                };
+            };
+            /** @description The caller lacks the relation on the account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such base station in the caller's account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `base-station-not-linked`: no mower is linked to it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `mower_id` is not linked to the base station. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_command_api_v1_fleet_commands__command_id__get: {
         parameters: {
             query?: never;
@@ -3797,6 +4415,62 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    set_mower_base_station_api_v1_fleet_mowers__mower_id__base_station_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MowerBaseStationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowerOut"];
+                };
+            };
+            /** @description The caller sees the mower but has no `can_manage_mowers`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The mower or the base station does not exist in the account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `base-station-not-applicable`: it cannot serve this mower. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

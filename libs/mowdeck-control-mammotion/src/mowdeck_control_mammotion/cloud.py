@@ -55,6 +55,7 @@ from functools import partial
 from typing import Any, Final, Protocol, cast
 
 from mowdeck_contracts.v1 import (
+    BASE_STATION_OPTION,
     LINK_BLE_BRIDGE,
     BridgeScanError,
     BridgeScanErrorCode,
@@ -330,8 +331,11 @@ def cloud_port(options: CloudOptions, pool: CloudSessionPool | None = None) -> C
 
 def split_link_options(options: Any) -> tuple[dict[str, Any], Any]:
     """``(connection options, links)``: the ``links`` entry of a registration's options is not
-    a cloud option (the Device-Gateway copies ``MowerRegistration.links`` into it)."""
+    a cloud option (the Device-Gateway copies ``MowerRegistration.links`` into it), and neither
+    is the linked RTK base station (``base_station``, ADR 0047), which
+    :class:`~mowdeck_control_mammotion.base.MammotionBase` reads from the config itself."""
     plain = dict(options)
+    plain.pop(BASE_STATION_OPTION, None)
     return plain, plain.pop("links", None)
 
 

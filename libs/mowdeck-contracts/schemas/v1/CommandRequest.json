@@ -1,5 +1,28 @@
 {
   "$defs": {
+    "BaseStationFirmwareUpdate": {
+      "description": "Install the firmware the vendor offers for the mower's RTK base station\n(``MowerState.base_station.firmware_info.available``, ADR 0047).\n\nSent to a mower linked to the base station: its connection asks the vendor's firmware\nservice with the base station's id. Refused unless the base station's ``update_state`` is\n``available`` and ``version`` equals ``available``, no update of the base station is already\ninstalling, and the mower runs no job, spot run or drive session (it loses its RTK\ncorrections while the base station restarts).",
+      "properties": {
+        "kind": {
+          "const": "base_station_firmware_update",
+          "default": "base_station_firmware_update",
+          "title": "Kind",
+          "type": "string"
+        },
+        "version": {
+          "description": "The version to install, as offered.",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "BaseStationFirmwareUpdate",
+      "type": "object"
+    },
     "DriveCalibrate": {
       "description": "Measure what the stick values mean on the ground (ADR 0042).\n\nMowDeck drives a few short steps with the blades off (forward at ``linear`` 0.3, 0.5, 0.7\nand 1.0, then turns in place at ``angular`` ±0.3, ±0.6 and ±1.0, each ``step_s`` long, zero\nframes in between). Each step is measured over its steady window only (without the first\n1.5 s, while the mower reacts), and MowDeck fits the full-scale ground speed, the\nfull-scale yaw rate and the dead zone. Needs ``MowerCapabilities.manual_drive``, an idle\nmower out of its dock with a fixed RTK position and about 2 m of free lawn straight ahead.\nProgress and the result arrive in ``MowerState.drive_calibration``; ``SpotStop`` and\n``EmergencyStop`` end it.",
       "properties": {
@@ -717,6 +740,7 @@
     "command": {
       "discriminator": {
         "mapping": {
+          "base_station_firmware_update": "#/$defs/BaseStationFirmwareUpdate",
           "drive_calibrate": "#/$defs/DriveCalibrate",
           "emergency_stop": "#/$defs/EmergencyStop",
           "firmware_update": "#/$defs/FirmwareUpdate",
@@ -767,6 +791,9 @@
         },
         {
           "$ref": "#/$defs/FirmwareUpdate"
+        },
+        {
+          "$ref": "#/$defs/BaseStationFirmwareUpdate"
         },
         {
           "$ref": "#/$defs/SpotMow"

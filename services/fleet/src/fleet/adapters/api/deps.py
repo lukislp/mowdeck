@@ -31,6 +31,9 @@ from fleet.application.context import Actor
 from fleet.application.services import Services
 from fleet.application.throttle import TooManyLoginAttempts as LoginThrottled
 from fleet.domain.errors import (
+    BaseStationAlreadyRegisteredError,
+    BaseStationNotApplicableError,
+    BaseStationNotLinkedError,
     BridgeScanUnsupportedError,
     CameraBudgetError,
     CameraRelayUnsupportedError,
@@ -150,6 +153,30 @@ class MowerAlreadyRegistered(Conflict):
     title = "Mower already registered"
 
 
+class BaseStationAlreadyRegistered(Conflict):
+    """409 ``urn:mowdeck:problem:base-station-already-registered``: this physical RTK base
+    station is registered already (in this or another MowDeck account, which is not named)."""
+
+    problem_type = "base-station-already-registered"
+    title = "Base station already registered"
+
+
+class BaseStationNotApplicable(Conflict):
+    """409 ``urn:mowdeck:problem:base-station-not-applicable``: the base station cannot serve
+    this mower (another linked account, another connection kind)."""
+
+    problem_type = "base-station-not-applicable"
+    title = "Base station not applicable"
+
+
+class BaseStationNotLinked(Conflict):
+    """409 ``urn:mowdeck:problem:base-station-not-linked``: no mower relays requests to the
+    base station (or the mower is linked to none)."""
+
+    problem_type = "base-station-not-linked"
+    title = "Base station not linked to a mower"
+
+
 class TooManyLoginAttempts(ServiceError):  # noqa: N818 - HTTP status names read best
     """429 ``urn:mowdeck:problem:too-many-requests`` with ``Retry-After``: too many failed
     vendor logins for this e-mail."""
@@ -258,6 +285,12 @@ def to_service_error(exc: FleetError) -> ServiceError:
             )
         case MowerAlreadyRegisteredError():
             return MowerAlreadyRegistered(exc.message)
+        case BaseStationAlreadyRegisteredError():
+            return BaseStationAlreadyRegistered(exc.message)
+        case BaseStationNotApplicableError():
+            return BaseStationNotApplicable(exc.message)
+        case BaseStationNotLinkedError():
+            return BaseStationNotLinked(exc.message)
         case LinkedAccountLoginError():
             return LinkedAccountLoginFailed(
                 exc.message,

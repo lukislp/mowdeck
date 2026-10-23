@@ -16,6 +16,13 @@ from mowdeck_contracts.v1.areas import (
     clean_area_name,
     is_placeholder_name,
 )
+from mowdeck_contracts.v1.base_station import (
+    BASE_STATION_OPTION,
+    BaseStationPosition,
+    BaseStationRef,
+    BaseStationState,
+    RtkCorrectionLink,
+)
 from mowdeck_contracts.v1.billing import (
     BILLING_SUBSCRIPTION_CHANGED,
     SubscriptionChanged,
@@ -63,6 +70,7 @@ from mowdeck_contracts.v1.cloud import (
     CloudDiscoverReply,
     CloudDiscoverRequest,
     CloudProvider,
+    DeviceType,
     DiscoveredDevice,
 )
 from mowdeck_contracts.v1.commands import (
@@ -132,6 +140,7 @@ from mowdeck_contracts.v1.firmware import (
     FirmwareCheckReply,
     FirmwareCheckRequest,
     FirmwareInfo,
+    FirmwareTarget,
     FirmwareUpdateState,
 )
 from mowdeck_contracts.v1.fleet import (
@@ -220,6 +229,7 @@ from mowdeck_contracts.v1.mow_path import (
 from mowdeck_contracts.v1.mower import (
     COMMAND_MODELS,
     NATIVE_PATTERN_NAMES,
+    BaseStationFirmwareUpdate,
     ConnectionKind,
     DriveCalibrate,
     EmergencyStop,
@@ -394,6 +404,7 @@ __all__ = [
     "ALWAYS_ALLOWED_FEATURES",
     "AREA_FALLBACK",
     "AREA_NAME_MAX_LENGTH",
+    "BASE_STATION_OPTION",
     "BILLING_SUBSCRIPTION_CHANGED",
     "BRIDGE_SCAN_MAX_TIMEOUT_S",
     "CAMERA_FEATURE",
@@ -484,6 +495,10 @@ __all__ = [
     "AccountKind",
     "ApiTokenRevoked",
     "AreaNamesChanged",
+    "BaseStationFirmwareUpdate",
+    "BaseStationPosition",
+    "BaseStationRef",
+    "BaseStationState",
     "BladeHoursThreshold",
     "BridgeScanError",
     "BridgeScanErrorCode",
@@ -531,6 +546,7 @@ __all__ = [
     "ConnectionKind",
     "ContractModel",
     "DenyReason",
+    "DeviceType",
     "DiscoveredDevice",
     "DockPose",
     "DriveCalibrate",
@@ -563,6 +579,7 @@ __all__ = [
     "FirmwareCheckReply",
     "FirmwareCheckRequest",
     "FirmwareInfo",
+    "FirmwareTarget",
     "FirmwareUpdate",
     "FirmwareUpdateState",
     "GeoPosition",
@@ -658,6 +675,7 @@ __all__ = [
     "ResumeMow",
     "ResyncRtk",
     "ReturnToDock",
+    "RtkCorrectionLink",
     "RtkFixStatus",
     "RtkSource",
     "ScannedDevice",

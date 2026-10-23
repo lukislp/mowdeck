@@ -12,6 +12,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
+from mowdeck_contracts.v1.base_station import BaseStationState
 from mowdeck_contracts.v1.calibration import (
     DEFAULT_CALIBRATION_STEP_S,
     MAX_CALIBRATION_STEP_S,
@@ -239,6 +240,12 @@ class MowerState(ContractModel):
         description="The mower's own rain sensor reports rain right now; null when the "
         "connection does not report the sensor (ADR 0046).",
     )
+    base_station: BaseStationState | None = Field(
+        default=None,
+        description="The RTK base station the mower is linked to in Fleet, as the mower's "
+        "connection sees it (correction link, satellites, position, firmware; ADR 0047); null "
+        "for a mower without a linked base station.",
+    )
     raw: dict[str, Any] = Field(
         default_factory=dict,
         description="Adapter specific extras. Consumers must not rely on its structure; the "
@@ -394,6 +401,23 @@ class FirmwareUpdate(ContractModel):
     )
 
 
+class BaseStationFirmwareUpdate(ContractModel):
+    """Install the firmware the vendor offers for the mower's RTK base station
+    (``MowerState.base_station.firmware_info.available``, ADR 0047).
+
+    Sent to a mower linked to the base station: its connection asks the vendor's firmware
+    service with the base station's id. Refused unless the base station's ``update_state`` is
+    ``available`` and ``version`` equals ``available``, no update of the base station is already
+    installing, and the mower runs no job, spot run or drive session (it loses its RTK
+    corrections while the base station restarts).
+    """
+
+    kind: Literal["base_station_firmware_update"] = "base_station_firmware_update"
+    version: str = Field(
+        min_length=1, max_length=64, description="The version to install, as offered."
+    )
+
+
 class SpotMow(ContractModel):
     """Mow a small spot by driving the mower along ``plan`` with joystick frames (ADR 0039).
 
@@ -531,6 +555,7 @@ MowerCommand = Annotated[
     | SetSpeed
     | SetLight
     | FirmwareUpdate
+    | BaseStationFirmwareUpdate
     | SpotMow
     | SpotStop
     | DriveCalibrate
@@ -556,6 +581,7 @@ COMMAND_MODELS: tuple[type[ContractModel], ...] = (
     SetSpeed,
     SetLight,
     FirmwareUpdate,
+    BaseStationFirmwareUpdate,
     SpotMow,
     SpotStop,
     DriveCalibrate,

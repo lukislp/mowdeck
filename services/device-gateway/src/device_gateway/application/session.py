@@ -58,6 +58,7 @@ from mowdeck_contracts.v1 import (
     CommandStatus,
     DriveCalibrate,
     FirmwareInfo,
+    FirmwareTarget,
     MowerActivity,
     MowerCapabilitiesSnapshot,
     MowerConnectionEvent,
@@ -77,6 +78,7 @@ from mowdeck_control import (
     Photo,
     PhotoCapture,
     PhotoUnavailable,
+    base_station_port_of,
     bridge_scanner_of,
     camera_session_of,
     firmware_port_of,
@@ -545,16 +547,28 @@ class MowerSession:
             return
         await asyncio.sleep(initial)
         while True:
-            try:
-                await self._check_firmware(controller)
-            except (NotConnected, FirmwareUnsupported) as exc:
-                _log.info(
-                    "periodic firmware check skipped", mower_id=str(self.mower_id), reason=str(exc)
-                )
-            except Exception as exc:
-                _log.warning(
-                    "periodic firmware check failed", mower_id=str(self.mower_id), error=repr(exc)
-                )
+            for target in ("mower", "base_station"):
+                if target == "base_station" and self.registration.base_station is None:
+                    continue
+                try:
+                    if target == "mower":
+                        await self._check_firmware(controller)
+                    else:
+                        await self._check_base_firmware(controller)
+                except (NotConnected, FirmwareUnsupported) as exc:
+                    _log.info(
+                        "periodic firmware check skipped",
+                        mower_id=str(self.mower_id),
+                        target=target,
+                        reason=str(exc),
+                    )
+                except Exception as exc:
+                    _log.warning(
+                        "periodic firmware check failed",
+                        mower_id=str(self.mower_id),
+                        target=target,
+                        error=repr(exc),
+                    )
             await asyncio.sleep(self._timing.firmware_check_interval_seconds)
 
     async def _check_firmware(self, controller: MowerController) -> FirmwareInfo | None:
@@ -570,16 +584,41 @@ class MowerSession:
             self.last_state = latest
         return info
 
-    async def check_firmware(self) -> FirmwareInfo | None:
+    async def _check_base_firmware(self, controller: MowerController) -> FirmwareInfo | None:
+        """The firmware of the linked RTK base station through the mower's connection (ADR
+        0047); the adapter publishes the answer in ``MowerState.base_station``."""
+        capabilities = await controller.capabilities()
+        port = base_station_port_of(controller.connection)
+        if port is None or not capabilities.base_station_firmware_update:
+            raise FirmwareUnsupported(
+                "this connection cannot ask the manufacturer for the base station's firmware"
+            )
+        info = await port.check_base_station_firmware()
+        latest = controller.last_state
+        if latest is not None and (
+            latest.base_station is None or latest.base_station.firmware_info != info
+        ):
+            latest = await controller.connection.get_state()
+            await self._publish_state(latest)
+            self.last_state = latest
+        return info
+
+    async def check_firmware(self, target: FirmwareTarget = "mower") -> FirmwareInfo | None:
         """Ask the manufacturer now (``gateway.mower.<id>.firmware.check``) and publish the
-        state that carries the answer.
+        state that carries the answer; ``target`` ``base_station`` asks for the linked RTK base
+        station instead (ADR 0047).
 
         Raises :class:`~mowdeck_control.NotConnected` while the mower is not connected (or the
-        vendor did not answer) and :class:`FirmwareUnsupported` without the capability.
+        vendor did not answer) and :class:`FirmwareUnsupported` without the capability (or,
+        for the base station, without a linked one).
         """
         controller = self._controller
         if controller is None:
             raise NotConnected("the mower is not connected")
+        if target == "base_station":
+            if self.registration.base_station is None:
+                raise FirmwareUnsupported("the mower is linked to no base station")
+            return await self._check_base_firmware(controller)
         return await self._check_firmware(controller)
 
     async def scan_bridge(

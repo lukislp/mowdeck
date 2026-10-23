@@ -8,12 +8,14 @@ from uuid import UUID
 from mowdeck_contracts.v1 import (
     CameraTransport,
     ConnectionKind,
+    DeviceType,
     DriveCalibration,
     MowPattern,
     ProxyInfo,
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from fleet.application.base_stations import BaseStationView
 from fleet.application.linked_accounts import DeviceView, LinkedAccountView
 from fleet.application.links import ScanInput, drive_calibration_of, proxy_info_of
 from fleet.application.mowers import MowerView
@@ -363,6 +365,11 @@ class MowerOut(BaseModel):
         description="The stored drive calibration (`PUT /mowers/{id}/drive-calibration`): from "
         "the `ble_bridge` link, else from the connection options; null until one is stored.",
     )
+    base_station_id: UUID | None = Field(
+        default=None,
+        description="The RTK base station the mower is linked to (`PUT /mowers/{id}/base-station`"
+        ", ADR 0047); its state is in the mower's telemetry (`MowerState.base_station`).",
+    )
     created_by: UUID
     created_at: datetime
     updated_at: datetime
@@ -386,6 +393,7 @@ class MowerOut(BaseModel):
             mow_defaults=MowDefaults.of(item.mow_defaults),
             links={link.kind: LinkOut.of(link) for link in found.links},
             drive_calibration=drive_calibration_of(found.links, item.connection_options),
+            base_station_id=item.base_station_id,
             created_by=item.created_by,
             created_at=item.created_at,
             updated_at=item.updated_at,
@@ -586,8 +594,18 @@ class LinkedDeviceOut(BaseModel):
     product_key: str | None
     online: bool | None
     is_mower: bool = Field(description="False for RTK base stations and other non-mowers.")
-    registered: bool = Field(description="Registered as a mower of this account.")
-    mower_id: UUID | None = Field(description="That mower, when `registered`.")
+    device_type: DeviceType = Field(
+        default=DeviceType.OTHER,
+        description="`mower`, `rtk_base` (register it with `POST /base-stations`, ADR 0047) or "
+        "`other` (not registrable).",
+    )
+    registered: bool = Field(
+        description="Registered in this account: as a mower, or as a base station."
+    )
+    mower_id: UUID | None = Field(description="That mower, when `registered` as a mower.")
+    base_station_id: UUID | None = Field(
+        default=None, description="That base station, when `registered` as a base station."
+    )
     registered_elsewhere: bool = Field(
         description="Registered in another MowDeck account (which one is not revealed); "
         "it cannot be added here."
@@ -604,8 +622,10 @@ class LinkedDeviceOut(BaseModel):
             product_key=device.product_key,
             online=device.online,
             is_mower=device.is_mower,
-            registered=view.mower_id is not None,
+            device_type=device.device_type,
+            registered=view.mower_id is not None or view.base_station_id is not None,
             mower_id=view.mower_id,
+            base_station_id=view.base_station_id,
             registered_elsewhere=view.elsewhere,
         )
 
@@ -653,3 +673,91 @@ class LinkedMowersOut(BaseModel):
 
     created: list[MowerOut]
     failed: list[LinkedMowerFailure]
+
+
+# --- RTK base stations (ADR 0047) ---------------------------------------------------------------
+
+
+class BaseStationIn(In):
+    """``POST /base-stations``: a device of a linked account (``source`` ``cloud``) or the
+    simulator's base station (``simulated``)."""
+
+    source: Literal["cloud", "simulated"] = "cloud"
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Defaults to the device name (`Simulated base station`).",
+    )
+    linked_account_id: UUID | None = Field(
+        default=None, description="`cloud`: the linked account whose device list names it."
+    )
+    device_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="`cloud`: the device (`device_type` `rtk_base` in the device list).",
+    )
+
+
+class BaseStationPatch(In):
+    """``PATCH /base-stations/{id}``."""
+
+    name: str = Field(min_length=1, max_length=100)
+
+
+class BaseStationOut(BaseModel):
+    """An RTK base station. Its live state comes with the linked mowers' telemetry
+    (`MowerState.base_station`)."""
+
+    id: UUID
+    name: str
+    source: Literal["cloud", "simulated"]
+    linked_account_id: UUID | None
+    device_name: str | None
+    iot_id: str | None = Field(description="The vendor's device id (unique across accounts).")
+    model: str | None
+    mower_ids: list[UUID] = Field(description="The mowers linked to it, by name.")
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def of(cls, view: BaseStationView) -> "BaseStationOut":
+        """From the use case view."""
+        base = view.base
+        return cls(
+            id=base.id,
+            name=base.name,
+            source="simulated" if base.source == "simulated" else "cloud",
+            linked_account_id=base.linked_account_id,
+            device_name=base.device_name,
+            iot_id=base.iot_id,
+            model=base.model,
+            mower_ids=list(view.mower_ids),
+            created_at=base.created_at,
+            updated_at=base.updated_at,
+        )
+
+
+class BaseStationList(BaseModel):
+    """``GET /base-stations``."""
+
+    items: list[BaseStationOut]
+
+
+class BaseStationFirmwareUpdateIn(In):
+    """``POST /base-stations/{id}/firmware/update``."""
+
+    version: str = Field(
+        min_length=1, max_length=64, description="The offered version (`firmware_info.available`)."
+    )
+    mower_id: UUID | None = Field(
+        default=None,
+        description="The linked mower that relays the request; default the first by name.",
+    )
+
+
+class MowerBaseStationIn(In):
+    """``PUT /mowers/{id}/base-station``: link the mower to a base station, or unlink it."""
+
+    base_station_id: UUID | None = Field(description="null removes the link.")

@@ -62,6 +62,12 @@ What it simulates:
   idle when it restarted out of its dock); ``sync_map``, ``relocate_dock`` and ``resync_rtk`` are
   recorded in ``maintenance_log``; ``leave_dock`` is the undock above. The safety rules are the
   controller's (:func:`~mowdeck_control.safety.maintenance_problem`), applied once more here.
+* an RTK base station (ADR 0047) when the connection option ``base_station`` links one: the
+  state's ``base_station`` reports corrections over LoRa (network RTK after
+  :meth:`SimulatedMower.set_rtk` with the network source), satellites, position, Wi-Fi and
+  firmware; :class:`~mowdeck_control.connection.BaseStationPort` checks the firmware against
+  ``base_station_firmware_available`` and installs it over ``firmware_update_seconds``, during
+  which the LoRa link is down.
 
 ``SimulationConfig.time_scale`` makes simulated time run faster than real time.
 """
@@ -78,8 +84,12 @@ from typing import Any, Final
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    BASE_STATION_OPTION,
     LINK_BLE_BRIDGE,
     MAINTENANCE_ACTIONS,
+    BaseStationPosition,
+    BaseStationRef,
+    BaseStationState,
     BridgeScanError,
     BridgeScanErrorCode,
     BridgeScanReply,
@@ -121,6 +131,7 @@ from mowdeck_contracts.v1 import (
     ResumeMow,
     ResyncRtk,
     ReturnToDock,
+    RtkCorrectionLink,
     RtkFixStatus,
     RtkSource,
     ScannedDevice,
@@ -162,6 +173,7 @@ from mowdeck_control.paths import stripe_path
 from mowdeck_control.photo import render_scene
 from mowdeck_control.safety import (
     FIRMWARE_UPDATE_RUNNING,
+    base_station_firmware_update_problem,
     firmware_update_problem,
     maintenance_problem,
 )
@@ -175,6 +187,10 @@ SIMULATED_CUTTING_WIDTH_M: Final = 0.3
 """The simulated mower's cutting width (``MowerCapabilities.cutting_width_mm`` 300)."""
 SIMULATED_WIFI_DBM: Final = -58
 """The Wi-Fi signal the simulated mower reports (``MowerState.signal``)."""
+SIM_BASE_LORA_CHANNEL: Final = 7
+SIM_BASE_SATELLITES: Final = 32
+SIM_BASE_WIFI_DBM: Final = -61
+"""What the simulated RTK base station reports (ADR 0047)."""
 _SATELLITES: Final[Mapping[RtkFixStatus, int]] = {
     RtkFixStatus.FIXED: 29,
     RtkFixStatus.FLOAT: 21,
@@ -417,6 +433,12 @@ class SimulationConfig:
     restart_seconds: float = 5.0
     """Simulated seconds a ``restart_mower`` keeps the mower ``offline`` before it reports again
     (docked when it restarted in its dock, else idle)."""
+    base_station_firmware: str = "sim-base-1.0.0"
+    """The firmware the simulated RTK base station runs (ADR 0047; only with a linked base
+    station, the connection option ``base_station``)."""
+    base_station_firmware_available: str | None = None
+    """A newer base station firmware the "manufacturer" offers; None: up to date. Installing
+    it takes ``firmware_update_seconds`` simulated seconds."""
 
     @property
     def origin(self) -> tuple[float, float]:
@@ -562,8 +584,12 @@ class SimulatedMower:
         config: SimulationConfig | None = None,
         mower_map: MowerMap | None = None,
         clock: Callable[[], datetime] = utc_now,
+        base_station: BaseStationRef | None = None,
     ) -> None:
         self.mower_id = mower_id
+        self.base_station = base_station
+        """The RTK base station the mower is linked to (ADR 0047); None: none, the state then
+        carries no ``base_station``."""
         self.account_id = account_id
         self.config = config or SimulationConfig()
         self._map = mower_map or default_map(self.config.origin)
@@ -610,6 +636,12 @@ class SimulatedMower:
         self._firmware_remaining_s = 0.0
         self._firmware_target: str | None = None
         self._last_report_s: float | None = None
+        self._base_installed = self.config.base_station_firmware
+        self._base_available = self.config.base_station_firmware_available
+        self._base_checked_at: datetime | None = None
+        self._base_target: str | None = None
+        self._base_remaining_s = 0.0
+        self._base_details_at: datetime | None = None
         self._noise = random.Random(self.config.noise_seed)  # noqa: S311 - not security
         self._capabilities = MowerCapabilities(
             model=self.config.model,
@@ -627,6 +659,7 @@ class SimulatedMower:
             connection_kinds=frozenset({ConnectionKind.SIMULATED}),
             links_supported=[LINK_BLE_BRIDGE],
             firmware_update=True,
+            base_station_firmware_update=base_station is not None,
             undock=self.config.undock,
             maintenance=(
                 frozenset(a for a in MAINTENANCE_ACTIONS if a != "leave_dock" or self.config.undock)
@@ -677,6 +710,11 @@ class SimulatedMower:
             self._connected = True
             if self._firmware_checked_at is None:
                 self._firmware_checked_at = self._clock()  # the "vendor" answers at connect
+            if self.base_station is not None:
+                now = self._clock()
+                self._base_details_at = now  # the mower answers the base station request
+                if self._base_checked_at is None:
+                    self._base_checked_at = now
             self._publish()
 
     async def disconnect(self) -> None:
@@ -1182,6 +1220,89 @@ class SimulatedMower:
             _log.info("simulated mower %s installed firmware %s", self.mower_id, target)
         return t
 
+    # --- RTK base station (BaseStationPort, ADR 0047) -----------------------------------------
+
+    def base_station_firmware_info(self) -> FirmwareInfo | None:
+        """The base station's firmware state (None before the first check)."""
+        if self._base_checked_at is None:
+            return None
+        progress: int | None = None
+        if self._base_target is not None:
+            state = "installing"
+            total = self.config.firmware_update_seconds
+            progress = min(100, math.floor(100 * (total - self._base_remaining_s) / total))
+        elif self._base_available:
+            state = "available"
+        else:
+            state = "idle"
+        return FirmwareInfo(
+            installed=self._base_installed,
+            available=self._base_available,
+            update_state=state,  # type: ignore[arg-type]
+            progress=progress,
+            checked_at=self._base_checked_at,
+        )
+
+    def _base_station_state(self) -> BaseStationState | None:
+        """The linked base station as the simulated mower sees it: corrections over LoRa while
+        the RTK source is the base station (the link drops while the base station updates)."""
+        ref = self.base_station
+        if ref is None:
+            return None
+        lora = self._rtk_source is RtkSource.BASE_STATION
+        updating = self._base_target is not None
+        where = to_geo_position(self._map.reference, -3.0, -2.0, 0.0)
+        return BaseStationState(
+            base_station_id=ref.base_station_id,
+            correction_link=RtkCorrectionLink.LORA if lora else RtkCorrectionLink.NETWORK,
+            link_up=(not updating) if lora else None,
+            lora_channel=SIM_BASE_LORA_CHANNEL,
+            satellites=None if updating else SIM_BASE_SATELLITES,
+            rtk_status=GnssSolution.UNKNOWN if updating else GnssSolution.FIXED,
+            position=BaseStationPosition(lat=where.lat, lon=where.lon),
+            wifi_dbm=SIM_BASE_WIFI_DBM,
+            moved=False,
+            firmware=self._base_installed,
+            firmware_info=self.base_station_firmware_info(),
+            details_at=self._base_details_at,
+        )
+
+    async def check_base_station_firmware(self) -> FirmwareInfo | None:
+        """:class:`~mowdeck_control.connection.BaseStationPort`: the "vendor" answers at once;
+        None without a linked base station."""
+        self._require_connected()
+        if self.base_station is None:
+            return None
+        self._base_checked_at = self._clock()
+        self._publish()
+        return self.base_station_firmware_info()
+
+    async def start_base_station_firmware_update(self, version: str) -> None:
+        """:class:`~mowdeck_control.connection.BaseStationPort`: start installing ``version`` on
+        the base station; direct callers get the controller's rules
+        (:func:`~mowdeck_control.safety.base_station_firmware_update_problem`)."""
+        self._require_connected()
+        problem = base_station_firmware_update_problem(version, self.snapshot(), self._capabilities)
+        if problem is not None:
+            raise CommandRejected(problem)
+        self._base_target = version
+        self._base_remaining_s = self.config.firmware_update_seconds
+        self._publish()
+
+    def _base_update_step(self, t: float) -> None:
+        """Advance a running base station update by ``t`` simulated seconds."""
+        if self._base_target is None:
+            return
+        self._base_remaining_s -= t
+        if self._base_remaining_s > 1e-9:
+            return
+        self._base_installed = self._base_target
+        self._base_available = None
+        self._base_target = None
+        self._base_remaining_s = 0.0
+        self._base_checked_at = self._clock()
+        _log.info("simulated base station of %s updated to %s", self.mower_id, self._base_installed)
+
     def tick(self, dt: float) -> MowerState:
         """Advance the simulation by ``dt`` real seconds (times ``time_scale``) and publish."""
         if dt < 0:
@@ -1189,6 +1310,7 @@ class SimulatedMower:
             raise ValueError(msg)
         remaining = dt * self.config.time_scale
         self._elapsed_s += remaining
+        self._base_update_step(remaining)
         pending = self._pending_start
         if pending is not None:
             pending.remaining_s -= remaining
@@ -1304,6 +1426,7 @@ class SimulatedMower:
             else None,
             settings=dict(self._settings) if self.config.settings else {},
             rain_detected=self._raining,
+            base_station=self._base_station_state(),
             raw=raw,
         )
 
@@ -1927,11 +2050,13 @@ def create_simulated_connection(config: ConnectionConfig) -> SimulatedMower:
 
     ``config.options`` may override any :class:`SimulationConfig` field, for example
     ``{"time_scale": 60}``. A ``links`` option with a ``ble_bridge`` entry (the additional links
-    of the registration, as the Device-Gateway passes them) switches the simulated bridge on.
-    Unknown options raise ``ValueError``.
+    of the registration, as the Device-Gateway passes them) switches the simulated bridge on; a
+    ``base_station`` option (a :class:`~mowdeck_contracts.v1.BaseStationRef`, ADR 0047) links the
+    simulated RTK base station. Unknown options raise ``ValueError``.
     """
     options = dict(config.options)
     links = options.pop("links", None)
+    base = options.pop(BASE_STATION_OPTION, None)
     names = {f.name for f in fields(SimulationConfig)}
     unknown = sorted(set(options) - names)
     if unknown:
@@ -1947,4 +2072,9 @@ def create_simulated_connection(config: ConnectionConfig) -> SimulatedMower:
         low, high, step = options["drive_speed_range"]
         options["drive_speed_range"] = (float(low), float(high), float(step))
     sim_config = replace(SimulationConfig(), **options)
-    return SimulatedMower(mower_id=config.mower_id, account_id=config.account_id, config=sim_config)
+    return SimulatedMower(
+        mower_id=config.mower_id,
+        account_id=config.account_id,
+        config=sim_config,
+        base_station=BaseStationRef.model_validate(base) if base is not None else None,
+    )

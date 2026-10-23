@@ -100,7 +100,13 @@ def test_fleet_command_features_per_kind() -> None:
     assert command_features("spot_stop") == {"control"}
     assert command_features("drive_calibrate") == {"control"}
     assert command_features("set_drive_speed") == {"control"}
-    assert {"spot_mow", "drive_calibrate", "set_drive_speed"} <= SINGLE_MOWER_KINDS
+    assert command_features("base_station_firmware_update") == {"control"}
+    assert {
+        "spot_mow",
+        "drive_calibrate",
+        "set_drive_speed",
+        "base_station_firmware_update",
+    } <= SINGLE_MOWER_KINDS
     assert {"start_mow", "pause_mow", "return_to_dock", "emergency_stop"}.isdisjoint(
         SINGLE_MOWER_KINDS
     )

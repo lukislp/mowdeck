@@ -50,4 +50,5 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0044](0044-drive-view-with-camera.md) | Drive view with camera | Accepted |
 | [0045](0045-camera-relay.md) | Camera relay | Accepted |
 | [0046](0046-device-settings-as-capabilities.md) | Device settings as capabilities | Accepted |
+| [0047](0047-rtk-base-station-as-a-fleet-device.md) | The RTK base station as a Fleet device | Accepted |
 | [0048](0048-maintenance-commands.md) | Maintenance commands | Accepted |

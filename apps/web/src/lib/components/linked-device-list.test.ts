@@ -14,6 +14,7 @@ function device(name: string, extra: Partial<LinkedDevice> = {}): LinkedDevice {
     product_key: null,
     online: null,
     is_mower: true,
+    device_type: 'mower',
     registered: false,
     mower_id: null,
     registered_elsewhere: false,
@@ -22,7 +23,7 @@ function device(name: string, extra: Partial<LinkedDevice> = {}): LinkedDevice {
 }
 
 const DEVICES = [
-  device('RTK-FAKE0001', { is_mower: false, online: true }),
+  device('RTK-FAKE0001', { is_mower: false, device_type: 'rtk_base', online: true }),
   device('Luba-FAKE0002', { online: false, iot_id: 'fakeiot0002' }),
   device('Luba-FAKE0001', { online: true, iot_id: 'fakeiot0001', model: 'LUBA 2 AWD 5000X' }),
   device('Luba-ADDED', { registered: true }),
