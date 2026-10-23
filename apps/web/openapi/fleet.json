@@ -5456,6 +5456,59 @@
         ]
       }
     },
+    "/api/v1/fleet/mowers/{mower_id}/camera/snapshot": {
+      "get": {
+        "description": "A still image of the mower's camera for API clients (``can_view`` on the mower, hidden\notherwise, and the plan feature ``camera``): taken by the Device-Gateway with the mower's\nown photo function or through the camera relay, keeping every camera limit (a sleeping\nmower is not woken). At most one new image per mower every\n``MOWDECK_CAMERA_SNAPSHOT_MIN_INTERVAL_SECONDS`` (30 s); requests in between get the\nlast one. A new image is audited as ``mower.camera_snapshot``; Fleet never stores it.",
+        "operationId": "camera_snapshot_api_v1_fleet_mowers__mower_id__camera_snapshot_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            },
+            "description": "The image, with `X-Snapshot-Taken-At` (ISO 8601)."
+          },
+          "403": {
+            "description": "The plan does not include the feature `camera`."
+          },
+          "404": {
+            "description": "The mower does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "`camera-unsupported`: the mower's connection cannot take a photo."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "No Device-Gateway holds the mower or none answered in time, the mower is offline or asleep, or a camera limit (battery, budget) refused the image."
+          }
+        },
+        "summary": "Camera Snapshot",
+        "tags": [
+          "mowers"
+        ]
+      }
+    },
     "/api/v1/fleet/mowers/{mower_id}/commands": {
       "get": {
         "description": "Command records of the mower (``can_view``, hidden otherwise).",

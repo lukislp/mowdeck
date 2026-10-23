@@ -377,6 +377,46 @@ async def close_camera_session(
     await services.camera.detach(actor_of(principal), account_id, mower_id, lease_id)
 
 
+@router.get(
+    "/mowers/{mower_id}/camera/snapshot",
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The image, with `X-Snapshot-Taken-At` (ISO 8601).",
+            "content": {"image/jpeg": {}, "image/png": {}},
+        },
+        403: {"description": "The plan does not include the feature `camera`."},
+        404: {"description": "The mower does not exist or is not visible to the caller."},
+        409: {"description": "`camera-unsupported`: the mower's connection cannot take a photo."},
+        503: {
+            "description": "No Device-Gateway holds the mower or none answered in time, the "
+            "mower is offline or asleep, or a camera limit (battery, budget) refused the image."
+        },
+    },
+)
+async def camera_snapshot(
+    mower_id: UUID,
+    principal: ViewMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> Response:
+    """A still image of the mower's camera for API clients (``can_view`` on the mower, hidden
+    otherwise, and the plan feature ``camera``): taken by the Device-Gateway with the mower's
+    own photo function or through the camera relay, keeping every camera limit (a sleeping
+    mower is not woken). At most one new image per mower every
+    ``MOWDECK_CAMERA_SNAPSHOT_MIN_INTERVAL_SECONDS`` (30 s); requests in between get the
+    last one. A new image is audited as ``mower.camera_snapshot``; Fleet never stores it."""
+    snapshot = await services.camera.snapshot(actor_of(principal), account_id, mower_id)
+    return Response(
+        content=snapshot.content,
+        media_type=snapshot.media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Snapshot-Taken-At": snapshot.taken_at.isoformat(),
+        },
+    )
+
+
 @router.post(
     "/mowers/{mower_id}/path-preview",
     responses={

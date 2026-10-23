@@ -26,6 +26,8 @@ from mowdeck_contracts.v1 import (
     FirmwareCheckRequest,
     PathPreviewGatewayRequest,
     PathPreviewReply,
+    PhotoReply,
+    PhotoRequest,
 )
 from mowdeck_contracts.v1.relay import (
     RelayAttachReply,
@@ -223,6 +225,14 @@ class CameraGateway(Protocol):
     """Asks the Device-Gateway that holds a mower for a live camera session."""
 
     async def request(self, request: CameraSessionRequest) -> CameraSessionReply:
+        """The gateway's reply; raises when no gateway answers in time."""
+        ...
+
+
+class PhotoGateway(Protocol):
+    """Asks the Device-Gateway that holds a mower for a still image of its camera."""
+
+    async def request(self, request: PhotoRequest) -> PhotoReply:
         """The gateway's reply; raises when no gateway answers in time."""
         ...
 

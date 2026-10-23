@@ -72,6 +72,14 @@ class Settings(ServiceSettings):
     """How long Fleet waits for the camera relay (ADR 0045): a little longer than the relay's
     own gateway timeout. ``auto`` takes the direct path after it, ``relay`` answers 503."""
 
+    camera_snapshot_timeout_seconds: float = Field(default=35.0, ge=5, le=60)
+    """How long Fleet waits for a still image of a mower's camera (503 after): the camera
+    relay may have to start the mower's stream first (up to about 30 s)."""
+
+    camera_snapshot_min_interval_seconds: float = Field(default=30.0, ge=0, le=3600)
+    """A still image is taken at most this often per mower; requests in between get the last
+    one. 0 takes a new image for every request."""
+
     path_preview_request_timeout_seconds: float = Field(default=85.0, ge=5, le=120)
     """How long Fleet waits for a route the mower plans for a preview (504 after); a little
     longer than the gateway's ``MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS``."""

@@ -51,6 +51,7 @@ from fleet.adapters.bus.camera import BusCameraGateway, BusCameraRelay
 from fleet.adapters.bus.cloud import BusCloudDiscovery
 from fleet.adapters.bus.firmware import BusFirmwareCheckGateway
 from fleet.adapters.bus.path_preview import BusPathPreviewGateway
+from fleet.adapters.bus.photo import BusPhotoGateway
 from fleet.adapters.bus.publisher import BusCommandPublisher, BusEventPublisher
 from fleet.adapters.bus.subscriptions import subscribe_all
 from fleet.adapters.crypto import cipher_from_key
@@ -150,6 +151,10 @@ def build_app(
             firmware_check_gateway=BusFirmwareCheckGateway(
                 active_bus, timeout_seconds=settings.firmware_check_request_timeout_seconds
             ),
+            photo_gateway=BusPhotoGateway(
+                active_bus, timeout_seconds=settings.camera_snapshot_timeout_seconds
+            ),
+            snapshot_min_interval_seconds=settings.camera_snapshot_min_interval_seconds,
         )
         app.state.fleet = services
         subscriptions: list[Subscription] = []
