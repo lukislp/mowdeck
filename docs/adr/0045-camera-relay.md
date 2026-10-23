@@ -133,3 +133,7 @@ Follow-up (2026-10-18, after the first Vision analyses through the relay): the t
 Later: hardware transcoding and monitoring, a "learn the garden" run that ties frames (the frame stream) to RTK positions, removing the capture worker.
 
 To check on hardware: latency on the drive page; Safari, the iOS app and Chrome for ten minutes each without stalls; the media port reachable from a phone in the home Wi-Fi; a Vision still of the LUBA through the relay, and no second vendor session while a viewer watches.
+
+## Amendment (2026-10-23): still images for API clients
+
+The frame tap no longer serves Vision alone. Fleet's `GET /api/v1/fleet/mowers/{id}/camera/snapshot` (`can_view` and the plan feature `camera`) gives API clients such as the Home Assistant integration a still image: Fleet sends the same `PhotoRequest` on `gateway.mower.<id>.photo` as Vision, with `demand: routine`, so the Device-Gateway's existing path applies unchanged (the mower's own photo function, else the relay's snapshot lease) and every camera limit holds: a sleeping mower is not woken, the battery and the Vision budget apply, nothing streams afterwards. Fleet takes at most one new image per mower every 30 s (`MOWDECK_CAMERA_SNAPSHOT_MIN_INTERVAL_SECONDS`) and answers the last one in between, keeps it only in memory and audits each new image as `mower.camera_snapshot`. No contract, relay or gateway change was needed.
