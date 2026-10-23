@@ -62,6 +62,15 @@ MIRROR_LICENCES = {
     "stripe-mock": "MIT",
 }
 
+# Third-party images CI pulls from their own registry because the public mirror must not
+# republish them: alias -> why. CI-only, never part of a release (no release workflow, chart or
+# Compose file names them). A new entry here needs the same reasoning, not a licence shortcut.
+NOT_MIRRORED = {
+    # Playwright is Apache-2.0, Firefox MPL-2.0, WebKit LGPL-2.1/BSD, but the bundled Chromium is
+    # Chrome for Testing ("Google Chrome ... All rights reserved", Google's terms, Widevine CDM).
+    "playwright": "Apache-2.0 with Chrome for Testing (Google terms), MPL-2.0, LGPL-2.1",
+}
+
 # Non-comment Dockerfile lines that may name Agora: the switches that keep it out. The vision
 # Dockerfile's capture build (WITH_CAPTURE=true, never released) is checked by its default.
 DOCKERFILE_AGORA_LINES = {
@@ -215,6 +224,22 @@ def test_mirror_republishes_only_redistributable_images(repo_root: Path) -> None
     assert not unknown, f"mirror images without a checked licence: {unknown} (MIRROR_LICENCES)"
     stale = sorted(set(MIRROR_LICENCES) - set(aliases))
     assert not stale, f"MIRROR_LICENCES lists images the mirror no longer copies: {stale}"
+    copied = sorted(set(aliases) & set(NOT_MIRRORED))
+    assert not copied, f"the public mirror must not republish {copied} (NOT_MIRRORED)"
+
+
+def test_unmirrored_images_stay_out_of_releases(repo_root: Path) -> None:
+    released = [
+        repo_root / ".github/workflows/release.yml",
+        repo_root / "infra/compose/docker-compose.yml",
+        repo_root / "infra/helm/mowdeck/values.yaml",
+        repo_root / "infra/compose/.env.example",
+    ]
+    for alias in NOT_MIRRORED:
+        pattern = re.compile(rf"[/\w.-]+/{re.escape(alias)}:", re.IGNORECASE)
+        for path in released:
+            text = path.read_text("utf-8")
+            assert not pattern.search(text), f"{path.name} references the {alias} image"
 
 
 def test_no_agora_binary_is_committed(repo_root: Path) -> None:
