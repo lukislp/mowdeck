@@ -1,6 +1,6 @@
 """Ports: what the use cases need from the outside world, as protocols."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -249,12 +249,21 @@ class Store(Protocol):
         """The users among ``user_ids`` with a silence of ``key`` lasting beyond ``now``."""
         ...
 
-    async def claim_deliveries(self, now: datetime, lease: timedelta, limit: int) -> list[Delivery]:
+    async def claim_deliveries(
+        self,
+        now: datetime,
+        lease: timedelta,
+        limit: int,
+        *,
+        channel: str | None = None,
+        exclude: Collection[str] = (),
+    ) -> list[Delivery]:
         """Pending deliveries due at ``now``, with their targets resolved.
 
         Each claimed row gets ``attempts + 1`` and ``next_attempt_at = now + lease`` in one
         short transaction (``FOR UPDATE SKIP LOCKED``), so other replicas skip it and a crashed
-        worker's claim expires after the lease.
+        or hung worker's claim expires after the lease (a restart picks it up again).
+        ``channel`` claims only that channel's deliveries, ``exclude`` skips those channels.
         """
         ...
 

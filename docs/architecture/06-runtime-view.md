@@ -141,9 +141,9 @@ sequenceDiagram
     No->>No: per recipient: render DE/EN, inbox item (unique dedupe_key), deliveries (quiet hours: none)
     No->>N: event.notifications.sent
     loop delivery worker on every replica
-        No->>No: claim due deliveries FOR UPDATE SKIP LOCKED, attempts + 1, lease
-        No->>P: Web Push (VAPID, aes128gcm, TTL, Urgency) or ntfy JSON publish
-        P-->>No: 201 sent, 410 gone (subscription deleted), 429 or 5xx retry with backoff
+        No->>No: claim due deliveries per channel up to its free send slots, FOR UPDATE SKIP LOCKED, attempts + 1, lease
+        No->>P: Web Push (VAPID, aes128gcm, TTL, Urgency) or ntfy JSON publish, one task each, under the send deadline
+        P-->>No: 201 sent, 410 gone (subscription deleted), 429, 5xx or no answer in time: retry with backoff
     end
     L->>No: GET /api/v1/notifications/inbox, POST /inbox/{id}/read
 ```
