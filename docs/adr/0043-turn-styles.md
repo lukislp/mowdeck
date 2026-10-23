@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-15); amends [ADR 0039](0039-spot-mowing-by-mowdeck-driven-paths.md) (how a spot run turns) and [ADR 0030](0030-mowing-patterns-and-planner.md) (the Planner shapes lane ends on request).
+Accepted (2026-10-15); amends [ADR 0039](0039-spot-mowing-by-mowdeck-driven-paths.md) (how a spot run turns) and [ADR 0030](0030-mowing-patterns-and-planner.md) (the Planner shapes lane ends on request); amended by [ADR 0046](0046-device-settings-as-capabilities.md) (the mower's own turn setting can be changed as the setting `turn_style`).
 
 ## Context
 

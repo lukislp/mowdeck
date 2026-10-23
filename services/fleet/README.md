@@ -91,6 +91,8 @@ Feature gates per kind are data (`fleet.domain.rules.command_features`): nothing
 
 Drive calibration ([ADR 0042](../../docs/adr/0042-drive-calibration.md)): `drive_calibrate` (MowDeck drives a few fixed steps to measure what a stick value means on the ground) and `set_drive_speed` (the vendor's speed setting for manual driving) need `can_drive` and the plan feature `control` only (not `spot_mowing`: a calibration is not spot mowing). Both are single-mower kinds: a bulk command answers 422. `spot_stop` also ends a running calibration.
 
+Mower settings ([ADR 0046](../../docs/adr/0046-device-settings-as-capabilities.md)): `set_setting {key, value}` changes one of the mower's own settings (rain detection, battery levels, lights, voice, non-work hours, ...). It needs `can_manage_mowers` (it changes the device itself, like `firmware_update`) and the plan feature `control`; the record is its audit. Fleet checks only the key's form; whether the mower has the setting and whether the value fits is the controller's rule (`MowerCapabilities.settings`), so an unknown key or a value out of range ends `rejected`. It may go to a site or group.
+
 ### Area names
 
 The mower's map (`MowerMap.areas[]` from the Device-Gateway, stored by Telemetry) carries the mower's own area names, often only a vendor hash. Fleet keeps a MowDeck name per mower and area id in `mower_area_names (mower_id, area_id, account_id, name, updated_at, updated_by)`, primary key `(mower_id, area_id)`, deleted with the mower (`ON DELETE CASCADE`; the use case deletes the rows explicitly too).

@@ -50,6 +50,7 @@ from mowdeck_control.connection import (
     Photo,
     PhotoCapture,
     ReportRateCapable,
+    SettingsCapable,
     TwoPhaseExecution,
     UndockCapable,
     bridge_scanner_of,
@@ -60,6 +61,7 @@ from mowdeck_control.connection import (
     drive_speed_port_of,
     firmware_port_of,
     release_camera_session_of,
+    settings_port_of,
 )
 from mowdeck_control.controller import MowerController, StateCallback
 from mowdeck_control.errors import (
@@ -183,6 +185,7 @@ __all__ = [
     "Pose",
     "ReportRateCapable",
     "SensorStop",
+    "SettingsCapable",
     "SimulatedDriveSession",
     "SimulatedMower",
     "SimulationConfig",
@@ -228,6 +231,7 @@ __all__ = [
     "release_camera_session_of",
     "render_scene",
     "room_ahead_problem",
+    "settings_port_of",
     "spot_start_problem",
     "to_geo_position",
     "to_wgs84",

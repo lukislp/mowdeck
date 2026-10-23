@@ -39,8 +39,10 @@ from mowdeck_control_mammotion.fake import (
     BACK_HASH,
     FRONT_HASH,
     RTK_YAW_DEG,
+    SETTING_READ_COMMANDS,
     FakeMammotionPort,
     dock_buffer,
+    is_setting_read,
     sample_device,
 )
 from mowdeck_control_mammotion.options import (
@@ -59,13 +61,23 @@ from mowdeck_control_mammotion.port import (
 DOCK_ARGS = {"rw_id": 5, "context": 1, "rw": 1}
 
 
+def _dock_reads(port: FakeMammotionPort) -> int:
+    """Number of dock buffer requests sent (`read_write_device` also reads settings)."""
+    return sum(1 for c in port.sent if c.name == "read_write_device" and c.kwargs == DOCK_ARGS)
+
+
 def _is_info_request(name: str) -> bool:
     """The connect-time device information, dock buffer, light and drive speed reads."""
-    return name.startswith("get_device_") or name in {
-        "read_write_device",
-        LIGHT_READ_COMMAND,
-        "get_speed",
-    }
+    return (
+        name.startswith("get_device_")
+        or name in SETTING_READ_COMMANDS
+        or name
+        in {
+            "read_write_device",
+            LIGHT_READ_COMMAND,
+            "get_speed",
+        }
+    )
 
 
 FRONT = str(FRONT_HASH)
@@ -903,7 +915,7 @@ async def test_mammotion_ble_requests_only_the_dock_buffer_and_the_light() -> No
     conn, port = ble()
     await conn.connect()
     await asyncio.sleep(0.01)
-    assert [(c.name, c.kwargs) for c in port.sent] == [
+    assert [(c.name, c.kwargs) for c in port.sent if not is_setting_read(c.name, c.kwargs)] == [
         ("read_write_device", DOCK_ARGS),
         (LIGHT_READ_COMMAND, {"ids": 1126}),
     ]
@@ -916,7 +928,9 @@ async def test_mammotion_cloud_requests_the_dock_buffer_with_the_device_informat
     conn._device_info_retry_s = 0.01
     await conn.connect()
     await asyncio.sleep(0.1)
-    requests = [c for c in port.sent if _is_info_request(c.name)]
+    requests = [
+        c for c in port.sent if _is_info_request(c.name) and not is_setting_read(c.name, c.kwargs)
+    ]
     assert [c.name for c in requests] == [
         "get_device_version_info",
         "get_device_base_info",
@@ -927,7 +941,7 @@ async def test_mammotion_cloud_requests_the_dock_buffer_with_the_device_informat
     assert requests[-2].kwargs == DOCK_ARGS
     assert requests[-2].priority is Priority.BACKGROUND
     # the fake mower answered with the buffer: dock and origin known, no retry
-    assert port.names().count("read_write_device") == 1
+    assert _dock_reads(port) == 1
     mower_map = await conn.get_map()
     assert mower_map.dock is not None
     assert mower_map.reference.rotation_deg == pytest.approx(RTK_YAW_DEG)
@@ -946,14 +960,14 @@ async def test_mammotion_dock_buffer_is_retried_until_the_dock_is_known() -> Non
     first = await anext(watch)
     assert first.position_source is PositionSource.RTK  # raw position, dock unknown
     await asyncio.sleep(0.03)
-    assert port.names().count("read_write_device") >= 2
+    assert _dock_reads(port) >= 2
     await port.deliver_dock_buffer()  # the answer arrives
     update = await asyncio.wait_for(anext(watch), 1)
     while update.position_source is not PositionSource.DOCK:  # skip the light answer's update
         update = await asyncio.wait_for(anext(watch), 1)
     assert update.position_source is PositionSource.DOCK
     await asyncio.sleep(0.15)
-    count = port.names().count("read_write_device")
+    count = _dock_reads(port)
     assert count < mammotion_base.DEVICE_INFO_ATTEMPTS
     assert port.names().count("get_device_version_info") == 1  # firmware known
     await conn.disconnect()
@@ -966,9 +980,12 @@ async def test_mammotion_dock_buffer_retries_are_bounded() -> None:
     conn._device_info_retry_s = 0.01
     await conn.connect()
     await asyncio.sleep(0.2)
-    docks = [n for n in port.names() if n == "read_write_device"]
+    docks = [c.name for c in port.sent if c.name == "read_write_device" and c.kwargs == DOCK_ARGS]
     assert docks == ["read_write_device"] * mammotion_base.DEVICE_INFO_ATTEMPTS
-    assert port.names().count(LIGHT_READ_COMMAND) == 1  # answered in the first round
+    light_reads = [
+        c for c in port.sent if c.name == LIGHT_READ_COMMAND and c.kwargs == {"ids": 1126}
+    ]
+    assert len(light_reads) == 1  # answered in the first round
     await conn.disconnect()
 
 
@@ -996,7 +1013,7 @@ async def test_mammotion_dock_buffer_is_requested_again_after_reconnect() -> Non
     await conn.disconnect()
     await conn.connect()
     await asyncio.sleep(0.01)
-    assert port.names().count("read_write_device") == 2
+    assert _dock_reads(port) == 2
     await conn.disconnect()
 
 
@@ -1008,14 +1025,14 @@ async def test_mammotion_map_waits_for_the_dock_buffer() -> None:
     await conn.connect()
     await asyncio.sleep(0.01)
     assert (await conn.get_map()).dock is None  # no answer: the map stays without a dock
-    assert port.names().count("read_write_device") == 2  # connect and the map read
+    assert _dock_reads(port) == 2  # connect and the map read
     port.dock_answer = dock_buffer()
     mower_map = await conn.get_map()
     assert mower_map.dock is not None
     assert mower_map.reference.rotation_deg == pytest.approx(RTK_YAW_DEG)
-    calls = port.names().count("read_write_device")
+    calls = _dock_reads(port)
     await conn.get_map()  # dock known: no further request
-    assert port.names().count("read_write_device") == calls
+    assert _dock_reads(port) == calls
     await conn.disconnect()
 
 

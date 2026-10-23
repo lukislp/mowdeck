@@ -282,6 +282,10 @@ export type Lon = number
  */
 export type PositionSource = ("rtk" | "gnss" | "dock" | "unknown")
 /**
+ * The mower's own rain sensor reports rain right now; null when the connection does not report the sensor (ADR 0046).
+ */
+export type RainDetected = (boolean | null)
+/**
  * Quality of the RTK position fix.
  */
 export type RtkFixStatus = ("none" | "float" | "fixed" | "unknown")
@@ -300,6 +304,14 @@ export type Detail = (string | null)
  * via the `definition` "SelfCheckResult".
  */
 export type SelfCheckResult = ("ok" | "blocked")
+/**
+ * End, `HH:MM` (24-hour clock).
+ */
+export type End = string
+/**
+ * Start, `HH:MM` (24-hour clock).
+ */
+export type Start = string
 /**
  * Mobile network (LTE) signal in dBm; null when not reported.
  */
@@ -719,6 +731,7 @@ mower_id: MowerId1
 observed_at: ObservedAt
 position?: (GeoPosition | null)
 position_source?: PositionSource
+rain_detected?: RainDetected
 raw?: Raw
 rtk_fix?: RtkFixStatus
 rtk_source?: RtkSource
@@ -726,6 +739,7 @@ rtk_source?: RtkSource
  * The mower's start self-check (`ok` or `blocked` with the reason); null when the connection does not report it.
  */
 self_check?: (SelfCheck | null)
+settings?: Settings
 /**
  * The mower's own Wi-Fi and mobile signal in dBm and its uplink; null when the connection does not report them.
  */
@@ -895,6 +909,27 @@ export interface Raw {
 export interface SelfCheck {
 detail?: Detail
 result: SelfCheckResult
+}
+/**
+ * Current values of the mower's own settings (ADR 0046) by key, as the mower reported them; a declared setting the mower has not reported yet is missing. Types, ranges and options: `MowerCapabilities.settings`.
+ */
+export interface Settings {
+/**
+ * This interface was referenced by `Settings`'s JSON-Schema definition
+ * via the `patternProperty` "^[a-z][a-z0-9_]{0,47}$".
+ */
+[k: string]: boolean | number | string | TimeWindow | null | undefined
+}
+/**
+ * A daily window in the mower's local time, ``HH:MM`` on a 24-hour clock. ``end`` before
+ * ``start`` crosses midnight (``22:00`` to ``06:00``).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "TimeWindow".
+ */
+export interface TimeWindow {
+end: End
+start: Start
 }
 /**
  * The mower's own radio signal (``MowerState.signal``).

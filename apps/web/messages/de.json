@@ -1799,6 +1799,7 @@
   "spot_reason_stalled": "seit 60 s kein Fortschritt entlang des Plans",
   "command_drive_calibrate": "Fahrverhalten kalibrieren",
   "command_set_drive_speed": "Fahrgeschwindigkeit setzen",
+  "command_set_setting": "Mähereinstellung ändern",
   "drive_settings_title": "Manuelles Fahren",
   "drive_speed_title": "Fahrgeschwindigkeit",
   "drive_speed_unknown": "unbekannt",
