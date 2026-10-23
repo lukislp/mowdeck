@@ -1,18 +1,27 @@
 """APNs: the provider token, requests per severity, answer mapping, the factory and settings,
-the device API, fan-out to devices and the outbox removing unregistered devices."""
+the device API, fan-out to devices, the outbox removing unregistered devices, and robustness: the
+request deadline, client replacement, one stream at a time against an APNs-like HTTP/2 server."""
 
+import asyncio
+import contextlib
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+import h2.config
+import h2.connection
+import h2.events
+import h2.settings
 import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from hyperframe.frame import SettingsFrame
 from mowdeck_contracts.v1 import NotificationKind, NotificationSeverity, PlanStatus
 from mowdeck_service_kit.testing import FakeEntitlements
 from notifications_support import (
@@ -634,3 +643,218 @@ async def test_notifications_apns_outbox_gone_removes_the_device() -> None:
     assert store.data.deliveries[foreign].status is DeliveryStatus.DROPPED
     assert await store.apns_devices(user, account) == []
     assert [d.target for d in channel.sent] == [{"token": TOKEN}]
+
+
+# --- robustness: deadline, client replacement, one stream at a time ---------------------------
+
+
+def recycling_channel(
+    handlers: list[Callable[[httpx.Request], Any]], *, deadline: float | None = None
+) -> tuple[ApnsChannel, list[httpx.AsyncClient]]:
+    """A channel whose factory hands out one client per handler, in order."""
+    pem, _ = p8_key()
+    clients: list[httpx.AsyncClient] = []
+
+    def factory() -> httpx.AsyncClient:
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handlers[len(clients)]))
+        clients.append(client)
+        return client
+
+    channel = ApnsChannel(
+        key=load_signing_key(pem),
+        key_id=KEY_ID,
+        team_id=TEAM_ID,
+        bundle_id=BUNDLE,
+        clock=ManualClock(),
+        http_factory=factory,
+        deadline=deadline,
+    )
+    return channel, clients
+
+
+def ok(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [httpx.ReadTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError, httpx.LocalProtocolError],
+)
+async def test_notifications_apns_client_is_replaced_after_a_timeout_or_protocol_error(
+    error: type[httpx.TransportError],
+) -> None:
+    def failing(request: httpx.Request) -> httpx.Response:
+        raise error("stuck", request=request)
+
+    channel, clients = recycling_channel([failing, ok])
+    result = await channel.send(delivery())
+    assert result.outcome is DeliveryOutcome.RETRY and error.__name__ in (result.error or "")
+    assert channel.recycled == 1 and len(clients) == 2 and clients[0].is_closed
+    assert (await channel.send(delivery())).outcome is DeliveryOutcome.SENT
+    await channel.aclose()
+    assert clients[1].is_closed
+
+
+async def test_notifications_apns_request_deadline_ends_a_hang_and_replaces_the_client() -> None:
+    async def hanging(request: httpx.Request) -> httpx.Response:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    channel, clients = recycling_channel([hanging, ok], deadline=0.1)
+    result = await channel.send(delivery())
+    assert result.outcome is DeliveryOutcome.RETRY
+    assert result.error == "apns request got no answer within 0.1 s"
+    assert channel.recycled == 1 and clients[0].is_closed
+    assert (await channel.send(delivery())).outcome is DeliveryOutcome.SENT
+
+
+async def test_notifications_apns_connection_errors_keep_the_client() -> None:
+    def refused(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    channel, clients = recycling_channel([refused])
+    assert (await channel.send(delivery())).outcome is DeliveryOutcome.RETRY
+    assert channel.recycled == 0 and len(clients) == 1
+
+
+async def test_notifications_apns_sends_one_request_at_a_time() -> None:
+    active, peak = 0, 0
+
+    async def slow(request: httpx.Request) -> httpx.Response:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return httpx.Response(200)
+
+    channel, _ = recycling_channel([slow])
+    results = await asyncio.gather(*(channel.send(delivery()) for _ in range(5)))
+    assert {r.outcome for r in results} == {DeliveryOutcome.SENT}
+    assert peak == 1 and ApnsChannel.max_concurrency == 1
+
+
+async def test_notifications_apns_default_client_and_deadline_from_the_settings() -> None:
+    pem, _ = p8_key()
+    settings = make_settings(
+        apns_key=pem,
+        apns_key_id=KEY_ID,
+        apns_team_id=TEAM_ID,
+        notifications_http_timeout_seconds=10,
+        notifications_send_deadline_seconds=15,
+    )
+    async with httpx.AsyncClient() as http:
+        channel = create_apns_channel(ChannelContext(settings, http, ManualClock(), None))
+    assert channel is not None
+    assert channel._deadline == pytest.approx(13.5)  # below the outbox deadline of 15 s
+    timeout = channel._http.timeout
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (10, 10, 10, 10)
+    await channel.aclose()
+    with pytest.raises(ValueError, match="SEND_DEADLINE"):
+        make_settings(notifications_send_deadline_seconds=60, notifications_lease_seconds=60)
+
+
+async def test_notifications_apns_expiration_counts_from_the_queue_time() -> None:
+    service = FakeApns()
+    clock = ManualClock()
+    channel, _ = channel_for(service, clock)
+    clock.advance(600)  # sent ten minutes after it was queued
+    await channel.send(replace(delivery(), created_at=T0))
+    expiration = int(service.requests[0].headers["apns-expiration"])
+    assert expiration == int(T0.timestamp()) + 24 * 3600
+
+
+# A local HTTP/2 server that behaves like APNs: SETTINGS_MAX_CONCURRENT_STREAMS 200 first, then
+# 1 right after the first request (APNs does this until the provider token is verified). Several
+# concurrent streams on one httpcore 1.0.9 connection hang for good on this (MowDeck 0.9.1).
+
+_MAX_STREAMS = h2.settings.SettingCodes.MAX_CONCURRENT_STREAMS
+
+
+async def _apns_like(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    connection = h2.connection.H2Connection(h2.config.H2Configuration(client_side=False))
+    connection.local_settings = h2.settings.Settings(
+        client=False, initial_values={_MAX_STREAMS: 200}
+    )
+    connection.initiate_connection()
+    writer.write(connection.data_to_send())
+    lowered = False
+
+    async def answer(stream_id: int) -> None:
+        await asyncio.sleep(0.02)
+        connection.send_headers(stream_id, [(":status", "200")], end_stream=True)
+        writer.write(connection.data_to_send())
+        await writer.drain()
+
+    with contextlib.suppress(ConnectionError):
+        while data := await reader.read(65535):
+            for event in connection.receive_data(data):
+                if isinstance(event, h2.events.RequestReceived) and not lowered:
+                    lowered = True
+                    # A raw frame: h2 itself would enforce the lower limit, APNs does not.
+                    writer.write(
+                        connection.data_to_send()
+                        + SettingsFrame(0, settings={_MAX_STREAMS: 1}).serialize()
+                    )
+                elif isinstance(event, h2.events.StreamEnded):
+                    asyncio.get_running_loop().create_task(answer(event.stream_id))
+            writer.write(connection.data_to_send())
+            await writer.drain()
+    writer.close()
+
+
+class _ToLocalH2c(httpx.AsyncBaseTransport):
+    """Sends the ``https://api...apple.com`` requests to the local server over h2c."""
+
+    def __init__(self, port: int) -> None:
+        self._port = port
+        self._inner = httpx.AsyncHTTPTransport(http1=False, http2=True)
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        request.url = request.url.copy_with(scheme="http", host="127.0.0.1", port=self._port)
+        return await self._inner.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
+async def test_notifications_apns_real_http2_stack_survives_the_stream_limit_drop() -> None:
+    server = await asyncio.start_server(_apns_like, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    pem, _ = p8_key()
+    channel = ApnsChannel(
+        key=load_signing_key(pem),
+        key_id=KEY_ID,
+        team_id=TEAM_ID,
+        bundle_id=BUNDLE,
+        clock=ManualClock(),
+        http_factory=lambda: httpx.AsyncClient(transport=_ToLocalH2c(port), timeout=5),
+        deadline=5,
+    )
+    store, clock = MemoryStore(), ManualClock()
+    outbox = Outbox(store, ChannelRegistry({"apns": channel}), NotificationsConfig(), clock)
+    user, account = uuid4(), uuid4()
+    deliveries = []
+    for index in range(5):
+        device = await store.add_apns_device(
+            ApnsDevice(uuid4(), user, account, f"{index:02x}" * 32, f"iPhone {index}", T0)
+        )
+        deliveries.append(await enqueue(store, user, account, device.id))
+    try:
+        # Concurrent sends on a fresh connection: the case that hung in production.
+        async with asyncio.timeout(10):
+            results = await asyncio.gather(*(channel.send(delivery()) for _ in range(5)))
+        # The outbox on the same connection.
+        async with asyncio.timeout(10):
+            while any(
+                store.data.deliveries[d].status is DeliveryStatus.PENDING for d in deliveries
+            ):
+                await outbox.dispatch()
+                await outbox.wait(0.05)
+    finally:
+        await outbox.aclose()
+        await channel.aclose()
+        server.close()
+    assert {store.data.deliveries[d].status for d in deliveries} == {DeliveryStatus.SENT}
+    assert {r.outcome for r in results} == {DeliveryOutcome.SENT}
+    assert channel.recycled == 0

@@ -24,13 +24,8 @@ from pywebpush import WebPusher, WebPushException
 
 from notifications.adapters.channels import ChannelContext
 from notifications.adapters.channels.vapid import VapidKeys
-from notifications.domain.models import Delivery, DeliveryOutcome, DeliveryResult
+from notifications.domain.models import TTL_SECONDS, Delivery, DeliveryOutcome, DeliveryResult
 
-TTL_SECONDS = {
-    NotificationSeverity.CRITICAL: 24 * 3600,
-    NotificationSeverity.WARNING: 6 * 3600,
-    NotificationSeverity.INFO: 3600,
-}
 URGENCY = {
     NotificationSeverity.CRITICAL: "high",
     NotificationSeverity.WARNING: "normal",

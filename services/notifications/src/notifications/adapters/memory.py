@@ -5,7 +5,7 @@ Transactions run one at a time and are all or nothing (the snapshot is restored 
 
 import asyncio
 import copy
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -357,13 +357,24 @@ class MemoryStore:
             case _:
                 return None
 
-    async def claim_deliveries(self, now: datetime, lease: timedelta, limit: int) -> list[Delivery]:
+    async def claim_deliveries(
+        self,
+        now: datetime,
+        lease: timedelta,
+        limit: int,
+        *,
+        channel: str | None = None,
+        exclude: Collection[str] = (),
+    ) -> list[Delivery]:
         async with self._lock:
             due = sorted(
                 (
                     r
                     for r in self.data.deliveries.values()
-                    if r.status is DeliveryStatus.PENDING and r.next_attempt_at <= now
+                    if r.status is DeliveryStatus.PENDING
+                    and r.next_attempt_at <= now
+                    and (channel is None or r.channel == channel)
+                    and r.channel not in exclude
                 ),
                 key=lambda r: (r.next_attempt_at, str(r.id)),
             )[:limit]
@@ -383,6 +394,7 @@ class MemoryStore:
                         target_kind=row.target_kind,
                         target_id=row.target_id,
                         target=self._target(row),
+                        created_at=row.created_at,
                     )
                 )
             return claimed

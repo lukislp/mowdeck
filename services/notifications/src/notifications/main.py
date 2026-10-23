@@ -11,8 +11,9 @@ Authorization: OpenFGA (``MOWDECK_OPENFGA_*``) through ``mowdeck-authz``.
 Startup: load the message catalog and the VAPID keys, create the channels, wire the use cases,
 subscribe (states, mower events, commands, map snapshots, telemetry events, identity events,
 grant changes) and start the background tasks: the delivery worker, the offline timer, the
-outbox pruning and the directory seed from Fleet. Readiness: the bus (kit), the subscriptions,
-the database and OpenFGA.
+outbox pruning, the outbox watchdog and the directory seed from Fleet. Readiness: the bus
+(kit), the subscriptions, the database, OpenFGA and the outbox (no stall: a delivery finished
+or nothing was due within ``MOWDECK_NOTIFICATIONS_STALL_SECONDS``).
 """
 
 import asyncio
@@ -107,15 +108,32 @@ async def every(seconds: float, name: str, job: Callable[[], Awaitable[Any]]) ->
 
 
 async def delivery_worker(services: Services, idle_seconds: float) -> None:
-    """Send the outbox until cancelled; pause only when a round found less than a batch."""
+    """Send the outbox until cancelled.
+
+    Each round claims what fits into the free send slots and starts the sends in the background.
+    When a round claimed nothing the worker pauses until a send finishes or ``idle_seconds``
+    passed. A failing round is logged and the loop goes on.
+    """
+    outbox = services.outbox
     while True:
         try:
-            claimed = await services.outbox.run_once()
+            claimed = await outbox.dispatch()
         except Exception:
             _log.exception("delivery round failed")
             claimed = 0
-        if claimed < services.config.batch_size:
-            await asyncio.sleep(idle_seconds)
+        if claimed == 0:
+            await outbox.wait(idle_seconds)
+
+
+async def outbox_watchdog(services: Services) -> None:
+    """Log an error while the outbox makes no progress (``/readyz`` fails at the same time)."""
+    stalled = services.outbox.stalled_for()
+    if stalled is not None:
+        _log.error(
+            "outbox stalled: no delivery finished while work was due",
+            stalled_seconds=round(stalled.total_seconds()),
+            in_flight=services.outbox.in_flight(),
+        )
 
 
 def build_app(
@@ -199,6 +217,9 @@ def build_app(
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        services: Services | None = getattr(app.state, "notifications", None)
+        if services is not None:
+            await services.outbox.aclose()
         for subscription in getattr(app.state, "subscriptions", []):
             await subscription.unsubscribe()
         if own_registry:
@@ -214,6 +235,10 @@ def build_app(
         subscriptions = getattr(app.state, "subscriptions", [])
         return bool(subscriptions) and app.state.bus is not None and app.state.bus.is_connected
 
+    async def outbox_progressing() -> bool:
+        services: Services | None = getattr(app.state, "notifications", None)
+        return services is None or services.outbox.stalled_for() is None
+
     app = create_app(
         settings,
         DESCRIPTOR,
@@ -221,6 +246,7 @@ def build_app(
         readiness_checks=[
             *([readiness_check_db(engine)] if engine is not None else []),
             ReadinessCheck(name="subscriptions", check=subscriptions_active),
+            ReadinessCheck(name="outbox", check=outbox_progressing),
         ],
         on_startup=[startup],
         on_shutdown=[shutdown],
@@ -246,7 +272,8 @@ def start_background_tasks(
     bus: EventBus | None,
     seed_delay_seconds: float = 1.0,
 ) -> list[asyncio.Task[Any]]:
-    """The delivery worker, the offline timer, the outbox pruning and the directory seed."""
+    """The delivery worker, the offline timer, the outbox pruning, the outbox watchdog and the
+    directory seed."""
 
     async def sweep() -> None:
         await services.watcher.sweep_offline()
@@ -266,6 +293,10 @@ def start_background_tasks(
             name="notifications-offline-timer",
         ),
         asyncio.create_task(every(3600, "prune", prune), name="notifications-prune"),
+        asyncio.create_task(
+            every(60, "outbox watchdog", lambda: outbox_watchdog(services)),
+            name="notifications-outbox-watchdog",
+        ),
     ]
     if bus is not None:
 

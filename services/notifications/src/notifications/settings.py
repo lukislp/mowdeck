@@ -10,7 +10,7 @@ from datetime import timedelta
 from typing import Any, Literal
 
 from mowdeck_service_kit import ServiceSettings
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 
 from notifications.application.context import NotificationsConfig
 from notifications.domain.models import RuleConfig
@@ -163,6 +163,14 @@ class Settings(ServiceSettings):
     notifications_lease_seconds: float = Field(default=60, ge=5)
     """A claimed delivery is invisible to other workers this long (crash recovery)."""
 
+    notifications_send_deadline_seconds: float = Field(default=30, ge=1)
+    """Hard limit of one send through any channel; a send still running is cancelled and
+    retried. Must be below the lease."""
+
+    notifications_stall_seconds: float = Field(default=300, ge=30)
+    """``/readyz`` fails and an error is logged when the outbox finished no delivery for this
+    long while work was due."""
+
     notifications_delivery_retention_days: int = Field(default=7, ge=1, le=365)
     """Finished deliveries are deleted after this many days."""
 
@@ -195,6 +203,17 @@ class Settings(ServiceSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @model_validator(mode="after")
+    def _deadline_below_lease(self) -> "Settings":
+        """A claim must outlive its send, or another round would send the delivery again."""
+        if self.notifications_send_deadline_seconds >= self.notifications_lease_seconds:
+            msg = (
+                "MOWDECK_NOTIFICATIONS_SEND_DEADLINE_SECONDS must be below "
+                "MOWDECK_NOTIFICATIONS_LEASE_SECONDS"
+            )
+            raise ValueError(msg)
+        return self
 
     @property
     def channel_names(self) -> tuple[str, ...]:
@@ -242,6 +261,8 @@ class Settings(ServiceSettings):
             backoff_base=timedelta(seconds=self.notifications_backoff_base_seconds),
             backoff_max=timedelta(seconds=self.notifications_backoff_max_seconds),
             lease=timedelta(seconds=self.notifications_lease_seconds),
+            send_deadline=timedelta(seconds=self.notifications_send_deadline_seconds),
+            stall_after=timedelta(seconds=self.notifications_stall_seconds),
             batch_size=self.notifications_worker_batch_size,
             delivery_retention=timedelta(days=self.notifications_delivery_retention_days),
             test_every=timedelta(seconds=self.notifications_test_interval_seconds),

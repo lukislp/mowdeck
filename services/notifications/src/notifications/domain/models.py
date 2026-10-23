@@ -32,6 +32,14 @@ SEVERITY: dict[NotificationKind, NotificationSeverity] = {
 }
 """Severity of every kind (the contract has no "low" severity: the blade reminder is ``info``)."""
 
+TTL_SECONDS: dict[NotificationSeverity, int] = {
+    NotificationSeverity.CRITICAL: 24 * 3600,
+    NotificationSeverity.WARNING: 6 * 3600,
+    NotificationSeverity.INFO: 3600,
+}
+"""How long a notification is worth delivering, by severity (Web Push ``TTL``, APNs
+``apns-expiration``); the outbox drops a delivery that is still pending after this."""
+
 ALARM_KINDS: frozenset[NotificationKind] = frozenset(
     {
         NotificationKind.MOWER_LIFTED,
@@ -437,6 +445,14 @@ class Delivery:
     target: dict[str, Any] | None
     """Channel specific target (push subscription, ntfy target, APNs device token), resolved
     when claimed; None when it no longer exists."""
+    created_at: datetime | None = None
+    """When the delivery was queued (None: unknown, never expires)."""
+
+    def expires_at(self) -> datetime | None:
+        """The end of the message's TTL (:data:`TTL_SECONDS` of its severity)."""
+        if self.created_at is None:
+            return None
+        return self.created_at + timedelta(seconds=TTL_SECONDS[self.message.severity])
 
 
 @dataclass(frozen=True, slots=True)
