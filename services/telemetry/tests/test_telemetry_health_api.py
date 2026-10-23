@@ -221,6 +221,57 @@ async def test_telemetry_health_blade_reset_permissions_and_changes() -> None:
     assert items[0]["changed_by"] == str(owner.principal.subject)
 
 
+async def test_telemetry_health_blade_threshold_per_mower() -> None:
+    async with harness(telemetry_blade_hours_threshold=1.0) as h:
+        owner = await h.owner()
+        intruder = await h.owner()
+        mower_id = await h.add_mower(owner)
+        other_id = await h.add_mower(owner)
+        viewer = await subuser(h, owner, mower_id)
+        path = f"{API}/mowers/{mower_id}/health/blade-threshold"
+        # Before any telemetry: the row is created with the threshold.
+        early = await h.client.put(path, headers=owner.headers, json={"hours": 0.01})  # 36 s
+        forbidden = await h.client.put(path, headers=viewer.headers, json={"hours": 2})
+        hidden = await h.client.put(path, headers=intruder.headers, json={"hours": 2})
+        invalid = [
+            await h.client.put(path, headers=owner.headers, json=body)
+            for body in ({"hours": 0}, {"hours": -1}, {"hours": 10_001}, {}, {"hours": 1, "x": 1})
+        ]
+        await mow(h, owner, mower_id, 0, 10)  # 90 s: crosses the mower's 36 s
+        await mow(h, owner, other_id, 0, 10)  # 90 s: below the default hour
+        events = h.bus.messages(THRESHOLD_SUBJECT)
+        shown = await h.client.get(f"{API}/mowers/{mower_id}/health", headers=viewer.headers)
+        default = await h.client.get(f"{API}/mowers/{other_id}/health", headers=owner.headers)
+        # Raising the threshold above the hours arms the reminder again; it fires once more.
+        raised = await h.client.put(path, headers=owner.headers, json={"hours": 0.03})  # 108 s
+        await mow(h, owner, mower_id, 100, 3)  # 120 s since the change: below 108 s at 100 s
+        after_raise = h.bus.messages(THRESHOLD_SUBJECT)
+        # Lowering it below the hours keeps the reminder already sent; null is the default.
+        lowered = await h.client.put(path, headers=owner.headers, json={"hours": 0.01})
+        await mow(h, owner, mower_id, 130, 2)
+        after_lower = h.bus.messages(THRESHOLD_SUBJECT)
+        reset = await h.client.put(path, headers=owner.headers, json={"hours": None})
+    assert early.status_code == 200, early.text
+    assert early.json()["since"] is None
+    assert early.json()["blade_hours_threshold"] == 0.01
+    assert early.json()["blade_hours_threshold_custom"] is True
+    assert forbidden.status_code == 403 and hidden.status_code == 404
+    assert [r.status_code for r in invalid] == [422] * 5
+    assert len(events) == 1
+    payload = events[0].model(EventEnvelope[BladeHoursThreshold]).payload
+    assert (payload.mower_id, payload.threshold_hours) == (mower_id, 0.01)
+    assert payload.crossed_at == T0 + seconds(40)
+    assert shown.json()["blade_hours_threshold"] == 0.01
+    assert default.json()["blade_hours_threshold"] == 1.0
+    assert default.json()["blade_hours_threshold_custom"] is False
+    assert raised.status_code == 200 and raised.json()["blade_hours_threshold"] == 0.03
+    assert len(after_raise) == 2
+    assert after_raise[1].model(EventEnvelope[BladeHoursThreshold]).payload.threshold_hours == 0.03
+    assert lowered.status_code == 200 and len(after_lower) == 2
+    assert reset.json()["blade_hours_threshold"] == 1.0
+    assert reset.json()["blade_hours_threshold_custom"] is False
+
+
 async def test_telemetry_health_routes_hide_foreign_mowers() -> None:
     async with harness() as h:
         owner = await h.owner()

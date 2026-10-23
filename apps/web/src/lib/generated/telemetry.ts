@@ -183,6 +183,30 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/mowers/{mower_id}/health/blade-threshold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Blade Threshold
+         * @description Set the mower's blade reminder threshold in hours (``can_manage_mowers``, like the blade
+         *     reset); ``null`` returns to the default (``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``). The
+         *     reminder is armed again when the hours since the change lie below the new threshold.
+         *     Works before the first telemetry, too. The mower's own warning (``device_blade_warn_hours``)
+         *     is not touched.
+         */
+        put: operations["set_blade_threshold_api_v1_telemetry_mowers__mower_id__health_blade_threshold_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/mowers/{mower_id}/health/daily": {
         parameters: {
             query?: never;
@@ -453,6 +477,17 @@ export type components = {
              * @description Free text, optional.
              */
             note?: string | null;
+        };
+        /**
+         * BladeThresholdIn
+         * @description ``PUT .../health/blade-threshold``: the mower's blade reminder threshold.
+         */
+        BladeThresholdIn: {
+            /**
+             * Hours
+             * @description Blade hours after which MowDeck reminds of a blade change; null returns to the installation's default.
+             */
+            hours: number | null;
         };
         /**
          * CameraAccess
@@ -1328,9 +1363,15 @@ export type components = {
             blade_hours_since_change: number;
             /**
              * Blade Hours Threshold
-             * @description Hours after which a reminder is sent.
+             * @description Hours after which a reminder is sent: the mower's own threshold set in MowDeck, else the installation's default.
              */
             blade_hours_threshold: number;
+            /**
+             * Blade Hours Threshold Custom
+             * @description The mower has its own threshold (`PUT .../health/blade-threshold`); false: the default applies.
+             * @default false
+             */
+            blade_hours_threshold_custom: boolean;
             /**
              * Blade Source
              * @description Which blade counter to show as hours since the blade change: the mower's own (device) or MowDeck's (telemetry, blade_hours_since_change).
@@ -2260,6 +2301,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["BladeResetIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowerHealthOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_blade_threshold_api_v1_telemetry_mowers__mower_id__health_blade_threshold_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BladeThresholdIn"];
             };
         };
         responses: {
