@@ -70,6 +70,8 @@ export default defineConfig({
         'src/lib/schedules/recurrence.ts',
         'src/lib/mower/rtk-range.ts',
         'src/lib/mower/mow-pattern.ts',
+        'src/lib/mower/device-settings.ts',
+        'src/lib/mower/device-settings.svelte.ts',
         'src/lib/drive/pilot.ts',
         'src/lib/drive/layout.ts',
         'src/lib/health/series.ts',
