@@ -17,8 +17,11 @@ What it simulates:
 * error injection and a lift sensor that stops everything and cannot be cleared by a command;
 * getting stuck (:meth:`SimulatedMower.inject_stuck`, or after ``stuck_after_seconds`` of
   mowing): ``error`` with code ``stuck`` and ``drive_recoverable``; the wheels only move
-  backwards until a backward move of at least ``unstuck_backward_m`` frees the mower; a job the
-  error interrupted then stays ``paused`` (its route stays published) until ``ResumeMow``;
+  backwards until a backward move of at least ``unstuck_backward_m`` frees the mower. Without a
+  job it is ``idle`` again; a job the error interrupted keeps the error, like a LUBA: the mower
+  can be driven freely, but the error clears only after ``ResumeMow`` once it drove
+  ``resume_clear_m`` on its route (``ResumeMow`` on a mower that was not freed is accepted, the
+  wheels spin and the error stays);
 * manual driving through a :class:`SimulatedDriveSession`;
 * a camera: :meth:`SimulatedMower.get_camera_session` returns a session with ``provider``
   ``fake`` (no video; the web app draws a test pattern) and two front cameras (``front_left``
@@ -275,6 +278,10 @@ class SimulationConfig:
     per job), so AI assist can be demonstrated. None: never."""
     unstuck_backward_m: float = 0.3
     """Backward distance that frees a stuck mower."""
+    resume_clear_m: float = 2.0
+    """After ``ResumeMow`` on a freed mower whose job a stuck error interrupted: the distance
+    driven on the route after which the error clears and the mower mows again (a LUBA clears
+    its stuck error only once the resumed job moved it a few metres)."""
     start_delay_s: float | None = None
     """Simulated seconds between a ``StartMow`` or ``ResumeMow`` and the mower reporting
     ``mowing``. None: at once (the command returns ``executed``). With a delay the command is
@@ -359,6 +366,9 @@ class SimulationConfig:
             raise ValueError(msg)
         if self.unstuck_backward_m <= 0:
             msg = "unstuck_backward_m must be positive"
+            raise ValueError(msg)
+        if self.resume_clear_m <= 0:
+            msg = "resume_clear_m must be positive"
             raise ValueError(msg)
         if self.start_delay_s is not None and self.start_delay_s < 0:
             msg = "start_delay_s must not be negative"
@@ -492,6 +502,11 @@ class SimulatedMower:
         self._drive_pending: list[tuple[float, _DriveCommand]] = []
         """Drive frames not yet followed (``drive_response_delay_s``): ``(due_s, command)``."""
         self._backed_off_m = 0.0
+        self._unblocked = False
+        """A stuck mower in a job was driven free; the error stays until the job resumes."""
+        self._resuming = False
+        """``ResumeMow`` came while the stuck error lasts: the route continues once free."""
+        self._resume_moved_m = 0.0
         self._pending_start: _PendingStart | None = None
         self._path: MowPath | None = None
         self._path_done = 0
@@ -636,6 +651,8 @@ class SimulatedMower:
         if isinstance(command, SetLight):
             # The light works in every state: AI assist lights up a stuck mower at night.
             return Dispatch.done(self._set_light(on=command.on))
+        if self.stuck and isinstance(command, ResumeMow) and self._status.resume_activity:
+            return Dispatch.done(self._resume_stuck())
         if self.stuck:
             return Dispatch.done(Outcome.rejected("the mower is stuck: drive it free first"))
         self._require_no_sensor_stop()
@@ -1153,9 +1170,13 @@ class SimulatedMower:
     def inject_stuck(self, message: str | None = None) -> None:
         """Get stuck (wheel slip on an obstacle): ``error`` with code ``stuck`` and
         ``drive_recoverable``. Forward moves and turns do nothing until the mower was driven
-        backwards by at least ``unstuck_backward_m``; then it is ``paused`` when the error
-        interrupted a job (``ResumeMow`` continues it, like a real mower), else ``idle``."""
+        backwards by at least ``unstuck_backward_m``; then it is ``idle`` again, or, when the
+        error interrupted a job, free to drive with the error kept until ``ResumeMow`` moved it
+        ``resume_clear_m`` on its route (like a LUBA)."""
         self._backed_off_m = 0.0
+        self._unblocked = False
+        self._resuming = False
+        self._resume_moved_m = 0.0
         self._enter_error(STUCK_ERROR_CODE, message or "the mower is stuck on an obstacle")
 
     def lift(self) -> None:
@@ -1166,6 +1187,7 @@ class SimulatedMower:
     def clear_error(self) -> None:
         """Clear an error. A job that was running stays paused until resumed."""
         status = self._status
+        self._unblocked = self._resuming = False
         if status.activity is not MowerActivity.ERROR:
             return
         status.error_code = None
@@ -1415,6 +1437,7 @@ class SimulatedMower:
 
     def _enter_error(self, code: str, message: str) -> None:
         status = self._status
+        self._unblocked = self._resuming = False
         self._blade_on = False
         self._moving_speed = 0.0
         self._end_drive_session()
@@ -1501,6 +1524,8 @@ class SimulatedMower:
         activity = status.activity
         if activity is MowerActivity.UPDATING:
             return self._update_step(t)
+        if activity is MowerActivity.ERROR and self._resuming:
+            return self._resume_step(t)
         if activity in (MowerActivity.MOWING, MowerActivity.RETURNING):
             if self._rtk_fix is RtkFixStatus.NONE:
                 self._blade_on = False
@@ -1615,7 +1640,7 @@ class SimulatedMower:
         if cmd.linear == 0 and cmd.angular == 0:
             self._drain(t, self.config.drain_idle_per_h)
             return t
-        if self.stuck:
+        if self.stuck and not self._unblocked:
             return self._stuck_step(step, cmd)
         self._theta += cmd.angular * self.config.drive_max_turn_rad_s * step
         speed = cmd.linear * self.drive_full_speed_mps
@@ -1645,15 +1670,47 @@ class SimulatedMower:
         self._backed_off_m += abs(speed) * step
         if self._backed_off_m >= self.config.unstuck_backward_m - 1e-9:
             status = self._status
-            # A job the error interrupted waits for ``ResumeMow`` (like ``clear_error``).
-            status.activity = (
-                MowerActivity.PAUSED if status.resume_activity is not None else MowerActivity.IDLE
-            )
-            status.error_code = None
-            status.error_message = None
-            _log.info("simulated mower %s is free again", self.mower_id)
+            if status.resume_activity is not None:
+                # Like a LUBA: free to move, but the error lasts until the job resumes.
+                self._unblocked = True
+                _log.info("simulated mower %s is free, the error stays", self.mower_id)
+            else:
+                status.activity = MowerActivity.IDLE
+                status.error_code = None
+                status.error_message = None
+                _log.info("simulated mower %s is free again", self.mower_id)
             self._publish()
         return step
+
+    def _resume_stuck(self) -> Outcome:
+        """``ResumeMow`` while a stuck error interrupts the job: accepted; the route continues
+        once the mower is free and the error clears after ``resume_clear_m``."""
+        self._end_drive_session()
+        self._resuming = True
+        self._resume_moved_m = 0.0
+        self._publish()
+        return Outcome.accepted("resume sent; the error clears once the mower moved")
+
+    def _resume_step(self, t: float) -> float:
+        """The resumed route while the stuck error lasts (blades off): wheels spin until the
+        mower was freed, then the error clears after ``resume_clear_m``."""
+        if not self._unblocked:
+            self._drain(t, self.config.drain_moving_per_h)
+            return t
+        before = (self._x, self._y)
+        used = self._follow_route(t)
+        self._blade_on = False
+        self._resume_moved_m += distance(before, (self._x, self._y))
+        status = self._status
+        if self._resume_moved_m >= self.config.resume_clear_m - 1e-9 or not status.legs:
+            status.activity = status.resume_activity or MowerActivity.MOWING
+            status.resume_activity = None
+            status.error_code = None
+            status.error_message = None
+            self._unblocked = self._resuming = False
+            _log.info("simulated mower %s resumed, the error cleared", self.mower_id)
+            self._publish()
+        return used
 
     def _publish(self) -> None:
         self._changed.set()

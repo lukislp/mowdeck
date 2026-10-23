@@ -122,9 +122,14 @@ class Settings(ServiceSettings):
     vision_min_move_m: float = Field(default=0.2, ge=0, le=5)
     """Displacement that counts as "moved as planned"."""
 
-    vision_resume_confirm_seconds: float = Field(default=20.0, gt=0, le=300)
-    """After ``resume_mow`` of an approved ``resume``: how long to wait for the mower to report
-    ``mowing`` before the outcome says it was sent but not confirmed."""
+    vision_resume_confirm_seconds: float = Field(default=60.0, gt=0, le=600)
+    """After ``resume_mow`` of an approved ``resume``: how long to wait for the job to continue
+    (mowing, the error cleared, or the move below); the same error at the same place after
+    this is ``not_recovered``, and ``resume_mow`` is never sent again."""
+
+    vision_resume_confirm_move_m: float = Field(default=2.0, gt=0, le=50)
+    """After ``resume_mow``: a move this far from where it was sent counts as the job
+    continuing (a LUBA clears a stuck error only after the resumed job moved a few metres)."""
 
     vision_linear_mps_at_1: float = Field(default=0.5, gt=0, le=3)
     """Typical speed at ``linear = 1`` (told to the model)."""
