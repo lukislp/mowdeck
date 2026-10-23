@@ -18,7 +18,8 @@ export type CommandKind =
   | 'spot_mow'
   | 'spot_stop'
   | 'drive_calibrate'
-  | 'set_drive_speed';
+  | 'set_drive_speed'
+  | 'set_setting';
 
 export type CommandOutcome =
   'pending' | 'accepted' | 'executed' | 'rejected' | 'failed' | 'expired';

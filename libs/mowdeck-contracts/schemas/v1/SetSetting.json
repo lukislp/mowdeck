@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "TimeWindow": {
+      "description": "A daily window in the mower's local time, ``HH:MM`` on a 24-hour clock. ``end`` before\n``start`` crosses midnight (``22:00`` to ``06:00``).",
+      "properties": {
+        "end": {
+          "description": "End, `HH:MM` (24-hour clock).",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "End",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start, `HH:MM` (24-hour clock).",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "TimeWindow",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Change one of the mower's own settings (ADR 0046).\n\nThe key must be declared in ``MowerCapabilities.settings`` and the value must fit its\ndeclaration (type, range, step, options); the controller rejects anything else before it\nreaches the mower. A setting never makes the mower move. The new value arrives in\n``MowerState.settings`` once the mower reports it.",
+  "properties": {
+    "key": {
+      "pattern": "^[a-z][a-z0-9_]{0,47}$",
+      "title": "Key",
+      "type": "string"
+    },
+    "kind": {
+      "const": "set_setting",
+      "default": "set_setting",
+      "title": "Kind",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/TimeWindow"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The new value: true or false, a whole number, an option, a time window `{start, end}`, or null to switch a time window off.",
+      "title": "Value"
+    }
+  },
+  "required": [
+    "key",
+    "value"
+  ],
+  "title": "SetSetting",
+  "type": "object"
+}

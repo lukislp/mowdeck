@@ -51,7 +51,11 @@ What it simulates:
   the installed version and ``firmware_available`` as offered; ``FirmwareUpdate`` (after the
   controller's safety rules, which the simulator applies itself too) installs it over
   ``firmware_update_seconds`` simulated seconds with the activity ``updating`` and a progress,
-  then the mower reports the new version and ``update_state`` ``idle``.
+  then the mower reports the new version and ``update_state`` ``idle``;
+* its own settings (ADR 0046, ``SimulationConfig.settings``): one setting of each type
+  (:data:`SIMULATED_SETTINGS`) with ``SetSetting`` and their values in ``MowerState.settings``,
+  and a rain sensor (``rain_detected``, test hook :meth:`SimulatedMower.set_raining`) that, with
+  ``rain_detection`` on, blocks the self-check (``rain``) and rejects a start.
 
 ``SimulationConfig.time_scale`` makes simulated time run faster than real time.
 """
@@ -115,6 +119,10 @@ from mowdeck_contracts.v1 import (
     SetBladeHeight,
     SetLight,
     SetSpeed,
+    SettingGroup,
+    SettingSpec,
+    SettingType,
+    SettingValue,
     SignalStatus,
     SpotMowPlan,
     StartMow,
@@ -194,6 +202,49 @@ _PROXY_UNANSWERED: Final = frozenset(
     {BridgeScanErrorCode.UNREACHABLE, BridgeScanErrorCode.AUTH_FAILED}
 )
 """Scan errors after which nothing about the bridge itself is known."""
+
+
+SIMULATED_SETTINGS: Final[tuple[SettingSpec, ...]] = (
+    SettingSpec(key="rain_detection", type=SettingType.BOOL, group=SettingGroup.WEATHER),
+    SettingSpec(
+        key="recharge_level",
+        type=SettingType.INT,
+        group=SettingGroup.BATTERY,
+        min=15,
+        max=30,
+        step=1,
+        unit="%",
+    ),
+    SettingSpec(key="night_light", type=SettingType.BOOL, group=SettingGroup.LIGHTS),
+    SettingSpec(
+        key="turn_style",
+        type=SettingType.ENUM,
+        group=SettingGroup.DRIVING,
+        options=["in_place", "multi_point"],
+    ),
+    SettingSpec(
+        key="voice_volume",
+        type=SettingType.INT,
+        group=SettingGroup.VOICE,
+        min=0,
+        max=100,
+        step=1,
+        unit="%",
+    ),
+    SettingSpec(key="non_work_hours", type=SettingType.TIME_WINDOW, group=SettingGroup.SCHEDULE),
+)
+"""The settings the simulator offers (``SimulationConfig.settings``, ADR 0046): one of each type."""
+SIMULATED_SETTING_DEFAULTS: Final[Mapping[str, SettingValue]] = {
+    "rain_detection": True,
+    "recharge_level": 20,
+    "night_light": False,
+    "turn_style": "in_place",
+    "voice_volume": 50,
+    "non_work_hours": None,
+}
+"""The values the simulated mower starts with."""
+RAIN_BLOCKS_START: Final = "rain detected: the mower does not start in the rain"
+"""Rejection of a start while it rains and ``rain_detection`` is on."""
 
 
 DEFAULT_ORIGIN: Final = (48.137154, 11.576124)
@@ -331,6 +382,11 @@ class SimulationConfig:
     negative ``linear`` stands the mower still, like a link that cannot drive backwards."""
     turn_style: TurnStyle | None = None
     """The mower's own turn setting reported in ``MowerState.turn_style`` (None: none)."""
+    settings: bool = True
+    """Offer the mower's own settings (:data:`SIMULATED_SETTINGS`, ADR 0046) with ``SetSetting``."""
+    raining: bool = False
+    """Initial state of the rain sensor (``MowerState.rain_detected``; test hook
+    :meth:`SimulatedMower.set_raining`)."""
 
     @property
     def origin(self) -> tuple[float, float]:
@@ -550,6 +606,12 @@ class SimulatedMower:
                 else None
             ),
         )
+        if self.config.settings:
+            self._capabilities = self._capabilities.model_copy(
+                update={"settings": list(SIMULATED_SETTINGS)}
+            )
+        self._settings: dict[str, SettingValue] = dict(SIMULATED_SETTING_DEFAULTS)
+        self._raining = self.config.raining
         self._drive_speed = self.config.drive_speed_mps
         self._undock_target: LocalPoint | None = None
         self.camera_publishing = False
@@ -700,6 +762,26 @@ class SimulatedMower:
             except TimeoutError:
                 continue
         return Outcome.executed("mower is mowing")
+
+    async def set_setting(self, key: str, value: SettingValue) -> Outcome:
+        """:class:`~mowdeck_control.connection.SettingsCapable` (ADR 0046): store the value; it
+        never moves the mower. Works in every state, like a real mower's settings."""
+        self._require_connected()
+        spec = self._capabilities.setting(key)
+        if spec is None:
+            msg = f"this mower has no setting {key!r}"
+            raise CommandRejected(msg)
+        problem = spec.value_problem(value)
+        if problem is not None:
+            raise CommandRejected(problem)
+        self._settings[key] = value
+        self._publish()
+        return Outcome.executed(f"{key} set")
+
+    @property
+    def settings(self) -> Mapping[str, SettingValue]:
+        """The current values of the simulated settings."""
+        return dict(self._settings)
 
     async def get_drive_speed(self) -> float | None:
         """:class:`~mowdeck_control.connection.DriveSpeedCapable`: the speed setting."""
@@ -1121,10 +1203,14 @@ class SimulatedMower:
             signal=SignalStatus(
                 wifi_dbm=SIMULATED_WIFI_DBM, mobile_dbm=None, network=NetworkKind.WIFI
             ),
-            self_check=SelfCheck(result=SelfCheckResult.OK),
+            self_check=SelfCheck(result=SelfCheckResult.BLOCKED, detail="rain")
+            if self._rain_blocks()
+            else SelfCheck(result=SelfCheckResult.OK),
             error_category=_ERROR_CATEGORY.get(status.error_code or "", MowerErrorCategory.OTHER)
             if status.activity is MowerActivity.ERROR
             else None,
+            settings=dict(self._settings) if self.config.settings else {},
+            rain_detected=self._raining,
             raw=raw,
         )
 
@@ -1157,6 +1243,18 @@ class SimulatedMower:
         if source is not None:
             self._rtk_source = source
         self._publish()
+
+    def set_raining(self, raining: bool) -> None:
+        """Let the rain sensor report rain (``MowerState.rain_detected``). With the setting
+        ``rain_detection`` on, the self-check then reports ``blocked`` (``rain``) and a start is
+        rejected; a running job goes on (the simulator does not send the mower home)."""
+        self._raining = raining
+        self._publish()
+
+    def _rain_blocks(self) -> bool:
+        return (
+            self._raining and self.config.settings and self._settings.get("rain_detection") is True
+        )
 
     def set_battery(self, percent: float) -> None:
         """Set the battery level."""
@@ -1226,6 +1324,8 @@ class SimulatedMower:
         return Outcome.executed("blades and wheels stopped")
 
     def _start_mow(self, command: StartMow) -> Outcome:
+        if self._rain_blocks():
+            return Outcome.rejected(RAIN_BLOCKS_START)
         if command.plan_ref is not None:
             return Outcome.rejected("the simulator cannot resolve plan references")
         if command.spot_plan is not None:

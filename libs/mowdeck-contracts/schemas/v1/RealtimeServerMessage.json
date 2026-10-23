@@ -1277,6 +1277,19 @@
           "default": "unknown",
           "description": "Where `position` comes from; `unknown` whenever `position` is null."
         },
+        "rain_detected": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The mower's own rain sensor reports rain right now; null when the connection does not report the sensor (ADR 0046).",
+          "title": "Rain Detected"
+        },
         "raw": {
           "additionalProperties": true,
           "description": "Adapter specific extras. Consumers must not rely on its structure; the typed fields above replace the keys they cover.",
@@ -1302,6 +1315,33 @@
           ],
           "default": null,
           "description": "The mower's start self-check (`ok` or `blocked` with the reason); null when the connection does not report it."
+        },
+        "settings": {
+          "description": "Current values of the mower's own settings (ADR 0046) by key, as the mower reported them; a declared setting the mower has not reported yet is missing. Types, ranges and options: `MowerCapabilities.settings`.",
+          "maxProperties": 32,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{0,47}$": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/TimeWindow"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "title": "Settings",
+          "type": "object"
         },
         "signal": {
           "anyOf": [
@@ -1984,6 +2024,29 @@
         }
       },
       "title": "SubscribedMessage",
+      "type": "object"
+    },
+    "TimeWindow": {
+      "description": "A daily window in the mower's local time, ``HH:MM`` on a 24-hour clock. ``end`` before\n``start`` crosses midnight (``22:00`` to ``06:00``).",
+      "properties": {
+        "end": {
+          "description": "End, `HH:MM` (24-hour clock).",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "End",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start, `HH:MM` (24-hour clock).",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "TimeWindow",
       "type": "object"
     },
     "TurnStyle": {

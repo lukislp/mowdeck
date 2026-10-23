@@ -54,9 +54,8 @@ async def test_mammotion_light_is_read_after_connect() -> None:
     conn, _ = cloud(port)
     assert (await _connected(conn)).light_on is True
     assert (await conn.capabilities()).light is True
-    reads = [c for c in port.sent if c.name == LIGHT_READ_COMMAND]
+    reads = [c for c in port.sent if c.name == LIGHT_READ_COMMAND and c.kwargs == READ]
     assert len(reads) == 1
-    assert reads[0].kwargs == READ
     assert reads[0].priority is Priority.BACKGROUND
     assert reads[0].expected_field == "get_lamp_rsp"
     state = await conn.get_state()

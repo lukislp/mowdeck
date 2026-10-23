@@ -41,6 +41,14 @@ drive speed        not a command but :meth:`MammotionBase.get_drive_speed` and
                    read ``get_car_light(ids=1126)`` (PyMammotion's ``mower_api.py``); ``executed``
                    when the answer shows the wanted state, else ``accepted``; allowed during
                    an error (AI assist lights up a stuck mower)
+``SetSetting``     not a job command but :meth:`MammotionBase.set_setting`
+                   (:class:`~mowdeck_control.SettingsCapable`, ADR 0046): the vendor command(s)
+                   of :mod:`~mowdeck_control_mammotion.settings` sent once with
+                   ``Priority.USER``, then the setting read back (``send_and_wait``, a read);
+                   ``executed`` when the answer shows the new value, else ``accepted``; allowed
+                   in every activity (no setting moves the mower). The declared settings are
+                   read at connect with the device information (background priority, again
+                   while unanswered); ``MowerState.settings`` holds only answered keys
 ``FirmwareUpdate`` cloud only (ADR 0038): ``clear_version_info`` and the vendor's
                    ``start_ota_upgrade`` (:meth:`MammotionPort.start_firmware_update`),
                    confirmed by ``update_check.isupgrading`` or the work mode
@@ -137,6 +145,7 @@ from mowdeck_contracts.v1 import (
     SetBladeHeight,
     SetLight,
     SetSpeed,
+    SettingValue,
     StartMow,
     utc_now,
 )
@@ -156,7 +165,7 @@ from mowdeck_control import (
     firmware_update_problem,
 )
 
-from mowdeck_control_mammotion import errors, mapping
+from mowdeck_control_mammotion import errors, mapping, settings
 from mowdeck_control_mammotion.port import (
     CommandTimeoutError,
     FirmwareRefused,
@@ -259,6 +268,11 @@ mower answers with the same field, which PyMammotion's reducer stores in
 ``mower_state.travel_speed``."""
 DRIVE_SPEED_READ_TIMEOUT_S: Final = 5.0
 """Wait per attempt for the answer to ``get_speed`` (PyMammotion sends twice, so about 10 s)."""
+SETTING_READ_TIMEOUT_S: Final = 5.0
+"""Wait per attempt for the answer to a setting read (PyMammotion sends twice)."""
+SETTING_CONFIRM_S: Final = 3.0
+"""How long a setting change waits for the device state to show the answered read."""
+_MISSING: Final = object()
 DRIVE_SPEED_SETTLE_S: Final = 1.0
 """How long a read waits after the answer for the reducer to store it."""
 
@@ -342,6 +356,8 @@ class MammotionBase:
         self._blade_height_mm: int | None = None
         self._speed_mps: float | None = None
         self._light_reported = False
+        self._settings_reported: set[str] = set()
+        """Settings whose read the mower answered since the connect (ADR 0046)."""
         self._lock = asyncio.Lock()
         self._planned: mapping.PlannedPath | None = None
         self._path_task: asyncio.Task[None] | None = None
@@ -393,6 +409,7 @@ class MammotionBase:
                 raise CommandRejected(msg)
             self._connected = True
             self._light_reported = False
+            self._settings_reported = set()
             self._unsubscribe = self._port.subscribe(self._on_device_update)
             self._unsubscribe_notifications = self._port.subscribe_notifications(
                 self._on_notification
@@ -635,7 +652,8 @@ class MammotionBase:
                     return
             commands = self._device_info_requests(first=not attempt)
             read_light = self._light_unknown()
-            if not commands and not read_light:
+            unread = self._unread_settings()
+            if not commands and not read_light and not unread:
                 return
             for command, kwargs in commands:
                 try:
@@ -644,6 +662,9 @@ class MammotionBase:
                     _log.debug("device information request %s failed", command, exc_info=True)
             if read_light:
                 await self._read_light(Priority.BACKGROUND)
+            if unread:
+                with contextlib.suppress(Exception):  # the next round tries again
+                    await self._read_settings(unread, Priority.BACKGROUND)
 
     def _light_unknown(self) -> bool:
         """True for a mower with a light whose state has not been reported yet."""
@@ -673,6 +694,68 @@ class MammotionBase:
         if self._connected:
             self._publish()
         return True
+
+    def _declared_settings(self) -> list[str]:
+        """The keys of the settings this mower declares (ADR 0046)."""
+        try:
+            specs = settings.settings_of(
+                self._port.device_name, self._port.firmware(), self._port.product_key()
+            )
+        except Exception:  # a closed port: nothing to declare
+            return []
+        return [spec.key for spec in specs]
+
+    def _unread_settings(self) -> list[str]:
+        """Declared settings the mower has not answered yet."""
+        return [k for k in self._declared_settings() if k not in self._settings_reported]
+
+    async def _read_settings(self, keys: Sequence[str], priority: Priority) -> bool:
+        """Read ``keys`` (each vendor read once) and wait for the answers; True when every read
+        was answered (best effort: a read without an answer is tried again next round)."""
+        declared = self._declared_settings()
+        answered_all = True
+        for request in settings.reads_for(keys):
+            command, reply, kwargs = request
+            try:
+                await self._port.send_and_wait(
+                    command, reply, priority=priority, timeout_s=SETTING_READ_TIMEOUT_S, **kwargs
+                )
+            except (NoTransportAvailableError, PortClosedError):
+                raise
+            except Exception:
+                _log.debug("setting read %s of %s failed", command, self._port.device_name)
+                answered_all = False
+                continue
+            self._settings_reported |= settings.answered_keys(request, declared)
+        if self._connected:
+            self._publish()
+        return answered_all
+
+    async def set_setting(self, key: str, value: SettingValue) -> Outcome:
+        """:class:`~mowdeck_control.SettingsCapable` (ADR 0046): send the vendor command(s) of
+        :mod:`~mowdeck_control_mammotion.settings` once with ``Priority.USER``, then read the
+        setting back; ``executed`` when the answer shows the new value, else ``accepted``. None
+        of these commands moves the mower, so they are allowed in every activity."""
+        self._require_connected()
+        if key not in self._declared_settings():
+            msg = f"this mower has no setting {key!r}"
+            raise CommandRejected(msg)
+        try:
+            for command, kwargs in settings.writes_for(key, value, self._port.device()):
+                await self._send(command, **kwargs)
+            confirmed = await self._read_settings([key], Priority.USER)
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("no usable link to the mower") from exc
+        except TransportError as exc:
+            msg = f"transport error: {type(exc).__name__}"
+            raise CommandRejected(msg) from exc
+
+        def shows_wanted(device: MowerDevice) -> bool:
+            return settings.values_of(device, {key}).get(key, _MISSING) == value
+
+        if confirmed and await self._port.wait_for(shows_wanted, SETTING_CONFIRM_S):
+            return Outcome.executed(f"{key} set")
+        return Outcome.accepted(f"{key} sent; the mower did not confirm it")
 
     def _device_info_requests(self, *, first: bool) -> list[tuple[str, dict[str, Any]]]:
         """The device information commands of one round with their arguments."""
@@ -804,6 +887,9 @@ class MammotionBase:
             firmware_update=self._firmware_offered(),
             undock=True,
             drive_speed=self._drive_speed_offered(),
+            settings=settings.settings_of(
+                self._port.device_name, self._port.firmware(), self._port.product_key()
+            ),
         )
 
     async def get_state(self) -> MowerState:
@@ -1449,6 +1535,10 @@ class MammotionBase:
             firmware_info=self._firmware.info,
             fault_since=self._fault_since,
             warnings=tuple(self._warnings),
+            settings=settings.values_of(self._port.device(), self._settings_reported),
+            rain_detected=settings.rain_detected_of(
+                self._port.device(), has_report=self._port.has_report
+            ),
         )
 
     async def _on_device_update(self) -> None:

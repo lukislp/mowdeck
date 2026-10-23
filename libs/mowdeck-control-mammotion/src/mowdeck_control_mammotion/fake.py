@@ -355,6 +355,11 @@ class FakeMammotionPort:
         answer (the read times out). A write (``operate=0``) changes it when the mower answers
         (``light_follows_writes``)."""
         self.light_follows_writes = True
+        self.settings_answer = True
+        """Whether the mower answers the reads of its settings (ADR 0046); False: they time out.
+        Writes change the device state like PyMammotion's reducer on the answer
+        (:meth:`_apply_setting`) while ``settings_follow_writes``."""
+        self.settings_follow_writes = True
         self.lamp_bright = 80
         self.speed_answer: float | None = 0.4
         """The speed setting for manual driving the mower reports on ``get_speed`` (answer
@@ -564,6 +569,11 @@ class FakeMammotionPort:
                 raise CommandTimeoutError(expected_field, 2)
             await self.deliver_speed(self.speed_answer)
             return {expected_field: {"speed": self.speed_answer}}
+        if is_setting_read(command, kwargs):
+            if not self.settings_answer:
+                raise CommandTimeoutError(expected_field, 2)
+            await self.emit()
+            return {expected_field: {}}
         await self._apply(command, kwargs)
         return {expected_field: {}}
 
@@ -793,7 +803,58 @@ class FakeMammotionPort:
         if error is not None:
             raise error
 
+    def _apply_setting(self, command: str, kwargs: dict[str, Any]) -> bool:
+        """Store a setting write like PyMammotion's reducer stores the mower's answer; True when
+        ``command`` was a setting write."""
+        state = self._device.mower_state
+        follow = self.settings_follow_writes
+        if command == "read_write_device" and kwargs.get("rw") == 1:
+            rw_id, context = kwargs.get("rw_id"), int(kwargs.get("context", 0))
+            if rw_id not in (3, 6, 7):
+                return False
+            if follow and rw_id == 3:
+                state.rain_detection = bool(context)
+            return True
+        if command in ("turning_mode", "traverse_mode"):
+            if follow:
+                setattr(state, command.replace("traverse", "traversal"), int(kwargs["context"]))
+            return True
+        if command == "read_and_set_sidelight" and kwargs.get("operate") == 0:
+            if follow:
+                state.side_led.enable = 0 if kwargs["is_sidelight"] else 1
+            return True
+        if command == "set_car_light":
+            if follow:
+                state.lamp_info.night_light = bool(kwargs["on_off"])
+            return True
+        if command == "set_animal_protection_mode":
+            if follow:
+                state.animal_protection.mode = int(kwargs["mode"])
+                state.animal_protection.status = 1 if kwargs["mode"] else 0
+            return True
+        if command in ("set_recharge_level", "set_resume_level"):
+            if follow:
+                setattr(state, command.removeprefix("set_"), int(kwargs["level"]))
+            return True
+        if command == "set_car_volume":
+            if follow:
+                state.audio.volume = int(kwargs["volume"])
+            return True
+        if command == "set_car_volume_sex":
+            if follow:
+                state.audio.sex = int(kwargs["sex"])
+            return True
+        if command in ("job_do_not_disturb", "job_do_not_disturb_del"):
+            if follow:
+                hours = self._device.non_work_hours
+                hours.start_time = str(kwargs.get("unable_start_time", "0"))
+                hours.end_time = str(kwargs.get("unable_end_time", "0"))
+            return True
+        return False
+
     async def _apply(self, command: str, kwargs: dict[str, Any] | None = None) -> None:
+        if self._apply_setting(command, kwargs or {}):
+            return
         if command == "read_write_device" and (kwargs or {}).get("rw_id") == 5:
             if (kwargs or {}).get("context", 1) == 2:
                 if self.error_log_answer is not None:
@@ -832,6 +893,32 @@ class FakeMammotionPort:
             await self.emit()
 
 
+SETTING_READ_COMMANDS: Final = frozenset(
+    {
+        "read_animal_protection_mode",
+        "read_animal_protection_status",
+        "read_recharge_level",
+        "read_resume_level",
+        "get_car_audio_cfg",
+        "read_job_do_not_disturb",
+        "read_and_set_sidelight",
+    }
+)
+"""Commands of the setting reads (ADR 0046); `read_write_device` and `get_car_light` also
+carry other requests, see :func:is_setting_read."""
+
+
+def is_setting_read(command: str, kwargs: dict[str, Any]) -> bool:
+    """The reads of :mod:`~mowdeck_control_mammotion.settings` (ADR 0046)."""
+    if command in SETTING_READ_COMMANDS - {"read_and_set_sidelight"}:
+        return True
+    if command == "read_write_device":
+        return kwargs.get("rw") == 0 and kwargs.get("rw_id") in (3, 6, 7)
+    if command == "read_and_set_sidelight":
+        return kwargs.get("operate") == 1
+    return command == "get_car_light" and kwargs.get("ids") == 1123
+
+
 __all__ = [
     "BACK_HASH",
     "DOCK_ROTATION_DEG",
@@ -849,6 +936,7 @@ __all__ = [
     "SAMPLE_PATH_LINES",
     "SAMPLE_PRODUCT_KEY",
     "SAMPLE_SUB_MODEL_ID",
+    "SETTING_READ_COMMANDS",
     "STRIPE_LINE_HASH",
     "CommandTimeoutError",
     "FakeMammotionPort",

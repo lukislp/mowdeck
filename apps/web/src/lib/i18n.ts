@@ -188,6 +188,8 @@ export function commandLabel(
       return m.command_drive_calibrate();
     case 'set_drive_speed':
       return m.command_set_drive_speed();
+    case 'set_setting':
+      return m.command_set_setting();
     case 'manual_drive':
       return m.command_manual_drive();
   }

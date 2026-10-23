@@ -1799,6 +1799,7 @@
   "spot_reason_stalled": "no progress along the plan for 60 s",
   "command_drive_calibrate": "Calibrate driving",
   "command_set_drive_speed": "Set driving speed",
+  "command_set_setting": "Change mower setting",
   "drive_settings_title": "Manual driving",
   "drive_speed_title": "Driving speed",
   "drive_speed_unknown": "unknown",

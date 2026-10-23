@@ -36,6 +36,7 @@ COMMAND_RELATION: Final[Mapping[str, str]] = {
     "manual_drive": CAN_DRIVE,
     "drive_calibrate": CAN_DRIVE,  # MowDeck drives fixed steps to measure the stick scale
     "set_drive_speed": CAN_DRIVE,  # changes how far a stick value drives the mower
+    "set_setting": CAN_MANAGE_MOWERS,  # the mower's own settings (ADR 0046), like its firmware
     "emergency_stop": CAN_EMERGENCY_STOP,  # equals can_view in the model: whoever sees may stop
 }
 """The computed relation a principal needs on the mower to send a command of each kind."""
