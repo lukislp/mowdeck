@@ -7,6 +7,8 @@ every image of the list through the repository's GHCR mirror ``ghcr.io/<owner>/m
 .github/workflows/mirror-images.yml fills from the same list through infra/mirror-env.sh. No
 workflow pins an image of its own or pulls a listed image from its public registry, so the images
 CI runs cannot drift from the ones the stack runs.
+The one exception is ``UNMIRRORED``: an image whose licence does not allow the public mirror to
+republish it, pinned by digest in its job instead.
 """
 
 import os
@@ -29,6 +31,10 @@ MIRROR_REF_RE = re.compile(r"mowdeck/mirror/([a-z0-9-]+):([\w.-]+)")
 WORKFLOWS = ["ci.yml", "helm-kind.yml", "release.yml"]
 MIRROR_WORKFLOW = "mirror-images.yml"
 MIRROR_SCRIPT = "infra/mirror-env.sh"
+# The only images pinned outside the list: (workflow, job, variable) -> registry prefix. They may
+# not be republished by the public mirror (licence; test_release_licences.py, NOT_MIRRORED), so
+# the job pulls them from their own registry, pinned by digest.
+UNMIRRORED = {("ci.yml", "e2e-web", "PLAYWRIGHT_IMAGE"): "mcr.microsoft.com/playwright:"}
 
 
 def _images(repo_root: Path) -> dict[str, str]:
@@ -207,7 +213,12 @@ def test_workflows_pull_through_the_mirror(repo_root: Path, workflow: str) -> No
     scopes = [("workflow env", data.get("env") or {})]
     scopes += [(f"job {name} env", job.get("env") or {}) for name, job in data["jobs"].items()]
     for scope, mapping in scopes:
-        pinned = sorted(key for key in mapping if key.endswith("_IMAGE"))
+        pinned = sorted(
+            key
+            for key in mapping
+            if key.endswith("_IMAGE")
+            and (workflow, scope.removeprefix("job ").removesuffix(" env"), key) not in UNMIRRORED
+        )
         assert not pinned, f"{workflow}: {scope} pins {pinned}; pin images in .env.example"
     # A listed image is never pulled from its public registry.
     for name, source in images.items():
@@ -284,3 +295,14 @@ def test_mirror_script_and_docs_name_the_namespace(repo_root: Path) -> None:
     assert MIRROR_SCRIPT in readme and "MOWDECK_IMAGE_MIRROR" in readme
     env_example = (repo_root / "infra" / "compose" / ".env.example").read_text("utf-8")
     assert "mowdeck/mirror" in env_example
+
+
+def test_unmirrored_images_are_pinned_and_unlisted(repo_root: Path) -> None:
+    """The images the mirror must not republish stay out of the list and are digest-pinned."""
+    images = _images(repo_root)
+    for (workflow, job, name), prefix in UNMIRRORED.items():
+        _, data = _workflow(repo_root, workflow)
+        image = (data["jobs"][job].get("env") or {}).get(name, "")
+        assert image.startswith(prefix), f"{workflow}: job {job} {name}={image!r} not {prefix}..."
+        assert _tag(image) and _digest(image), f"{workflow}: {name}={image} needs tag and digest"
+        assert name not in images, f"{name} is in .env.example: the mirror would republish it"
