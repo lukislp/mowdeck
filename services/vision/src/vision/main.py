@@ -158,6 +158,7 @@ def build_app(
                 settle_seconds=settings.vision_settle_seconds,
                 min_move_m=settings.vision_min_move_m,
                 resume_confirm_seconds=settings.vision_resume_confirm_seconds,
+                resume_confirm_move_m=settings.vision_resume_confirm_move_m,
             ),
         )
         service = VisionService(

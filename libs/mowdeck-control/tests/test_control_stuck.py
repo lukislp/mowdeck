@@ -88,9 +88,9 @@ async def test_control_stuck_after_seconds_of_mowing_and_driven_free() -> None:
     assert sim.stuck
     sim.tick(0.4)
     state = await sim.get_state()
-    # The job the error interrupted waits for resume_mow, like on a real mower.
-    assert state.activity is MowerActivity.PAUSED
-    assert state.error_code is None and not state.drive_recoverable
+    # Free to move, but like a LUBA the error of the interrupted job stays until it resumes.
+    assert state.activity is MowerActivity.ERROR and state.error_code == STUCK_ERROR_CODE
+    assert state.drive_recoverable is True
     assert math.dist(sim.local_position, stuck_at) >= 0.3
     await session.update(0.0, 1.0, blade_on=False)
     before = sim.theta
@@ -99,8 +99,8 @@ async def test_control_stuck_after_seconds_of_mowing_and_driven_free() -> None:
     await session.close()
 
 
-async def test_control_stuck_job_keeps_its_route_and_resumes_after_being_driven_free() -> None:
-    sim = _sim()
+async def test_control_stuck_error_clears_only_after_resume_and_a_few_metres() -> None:
+    sim = _sim(resume_clear_m=2.0)
     await sim.connect()
     assert (await sim.execute(StartMow(area_ids=["front", "back"]))).status is (
         CommandStatus.EXECUTED
@@ -115,11 +115,33 @@ async def test_control_stuck_job_keeps_its_route_and_resumes_after_being_driven_
     await session.update(-1.0, 0.0, blade_on=False)
     sim.tick(0.8)
     state = await sim.get_state()
-    assert state.activity is MowerActivity.PAUSED and state.error_code is None
+    assert state.activity is MowerActivity.ERROR, "a manual drive does not clear the error"
     assert sim.current_path() is not None, "the interrupted job is still there"
     await session.close()
-    assert (await sim.execute(ResumeMow())).status is CommandStatus.EXECUTED
-    assert (await sim.get_state()).activity is MowerActivity.MOWING
+    freed_at = sim.local_position
+    assert (await sim.execute(ResumeMow())).status is CommandStatus.ACCEPTED
+    sim.tick(1)
+    state = await sim.get_state()
+    assert state.activity is MowerActivity.ERROR and not sim.blade_on
+    assert math.dist(sim.local_position, freed_at) > 0, "the route continues while the error lasts"
+    for _ in range(20):
+        if sim.tick(0.5).activity is MowerActivity.MOWING:
+            break
+    state = await sim.get_state()
+    assert state.activity is MowerActivity.MOWING and state.error_code is None
+
+
+async def test_control_resume_without_freeing_keeps_the_error_and_the_place() -> None:
+    sim = _sim()
+    await sim.connect()
+    await sim.execute(StartMow(area_ids=["front"]))
+    sim.tick(5)
+    sim.inject_stuck()
+    stuck_at = sim.local_position
+    assert (await sim.execute(ResumeMow())).status is CommandStatus.ACCEPTED
+    sim.tick(10)
+    state = await sim.get_state()
+    assert state.activity is MowerActivity.ERROR and sim.local_position == stuck_at
 
 
 async def test_control_manual_drive_still_cancels_a_paused_job() -> None:
