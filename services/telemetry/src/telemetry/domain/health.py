@@ -104,6 +104,9 @@ class HealthRow:
     device_battery_cycles: int | None = None
     """The mower's own lifetime battery cycle counter (``raw.bat_cycles``), None when it never
     sent one."""
+    blade_threshold_seconds: float | None = None
+    """The mower's own blade reminder threshold set in MowDeck; None: the configured default
+    (``HealthLimits.blade_threshold_seconds``)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +169,24 @@ class HealthStep:
     row: HealthRow
     deltas: list[Delta]
     threshold_crossed: bool
+
+
+def threshold_seconds(row: HealthRow, limits: HealthLimits) -> float:
+    """The blade reminder threshold of a mower: its own, else the configured default."""
+    if row.blade_threshold_seconds is not None:
+        return row.blade_threshold_seconds
+    return limits.blade_threshold_seconds
+
+
+def set_threshold(
+    row: HealthRow, seconds: float | None, limits: HealthLimits, now: datetime
+) -> HealthRow:
+    """The row with a new blade reminder threshold (None: back to the default). The reminder
+    is armed again when the hours since the change lie below the new threshold; above it, a
+    reminder already sent stays sent and one not yet sent follows with the next state."""
+    changed = replace(row, blade_threshold_seconds=seconds, updated_at=now)
+    below = changed.blade_seconds_since_change < threshold_seconds(changed, limits)
+    return replace(changed, blade_threshold_notified=row.blade_threshold_notified and not below)
 
 
 def utc_day(at: datetime) -> date:
@@ -275,7 +296,7 @@ def advance(
 
     since_change = current.blade_seconds_since_change + blade
     notified = current.blade_threshold_notified
-    crossed = not notified and since_change >= limits.blade_threshold_seconds
+    crossed = not notified and since_change >= threshold_seconds(current, limits)
     new_row = replace(
         current,
         updated_at=now,

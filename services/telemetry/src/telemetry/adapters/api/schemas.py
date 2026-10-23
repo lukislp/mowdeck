@@ -6,7 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from mowdeck_contracts.v1 import GeoReference, MowerCapabilities, MowerMap, MowerState, MowPath
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from telemetry.application.queries import HeatmapResult
 from telemetry.domain.health import BladeChange, DailyRow, HealthRow
@@ -214,6 +214,19 @@ def _optional_hours(seconds: float | None) -> float | None:
     return None if seconds is None else _hours(seconds)
 
 
+class BladeThresholdIn(BaseModel):
+    """``PUT .../health/blade-threshold``: the mower's blade reminder threshold."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hours: float | None = Field(
+        gt=0,
+        le=10_000,
+        description="Blade hours after which MowDeck reminds of a blade change; null returns "
+        "to the installation's default.",
+    )
+
+
 class MowerHealthOut(BaseModel):
     """Running health totals of a mower (since the first state Telemetry received)."""
 
@@ -225,7 +238,15 @@ class MowerHealthOut(BaseModel):
     blade_hours: float = Field(description="Hours with running blades (heuristic, see README).")
     blade_hours_since_change: float
     blade_changed_at: datetime | None = Field(description="The last recorded blade change.")
-    blade_hours_threshold: float = Field(description="Hours after which a reminder is sent.")
+    blade_hours_threshold: float = Field(
+        description="Hours after which a reminder is sent: the mower's own threshold set in "
+        "MowDeck, else the installation's default."
+    )
+    blade_hours_threshold_custom: bool = Field(
+        default=False,
+        description="The mower has its own threshold (`PUT .../health/blade-threshold`); false: "
+        "the default applies.",
+    )
     device_blade_hours: float | None = Field(
         description="The mower's own blade counter in hours (reset in the vendor app), as the "
         "vendor app shows it; null when the mower does not report one.",
@@ -262,14 +283,20 @@ class MowerHealthOut(BaseModel):
 
     @classmethod
     def of(cls, row: HealthRow, *, threshold_hours: float) -> "MowerHealthOut":
-        """Build from the stored totals."""
+        """Build from the stored totals; ``threshold_hours`` is the default threshold."""
+        custom = row.blade_threshold_seconds is not None
         return cls(
             mower_id=row.mower_id,
             since=row.since,
             blade_hours=_hours(row.blade_seconds),
             blade_hours_since_change=_hours(row.blade_seconds_since_change),
             blade_changed_at=row.blade_changed_at,
-            blade_hours_threshold=threshold_hours,
+            blade_hours_threshold=(
+                _hours(row.blade_threshold_seconds)
+                if row.blade_threshold_seconds is not None
+                else threshold_hours
+            ),
+            blade_hours_threshold_custom=custom,
             device_blade_hours=_optional_hours(row.device_blade_seconds),
             device_blade_warn_hours=_optional_hours(row.device_blade_warn_seconds),
             blade_source="device" if row.device_blade_seconds is not None else "telemetry",

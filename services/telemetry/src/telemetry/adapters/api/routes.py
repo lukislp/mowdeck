@@ -26,6 +26,7 @@ from telemetry.adapters.api.schemas import (
     BladeChangeList,
     BladeChangeOut,
     BladeResetIn,
+    BladeThresholdIn,
     CommandEventOut,
     CommandTimeline,
     HealthDaily,
@@ -252,6 +253,23 @@ async def reset_blade(
     """Record a blade change: the blade hours since the change restart at zero and the
     threshold reminder is armed again. Works before the first telemetry, too."""
     row = await services.health.reset_blade(account_id, mower_id, principal.subject, body.note)
+    return MowerHealthOut.of(row, threshold_hours=services.health.threshold_hours)
+
+
+@router.put("/mowers/{mower_id}/health/blade-threshold")
+async def set_blade_threshold(
+    mower_id: UUID,
+    _: ManageMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    body: BladeThresholdIn,
+) -> MowerHealthOut:
+    """Set the mower's blade reminder threshold in hours (``can_manage_mowers``, like the blade
+    reset); ``null`` returns to the default (``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``). The
+    reminder is armed again when the hours since the change lie below the new threshold.
+    Works before the first telemetry, too. The mower's own warning (``device_blade_warn_hours``)
+    is not touched."""
+    row = await services.health.set_blade_threshold(account_id, mower_id, body.hours)
     return MowerHealthOut.of(row, threshold_hours=services.health.threshold_hours)
 
 
