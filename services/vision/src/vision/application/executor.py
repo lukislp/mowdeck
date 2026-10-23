@@ -32,12 +32,19 @@ A proposal with action ``resume`` continues the paused mowing job, in this order
 2. Its drive steps, if any, run exactly like a ``drive`` (steps 1 to 5 above, blades off, the
    same limits and aborts); a run that aborts or does not free the mower ends there
    (``aborted`` or ``not_recovered``, "the job was not resumed").
-3. Verify before resuming (:func:`~vision.domain.rules.resume_gate`): a recent state without
-   an error, a lift or offline, and the job still paused; otherwise ``not_recovered``.
+3. Verify what the drive can establish (:func:`~vision.domain.rules.resume_gate`): a recent
+   state, not lifted, not offline, no sensor stop and no new error (a lift, tilt, collision,
+   blade or motor fault, or another code), and the job still paused or paused by the error.
+   The error that stopped the job may still be reported: a LUBA clears a stuck error only after
+   the resumed job moved it a few metres, never after a manual drive. Otherwise
+   ``not_recovered``.
 4. ``resume_mow`` (the command of the app's "continue") through ``fleet.commands.issue`` on
-   behalf of the approver, then up to ``resume_confirm_seconds`` for the mower to report
-   ``mowing`` (or the command's ``executed`` result): ``recovered``; a refused or failed
-   command is ``not_recovered`` with the mower's reason.
+   behalf of the approver, sent once and never repeated automatically. Then up to
+   ``resume_confirm_seconds`` (default 60 s) for any of: the activity becomes ``mowing``, the
+   error clears, or the mower moved at least ``resume_confirm_move_m`` (default 2 m) from where
+   ``resume_mow`` was sent: ``recovered``. A refused or failed command, an emergency stop, a
+   lift or a new error is ``not_recovered`` at once; still in the same error at the same place
+   after the window is ``not_recovered`` with that reason.
 """
 
 import asyncio
@@ -102,6 +109,7 @@ _log = get_logger("vision.executor")
 
 _NO_STOP_FRAME = ("emergency_stop", "sensor_stop")
 _FLEET_SILENT = "Fleet did not answer"
+_RESUMABLE = frozenset({"paused", "paused_by_error"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,8 +124,10 @@ class DriveConfig:
     geofence_margin_m: float = 2.0
     settle_seconds: float = 1.5
     min_move_m: float = 0.2
-    resume_confirm_seconds: float = 20.0
-    """After ``resume_mow``: how long to wait for the mower to report ``mowing``."""
+    resume_confirm_seconds: float = 60.0
+    """After ``resume_mow``: how long to wait for mowing, the error to clear or the move."""
+    resume_confirm_move_m: float = 2.0
+    """After ``resume_mow``: this far from where it was sent counts as moving on its job."""
 
 
 @dataclass(slots=True)
@@ -364,29 +374,35 @@ class Executor:
         if not steps:
             await on_verifying(None)
             nothing_driven = RunOutcome(ProposalState.RECOVERED, "")
-            return await self._send_resume(proposal, approver, account_id, nothing_driven)
+            return await self._send_resume(proposal, approver, account_id, nothing_driven, state)
         driven = await self._drive_steps(
             proposal, approver, account_id, steps, cancelled=cancelled, on_verifying=on_verifying
         )
         if driven.state is not ProposalState.RECOVERED:
             driven.detail = f"{driven.detail}; the job was not resumed"[:500]
             return driven
-        return await self._send_resume(proposal, approver, account_id, driven)
+        return await self._send_resume(proposal, approver, account_id, driven, state)
 
     async def _send_resume(
-        self, proposal: Proposal, approver: PrincipalRef, account_id: UUID, outcome: RunOutcome
+        self,
+        proposal: Proposal,
+        approver: PrincipalRef,
+        account_id: UUID,
+        outcome: RunOutcome,
+        initial: MowerState,
     ) -> RunOutcome:
-        """Verify that the error cleared and the job is still paused, send ``resume_mow`` and
-        wait for the mower to mow again; completes ``outcome`` (of the drive, if any)."""
+        """Check what the drive could establish (not that the error cleared), send
+        ``resume_mow`` once and confirm that the job continues; completes ``outcome`` (of the
+        drive, if any). ``initial`` is the state when the execution started."""
         before = f"{outcome.detail}; " if outcome.detail else ""
         state, missing = self._recent_state(proposal)
-        problem = missing or resume_gate(state)
+        problem = missing or resume_gate(state, initial)
         job = self._job(proposal, state) if state is not None else None
         if problem is None and state is not None:
             problem = resume_problem(job, state)
-            if problem is None and job is not None and job.status != "paused":
+            if problem is None and job is not None and job.status not in _RESUMABLE:
                 problem = f"the job is {job.status.replace('_', ' ')}"
-        if problem is not None:
+        if problem is not None or state is None:
             outcome.state = ProposalState.NOT_RECOVERED
             outcome.detail = f"{before}the job was not resumed: {problem}"[:500]
             return outcome
@@ -403,52 +419,67 @@ class Executor:
                 return outcome
             outcome.return_command_id = command_id
             _log.info("vision resume issued", proposal_id=str(proposal.id))
-            confirmed, why = await self._await_mowing(proposal, watch, command_id)
+            continued, why = await self._await_continue(proposal, watch, command_id, state)
         finally:
             watch.close()
-        target = _job_words(job)
-        if confirmed is False:
-            outcome.state = ProposalState.NOT_RECOVERED
-            outcome.detail = f"{before}resume_mow failed: {why}"[:500]
-        elif confirmed is None:
+        if continued:
             outcome.state = ProposalState.RECOVERED
-            outcome.detail = (
-                f"{before}resume_mow sent{target}; the mower has not reported mowing within "
-                f"{self.config.resume_confirm_seconds:g} s"
-            )[:500]
+            outcome.detail = f"{before}the job continues{_job_words(job)}: {why}"[:500]
         else:
-            outcome.state = ProposalState.RECOVERED
-            outcome.detail = f"{before}the job continues{target}"[:500]
+            outcome.state = ProposalState.NOT_RECOVERED
+            detail = f"{before}resume_mow was sent once, the job did not continue: {why}"
+            outcome.detail = detail[:500]
         return outcome
 
-    async def _await_mowing(
-        self, proposal: Proposal, watch: MowerWatch, command_id: UUID
-    ) -> tuple[bool | None, str]:
-        """True when the mower mows again (or the command executed), False with the reason
-        when it refused or an emergency stop came, None when nothing was heard in time."""
-        deadline = self.view.monotonic() + self.config.resume_confirm_seconds
+    async def _await_continue(
+        self, proposal: Proposal, watch: MowerWatch, command_id: UUID, sent: MowerState
+    ) -> tuple[bool, str]:
+        """Whether the job continues after ``resume_mow``, with the reason: the activity becomes
+        ``mowing``, the error clears, or the mower moves ``resume_confirm_move_m`` from where
+        the command was sent (``sent``), within ``resume_confirm_seconds``. A refusal, an
+        emergency stop, a lift or a new error ends the wait at once."""
+        mapped = self.view.mower_map(proposal.mower_id)
+        mower_map = mapped[1] if mapped is not None and mapped[0] == proposal.account_id else None
+        origin = pose_of(sent, mower_map)
+        last = sent
+        moved = 0.0
+        window = self.config.resume_confirm_seconds
+        deadline = self.view.monotonic() + window
         while (remaining := deadline - self.view.monotonic()) > 0:
             event = await watch.next(remaining)
             if event is None:
                 break
             if event.kind == "emergency_stop":
-                return False, "emergency stop"
+                return False, "an emergency stop came"
             if event.kind == "result" and event.result is not None:
                 result = event.result
-                if result.command_id != command_id:
-                    continue
-                if result.status in (CommandStatus.REJECTED, CommandStatus.FAILED):
-                    return False, result.reason or str(result.status)
-                if result.status is CommandStatus.EXECUTED:
-                    return True, "executed"
-            if (
-                event.kind == "state"
-                and event.state is not None
-                and event.state.account_id == proposal.account_id
-                and event.state.activity is MowerActivity.MOWING
-            ):
-                return True, "mowing"
-        return None, "no confirmation"
+                if result.command_id == command_id and result.status in (
+                    CommandStatus.REJECTED,
+                    CommandStatus.FAILED,
+                ):
+                    return False, f"the mower refused it: {result.reason or result.status}"
+                continue
+            state = event.state
+            if event.kind != "state" or state is None or state.account_id != proposal.account_id:
+                continue
+            last = state
+            if state.activity is MowerActivity.MOWING:
+                return True, "mowing again"
+            stop = resume_gate(state, sent)
+            if stop is not None:
+                return False, stop
+            if state.activity is not MowerActivity.ERROR:
+                return True, f"the error cleared, the mower is {state.activity}"
+            here = pose_of(state, mower_map)
+            if origin is not None and here is not None:
+                moved = max(moved, math.hypot(here.x - origin.x, here.y - origin.y))
+                if moved >= self.config.resume_confirm_move_m:
+                    return True, f"moved {moved:.1f} m on its job"
+        code = last.error_code or str(last.activity)
+        return False, (
+            f"after {window:g} s the mower still reports {code}, {moved:.1f} m from where "
+            "resume_mow was sent; it is not sent again"
+        )
 
     # --- start ----------------------------------------------------------------------------
 
@@ -694,6 +725,7 @@ class Executor:
             steps=steps,
             min_move_m=self.config.min_move_m,
             travelled_m=run.travelled_m,
+            initial=run.initial,
         )
         outcome = RunOutcome(
             ProposalState.RECOVERED if ok else ProposalState.NOT_RECOVERED,

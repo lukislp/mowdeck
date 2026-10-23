@@ -5,8 +5,9 @@
  * model `fake/recover` and a test call answers ok; (b) a simulated mower that gets stuck after
  * 20 s of mowing (`stuck_after_seconds`, a development option of the simulator that Fleet passes
  * through) shows the error state, the AI assist sheet proposes the fake maneuver (back, turn,
- * forward), the owner approves it (blades off), the outcome is "recovered" with the mower free
- * again (idle, mowing, or paused when the error interrupted its job), and Fleet lists the drive session with `origin: "vision"`. Stereo: the settings
+ * forward), the owner approves it (blades off), the outcome is "recovered": the mower is free,
+ * and like a LUBA it keeps the stuck error of its interrupted job until the job resumes; Fleet
+ * lists the drive session with `origin: "vision"`. Stereo: the settings
  * page has "Stereo-Bilder, wenn verfügbar" switched on by default; with both front cameras of the
  * simulator side by side in the camera panel the request carries both frames, and the proposal
  * shows "Stereo" with the two images (left and right) and `stereo: true` in the API; Vision adds
@@ -15,7 +16,9 @@
  * the labelled dock fallback; approving it sends the normal dock command and no drive session.
  * (d) Resume: with `fake/resume` a mower stuck during a two-area job gets the proposal to continue
  * it (the job's areas, current and next, shown in the sheet); approving drives the short maneuver
- * with the blades off, then `resume_mow` continues the job and the mower mows again.
+ * with the blades off, then `resume_mow` goes out while the stuck error is still reported (a
+ * manual drive does not clear it on a LUBA), the job continues, the error clears after a few
+ * metres and the mower mows again.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
@@ -149,10 +152,8 @@ test('vision: fake provider set up, a stuck mower recovered by an approved AI ma
     timeout: 30_000,
   });
   await expect(sheet.getByTestId('assist-outcome')).toContainText('Der Mäher ist wieder frei.');
-  // Free again: idle, or paused when the error interrupted the job (resume_mow continues it).
-  await expect(page.getByTestId('mower-state')).toContainText(/Bereit|Mäht|Pausiert/, {
-    timeout: 30_000,
-  });
+  // Free, but like a LUBA the stuck error of the interrupted job stays until it resumes.
+  await expect(sheet.getByTestId('assist-detail')).toContainText('still reports stuck');
 
   // Fleet records the maneuver as a drive session on behalf of the Vision service.
   await expect
