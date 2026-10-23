@@ -292,3 +292,42 @@ async def test_vision_resume_reports_a_refusal_by_fleet() -> None:
         done = await h.until(proposal_id, owner, *DONE)
         assert done["state"] == "not_recovered"
         assert done["detail"] == "resume_mow was refused: forbidden"
+
+
+async def test_vision_resume_sent_once_and_reported_when_the_job_does_not_continue() -> None:
+    # Resume without a maneuver while the mower is still wedged: the error persists, the gate
+    # lets resume_mow go out (the error itself is no reason), the wheels spin, nothing moves.
+    factory = StaticFactory(default=answer([], action=ProposalAction.RESUME))
+    async with harness(factory=factory, vision_resume_confirm_seconds=1.5) as h:
+        owner = h.owner()
+        rig = await _mowing_two_areas(h, owner)
+        await _stuck_at_the_side_path(h, rig)
+        proposal_id = await _request(h, owner, rig)
+        await h.until(proposal_id, owner, ProposalState.PROPOSED)
+        await h.client.post(f"{API}/proposals/{proposal_id}/approve", headers=owner.headers)
+        done = await h.until(proposal_id, owner, *DONE)
+        assert done["state"] == "not_recovered", done["detail"]
+        assert "resume_mow was sent once" in done["detail"]
+        assert "still reports stuck, 0.0 m from where resume_mow was sent" in done["detail"]
+        assert [i.command.command.kind for i in h.fleet.issued] == ["resume_mow"]
+        assert _kinds(rig).count("resume_mow") == 1, "never sent a second time"
+        assert rig.sim.stuck
+
+
+async def test_vision_resume_after_the_drive_keeps_the_error_until_the_job_moves() -> None:
+    factory = FakeFactory()
+    async with harness(factory=factory) as h:
+        owner = h.owner()
+        rig = await _mowing_two_areas(h, owner)
+        await _stuck_at_the_side_path(h, rig)
+        proposal_id = await _request(h, owner, rig)
+        await h.until(proposal_id, owner, ProposalState.PROPOSED)
+        await h.client.post(f"{API}/proposals/{proposal_id}/approve", headers=owner.headers)
+        await wait_for(lambda: "resume_mow" in _kinds(rig), timeout=15)
+        # resume_mow went out while the mower still reported the stuck error.
+        resumed = _kinds(rig).index("resume_mow")
+        assert resumed > 0
+        done = await h.until(proposal_id, owner, *DONE, timeout=20)
+        assert done["state"] == "recovered", done["detail"]
+        assert "still reports stuck" in done["detail"], "the drive did not clear the error"
+        assert "the job continues" in done["detail"]

@@ -9,7 +9,8 @@ Safety rules (ADR 0033, plan "Risiken"):
 * An answer ``resume`` only for task ``recover`` and when the job context
   (:func:`~vision.domain.job.job_context`) finds a paused job that ``resume_mow`` can continue
   (no spot run, no lift, tilt or other safety stop). Its optional drive steps follow the drive
-  rules below; ``resume_mow`` is sent only after the error cleared (:func:`resume_gate`).
+  rules below; ``resume_mow`` is sent only when :func:`resume_gate` passes (the stuck error
+  itself may persist: a LUBA clears it only after the resumed job moved it).
 * Dock fallback: when the model recommends nothing (or something not allowed) without any risk
   flag and return to dock is applicable, the service still offers ``return_to_dock``, labelled
   as a rule based fallback. Like every proposal it runs only after a human approves it.
@@ -28,11 +29,18 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final
 
-from mowdeck_contracts.v1 import LocalPoint, MowerActivity, MowerMap, MowerState, VisionTask
+from mowdeck_contracts.v1 import (
+    LocalPoint,
+    MowerActivity,
+    MowerErrorCategory,
+    MowerMap,
+    MowerState,
+    VisionTask,
+)
 from mowdeck_control.geo import distance, point_in_polygon
 
 from vision.domain.context import Pose
-from vision.domain.dock import DockRoute
+from vision.domain.dock import DockRoute, hardware_fault
 from vision.domain.job import JobContext
 from vision.domain.models import AssessmentOut, ProposalAction, ProposalState, ProposedStep
 
@@ -155,18 +163,51 @@ def start_problem(task: VisionTask, state: MowerState | None) -> str | None:
     return None
 
 
-def resume_gate(state: MowerState | None) -> str | None:
-    """Why ``resume_mow`` must not be sent with this state (None: send it): the error that
-    paused the job must have cleared and no sensor stop may be active."""
+_STOP_CATEGORIES: Final = frozenset(
+    {MowerErrorCategory.LIFT_TILT, MowerErrorCategory.COLLISION, MowerErrorCategory.BLADE_MOTOR}
+)
+"""Error categories that are a safety or hardware stop, never something to drive or resume on."""
+
+
+def resume_gate(state: MowerState | None, initial: MowerState | None = None) -> str | None:
+    """Why ``resume_mow`` must not be sent with this state (None: send it).
+
+    The error that paused the job may still be reported: a LUBA clears a stuck error only after
+    the resumed job moved it a few metres. Refused are: no state, a lift, offline, an error that
+    is not drive recoverable or names a lift, tilt, collision, blade or motor fault, and an
+    error other than the one the mower had when the round started (``initial``).
+    """
     if state is None:
         return "no state of the mower is known"
     if state.raw.get("lifted") is True:
         return "sensor stop: the mower was lifted"
-    if state.activity is MowerActivity.ERROR:
-        return f"the mower still reports error {state.error_code or 'unknown'}"
     if state.activity is MowerActivity.OFFLINE:
         return "the mower is offline"
+    if state.activity is not MowerActivity.ERROR:
+        return None
+    code = state.error_code or "unknown"
+    if not state.drive_recoverable:
+        return f"sensor stop: {code}"
+    if state.error_category in _STOP_CATEGORIES:
+        return f"sensor stop: {code} ({state.error_category})"
+    fault = hardware_fault(state)
+    if fault is not None:
+        return fault
+    before = initial.error_code if initial and initial.activity is MowerActivity.ERROR else None
+    if before != state.error_code:
+        return f"new error {code}"
     return None
+
+
+def persisting_error(state: MowerState, initial: MowerState | None) -> bool:
+    """The state still reports the drive recoverable error the round started with (a LUBA keeps
+    a stuck error after a manual drive until its job resumed and moved)."""
+    return (
+        state.activity is MowerActivity.ERROR
+        and initial is not None
+        and initial.activity is MowerActivity.ERROR
+        and resume_gate(state, initial) is None
+    )
 
 
 def state_abort_reason(state: MowerState, initial: MowerState) -> str | None:
@@ -238,13 +279,19 @@ def verify(
     min_move_m: float,
     min_turn_deg: float = 10.0,
     travelled_m: float = 0.0,
+    initial: MowerState | None = None,
 ) -> tuple[bool, str]:
-    """Did the maneuver help? The mower must report no error and must have moved as planned:
-    ``min_move_m`` of path (the travelled path counts, so "back, turn, forward" that ends near
-    the start is a move) when the plan drove, or a turn when it only turned."""
+    """Did the maneuver help? The mower must have moved as planned: ``min_move_m`` of path (the
+    travelled path counts, so "back, turn, forward" that ends near the start is a move) when the
+    plan drove, or a turn when it only turned. It must report no error, except the drive
+    recoverable error it had at the start (``initial``): a manual drive does not clear a LUBA's
+    stuck error, that happens only once the resumed job moved it."""
     if end_state is None:
         return False, "no state after the maneuver"
-    if end_state.activity in (MowerActivity.ERROR, MowerActivity.OFFLINE):
+    kept = persisting_error(end_state, initial)
+    if end_state.activity is MowerActivity.OFFLINE or (
+        end_state.activity is MowerActivity.ERROR and not kept
+    ):
         return False, f"the mower still reports {end_state.error_code or end_state.activity}"
     if start is None or end is None:
         return False, "the position is unknown, the outcome cannot be checked"
@@ -258,9 +305,14 @@ def verify(
         turned = abs(math.degrees(_angle_diff(end.theta_rad, start.theta_rad)))
         if turned < min_turn_deg:
             return False, f"the mower turned only {turned:.0f} degrees"
+    still = (
+        f"; the mower still reports {end_state.error_code}, which clears once its job continues"
+        if kept
+        else ""
+    )
     if task is VisionTask.FIND_DOCK:
-        return True, f"moved {moved:.2f} m; returning to the dock"
-    return True, f"free again, moved {moved:.2f} m"
+        return True, f"moved {moved:.2f} m{still}; returning to the dock"
+    return True, f"free again, moved {moved:.2f} m{still}"
 
 
 def _angle_diff(a: float, b: float) -> float:
