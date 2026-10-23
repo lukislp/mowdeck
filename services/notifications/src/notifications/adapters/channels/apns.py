@@ -11,7 +11,7 @@ Provider token: an ES256 JWT signed with the ``.p8`` key, header ``kid`` (key id
 more often than every 20 minutes, so one token is reused for 50 minutes; a 403
 ``ExpiredProviderToken`` drops it at once (the delivery is retried with a fresh one).
 
-Headers: ``apns-push-type: alert``, ``apns-priority`` 10 (critical, warning) or 5 (info),
+Headers: ``apns-push-type: alert``, ``apns-priority`` 10 for every severity (visible alerts),
 ``apns-expiration`` now plus the Web Push TTL of the severity, ``apns-collapse-id`` the Web Push
 ``Topic`` of the tag (one visible notification per kind and mower). Body: ``aps`` with the
 alert, the default sound, ``thread-id`` (the tag) and ``interruption-level``
@@ -44,10 +44,14 @@ HOSTS: dict[str, str] = {
     "development": "api.sandbox.push.apple.com",
     "production": "api.push.apple.com",
 }
+# Every MowDeck notification is a visible alert, so all go out at priority 10 ("deliver now").
+# Priority 5 lets iOS hold an alert for power reasons; on the owner's iPhone info alerts such as
+# mowing_finished only appeared once the app was opened (2026-10-23). Severity still sets the
+# interruption level and the expiration.
 PRIORITY = {
     NotificationSeverity.CRITICAL: "10",
     NotificationSeverity.WARNING: "10",
-    NotificationSeverity.INFO: "5",
+    NotificationSeverity.INFO: "10",
 }
 MAX_PAYLOAD_BYTES = 4096
 """APNs limit of an alert notification's JSON body."""

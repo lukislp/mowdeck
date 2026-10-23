@@ -195,7 +195,7 @@ def test_notifications_apns_signing_key_must_be_p256_pem() -> None:
     [
         (NotificationSeverity.CRITICAL, "10", "time-sensitive", 24 * 3600),
         (NotificationSeverity.WARNING, "10", "active", 6 * 3600),
-        (NotificationSeverity.INFO, "5", "active", 3600),
+        (NotificationSeverity.INFO, "10", "active", 3600),
     ],
 )
 async def test_notifications_apns_request_per_severity(
