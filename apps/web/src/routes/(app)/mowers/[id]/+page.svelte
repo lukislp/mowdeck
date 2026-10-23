@@ -47,12 +47,14 @@
   import CameraPanel from '$lib/components/CameraPanel.svelte';
   import HeatmapControls, { type HeatStatus } from '$lib/components/HeatmapControls.svelte';
   import HeatmapGaps from '$lib/components/HeatmapGaps.svelte';
+  import JobCard from '$lib/components/JobCard.svelte';
   import LightToggle from '$lib/components/LightToggle.svelte';
   import AssistSheet from '$lib/components/AssistSheet.svelte';
   import LiveStatus from '$lib/components/LiveStatus.svelte';
   import MowSettings from '$lib/components/MowSettings.svelte';
   import PlanBanner from '$lib/components/PlanBanner.svelte';
   import RainReadout from '$lib/components/RainReadout.svelte';
+  import ReceptionPanel from '$lib/components/ReceptionPanel.svelte';
   import SlowLoading from '$lib/components/SlowLoading.svelte';
   import SpotRunBar from '$lib/components/SpotRunBar.svelte';
   import SpotSheet from '$lib/components/SpotSheet.svelte';
@@ -79,7 +81,10 @@
   import { commands, permissions, realtime, revoked, sendCommand } from '$lib/live.svelte';
   import { drivesOverBridge } from '$lib/mower/drive-link';
   import { formatDuration } from '$lib/mower/duration';
+  import { jobView } from '$lib/mower/job';
   import { rainNow, readoutBars, stripBars } from '$lib/mower/rain';
+  import { hasReception } from '$lib/mower/reception';
+  import { errorCategoryLabel } from '$lib/mower/reception-labels';
   import type { RainDecision } from '$lib/schedules/types';
   import { availability, polygonArea, primaryCommand, type BarCommand } from '$lib/mower/commands';
   import {
@@ -924,6 +929,14 @@
   const areaNames = $derived(mower?.area_names ?? {});
   const areaName = $derived(areaNamer(mowerMap?.areas, areaNames));
   const areaIndex = $derived(new Map((mowerMap?.areas ?? []).map((a, i) => [a.id, i] as const)));
+  /** The running job (`MowerState.job`) with its area's MowDeck name; null when none runs. */
+  const job = $derived(jobView(ms?.job, activity, mowerMap?.areas, areaName));
+  /** The error notice names the fault's category (`error_category`) before code and message. */
+  const errorTitle = $derived.by(() => {
+    if (!ms?.error_code) return null;
+    const text = `${ms.error_code} ${ms.error_message ?? ''}`.trim();
+    return ms.error_category ? `${errorCategoryLabel(ms.error_category)} · ${text}` : text;
+  });
   const renamingArea = $derived(
     renaming ? ((mowerMap?.areas ?? []).find((a) => a.id === renaming) ?? null) : null,
   );
@@ -1406,8 +1419,13 @@
             {/if}
           </span>
         </div>
-        {#if ms?.error_code}
-          <ProblemNotice title="{ms.error_code} {ms.error_message ?? ''}" />
+        {#if errorTitle}
+          <div class="error-notice" data-testid="mower-error" data-category={ms?.error_category}>
+            <ProblemNotice title={errorTitle} />
+          </div>
+        {/if}
+        {#if job}
+          <JobCard {job} />
         {/if}
         {#if canSpot}
           <div class="spot-entry" data-testid="spot-entry">
@@ -1516,6 +1534,17 @@
       </div>
 
       <div class="extras">
+        {#if ms && hasReception(ms)}
+          <Panel label={m.rx_title()} testid="reception">
+            <ReceptionPanel
+              gnss={ms.gnss ?? null}
+              signal={ms.signal ?? null}
+              selfCheck={ms.self_check ?? null}
+              rainDetected={ms.rain_detected ?? null}
+              {stale}
+            />
+          </Panel>
+        {/if}
         {#if hasCamera}
           <div class="camera-slot">
             <Panel label={m.camera_title()} testid="camera">
