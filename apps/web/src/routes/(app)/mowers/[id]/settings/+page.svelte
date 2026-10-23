@@ -14,6 +14,7 @@
   import DriveCalibrationPanel from '$lib/components/DriveCalibrationPanel.svelte';
   import DriveSpeedControl from '$lib/components/DriveSpeedControl.svelte';
   import FirmwarePanel from '$lib/components/FirmwarePanel.svelte';
+  import MaintenancePanel from '$lib/components/MaintenancePanel.svelte';
   import MowerPlacement from '$lib/components/MowerPlacement.svelte';
   import SiteLocation from '$lib/components/SiteLocation.svelte';
   import SlowLoading from '$lib/components/SlowLoading.svelte';
@@ -58,7 +59,13 @@
   } from '$lib/mower/drive-calibration';
   import { DriveCalibrationFlow } from '$lib/mower/drive-calibration.svelte';
   import { drivesOverBridge } from '$lib/mower/drive-link';
+  import {
+    maintenanceBlocker,
+    offeredActions,
+    type MaintenanceAction,
+  } from '$lib/mower/maintenance';
   import { m } from '$lib/paraglide/messages';
+  import { accountPlan } from '$lib/plan/plan.svelte';
   import { mowers as states } from '$lib/stores/mowers.svelte';
   import { toasts } from '$lib/stores/ui.svelte';
 
@@ -204,6 +211,53 @@
 
   function installFirmware(version: string): void {
     void sendCommand(id, { kind: 'firmware_update', version });
+  }
+
+  // --- maintenance (ADR 0048) -------------------------------------------------------------------
+
+  /** The declared actions; the section shows only when the connection declares some. */
+  const maintenanceActions = $derived(offeredActions(caps));
+  /** Restart, map sync, dock relocation and RTK resync need `can_manage_mowers`. */
+  let canManageMaintenance = $state(false);
+  $effect(() => {
+    const mowerId = id;
+    void permissions.version;
+    void permissions
+      .check(mowerId, ['can_manage_mowers'])
+      .then((result) => {
+        if (mowerId === id) canManageMaintenance = result.can_manage_mowers;
+      })
+      .catch(() => (canManageMaintenance = false));
+  });
+  const maintenanceDriving = $derived(realtime.drive?.mowerId === id);
+  const maintenanceBlockers = $derived.by(() => {
+    const pending = new Set<string>(maintenanceActions.filter((a) => commands.pending(id, a)));
+    const input = {
+      state: ms,
+      offline: snap === undefined || stale,
+      canControl,
+      canManage: canManageMaintenance,
+      features: accountPlan.current?.features ?? null,
+      restricted: accountPlan.restricted,
+      driveSession: maintenanceDriving,
+      pending,
+    };
+    return Object.fromEntries(
+      maintenanceActions.map((action) => [action, maintenanceBlocker(action, input)]),
+    );
+  });
+  /** The newest command of each action in this session (its live result). */
+  const maintenanceResults = $derived(
+    Object.fromEntries(
+      maintenanceActions.flatMap((action) => {
+        const last = commands.latest(id, action);
+        return last ? [[action, { status: last.status, reason: last.reason }]] : [];
+      }),
+    ),
+  );
+
+  function runMaintenance(action: MaintenanceAction): void {
+    void sendCommand(id, { kind: action });
   }
 
   function show(found: Mower): void {
@@ -475,6 +529,17 @@
         oninstall={installFirmware}
       />
     </Panel>
+    {#if maintenanceActions.length}
+      <Panel label={m.maint_title()} testid="maintenance-section">
+        <MaintenancePanel
+          actions={maintenanceActions}
+          blockers={maintenanceBlockers}
+          results={maintenanceResults}
+          driveSession={maintenanceDriving}
+          onrun={runMaintenance}
+        />
+      </Panel>
+    {/if}
   </div>
   <BridgeLinkSheet flow={bridge} />
   <div class="site">
