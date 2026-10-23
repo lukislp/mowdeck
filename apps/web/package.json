@@ -21,7 +21,7 @@
     "openapi-fetch": "0.17.0"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "2.29.0",
+    "@inlang/paraglide-js": "2.29.1",
     "@sveltejs/adapter-static": "3.0.10",
     "@sveltejs/kit": "2.70.3",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
