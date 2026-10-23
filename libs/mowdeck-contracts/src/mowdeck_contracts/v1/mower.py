@@ -20,6 +20,13 @@ from mowdeck_contracts.v1.calibration import (
 )
 from mowdeck_contracts.v1.firmware import FirmwareInfo
 from mowdeck_contracts.v1.links import LinkStatus
+from mowdeck_contracts.v1.maintenance import (
+    LeaveDock,
+    RelocateDock,
+    RestartMower,
+    ResyncRtk,
+    SyncMap,
+)
 from mowdeck_contracts.v1.mower_status import (
     GnssStatus,
     JobProgress,
@@ -529,6 +536,11 @@ MowerCommand = Annotated[
     | DriveCalibrate
     | SetDriveSpeed
     | SetSetting
+    | RestartMower
+    | SyncMap
+    | RelocateDock
+    | LeaveDock
+    | ResyncRtk
     | ManualDrive,
     Field(discriminator="kind"),
 ]
@@ -549,6 +561,11 @@ COMMAND_MODELS: tuple[type[ContractModel], ...] = (
     DriveCalibrate,
     SetDriveSpeed,
     SetSetting,
+    RestartMower,
+    SyncMap,
+    RelocateDock,
+    LeaveDock,
+    ResyncRtk,
     ManualDrive,
 )
 """All command model classes, in a stable order."""

@@ -47,7 +47,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`); Trae
 | PUT | `/api/v1/fleet/mowers/{mower_id}/area-names/{area_id}` | `can_control` (hide) | `{name: str \| null}`; trimmed, at most 60 characters (422), `null` or blank drops the custom name; answers all names; publishes `fleet.mower.area_names_changed` after a change |
 | PUT | `/api/v1/fleet/mowers/{mower_id}/groups` | `can_manage_mowers` (hide) on the mower and on every added or removed group | `{group_ids}` |
 | DELETE | `/api/v1/fleet/mowers/{mower_id}` | `can_manage_mowers` (hide) | 204; command records stay |
-| POST | `/api/v1/fleet/mowers/{mower_id}/commands` | by kind (hide): `can_control` (start, pause, resume, dock, blade height, speed, light, spot stop), `can_drive` (manual drive, spot mow, drive calibration, drive speed setting), `can_manage_mowers` (firmware update), `can_emergency_stop` = `can_view` (emergency stop) | `CommandRequest` in, 202 `CommandAccepted` with `Location` |
+| POST | `/api/v1/fleet/mowers/{mower_id}/commands` | by kind (hide): `can_control` (start, pause, resume, dock, blade height, speed, light, spot stop, leave dock), `can_drive` (manual drive, spot mow, drive calibration, drive speed setting), `can_manage_mowers` (firmware update, restart, map sync, dock relocation, RTK resync), `can_emergency_stop` = `can_view` (emergency stop) | `CommandRequest` in, 202 `CommandAccepted` with `Location` |
 | GET | `/api/v1/fleet/mowers/{mower_id}/commands` | `can_view` (hide) | newest first; `?limit=&before=` (keyset on `issued_at`) |
 | GET | `/api/v1/fleet/mowers/{mower_id}/drive-sessions` | `can_view` (hide) | the drive audit, newest first: who, start, expiry, end and reason, frames published and dropped; `?limit=&before=` (keyset on `started_at`) |
 | POST | `/api/v1/fleet/mowers/{mower_id}/camera/session` | `can_view` (hide) and the plan feature `camera` | a short-lived live camera session (`CameraSession`, `Cache-Control: no-store`); optional body `{"transport": "auto"\|"relay"\|"direct"}` (default `auto`), see [Camera](#camera); 409 `camera-unsupported`, `camera-relay-unsupported`, `camera-budget`, 503 when no gateway, vendor cloud or (with `relay`) camera relay answers |
@@ -92,6 +92,8 @@ Feature gates per kind are data (`fleet.domain.rules.command_features`): nothing
 Drive calibration ([ADR 0042](../../docs/adr/0042-drive-calibration.md)): `drive_calibrate` (MowDeck drives a few fixed steps to measure what a stick value means on the ground) and `set_drive_speed` (the vendor's speed setting for manual driving) need `can_drive` and the plan feature `control` only (not `spot_mowing`: a calibration is not spot mowing). Both are single-mower kinds: a bulk command answers 422. `spot_stop` also ends a running calibration.
 
 Mower settings ([ADR 0046](../../docs/adr/0046-device-settings-as-capabilities.md)): `set_setting {key, value}` changes one of the mower's own settings (rain detection, battery levels, lights, voice, non-work hours, ...). It needs `can_manage_mowers` (it changes the device itself, like `firmware_update`) and the plan feature `control`; the record is its audit. Fleet checks only the key's form; whether the mower has the setting and whether the value fits is the controller's rule (`MowerCapabilities.settings`), so an unknown key or a value out of range ends `rejected`. It may go to a site or group.
+
+Maintenance commands ([ADR 0048](../../docs/adr/0048-maintenance-commands.md)): `restart_mower`, `sync_map`, `relocate_dock` and `resync_rtk` change or reset the device itself and need `can_manage_mowers` (permission `fleet.manage`, like `firmware_update`); `leave_dock` drives the mower out of its station and needs `can_control`. All five need the plan feature `control`, carry no parameters and are single-mower kinds (422 in a bulk command). Their command record is the audit, as for every kind; whether the mower can do one now (`capabilities.maintenance`, the safety rules) is decided by the Device-Gateway's controller, which answers `rejected` with the reason.
 
 ### Area names
 
@@ -193,6 +195,7 @@ Fleet enforces the account's plan with one call per enforcement point through th
 | bulk command except `emergency_stop` | features `control` and `fleet.bulk_commands` | 403 `feature-not-in-plan` |
 | `start_mow` with a `spot_plan` (a Planner route, [ADR 0030](../../docs/adr/0030-mowing-patterns-and-planner.md)) and `spot_mow` | features `control` and `spot_mowing` | 403 `feature-not-in-plan` |
 | `drive_calibrate` and `set_drive_speed` ([ADR 0042](../../docs/adr/0042-drive-calibration.md)) | feature `control` | 403 `feature-not-in-plan` |
+| `restart_mower`, `sync_map`, `relocate_dock`, `leave_dock`, `resync_rtk` ([ADR 0048](../../docs/adr/0048-maintenance-commands.md)) | feature `control` | 403 `feature-not-in-plan` |
 | live camera session | feature `camera` | 403 `feature-not-in-plan` |
 | path preview | feature `control` | 403 `feature-not-in-plan` |
 | `set_light` (the mower's light, switched in the camera panel and by AI assist for dark photos) | features `control` and `camera` (also in a bulk command) | 403 `feature-not-in-plan` |

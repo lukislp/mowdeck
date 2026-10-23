@@ -36,7 +36,10 @@ implements :class:`ReportRateCapable`, so a drive calibration can ask for them a
 allows (ADR 0042, see :func:`report_rate_port_of`). An adapter that can read and change the
 mower's own settings declares them in ``MowerCapabilities.settings``, reports their values in
 ``MowerState.settings`` and implements :class:`SettingsCapable` (ADR 0046, see
-:func:`settings_port_of`).
+:func:`settings_port_of`). An adapter that can restart the mower, read
+its map again, make it forget its dock position or read the RTK origin and dock pose again lists
+those actions in ``MowerCapabilities.maintenance`` and implements :class:`MaintenanceCapable`
+(ADR 0048, see :func:`maintenance_port_of`); ``leave_dock`` there is :class:`UndockCapable`.
 
 Links and firmware (ADR 0038) are optional capabilities as well, declared in the capabilities
 and implemented as protocols: an adapter whose connection can consist of several links (the
@@ -67,7 +70,10 @@ from mowdeck_contracts.v1 import (
     MowerState,
     MowPath,
     PauseMow,
+    RelocateDock,
+    RestartMower,
     ResumeMow,
+    ResyncRtk,
     ReturnToDock,
     SetBladeHeight,
     SetLight,
@@ -76,6 +82,7 @@ from mowdeck_contracts.v1 import (
     SpotMow,
     SpotStop,
     StartMow,
+    SyncMap,
 )
 
 JobCommand = (
@@ -465,6 +472,40 @@ class DriveSpeedCapable(Protocol):
     async def set_drive_speed(self, speed_mps: float) -> None:
         """Change the setting (the controller checked the range)."""
         ...
+
+
+MaintenanceCommand = RestartMower | SyncMap | RelocateDock | ResyncRtk
+"""The maintenance commands an adapter runs through :class:`MaintenanceCapable`
+(``leave_dock`` goes through :class:`UndockCapable`)."""
+
+
+@runtime_checkable
+class MaintenanceCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection`, declared with
+    ``MowerCapabilities.maintenance`` (ADR 0048): one-shot device actions. The controller checked
+    the capability and the safety rules (:func:`mowdeck_control.safety.maintenance_problem`).
+    Rules:
+
+    * State-changing actions (``restart_mower``, ``relocate_dock``) are sent once and never
+      re-sent without a reply; the result is ``accepted`` (sent), the mower does not confirm.
+    * ``sync_map`` reads the whole map again even when the adapter holds a fresh one, and
+      returns once it arrived (``executed``) or its own timeout passed (``accepted``); the next
+      :meth:`MowerConnection.get_map` returns the new map without reading it once more.
+    * ``resync_rtk`` asks for the RTK origin and the dock pose; ``executed`` when the answer
+      arrived within the adapter's wait, ``accepted`` otherwise.
+    * Raises :class:`~mowdeck_control.errors.NotConnected` without a link and
+      :class:`~mowdeck_control.errors.CommandRejected` (or returns ``Outcome.rejected``) when
+      the mower cannot do it now.
+    """
+
+    async def run_maintenance(self, command: MaintenanceCommand) -> Outcome:
+        """Run ``command`` (any of :data:`MaintenanceCommand`)."""
+        ...
+
+
+def maintenance_port_of(connection: object) -> MaintenanceCapable | None:
+    """``connection`` as a :class:`MaintenanceCapable`, or None when it does not implement it."""
+    return connection if isinstance(connection, MaintenanceCapable) else None
 
 
 def drive_speed_port_of(connection: object) -> DriveSpeedCapable | None:

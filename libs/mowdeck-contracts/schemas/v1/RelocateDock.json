@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Delete the stored position of the charging station, so the mower learns it again (after\nthe station was moved). Only while the mower stands in its dock (docked or charging): out on\nthe lawn it would lose its way home.",
+  "properties": {
+    "kind": {
+      "const": "relocate_dock",
+      "default": "relocate_dock",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "RelocateDock",
+  "type": "object"
+}

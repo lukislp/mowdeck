@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Read the mower's map again in full (areas, zones, paths, dock) and publish it. No motion;\nrefused while a manual drive session is open (the transfer occupies the mower's command\nqueue).",
+  "properties": {
+    "kind": {
+      "const": "sync_map",
+      "default": "sync_map",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "SyncMap",
+  "type": "object"
+}

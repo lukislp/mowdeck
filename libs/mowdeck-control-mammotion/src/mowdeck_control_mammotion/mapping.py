@@ -40,6 +40,7 @@ from mowdeck_contracts.v1 import (
     JobProgress,
     LinkStatus,
     LocalPoint,
+    MaintenanceAction,
     MapArea,
     MapPath,
     MapZone,
@@ -1122,6 +1123,22 @@ def path_spacing_of(device: MowerDevice, product_key: str = "") -> tuple[int, in
     return (int(spacing[0]), int(spacing[1])) if spacing else None
 
 
+def maintenance_actions_of(
+    device_name: str, product_key: str = "", *, undock: bool = False
+) -> frozenset[MaintenanceAction]:
+    """The maintenance commands of a model (ADR 0048), as Mammotion-HA offers its buttons
+    (``button.py``): map sync, RTK dock resync, release from dock and charging station
+    relocation for every model, the remote restart for every model but the Luba 1
+    (``BUTTON_LUBA_PRO_YUKA``). ``leave_dock`` only with ``undock``.
+    """
+    actions: set[MaintenanceAction] = {"sync_map", "relocate_dock", "resync_rtk"}
+    if not DeviceType.is_luba1(device_name, product_key):
+        actions.add("restart_mower")
+    if undock:
+        actions.add("leave_dock")
+    return frozenset(actions)
+
+
 def capabilities_of(
     device: MowerDevice,
     *,
@@ -1136,6 +1153,7 @@ def capabilities_of(
     undock: bool = False,
     drive_speed: bool = False,
     settings: Sequence[SettingSpec] = (),
+    maintenance: bool = False,
 ) -> MowerCapabilities:
     """Capabilities of one mower over one link (``links_supported`` and ``firmware_update``
     describe the connection, ADR 0038).
@@ -1151,7 +1169,8 @@ def capabilities_of(
     commands, so it declares the speed setting for manual driving
     (:func:`drive_speed_setting_of`). ``drive_reverse`` follows ``manual_drive``: every drive
     session of this adapter is a Bluetooth one (``send_movement``), which takes a negative
-    linear speed (ADR 0043).
+    linear speed (ADR 0043). ``maintenance``: the connection can send the maintenance commands
+    (:func:`maintenance_actions_of`, ADR 0048).
     """
     profile = model_profile(device_name, product_key)
     with_camera = camera and has_camera(device_name, product_key)
@@ -1176,6 +1195,11 @@ def capabilities_of(
         links_supported=list(links_supported),
         firmware_update=firmware_update,
         undock=undock,
+        maintenance=(
+            maintenance_actions_of(device_name, product_key, undock=undock)
+            if maintenance
+            else frozenset()
+        ),
         drive_reverse=manual_drive,
         drive_speed_setting=drive_speed_setting_of(device, product_key) if drive_speed else None,
         settings=list(settings),

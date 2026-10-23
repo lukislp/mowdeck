@@ -19,12 +19,33 @@ Firmware updates (ADR 0038, :func:`firmware_update_problem`), the same for every
 * no job runs or is paused, no manual drive session is open, no update is already installing;
 * while the mower reports ``updating`` every command but the emergency stop is refused
   (:data:`FIRMWARE_UPDATE_RUNNING`).
+
+Maintenance commands (ADR 0048, :func:`maintenance_problem`), the same for every adapter; a
+running firmware update, spot run or drive calibration refuses them like every other command:
+
+* ``restart_mower``: only at rest (``docked``, ``charging`` or ``idle``; never while a job runs,
+  is paused or returns, never during an error), without an open drive session or a command
+  waiting for its confirmation;
+* ``relocate_dock``: only in the dock (``docked`` or ``charging``; out on the lawn the mower would
+  forget its way home), without an open drive session or a pending confirmation;
+* ``leave_dock``: a motion command: only in the dock, never during an error, not while a command
+  waits for its confirmation (the controller ends an open drive session first, like for a job
+  command);
+* ``sync_map``: no motion, any activity, but not during an open drive session (the transfer
+  occupies the mower's command queue for up to minutes);
+* ``resync_rtk``: no motion, a read; allowed in every activity.
 """
 
 from dataclasses import dataclass
 from typing import Final
 
-from mowdeck_contracts.v1 import ManualDrive, MowerActivity, MowerCapabilities, MowerState
+from mowdeck_contracts.v1 import (
+    MaintenanceAction,
+    ManualDrive,
+    MowerActivity,
+    MowerCapabilities,
+    MowerState,
+)
 
 _TRANSFER_ACTIVITIES = frozenset({MowerActivity.DOCKED, MowerActivity.CHARGING})
 FIRMWARE_MIN_BATTERY_PERCENT: Final = 70
@@ -92,4 +113,43 @@ def firmware_update_problem(
         )
     if drive_session_open:
         return "a manual drive session is open; stop driving first"
+    return None
+
+
+IN_DOCK_ACTIVITIES: Final = frozenset({MowerActivity.DOCKED, MowerActivity.CHARGING})
+"""Activities of a mower standing in its charging station."""
+AT_REST_ACTIVITIES: Final = IN_DOCK_ACTIVITIES | {MowerActivity.IDLE}
+"""Activities in which a restart is allowed: no job runs, is paused or returns."""
+_SESSION_BLOCKED: Final = frozenset({"restart_mower", "relocate_dock", "sync_map"})
+_CONFIRMATION_BLOCKED: Final = frozenset({"restart_mower", "relocate_dock", "leave_dock"})
+
+
+def maintenance_problem(
+    action: MaintenanceAction,
+    state: MowerState,
+    *,
+    drive_session_open: bool = False,
+    confirmation_pending: bool = False,
+) -> str | None:
+    """Why the maintenance command ``action`` must not run now, or None when it may (ADR 0048,
+    module docstring). The capability check is the caller's; the firmware update, spot run and
+    calibration lock-outs are the controller's for every command."""
+    activity = state.activity
+    if action in ("restart_mower", "relocate_dock", "leave_dock"):
+        if activity is MowerActivity.ERROR:
+            code = f" ({state.error_code})" if state.error_code else ""
+            return f"the mower reports an error{code}; clear it at the mower first"
+        if action == "restart_mower" and activity not in AT_REST_ACTIVITIES:
+            return (
+                f"the mower is {activity.value}; a restart needs it docked, charging or idle "
+                "(end the job first)"
+            )
+        if action != "restart_mower" and activity not in IN_DOCK_ACTIVITIES:
+            return f"the mower is {activity.value}, not in its dock"
+    if action == "relocate_dock" and state.job is not None:
+        return "a job is still active; end it first"
+    if drive_session_open and action in _SESSION_BLOCKED:
+        return "a manual drive session is open; stop driving first"
+    if confirmation_pending and action in _CONFIRMATION_BLOCKED:
+        return "a command is still waiting for its confirmation"
     return None

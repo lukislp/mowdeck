@@ -56,6 +56,12 @@ What it simulates:
   (:data:`SIMULATED_SETTINGS`) with ``SetSetting`` and their values in ``MowerState.settings``,
   and a rain sensor (``rain_detected``, test hook :meth:`SimulatedMower.set_raining`) that, with
   ``rain_detection`` on, blocks the self-check (``rain``) and rejects a start.
+* maintenance commands (:class:`~mowdeck_control.connection.MaintenanceCapable`, ADR 0048):
+  ``restart_mower`` keeps the mower ``offline`` for ``restart_seconds`` simulated seconds (every
+  command but the emergency stop and the light is refused meanwhile), then it reports docked (or
+  idle when it restarted out of its dock); ``sync_map``, ``relocate_dock`` and ``resync_rtk`` are
+  recorded in ``maintenance_log``; ``leave_dock`` is the undock above. The safety rules are the
+  controller's (:func:`~mowdeck_control.safety.maintenance_problem`), applied once more here.
 
 ``SimulationConfig.time_scale`` makes simulated time run faster than real time.
 """
@@ -73,6 +79,7 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import (
     LINK_BLE_BRIDGE,
+    MAINTENANCE_ACTIONS,
     BridgeScanError,
     BridgeScanErrorCode,
     BridgeScanReply,
@@ -109,7 +116,10 @@ from mowdeck_contracts.v1 import (
     PauseMow,
     PositionSource,
     ProxyInfo,
+    RelocateDock,
+    RestartMower,
     ResumeMow,
+    ResyncRtk,
     ReturnToDock,
     RtkFixStatus,
     RtkSource,
@@ -126,12 +136,20 @@ from mowdeck_contracts.v1 import (
     SignalStatus,
     SpotMowPlan,
     StartMow,
+    SyncMap,
     TurnStyle,
     utc_now,
 )
 
 from mowdeck_control.broadcast import StateBroadcaster, StateSubscription
-from mowdeck_control.connection import ConnectionConfig, Dispatch, JobCommand, Outcome, Photo
+from mowdeck_control.connection import (
+    ConnectionConfig,
+    Dispatch,
+    JobCommand,
+    MaintenanceCommand,
+    Outcome,
+    Photo,
+)
 from mowdeck_control.errors import (
     CommandRejected,
     NotConnected,
@@ -142,7 +160,11 @@ from mowdeck_control.errors import (
 from mowdeck_control.geo import distance, point_in_polygon, to_geo_position
 from mowdeck_control.paths import stripe_path
 from mowdeck_control.photo import render_scene
-from mowdeck_control.safety import FIRMWARE_UPDATE_RUNNING, firmware_update_problem
+from mowdeck_control.safety import (
+    FIRMWARE_UPDATE_RUNNING,
+    firmware_update_problem,
+    maintenance_problem,
+)
 from mowdeck_control.translation import MowRequest, NativeJob, Pattern, plan_to_native_job
 
 _log = logging.getLogger("mowdeck_control.simulator")
@@ -190,6 +212,8 @@ _PATH_ACTIVITIES: Final = frozenset(
     {MowerActivity.MOWING, MowerActivity.PAUSED, MowerActivity.RETURNING}
 )
 """Activities in which the route of the job stays shown."""
+RESTARTING: Final = "the mower is restarting"
+"""Rejection of every command but the emergency stop and the light while a restart runs."""
 BRIDGE_NOT_CONNECTED: Final = "the Bluetooth bridge is not connected"
 """Rejection of a drive session while the simulated bridge is down."""
 SIM_BRIDGE_NAME: Final = "sim-bridge"
@@ -387,6 +411,12 @@ class SimulationConfig:
     raining: bool = False
     """Initial state of the rain sensor (``MowerState.rain_detected``; test hook
     :meth:`SimulatedMower.set_raining`)."""
+    maintenance: bool = True
+    """Offer the maintenance commands (capability ``maintenance``, ADR 0048; ``leave_dock`` only
+    with ``undock``)."""
+    restart_seconds: float = 5.0
+    """Simulated seconds a ``restart_mower`` keeps the mower ``offline`` before it reports again
+    (docked when it restarted in its dock, else idle)."""
 
     @property
     def origin(self) -> tuple[float, float]:
@@ -434,6 +464,9 @@ class SimulationConfig:
             raise ValueError(msg)
         if self.firmware_update_seconds <= 0:
             msg = "firmware_update_seconds must be positive"
+            raise ValueError(msg)
+        if self.restart_seconds <= 0:
+            msg = "restart_seconds must be positive"
             raise ValueError(msg)
         if self.bridge_scan_error is not None:
             BridgeScanErrorCode(self.bridge_scan_error)  # raises ValueError for unknown codes
@@ -595,6 +628,11 @@ class SimulatedMower:
             links_supported=[LINK_BLE_BRIDGE],
             firmware_update=True,
             undock=self.config.undock,
+            maintenance=(
+                frozenset(a for a in MAINTENANCE_ACTIONS if a != "leave_dock" or self.config.undock)
+                if self.config.maintenance
+                else frozenset()
+            ),
             drive_reverse=self.config.drive_reverse,
             drive_speed_setting=(
                 DriveSpeedSetting(
@@ -619,6 +657,10 @@ class SimulatedMower:
         mower that keeps publishing until it is told to stop (ADR 0045)."""
         self.camera_releases: list[str | None] = []
         """The ``channel`` of every :meth:`release_camera_session` call, in order."""
+        self.maintenance_log: list[str] = []
+        """The kind of every maintenance command the simulated mower ran, in order."""
+        self._restart_remaining_s = 0.0
+        self._restart_back = MowerActivity.DOCKED
 
     # --- MowerConnection ----------------------------------------------------------------------
 
@@ -713,6 +755,8 @@ class SimulatedMower:
         if isinstance(command, SetLight):
             # The light works in every state: AI assist lights up a stuck mower at night.
             return Dispatch.done(self._set_light(on=command.on))
+        if self.restarting:
+            return Dispatch.done(Outcome.rejected(RESTARTING))
         if self.stuck and isinstance(command, ResumeMow) and self._status.resume_activity:
             return Dispatch.done(self._resume_stuck())
         if self.stuck:
@@ -831,6 +875,53 @@ class SimulatedMower:
         status.emergency_stopped = False
         self._publish()
 
+    @property
+    def restarting(self) -> bool:
+        """True while a ``restart_mower`` keeps the simulated mower offline."""
+        return self._restart_remaining_s > 0
+
+    async def run_maintenance(self, command: MaintenanceCommand) -> Outcome:
+        """:class:`~mowdeck_control.connection.MaintenanceCapable` (ADR 0048), with the safety
+        rules of :func:`~mowdeck_control.safety.maintenance_problem` applied once more for
+        direct callers. Every action is recorded in ``maintenance_log``; a restart keeps the
+        mower ``offline`` for ``restart_seconds`` simulated seconds."""
+        self._require_connected()
+        if command.kind not in self._capabilities.maintenance:
+            raise CommandRejected(f"this mower does not support {command.kind}")
+        if self.restarting:
+            raise CommandRejected(RESTARTING)
+        if self._status.activity is MowerActivity.UPDATING:
+            raise CommandRejected(FIRMWARE_UPDATE_RUNNING)
+        problem = maintenance_problem(
+            command.kind, self.snapshot(), drive_session_open=self._drive is not None
+        )
+        if problem is not None:
+            raise CommandRejected(problem)
+        self.maintenance_log.append(command.kind)
+        match command:
+            case RestartMower():
+                status = self._status
+                self._end_drive_session()
+                self._undock_target = None
+                in_dock = status.activity in (MowerActivity.DOCKED, MowerActivity.CHARGING)
+                self._restart_back = MowerActivity.DOCKED if in_dock else MowerActivity.IDLE
+                self._restart_remaining_s = self.config.restart_seconds
+                self._blade_on = False
+                status.activity = MowerActivity.OFFLINE
+                outcome = Outcome.accepted(
+                    f"restart sent; the mower is back in about {self.config.restart_seconds:g} s"
+                )
+            case SyncMap():
+                outcome = Outcome.executed(f"map read again: {len(self._map.areas)} areas")
+            case RelocateDock():
+                outcome = Outcome.accepted(
+                    "charging station position deleted; the mower learns it again in its dock"
+                )
+            case ResyncRtk():
+                outcome = Outcome.executed("RTK origin and dock pose read again")
+        self._publish()
+        return outcome
+
     async def start_drive_session(self) -> SimulatedDriveSession:
         self._require_connected()
         self._require_no_sensor_stop()
@@ -839,6 +930,8 @@ class SimulatedMower:
         status = self._status
         if status.activity is MowerActivity.UPDATING:
             raise CommandRejected(FIRMWARE_UPDATE_RUNNING)
+        if self.restarting:
+            raise CommandRejected(RESTARTING)
         if status.activity in (MowerActivity.MOWING, MowerActivity.RETURNING):
             raise CommandRejected("pause or end the job before driving manually")
         self._end_drive_session()
@@ -1622,6 +1715,8 @@ class SimulatedMower:
         activity changed and the rest must be simulated in the new activity)."""
         status = self._status
         activity = status.activity
+        if self.restarting:
+            return self._restart_step(t)
         if activity is MowerActivity.UPDATING:
             return self._update_step(t)
         if activity is MowerActivity.ERROR and self._resuming:
@@ -1642,6 +1737,15 @@ class SimulatedMower:
             return self._drive_step(t)
         self._drain(t, self.config.drain_idle_per_h)
         return t
+
+    def _restart_step(self, t: float) -> float:
+        """The mower boots: ``offline`` until the restart time passed, then back as it was."""
+        step = min(t, self._restart_remaining_s)
+        self._restart_remaining_s -= step
+        if self._restart_remaining_s <= 1e-9:
+            self._restart_remaining_s = 0.0
+            self._status.activity = self._restart_back
+        return step
 
     def _charge(self, t: float) -> float:
         status = self._status

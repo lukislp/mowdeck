@@ -95,6 +95,18 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    options). A setting never moves the mower, so it keeps an open drive session and pending
    confirmations, and it is allowed in every activity, also during an error; like every other
    command it is rejected while a firmware update, a spot run or a drive calibration runs.
+15. Maintenance commands (ADR 0048) need their kind in ``capabilities.maintenance`` and a connection
+   implementing :class:`~mowdeck_control.connection.MaintenanceCapable` (``leave_dock``:
+   ``capabilities.undock`` and :class:`~mowdeck_control.connection.UndockCapable`), and pass
+   :func:`mowdeck_control.safety.maintenance_problem` on the adapter's current state: a restart
+   only at rest (docked, charging, idle), ``relocate_dock`` and ``leave_dock`` only in the dock,
+   none of the three during an error or while a command waits for its confirmation; restart,
+   relocate and ``sync_map`` not during an open drive session; ``resync_rtk`` any time. Rules 11
+   to 13 refuse them like every other command. ``leave_dock`` is a motion command: it ends an open
+   drive session first (like a job command) and is answered ``accepted`` once sent. ``resync_rtk``
+   keeps an open drive session. ``sync_map`` holds the queue only for its checks: the transfer
+   runs outside it (one at a time; a restart is refused meanwhile), and afterwards the controller
+   reads the map again from the adapter, so :meth:`MowerController.mower_map` returns the new one.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -122,6 +134,7 @@ from mowdeck_contracts.v1 import (
     DriveCalibrationStatus,
     EmergencyStop,
     FirmwareUpdate,
+    LeaveDock,
     ManualDrive,
     MowerActivity,
     MowerCapabilities,
@@ -129,7 +142,10 @@ from mowdeck_contracts.v1 import (
     MowerState,
     MowPath,
     PauseMow,
+    RelocateDock,
+    RestartMower,
     ResumeMow,
+    ResyncRtk,
     ReturnToDock,
     SetBladeHeight,
     SetDriveSpeed,
@@ -140,6 +156,7 @@ from mowdeck_contracts.v1 import (
     SpotRunStatus,
     SpotStop,
     StartMow,
+    SyncMap,
     TurnStyle,
     resolve_turn_style,
     utc_now,
@@ -156,6 +173,8 @@ from mowdeck_control.connection import (
     Dispatch,
     DriveSession,
     JobCommand,
+    MaintenanceCapable,
+    MaintenanceCommand,
     MowerConnection,
     Outcome,
     PathPreviewCapable,
@@ -164,6 +183,7 @@ from mowdeck_control.connection import (
     current_path_of,
     dispatch_of,
     drive_speed_port_of,
+    maintenance_port_of,
     report_rate_port_of,
     settings_port_of,
 )
@@ -172,6 +192,7 @@ from mowdeck_control.safety import (
     FIRMWARE_UPDATE_RUNNING,
     decide_manual_blade,
     firmware_update_problem,
+    maintenance_problem,
 )
 from mowdeck_control.spot_run import (
     REASON_ACTIVITY_CHANGE,
@@ -198,6 +219,8 @@ _JOB_ACTIVITIES = frozenset({MowerActivity.MOWING, MowerActivity.PAUSED, MowerAc
 """Activities of a running job: no path preview then (rule 10)."""
 _SUPERSEDING = (StartMow, PauseMow, ResumeMow, ReturnToDock, EmergencyStop)
 """Job commands that end the confirmation wait of every earlier command (rule 9)."""
+_MAINTENANCE = (RestartMower, RelocateDock, ResyncRtk, LeaveDock)
+"""Maintenance commands sent while the queue is held (rule 15; ``SyncMap`` runs outside it)."""
 SPOT_RUN_ACTIVE = "spot run active; stop it first"
 """Rejection reason of every other command while a spot run drives (rule 12)."""
 CALIBRATION_ACTIVE = "drive calibration active; stop it first"
@@ -270,6 +293,7 @@ class MowerController:
         self._calibration_task: asyncio.Task[DriveCalibrationStatus] | None = None
         self._calibration_status: DriveCalibrationStatus | None = None
         self._speed_read: asyncio.Task[None] | None = None
+        self._map_syncing = False
 
     # --- Lifecycle ----------------------------------------------------------------------------
 
@@ -566,33 +590,14 @@ class MowerController:
         if isinstance(command, SpotStop):
             return await self._spot_stop(envelope)
         epoch = self._estop_epoch
+        if isinstance(command, SyncMap):
+            return await self._sync_map(envelope, command, epoch)
         async with self._lock:
-            if epoch != self._estop_epoch:
-                return self._result(
-                    envelope, CommandStatus.REJECTED, "preempted by an emergency stop"
-                )
-            if envelope.is_expired(self._clock()):
-                return self._result(
-                    envelope, CommandStatus.EXPIRED, "command expired while waiting in the queue"
-                )
-            run = self._spot_run
-            if run is not None and run.active:
-                own_frame = (
-                    isinstance(command, ManualDrive)
-                    and envelope.correlation_id == run.correlation_id
-                )
-                if not own_frame and not isinstance(command, SetLight):
-                    return self._result(envelope, CommandStatus.REJECTED, SPOT_RUN_ACTIVE)
-            calibration = self._calibration
-            if calibration is not None and calibration.active:
-                own_frame = (
-                    isinstance(command, ManualDrive)
-                    and envelope.correlation_id == calibration.correlation_id
-                )
-                if not own_frame and not isinstance(command, SetLight):
-                    return self._result(envelope, CommandStatus.REJECTED, CALIBRATION_ACTIVE)
-            if await self._updating():
-                return self._result(envelope, CommandStatus.REJECTED, FIRMWARE_UPDATE_RUNNING)
+            refused = await self._queue_refusal(envelope, epoch)
+            if refused is not None:
+                return refused
+            if isinstance(command, _MAINTENANCE):
+                return await self._maintenance(envelope, command)
             if isinstance(command, FirmwareUpdate) and self._session is not None:
                 return self._result(
                     envelope,
@@ -629,6 +634,35 @@ class MowerController:
             confirmation = self._begin_confirmation(envelope, dispatch)
         # Rule 5: the queue is free again while the mower confirms.
         return await self._await_confirmation(envelope, confirmation)
+
+    async def _queue_refusal(self, envelope: CommandEnvelope, epoch: int) -> CommandResult | None:
+        """The checks every queued command passes once it holds the queue (rules 3, 4, 11, 12
+        and 13); None when it may go on."""
+        command = envelope.command
+        if epoch != self._estop_epoch:
+            return self._result(envelope, CommandStatus.REJECTED, "preempted by an emergency stop")
+        if envelope.is_expired(self._clock()):
+            return self._result(
+                envelope, CommandStatus.EXPIRED, "command expired while waiting in the queue"
+            )
+        run = self._spot_run
+        if run is not None and run.active:
+            own_frame = (
+                isinstance(command, ManualDrive) and envelope.correlation_id == run.correlation_id
+            )
+            if not own_frame and not isinstance(command, SetLight):
+                return self._result(envelope, CommandStatus.REJECTED, SPOT_RUN_ACTIVE)
+        calibration = self._calibration
+        if calibration is not None and calibration.active:
+            own_frame = (
+                isinstance(command, ManualDrive)
+                and envelope.correlation_id == calibration.correlation_id
+            )
+            if not own_frame and not isinstance(command, SetLight):
+                return self._result(envelope, CommandStatus.REJECTED, CALIBRATION_ACTIVE)
+        if await self._updating():
+            return self._result(envelope, CommandStatus.REJECTED, FIRMWARE_UPDATE_RUNNING)
+        return None
 
     async def _emergency_stop(
         self, envelope: CommandEnvelope, command: EmergencyStop
@@ -1120,6 +1154,119 @@ class MowerController:
             self._log.exception("command %s: set_setting failed", envelope.command_id)
             outcome = Outcome.failed(f"adapter error: {type(exc).__name__}")
         return self._result(envelope, outcome.status, outcome.reason)
+
+    # --- Maintenance (ADR 0048) ---------------------------------------------------------------
+
+    async def _maintenance_support(
+        self, command: MaintenanceCommand | LeaveDock
+    ) -> MaintenanceCapable | UndockCapable | str:
+        """The adapter port that runs ``command``, or why this connection cannot (rule 15)."""
+        caps = await self.capabilities()
+        if command.kind not in caps.maintenance:
+            return f"this connection does not support {command.kind}"
+        if isinstance(command, LeaveDock):
+            if not caps.undock or not isinstance(self._connection, UndockCapable):
+                return "this connection cannot undock the mower"
+            return self._connection
+        port = maintenance_port_of(self._connection)
+        if port is None:
+            return f"this connection does not support {command.kind}"
+        return port
+
+    async def _maintenance(
+        self,
+        envelope: CommandEnvelope,
+        command: RestartMower | RelocateDock | ResyncRtk | LeaveDock,
+    ) -> CommandResult:
+        """Rule 15: ``restart_mower``, ``relocate_dock``, ``resync_rtk`` and ``leave_dock``,
+        sent while the queue is held."""
+        support = await self._maintenance_support(command)
+        if isinstance(support, str):
+            return self._result(envelope, CommandStatus.REJECTED, support)
+        try:
+            state = await self._connection.get_state()
+        except NotConnected:
+            return self._result(envelope, CommandStatus.FAILED, "mower is not connected")
+        if isinstance(command, LeaveDock):
+            # A motion command: it ends a drive session like a job command (rule 6).
+            await self._end_drive(f"ended by {command.kind}")
+        problem = maintenance_problem(
+            command.kind,
+            state,
+            drive_session_open=self._session is not None,
+            confirmation_pending=bool(self._confirming),
+        )
+        if problem is None and isinstance(command, RestartMower) and self._map_syncing:
+            problem = "a map sync is running; restart once it is done"
+        if problem is not None:
+            return self._result(envelope, CommandStatus.REJECTED, problem)
+        if isinstance(command, LeaveDock):
+            assert isinstance(support, UndockCapable)  # noqa: S101 - see _maintenance_support
+            outcome = await self._adapter_call(envelope, command.kind, self._leave_dock(support))
+        else:
+            assert isinstance(support, MaintenanceCapable)  # noqa: S101 - as above
+            outcome = await self._adapter_call(
+                envelope, command.kind, support.run_maintenance(command)
+            )
+        return self._result(envelope, outcome.status, outcome.reason)
+
+    @staticmethod
+    async def _leave_dock(connection: UndockCapable) -> Outcome:
+        await connection.leave_dock()
+        return Outcome.accepted("leave_dock sent; the mower drives out of its dock and stops")
+
+    async def _sync_map(
+        self, envelope: CommandEnvelope, command: SyncMap, epoch: int
+    ) -> CommandResult:
+        """Rule 15: ``sync_map``. The checks hold the queue; the transfer itself, which can take
+        minutes, runs outside it, so later commands are not delayed or expired by it."""
+        async with self._lock:
+            refused = await self._queue_refusal(envelope, epoch)
+            if refused is not None:
+                return refused
+            support = await self._maintenance_support(command)
+            if isinstance(support, str):
+                return self._result(envelope, CommandStatus.REJECTED, support)
+            assert isinstance(support, MaintenanceCapable)  # noqa: S101 - not a LeaveDock
+            try:
+                state = await self._connection.get_state()
+            except NotConnected:
+                return self._result(envelope, CommandStatus.FAILED, "mower is not connected")
+            problem = maintenance_problem(
+                command.kind, state, drive_session_open=self._session is not None
+            )
+            if problem is None and self._map_syncing:
+                problem = "a map sync is already running"
+            if problem is not None:
+                return self._result(envelope, CommandStatus.REJECTED, problem)
+            self._map_syncing = True
+        try:
+            self._log_event(envelope, "reading the map again")
+            outcome = await self._adapter_call(
+                envelope, command.kind, support.run_maintenance(command)
+            )
+            if outcome.status in (CommandStatus.EXECUTED, CommandStatus.ACCEPTED):
+                try:
+                    self._map = await self._connection.get_map()
+                except Exception:  # the result stands; the next read picks the map up
+                    self._log.warning("map read after a sync failed", exc_info=True)
+        finally:
+            self._map_syncing = False
+        return self._result(envelope, outcome.status, outcome.reason)
+
+    async def _adapter_call(
+        self, envelope: CommandEnvelope, kind: str, call: Awaitable[Outcome]
+    ) -> Outcome:
+        """Await an adapter call; its errors become the outcome like in :meth:`_execute`."""
+        try:
+            return await call
+        except CommandRejected as exc:
+            return Outcome.rejected(exc.reason)
+        except NotConnected:
+            return Outcome.failed("mower is not connected")
+        except Exception as exc:
+            self._log.exception("command %s: %s failed", envelope.command_id, kind)
+            return Outcome.failed(f"adapter error: {type(exc).__name__}")
 
     def _on_spot_status(self, status: SpotRunStatus) -> None:
         self._spot_status = status

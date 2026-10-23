@@ -190,6 +190,16 @@ export function commandLabel(
       return m.command_set_drive_speed();
     case 'set_setting':
       return m.command_set_setting();
+    case 'restart_mower':
+      return m.command_restart_mower();
+    case 'sync_map':
+      return m.command_sync_map();
+    case 'relocate_dock':
+      return m.command_relocate_dock();
+    case 'leave_dock':
+      return m.command_leave_dock();
+    case 'resync_rtk':
+      return m.command_resync_rtk();
     case 'manual_drive':
       return m.command_manual_drive();
   }

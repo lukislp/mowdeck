@@ -37,6 +37,13 @@ COMMAND_RELATION: Final[Mapping[str, str]] = {
     "drive_calibrate": CAN_DRIVE,  # MowDeck drives fixed steps to measure the stick scale
     "set_drive_speed": CAN_DRIVE,  # changes how far a stick value drives the mower
     "set_setting": CAN_MANAGE_MOWERS,  # the mower's own settings (ADR 0046), like its firmware
+    # Maintenance (ADR 0048): what changes or resets the device needs the right to manage it,
+    # leaving the dock is ordinary control (it is what a start does first).
+    "restart_mower": CAN_MANAGE_MOWERS,
+    "sync_map": CAN_MANAGE_MOWERS,
+    "relocate_dock": CAN_MANAGE_MOWERS,
+    "resync_rtk": CAN_MANAGE_MOWERS,
+    "leave_dock": CAN_CONTROL,
     "emergency_stop": CAN_EMERGENCY_STOP,  # equals can_view in the model: whoever sees may stop
 }
 """The computed relation a principal needs on the mower to send a command of each kind."""
@@ -69,16 +76,28 @@ def command_features(kind: str) -> frozenset[str]:
     ``control`` (so also ``firmware_update``) plus ``camera`` for ``set_light`` and
     ``spot_mowing`` for ``spot_mow``. A ``start_mow`` with a spot plan adds ``spot_mowing`` in
     the use case (the kind alone does not say). A drive calibration and the drive speed setting
-    need ``control`` only: they are not spot mowing."""
+    need ``control`` only: they are not spot mowing; so do the maintenance commands (ADR 0048)."""
     if kind == "emergency_stop":
         return frozenset()
     return frozenset({FEATURE_CONTROL}) | _EXTRA_FEATURES.get(kind, frozenset())
 
 
-SINGLE_MOWER_KINDS: Final = frozenset({"spot_mow", "drive_calibrate", "set_drive_speed"})
+SINGLE_MOWER_KINDS: Final = frozenset(
+    {
+        "spot_mow",
+        "drive_calibrate",
+        "set_drive_speed",
+        "restart_mower",
+        "sync_map",
+        "relocate_dock",
+        "leave_dock",
+        "resync_rtk",
+    }
+)
 """Kinds that only make sense for one mower, never sent to a site or group: a route computed
-for one mower, a drive calibration (one mower in front of its user) and the per-mower vendor
-setting for manual driving."""
+for one mower, a drive calibration (one mower in front of its user), the per-mower vendor
+setting for manual driving and the maintenance commands (ADR 0048: a deliberate action on one
+device, not something to fire at a whole site)."""
 
 
 def bulk_gate_relation(kind: str) -> str:

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Drive out of the charging station and stop a short way in front of it (needs\n``MowerCapabilities.undock``). A motion command: only from the dock, never during a sensor\nstop; it ends an open drive session like a job command.",
+  "properties": {
+    "kind": {
+      "const": "leave_dock",
+      "default": "leave_dock",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "LeaveDock",
+  "type": "object"
+}

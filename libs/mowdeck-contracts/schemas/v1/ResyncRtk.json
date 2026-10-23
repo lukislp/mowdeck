@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Read the RTK origin and the dock pose again; the map is rebuilt with what the mower\nanswers. No motion; allowed in every activity except during a firmware update.",
+  "properties": {
+    "kind": {
+      "const": "resync_rtk",
+      "default": "resync_rtk",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "ResyncRtk",
+  "type": "object"
+}
