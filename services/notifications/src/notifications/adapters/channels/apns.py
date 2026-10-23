@@ -2,7 +2,18 @@
 
 Requests go to ``POST https://<host>/3/device/<token>`` over HTTP/2 (APNs accepts nothing
 else), so the channel owns an ``httpx.AsyncClient(http2=True)`` instead of the shared client;
-tests inject one with a mock transport. The host follows ``MOWDECK_APNS_ENVIRONMENT``:
+tests inject one with a mock transport (and a factory for the replacement client).
+
+One request at a time: APNs first announces ``SETTINGS_MAX_CONCURRENT_STREAMS`` 200 and lowers
+it to 1 right after (until the provider token is verified). httpcore 1.0.9 lowers its stream
+limit by acquiring semaphore slots while it holds the connection's read lock, so with more than
+one stream open the reader waits for slots that only readers can free: every request on the
+connection hangs for good, and no HTTP timeout fires because nothing waits on the network
+(MowDeck 0.9.1, 2026-10-23). With one stream at a time the slots are always free. The channel
+therefore serialises its requests (``max_concurrency = 1`` for the outbox and a lock), and puts
+each one under a deadline on top of the connect, read, write and pool timeouts. After a
+deadline, a timeout or an HTTP/2 protocol error the client is replaced, so a broken connection
+is never reused. The host follows ``MOWDECK_APNS_ENVIRONMENT``:
 ``api.sandbox.push.apple.com`` for development builds (installed from Xcode with a development
 provisioning profile), ``api.push.apple.com`` for TestFlight and App Store builds.
 
@@ -12,7 +23,7 @@ more often than every 20 minutes, so one token is reused for 50 minutes; a 403
 ``ExpiredProviderToken`` drops it at once (the delivery is retried with a fresh one).
 
 Headers: ``apns-push-type: alert``, ``apns-priority`` 10 for every severity (visible alerts),
-``apns-expiration`` now plus the Web Push TTL of the severity, ``apns-collapse-id`` the Web Push
+``apns-expiration`` the queue time plus the TTL of the severity, ``apns-collapse-id`` the Web Push
 ``Topic`` of the tag (one visible notification per kind and mower). Body: ``aps`` with the
 alert, the default sound, ``thread-id`` (the tag) and ``interruption-level``
 (``time-sensitive`` for critical, else ``active``), plus ``url``, ``kind``, ``mower_id`` and
@@ -24,9 +35,13 @@ a new token, any other 403 failed (wrong key, key id or team); 429 and 5xx retry
 ``Retry-After``); anything else failed. Apple's ``reason`` is part of the error.
 """
 
+import asyncio
+import contextlib
 import json
 import re
+from collections.abc import Callable
 from datetime import timedelta
+from functools import partial
 from typing import Any, Literal
 
 import httpx
@@ -34,11 +49,12 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from mowdeck_contracts.v1 import NotificationSeverity
+from mowdeck_service_kit import get_logger
 
 from notifications.adapters.channels import ChannelContext
-from notifications.adapters.channels.webpush import TTL_SECONDS, retry_after, topic_for
+from notifications.adapters.channels.webpush import retry_after, topic_for
 from notifications.application.ports import Clock
-from notifications.domain.models import Delivery, DeliveryOutcome, DeliveryResult
+from notifications.domain.models import TTL_SECONDS, Delivery, DeliveryOutcome, DeliveryResult
 
 HOSTS: dict[str, str] = {
     "development": "api.sandbox.push.apple.com",
@@ -61,6 +77,23 @@ GONE_REASONS = frozenset({"BadDeviceToken", "DeviceTokenNotForTopic", "Unregiste
 EXPIRED_TOKEN = "ExpiredProviderToken"  # noqa: S105 - an APNs error reason, not a secret
 
 _HEX_TOKEN = re.compile(r"^[0-9a-fA-F]{64,200}$")
+
+_log = get_logger("notifications.channel.apns")
+
+KEEPALIVE_SECONDS = 300.0
+"""An idle APNs connection is kept this long (Apple asks providers to keep connections open)."""
+
+
+def default_client(timeout: float) -> httpx.AsyncClient:
+    """The HTTP/2 client: explicit connect, read, write and pool timeouts, one connection."""
+    return httpx.AsyncClient(
+        http2=True,
+        follow_redirects=False,
+        timeout=httpx.Timeout(timeout),
+        limits=httpx.Limits(
+            max_connections=1, max_keepalive_connections=1, keepalive_expiry=KEEPALIVE_SECONDS
+        ),
+    )
 
 
 def load_signing_key(pem: str) -> ec.EllipticCurvePrivateKey:
@@ -89,6 +122,8 @@ class ApnsChannel:
     """Sends to the iOS devices of a user."""
 
     name = "apns"
+    max_concurrency = 1
+    """The outbox sends one APNs request at a time (see the module docstring)."""
 
     def __init__(
         self,
@@ -100,7 +135,9 @@ class ApnsChannel:
         clock: Clock,
         environment: Literal["development", "production"] = "development",
         http: httpx.AsyncClient | None = None,
+        http_factory: Callable[[], httpx.AsyncClient] | None = None,
         timeout: float = 10.0,
+        deadline: float | None = None,
     ) -> None:
         self._key = key
         self._key_id = key_id
@@ -108,10 +145,38 @@ class ApnsChannel:
         self._bundle_id = bundle_id
         self._clock = clock
         self.host = HOSTS[environment]
+        if http_factory is None and http is None:
+            http_factory = partial(default_client, timeout)
+        self._factory = http_factory
         self._own_http = http is None
-        self._http = http or httpx.AsyncClient(http2=True, follow_redirects=False)
-        self._timeout = timeout
+        self._http = http if http is not None else self._new_client()
+        self._timeout = httpx.Timeout(timeout)
+        self._deadline = deadline if deadline is not None else 2 * timeout
+        """Upper bound of one request, whatever httpx does (connect, write and read each have
+        their own timeout)."""
+        self._lock = asyncio.Lock()
         self._token: tuple[str, float] | None = None
+        self.recycled = 0
+        """How often the HTTP client was replaced (tests, diagnostics)."""
+
+    def _new_client(self) -> httpx.AsyncClient:
+        assert self._factory is not None  # noqa: S101 - only called with a factory
+        return self._factory()
+
+    async def _recycle(self, reason: str) -> None:
+        """Replace the HTTP client after a timeout or protocol error (without a factory the
+        injected client is kept)."""
+        if self._factory is None:
+            return
+        old, own = self._http, self._own_http
+        self._http, self._own_http = self._new_client(), True
+        self.recycled += 1
+        _log.warning("apns http client replaced", reason=reason)
+        if own:
+            # Closing a stuck connection must not hang the send either.
+            with contextlib.suppress(Exception):
+                async with asyncio.timeout(1):
+                    await old.aclose()
 
     def provider_token(self) -> str:
         """The current provider token (a new one after :data:`TOKEN_LIFETIME`)."""
@@ -166,7 +231,8 @@ class ApnsChannel:
             msg = "the device token is not hexadecimal"
             raise ValueError(msg)
         message = delivery.message
-        expiration = self._clock().timestamp() + TTL_SECONDS[message.severity]
+        queued = delivery.created_at or self._clock()
+        expiration = queued.timestamp() + TTL_SECONDS[message.severity]
         headers = {
             "authorization": f"bearer {self.provider_token()}",
             "apns-topic": self._bundle_id,
@@ -200,12 +266,23 @@ class ApnsChannel:
             url, headers, body = self.request(delivery)
         except ValueError as exc:
             return DeliveryResult(DeliveryOutcome.FAILED, f"invalid apns target: {exc}")
-        try:
-            response = await self._http.post(
-                url, content=body, headers=headers, timeout=self._timeout
-            )
-        except httpx.HTTPError as exc:
-            return DeliveryResult(DeliveryOutcome.RETRY, f"apns request failed: {exc!r}")
+        async with self._lock:
+            try:
+                async with asyncio.timeout(self._deadline):
+                    response = await self._http.post(
+                        url, content=body, headers=headers, timeout=self._timeout
+                    )
+            except TimeoutError:
+                await self._recycle("no answer within the request deadline")
+                return DeliveryResult(
+                    DeliveryOutcome.RETRY,
+                    f"apns request got no answer within {self._deadline:g} s",
+                )
+            except (httpx.TimeoutException, httpx.ProtocolError) as exc:
+                await self._recycle(type(exc).__name__)
+                return DeliveryResult(DeliveryOutcome.RETRY, f"apns request failed: {exc!r}")
+            except httpx.HTTPError as exc:
+                return DeliveryResult(DeliveryOutcome.RETRY, f"apns request failed: {exc!r}")
         return self.classify(response)
 
     async def aclose(self) -> None:
@@ -227,4 +304,10 @@ def create_apns_channel(context: ChannelContext) -> ApnsChannel | None:
         clock=context.clock,
         environment=settings.apns_environment,
         timeout=settings.notifications_http_timeout_seconds,
+        # Below the outbox deadline, so the channel (not the outbox) ends a stuck request and
+        # replaces the client.
+        deadline=min(
+            2 * settings.notifications_http_timeout_seconds,
+            0.9 * settings.notifications_send_deadline_seconds,
+        ),
     )

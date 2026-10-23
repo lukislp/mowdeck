@@ -8,7 +8,7 @@
   ``attempts`` and moves ``next_attempt_at`` by the lease; sending happens outside of it.
 """
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, time, timedelta
 from typing import Any
@@ -624,12 +624,25 @@ class SqlStore:
             )
             return {row.user_id for row in result.all()}
 
-    async def claim_deliveries(self, now: datetime, lease: timedelta, limit: int) -> list[Delivery]:
+    async def claim_deliveries(
+        self,
+        now: datetime,
+        lease: timedelta,
+        limit: int,
+        *,
+        channel: str | None = None,
+        exclude: Collection[str] = (),
+    ) -> list[Delivery]:
         d = tables.deliveries.c
+        conditions = [d.status == DeliveryStatus.PENDING.value, d.next_attempt_at <= now]
+        if channel is not None:
+            conditions.append(d.channel == channel)
+        if exclude:
+            conditions.append(d.channel.not_in(list(exclude)))
         async with self.engine.begin() as conn:
             due = (
                 sa.select(d.id)
-                .where(d.status == DeliveryStatus.PENDING.value, d.next_attempt_at <= now)
+                .where(*conditions)
                 .order_by(d.next_attempt_at, d.id)
                 .limit(limit)
                 .with_for_update(skip_locked=True)
@@ -711,6 +724,7 @@ class SqlStore:
                     target_kind=kind,
                     target_id=row.target_id,
                     target=target,
+                    created_at=row.created_at,
                 )
             )
         return claimed

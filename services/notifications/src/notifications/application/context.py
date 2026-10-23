@@ -22,7 +22,14 @@ class NotificationsConfig:
     batch_size: int = 50
     """Deliveries claimed per worker round."""
     send_concurrency: int = 10
-    """Deliveries sent at the same time by one worker."""
+    """Deliveries of one channel sent at the same time by one worker (a channel may ask for
+    fewer with a ``max_concurrency`` attribute, APNs does)."""
+    send_deadline: timedelta = timedelta(seconds=30)
+    """Hard limit of one ``channel.send``; a send still running is cancelled and retried. Must
+    stay below the lease, so a claim never expires while its send is still running."""
+    stall_after: timedelta = timedelta(minutes=5)
+    """The outbox counts as stalled (``/readyz`` fails, an error is logged) when due work
+    waits and no delivery finished for this long."""
     delivery_retention: timedelta = timedelta(days=7)
     """Finished deliveries are deleted after this."""
     offline_batch_size: int = 200

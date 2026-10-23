@@ -7,7 +7,7 @@ import pytest
 from mowdeck_authz.testing import AllowAll, InMemoryAuthorizer
 from mowdeck_service_kit.bus import InMemoryBus
 from mowdeck_service_kit.testing import lifespan_client
-from notifications_support import API, harness, make_settings
+from notifications_support import API, ManualClock, harness, make_settings
 
 from notifications.adapters.memory import MemoryStore
 from notifications.main import (
@@ -95,6 +95,25 @@ async def test_notifications_app_startup_subscriptions_and_shutdown() -> None:
         assert (await client.get("/readyz")).status_code == 200
         assert len(app.state.subscriptions) == 9  # incl. entitlements.plan.changed and vision
     assert app.state.draining is True and not bus.is_connected
+
+
+async def test_notifications_app_not_ready_while_the_outbox_is_stalled() -> None:
+    clock = ManualClock()
+    app = build_app(
+        make_settings(notifications_stall_seconds=300),
+        bus=InMemoryBus(),
+        store=MemoryStore(),
+        authorizer=InMemoryAuthorizer(),
+        clock=clock,
+        background_tasks=False,
+    )
+    async with lifespan_client(app) as client:
+        assert (await client.get("/readyz")).status_code == 200
+        clock.advance(301)  # no round ran: no worker progress for longer than the limit
+        stalled = await client.get("/readyz")
+        assert stalled.status_code == 503 and "outbox" in stalled.text
+        await app.state.notifications.outbox.dispatch()  # an idle round is progress
+        assert (await client.get("/readyz")).status_code == 200
 
 
 async def test_notifications_app_without_bus_is_not_ready() -> None:
