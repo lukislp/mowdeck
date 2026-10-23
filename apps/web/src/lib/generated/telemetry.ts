@@ -1234,6 +1234,11 @@ export type components = {
              */
             links_supported?: string[];
             /**
+             * Maintenance
+             * @description Maintenance commands this connection can send (ADR 0048): `restart_mower`, `sync_map`, `relocate_dock`, `leave_dock` (only together with `undock`), `resync_rtk`. Clients offer only these; empty when the connection has none.
+             */
+            maintenance?: ("restart_mower" | "sync_map" | "relocate_dock" | "leave_dock" | "resync_rtk")[];
+            /**
              * Manual Drive
              * @description Joystick driving is supported.
              * @default false
@@ -1278,6 +1283,11 @@ export type components = {
              * @description RTK correction sources the mower can report.
              */
             rtk_sources?: components["schemas"]["RtkSource"][];
+            /**
+             * Settings
+             * @description The mower's own settings this connection can read and change with `set_setting` (ADR 0046), each with its type and range or options; current values in `MowerState.settings`. Empty when the connection offers none.
+             */
+            settings?: components["schemas"]["SettingSpec"][];
             /**
              * Undock
              * @description The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).
@@ -1616,6 +1626,11 @@ export type components = {
              */
             position_source: components["schemas"]["PositionSource"];
             /**
+             * Rain Detected
+             * @description The mower's own rain sensor reports rain right now; null when the connection does not report the sensor (ADR 0046).
+             */
+            rain_detected?: boolean | null;
+            /**
              * Raw
              * @description Adapter specific extras. Consumers must not rely on its structure; the typed fields above replace the keys they cover.
              */
@@ -1628,6 +1643,13 @@ export type components = {
             rtk_source: components["schemas"]["RtkSource"];
             /** @description The mower's start self-check (`ok` or `blocked` with the reason); null when the connection does not report it. */
             self_check?: components["schemas"]["SelfCheck"] | null;
+            /**
+             * Settings
+             * @description Current values of the mower's own settings (ADR 0046) by key, as the mower reported them; a declared setting the mower has not reported yet is missing. Types, ranges and options: `MowerCapabilities.settings`.
+             */
+            settings?: {
+                [key: string]: boolean | number | string | components["schemas"]["TimeWindow"] | null;
+            };
             /** @description The mower's own Wi-Fi and mobile signal in dBm and its uplink; null when the connection does not report them. */
             signal?: components["schemas"]["SignalStatus"] | null;
             /** Speed Mps */
@@ -1910,6 +1932,56 @@ export type components = {
          */
         SelfCheckResult: "ok" | "blocked";
         /**
+         * SettingGroup
+         * @description Where a client shows a setting.
+         * @enum {string}
+         */
+        SettingGroup: "weather" | "battery" | "lights" | "driving" | "safety" | "voice" | "schedule";
+        /**
+         * SettingSpec
+         * @description One setting a mower has, as its connection declares it (``MowerCapabilities.settings``).
+         */
+        SettingSpec: {
+            group: components["schemas"]["SettingGroup"];
+            /**
+             * Key
+             * @description Manufacturer-neutral key, one of the known keys.
+             */
+            key: string;
+            /**
+             * Max
+             * @description Largest value of an `int` setting.
+             */
+            max?: number | null;
+            /**
+             * Min
+             * @description Smallest value of an `int` setting.
+             */
+            min?: number | null;
+            /**
+             * Options
+             * @description The options of an `enum` setting, in the order a client offers them.
+             */
+            options?: string[];
+            /**
+             * Step
+             * @description Grid of an `int` setting, counted from `min`.
+             */
+            step?: number | null;
+            type: components["schemas"]["SettingType"];
+            /**
+             * Unit
+             * @description Unit of an `int` setting, e.g. `%` or `h`.
+             */
+            unit?: string | null;
+        };
+        /**
+         * SettingType
+         * @description The type of a setting's value.
+         * @enum {string}
+         */
+        SettingType: "bool" | "int" | "enum" | "time_window";
+        /**
          * SignalStatus
          * @description The mower's own radio signal (``MowerState.signal``).
          */
@@ -2011,6 +2083,23 @@ export type components = {
             to: string;
             /** Truncated */
             truncated: boolean;
+        };
+        /**
+         * TimeWindow
+         * @description A daily window in the mower's local time, ``HH:MM`` on a 24-hour clock. ``end`` before
+         *     ``start`` crosses midnight (``22:00`` to ``06:00``).
+         */
+        TimeWindow: {
+            /**
+             * End
+             * @description End, `HH:MM` (24-hour clock).
+             */
+            end: string;
+            /**
+             * Start
+             * @description Start, `HH:MM` (24-hour clock).
+             */
+            start: string;
         };
         /**
          * TurnStyle

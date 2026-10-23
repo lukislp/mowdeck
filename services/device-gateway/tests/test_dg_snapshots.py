@@ -3,16 +3,27 @@
 import asyncio
 from typing import Any
 
-from dg_support import SlowMower, TestProvider, make_app, registration, telemetry, wait_until
+from dg_support import (
+    SlowMower,
+    TestProvider,
+    envelope,
+    make_app,
+    registration,
+    result_for,
+    telemetry,
+    wait_until,
+)
 from mowdeck_contracts.v1 import (
+    CommandStatus,
     MowerCapabilities,
     MowerCapabilitiesSnapshot,
     MowerMap,
     MowerMapSnapshot,
+    SyncMap,
 )
 from mowdeck_contracts.v1.subjects import device_subject
-from mowdeck_control import SimulationConfig
-from mowdeck_service_kit.bus import InMemoryBus
+from mowdeck_control import MaintenanceCommand, Outcome, SimulationConfig
+from mowdeck_service_kit.bus import InMemoryBus, publish_command
 from mowdeck_service_kit.testing import lifespan_client
 
 from device_gateway.application.session import fingerprint
@@ -174,3 +185,49 @@ async def test_a_dock_learned_after_connect_is_republished_without_a_map_reload(
     assert len(maps) == 2, "the recheck publishes once per change, not per state"
     assert maps[-1].map.dock is not None
     assert mowers[0].get_map_calls == 1, "a recheck rebuilds; it never re-reads the map"
+
+
+class RenamedInAppMower(SlowMower):
+    """A mower whose zones were renamed in the vendor app: only a map sync shows it."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.synced = False
+
+    async def run_maintenance(self, command: MaintenanceCommand) -> Outcome:
+        if isinstance(command, SyncMap):
+            self.synced = True
+        return await super().run_maintenance(command)
+
+    async def get_map(self) -> MowerMap:
+        full = await super().get_map()
+        if not self.synced:
+            return full
+        areas = [a.model_copy(update={"name": f"{a.name} (new)"}) for a in full.areas]
+        return full.model_copy(update={"areas": areas})
+
+
+async def test_sync_map_publishes_the_new_map_at_once() -> None:
+    bus = InMemoryBus()
+    reg = registration()
+
+    def factory(r: Any) -> RenamedInAppMower:
+        return RenamedInAppMower(
+            mower_id=r.mower_id, account_id=r.account_id, config=SimulationConfig(time_scale=60)
+        )
+
+    app = make_app(
+        bus=bus,
+        provider=TestProvider({reg.mower_id: factory}),
+        bootstrap_mowers=[reg.model_dump(mode="json")],
+        snapshot_recheck_seconds=3600,  # only the command publishes
+    )
+    command = envelope(reg, SyncMap())
+    async with lifespan_client(app):
+        await wait_until(lambda: _maps(bus, reg))
+        await publish_command(bus, command)
+        await wait_until(lambda: len(_maps(bus, reg)) >= 2)
+        result = result_for(bus, command)
+        maps = _maps(bus, reg)
+    assert result is not None and result.status is CommandStatus.EXECUTED
+    assert [a.name for a in maps[-1].map.areas] == ["Front lawn (new)", "Back lawn (new)"]

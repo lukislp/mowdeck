@@ -74,7 +74,12 @@ from pymammotion.data.model.coordinates import CoordinateConverter
 from pymammotion.data.model.device import MowerDevice, create_device
 from pymammotion.data.model.device_capabilities import DeviceConfig
 from pymammotion.data.model.device_config import OperationSettings, build_route_information
-from pymammotion.data.model.device_info import LampInfo
+from pymammotion.data.model.device_info import (
+    RECHARGE_LEVEL_RANGE,
+    RESUME_LEVEL_RANGE,
+    SMART_CHARGE_LEVEL,
+    LampInfo,
+)
 from pymammotion.data.model.enums import RTKStatus
 from pymammotion.data.model.events import (
     OTA_RESULT_FAILED,
@@ -107,7 +112,7 @@ from pymammotion.http.model.camera_stream import (
 from pymammotion.http.model.http import CheckDeviceVersion, ProductVersionInfo
 from pymammotion.messaging.command_queue import Priority
 from pymammotion.messaging.mow_path_saga import MowPathSaga
-from pymammotion.proto import DrvUpgradeReport, RptAct, RptInfoType, SystemUpdateBufMsg
+from pymammotion.proto import DrvUpgradeReport, MulSex, RptAct, RptInfoType, SystemUpdateBufMsg
 from pymammotion.state.device_state import DeviceNotification
 from pymammotion.transport.base import (
     AccountInUseError,
@@ -127,6 +132,9 @@ __all__ = [
     "OTA_RESULT_FAILED",
     "OTA_RESULT_IN_PROGRESS",
     "OTA_RESULT_SUCCESS",
+    "RECHARGE_LEVEL_RANGE",
+    "RESUME_LEVEL_RANGE",
+    "SMART_CHARGE_LEVEL",
     "AccountInUseError",
     "AgoraTokenClaims",
     "AreaHashNameList",
@@ -157,6 +165,7 @@ __all__ = [
     "MowPathFrame",
     "MowPathPacket",
     "MowerDevice",
+    "MulSex",
     "NavGetCommData",
     "NavGetHashListData",
     "NoTransportAvailableError",

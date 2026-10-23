@@ -13,6 +13,8 @@
   speed, yaw rate, dead zone) for spot runs (ADR 0042); :class:`DriveSpeedCapable` is the
   optional vendor speed setting for manual driving, :class:`ReportRateCapable` lets it ask for
   reports faster while it measures.
+* :class:`MaintenanceCapable`: optional maintenance commands (restart, map sync, dock
+  relocation, RTK resync; ADR 0048) with their safety rules in :func:`maintenance_problem`.
 * :class:`SimulatedMower`: a deterministic simulated mower (``ConnectionKind.SIMULATED``).
 * :func:`plan_to_native_job`: neutral mowing request to a native mower job.
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
@@ -42,6 +44,8 @@ from mowdeck_control.connection import (
     DriveSpeedCapable,
     FirmwarePort,
     JobCommand,
+    MaintenanceCapable,
+    MaintenanceCommand,
     MapRebuildable,
     MowerConnection,
     MowPathSource,
@@ -50,6 +54,7 @@ from mowdeck_control.connection import (
     Photo,
     PhotoCapture,
     ReportRateCapable,
+    SettingsCapable,
     TwoPhaseExecution,
     UndockCapable,
     bridge_scanner_of,
@@ -59,7 +64,9 @@ from mowdeck_control.connection import (
     dispatch_of,
     drive_speed_port_of,
     firmware_port_of,
+    maintenance_port_of,
     release_camera_session_of,
+    settings_port_of,
 )
 from mowdeck_control.controller import MowerController, StateCallback
 from mowdeck_control.errors import (
@@ -95,6 +102,7 @@ from mowdeck_control.safety import (
     BladeDecision,
     decide_manual_blade,
     firmware_update_problem,
+    maintenance_problem,
 )
 from mowdeck_control.simulator import (
     STUCK_ERROR_CODE,
@@ -164,6 +172,8 @@ __all__ = [
     "FrameChannel",
     "Geofence",
     "JobCommand",
+    "MaintenanceCapable",
+    "MaintenanceCommand",
     "MapRebuildable",
     "MowOrder",
     "MowPathSource",
@@ -183,6 +193,7 @@ __all__ = [
     "Pose",
     "ReportRateCapable",
     "SensorStop",
+    "SettingsCapable",
     "SimulatedDriveSession",
     "SimulatedMower",
     "SimulationConfig",
@@ -219,6 +230,8 @@ __all__ = [
     "flat_png",
     "from_wgs84",
     "local_angle",
+    "maintenance_port_of",
+    "maintenance_problem",
     "plan_to_native_job",
     "plan_transit",
     "point_in_polygon",
@@ -228,6 +241,7 @@ __all__ = [
     "release_camera_session_of",
     "render_scene",
     "room_ahead_problem",
+    "settings_port_of",
     "spot_start_problem",
     "to_geo_position",
     "to_wgs84",

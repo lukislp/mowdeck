@@ -13,7 +13,9 @@ from pydantic import Field, PlainSerializer, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel
 from mowdeck_contracts.v1.calibration import DriveSpeedSetting
+from mowdeck_contracts.v1.maintenance import MaintenanceAction
 from mowdeck_contracts.v1.mower import ConnectionKind, RtkSource
+from mowdeck_contracts.v1.settings import SettingSpec
 
 
 class CameraAccess(StrEnum):
@@ -53,6 +55,17 @@ ConnectionKinds = Annotated[
     frozenset[ConnectionKind],
     PlainSerializer(_sorted_kinds, return_type=list[ConnectionKind], when_used="always"),
 ]
+
+
+def _sorted_actions(values: frozenset[MaintenanceAction]) -> list[MaintenanceAction]:
+    return sorted(values)
+
+
+MaintenanceActions = Annotated[
+    frozenset[MaintenanceAction],
+    PlainSerializer(_sorted_actions, return_type=list[MaintenanceAction], when_used="always"),
+]
+"""A set of maintenance actions, serialised as a sorted list."""
 
 
 class MowerCapabilities(ContractModel):
@@ -141,9 +154,25 @@ class MowerCapabilities(ContractModel):
         description="The connection can ask the manufacturer's firmware service for updates "
         "and install them (`firmware_check`, `firmware_update`).",
     )
+    settings: list[SettingSpec] = Field(
+        default_factory=list,
+        max_length=32,
+        description="The mower's own settings this connection can read and change with "
+        "`set_setting` (ADR 0046), each with its type and range or options; current values in "
+        "`MowerState.settings`. Empty when the connection offers none.",
+    )
+    maintenance: MaintenanceActions = Field(
+        default_factory=frozenset,
+        description="Maintenance commands this connection can send (ADR 0048): `restart_mower`, "
+        "`sync_map`, `relocate_dock`, `leave_dock` (only together with `undock`), "
+        "`resync_rtk`. Clients offer only these; empty when the connection has none.",
+    )
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:
+        if "leave_dock" in self.maintenance and not self.undock:
+            msg = "maintenance action leave_dock needs undock"
+            raise ValueError(msg)
         if self.blade_height_range_mm is not None:
             low, high = self.blade_height_range_mm
             if not 0 <= low <= high:
@@ -161,7 +190,15 @@ class MowerCapabilities(ContractModel):
         ):
             msg = "min_speed_mps must not exceed max_speed_mps"
             raise ValueError(msg)
+        keys = [spec.key for spec in self.settings]
+        if len(set(keys)) != len(keys):
+            msg = "settings must not declare a key twice"
+            raise ValueError(msg)
         return self
+
+    def setting(self, key: str) -> SettingSpec | None:
+        """The declared setting ``key``; None when the connection does not offer it."""
+        return next((spec for spec in self.settings if spec.key == key), None)
 
     def supports_pattern(self, name: str) -> bool:
         """Return True if ``name`` is a native pattern of this mower."""

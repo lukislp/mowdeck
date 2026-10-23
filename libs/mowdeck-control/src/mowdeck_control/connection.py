@@ -33,7 +33,13 @@ setting for manual driving declares ``MowerCapabilities.drive_speed_setting``, r
 ``MowerState.drive_speed_mps`` and implements :class:`DriveSpeedCapable` (ADR 0042, see
 :func:`drive_speed_port_of`). An adapter that asks the mower for its reports while driving
 implements :class:`ReportRateCapable`, so a drive calibration can ask for them as fast as the link
-allows (ADR 0042, see :func:`report_rate_port_of`).
+allows (ADR 0042, see :func:`report_rate_port_of`). An adapter that can read and change the
+mower's own settings declares them in ``MowerCapabilities.settings``, reports their values in
+``MowerState.settings`` and implements :class:`SettingsCapable` (ADR 0046, see
+:func:`settings_port_of`). An adapter that can restart the mower, read
+its map again, make it forget its dock position or read the RTK origin and dock pose again lists
+those actions in ``MowerCapabilities.maintenance`` and implements :class:`MaintenanceCapable`
+(ADR 0048, see :func:`maintenance_port_of`); ``leave_dock`` there is :class:`UndockCapable`.
 
 Links and firmware (ADR 0038) are optional capabilities as well, declared in the capabilities
 and implemented as protocols: an adapter whose connection can consist of several links (the
@@ -64,14 +70,19 @@ from mowdeck_contracts.v1 import (
     MowerState,
     MowPath,
     PauseMow,
+    RelocateDock,
+    RestartMower,
     ResumeMow,
+    ResyncRtk,
     ReturnToDock,
     SetBladeHeight,
     SetLight,
     SetSpeed,
+    SettingValue,
     SpotMow,
     SpotStop,
     StartMow,
+    SyncMap,
 )
 
 JobCommand = (
@@ -463,9 +474,73 @@ class DriveSpeedCapable(Protocol):
         ...
 
 
+MaintenanceCommand = RestartMower | SyncMap | RelocateDock | ResyncRtk
+"""The maintenance commands an adapter runs through :class:`MaintenanceCapable`
+(``leave_dock`` goes through :class:`UndockCapable`)."""
+
+
+@runtime_checkable
+class MaintenanceCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection`, declared with
+    ``MowerCapabilities.maintenance`` (ADR 0048): one-shot device actions. The controller checked
+    the capability and the safety rules (:func:`mowdeck_control.safety.maintenance_problem`).
+    Rules:
+
+    * State-changing actions (``restart_mower``, ``relocate_dock``) are sent once and never
+      re-sent without a reply; the result is ``accepted`` (sent), the mower does not confirm.
+    * ``sync_map`` reads the whole map again even when the adapter holds a fresh one, and
+      returns once it arrived (``executed``) or its own timeout passed (``accepted``); the next
+      :meth:`MowerConnection.get_map` returns the new map without reading it once more.
+    * ``resync_rtk`` asks for the RTK origin and the dock pose; ``executed`` when the answer
+      arrived within the adapter's wait, ``accepted`` otherwise.
+    * Raises :class:`~mowdeck_control.errors.NotConnected` without a link and
+      :class:`~mowdeck_control.errors.CommandRejected` (or returns ``Outcome.rejected``) when
+      the mower cannot do it now.
+    """
+
+    async def run_maintenance(self, command: MaintenanceCommand) -> Outcome:
+        """Run ``command`` (any of :data:`MaintenanceCommand`)."""
+        ...
+
+
+def maintenance_port_of(connection: object) -> MaintenanceCapable | None:
+    """``connection`` as a :class:`MaintenanceCapable`, or None when it does not implement it."""
+    return connection if isinstance(connection, MaintenanceCapable) else None
+
+
 def drive_speed_port_of(connection: object) -> DriveSpeedCapable | None:
     """``connection`` as a :class:`DriveSpeedCapable`, or None when it does not implement it."""
     return connection if isinstance(connection, DriveSpeedCapable) else None
+
+
+@runtime_checkable
+class SettingsCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection`, declared with
+    ``MowerCapabilities.settings`` (ADR 0046): the mower's own settings (rain sensor, battery
+    levels, lights, voice, non-work hours, ...).
+
+    The adapter reports the current values in ``MowerState.settings`` and changes one with
+    :meth:`set_setting`. Rules:
+
+    * Only declared keys arrive, with a value the controller checked against the declaration
+      (:meth:`~mowdeck_contracts.v1.SettingSpec.value_problem`).
+    * A setting never makes the mower move: an adapter declares no key whose change starts the
+      wheels or the blades.
+    * The outcome is ``executed`` when the mower confirmed the new value (a read back), else
+      ``accepted`` (sent, not confirmed).
+
+    Raises :class:`~mowdeck_control.errors.NotConnected` without a link and
+    :class:`~mowdeck_control.errors.CommandRejected` when the mower refuses.
+    """
+
+    async def set_setting(self, key: str, value: SettingValue) -> Outcome:
+        """Change setting ``key`` to ``value``."""
+        ...
+
+
+def settings_port_of(connection: object) -> SettingsCapable | None:
+    """``connection`` as a :class:`SettingsCapable`, or None when it does not implement it."""
+    return connection if isinstance(connection, SettingsCapable) else None
 
 
 @runtime_checkable

@@ -57,6 +57,19 @@
       "title": "FirmwareUpdate",
       "type": "object"
     },
+    "LeaveDock": {
+      "description": "Drive out of the charging station and stop a short way in front of it (needs\n``MowerCapabilities.undock``). A motion command: only from the dock, never during a sensor\nstop; it ends an open drive session like a job command.",
+      "properties": {
+        "kind": {
+          "const": "leave_dock",
+          "default": "leave_dock",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "LeaveDock",
+      "type": "object"
+    },
     "ManualDrive": {
       "description": "One joystick sample. The mower stops when no new sample arrives within ``ttl_ms``.\n\nThis is the dead-man switch: clients resend samples continuously while the stick is held.",
       "properties": {
@@ -114,6 +127,32 @@
       "title": "PauseMow",
       "type": "object"
     },
+    "RelocateDock": {
+      "description": "Delete the stored position of the charging station, so the mower learns it again (after\nthe station was moved). Only while the mower stands in its dock (docked or charging): out on\nthe lawn it would lose its way home.",
+      "properties": {
+        "kind": {
+          "const": "relocate_dock",
+          "default": "relocate_dock",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "RelocateDock",
+      "type": "object"
+    },
+    "RestartMower": {
+      "description": "Restart the mower. Only at rest (docked, charging or idle), without an open drive\nsession or a command waiting for its confirmation; the mower is offline while it boots.",
+      "properties": {
+        "kind": {
+          "const": "restart_mower",
+          "default": "restart_mower",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "RestartMower",
+      "type": "object"
+    },
     "ResumeMow": {
       "description": "Resume a paused job.",
       "properties": {
@@ -125,6 +164,19 @@
         }
       },
       "title": "ResumeMow",
+      "type": "object"
+    },
+    "ResyncRtk": {
+      "description": "Read the RTK origin and the dock pose again; the map is rebuilt with what the mower\nanswers. No motion; allowed in every activity except during a firmware update.",
+      "properties": {
+        "kind": {
+          "const": "resync_rtk",
+          "default": "resync_rtk",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ResyncRtk",
       "type": "object"
     },
     "ReturnToDock": {
@@ -209,6 +261,49 @@
         "on"
       ],
       "title": "SetLight",
+      "type": "object"
+    },
+    "SetSetting": {
+      "description": "Change one of the mower's own settings (ADR 0046).\n\nThe key must be declared in ``MowerCapabilities.settings`` and the value must fit its\ndeclaration (type, range, step, options); the controller rejects anything else before it\nreaches the mower. A setting never makes the mower move. The new value arrives in\n``MowerState.settings`` once the mower reports it.",
+      "properties": {
+        "key": {
+          "pattern": "^[a-z][a-z0-9_]{0,47}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "set_setting",
+          "default": "set_setting",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/TimeWindow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The new value: true or false, a whole number, an option, a time window `{start, end}`, or null to switch a time window off.",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "title": "SetSetting",
       "type": "object"
     },
     "SetSpeed": {
@@ -569,6 +664,42 @@
       "title": "StartMow",
       "type": "object"
     },
+    "SyncMap": {
+      "description": "Read the mower's map again in full (areas, zones, paths, dock) and publish it. No motion;\nrefused while a manual drive session is open (the transfer occupies the mower's command\nqueue).",
+      "properties": {
+        "kind": {
+          "const": "sync_map",
+          "default": "sync_map",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "SyncMap",
+      "type": "object"
+    },
+    "TimeWindow": {
+      "description": "A daily window in the mower's local time, ``HH:MM`` on a 24-hour clock. ``end`` before\n``start`` crosses midnight (``22:00`` to ``06:00``).",
+      "properties": {
+        "end": {
+          "description": "End, `HH:MM` (24-hour clock).",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "End",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start, `HH:MM` (24-hour clock).",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "TimeWindow",
+      "type": "object"
+    },
     "TurnStyle": {
       "description": "How a spot run turns at the end of a lane (ADR 0043).\n\n``in_place``: the mower rotates on the spot (fast, but an all-wheel-drive mower scuffs the\nturf). ``arc``: a forward U-turn with a radius of at least half the lane spacing, or a bulb\nturn over the neighbouring lane when the spacing is narrower than the turning radius.\n``multi_point``: a three-point turn (forward arc, reverse arc with the blades off, forward\narc); needs a drive link that can reverse (``MowerCapabilities.drive_reverse``).",
       "enum": [
@@ -589,17 +720,23 @@
           "drive_calibrate": "#/$defs/DriveCalibrate",
           "emergency_stop": "#/$defs/EmergencyStop",
           "firmware_update": "#/$defs/FirmwareUpdate",
+          "leave_dock": "#/$defs/LeaveDock",
           "manual_drive": "#/$defs/ManualDrive",
           "pause_mow": "#/$defs/PauseMow",
+          "relocate_dock": "#/$defs/RelocateDock",
+          "restart_mower": "#/$defs/RestartMower",
           "resume_mow": "#/$defs/ResumeMow",
+          "resync_rtk": "#/$defs/ResyncRtk",
           "return_to_dock": "#/$defs/ReturnToDock",
           "set_blade_height": "#/$defs/SetBladeHeight",
           "set_drive_speed": "#/$defs/SetDriveSpeed",
           "set_light": "#/$defs/SetLight",
+          "set_setting": "#/$defs/SetSetting",
           "set_speed": "#/$defs/SetSpeed",
           "spot_mow": "#/$defs/SpotMow",
           "spot_stop": "#/$defs/SpotStop",
-          "start_mow": "#/$defs/StartMow"
+          "start_mow": "#/$defs/StartMow",
+          "sync_map": "#/$defs/SyncMap"
         },
         "propertyName": "kind"
       },
@@ -642,6 +779,24 @@
         },
         {
           "$ref": "#/$defs/SetDriveSpeed"
+        },
+        {
+          "$ref": "#/$defs/SetSetting"
+        },
+        {
+          "$ref": "#/$defs/RestartMower"
+        },
+        {
+          "$ref": "#/$defs/SyncMap"
+        },
+        {
+          "$ref": "#/$defs/RelocateDock"
+        },
+        {
+          "$ref": "#/$defs/LeaveDock"
+        },
+        {
+          "$ref": "#/$defs/ResyncRtk"
         },
         {
           "$ref": "#/$defs/ManualDrive"

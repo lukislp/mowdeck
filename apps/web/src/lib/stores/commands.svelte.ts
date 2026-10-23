@@ -18,7 +18,13 @@ export type CommandKind =
   | 'spot_mow'
   | 'spot_stop'
   | 'drive_calibrate'
-  | 'set_drive_speed';
+  | 'set_drive_speed'
+  | 'set_setting'
+  | 'restart_mower'
+  | 'sync_map'
+  | 'relocate_dock'
+  | 'leave_dock'
+  | 'resync_rtk';
 
 export type CommandOutcome =
   'pending' | 'accepted' | 'executed' | 'rejected' | 'failed' | 'expired';

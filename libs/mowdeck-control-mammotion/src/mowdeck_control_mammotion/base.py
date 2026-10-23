@@ -41,12 +41,33 @@ drive speed        not a command but :meth:`MammotionBase.get_drive_speed` and
                    read ``get_car_light(ids=1126)`` (PyMammotion's ``mower_api.py``); ``executed``
                    when the answer shows the wanted state, else ``accepted``; allowed during
                    an error (AI assist lights up a stuck mower)
+``SetSetting``     not a job command but :meth:`MammotionBase.set_setting`
+                   (:class:`~mowdeck_control.SettingsCapable`, ADR 0046): the vendor command(s)
+                   of :mod:`~mowdeck_control_mammotion.settings` sent once with
+                   ``Priority.USER``, then the setting read back (``send_and_wait``, a read);
+                   ``executed`` when the answer shows the new value, else ``accepted``; allowed
+                   in every activity (no setting moves the mower). The declared settings are
+                   read at connect with the device information (background priority, again
+                   while unanswered); ``MowerState.settings`` holds only answered keys
 ``FirmwareUpdate`` cloud only (ADR 0038): ``clear_version_info`` and the vendor's
                    ``start_ota_upgrade`` (:meth:`MammotionPort.start_firmware_update`),
                    confirmed by ``update_check.isupgrading`` or the work mode
                    ``MODE_UPDATING``; the preconditions are the controller's rules
                    (:func:`mowdeck_control.safety.firmware_update_problem`), applied here once
                    more for direct callers
+maintenance        not commands of :meth:`MammotionBase.execute` but
+                   :meth:`MammotionBase.run_maintenance`
+                   (:class:`~mowdeck_control.MaintenanceCapable`, capability ``maintenance``,
+                   ADR 0048), as Mammotion-HA's buttons send them: ``restart_mower`` is
+                   ``remote_restart`` (every model but the Luba 1) and ``relocate_dock`` is
+                   ``delete_charge_point``, both sent once with ``Priority.USER`` and
+                   answered ``accepted`` (the mower sends no reply); ``resync_rtk`` sends the
+                   dock buffer request (:data:`DOCK_BUFFER_COMMAND`) once and waits up to
+                   :data:`RTK_RESYNC_WAIT_S` for a new RTK origin or dock pose
+                   (``executed``, else ``accepted``); ``sync_map`` runs the map sync saga
+                   (:meth:`MammotionPort.sync_map`) even when the held map is fresh. Every
+                   link sends them (a dual link over the cloud); ``leave_dock`` is the
+                   undock above
 =================  =========================================================================
 
 Firmware (ADR 0038): the state carries ``firmware_info`` once the vendor was asked
@@ -132,12 +153,17 @@ from mowdeck_contracts.v1 import (
     MowerState,
     MowPath,
     PauseMow,
+    RelocateDock,
+    RestartMower,
     ResumeMow,
+    ResyncRtk,
     ReturnToDock,
     SetBladeHeight,
     SetLight,
     SetSpeed,
+    SettingValue,
     StartMow,
+    SyncMap,
     utc_now,
 )
 from mowdeck_control import (
@@ -146,6 +172,7 @@ from mowdeck_control import (
     Dispatch,
     DriveSession,
     JobCommand,
+    MaintenanceCommand,
     NotConnected,
     Outcome,
     PathUnavailable,
@@ -154,9 +181,10 @@ from mowdeck_control import (
     StateSubscription,
     UnsupportedPattern,
     firmware_update_problem,
+    maintenance_problem,
 )
 
-from mowdeck_control_mammotion import errors, mapping
+from mowdeck_control_mammotion import errors, mapping, settings
 from mowdeck_control_mammotion.port import (
     CommandTimeoutError,
     FirmwareRefused,
@@ -259,8 +287,24 @@ mower answers with the same field, which PyMammotion's reducer stores in
 ``mower_state.travel_speed``."""
 DRIVE_SPEED_READ_TIMEOUT_S: Final = 5.0
 """Wait per attempt for the answer to ``get_speed`` (PyMammotion sends twice, so about 10 s)."""
+SETTING_READ_TIMEOUT_S: Final = 5.0
+"""Wait per attempt for the answer to a setting read (PyMammotion sends twice)."""
+SETTING_CONFIRM_S: Final = 3.0
+"""How long a setting change waits for the device state to show the answered read."""
+_MISSING: Final = object()
 DRIVE_SPEED_SETTLE_S: Final = 1.0
 """How long a read waits after the answer for the reducer to store it."""
+RESTART_COMMAND: Final = "remote_restart"
+"""PyMammotion's ``remote_restart`` (``mammotion/commands/messages/system.py``,
+``MctlSys.to_dev_remote_reset`` with ``force_reset=1`` by default), as Mammotion-HA's
+"restart mower" button sends it (``async_restart_mower``). The mower sends no reply."""
+RELOCATE_DOCK_COMMAND: Final = "delete_charge_point"
+"""PyMammotion's ``delete_charge_point`` (``navigation.py``: ``NavGetCommData(pver=1, action=6,
+type=5)``, "delete the stored charging-pile location and reset the docking position"), as
+Mammotion-HA's "relocate charging station" button sends it (``async_relocate_charging_station``,
+fire and forget)."""
+RTK_RESYNC_WAIT_S: Final = 10.0
+"""How long ``resync_rtk`` waits for the dock buffer to show a new RTK origin or dock pose."""
 
 
 async def _cancel(task: asyncio.Task[Any] | None, what: str) -> None:
@@ -342,6 +386,8 @@ class MammotionBase:
         self._blade_height_mm: int | None = None
         self._speed_mps: float | None = None
         self._light_reported = False
+        self._settings_reported: set[str] = set()
+        """Settings whose read the mower answered since the connect (ADR 0046)."""
         self._lock = asyncio.Lock()
         self._planned: mapping.PlannedPath | None = None
         self._path_task: asyncio.Task[None] | None = None
@@ -393,6 +439,7 @@ class MammotionBase:
                 raise CommandRejected(msg)
             self._connected = True
             self._light_reported = False
+            self._settings_reported = set()
             self._unsubscribe = self._port.subscribe(self._on_device_update)
             self._unsubscribe_notifications = self._port.subscribe_notifications(
                 self._on_notification
@@ -635,7 +682,8 @@ class MammotionBase:
                     return
             commands = self._device_info_requests(first=not attempt)
             read_light = self._light_unknown()
-            if not commands and not read_light:
+            unread = self._unread_settings()
+            if not commands and not read_light and not unread:
                 return
             for command, kwargs in commands:
                 try:
@@ -644,6 +692,9 @@ class MammotionBase:
                     _log.debug("device information request %s failed", command, exc_info=True)
             if read_light:
                 await self._read_light(Priority.BACKGROUND)
+            if unread:
+                with contextlib.suppress(Exception):  # the next round tries again
+                    await self._read_settings(unread, Priority.BACKGROUND)
 
     def _light_unknown(self) -> bool:
         """True for a mower with a light whose state has not been reported yet."""
@@ -673,6 +724,68 @@ class MammotionBase:
         if self._connected:
             self._publish()
         return True
+
+    def _declared_settings(self) -> list[str]:
+        """The keys of the settings this mower declares (ADR 0046)."""
+        try:
+            specs = settings.settings_of(
+                self._port.device_name, self._port.firmware(), self._port.product_key()
+            )
+        except Exception:  # a closed port: nothing to declare
+            return []
+        return [spec.key for spec in specs]
+
+    def _unread_settings(self) -> list[str]:
+        """Declared settings the mower has not answered yet."""
+        return [k for k in self._declared_settings() if k not in self._settings_reported]
+
+    async def _read_settings(self, keys: Sequence[str], priority: Priority) -> bool:
+        """Read ``keys`` (each vendor read once) and wait for the answers; True when every read
+        was answered (best effort: a read without an answer is tried again next round)."""
+        declared = self._declared_settings()
+        answered_all = True
+        for request in settings.reads_for(keys):
+            command, reply, kwargs = request
+            try:
+                await self._port.send_and_wait(
+                    command, reply, priority=priority, timeout_s=SETTING_READ_TIMEOUT_S, **kwargs
+                )
+            except (NoTransportAvailableError, PortClosedError):
+                raise
+            except Exception:
+                _log.debug("setting read %s of %s failed", command, self._port.device_name)
+                answered_all = False
+                continue
+            self._settings_reported |= settings.answered_keys(request, declared)
+        if self._connected:
+            self._publish()
+        return answered_all
+
+    async def set_setting(self, key: str, value: SettingValue) -> Outcome:
+        """:class:`~mowdeck_control.SettingsCapable` (ADR 0046): send the vendor command(s) of
+        :mod:`~mowdeck_control_mammotion.settings` once with ``Priority.USER``, then read the
+        setting back; ``executed`` when the answer shows the new value, else ``accepted``. None
+        of these commands moves the mower, so they are allowed in every activity."""
+        self._require_connected()
+        if key not in self._declared_settings():
+            msg = f"this mower has no setting {key!r}"
+            raise CommandRejected(msg)
+        try:
+            for command, kwargs in settings.writes_for(key, value, self._port.device()):
+                await self._send(command, **kwargs)
+            confirmed = await self._read_settings([key], Priority.USER)
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("no usable link to the mower") from exc
+        except TransportError as exc:
+            msg = f"transport error: {type(exc).__name__}"
+            raise CommandRejected(msg) from exc
+
+        def shows_wanted(device: MowerDevice) -> bool:
+            return settings.values_of(device, {key}).get(key, _MISSING) == value
+
+        if confirmed and await self._port.wait_for(shows_wanted, SETTING_CONFIRM_S):
+            return Outcome.executed(f"{key} set")
+        return Outcome.accepted(f"{key} sent; the mower did not confirm it")
 
     def _device_info_requests(self, *, first: bool) -> list[tuple[str, dict[str, Any]]]:
         """The device information commands of one round with their arguments."""
@@ -804,6 +917,10 @@ class MammotionBase:
             firmware_update=self._firmware_offered(),
             undock=True,
             drive_speed=self._drive_speed_offered(),
+            settings=settings.settings_of(
+                self._port.device_name, self._port.firmware(), self._port.product_key()
+            ),
+            maintenance=True,
         )
 
     async def get_state(self) -> MowerState:
@@ -932,6 +1049,83 @@ class MammotionBase:
         except TransportError as exc:
             msg = f"transport error: {type(exc).__name__}"
             raise CommandRejected(msg) from exc
+
+    async def run_maintenance(self, command: MaintenanceCommand) -> Outcome:
+        """:class:`~mowdeck_control.MaintenanceCapable` (ADR 0048): see the module docstring.
+
+        The controller checked the capability and the rules
+        (:func:`~mowdeck_control.maintenance_problem`); they are applied once more here for
+        direct callers. State-changing commands go out once with ``Priority.USER``
+        (:meth:`_send`), never through ``send_and_wait``.
+        """
+        self._require_connected()
+        capabilities = await self.capabilities()
+        if command.kind not in capabilities.maintenance:
+            msg = f"this mower does not support {command.kind}"
+            raise CommandRejected(msg)
+        problem = maintenance_problem(command.kind, self._snapshot())
+        if problem is not None:
+            raise CommandRejected(problem)
+        try:
+            match command:
+                case RestartMower():
+                    await self._send(RESTART_COMMAND)
+                    return Outcome.accepted(
+                        f"{RESTART_COMMAND} sent; the mower restarts and is offline for a minute "
+                        "or two"
+                    )
+                case RelocateDock():
+                    await self._send(RELOCATE_DOCK_COMMAND)
+                    return Outcome.accepted(
+                        f"{RELOCATE_DOCK_COMMAND} sent; the mower forgot its charging station "
+                        "position and learns it again in the dock"
+                    )
+                case ResyncRtk():
+                    return await self._resync_rtk()
+                case SyncMap():
+                    return await self._sync_map_now()
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("no usable link to the mower") from exc
+        except TransportError as exc:
+            return Outcome.failed(f"transport error: {type(exc).__name__}")
+        msg = f"unsupported command {type(command).__name__}"  # pragma: no cover - exhaustive
+        raise CommandRejected(msg)  # pragma: no cover
+
+    async def _resync_rtk(self) -> Outcome:
+        """Ask for the dock buffer (:data:`DOCK_BUFFER_COMMAND`, user priority, sent once) and
+        wait up to :data:`RTK_RESYNC_WAIT_S` for a new RTK origin or dock pose; the map is
+        rebuilt from it (:meth:`current_map`)."""
+        before = _dock_key(self._port.device())
+        await self._send(DOCK_BUFFER_COMMAND, priority=Priority.USER, **DOCK_BUFFER_ARGS)
+
+        def answered(device: MowerDevice) -> bool:
+            return mapping.dock_known(device) and _dock_key(device) != before
+
+        if await self._port.wait_for(answered, RTK_RESYNC_WAIT_S):
+            self._publish()
+            return Outcome.executed("RTK origin and dock pose read again")
+        if mapping.dock_known(self._port.device()):
+            return Outcome.accepted(
+                "dock buffer requested; RTK origin and dock pose did not change within "
+                f"{RTK_RESYNC_WAIT_S:.0f} s (an unchanged answer looks the same)"
+            )
+        return Outcome.accepted(
+            f"dock buffer requested; no RTK origin or dock pose within {RTK_RESYNC_WAIT_S:.0f} s"
+        )
+
+    async def _sync_map_now(self) -> Outcome:
+        """Read the whole map again (PyMammotion's map sync saga), also when the held one is
+        fresh; the next :meth:`get_map` returns it without another sync."""
+        try:
+            await self._port.sync_map(self._map_sync_timeout_s)
+        except TimeoutError:
+            return Outcome.accepted(
+                f"map sync started; it did not finish within {self._map_sync_timeout_s:.0f} s"
+            )
+        self._map_synced_at = self._monotonic()
+        await self._await_dock()
+        self._map = mapping.map_of(self._port.device())
+        return Outcome.executed(f"map read again: {len(self._map.areas)} areas")
 
     async def get_drive_speed(self) -> float | None:
         """:class:`~mowdeck_control.DriveSpeedCapable` (ADR 0042): ask the mower for the speed
@@ -1449,6 +1643,10 @@ class MammotionBase:
             firmware_info=self._firmware.info,
             fault_since=self._fault_since,
             warnings=tuple(self._warnings),
+            settings=settings.values_of(self._port.device(), self._settings_reported),
+            rain_detected=settings.rain_detected_of(
+                self._port.device(), has_report=self._port.has_report
+            ),
         )
 
     async def _on_device_update(self) -> None:
@@ -1509,6 +1707,20 @@ ACTIVE_ACTIVITIES: Final = frozenset(
     {MowerActivity.MOWING, MowerActivity.RETURNING, MowerActivity.PAUSED}
 )
 """Activities that use the active refresh interval (a docked pause reports as docked)."""
+
+
+def _dock_key(device: MowerDevice) -> tuple[float, ...]:
+    """RTK origin and dock pose as PyMammotion holds them (``location.RTK``, ``location.dock``),
+    so ``resync_rtk`` can tell a new answer from the values it already had."""
+    rtk = device.location.RTK
+    dock = device.location.dock
+    return (
+        float(rtk.latitude),
+        float(rtk.longitude),
+        float(dock.latitude),
+        float(dock.longitude),
+        float(dock.rotation),
+    )
 
 
 def _changed(previous: MowerState, current: MowerState) -> bool:

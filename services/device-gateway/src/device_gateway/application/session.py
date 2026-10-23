@@ -23,6 +23,12 @@ registration's link options (``DRIVE_CALIBRATION_OPTION_KEYS``): the session str
 before the connection is created and hands them to the controller, which applies them to every
 spot run; a change of only the calibration updates the registration without reconnecting.
 
+Maintenance (ADR 0048): the controller runs the maintenance commands like every other command;
+after a ``sync_map``, ``resync_rtk`` or ``relocate_dock`` that went out (``executed`` or
+``accepted``) the session compares capabilities and map again at once and publishes the map
+snapshot when it changed, so clients see a re-read map or a new dock pose without waiting for the
+periodic recheck.
+
 Link heartbeat (ADR 0040): every state the session publishes carries ``heartbeat_at``, the time
 the gateway last knew the link alive (``MowerConnection.is_connected``), and ``connected``. While
 the link is up the latest state is republished every ``heartbeat_seconds`` even when the adapter
@@ -108,6 +114,9 @@ _log = get_logger(__name__)
 
 _JOB_ACTIVITIES = frozenset({MowerActivity.MOWING, MowerActivity.PAUSED, MowerActivity.RETURNING})
 _AT_REST = frozenset({MowerActivity.DOCKED, MowerActivity.CHARGING, MowerActivity.IDLE})
+_MAP_MAINTENANCE = frozenset({"sync_map", "resync_rtk", "relocate_dock"})
+"""Maintenance commands (ADR 0048) after which the map snapshot is compared and published at
+once: a fresh map, a new dock pose or RTK origin, or a forgotten dock."""
 
 
 def fingerprint(model: BaseModel) -> str:
@@ -887,6 +896,14 @@ class MowerSession:
             result = await controller.handle(envelope)
         self.last_activity_at = self._clock()
         await self._publish_result(result)
+        if (
+            controller is not None
+            and envelope.command.kind in _MAP_MAINTENANCE
+            and result.status in (CommandStatus.EXECUTED, CommandStatus.ACCEPTED)
+        ):
+            # ADR 0048: the map (or its dock and RTK reference) changed; publish it now rather
+            # than at the next recheck.
+            self._recheck_snapshots_later(controller)
         if (
             controller is not None
             and isinstance(envelope.command, SpotMow)

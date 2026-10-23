@@ -40,6 +40,7 @@ from mowdeck_contracts.v1 import (
     JobProgress,
     LinkStatus,
     LocalPoint,
+    MaintenanceAction,
     MapArea,
     MapPath,
     MapZone,
@@ -58,6 +59,8 @@ from mowdeck_contracts.v1 import (
     RtkSource,
     SelfCheck,
     SelfCheckResult,
+    SettingSpec,
+    SettingValue,
     SignalStatus,
     StartMow,
     TurnStyle,
@@ -628,6 +631,8 @@ def state_of(
     firmware_info: FirmwareInfo | None = None,
     fault_since: datetime | None = None,
     warnings: Sequence[FaultWarning] = (),
+    settings: Mapping[str, SettingValue] | None = None,
+    rain_detected: bool | None = None,
 ) -> MowerState:
     """Build the :class:`MowerState` snapshot of ``device``.
 
@@ -636,6 +641,8 @@ def state_of(
     its default); reported as ``speed_mps`` while the mower reports no speed (idle, docked),
     with ``raw["speed_source"]`` ``setpoint`` instead of ``reported``. ``links`` and
     ``firmware_info`` are the connection's additional links and firmware state (ADR 0038).
+    ``settings`` and ``rain_detected`` are the mower's own settings and its rain sensor (ADR 0046,
+    :mod:`mowdeck_control_mammotion.settings`).
 
     Faults (:func:`fault_of`): ``fault_since`` is when the adapter saw the mower pause off the
     charger or fail (minus :data:`FAULT_TOLERANCE_S`), ``warnings`` the warning codes it received.
@@ -710,6 +717,8 @@ def state_of(
         signal=signal_of(device, has_report=has_report),
         self_check=self_check_of(device, has_report=has_report),
         error_category=MowerErrorCategory(category) if category is not None else None,
+        settings=dict(settings) if settings else {},
+        rain_detected=rain_detected,
         raw=raw,
     )
 
@@ -1095,14 +1104,15 @@ TURNING_MODES: Final[dict[int, TurnStyle]] = {0: TurnStyle.IN_PLACE, 1: TurnStyl
 """The mower's own turn setting for its jobs (ADR 0043): ``mower_state.turning_mode``, which
 PyMammotion's state reducer sets from the read/write parameter 6 (``nav_sys_param_cmd`` on a
 Luba Pro, ``bidire_comm_cmd`` otherwise; ``state_reducer.py``: "0=zero-turn, 1=multipoint
-turn"). MowDeck only reads it: the vendor app's setting is never changed."""
+turn"). Since ADR 0046 it is also the setting ``turn_style``
+(:mod:`mowdeck_control_mammotion.settings`), which reads and changes it."""
 
 
 def turn_style_of(device: MowerDevice) -> TurnStyle | None:
     """The mower's own turn style (:data:`TURNING_MODES`); None for an unknown value.
 
-    PyMammotion has no read request for the parameter and starts at 0, so until the mower
-    reports it the value reads as zero-turn (``in_place``)."""
+    PyMammotion starts at 0, so until the mower answers the settings read (parameter 6) the
+    value reads as zero-turn (``in_place``)."""
     return TURNING_MODES.get(_int(device.mower_state.turning_mode))
 
 
@@ -1111,6 +1121,22 @@ def path_spacing_of(device: MowerDevice, product_key: str = "") -> tuple[int, in
     config = model_config_of(device, product_key)
     spacing = _range(config, "path_spacing_min", "path_spacing_max") if config else None
     return (int(spacing[0]), int(spacing[1])) if spacing else None
+
+
+def maintenance_actions_of(
+    device_name: str, product_key: str = "", *, undock: bool = False
+) -> frozenset[MaintenanceAction]:
+    """The maintenance commands of a model (ADR 0048), as Mammotion-HA offers its buttons
+    (``button.py``): map sync, RTK dock resync, release from dock and charging station
+    relocation for every model, the remote restart for every model but the Luba 1
+    (``BUTTON_LUBA_PRO_YUKA``). ``leave_dock`` only with ``undock``.
+    """
+    actions: set[MaintenanceAction] = {"sync_map", "relocate_dock", "resync_rtk"}
+    if not DeviceType.is_luba1(device_name, product_key):
+        actions.add("restart_mower")
+    if undock:
+        actions.add("leave_dock")
+    return frozenset(actions)
 
 
 def capabilities_of(
@@ -1126,6 +1152,8 @@ def capabilities_of(
     firmware_update: bool = False,
     undock: bool = False,
     drive_speed: bool = False,
+    settings: Sequence[SettingSpec] = (),
+    maintenance: bool = False,
 ) -> MowerCapabilities:
     """Capabilities of one mower over one link (``links_supported`` and ``firmware_update``
     describe the connection, ADR 0038).
@@ -1141,7 +1169,8 @@ def capabilities_of(
     commands, so it declares the speed setting for manual driving
     (:func:`drive_speed_setting_of`). ``drive_reverse`` follows ``manual_drive``: every drive
     session of this adapter is a Bluetooth one (``send_movement``), which takes a negative
-    linear speed (ADR 0043).
+    linear speed (ADR 0043). ``maintenance``: the connection can send the maintenance commands
+    (:func:`maintenance_actions_of`, ADR 0048).
     """
     profile = model_profile(device_name, product_key)
     with_camera = camera and has_camera(device_name, product_key)
@@ -1166,8 +1195,14 @@ def capabilities_of(
         links_supported=list(links_supported),
         firmware_update=firmware_update,
         undock=undock,
+        maintenance=(
+            maintenance_actions_of(device_name, product_key, undock=undock)
+            if maintenance
+            else frozenset()
+        ),
         drive_reverse=manual_drive,
         drive_speed_setting=drive_speed_setting_of(device, product_key) if drive_speed else None,
+        settings=list(settings),
     )
 
 

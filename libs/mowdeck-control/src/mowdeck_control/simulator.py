@@ -51,7 +51,17 @@ What it simulates:
   the installed version and ``firmware_available`` as offered; ``FirmwareUpdate`` (after the
   controller's safety rules, which the simulator applies itself too) installs it over
   ``firmware_update_seconds`` simulated seconds with the activity ``updating`` and a progress,
-  then the mower reports the new version and ``update_state`` ``idle``.
+  then the mower reports the new version and ``update_state`` ``idle``;
+* its own settings (ADR 0046, ``SimulationConfig.settings``): one setting of each type
+  (:data:`SIMULATED_SETTINGS`) with ``SetSetting`` and their values in ``MowerState.settings``,
+  and a rain sensor (``rain_detected``, test hook :meth:`SimulatedMower.set_raining`) that, with
+  ``rain_detection`` on, blocks the self-check (``rain``) and rejects a start.
+* maintenance commands (:class:`~mowdeck_control.connection.MaintenanceCapable`, ADR 0048):
+  ``restart_mower`` keeps the mower ``offline`` for ``restart_seconds`` simulated seconds (every
+  command but the emergency stop and the light is refused meanwhile), then it reports docked (or
+  idle when it restarted out of its dock); ``sync_map``, ``relocate_dock`` and ``resync_rtk`` are
+  recorded in ``maintenance_log``; ``leave_dock`` is the undock above. The safety rules are the
+  controller's (:func:`~mowdeck_control.safety.maintenance_problem`), applied once more here.
 
 ``SimulationConfig.time_scale`` makes simulated time run faster than real time.
 """
@@ -69,6 +79,7 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import (
     LINK_BLE_BRIDGE,
+    MAINTENANCE_ACTIONS,
     BridgeScanError,
     BridgeScanErrorCode,
     BridgeScanReply,
@@ -105,7 +116,10 @@ from mowdeck_contracts.v1 import (
     PauseMow,
     PositionSource,
     ProxyInfo,
+    RelocateDock,
+    RestartMower,
     ResumeMow,
+    ResyncRtk,
     ReturnToDock,
     RtkFixStatus,
     RtkSource,
@@ -115,15 +129,27 @@ from mowdeck_contracts.v1 import (
     SetBladeHeight,
     SetLight,
     SetSpeed,
+    SettingGroup,
+    SettingSpec,
+    SettingType,
+    SettingValue,
     SignalStatus,
     SpotMowPlan,
     StartMow,
+    SyncMap,
     TurnStyle,
     utc_now,
 )
 
 from mowdeck_control.broadcast import StateBroadcaster, StateSubscription
-from mowdeck_control.connection import ConnectionConfig, Dispatch, JobCommand, Outcome, Photo
+from mowdeck_control.connection import (
+    ConnectionConfig,
+    Dispatch,
+    JobCommand,
+    MaintenanceCommand,
+    Outcome,
+    Photo,
+)
 from mowdeck_control.errors import (
     CommandRejected,
     NotConnected,
@@ -134,7 +160,11 @@ from mowdeck_control.errors import (
 from mowdeck_control.geo import distance, point_in_polygon, to_geo_position
 from mowdeck_control.paths import stripe_path
 from mowdeck_control.photo import render_scene
-from mowdeck_control.safety import FIRMWARE_UPDATE_RUNNING, firmware_update_problem
+from mowdeck_control.safety import (
+    FIRMWARE_UPDATE_RUNNING,
+    firmware_update_problem,
+    maintenance_problem,
+)
 from mowdeck_control.translation import MowRequest, NativeJob, Pattern, plan_to_native_job
 
 _log = logging.getLogger("mowdeck_control.simulator")
@@ -182,6 +212,8 @@ _PATH_ACTIVITIES: Final = frozenset(
     {MowerActivity.MOWING, MowerActivity.PAUSED, MowerActivity.RETURNING}
 )
 """Activities in which the route of the job stays shown."""
+RESTARTING: Final = "the mower is restarting"
+"""Rejection of every command but the emergency stop and the light while a restart runs."""
 BRIDGE_NOT_CONNECTED: Final = "the Bluetooth bridge is not connected"
 """Rejection of a drive session while the simulated bridge is down."""
 SIM_BRIDGE_NAME: Final = "sim-bridge"
@@ -194,6 +226,49 @@ _PROXY_UNANSWERED: Final = frozenset(
     {BridgeScanErrorCode.UNREACHABLE, BridgeScanErrorCode.AUTH_FAILED}
 )
 """Scan errors after which nothing about the bridge itself is known."""
+
+
+SIMULATED_SETTINGS: Final[tuple[SettingSpec, ...]] = (
+    SettingSpec(key="rain_detection", type=SettingType.BOOL, group=SettingGroup.WEATHER),
+    SettingSpec(
+        key="recharge_level",
+        type=SettingType.INT,
+        group=SettingGroup.BATTERY,
+        min=15,
+        max=30,
+        step=1,
+        unit="%",
+    ),
+    SettingSpec(key="night_light", type=SettingType.BOOL, group=SettingGroup.LIGHTS),
+    SettingSpec(
+        key="turn_style",
+        type=SettingType.ENUM,
+        group=SettingGroup.DRIVING,
+        options=["in_place", "multi_point"],
+    ),
+    SettingSpec(
+        key="voice_volume",
+        type=SettingType.INT,
+        group=SettingGroup.VOICE,
+        min=0,
+        max=100,
+        step=1,
+        unit="%",
+    ),
+    SettingSpec(key="non_work_hours", type=SettingType.TIME_WINDOW, group=SettingGroup.SCHEDULE),
+)
+"""The settings the simulator offers (``SimulationConfig.settings``, ADR 0046): one of each type."""
+SIMULATED_SETTING_DEFAULTS: Final[Mapping[str, SettingValue]] = {
+    "rain_detection": True,
+    "recharge_level": 20,
+    "night_light": False,
+    "turn_style": "in_place",
+    "voice_volume": 50,
+    "non_work_hours": None,
+}
+"""The values the simulated mower starts with."""
+RAIN_BLOCKS_START: Final = "rain detected: the mower does not start in the rain"
+"""Rejection of a start while it rains and ``rain_detection`` is on."""
 
 
 DEFAULT_ORIGIN: Final = (48.137154, 11.576124)
@@ -331,6 +406,17 @@ class SimulationConfig:
     negative ``linear`` stands the mower still, like a link that cannot drive backwards."""
     turn_style: TurnStyle | None = None
     """The mower's own turn setting reported in ``MowerState.turn_style`` (None: none)."""
+    settings: bool = True
+    """Offer the mower's own settings (:data:`SIMULATED_SETTINGS`, ADR 0046) with ``SetSetting``."""
+    raining: bool = False
+    """Initial state of the rain sensor (``MowerState.rain_detected``; test hook
+    :meth:`SimulatedMower.set_raining`)."""
+    maintenance: bool = True
+    """Offer the maintenance commands (capability ``maintenance``, ADR 0048; ``leave_dock`` only
+    with ``undock``)."""
+    restart_seconds: float = 5.0
+    """Simulated seconds a ``restart_mower`` keeps the mower ``offline`` before it reports again
+    (docked when it restarted in its dock, else idle)."""
 
     @property
     def origin(self) -> tuple[float, float]:
@@ -378,6 +464,9 @@ class SimulationConfig:
             raise ValueError(msg)
         if self.firmware_update_seconds <= 0:
             msg = "firmware_update_seconds must be positive"
+            raise ValueError(msg)
+        if self.restart_seconds <= 0:
+            msg = "restart_seconds must be positive"
             raise ValueError(msg)
         if self.bridge_scan_error is not None:
             BridgeScanErrorCode(self.bridge_scan_error)  # raises ValueError for unknown codes
@@ -539,6 +628,11 @@ class SimulatedMower:
             links_supported=[LINK_BLE_BRIDGE],
             firmware_update=True,
             undock=self.config.undock,
+            maintenance=(
+                frozenset(a for a in MAINTENANCE_ACTIONS if a != "leave_dock" or self.config.undock)
+                if self.config.maintenance
+                else frozenset()
+            ),
             drive_reverse=self.config.drive_reverse,
             drive_speed_setting=(
                 DriveSpeedSetting(
@@ -550,6 +644,12 @@ class SimulatedMower:
                 else None
             ),
         )
+        if self.config.settings:
+            self._capabilities = self._capabilities.model_copy(
+                update={"settings": list(SIMULATED_SETTINGS)}
+            )
+        self._settings: dict[str, SettingValue] = dict(SIMULATED_SETTING_DEFAULTS)
+        self._raining = self.config.raining
         self._drive_speed = self.config.drive_speed_mps
         self._undock_target: LocalPoint | None = None
         self.camera_publishing = False
@@ -557,6 +657,10 @@ class SimulatedMower:
         mower that keeps publishing until it is told to stop (ADR 0045)."""
         self.camera_releases: list[str | None] = []
         """The ``channel`` of every :meth:`release_camera_session` call, in order."""
+        self.maintenance_log: list[str] = []
+        """The kind of every maintenance command the simulated mower ran, in order."""
+        self._restart_remaining_s = 0.0
+        self._restart_back = MowerActivity.DOCKED
 
     # --- MowerConnection ----------------------------------------------------------------------
 
@@ -651,6 +755,8 @@ class SimulatedMower:
         if isinstance(command, SetLight):
             # The light works in every state: AI assist lights up a stuck mower at night.
             return Dispatch.done(self._set_light(on=command.on))
+        if self.restarting:
+            return Dispatch.done(Outcome.rejected(RESTARTING))
         if self.stuck and isinstance(command, ResumeMow) and self._status.resume_activity:
             return Dispatch.done(self._resume_stuck())
         if self.stuck:
@@ -701,6 +807,26 @@ class SimulatedMower:
                 continue
         return Outcome.executed("mower is mowing")
 
+    async def set_setting(self, key: str, value: SettingValue) -> Outcome:
+        """:class:`~mowdeck_control.connection.SettingsCapable` (ADR 0046): store the value; it
+        never moves the mower. Works in every state, like a real mower's settings."""
+        self._require_connected()
+        spec = self._capabilities.setting(key)
+        if spec is None:
+            msg = f"this mower has no setting {key!r}"
+            raise CommandRejected(msg)
+        problem = spec.value_problem(value)
+        if problem is not None:
+            raise CommandRejected(problem)
+        self._settings[key] = value
+        self._publish()
+        return Outcome.executed(f"{key} set")
+
+    @property
+    def settings(self) -> Mapping[str, SettingValue]:
+        """The current values of the simulated settings."""
+        return dict(self._settings)
+
     async def get_drive_speed(self) -> float | None:
         """:class:`~mowdeck_control.connection.DriveSpeedCapable`: the speed setting."""
         self._require_connected()
@@ -749,6 +875,53 @@ class SimulatedMower:
         status.emergency_stopped = False
         self._publish()
 
+    @property
+    def restarting(self) -> bool:
+        """True while a ``restart_mower`` keeps the simulated mower offline."""
+        return self._restart_remaining_s > 0
+
+    async def run_maintenance(self, command: MaintenanceCommand) -> Outcome:
+        """:class:`~mowdeck_control.connection.MaintenanceCapable` (ADR 0048), with the safety
+        rules of :func:`~mowdeck_control.safety.maintenance_problem` applied once more for
+        direct callers. Every action is recorded in ``maintenance_log``; a restart keeps the
+        mower ``offline`` for ``restart_seconds`` simulated seconds."""
+        self._require_connected()
+        if command.kind not in self._capabilities.maintenance:
+            raise CommandRejected(f"this mower does not support {command.kind}")
+        if self.restarting:
+            raise CommandRejected(RESTARTING)
+        if self._status.activity is MowerActivity.UPDATING:
+            raise CommandRejected(FIRMWARE_UPDATE_RUNNING)
+        problem = maintenance_problem(
+            command.kind, self.snapshot(), drive_session_open=self._drive is not None
+        )
+        if problem is not None:
+            raise CommandRejected(problem)
+        self.maintenance_log.append(command.kind)
+        match command:
+            case RestartMower():
+                status = self._status
+                self._end_drive_session()
+                self._undock_target = None
+                in_dock = status.activity in (MowerActivity.DOCKED, MowerActivity.CHARGING)
+                self._restart_back = MowerActivity.DOCKED if in_dock else MowerActivity.IDLE
+                self._restart_remaining_s = self.config.restart_seconds
+                self._blade_on = False
+                status.activity = MowerActivity.OFFLINE
+                outcome = Outcome.accepted(
+                    f"restart sent; the mower is back in about {self.config.restart_seconds:g} s"
+                )
+            case SyncMap():
+                outcome = Outcome.executed(f"map read again: {len(self._map.areas)} areas")
+            case RelocateDock():
+                outcome = Outcome.accepted(
+                    "charging station position deleted; the mower learns it again in its dock"
+                )
+            case ResyncRtk():
+                outcome = Outcome.executed("RTK origin and dock pose read again")
+        self._publish()
+        return outcome
+
     async def start_drive_session(self) -> SimulatedDriveSession:
         self._require_connected()
         self._require_no_sensor_stop()
@@ -757,6 +930,8 @@ class SimulatedMower:
         status = self._status
         if status.activity is MowerActivity.UPDATING:
             raise CommandRejected(FIRMWARE_UPDATE_RUNNING)
+        if self.restarting:
+            raise CommandRejected(RESTARTING)
         if status.activity in (MowerActivity.MOWING, MowerActivity.RETURNING):
             raise CommandRejected("pause or end the job before driving manually")
         self._end_drive_session()
@@ -1121,10 +1296,14 @@ class SimulatedMower:
             signal=SignalStatus(
                 wifi_dbm=SIMULATED_WIFI_DBM, mobile_dbm=None, network=NetworkKind.WIFI
             ),
-            self_check=SelfCheck(result=SelfCheckResult.OK),
+            self_check=SelfCheck(result=SelfCheckResult.BLOCKED, detail="rain")
+            if self._rain_blocks()
+            else SelfCheck(result=SelfCheckResult.OK),
             error_category=_ERROR_CATEGORY.get(status.error_code or "", MowerErrorCategory.OTHER)
             if status.activity is MowerActivity.ERROR
             else None,
+            settings=dict(self._settings) if self.config.settings else {},
+            rain_detected=self._raining,
             raw=raw,
         )
 
@@ -1157,6 +1336,18 @@ class SimulatedMower:
         if source is not None:
             self._rtk_source = source
         self._publish()
+
+    def set_raining(self, raining: bool) -> None:
+        """Let the rain sensor report rain (``MowerState.rain_detected``). With the setting
+        ``rain_detection`` on, the self-check then reports ``blocked`` (``rain``) and a start is
+        rejected; a running job goes on (the simulator does not send the mower home)."""
+        self._raining = raining
+        self._publish()
+
+    def _rain_blocks(self) -> bool:
+        return (
+            self._raining and self.config.settings and self._settings.get("rain_detection") is True
+        )
 
     def set_battery(self, percent: float) -> None:
         """Set the battery level."""
@@ -1226,6 +1417,8 @@ class SimulatedMower:
         return Outcome.executed("blades and wheels stopped")
 
     def _start_mow(self, command: StartMow) -> Outcome:
+        if self._rain_blocks():
+            return Outcome.rejected(RAIN_BLOCKS_START)
         if command.plan_ref is not None:
             return Outcome.rejected("the simulator cannot resolve plan references")
         if command.spot_plan is not None:
@@ -1522,6 +1715,8 @@ class SimulatedMower:
         activity changed and the rest must be simulated in the new activity)."""
         status = self._status
         activity = status.activity
+        if self.restarting:
+            return self._restart_step(t)
         if activity is MowerActivity.UPDATING:
             return self._update_step(t)
         if activity is MowerActivity.ERROR and self._resuming:
@@ -1542,6 +1737,15 @@ class SimulatedMower:
             return self._drive_step(t)
         self._drain(t, self.config.drain_idle_per_h)
         return t
+
+    def _restart_step(self, t: float) -> float:
+        """The mower boots: ``offline`` until the restart time passed, then back as it was."""
+        step = min(t, self._restart_remaining_s)
+        self._restart_remaining_s -= step
+        if self._restart_remaining_s <= 1e-9:
+            self._restart_remaining_s = 0.0
+            self._status.activity = self._restart_back
+        return step
 
     def _charge(self, t: float) -> float:
         status = self._status
