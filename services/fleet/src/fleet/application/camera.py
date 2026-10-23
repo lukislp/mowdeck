@@ -24,6 +24,15 @@ token's principal (``requested_by``). Leases are strict: the relay refuses a lea
 account or one another user opened (``forbidden``), which Fleet answers like a hidden object
 (404); that lease keeps running.
 
+A still image (:meth:`CameraService.snapshot`, for API clients such as Home Assistant's camera
+entity) is asked from the Device-Gateway on ``gateway.mower.<id>.photo``, the request Vision
+uses, with the demand ``routine``: the gateway uses the mower's own photo function or the
+camera relay's frame tap, which keeps every camera limit (battery, Vision budget, a sleeping
+mower is not woken). Fleet takes at most one image per mower every
+``snapshot_min_interval_seconds`` and hands the last one to every request in between, so a
+dashboard that refreshes often costs the mower nothing more. A new image is audited as
+``mower.camera_snapshot``; the image itself is never stored.
+
 The relay's lifecycle events (stream ``CAMERA``) become the audit rows
 ``mower.camera_stream_started`` and ``mower.camera_stream_stopped`` of the event's account
 (:meth:`CameraService.record_relay_event`), once per event id however often it is delivered.
@@ -33,8 +42,12 @@ who may see the mower's position and map may see its surroundings too. Owners wh
 restrict the camera give those users no access to the mower or switch off the plan feature.
 """
 
+import asyncio
+import base64
+import binascii
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -45,7 +58,10 @@ from mowdeck_contracts.v1 import (
     CameraSessionRequest,
     CameraTransport,
     EventEnvelope,
+    PhotoErrorCode,
+    PhotoRequest,
     PrincipalRef,
+    VisionDemand,
 )
 from mowdeck_contracts.v1.relay import (
     CAMERA_RELAY_STARTED,
@@ -64,7 +80,7 @@ from mowdeck_service_kit.entitlements import Entitlements
 
 from fleet.application.context import Actor
 from fleet.application.plan import allow_all, require_feature
-from fleet.application.ports import CameraGateway, CameraRelay, Clock, Store
+from fleet.application.ports import CameraGateway, CameraRelay, Clock, PhotoGateway, Store
 from fleet.domain.errors import (
     CameraBudgetError,
     CameraRelayUnsupportedError,
@@ -80,6 +96,8 @@ _log = logging.getLogger("fleet.camera")
 
 CAMERA_OPENED = "mower.camera_opened"
 """Audit action of an issued camera session (``details.transport``: ``direct`` or ``relay``)."""
+CAMERA_SNAPSHOT = "mower.camera_snapshot"
+"""Audit action of a new still image (``details.media_type``, ``bytes``; never the image)."""
 CAMERA_STREAM_STARTED = "mower.camera_stream_started"
 """Audit action of a relay session that went live (event ``camera.relay.started``)."""
 CAMERA_STREAM_STOPPED = "mower.camera_stream_stopped"
@@ -87,6 +105,18 @@ CAMERA_STREAM_STOPPED = "mower.camera_stream_stopped"
 
 RELAY_SERVICE_ACTOR = "service:camera-relay"
 """Actor of a stream audit row that no person caused (the stop after the grace)."""
+
+
+@dataclass(frozen=True, slots=True)
+class Snapshot:
+    """A still image of a mower's camera."""
+
+    content: bytes
+    media_type: str
+    taken_at: datetime
+    """When the gateway reported the image taken (else when Fleet received it)."""
+    fetched_at: datetime
+    """When Fleet received it; with ``snapshot_min_interval_seconds`` the age of the cache."""
 
 
 class RelayNotAnswering(Exception):  # noqa: N818 - a condition, not a failure of Fleet
@@ -114,12 +144,19 @@ class CameraService:
         clock: Clock,
         entitlements: Entitlements | None = None,
         relay: CameraRelay | None = None,
+        *,
+        photos: PhotoGateway | None = None,
+        snapshot_min_interval_seconds: float = 30.0,
     ) -> None:
         self.store = store
         self.gateway = gateway
         self.relay = relay
+        self.photos = photos
         self.clock = clock
         self.entitlements = entitlements if entitlements is not None else allow_all()
+        self.snapshot_min_interval = timedelta(seconds=snapshot_min_interval_seconds)
+        self._snapshots: dict[UUID, Snapshot] = {}
+        self._snapshot_locks: dict[UUID, asyncio.Lock] = {}
 
     async def _mower(self, actor: Actor, account_id: UUID, mower_id: UUID) -> Mower:
         if actor.principal is None:
@@ -246,6 +283,68 @@ class CameraService:
             msg = "no camera relay port"
             raise RelayNotAnswering(msg)
         return self.relay
+
+    # --- Still image --------------------------------------------------------------------------
+
+    async def snapshot(self, actor: Actor, account_id: UUID, mower_id: UUID) -> Snapshot:
+        """A still image of the mower's camera (the caller holds ``can_view``): the last one
+        while it is younger than ``snapshot_min_interval_seconds``, else a new one. Concurrent
+        requests for the same mower share one photo request.
+
+        Raises :class:`FeatureNotInPlanError` (403), :class:`NotFoundError` (404),
+        :class:`CameraUnsupportedError` (409) or :class:`Unavailable` (503).
+        """
+        await require_feature(self.entitlements, account_id, CAMERA_FEATURE)
+        target = await self._mower(actor, account_id, mower_id)
+        lock = self._snapshot_locks.setdefault(target.id, asyncio.Lock())
+        async with lock:
+            cached = self._snapshots.get(target.id)
+            if cached is not None and self.clock() - cached.fetched_at < self.snapshot_min_interval:
+                return cached
+            snapshot = await self._take_photo(target)
+            self._snapshots[target.id] = snapshot
+        await self._audit(
+            actor,
+            target,
+            CAMERA_SNAPSHOT,
+            {"media_type": snapshot.media_type, "bytes": len(snapshot.content)},
+        )
+        return snapshot
+
+    async def _take_photo(self, target: Mower) -> Snapshot:
+        if self.photos is None:
+            raise Unavailable("no device gateway is reachable")
+        request = PhotoRequest(
+            mower_id=target.id, account_id=target.account_id, demand=VisionDemand.ROUTINE
+        )
+        try:
+            reply = await self.photos.request(request)
+        except Exception as exc:
+            _log.warning(
+                "camera snapshot request failed",
+                extra={"mower_id": str(target.id), "error": type(exc).__name__},
+            )
+            raise Unavailable("the device gateway did not answer") from exc
+        if reply.error is not None:
+            match reply.error.code:
+                case PhotoErrorCode.UNSUPPORTED:
+                    raise CameraUnsupportedError(reply.error.detail)
+                case PhotoErrorCode.NOT_FOUND:
+                    raise Unavailable("the mower is not held by a device gateway right now")
+                case _:
+                    raise Unavailable(reply.error.detail or "the camera is not available")
+        encoded: str | None = reply.image_base64
+        media_type: str | None = reply.media_type
+        if reply.frames:
+            encoded, media_type = reply.frames[0].image_base64, reply.frames[0].media_type
+        if encoded is None or media_type is None:  # pragma: no cover - the model ensures both
+            raise Unavailable("the device gateway sent no image")
+        try:
+            content = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise Unavailable("the device gateway sent an unreadable image") from exc
+        now = self.clock()
+        return Snapshot(content, media_type, reply.taken_at or now, now)
 
     # --- Renew and detach ---------------------------------------------------------------------
 

@@ -16,6 +16,8 @@ from mowdeck_contracts.v1 import (
     FirmwareCheckRequest,
     PathPreviewGatewayRequest,
     PathPreviewReply,
+    PhotoReply,
+    PhotoRequest,
 )
 from mowdeck_service_kit.entitlements import Entitlements
 
@@ -41,6 +43,7 @@ from fleet.application.ports import (
     EventPublisher,
     FirmwareCheckGateway,
     PathPreviewGateway,
+    PhotoGateway,
     SecretCipher,
     Store,
 )
@@ -85,6 +88,8 @@ def build_services(
     cipher: SecretCipher | None = None,
     bridge_scan_gateway: BridgeScanGateway | None = None,
     firmware_check_gateway: FirmwareCheckGateway | None = None,
+    photo_gateway: PhotoGateway | None = None,
+    snapshot_min_interval_seconds: float = 30.0,
 ) -> Services:
     """Wire the use cases. Tuples are written with ``TupleWriter(owner="fleet")``."""
     writer = TupleWriter(tuple_backend, owner="fleet", caches=caches)
@@ -100,7 +105,13 @@ def build_services(
         commands=CommandService(store, access, commands, config, clock, entitlements),
         drive=DriveService(store, access, clock),
         camera=CameraService(
-            store, camera_gateway or _NoCameraGateway(), clock, entitlements, camera_relay
+            store,
+            camera_gateway or _NoCameraGateway(),
+            clock,
+            entitlements,
+            camera_relay,
+            photos=photo_gateway or _NoPhotoGateway(),
+            snapshot_min_interval_seconds=snapshot_min_interval_seconds,
         ),
         path_preview=PathPreviewService(
             store, path_preview_gateway or _NoPathPreviewGateway(), entitlements
@@ -132,6 +143,14 @@ class _NoCameraGateway:
     """Without a bus no gateway can answer (tests and NATS-less runs): every request fails."""
 
     async def request(self, request: CameraSessionRequest) -> CameraSessionReply:
+        msg = "no device gateway is reachable (no event bus)"
+        raise ConnectionError(msg)
+
+
+class _NoPhotoGateway:
+    """Without a bus no gateway can take a photo: every request fails."""
+
+    async def request(self, request: PhotoRequest) -> PhotoReply:
         msg = "no device gateway is reachable (no event bus)"
         raise ConnectionError(msg)
 

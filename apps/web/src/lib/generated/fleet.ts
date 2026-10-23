@@ -425,6 +425,31 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fleet/mowers/{mower_id}/camera/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Camera Snapshot
+         * @description A still image of the mower's camera for API clients (``can_view`` on the mower, hidden
+         *     otherwise, and the plan feature ``camera``): taken by the Device-Gateway with the mower's
+         *     own photo function or through the camera relay, keeping every camera limit (a sleeping
+         *     mower is not woken). At most one new image per mower every
+         *     ``MOWDECK_CAMERA_SNAPSHOT_MIN_INTERVAL_SECONDS`` (30 s); requests in between get the
+         *     last one. A new image is audited as ``mower.camera_snapshot``; Fleet never stores it.
+         */
+        get: operations["camera_snapshot_api_v1_fleet_mowers__mower_id__camera_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fleet/mowers/{mower_id}/commands": {
         parameters: {
             query?: never;
@@ -3824,6 +3849,66 @@ export interface operations {
                 };
             };
             /** @description The camera relay is not deployed or did not answer. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    camera_snapshot_api_v1_fleet_mowers__mower_id__camera_snapshot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image, with `X-Snapshot-Taken-At` (ISO 8601). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description The plan does not include the feature `camera`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The mower does not exist or is not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `camera-unsupported`: the mower's connection cannot take a photo. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description No Device-Gateway holds the mower or none answered in time, the mower is offline or asleep, or a camera limit (battery, budget) refused the image. */
             503: {
                 headers: {
                     [name: string]: unknown;
