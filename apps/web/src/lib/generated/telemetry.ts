@@ -1234,6 +1234,11 @@ export type components = {
              */
             links_supported?: string[];
             /**
+             * Maintenance
+             * @description Maintenance commands this connection can send (ADR 0048): `restart_mower`, `sync_map`, `relocate_dock`, `leave_dock` (only together with `undock`), `resync_rtk`. Clients offer only these; empty when the connection has none.
+             */
+            maintenance?: ("restart_mower" | "sync_map" | "relocate_dock" | "leave_dock" | "resync_rtk")[];
+            /**
              * Manual Drive
              * @description Joystick driving is supported.
              * @default false

@@ -40,6 +40,11 @@ EXPECTED = {
     "drive_calibrate": Relation.CAN_DRIVE,
     "set_drive_speed": Relation.CAN_DRIVE,
     "set_setting": Relation.CAN_MANAGE_MOWERS,
+    "restart_mower": Relation.CAN_MANAGE_MOWERS,
+    "sync_map": Relation.CAN_MANAGE_MOWERS,
+    "relocate_dock": Relation.CAN_MANAGE_MOWERS,
+    "resync_rtk": Relation.CAN_MANAGE_MOWERS,
+    "leave_dock": Relation.CAN_CONTROL,
     "emergency_stop": Relation.CAN_EMERGENCY_STOP,
 }
 

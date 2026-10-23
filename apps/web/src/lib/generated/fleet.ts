@@ -1180,7 +1180,7 @@ export type components = {
          */
         CommandRequest: {
             /** Command */
-            command: components["schemas"]["StartMow"] | components["schemas"]["PauseMow"] | components["schemas"]["ResumeMow"] | components["schemas"]["ReturnToDock"] | components["schemas"]["EmergencyStop"] | components["schemas"]["SetBladeHeight"] | components["schemas"]["SetSpeed"] | components["schemas"]["SetLight"] | components["schemas"]["FirmwareUpdate"] | components["schemas"]["SpotMow"] | components["schemas"]["SpotStop"] | components["schemas"]["DriveCalibrate"] | components["schemas"]["SetDriveSpeed"] | components["schemas"]["SetSetting"] | components["schemas"]["ManualDrive"];
+            command: components["schemas"]["StartMow"] | components["schemas"]["PauseMow"] | components["schemas"]["ResumeMow"] | components["schemas"]["ReturnToDock"] | components["schemas"]["EmergencyStop"] | components["schemas"]["SetBladeHeight"] | components["schemas"]["SetSpeed"] | components["schemas"]["SetLight"] | components["schemas"]["FirmwareUpdate"] | components["schemas"]["SpotMow"] | components["schemas"]["SpotStop"] | components["schemas"]["DriveCalibrate"] | components["schemas"]["SetDriveSpeed"] | components["schemas"]["SetSetting"] | components["schemas"]["RestartMower"] | components["schemas"]["SyncMap"] | components["schemas"]["RelocateDock"] | components["schemas"]["LeaveDock"] | components["schemas"]["ResyncRtk"] | components["schemas"]["ManualDrive"];
             /** Ttl Seconds */
             ttl_seconds?: number | null;
         };
@@ -1652,6 +1652,19 @@ export type components = {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * LeaveDock
+         * @description Drive out of the charging station and stop a short way in front of it (needs
+         *     ``MowerCapabilities.undock``). A motion command: only from the dock, never during a sensor
+         *     stop; it ends an open drive session like a job command.
+         */
+        LeaveDock: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "leave_dock";
         };
         /**
          * LinkedAccountDetail
@@ -2386,6 +2399,31 @@ export type components = {
             whep_url: string;
         };
         /**
+         * RelocateDock
+         * @description Delete the stored position of the charging station, so the mower learns it again (after
+         *     the station was moved). Only while the mower stands in its dock (docked or charging): out on
+         *     the lawn it would lose its way home.
+         */
+        RelocateDock: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "relocate_dock";
+        };
+        /**
+         * RestartMower
+         * @description Restart the mower. Only at rest (docked, charging or idle), without an open drive
+         *     session or a command waiting for its confirmation; the mower is offline while it boots.
+         */
+        RestartMower: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "restart_mower";
+        };
+        /**
          * ResumeMow
          * @description Resume a paused job.
          */
@@ -2395,6 +2433,18 @@ export type components = {
              * @enum {string}
              */
             kind: "resume_mow";
+        };
+        /**
+         * ResyncRtk
+         * @description Read the RTK origin and the dock pose again; the map is rebuilt with what the mower
+         *     answers. No motion; allowed in every activity except during a firmware update.
+         */
+        ResyncRtk: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "resync_rtk";
         };
         /**
          * ReturnToDock
@@ -2806,6 +2856,19 @@ export type components = {
             plan_ref?: string | null;
             /** @description A route computed by the Planner (spot mowing). Runs only on mowers with `custom_paths`, or natively when the plan carries a `native` job. */
             spot_plan?: components["schemas"]["SpotMowPlan"] | null;
+        };
+        /**
+         * SyncMap
+         * @description Read the mower's map again in full (areas, zones, paths, dock) and publish it. No motion;
+         *     refused while a manual drive session is open (the transfer occupies the mower's command
+         *     queue).
+         */
+        SyncMap: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "sync_map";
         };
         /**
          * TimeWindow

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Restart the mower. Only at rest (docked, charging or idle), without an open drive\nsession or a command waiting for its confirmation; the mower is offline while it boots.",
+  "properties": {
+    "kind": {
+      "const": "restart_mower",
+      "default": "restart_mower",
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "title": "RestartMower",
+  "type": "object"
+}

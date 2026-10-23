@@ -1859,6 +1859,21 @@
             "title": "Links Supported",
             "type": "array"
           },
+          "maintenance": {
+            "description": "Maintenance commands this connection can send (ADR 0048): `restart_mower`, `sync_map`, `relocate_dock`, `leave_dock` (only together with `undock`), `resync_rtk`. Clients offer only these; empty when the connection has none.",
+            "items": {
+              "enum": [
+                "restart_mower",
+                "sync_map",
+                "relocate_dock",
+                "leave_dock",
+                "resync_rtk"
+              ],
+              "type": "string"
+            },
+            "title": "Maintenance",
+            "type": "array"
+          },
           "manual_drive": {
             "default": false,
             "description": "Joystick driving is supported.",
