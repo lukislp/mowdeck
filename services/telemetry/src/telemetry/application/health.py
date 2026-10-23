@@ -16,7 +16,15 @@ from telemetry.application.context import TelemetryConfig
 from telemetry.application.ports import Clock, Store
 from telemetry.application.queries import HistoryResult, Queries
 from telemetry.domain.errors import InvalidQueryError, NoTelemetryYetError
-from telemetry.domain.health import BladeChange, DailyRow, HealthRow, reset_blade, utc_day
+from telemetry.domain.health import (
+    BladeChange,
+    DailyRow,
+    HealthLimits,
+    HealthRow,
+    reset_blade,
+    set_threshold,
+    utc_day,
+)
 
 DAILY_DEFAULT_DAYS = 30
 """Days returned by the daily query when no range is given (ending today, UTC)."""
@@ -60,8 +68,26 @@ class Health:
 
     @property
     def threshold_hours(self) -> float:
-        """The configured blade hours threshold."""
+        """The configured blade hours threshold (the default of every mower)."""
         return self._config.blade_hours_threshold
+
+    async def set_blade_threshold(
+        self, account_id: UUID, mower_id: UUID, hours: float | None
+    ) -> HealthRow:
+        """Set the mower's blade reminder threshold (None: back to the default). Works before
+        the first telemetry, too."""
+        now = self._clock()
+        async with self._store.transaction() as tx:
+            current = await tx.health(mower_id)
+            if current is not None and current.account_id != account_id:
+                msg = "no telemetry yet"
+                raise NoTelemetryYetError(msg)
+            base = current or HealthRow(mower_id=mower_id, account_id=account_id, updated_at=now)
+            seconds = hours * 3600 if hours is not None else None
+            limits = HealthLimits(blade_threshold_seconds=self.threshold_hours * 3600)
+            row = set_threshold(base, seconds, limits, now)
+            await tx.put_health(row)
+        return row
 
     async def totals(self, account_id: UUID, mower_id: UUID) -> HealthRow:
         """The running totals; raises :class:`NoTelemetryYetError` when nothing was recorded."""

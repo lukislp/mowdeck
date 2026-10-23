@@ -179,6 +179,31 @@
         "title": "BladeResetIn",
         "type": "object"
       },
+      "BladeThresholdIn": {
+        "additionalProperties": false,
+        "description": "``PUT .../health/blade-threshold``: the mower's blade reminder threshold.",
+        "properties": {
+          "hours": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Blade hours after which MowDeck reminds of a blade change; null returns to the installation's default.",
+            "title": "Hours"
+          }
+        },
+        "required": [
+          "hours"
+        ],
+        "title": "BladeThresholdIn",
+        "type": "object"
+      },
       "CameraAccess": {
         "description": "How a camera stream can be reached, if there is one.",
         "enum": [
@@ -2054,9 +2079,15 @@
             "type": "number"
           },
           "blade_hours_threshold": {
-            "description": "Hours after which a reminder is sent.",
+            "description": "Hours after which a reminder is sent: the mower's own threshold set in MowDeck, else the installation's default.",
             "title": "Blade Hours Threshold",
             "type": "number"
+          },
+          "blade_hours_threshold_custom": {
+            "default": false,
+            "description": "The mower has its own threshold (`PUT .../health/blade-threshold`); false: the default applies.",
+            "title": "Blade Hours Threshold Custom",
+            "type": "boolean"
           },
           "blade_source": {
             "description": "Which blade counter to show as hours since the blade change: the mower's own (device) or MowDeck's (telemetry, blade_hours_since_change).",
@@ -3662,6 +3693,60 @@
           }
         },
         "summary": "Reset Blade",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/health/blade-threshold": {
+      "put": {
+        "description": "Set the mower's blade reminder threshold in hours (``can_manage_mowers``, like the blade\nreset); ``null`` returns to the default (``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``). The\nreminder is armed again when the hours since the change lie below the new threshold.\nWorks before the first telemetry, too. The mower's own warning (``device_blade_warn_hours``)\nis not touched.",
+        "operationId": "set_blade_threshold_api_v1_telemetry_mowers__mower_id__health_blade_threshold_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BladeThresholdIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerHealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Blade Threshold",
         "tags": [
           "telemetry"
         ]

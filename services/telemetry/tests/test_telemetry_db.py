@@ -607,3 +607,20 @@ async def test_telemetry_db_health_stores_the_device_battery_cycle_counter(
         stored = await store.health_of(account, mower)
     assert without is not None and without.device_battery_cycles is None
     assert stored is not None and stored.device_battery_cycles == 152
+
+
+@pytest.mark.parametrize("kind", KINDS)
+async def test_telemetry_db_health_stores_the_blade_threshold(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account, mower = uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        services = build_services(store, TelemetryConfig(), lambda: NOW)
+        await services.health.set_blade_threshold(account, mower, 12.5)
+        await services.ingest.record_state(make_state(mower, account, at=NOW))
+        stored = await store.health_of(account, mower)
+        await services.health.set_blade_threshold(account, mower, None)
+        cleared = await store.health_of(account, mower)
+    assert stored is not None and stored.blade_threshold_seconds == 12.5 * 3600
+    assert stored.since == NOW
+    assert cleared is not None and cleared.blade_threshold_seconds is None

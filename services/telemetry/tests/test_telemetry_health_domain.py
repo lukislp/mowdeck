@@ -20,6 +20,8 @@ from telemetry.domain.health import (
     device_seconds,
     haversine_m,
     reset_blade,
+    set_threshold,
+    threshold_seconds,
     utc_day,
 )
 
@@ -294,3 +296,22 @@ def test_telemetry_health_device_count_accepts_whole_positive_numbers() -> None:
     assert device_count({"n": 7.0}, "n") == 7
     for value in (0, -3, 2.5, float("nan"), float("inf"), "7", None, False):
         assert device_count({"n": value}, "n") is None
+
+
+def test_blade_threshold_per_mower_arms_the_reminder_again() -> None:
+    limits = HealthLimits(blade_threshold_seconds=100.0)
+    row = HealthRow(
+        mower_id=uuid4(),
+        account_id=uuid4(),
+        updated_at=T0,
+        blade_seconds_since_change=50.0,
+        blade_threshold_notified=True,
+    )
+    assert threshold_seconds(row, limits) == 100.0
+    above = set_threshold(row, 40.0, limits, T0)
+    assert threshold_seconds(above, limits) == 40.0
+    assert above.blade_threshold_notified is True  # already above: the reminder stays sent
+    below = set_threshold(row, 60.0, limits, T0)
+    assert below.blade_threshold_notified is False  # armed again
+    default = set_threshold(below, None, limits, T0)
+    assert default.blade_threshold_seconds is None and default.blade_threshold_notified is False
