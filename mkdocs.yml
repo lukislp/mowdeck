@@ -86,6 +86,7 @@ nav:
       - adr/0043-turn-styles.md
       - adr/0044-drive-view-with-camera.md
       - adr/0045-camera-relay.md
+      - adr/0046-device-settings-as-capabilities.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md

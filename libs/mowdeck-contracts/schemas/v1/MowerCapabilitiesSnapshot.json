@@ -247,6 +247,15 @@
           "type": "array",
           "uniqueItems": true
         },
+        "settings": {
+          "description": "The mower's own settings this connection can read and change with `set_setting` (ADR 0046), each with its type and range or options; current values in `MowerState.settings`. Empty when the connection offers none.",
+          "items": {
+            "$ref": "#/$defs/SettingSpec"
+          },
+          "maxItems": 32,
+          "title": "Settings",
+          "type": "array"
+        },
         "undock": {
           "default": false,
           "description": "The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).",
@@ -265,6 +274,118 @@
         "unknown"
       ],
       "title": "RtkSource",
+      "type": "string"
+    },
+    "SettingGroup": {
+      "description": "Where a client shows a setting.",
+      "enum": [
+        "weather",
+        "battery",
+        "lights",
+        "driving",
+        "safety",
+        "voice",
+        "schedule"
+      ],
+      "title": "SettingGroup",
+      "type": "string"
+    },
+    "SettingSpec": {
+      "description": "One setting a mower has, as its connection declares it (``MowerCapabilities.settings``).",
+      "properties": {
+        "group": {
+          "$ref": "#/$defs/SettingGroup"
+        },
+        "key": {
+          "description": "Manufacturer-neutral key, one of the known keys.",
+          "pattern": "^[a-z][a-z0-9_]{0,47}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Largest value of an `int` setting.",
+          "title": "Max"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Smallest value of an `int` setting.",
+          "title": "Min"
+        },
+        "options": {
+          "description": "The options of an `enum` setting, in the order a client offers them.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Options",
+          "type": "array"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Grid of an `int` setting, counted from `min`.",
+          "title": "Step"
+        },
+        "type": {
+          "$ref": "#/$defs/SettingType"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "maxLength": 8,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Unit of an `int` setting, e.g. `%` or `h`.",
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "key",
+        "type",
+        "group"
+      ],
+      "title": "SettingSpec",
+      "type": "object"
+    },
+    "SettingType": {
+      "description": "The type of a setting's value.",
+      "enum": [
+        "bool",
+        "int",
+        "enum",
+        "time_window"
+      ],
+      "title": "SettingType",
       "type": "string"
     }
   },

@@ -89,6 +89,12 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    ``capabilities.drive_speed_setting`` and a connection implementing
    :class:`~mowdeck_control.connection.DriveSpeedCapable`; the value is snapped to the declared
    range and step. Like ``SetLight`` it keeps an open drive session.
+14. A ``SetSetting`` (ADR 0046) needs a key declared in ``capabilities.settings``, a connection
+   implementing :class:`~mowdeck_control.connection.SettingsCapable` and a value that fits the
+   declaration (:meth:`~mowdeck_contracts.v1.SettingSpec.value_problem`: type, range, step,
+   options). A setting never moves the mower, so it keeps an open drive session and pending
+   confirmations, and it is allowed in every activity, also during an error; like every other
+   command it is rejected while a firmware update, a spot run or a drive calibration runs.
 
 Every decision is logged on the stdlib logger ``mowdeck_control.controller`` with the command id
 and the correlation id (``extra`` fields ``command_id``, ``correlation_id``, ``mower_id``,
@@ -128,6 +134,7 @@ from mowdeck_contracts.v1 import (
     SetBladeHeight,
     SetDriveSpeed,
     SetLight,
+    SetSetting,
     SetSpeed,
     SpotMow,
     SpotRunStatus,
@@ -158,6 +165,7 @@ from mowdeck_control.connection import (
     dispatch_of,
     drive_speed_port_of,
     report_rate_port_of,
+    settings_port_of,
 )
 from mowdeck_control.errors import CommandRejected, NotConnected, UnsupportedPattern
 from mowdeck_control.safety import (
@@ -605,6 +613,8 @@ class MowerController:
                 return await self._drive_calibrate(envelope, command)
             if isinstance(command, SetDriveSpeed):
                 return await self._set_drive_speed(envelope, command)
+            if isinstance(command, SetSetting):
+                return await self._set_setting(envelope, command)
             if not isinstance(command, SetLight):
                 await self._end_drive(f"ended by {command.kind}")
             problem = await self._validate(command)
@@ -1082,6 +1092,34 @@ class MowerController:
         return self._result(
             envelope, CommandStatus.EXECUTED, f"speed for manual driving set to {value:g} m/s"
         )
+
+    async def _set_setting(self, envelope: CommandEnvelope, command: SetSetting) -> CommandResult:
+        """``SetSetting``: one of the mower's own settings (rule 14)."""
+        port = settings_port_of(self._connection)
+        spec = (await self.capabilities()).setting(command.key)
+        if spec is None and port is not None:
+            # The declaration may depend on what the mower reported after the first load (its
+            # model, its firmware), so look once more before refusing.
+            spec = (await self.capabilities(refresh=True)).setting(command.key)
+        if spec is None or port is None:
+            return self._result(
+                envelope,
+                CommandStatus.REJECTED,
+                f"this mower has no setting {command.key!r}",
+            )
+        problem = spec.value_problem(command.value)
+        if problem is not None:
+            return self._result(envelope, CommandStatus.REJECTED, problem)
+        try:
+            outcome = await port.set_setting(command.key, command.value)
+        except CommandRejected as exc:
+            outcome = Outcome.rejected(exc.reason)
+        except NotConnected:
+            outcome = Outcome.failed("mower is not connected")
+        except Exception as exc:
+            self._log.exception("command %s: set_setting failed", envelope.command_id)
+            outcome = Outcome.failed(f"adapter error: {type(exc).__name__}")
+        return self._result(envelope, outcome.status, outcome.reason)
 
     def _on_spot_status(self, status: SpotRunStatus) -> None:
         self._spot_status = status

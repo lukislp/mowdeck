@@ -14,6 +14,7 @@ from pydantic import Field, PlainSerializer, model_validator
 from mowdeck_contracts.v1._base import ContractModel
 from mowdeck_contracts.v1.calibration import DriveSpeedSetting
 from mowdeck_contracts.v1.mower import ConnectionKind, RtkSource
+from mowdeck_contracts.v1.settings import SettingSpec
 
 
 class CameraAccess(StrEnum):
@@ -141,6 +142,13 @@ class MowerCapabilities(ContractModel):
         description="The connection can ask the manufacturer's firmware service for updates "
         "and install them (`firmware_check`, `firmware_update`).",
     )
+    settings: list[SettingSpec] = Field(
+        default_factory=list,
+        max_length=32,
+        description="The mower's own settings this connection can read and change with "
+        "`set_setting` (ADR 0046), each with its type and range or options; current values in "
+        "`MowerState.settings`. Empty when the connection offers none.",
+    )
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:
@@ -161,7 +169,15 @@ class MowerCapabilities(ContractModel):
         ):
             msg = "min_speed_mps must not exceed max_speed_mps"
             raise ValueError(msg)
+        keys = [spec.key for spec in self.settings]
+        if len(set(keys)) != len(keys):
+            msg = "settings must not declare a key twice"
+            raise ValueError(msg)
         return self
+
+    def setting(self, key: str) -> SettingSpec | None:
+        """The declared setting ``key``; None when the connection does not offer it."""
+        return next((spec for spec in self.settings if spec.key == key), None)
 
     def supports_pattern(self, name: str) -> bool:
         """Return True if ``name`` is a native pattern of this mower."""

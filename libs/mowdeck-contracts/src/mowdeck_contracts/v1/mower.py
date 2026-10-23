@@ -27,6 +27,7 @@ from mowdeck_contracts.v1.mower_status import (
     SelfCheck,
     SignalStatus,
 )
+from mowdeck_contracts.v1.settings import SettingKey, SettingValue
 from mowdeck_contracts.v1.spot import (
     MAX_SPOT_MOW_SPEED_MPS,
     SpotCircle,
@@ -218,6 +219,18 @@ class MowerState(ContractModel):
         default=None,
         description="With activity `error`: the manufacturer-neutral kind of the fault; null "
         "otherwise or when the connection cannot tell.",
+    )
+    settings: dict[SettingKey, SettingValue] = Field(
+        default_factory=dict,
+        max_length=32,
+        description="Current values of the mower's own settings (ADR 0046) by key, as the mower "
+        "reported them; a declared setting the mower has not reported yet is missing. Types, "
+        "ranges and options: `MowerCapabilities.settings`.",
+    )
+    rain_detected: bool | None = Field(
+        default=None,
+        description="The mower's own rain sensor reports rain right now; null when the "
+        "connection does not report the sensor (ADR 0046).",
     )
     raw: dict[str, Any] = Field(
         default_factory=dict,
@@ -454,6 +467,23 @@ class DriveCalibrate(ContractModel):
     )
 
 
+class SetSetting(ContractModel):
+    """Change one of the mower's own settings (ADR 0046).
+
+    The key must be declared in ``MowerCapabilities.settings`` and the value must fit its
+    declaration (type, range, step, options); the controller rejects anything else before it
+    reaches the mower. A setting never makes the mower move. The new value arrives in
+    ``MowerState.settings`` once the mower reports it.
+    """
+
+    kind: Literal["set_setting"] = "set_setting"
+    key: SettingKey
+    value: SettingValue = Field(
+        description="The new value: true or false, a whole number, an option, a time window "
+        "`{start, end}`, or null to switch a time window off."
+    )
+
+
 class SetDriveSpeed(ContractModel):
     """Change the vendor's speed setting for manual driving
     (``MowerCapabilities.drive_speed_setting``; the mower scales the stick by it)."""
@@ -498,6 +528,7 @@ MowerCommand = Annotated[
     | SpotStop
     | DriveCalibrate
     | SetDriveSpeed
+    | SetSetting
     | ManualDrive,
     Field(discriminator="kind"),
 ]
@@ -517,6 +548,7 @@ COMMAND_MODELS: tuple[type[ContractModel], ...] = (
     SpotStop,
     DriveCalibrate,
     SetDriveSpeed,
+    SetSetting,
     ManualDrive,
 )
 """All command model classes, in a stable order."""

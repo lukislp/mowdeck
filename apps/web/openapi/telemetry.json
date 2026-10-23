@@ -1950,6 +1950,15 @@
             "title": "Rtk Sources",
             "type": "array"
           },
+          "settings": {
+            "description": "The mower's own settings this connection can read and change with `set_setting` (ADR 0046), each with its type and range or options; current values in `MowerState.settings`. Empty when the connection offers none.",
+            "items": {
+              "$ref": "#/components/schemas/SettingSpec"
+            },
+            "maxItems": 32,
+            "title": "Settings",
+            "type": "array"
+          },
           "undock": {
             "default": false,
             "description": "The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).",
@@ -2600,6 +2609,18 @@
             "default": "unknown",
             "description": "Where `position` comes from; `unknown` whenever `position` is null."
           },
+          "rain_detected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mower's own rain sensor reports rain right now; null when the connection does not report the sensor (ADR 0046).",
+            "title": "Rain Detected"
+          },
           "raw": {
             "additionalProperties": true,
             "description": "Adapter specific extras. Consumers must not rely on its structure; the typed fields above replace the keys they cover.",
@@ -2624,6 +2645,33 @@
               }
             ],
             "description": "The mower's start self-check (`ok` or `blocked` with the reason); null when the connection does not report it."
+          },
+          "settings": {
+            "description": "Current values of the mower's own settings (ADR 0046) by key, as the mower reported them; a declared setting the mower has not reported yet is missing. Types, ranges and options: `MowerCapabilities.settings`.",
+            "maxProperties": 32,
+            "patternProperties": {
+              "^[a-z][a-z0-9_]{0,47}$": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TimeWindow"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "title": "Settings",
+            "type": "object"
           },
           "signal": {
             "anyOf": [
@@ -3006,6 +3054,114 @@
         "title": "SelfCheckResult",
         "type": "string"
       },
+      "SettingGroup": {
+        "description": "Where a client shows a setting.",
+        "enum": [
+          "weather",
+          "battery",
+          "lights",
+          "driving",
+          "safety",
+          "voice",
+          "schedule"
+        ],
+        "title": "SettingGroup",
+        "type": "string"
+      },
+      "SettingSpec": {
+        "description": "One setting a mower has, as its connection declares it (``MowerCapabilities.settings``).",
+        "properties": {
+          "group": {
+            "$ref": "#/components/schemas/SettingGroup"
+          },
+          "key": {
+            "description": "Manufacturer-neutral key, one of the known keys.",
+            "pattern": "^[a-z][a-z0-9_]{0,47}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Largest value of an `int` setting.",
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Smallest value of an `int` setting.",
+            "title": "Min"
+          },
+          "options": {
+            "description": "The options of an `enum` setting, in the order a client offers them.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Options",
+            "type": "array"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Grid of an `int` setting, counted from `min`.",
+            "title": "Step"
+          },
+          "type": {
+            "$ref": "#/components/schemas/SettingType"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 8,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unit of an `int` setting, e.g. `%` or `h`.",
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "group"
+        ],
+        "title": "SettingSpec",
+        "type": "object"
+      },
+      "SettingType": {
+        "description": "The type of a setting's value.",
+        "enum": [
+          "bool",
+          "int",
+          "enum",
+          "time_window"
+        ],
+        "title": "SettingType",
+        "type": "string"
+      },
       "SignalStatus": {
         "description": "The mower's own radio signal (``MowerState.signal``).",
         "properties": {
@@ -3189,6 +3345,29 @@
           "truncated"
         ],
         "title": "StateHistory",
+        "type": "object"
+      },
+      "TimeWindow": {
+        "description": "A daily window in the mower's local time, ``HH:MM`` on a 24-hour clock. ``end`` before\n``start`` crosses midnight (``22:00`` to ``06:00``).",
+        "properties": {
+          "end": {
+            "description": "End, `HH:MM` (24-hour clock).",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "description": "Start, `HH:MM` (24-hour clock).",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TimeWindow",
         "type": "object"
       },
       "TurnStyle": {

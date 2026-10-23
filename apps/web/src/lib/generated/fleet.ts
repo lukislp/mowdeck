@@ -1180,7 +1180,7 @@ export type components = {
          */
         CommandRequest: {
             /** Command */
-            command: components["schemas"]["StartMow"] | components["schemas"]["PauseMow"] | components["schemas"]["ResumeMow"] | components["schemas"]["ReturnToDock"] | components["schemas"]["EmergencyStop"] | components["schemas"]["SetBladeHeight"] | components["schemas"]["SetSpeed"] | components["schemas"]["SetLight"] | components["schemas"]["FirmwareUpdate"] | components["schemas"]["SpotMow"] | components["schemas"]["SpotStop"] | components["schemas"]["DriveCalibrate"] | components["schemas"]["SetDriveSpeed"] | components["schemas"]["ManualDrive"];
+            command: components["schemas"]["StartMow"] | components["schemas"]["PauseMow"] | components["schemas"]["ResumeMow"] | components["schemas"]["ReturnToDock"] | components["schemas"]["EmergencyStop"] | components["schemas"]["SetBladeHeight"] | components["schemas"]["SetSpeed"] | components["schemas"]["SetLight"] | components["schemas"]["FirmwareUpdate"] | components["schemas"]["SpotMow"] | components["schemas"]["SpotStop"] | components["schemas"]["DriveCalibrate"] | components["schemas"]["SetDriveSpeed"] | components["schemas"]["SetSetting"] | components["schemas"]["ManualDrive"];
             /** Ttl Seconds */
             ttl_seconds?: number | null;
         };
@@ -2483,6 +2483,29 @@ export type components = {
             on: boolean;
         };
         /**
+         * SetSetting
+         * @description Change one of the mower's own settings (ADR 0046).
+         *
+         *     The key must be declared in ``MowerCapabilities.settings`` and the value must fit its
+         *     declaration (type, range, step, options); the controller rejects anything else before it
+         *     reaches the mower. A setting never makes the mower move. The new value arrives in
+         *     ``MowerState.settings`` once the mower reports it.
+         */
+        SetSetting: {
+            /** Key */
+            key: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "set_setting";
+            /**
+             * Value
+             * @description The new value: true or false, a whole number, an option, a time window `{start, end}`, or null to switch a time window off.
+             */
+            value: boolean | number | string | components["schemas"]["TimeWindow"] | null;
+        };
+        /**
          * SetSpeed
          * @description Set the driving speed while mowing.
          */
@@ -2783,6 +2806,23 @@ export type components = {
             plan_ref?: string | null;
             /** @description A route computed by the Planner (spot mowing). Runs only on mowers with `custom_paths`, or natively when the plan carries a `native` job. */
             spot_plan?: components["schemas"]["SpotMowPlan"] | null;
+        };
+        /**
+         * TimeWindow
+         * @description A daily window in the mower's local time, ``HH:MM`` on a 24-hour clock. ``end`` before
+         *     ``start`` crosses midnight (``22:00`` to ``06:00``).
+         */
+        TimeWindow: {
+            /**
+             * End
+             * @description End, `HH:MM` (24-hour clock).
+             */
+            end: string;
+            /**
+             * Start
+             * @description Start, `HH:MM` (24-hour clock).
+             */
+            start: string;
         };
         /**
          * TurnStyle
