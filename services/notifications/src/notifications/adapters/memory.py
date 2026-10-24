@@ -201,6 +201,25 @@ class MemoryStore:
         self.data.push.pop(subscription_id, None)
 
     async def add_apns_device(self, device: ApnsDevice) -> ApnsDevice:
+        if device.installation_id is not None:
+            for current in list(self.data.apns.values()):
+                if (current.user_id, current.installation_id) == (
+                    device.user_id,
+                    device.installation_id,
+                ):
+                    self.data.apns = {
+                        k: d
+                        for k, d in self.data.apns.items()
+                        if d.token != device.token or k == current.id
+                    }
+                    updated = replace(
+                        current,
+                        token=device.token,
+                        account_id=device.account_id,
+                        device_name=device.device_name,
+                    )
+                    self.data.apns[current.id] = updated
+                    return updated
         for existing in list(self.data.apns.values()):
             if existing.token == device.token:
                 updated = replace(
@@ -208,6 +227,7 @@ class MemoryStore:
                     user_id=device.user_id,
                     account_id=device.account_id,
                     device_name=device.device_name,
+                    installation_id=device.installation_id or existing.installation_id,
                 )
                 self.data.apns[existing.id] = updated
                 return updated

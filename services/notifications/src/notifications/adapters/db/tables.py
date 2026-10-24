@@ -111,7 +111,9 @@ apns_devices = Table(
     Column("token", String(200), nullable=False),
     Column("device_name", String(100)),
     Column("created_at", TS, nullable=False),
+    Column("installation_id", Uuid),
     UniqueConstraint("token", name="uq_apns_devices_token"),
+    UniqueConstraint("user_id", "installation_id", name="uq_apns_devices_user_installation"),
     Index("ix_apns_devices_user", "user_id", "account_id"),
 )
 

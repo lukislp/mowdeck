@@ -6,6 +6,13 @@
  * (`POST /api/v1/notifications/me/push/apns`). The server then sends to Apple with the owner's
  * APNs auth key while the app is in the background or closed. The device id is remembered so
  * logout can remove the token again (`DELETE .../me/push/apns/{id}`).
+ *
+ * One registration per installation: the token goes up with the shell's installation id (a
+ * UUID the iOS shell keeps in the Keychain, `MowDeckShell.getInstallationId`), so a new token
+ * of the same installation (reinstall, TestFlight over a development build, token rotation)
+ * replaces the old one on the server instead of adding a second device that gets every
+ * notification again. Shells without the method (builds before it) send no id; the server then
+ * keeps one row per token as before.
  */
 import type { NativePlugin } from './capacitor';
 
@@ -13,8 +20,14 @@ const DEVICE_KEY = 'mowdeck.apns-device';
 
 export type ApnsState = 'idle' | 'pending' | 'on' | 'denied' | 'error';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface ApnsApi {
-  add(token: string, deviceName: string | null): Promise<{ id: string }>;
+  add(
+    token: string,
+    deviceName: string | null,
+    installationId: string | null,
+  ): Promise<{ id: string }>;
   remove(id: string): Promise<void>;
 }
 
@@ -23,6 +36,8 @@ export interface ApnsDeps {
   api: ApnsApi;
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
   deviceName?: string | null;
+  /** The shell's stable installation id (null: the shell has none, an older build). */
+  installationId?: () => Promise<string | null>;
   onChange?: (state: ApnsState) => void;
 }
 
@@ -101,6 +116,16 @@ export class ApnsRegistration {
     this.#offs = [];
   }
 
+  /** The installation id when the shell has a valid one, else null (never fails). */
+  async #installationId(): Promise<string | null> {
+    try {
+      const id = await this.#deps.installationId?.();
+      return typeof id === 'string' && UUID.test(id) ? id.toLowerCase() : null;
+    } catch {
+      return null;
+    }
+  }
+
   #listen(): void {
     if (this.#offs.length) return;
     const { push } = this.#deps;
@@ -111,8 +136,10 @@ export class ApnsRegistration {
           this.#set('error');
           return;
         }
-        void this.#deps.api
-          .add(token, this.#deps.deviceName ?? null)
+        void this.#installationId()
+          .then((installation) =>
+            this.#deps.api.add(token, this.#deps.deviceName ?? null, installation),
+          )
           .then((stored) => {
             this.#remember(stored.id);
             this.#set('on');

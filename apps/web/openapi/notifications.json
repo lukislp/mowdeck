@@ -20,6 +20,19 @@
             ],
             "title": "Device Name"
           },
+          "installation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable id of the app installation (a UUID the iOS shell keeps in the Keychain). A new token of the same installation replaces the earlier one, so a device never holds two registrations. Without it (older app builds) each token is its own device.",
+            "title": "Installation Id"
+          },
           "token": {
             "description": "Device token in hexadecimal (case-insensitive, stored in lower case).",
             "maxLength": 200,
@@ -1089,7 +1102,7 @@
         ]
       },
       "post": {
-        "description": "Register the iOS app's APNs device token for the caller (plan feature\n``notifications.push``); the same token again replaces the earlier owner and name.",
+        "description": "Register the iOS app's APNs device token for the caller (plan feature\n``notifications.push``); the same token again replaces the earlier owner and name, and a\nnew token of a known ``installation_id`` replaces that installation's earlier token.",
         "operationId": "add_apns_device_api_v1_notifications_me_push_apns_post",
         "requestBody": {
           "content": {

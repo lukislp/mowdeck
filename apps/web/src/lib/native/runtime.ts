@@ -19,10 +19,14 @@ export const nativeShell = new NativeShell({
   bridge: typeof window === 'undefined' ? null : nativeBridge(window),
   storage: localStore(),
   apns: {
-    add: (token, deviceName) =>
+    add: (token, deviceName, installationId) =>
       unwrap(
         notificationsApi.POST('/api/v1/notifications/me/push/apns', {
-          body: { token, device_name: deviceName },
+          body: {
+            token,
+            device_name: deviceName,
+            ...(installationId ? { installation_id: installationId } : {}),
+          },
         }),
       ),
     async remove(id) {
