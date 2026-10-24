@@ -1,31 +1,31 @@
 <script lang="ts">
   import { Button, Field, Icon, Panel, ProblemNotice, Readout, Switch } from '@mowdeck/ui';
 
-  import { fleetApi, notificationsApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import type { components } from '$lib/generated/notifications';
-  import { formatDateTime, problemMessage } from '$lib/i18n';
-  import NativeAppPanel from '$lib/native/NativeAppPanel.svelte';
-  import { nativeShell } from '$lib/native/runtime';
+  import { fleetApi, notificationsApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import type { components } from '#lib/generated/notifications.js';
+  import { formatDateTime, problemMessage } from '#lib/i18n.js';
+  import NativeAppPanel from '#lib/native/NativeAppPanel.svelte';
+  import { nativeShell } from '#lib/native/runtime.js';
   import {
     channelHint,
     channelLabel,
     kindHint,
     kindLabel,
     USER_KINDS,
-  } from '$lib/notifications/kinds';
-  import { inbox, pushDevice } from '$lib/notifications/runtime';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
+  } from '#lib/notifications/kinds.js';
+  import { inbox, pushDevice } from '#lib/notifications/runtime.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
   import {
     describeAgent,
     detectEnvironment,
     pushSupport,
     PushError,
     type PushSupport,
-  } from '$lib/push/device';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/push/device.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   type Preferences = components['schemas']['PreferencesOut'];
   type Subscription = components['schemas']['PushSubscriptionOut'];

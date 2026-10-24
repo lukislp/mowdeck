@@ -12,9 +12,9 @@
 <script lang="ts">
   import { Button, Icon, type RtkFix } from '@mowdeck/ui';
 
-  import { formatNumber, rtkFixShort } from '$lib/i18n';
-  import { spotReasonLabel, spotRunLabel, type SpotRunStatus } from '$lib/mower/spot-sheet';
-  import { m } from '$lib/paraglide/messages';
+  import { formatNumber, rtkFixShort } from '#lib/i18n.js';
+  import { spotReasonLabel, spotRunLabel, type SpotRunStatus } from '#lib/mower/spot-sheet.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     /** The run being driven, or null. */

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiProblem } from '$lib/api/problem';
-import type { BridgeLink, BridgeScanReply, ScannedDevice } from '$lib/fleet/links';
-import { m } from '$lib/paraglide/messages';
+import { ApiProblem } from '#lib/api/problem.js';
+import type { BridgeLink, BridgeScanReply, ScannedDevice } from '#lib/fleet/links.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import { formIssues, parsePort, preselect, rssiText, sortDevices } from './bridge-link';
 import { BridgeLinkFlow, type BridgeLinkDeps } from './bridge-link.svelte';

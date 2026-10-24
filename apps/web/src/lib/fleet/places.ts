@@ -3,7 +3,7 @@
  * `/sites` and `/groups`, the mower list sections by site, and the fleet filters. Pure and unit
  * tested (`places.test.ts`); Fleet checks everything again.
  */
-import { isValidTimeZone, parseNumber } from '$lib/schedules/form';
+import { isValidTimeZone, parseNumber } from '#lib/schedules/form.js';
 
 export interface SiteLike {
   id: string;

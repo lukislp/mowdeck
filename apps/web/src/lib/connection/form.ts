@@ -8,8 +8,8 @@
  * Managed options (a linked account's `device_name` and `iot_id`) are set by Fleet: shown
  * read-only, never validated and never sent.
  */
-import type { ApiProblem } from '$lib/api/problem';
-import type { components } from '$lib/generated/fleet';
+import type { ApiProblem } from '#lib/api/problem.js';
+import type { components } from '#lib/generated/fleet.js';
 
 export type KindSchema = components['schemas']['ConnectionKindOut'];
 export type OptionSchema = components['schemas']['ConnectionOptionOut'];

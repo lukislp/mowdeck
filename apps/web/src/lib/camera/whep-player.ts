@@ -47,7 +47,7 @@
  *
  * The ticket and the WHEP session URLs are secrets: never logged.
  */
-import { asProblem } from '$lib/api/problem';
+import { asProblem } from '#lib/api/problem.js';
 
 import {
   buildSnapshot,

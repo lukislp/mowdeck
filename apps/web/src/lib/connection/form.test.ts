@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ApiProblem } from '$lib/api/problem';
+import { ApiProblem } from '#lib/api/problem.js';
 
 import {
   buildOptions,

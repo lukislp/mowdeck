@@ -9,7 +9,7 @@ import {
   stepObstacleLaps,
   stepProgress,
   type JobOptionsSpec,
-} from '$lib/mower/job-options';
+} from '#lib/mower/job-options.js';
 
 /** `capabilities.start_options` of a LUBA 2 AWD on current firmware. */
 const LUBA = {

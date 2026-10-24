@@ -7,8 +7,8 @@
 <script lang="ts">
   import { Button } from '@mowdeck/ui';
 
-  import ToneBadge from '$lib/components/ToneBadge.svelte';
-  import { formatDateTime } from '$lib/i18n';
+  import ToneBadge from '#lib/components/ToneBadge.svelte';
+  import { formatDateTime } from '#lib/i18n.js';
   import {
     deviceState,
     idPart,
@@ -18,9 +18,9 @@
     type DeviceState,
     type LinkedDevice,
     type OnlineState,
-  } from '$lib/linked/accounts';
-  import { m } from '$lib/paraglide/messages';
-  import type { Glyph, Tone } from '$lib/schedules/labels';
+  } from '#lib/linked/accounts.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import type { Glyph, Tone } from '#lib/schedules/labels.js';
 
   interface Props {
     devices: LinkedDevice[];

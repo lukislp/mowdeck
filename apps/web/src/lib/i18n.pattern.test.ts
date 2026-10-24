@@ -7,8 +7,8 @@ import {
   orderLabel,
   patternLabel,
   patternSummary,
-} from '$lib/i18n';
-import { setLocale } from '$lib/paraglide/runtime';
+} from '#lib/i18n.js';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 describe('pattern labels', () => {
   it('summarises a start in German', () => {

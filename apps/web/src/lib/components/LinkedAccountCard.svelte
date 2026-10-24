@@ -7,15 +7,15 @@
 <script lang="ts">
   import { Button, Field, Icon, ProblemNotice } from '@mowdeck/ui';
 
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { formatDateTime } from '$lib/i18n';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { formatDateTime } from '#lib/i18n.js';
   import {
     accountIssue,
     inUseMowers,
     type AccountIssue,
     type LinkedAccount,
-  } from '$lib/linked/accounts';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/linked/accounts.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     account: LinkedAccount;

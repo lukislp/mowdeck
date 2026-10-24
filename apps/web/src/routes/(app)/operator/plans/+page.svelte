@@ -6,14 +6,14 @@
 <script lang="ts">
   import { Button, Icon, ProblemNotice, TopBar } from '@mowdeck/ui';
 
-  import { entitlementsApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { formatNumber, problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { featureLabel, limitLabel } from '$lib/plan/labels';
-  import { accountPlan } from '$lib/plan/plan.svelte';
-  import { LIMIT_KEYS, type Plan } from '$lib/plan/types';
+  import { entitlementsApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { formatNumber, problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { featureLabel, limitLabel } from '#lib/plan/labels.js';
+  import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import { LIMIT_KEYS, type Plan } from '#lib/plan/types.js';
 
   let plans = $state<Plan[] | null>(null);
   let problem = $state<ApiProblem | null>(null);

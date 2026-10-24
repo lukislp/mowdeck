@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { LinkedDevice } from '$lib/linked/accounts';
-import { m } from '$lib/paraglide/messages';
+import type { LinkedDevice } from '#lib/linked/accounts.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import LinkedDeviceList from './LinkedDeviceList.svelte';
 

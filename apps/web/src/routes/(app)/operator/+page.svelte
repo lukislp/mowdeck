@@ -7,18 +7,18 @@
 <script lang="ts">
   import { Button, Field, Icon, ProblemNotice, TopBar } from '@mowdeck/ui';
 
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import PlanStatusBadge from '$lib/components/PlanStatusBadge.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { formatDate, formatNumber, problemMessage } from '$lib/i18n';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import PlanStatusBadge from '#lib/components/PlanStatusBadge.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { formatDate, formatNumber, problemMessage } from '#lib/i18n.js';
   import {
     loadAccountPage,
     PAGE_SIZE,
     searchAccounts,
     type AccountPage,
-  } from '$lib/operator/accounts';
-  import { accountKindLabel, accountStatusLabel } from '$lib/operator/labels';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/operator/accounts.js';
+  import { accountKindLabel, accountStatusLabel } from '#lib/operator/labels.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   let offset = $state(0);
   let data = $state<AccountPage | null>(null);

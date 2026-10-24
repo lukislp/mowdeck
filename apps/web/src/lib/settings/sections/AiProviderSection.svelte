@@ -12,10 +12,10 @@
 <script lang="ts">
   import { Button, Field, Panel, ProblemNotice, Switch } from '@mowdeck/ui';
 
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { formatDateTime, formatNumber } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { toasts } from '$lib/stores/ui.svelte';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { formatDateTime, formatNumber } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
   import {
     visionCalls,
     type VisionPreferences,
@@ -23,10 +23,10 @@
     type ProviderFamily,
     type ProviderSettings,
     type ProviderTest,
-  } from '$lib/vision/api';
-  import { autoAvailability, canToggle, limitsText } from '$lib/vision/auto';
-  import { formatCost } from '$lib/vision/labels';
-  import { visionProblemText } from '$lib/vision/problems';
+  } from '#lib/vision/api.js';
+  import { autoAvailability, canToggle, limitsText } from '#lib/vision/auto.js';
+  import { formatCost } from '#lib/vision/labels.js';
+  import { visionProblemText } from '#lib/vision/problems.js';
   import {
     chooseFamily,
     findFamily,
@@ -35,7 +35,7 @@
     providerBody,
     validateForm,
     type ProviderForm,
-  } from '$lib/vision/provider';
+  } from '#lib/vision/provider.js';
 
   const api = visionCalls();
 

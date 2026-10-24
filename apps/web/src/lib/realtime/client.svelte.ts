@@ -21,7 +21,7 @@ import type {
   RealtimeErrorCode,
   RealtimeServerMessage,
   StateMessage,
-} from '$lib/generated/realtime';
+} from '#lib/generated/realtime.js';
 
 /** An open drive session as `drive_started` announced it. */
 export interface DriveSession {

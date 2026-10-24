@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { setLocale } from '$lib/paraglide/runtime';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 import BaseStationFirmware from './BaseStationFirmware.svelte';
 import BaseStationStatus from './BaseStationStatus.svelte';

@@ -12,8 +12,8 @@
   import { CommandBar, type StopState } from '@mowdeck/ui';
   import type { Snippet } from 'svelte';
 
-  import { commands, sendCommand } from '$lib/live.svelte';
-  import { m } from '$lib/paraglide/messages';
+  import { commands, sendCommand } from '#lib/live.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     mowerId: string;

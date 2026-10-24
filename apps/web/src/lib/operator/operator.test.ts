@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { PlanDetail } from '$lib/plan/types';
+import type { PlanDetail } from '#lib/plan/types.js';
 
 import { OperatorAccess, PLATFORM_PROBE, probeOperator } from './access.svelte';
 import {

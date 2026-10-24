@@ -13,11 +13,11 @@
 <script lang="ts">
   import { Button, SegmentedControl, Switch } from '@mowdeck/ui';
 
-  import { type DelaySource, shown } from '$lib/camera/diagnostics';
-  import { BOTH, cameraOptions as optionsOf } from '$lib/camera/labels';
-  import type { CameraViewer } from '$lib/camera/viewer.svelte';
-  import { formatNumber, formatTime } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  import { type DelaySource, shown } from '#lib/camera/diagnostics.js';
+  import { BOTH, cameraOptions as optionsOf } from '#lib/camera/labels.js';
+  import type { CameraViewer } from '#lib/camera/viewer.svelte.js';
+  import { formatNumber, formatTime } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   import CameraStage from './CameraStage.svelte';
 

@@ -6,7 +6,7 @@
 <script lang="ts">
   import { Button, Panel, ProblemNotice, Readout } from '@mowdeck/ui';
 
-  import { m } from '$lib/paraglide/messages';
+  import { m } from '#lib/paraglide/messages.js';
 
   import type { ApnsState } from './apns';
   import { nativeShell } from './runtime';

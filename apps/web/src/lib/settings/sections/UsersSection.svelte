@@ -7,16 +7,16 @@
 <script lang="ts">
   import { Button, Field, Icon, Panel, ProblemNotice, Select, Sheet } from '@mowdeck/ui';
 
-  import { identityApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { session } from '$lib/auth/session.svelte';
-  import LevelPicker from '$lib/components/LevelPicker.svelte';
-  import { levelLabel, loadPlaces, type LevelType, type Places } from '$lib/fleet/data';
-  import type { components } from '$lib/generated/identity';
-  import { formatDateTime, problemMessage, roleLabel } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { notifyPlanProblem } from '$lib/plan/problems';
-  import { toasts } from '$lib/stores/ui.svelte';
+  import { identityApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { session } from '#lib/auth/session.svelte.js';
+  import LevelPicker from '#lib/components/LevelPicker.svelte';
+  import { levelLabel, loadPlaces, type LevelType, type Places } from '#lib/fleet/data.js';
+  import type { components } from '#lib/generated/identity.js';
+  import { formatDateTime, problemMessage, roleLabel } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { notifyPlanProblem } from '#lib/plan/problems.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   type Member = components['schemas']['MemberOut'];
   type Role = components['schemas']['RoleOut'];

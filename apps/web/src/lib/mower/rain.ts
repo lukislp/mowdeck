@@ -6,8 +6,8 @@
  * and the thresholds applied (`decision.settings`) all come from the Scheduler, which owns the
  * rain rule (`services/scheduler`, `domain/rain.py`). Nothing here re-derives them.
  */
-import { hourBars, type HourBar } from '$lib/schedules/preview';
-import type { ForecastHour, RainPause } from '$lib/schedules/types';
+import { hourBars, type HourBar } from '#lib/schedules/preview.js';
+import type { ForecastHour, RainPause } from '#lib/schedules/types.js';
 
 /** The thresholds the Scheduler applied, as echoed in `decision.settings`. */
 export type Thresholds = Pick<RainPause, 'probability_threshold' | 'precipitation_mm_threshold'>;

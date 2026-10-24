@@ -8,9 +8,9 @@
 <script lang="ts">
   import { Button, ProblemNotice, Sheet } from '@mowdeck/ui';
 
-  import { fleetApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import ToneBadge from '$lib/components/ToneBadge.svelte';
+  import { fleetApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import ToneBadge from '#lib/components/ToneBadge.svelte';
   import {
     bulkCommand,
     lineStates,
@@ -20,10 +20,10 @@
     type BulkKind,
     type BulkLineState,
     type BulkTarget,
-  } from '$lib/fleet/bulk';
-  import { bulkKindLabel, bulkLine } from '$lib/fleet/data';
-  import { problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/fleet/bulk.js';
+  import { bulkKindLabel, bulkLine } from '#lib/fleet/data.js';
+  import { problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Affected {
     id: string;

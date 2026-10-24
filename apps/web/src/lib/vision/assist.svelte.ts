@@ -4,7 +4,7 @@
  * second until it is final, and the decisions (approve, reject, retry). One instance per mower
  * page; `close()` stops the polling.
  */
-import { asProblem, type ApiProblem } from '$lib/api/problem';
+import { asProblem, type ApiProblem } from '#lib/api/problem.js';
 
 import {
   VISION_PROBLEMS,

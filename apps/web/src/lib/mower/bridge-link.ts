@@ -3,10 +3,10 @@
  * scanned mowers, and the texts of a scan that gave no result (design 3). No DOM, no runes, so
  * `bridge-link.test.ts` covers them with the flow.
  */
-import type { ApiProblem } from '$lib/api/problem';
-import type { BridgeScanError, ScannedDevice } from '$lib/fleet/links';
-import { problemMessage } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
+import type { ApiProblem } from '#lib/api/problem.js';
+import type { BridgeScanError, ScannedDevice } from '#lib/fleet/links.js';
+import { problemMessage } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
 
 export const DEFAULT_PORT = 6053;
 

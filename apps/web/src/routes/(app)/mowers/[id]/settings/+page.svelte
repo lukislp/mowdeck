@@ -5,20 +5,20 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { clock } from '$lib/clock.svelte';
-  import BridgeLinkPanel from '$lib/components/BridgeLinkPanel.svelte';
-  import BridgeLinkSheet from '$lib/components/BridgeLinkSheet.svelte';
-  import ConnectionForm from '$lib/components/ConnectionForm.svelte';
-  import DeviceSettingsPanel from '$lib/components/DeviceSettingsPanel.svelte';
-  import DriveCalibrationPanel from '$lib/components/DriveCalibrationPanel.svelte';
-  import DriveSpeedControl from '$lib/components/DriveSpeedControl.svelte';
-  import FirmwarePanel from '$lib/components/FirmwarePanel.svelte';
-  import MaintenancePanel from '$lib/components/MaintenancePanel.svelte';
-  import MowerPlacement from '$lib/components/MowerPlacement.svelte';
-  import SiteLocation from '$lib/components/SiteLocation.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
+  import { fleetApi, telemetryApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import BridgeLinkPanel from '#lib/components/BridgeLinkPanel.svelte';
+  import BridgeLinkSheet from '#lib/components/BridgeLinkSheet.svelte';
+  import ConnectionForm from '#lib/components/ConnectionForm.svelte';
+  import DeviceSettingsPanel from '#lib/components/DeviceSettingsPanel.svelte';
+  import DriveCalibrationPanel from '#lib/components/DriveCalibrationPanel.svelte';
+  import DriveSpeedControl from '#lib/components/DriveSpeedControl.svelte';
+  import FirmwarePanel from '#lib/components/FirmwarePanel.svelte';
+  import MaintenancePanel from '#lib/components/MaintenancePanel.svelte';
+  import MowerPlacement from '#lib/components/MowerPlacement.svelte';
+  import SiteLocation from '#lib/components/SiteLocation.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
   import {
     buildOptions,
     initialState,
@@ -27,16 +27,16 @@
     type ConnectionState,
     type FieldIssue,
     type KindSchema,
-  } from '$lib/connection/form';
-  import { loadKinds } from '$lib/connection/kinds';
-  import { kindTitle } from '$lib/connection/text';
-  import { deleteDriveCalibration, putDriveCalibration } from '$lib/fleet/drive-calibration';
+  } from '#lib/connection/form.js';
+  import { loadKinds } from '#lib/connection/kinds.js';
+  import { kindTitle } from '#lib/connection/text.js';
+  import { deleteDriveCalibration, putDriveCalibration } from '#lib/fleet/drive-calibration.js';
   import {
     checkFirmware,
     firmwareCheckProblemText,
     shownFirmwareInfo,
     type FirmwareInfo,
-  } from '$lib/fleet/firmware';
+  } from '#lib/fleet/firmware.js';
   import {
     BLE_BRIDGE,
     bridgeLinkOfMower,
@@ -45,32 +45,32 @@
     putBridgeLink,
     scanBridge,
     type BridgeLink,
-  } from '$lib/fleet/links';
-  import type { components } from '$lib/generated/fleet';
-  import { connectionLabel, problemMessage } from '$lib/i18n';
-  import { isLegacyCloud, type LinkedAccount } from '$lib/linked/accounts';
-  import { getLinkedAccount } from '$lib/linked/api';
-  import { commands, permissions, realtime, sendCommand } from '$lib/live.svelte';
-  import { BridgeLinkFlow } from '$lib/mower/bridge-link.svelte';
-  import { settingSpecs, settingsBlocker } from '$lib/mower/device-settings';
-  import { DeviceSettingsFlow } from '$lib/mower/device-settings.svelte';
+  } from '#lib/fleet/links.js';
+  import type { components } from '#lib/generated/fleet.js';
+  import { connectionLabel, problemMessage } from '#lib/i18n.js';
+  import { isLegacyCloud, type LinkedAccount } from '#lib/linked/accounts.js';
+  import { getLinkedAccount } from '#lib/linked/api.js';
+  import { commands, permissions, realtime, sendCommand } from '#lib/live.svelte.js';
+  import { BridgeLinkFlow } from '#lib/mower/bridge-link.svelte.js';
+  import { settingSpecs, settingsBlocker } from '#lib/mower/device-settings.js';
+  import { DeviceSettingsFlow } from '#lib/mower/device-settings.svelte.js';
   import {
     calibrationConditions,
     driveSpeedLocked,
     storedCalibrationOf,
     type DriveSpeedSetting,
-  } from '$lib/mower/drive-calibration';
-  import { DriveCalibrationFlow } from '$lib/mower/drive-calibration.svelte';
-  import { drivesOverBridge } from '$lib/mower/drive-link';
+  } from '#lib/mower/drive-calibration.js';
+  import { DriveCalibrationFlow } from '#lib/mower/drive-calibration.svelte.js';
+  import { drivesOverBridge } from '#lib/mower/drive-link.js';
   import {
     maintenanceBlocker,
     offeredActions,
     type MaintenanceAction,
-  } from '$lib/mower/maintenance';
-  import { m } from '$lib/paraglide/messages';
-  import { accountPlan } from '$lib/plan/plan.svelte';
-  import { mowers as states } from '$lib/stores/mowers.svelte';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/mower/maintenance.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import { mowers as states } from '#lib/stores/mowers.svelte.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   type Mower = components['schemas']['MowerOut'];
   type ConnectionKind = components['schemas']['ConnectionKind'];

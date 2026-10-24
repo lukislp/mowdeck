@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SettingSpec } from '$lib/mower/device-settings';
-import { DeviceSettingsFlow } from '$lib/mower/device-settings.svelte';
-import { setLocale } from '$lib/paraglide/runtime';
+import type { SettingSpec } from '#lib/mower/device-settings.js';
+import { DeviceSettingsFlow } from '#lib/mower/device-settings.svelte.js';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 import DeviceSettingsPanel from './DeviceSettingsPanel.svelte';
 

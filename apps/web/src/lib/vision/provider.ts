@@ -3,7 +3,7 @@
  * what choosing a family pre-fills, client-side checks and the `PUT /me/provider` body. The API
  * key is write-only: an empty input keeps the stored key, "remove key" sends an empty string.
  */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import type { ProviderFamily, ProviderInput, ProviderSettings } from './api';
 

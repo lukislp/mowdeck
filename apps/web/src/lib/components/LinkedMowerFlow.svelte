@@ -10,16 +10,16 @@
 
   import { goto } from '$app/navigation';
 
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import LinkedAccountConnect from '$lib/components/LinkedAccountConnect.svelte';
-  import LinkedDeviceList from '$lib/components/LinkedDeviceList.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import type { KindSchema } from '$lib/connection/form';
-  import { kindDescription, kindTitle } from '$lib/connection/text';
-  import { displaySites, type Site } from '$lib/fleet/data';
-  import { sortSites } from '$lib/fleet/places';
-  import { createSite, listSites } from '$lib/fleet/sites';
-  import { formatDateTime, problemMessage } from '$lib/i18n';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import LinkedAccountConnect from '#lib/components/LinkedAccountConnect.svelte';
+  import LinkedDeviceList from '#lib/components/LinkedDeviceList.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import type { KindSchema } from '#lib/connection/form.js';
+  import { kindDescription, kindTitle } from '#lib/connection/text.js';
+  import { displaySites, type Site } from '#lib/fleet/data.js';
+  import { sortSites } from '#lib/fleet/places.js';
+  import { createSite, listSites } from '#lib/fleet/sites.js';
+  import { formatDateTime, problemMessage } from '#lib/i18n.js';
   import {
     accountIssue,
     BULK_LIMIT,
@@ -33,17 +33,17 @@
     type LinkedAccountDetail,
     type LinkedDevice,
     type MowerDraft,
-  } from '$lib/linked/accounts';
+  } from '#lib/linked/accounts.js';
   import {
     linkAccount,
     listDevices,
     listLinkedAccounts,
     registerMowers,
     syncAccount,
-  } from '$lib/linked/api';
-  import { m } from '$lib/paraglide/messages';
-  import { notifyPlanProblem } from '$lib/plan/problems';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/linked/api.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { notifyPlanProblem } from '#lib/plan/problems.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   interface Props {
     schema: KindSchema;

@@ -3,7 +3,7 @@
   the error tone, battery low the warning tone, offline dashed); never colour alone.
 -->
 <script lang="ts">
-  import { kindLabel, kindTone, type NotificationKind } from '$lib/notifications/kinds';
+  import { kindLabel, kindTone, type NotificationKind } from '#lib/notifications/kinds.js';
 
   let { kind }: { kind: NotificationKind } = $props();
   const tone = $derived(kindTone(kind));

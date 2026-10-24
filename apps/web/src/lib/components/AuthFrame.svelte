@@ -6,8 +6,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  import SourceCode from '$lib/components/SourceCode.svelte';
-  import { m } from '$lib/paraglide/messages';
+  import SourceCode from '#lib/components/SourceCode.svelte';
+  import { m } from '#lib/paraglide/messages.js';
 
   let { title, children }: { title: string; children: Snippet } = $props();
 </script>

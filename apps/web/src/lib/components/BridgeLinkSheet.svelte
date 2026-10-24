@@ -2,15 +2,15 @@
   Adding a Bluetooth bridge to a mower (ADR 0038, design 3), a non-modal sheet in three steps:
   the bridge (host, key, the port under "erweitert"), the mower the bridge saw (the expected
   name preselected, every other one marked "anderer Mäher", the blade switch for manual driving)
-  and the saved link. The flow (`$lib/mower/bridge-link.svelte`) holds every state; this file is
+  and the saved link. The flow (`#lib/mower/bridge-link.svelte.js`) holds every state; this file is
   the markup only. The key is typed into a password field and never shown again.
 -->
 <script lang="ts">
   import { Button, Field, Icon, ProblemNotice, Sheet, Switch } from '@mowdeck/ui';
 
-  import { isExpected, issueText, rssiText } from '$lib/mower/bridge-link';
-  import type { BridgeLinkFlow, BridgeStep } from '$lib/mower/bridge-link.svelte';
-  import { m } from '$lib/paraglide/messages';
+  import { isExpected, issueText, rssiText } from '#lib/mower/bridge-link.js';
+  import type { BridgeLinkFlow, BridgeStep } from '#lib/mower/bridge-link.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     flow: BridgeLinkFlow;

@@ -3,7 +3,7 @@
   (account and profile, notifications, users, AI provider, linked accounts, API tokens; the
   order of `module.ts`), then About for everyone (the build and its source code, AGPL-3.0). A numbered section index sits on the left on the desktop and as a strip
   under the top bar on phones; it marks the section in view. Old routes forward here
-  (`$lib/settings/sections`).
+  (`#lib/settings/sections.js`).
 -->
 <script lang="ts">
   import { TopBar } from '@mowdeck/ui';
@@ -11,18 +11,18 @@
 
   import { page } from '$app/state';
 
-  import { session } from '$lib/auth/session.svelte';
-  import { operatorAccess } from '$lib/operator/access.svelte';
-  import { m } from '$lib/paraglide/messages';
-  import { settingsSections, type SettingsSection } from '$lib/settings/sections';
-  import AboutSection from '$lib/settings/sections/AboutSection.svelte';
-  import AiProviderSection from '$lib/settings/sections/AiProviderSection.svelte';
-  import ApiTokensSection from '$lib/settings/sections/ApiTokensSection.svelte';
-  import LinkedAccountsSection from '$lib/settings/sections/LinkedAccountsSection.svelte';
-  import NotificationsSection from '$lib/settings/sections/NotificationsSection.svelte';
-  import ProfileSection from '$lib/settings/sections/ProfileSection.svelte';
-  import UsersSection from '$lib/settings/sections/UsersSection.svelte';
-  import { builtIn, registry, visibleModules } from '$lib/shell/registry.svelte';
+  import { session } from '#lib/auth/session.svelte.js';
+  import { operatorAccess } from '#lib/operator/access.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { settingsSections, type SettingsSection } from '#lib/settings/sections.js';
+  import AboutSection from '#lib/settings/sections/AboutSection.svelte';
+  import AiProviderSection from '#lib/settings/sections/AiProviderSection.svelte';
+  import ApiTokensSection from '#lib/settings/sections/ApiTokensSection.svelte';
+  import LinkedAccountsSection from '#lib/settings/sections/LinkedAccountsSection.svelte';
+  import NotificationsSection from '#lib/settings/sections/NotificationsSection.svelte';
+  import ProfileSection from '#lib/settings/sections/ProfileSection.svelte';
+  import UsersSection from '#lib/settings/sections/UsersSection.svelte';
+  import { builtIn, registry, visibleModules } from '#lib/shell/registry.svelte.js';
 
   /** The component of each settings module (by module id). */
   const VIEWS: Record<string, Component> = {

@@ -5,12 +5,12 @@
   weather (`GET /weather/{mower_id}`) and passes the parts in.
 -->
 <script lang="ts">
-  import RainStrip from '$lib/components/RainStrip.svelte';
-  import { formatClock, formatNumber } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import type { HourBar } from '$lib/schedules/preview';
-  import type { RainNow } from '$lib/mower/rain';
+  import RainStrip from '#lib/components/RainStrip.svelte';
+  import { formatClock, formatNumber } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import type { HourBar } from '#lib/schedules/preview.js';
+  import type { RainNow } from '#lib/mower/rain.js';
 
   interface Props {
     /** `ok`: data shown; `no_location`, `disabled` (provider off), `unavailable` (provider down). */

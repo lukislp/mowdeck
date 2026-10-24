@@ -3,17 +3,17 @@
 
   import { page } from '$app/state';
 
-  import { schedulerApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import ToneBadge from '$lib/components/ToneBadge.svelte';
-  import { problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import { followupLabel, outcomeLook } from '$lib/schedules/labels';
-  import { formatFiring, recurrenceSummary } from '$lib/schedules/recurrence';
-  import { loadTargets, type Targets } from '$lib/schedules/runtime';
-  import type { Locale, Run, Schedule } from '$lib/schedules/types';
+  import { schedulerApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import ToneBadge from '#lib/components/ToneBadge.svelte';
+  import { problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import { followupLabel, outcomeLook } from '#lib/schedules/labels.js';
+  import { formatFiring, recurrenceSummary } from '#lib/schedules/recurrence.js';
+  import { loadTargets, type Targets } from '#lib/schedules/runtime.js';
+  import type { Locale, Run, Schedule } from '#lib/schedules/types.js';
 
   const PAGE = 50;
   const id = $derived(page.params.id ?? '');

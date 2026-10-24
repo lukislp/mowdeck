@@ -10,25 +10,25 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import { schedulerApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import ScheduleForm from '$lib/components/ScheduleForm.svelte';
-  import SchedulePreview from '$lib/components/SchedulePreview.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { loadConfig, type MapTilesConfig } from '$lib/config';
-  import { problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import { notifyPlanProblem } from '$lib/plan/problems';
+  import { schedulerApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import ScheduleForm from '#lib/components/ScheduleForm.svelte';
+  import SchedulePreview from '#lib/components/SchedulePreview.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { loadConfig, type MapTilesConfig } from '#lib/config.js';
+  import { problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import { notifyPlanProblem } from '#lib/plan/problems.js';
   import {
     emptyForm,
     fromSchedule,
     localDate,
     toBody,
     type ScheduleFormState,
-  } from '$lib/schedules/form';
-  import { mowSummary, type CapsLike } from '$lib/schedules/mow-options';
-  import { recurrenceSummary } from '$lib/schedules/recurrence';
+  } from '#lib/schedules/form.js';
+  import { mowSummary, type CapsLike } from '#lib/schedules/mow-options.js';
+  import { recurrenceSummary } from '#lib/schedules/recurrence.js';
   import {
     loadCapabilities,
     loadPreview,
@@ -36,9 +36,9 @@
     siteTimeZone,
     targetRights,
     type Targets,
-  } from '$lib/schedules/runtime';
-  import type { Locale, Preview, RainPause, Schedule } from '$lib/schedules/types';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/schedules/runtime.js';
+  import type { Locale, Preview, RainPause, Schedule } from '#lib/schedules/types.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   let { id }: { id: string | null } = $props();
 

@@ -41,7 +41,7 @@
  * detaches its lease, the relay stops the source after its grace) and `resume` requests a new
  * one when the page is visible again; the direct path keeps playing as before.
  */
-import { asProblem } from '$lib/api/problem';
+import { asProblem } from '#lib/api/problem.js';
 
 import type { DiagnosticsSnapshot, TrackDiagnostics } from './diagnostics';
 import {

@@ -3,7 +3,7 @@
  * from well-known ids (Mammotion slots `0` front left, `1` front right, `2` rear; the simulator's
  * `front_left` and `front_right`). Unknown cameras keep the name from the session.
  */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import { placementOf, type CameraInfo, type CameraPlacement } from './session';
 

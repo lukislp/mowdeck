@@ -10,7 +10,7 @@
   Reads `/config.json` (the image's build values) unless `source` is given (tests).
 -->
 <script lang="ts">
-  import { loadConfig } from '$lib/config';
+  import { loadConfig } from '#lib/config.js';
   import {
     DEFAULT_SOURCE,
     LICENSE_NAME,
@@ -20,8 +20,8 @@
     sourceCodeUrl,
     versionLabel,
     type SourceInfo,
-  } from '$lib/legal/source';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/legal/source.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     variant?: 'line' | 'sheet';

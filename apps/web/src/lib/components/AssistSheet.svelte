@@ -15,18 +15,18 @@
   import { Button, Icon, ProblemNotice, Sheet } from '@mowdeck/ui';
   import { untrack } from 'svelte';
 
-  import ToneBadge from '$lib/components/ToneBadge.svelte';
-  import { formatNumber } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import type { Glyph } from '$lib/schedules/labels';
+  import ToneBadge from '#lib/components/ToneBadge.svelte';
+  import { formatNumber } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import type { Glyph } from '#lib/schedules/labels.js';
   import {
     PROVIDER_SETTINGS_ROUTE,
     visionCalls,
     type ApprovalOption,
     type VisionTask,
-  } from '$lib/vision/api';
-  import { AssistStore } from '$lib/vision/assist.svelte';
-  import { triggerNote } from '$lib/vision/auto';
+  } from '#lib/vision/api.js';
+  import { AssistStore } from '#lib/vision/assist.svelte.js';
+  import { triggerNote } from '#lib/vision/auto.js';
   import {
     actionTitle,
     approveLabel,
@@ -44,14 +44,14 @@
     stepDescription,
     stepOutcomeLabel,
     taskLabel,
-  } from '$lib/vision/labels';
-  import { visionProblemText } from '$lib/vision/problems';
+  } from '#lib/vision/labels.js';
+  import { visionProblemText } from '#lib/vision/problems.js';
   import {
     cameraImages,
     findCameraSources,
     findCameraVideo,
     stereoSources,
-  } from '$lib/vision/snapshot';
+  } from '#lib/vision/snapshot.js';
 
   interface Props {
     mowerId: string;

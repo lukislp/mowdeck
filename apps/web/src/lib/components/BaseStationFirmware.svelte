@@ -12,11 +12,11 @@
     updateProgress,
     type BaseUpdateBlocker,
     type FirmwareInfo,
-  } from '$lib/fleet/base-stations';
-  import { baseUpdateBlockerText, firmwareStateLabel } from '$lib/fleet/base-station-labels';
-  import { formatAge, formatNumber, outcomeLabel } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import type { CommandOutcome } from '$lib/stores/commands.svelte';
+  } from '#lib/fleet/base-stations.js';
+  import { baseUpdateBlockerText, firmwareStateLabel } from '#lib/fleet/base-station-labels.js';
+  import { formatAge, formatNumber, outcomeLabel } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import type { CommandOutcome } from '#lib/stores/commands.svelte.js';
 
   interface Relay {
     id: string;

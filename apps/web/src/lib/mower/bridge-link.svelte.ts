@@ -4,7 +4,7 @@
  * choice among the mowers it saw, step 3 the saved link. The page constructs it with the real
  * Fleet calls and binds to its state; `bridge-link.test.ts` drives it with fakes.
  */
-import { asProblem } from '$lib/api/problem';
+import { asProblem } from '#lib/api/problem.js';
 import type {
   BridgeLink,
   BridgeLinkIn,
@@ -13,7 +13,7 @@ import type {
   BridgeScanReply,
   ProxyInfo,
   ScannedDevice,
-} from '$lib/fleet/links';
+} from '#lib/fleet/links.js';
 
 import {
   DEFAULT_PORT,

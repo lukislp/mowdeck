@@ -46,17 +46,17 @@
 
   import { page } from '$app/state';
 
-  import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import type { CameraViewer } from '$lib/camera/viewer.svelte';
-  import { clock } from '$lib/clock.svelte';
-  import CameraStage from '$lib/components/CameraStage.svelte';
-  import LightChip from '$lib/components/LightChip.svelte';
-  import LiveStatus from '$lib/components/LiveStatus.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import StopBar from '$lib/components/StopBar.svelte';
-  import { loadConfig, type MapTilesConfig } from '$lib/config';
-  import { driveEndLabel, driveErrorLabel } from '$lib/drive/labels';
+  import { fleetApi, telemetryApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import type { CameraViewer } from '#lib/camera/viewer.svelte.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import CameraStage from '#lib/components/CameraStage.svelte';
+  import LightChip from '#lib/components/LightChip.svelte';
+  import LiveStatus from '#lib/components/LiveStatus.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import StopBar from '#lib/components/StopBar.svelte';
+  import { loadConfig, type MapTilesConfig } from '#lib/config.js';
+  import { driveEndLabel, driveErrorLabel } from '#lib/drive/labels.js';
   import {
     driveView,
     hasCamera,
@@ -67,18 +67,18 @@
     saveThumb,
     saveView,
     type DriveView,
-  } from '$lib/drive/layout';
-  import { DrivePilot, SPEED_LIMITS, clampReverse, type SpeedLimit } from '$lib/drive/pilot';
-  import type { components as Fleet } from '$lib/generated/fleet';
-  import { activityLabel, formatNumber, problemMessage } from '$lib/i18n';
-  import { commands, permissions, realtime, revoked, sendCommand } from '$lib/live.svelte';
-  import { lightCapable as isLightCapable, setLight } from '$lib/mower/light';
-  import { areaNamer, mapLabels } from '$lib/mower/map-labels';
-  import { appendLive } from '$lib/mower/route';
-  import { m } from '$lib/paraglide/messages';
-  import type { DriveEvent } from '$lib/realtime/client.svelte';
-  import { mowers as states } from '$lib/stores/mowers.svelte';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/drive/layout.js';
+  import { DrivePilot, SPEED_LIMITS, clampReverse, type SpeedLimit } from '#lib/drive/pilot.js';
+  import type { components as Fleet } from '#lib/generated/fleet.js';
+  import { activityLabel, formatNumber, problemMessage } from '#lib/i18n.js';
+  import { commands, permissions, realtime, revoked, sendCommand } from '#lib/live.svelte.js';
+  import { lightCapable as isLightCapable, setLight } from '#lib/mower/light.js';
+  import { areaNamer, mapLabels } from '#lib/mower/map-labels.js';
+  import { appendLive } from '#lib/mower/route.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import type { DriveEvent } from '#lib/realtime/client.svelte.js';
+  import { mowers as states } from '#lib/stores/mowers.svelte.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   type Mower = Fleet['schemas']['MowerOut'];
   type DriveCaps = {

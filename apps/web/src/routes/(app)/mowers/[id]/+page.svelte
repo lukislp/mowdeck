@@ -39,28 +39,28 @@
     schedulerApi,
     telemetryApi,
     unwrap,
-  } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { clock } from '$lib/clock.svelte';
-  import AreaPlan from '$lib/components/AreaPlan.svelte';
-  import AreaRenameForm from '$lib/components/AreaRenameForm.svelte';
-  import CameraPanel from '$lib/components/CameraPanel.svelte';
-  import HeatmapControls, { type HeatStatus } from '$lib/components/HeatmapControls.svelte';
-  import HeatmapGaps from '$lib/components/HeatmapGaps.svelte';
-  import JobCard from '$lib/components/JobCard.svelte';
-  import LightToggle from '$lib/components/LightToggle.svelte';
-  import AssistSheet from '$lib/components/AssistSheet.svelte';
-  import LiveStatus from '$lib/components/LiveStatus.svelte';
-  import MowSettings from '$lib/components/MowSettings.svelte';
-  import PlanBanner from '$lib/components/PlanBanner.svelte';
-  import RainReadout from '$lib/components/RainReadout.svelte';
-  import ReceptionPanel from '$lib/components/ReceptionPanel.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import SpotRunBar from '$lib/components/SpotRunBar.svelte';
-  import SpotSheet from '$lib/components/SpotSheet.svelte';
-  import ToneBadge from '$lib/components/ToneBadge.svelte';
-  import { loadConfig, type MapTilesConfig } from '$lib/config';
-  import type { components as Fleet } from '$lib/generated/fleet';
+  } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import AreaPlan from '#lib/components/AreaPlan.svelte';
+  import AreaRenameForm from '#lib/components/AreaRenameForm.svelte';
+  import CameraPanel from '#lib/components/CameraPanel.svelte';
+  import HeatmapControls, { type HeatStatus } from '#lib/components/HeatmapControls.svelte';
+  import HeatmapGaps from '#lib/components/HeatmapGaps.svelte';
+  import JobCard from '#lib/components/JobCard.svelte';
+  import LightToggle from '#lib/components/LightToggle.svelte';
+  import AssistSheet from '#lib/components/AssistSheet.svelte';
+  import LiveStatus from '#lib/components/LiveStatus.svelte';
+  import MowSettings from '#lib/components/MowSettings.svelte';
+  import PlanBanner from '#lib/components/PlanBanner.svelte';
+  import RainReadout from '#lib/components/RainReadout.svelte';
+  import ReceptionPanel from '#lib/components/ReceptionPanel.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import SpotRunBar from '#lib/components/SpotRunBar.svelte';
+  import SpotSheet from '#lib/components/SpotSheet.svelte';
+  import ToneBadge from '#lib/components/ToneBadge.svelte';
+  import { loadConfig, type MapTilesConfig } from '#lib/config.js';
+  import type { components as Fleet } from '#lib/generated/fleet.js';
   import {
     activityLabel,
     commandLabel,
@@ -77,31 +77,36 @@
     rtkSourceShort,
     type RtkSource,
     valuesAgeLabel,
-  } from '$lib/i18n';
-  import { commands, permissions, realtime, revoked, sendCommand } from '$lib/live.svelte';
-  import { drivesOverBridge } from '$lib/mower/drive-link';
-  import { formatDuration } from '$lib/mower/duration';
-  import { jobView } from '$lib/mower/job';
-  import { rainNow, readoutBars, stripBars } from '$lib/mower/rain';
-  import { hasReception } from '$lib/mower/reception';
-  import { errorCategoryLabel } from '$lib/mower/reception-labels';
-  import type { RainDecision } from '$lib/schedules/types';
-  import { availability, polygonArea, primaryCommand, type BarCommand } from '$lib/mower/commands';
+  } from '#lib/i18n.js';
+  import { commands, permissions, realtime, revoked, sendCommand } from '#lib/live.svelte.js';
+  import { drivesOverBridge } from '#lib/mower/drive-link.js';
+  import { formatDuration } from '#lib/mower/duration.js';
+  import { jobView } from '#lib/mower/job.js';
+  import { rainNow, readoutBars, stripBars } from '#lib/mower/rain.js';
+  import { hasReception } from '#lib/mower/reception.js';
+  import { errorCategoryLabel } from '#lib/mower/reception-labels.js';
+  import type { RainDecision } from '#lib/schedules/types.js';
+  import {
+    availability,
+    polygonArea,
+    primaryCommand,
+    type BarCommand,
+  } from '#lib/mower/commands.js';
   import {
     bladeRange as bladeLimits,
     clampTo,
     displayModel,
     speedRange as speedLimits,
-  } from '$lib/mower/limits';
-  import { lightCapable as isLightCapable, setLight } from '$lib/mower/light';
-  import { jobOptionsSpec } from '$lib/mower/job-options';
-  import { areaNamer, mapLabels } from '$lib/mower/map-labels';
+  } from '#lib/mower/limits.js';
+  import { lightCapable as isLightCapable, setLight } from '#lib/mower/light.js';
+  import { jobOptionsSpec } from '#lib/mower/job-options.js';
+  import { areaNamer, mapLabels } from '#lib/mower/map-labels.js';
   import {
     offeredPatterns,
     readPattern,
     spacingRange,
     type MowPattern,
-  } from '$lib/mower/mow-pattern';
+  } from '#lib/mower/mow-pattern.js';
   import {
     PATH_POLL_MS,
     donePercent,
@@ -111,19 +116,25 @@
     savePathShown,
     shownPath,
     type MowPath,
-  } from '$lib/mower/mow-path';
-  import { RTK_PAGE, isRtkRange, loadRange, rangeStart, type RtkRange } from '$lib/mower/rtk-range';
+  } from '#lib/mower/mow-path.js';
+  import {
+    RTK_PAGE,
+    isRtkRange,
+    loadRange,
+    rangeStart,
+    type RtkRange,
+  } from '#lib/mower/rtk-range.js';
   import {
     ROUTE_LIMIT,
     appendLive,
     isRouteWindow,
     windowStart,
     type RouteWindow,
-  } from '$lib/mower/route';
-  import { SpotSheetFlow } from '$lib/mower/spot-sheet.svelte';
-  import { StartSheetFlow } from '$lib/mower/start-sheet.svelte';
-  import { jobActive, rainStatusOf } from '$lib/mower/start-sheet';
-  import { assistProposal } from '$lib/notifications/kinds';
+  } from '#lib/mower/route.js';
+  import { SpotSheetFlow } from '#lib/mower/spot-sheet.svelte.js';
+  import { StartSheetFlow } from '#lib/mower/start-sheet.svelte.js';
+  import { jobActive, rainStatusOf } from '#lib/mower/start-sheet.js';
+  import { assistProposal } from '#lib/notifications/kinds.js';
   import {
     fetchHeatmap,
     heatLayerData,
@@ -137,19 +148,19 @@
     type HeatLayer,
     type HeatPeriod,
     type HeatmapResponse,
-  } from '$lib/map/heatmap';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import { verdictLook } from '$lib/schedules/labels';
-  import { parsePreview, type PreviewView } from '$lib/schedules/preview';
-  import { formatCountdown, formatFiring } from '$lib/schedules/recurrence';
-  import { loadPreview, schedulesOfMower } from '$lib/schedules/runtime';
-  import type { Locale, Schedule } from '$lib/schedules/types';
-  import type { CommandKind, CommandOutcome } from '$lib/stores/commands.svelte';
-  import { lastLoad } from '$lib/stores/last-load';
-  import { mowers as states } from '$lib/stores/mowers.svelte';
-  import { toasts } from '$lib/stores/ui.svelte';
-  import type { VisionTask } from '$lib/vision/api';
+  } from '#lib/map/heatmap.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import { verdictLook } from '#lib/schedules/labels.js';
+  import { parsePreview, type PreviewView } from '#lib/schedules/preview.js';
+  import { formatCountdown, formatFiring } from '#lib/schedules/recurrence.js';
+  import { loadPreview, schedulesOfMower } from '#lib/schedules/runtime.js';
+  import type { Locale, Schedule } from '#lib/schedules/types.js';
+  import type { CommandKind, CommandOutcome } from '#lib/stores/commands.svelte.js';
+  import { lastLoad } from '#lib/stores/last-load.js';
+  import { mowers as states } from '#lib/stores/mowers.svelte.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
+  import type { VisionTask } from '#lib/vision/api.js';
 
   type Mower = Fleet['schemas']['MowerOut'];
   type CommandView = Fleet['schemas']['CommandView'];
@@ -248,7 +259,7 @@
     | { kind: 'ok'; decision: RainDecision };
   let weather = $state.raw<Weather>({ kind: 'loading' });
   // The start sheet (areas, pattern and setpoint drafts, preview, rain confirmation, start) and
-  // the dock choice: `$lib/mower/start-sheet.svelte` holds the flow, this page the API calls.
+  // the dock choice: `#lib/mower/start-sheet.svelte.js` holds the flow, this page the API calls.
   const sheet = new StartSheetFlow({
     preview: (request, signal) =>
       unwrap(
@@ -294,7 +305,7 @@
   });
 
   // Spot mowing (ADR 0039): the spot on the map, the sheet's settings, the Planner preview, the
-  // start conditions, the start and the run bar: `$lib/mower/spot-sheet.svelte` holds the flow,
+  // start conditions, the start and the run bar: `#lib/mower/spot-sheet.svelte.js` holds the flow,
   // this page the API calls. The Planner plans the spot; the gateway drives the plan.
   const spotFlow = new SpotSheetFlow({
     preview: (request, signal) =>
@@ -686,12 +697,11 @@
   function closeAssist(): void {
     assisting = false;
     if (assistLink) {
-      const url = new URL(page.url);
+      const url = new URL(page.url.href);
       url.searchParams.delete('assist');
       void goto(`${url.pathname}${url.search}`, {
-        replaceState: true,
-        noScroll: true,
-        keepFocus: true,
+        replace: true,
+        reset: false,
       });
     }
   }

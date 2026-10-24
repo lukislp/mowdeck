@@ -5,7 +5,7 @@
   `title` elements per bar for pointer users.
 -->
 <script lang="ts">
-  import { barGeometry } from '$lib/health/series';
+  import { barGeometry } from '#lib/health/series.js';
 
   interface Props {
     label: string;

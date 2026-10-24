@@ -4,7 +4,7 @@
  * (`auto_analysis` of `GET`/`PUT /api/v1/vision/me/preferences`); the installation can switch it off and
  * sets the cooldown and the daily limit per mower.
  */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import type { Proposal, ProviderSettings, VisionPreferences } from './api';
 

@@ -9,8 +9,8 @@
   import { Button, Icon, ProblemNotice } from '@mowdeck/ui';
   import { onMount } from 'svelte';
 
-  import { ApiProblem, asProblem } from '$lib/api/problem';
-  import { BillingAccount } from '$lib/billing/account.svelte';
+  import { ApiProblem, asProblem } from '#lib/api/problem.js';
+  import { BillingAccount } from '#lib/billing/account.svelte.js';
   import {
     formatAmount,
     formatPrice,
@@ -20,10 +20,10 @@
     safeExternalUrl,
     subscriptionStatusLabel,
     type BillingStatus,
-  } from '$lib/billing/billing';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { formatDate, problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/billing/billing.js';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { formatDate, problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     status: BillingStatus;

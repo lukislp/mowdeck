@@ -4,11 +4,11 @@
 
   import { goto } from '$app/navigation';
 
-  import { fleetApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import ConnectionForm from '$lib/components/ConnectionForm.svelte';
-  import LinkedMowerFlow from '$lib/components/LinkedMowerFlow.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
+  import { fleetApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import ConnectionForm from '#lib/components/ConnectionForm.svelte';
+  import LinkedMowerFlow from '#lib/components/LinkedMowerFlow.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
   import {
     buildOptions,
     initialState,
@@ -17,14 +17,14 @@
     type ConnectionState,
     type FieldIssue,
     type KindSchema,
-  } from '$lib/connection/form';
-  import { loadKinds } from '$lib/connection/kinds';
-  import { kindTitle } from '$lib/connection/text';
-  import type { components } from '$lib/generated/fleet';
-  import { problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { notifyPlanProblem } from '$lib/plan/problems';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/connection/form.js';
+  import { loadKinds } from '#lib/connection/kinds.js';
+  import { kindTitle } from '#lib/connection/text.js';
+  import type { components } from '#lib/generated/fleet.js';
+  import { problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { notifyPlanProblem } from '#lib/plan/problems.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   type ConnectionKind = components['schemas']['ConnectionKind'];
 

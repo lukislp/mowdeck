@@ -1,8 +1,8 @@
 /** Texts for the problems of the Vision service (title and an optional detail). */
-import type { ApiProblem } from '$lib/api/problem';
-import { problemMessage } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
-import { planProblemText } from '$lib/plan/problems';
+import type { ApiProblem } from '#lib/api/problem.js';
+import { problemMessage } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
+import { planProblemText } from '#lib/plan/problems.js';
 
 import { VISION_PROBLEMS } from './api';
 

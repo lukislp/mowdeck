@@ -8,22 +8,22 @@
 <script lang="ts">
   import { Button, Icon, TopBar } from '@mowdeck/ui';
 
-  import { apiFetch, entitlementsApi, identityApi, unwrap } from '$lib/api/client';
-  import ToneBadge from '$lib/components/ToneBadge.svelte';
-  import { formatNumber, formatTime } from '$lib/i18n';
-  import { realtime } from '$lib/live.svelte';
-  import { verdictLabel } from '$lib/operator/labels';
+  import { apiFetch, entitlementsApi, identityApi, unwrap } from '#lib/api/client.js';
+  import ToneBadge from '#lib/components/ToneBadge.svelte';
+  import { formatNumber, formatTime } from '#lib/i18n.js';
+  import { realtime } from '#lib/live.svelte.js';
+  import { verdictLabel } from '#lib/operator/labels.js';
   import {
     probeService,
     probeVisionDefault,
     SERVICE_PROBES,
     type ProbeResult,
     type VisionDefault,
-  } from '$lib/operator/system';
-  import { m } from '$lib/paraglide/messages';
-  import { accountPlan } from '$lib/plan/plan.svelte';
-  import type { Feature, Plan } from '$lib/plan/types';
-  import type { Glyph, Tone } from '$lib/schedules/labels';
+  } from '#lib/operator/system.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import type { Feature, Plan } from '#lib/plan/types.js';
+  import type { Glyph, Tone } from '#lib/schedules/labels.js';
 
   interface Area {
     module: string;

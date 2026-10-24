@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const get = vi.fn();
 const post = vi.fn();
 const del = vi.fn();
-vi.mock('$lib/api/client', () => ({
+vi.mock('#lib/api/client.js', () => ({
   identityApi: {
     GET: (...a: unknown[]) => get(...a),
     POST: (...a: unknown[]) => post(...a),
@@ -12,11 +12,11 @@ vi.mock('$lib/api/client', () => ({
   },
   unwrap: async (p: Promise<unknown>) => p,
 }));
-vi.mock('$lib/auth/session.svelte', () => ({ session: { me: { account_id: 'acc-1' } } }));
+vi.mock('#lib/auth/session.svelte.js', () => ({ session: { me: { account_id: 'acc-1' } } }));
 
-import { ApiProblem } from '$lib/api/problem';
-import { setLocale } from '$lib/paraglide/runtime';
-import { CATALOGUE } from '$lib/settings/token-permissions.fixture';
+import { ApiProblem } from '#lib/api/problem.js';
+import { setLocale } from '#lib/paraglide/runtime.js';
+import { CATALOGUE } from '#lib/settings/token-permissions.fixture.js';
 
 import ApiTokensSection from './ApiTokensSection.svelte';
 

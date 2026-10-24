@@ -12,7 +12,7 @@
     "build": "pnpm i18n:compile && vite build && node scripts/csp-hashes.mjs build",
     "preview": "vite preview",
     "lint": "eslint . && prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore && stylelint \"src/**/*.{css,svelte}\" && node scripts/i18n-check.mjs",
-    "check": "pnpm i18n:compile && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "check": "pnpm i18n:compile && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc --noEmit -p src/service-worker/tsconfig.json",
     "test": "pnpm i18n:compile && svelte-kit sync && vitest run --coverage"
   },
   "dependencies": {
@@ -22,8 +22,8 @@
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.29.1",
-    "@sveltejs/adapter-static": "3.0.10",
-    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/adapter-static": "4.0.0",
+    "@sveltejs/kit": "3.0.1",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
@@ -37,5 +37,8 @@
     "typescript": "6.0.3",
     "vite": "8.3.4",
     "vitest": "5.0.5"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
   }
 }

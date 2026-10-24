@@ -10,25 +10,30 @@
 
   import { page } from '$app/state';
 
-  import { entitlementsApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import PlanStatusBadge from '$lib/components/PlanStatusBadge.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { formatDate, formatDateTime, problemMessage } from '$lib/i18n';
-  import { findPlatformAccount, type PlatformAccount } from '$lib/operator/accounts';
+  import { entitlementsApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import PlanStatusBadge from '#lib/components/PlanStatusBadge.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { formatDate, formatDateTime, problemMessage } from '#lib/i18n.js';
+  import { findPlatformAccount, type PlatformAccount } from '#lib/operator/accounts.js';
   import {
     assignForm,
     assignmentBody,
     takesUntil,
     validateAssignment,
     type AssignForm,
-  } from '$lib/operator/assign';
-  import { accountKindLabel, accountStatusLabel } from '$lib/operator/labels';
-  import { m } from '$lib/paraglide/messages';
-  import { sourceLabel, statusLabel } from '$lib/plan/labels';
-  import { PLAN_STATUSES, type AccountDetail, type Plan, type PlanStatus } from '$lib/plan/types';
-  import { statusUntil } from '$lib/plan/usage';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/operator/assign.js';
+  import { accountKindLabel, accountStatusLabel } from '#lib/operator/labels.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { sourceLabel, statusLabel } from '#lib/plan/labels.js';
+  import {
+    PLAN_STATUSES,
+    type AccountDetail,
+    type Plan,
+    type PlanStatus,
+  } from '#lib/plan/types.js';
+  import { statusUntil } from '#lib/plan/usage.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   const id = $derived(page.params.id ?? '');
 

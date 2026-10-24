@@ -11,7 +11,7 @@
 <script lang="ts">
   import { Button, SegmentedControl, Select, Stepper, Switch } from '@mowdeck/ui';
 
-  import { formatNumber } from '$lib/i18n';
+  import { formatNumber } from '#lib/i18n.js';
   import {
     crossesMidnight,
     groupSettings,
@@ -20,16 +20,16 @@
     type SettingValue,
     type SettingsBlocker,
     type TimeWindow,
-  } from '$lib/mower/device-settings';
-  import type { DeviceSettingsFlow, RowView } from '$lib/mower/device-settings.svelte';
+  } from '#lib/mower/device-settings.js';
+  import type { DeviceSettingsFlow, RowView } from '#lib/mower/device-settings.svelte.js';
   import {
     blockerText,
     groupLabel,
     optionLabel,
     settingHint,
     settingLabel,
-  } from '$lib/mower/device-settings-labels';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/mower/device-settings-labels.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     specs: SettingSpec[];

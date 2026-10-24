@@ -6,9 +6,9 @@
 <script lang="ts">
   import { SegmentedControl, Select } from '@mowdeck/ui';
 
-  import { LEVEL_TYPES, levelLabel, type LevelType, type Places } from '$lib/fleet/data';
-  import { sortSites } from '$lib/fleet/places';
-  import { m } from '$lib/paraglide/messages';
+  import { LEVEL_TYPES, levelLabel, type LevelType, type Places } from '#lib/fleet/data.js';
+  import { sortSites } from '#lib/fleet/places.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     id: string;

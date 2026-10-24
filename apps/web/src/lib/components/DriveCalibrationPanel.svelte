@@ -11,7 +11,7 @@
 <script lang="ts">
   import { Button, Icon, ProblemNotice, TableScroll } from '@mowdeck/ui';
 
-  import { formatDateTime, formatNumber, problemMessage } from '$lib/i18n';
+  import { formatDateTime, formatNumber, problemMessage } from '#lib/i18n.js';
   import {
     calibConditionHint,
     calibConditionText,
@@ -28,9 +28,9 @@
     stepKindLabel,
     stepRows,
     type CalibCondition,
-  } from '$lib/mower/drive-calibration';
-  import type { DriveCalibrationFlow } from '$lib/mower/drive-calibration.svelte';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/mower/drive-calibration.js';
+  import type { DriveCalibrationFlow } from '#lib/mower/drive-calibration.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     flow: DriveCalibrationFlow;

@@ -10,7 +10,7 @@
  */
 import type { HeatGap, HeatLayerData, HeatLegend } from '@mowdeck/ui';
 
-import { ApiProblem, problemFromResponse } from '$lib/api/problem';
+import { ApiProblem, problemFromResponse } from '#lib/api/problem.js';
 
 /** The layers of the switcher; `off` draws nothing. */
 export type HeatLayer = 'off' | 'coverage' | 'rtk' | 'wifi' | 'mnet';

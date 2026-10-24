@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { JobView } from '$lib/mower/job';
+import type { JobView } from '#lib/mower/job.js';
 
 import JobCard from './JobCard.svelte';
 
-import { setLocale } from '$lib/paraglide/runtime';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 beforeEach(() => setLocale('de', { reload: false }));
 

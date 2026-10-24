@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiProblem } from '$lib/api/problem';
-import { m } from '$lib/paraglide/messages';
-import type { HourBar } from '$lib/schedules/preview';
+import { ApiProblem } from '#lib/api/problem.js';
+import { m } from '#lib/paraglide/messages.js';
+import type { HourBar } from '#lib/schedules/preview.js';
 
 import type { MowPath } from './mow-path';
 import type { MowPattern } from './mow-pattern';

@@ -5,9 +5,9 @@
  */
 import type { Client } from 'openapi-fetch';
 
-import { unwrap, visionApi } from '$lib/api/client';
-import type { ApiProblem } from '$lib/api/problem';
-import type { components, paths } from '$lib/generated/vision';
+import { unwrap, visionApi } from '#lib/api/client.js';
+import type { ApiProblem } from '#lib/api/problem.js';
+import type { components, paths } from '#lib/generated/vision.js';
 
 type Schemas = components['schemas'];
 

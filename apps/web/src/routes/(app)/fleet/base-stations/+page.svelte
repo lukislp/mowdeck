@@ -8,16 +8,16 @@
 <script lang="ts">
   import { Button, Field, Icon, ProblemNotice, Select, Sheet, TopBar } from '@mowdeck/ui';
 
-  import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { session } from '$lib/auth/session.svelte';
-  import { clock } from '$lib/clock.svelte';
-  import BaseStationFirmware from '$lib/components/BaseStationFirmware.svelte';
-  import BaseStationStatus from '$lib/components/BaseStationStatus.svelte';
-  import FleetTabs from '$lib/components/FleetTabs.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { loadKinds } from '$lib/connection/kinds';
-  import { baseStationProblemText } from '$lib/fleet/base-station-labels';
+  import { fleetApi, telemetryApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { session } from '#lib/auth/session.svelte.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import BaseStationFirmware from '#lib/components/BaseStationFirmware.svelte';
+  import BaseStationStatus from '#lib/components/BaseStationStatus.svelte';
+  import FleetTabs from '#lib/components/FleetTabs.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { loadKinds } from '#lib/connection/kinds.js';
+  import { baseStationProblemText } from '#lib/fleet/base-station-labels.js';
   import {
     baseStationDevices,
     baseUpdateBlocker,
@@ -36,17 +36,17 @@
     type BaseStation,
     type BaseStationIn,
     type FirmwareInfo,
-  } from '$lib/fleet/base-stations';
-  import type { components } from '$lib/generated/fleet';
-  import { problemMessage } from '$lib/i18n';
-  import type { LinkedAccount, LinkedDevice } from '$lib/linked/accounts';
-  import { listDevices, listLinkedAccounts } from '$lib/linked/api';
-  import { permissions, realtime } from '$lib/live.svelte';
-  import { m } from '$lib/paraglide/messages';
-  import { accountPlan } from '$lib/plan/plan.svelte';
-  import type { CommandOutcome } from '$lib/stores/commands.svelte';
-  import { mowers as states } from '$lib/stores/mowers.svelte';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/fleet/base-stations.js';
+  import type { components } from '#lib/generated/fleet.js';
+  import { problemMessage } from '#lib/i18n.js';
+  import type { LinkedAccount, LinkedDevice } from '#lib/linked/accounts.js';
+  import { listDevices, listLinkedAccounts } from '#lib/linked/api.js';
+  import { permissions, realtime } from '#lib/live.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import type { CommandOutcome } from '#lib/stores/commands.svelte.js';
+  import { mowers as states } from '#lib/stores/mowers.svelte.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   type Mower = components['schemas']['MowerOut'];
 

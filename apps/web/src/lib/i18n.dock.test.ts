@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { setLocale } from '$lib/paraglide/runtime';
-import { commandLabel } from '$lib/i18n';
-import { bulkCommand } from '$lib/fleet/bulk';
+import { setLocale } from '#lib/paraglide/runtime.js';
+import { commandLabel } from '#lib/i18n.js';
+import { bulkCommand } from '#lib/fleet/bulk.js';
 
 describe('dock command variants', () => {
   it('labels a dock that ended the job differently', () => {

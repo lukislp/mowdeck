@@ -13,7 +13,7 @@ import {
   spacingRange,
   stepSpacing,
   toPattern,
-} from '$lib/mower/mow-pattern';
+} from '#lib/mower/mow-pattern.js';
 
 const ALL = offeredPatterns(['random_angle', 'edge_only', 'checkerboard', 'diagonal', 'stripes']);
 

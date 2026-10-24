@@ -1,5 +1,5 @@
 /** Scheduler API types as the schedules module uses them (from the generated OpenAPI types). */
-import type { components } from '$lib/generated/scheduler';
+import type { components } from '#lib/generated/scheduler.js';
 
 type S = components['schemas'];
 

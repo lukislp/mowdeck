@@ -2,9 +2,9 @@
  * Texts of the drive page: why a session ended and why a start was refused. Exhaustive switches,
  * so a new reason or error code in the Realtime contract fails the type check.
  */
-import type { RealtimeErrorCode } from '$lib/generated/realtime';
-import { m } from '$lib/paraglide/messages';
-import type { DriveEnd } from '$lib/realtime/client.svelte';
+import type { RealtimeErrorCode } from '#lib/generated/realtime.js';
+import { m } from '#lib/paraglide/messages.js';
+import type { DriveEnd } from '#lib/realtime/client.svelte.js';
 
 export function driveEndLabel(reason: DriveEnd): string {
   switch (reason) {

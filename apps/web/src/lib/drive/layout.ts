@@ -11,7 +11,7 @@
  * (`mowdeck.driveCameraLayout`, separate from the mower page's camera panel so driving always
  * starts on the front left camera unless the driver chose "Both").
  */
-import type { CameraLayout } from '$lib/camera/layout';
+import type { CameraLayout } from '#lib/camera/layout.js';
 
 export type DriveView = 'camera' | 'map';
 

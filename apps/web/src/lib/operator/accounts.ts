@@ -8,9 +8,9 @@
  * reads Identity's whole list (up to `SEARCH_CAP` accounts) because Identity has no search
  * parameter. Neither service returns mower data, and nothing here asks for any.
  */
-import { entitlementsApi, identityApi, unwrap } from '$lib/api/client';
-import type { components } from '$lib/generated/identity';
-import type { Assigned, ResolvedPlan } from '$lib/plan/types';
+import { entitlementsApi, identityApi, unwrap } from '#lib/api/client.js';
+import type { components } from '#lib/generated/identity.js';
+import type { Assigned, ResolvedPlan } from '#lib/plan/types.js';
 
 export type PlatformAccount = components['schemas']['PlatformAccountOut'];
 

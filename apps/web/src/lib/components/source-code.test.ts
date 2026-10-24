@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { resetConfig } from '$lib/config';
-import { DEFAULT_SOURCE, OFFICIAL_REPOSITORY } from '$lib/legal/source';
+import { resetConfig } from '#lib/config.js';
+import { DEFAULT_SOURCE, OFFICIAL_REPOSITORY } from '#lib/legal/source.js';
 
 import SourceCode from './SourceCode.svelte';
 

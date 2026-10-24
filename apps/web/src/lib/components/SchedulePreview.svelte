@@ -6,18 +6,18 @@
 <script lang="ts">
   import { Icon, ProblemNotice } from '@mowdeck/ui';
 
-  import type { ApiProblem } from '$lib/api/problem';
-  import { clock } from '$lib/clock.svelte';
-  import RainStrip from '$lib/components/RainStrip.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import ToneBadge from '$lib/components/ToneBadge.svelte';
-  import { formatNumber, problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import { verdictLook } from '$lib/schedules/labels';
-  import { hourBars, parsePreview } from '$lib/schedules/preview';
-  import { formatCountdown, formatFiring } from '$lib/schedules/recurrence';
-  import type { Preview, RainPause } from '$lib/schedules/types';
+  import type { ApiProblem } from '#lib/api/problem.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import RainStrip from '#lib/components/RainStrip.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import ToneBadge from '#lib/components/ToneBadge.svelte';
+  import { formatNumber, problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import { verdictLook } from '#lib/schedules/labels.js';
+  import { hourBars, parsePreview } from '#lib/schedules/preview.js';
+  import { formatCountdown, formatFiring } from '#lib/schedules/recurrence.js';
+  import type { Preview, RainPause } from '#lib/schedules/types.js';
 
   interface Props {
     preview: Preview | null;
