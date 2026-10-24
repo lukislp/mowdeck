@@ -143,7 +143,7 @@ def test_vision_job_channel_entry_from_the_mowers_route() -> None:
     assert link.entry_distance_m == 0.8 and abs(link.entry_bearing_deg) < 1
     assert link.entry_forward == 0.8 and abs(link.entry_left) < 0.01
     assert link.mower_at_entry is True and link.entry_ahead is True
-    assert "error cleared" in job.resume_note
+    assert "stays until the resumed job moved" in job.resume_note
 
 
 def test_vision_job_progress_marks_done_current_next_and_planned() -> None:

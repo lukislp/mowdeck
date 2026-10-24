@@ -9,6 +9,7 @@ import { asProblem, type ApiProblem } from '$lib/api/problem';
 import {
   VISION_PROBLEMS,
   visionCalls,
+  type ApprovalOption,
   type Proposal,
   type ProviderSettings,
   type VisionApi,
@@ -169,8 +170,11 @@ export class AssistStore {
     }
   }
 
-  approve(): Promise<void> {
-    return this.#decide('approve', (id) => this.#api.approve(id));
+  /** Approve the proposal; `option` picks one when it offers two (default: its `action`). */
+  approve(option?: ApprovalOption): Promise<void> {
+    return this.#decide('approve', (id) =>
+      option ? this.#api.approve(id, option) : this.#api.approve(id),
+    );
   }
 
   /** Reject a proposal, or cancel the running maneuver. */

@@ -20,6 +20,8 @@ export type ProviderTest = Schemas['ProviderTestOut'];
 export type Proposal = Schemas['ProposalOut'];
 export type ProposalState = Schemas['ProposalState'];
 export type ProposalStep = Schemas['StepOut'];
+export type ProposalOption = Schemas['OptionOut'];
+export type ApprovalOption = ProposalOption['option'];
 export type StepOutcome = Schemas['StepOutcome'];
 export type RiskFlag = Schemas['RiskFlag'];
 export type VisionTask = Schemas['VisionTask'];
@@ -59,7 +61,8 @@ export interface VisionApi {
   recover(mowerId: string, task: VisionTask, images: VisionImage[]): Promise<Proposal>;
   proposals(mowerId: string, limit?: number): Promise<Proposal[]>;
   proposal(proposalId: string): Promise<Proposal>;
-  approve(proposalId: string): Promise<Proposal>;
+  /** Approve; `option` picks `model` or `fallback` when the proposal offers both. */
+  approve(proposalId: string, option?: ApprovalOption): Promise<Proposal>;
   reject(proposalId: string): Promise<Proposal>;
   retry(proposalId: string, images: VisionImage[]): Promise<Proposal>;
   /** The stored snapshot `index` of a proposal (short lived on the server). */
@@ -97,9 +100,12 @@ export function visionCalls(client: Client<paths> = visionApi): VisionApi {
       ).items,
     proposal: (proposalId) =>
       unwrap(client.GET('/api/v1/vision/proposals/{proposal_id}', proposalPath(proposalId))),
-    approve: (proposalId) =>
+    approve: (proposalId, option) =>
       unwrap(
-        client.POST('/api/v1/vision/proposals/{proposal_id}/approve', proposalPath(proposalId)),
+        client.POST(
+          '/api/v1/vision/proposals/{proposal_id}/approve',
+          option ? { ...proposalPath(proposalId), body: { option } } : proposalPath(proposalId),
+        ),
       ),
     reject: (proposalId) =>
       unwrap(

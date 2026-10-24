@@ -6,7 +6,10 @@
   outcome with a retry. A non-modal sheet above the command bar, so the emergency stop stays
   visible and usable the whole time. With both front cameras live in the camera panel (and the
   user's stereo preference on) both frames of the same moment are sent; the proposal then shows
-  both images side by side with a "Stereo" mark.
+  both images side by side with a "Stereo" mark. A recommendation below the confidence threshold
+  is shown as what it is ("The AI recommends X, but only with 55 % confidence"): next to the dock
+  fallback the user picks one of the two options (the fallback is preselected), alone it carries
+  a low-confidence band; a recommendation that failed the safety check says why.
 -->
 <script lang="ts">
   import { Button, Icon, ProblemNotice, Sheet } from '@mowdeck/ui';
@@ -16,12 +19,21 @@
   import { formatNumber } from '$lib/i18n';
   import { m } from '$lib/paraglide/messages';
   import type { Glyph } from '$lib/schedules/labels';
-  import { PROVIDER_SETTINGS_ROUTE, visionCalls, type VisionTask } from '$lib/vision/api';
+  import {
+    PROVIDER_SETTINGS_ROUTE,
+    visionCalls,
+    type ApprovalOption,
+    type VisionTask,
+  } from '$lib/vision/api';
   import { AssistStore } from '$lib/vision/assist.svelte';
   import { triggerNote } from '$lib/vision/auto';
   import {
+    actionTitle,
+    approveLabel,
     confidencePercent,
     expiryCountdown,
+    fallbackReason,
+    lowConfidenceLine,
     jobAreaLabel,
     resumePlan,
     riskLabel,
@@ -128,6 +140,37 @@
   const provider = $derived(assist.provider);
 
   const title = $derived(shownTask === 'find_dock' ? m.vision_find_dock() : m.vision_title());
+
+  // The options of a waiting proposal; with two the user picks one (the default preselected,
+  // reset only when another proposal or another set of options arrives, not on every poll).
+  const options = $derived(proposal?.state === 'proposed' ? (proposal.options ?? []) : []);
+  const choice = $derived(options.length > 1);
+  let selected = $state<ApprovalOption | null>(null);
+  const optionKey = $derived(
+    proposal && options.length ? `${proposal.id}:${options.map((o) => o.option).join(',')}` : '',
+  );
+  $effect(() => {
+    void optionKey;
+    untrack(() => {
+      selected = options.find((o) => o.default)?.option ?? null;
+    });
+  });
+  const selectedOption = $derived(options.find((o) => o.option === selected) ?? options[0]);
+  /** What an approval runs now: the picked option, else the proposal's default action. */
+  const shownAction = $derived(
+    choice && selectedOption ? selectedOption.action : (proposal?.action ?? 'drive'),
+  );
+  const shownSteps = $derived(
+    choice && selectedOption ? (selectedOption.steps ?? []).length : (proposal?.steps.length ?? 0),
+  );
+  /** The model's low-confidence recommendation offered alone (no fallback next to it). */
+  const lowAlone = $derived(
+    proposal?.state === 'proposed' && proposal.low_confidence && !proposal.fallback,
+  );
+
+  function approve(): Promise<void> {
+    return assist.approve(choice && selected ? selected : undefined);
+  }
 
   async function start(): Promise<void> {
     await assist.start(task, await cameraImages(document, { stereo: assist.stereo }));
@@ -254,15 +297,93 @@
         </dl>
       {/if}
 
-      {#if proposal.action === 'return_to_dock'}
+      {#if lowAlone && assessment}
+        <p class="low-note" data-testid="assist-low-confidence">
+          <span class="low-mark mono">{m.vision_low_confidence_mark()}</span>
+          <span class="low-line">{lowConfidenceLine(proposal.action, assessment.confidence)}</span>
+          <span class="quiet small">{m.vision_low_confidence_hint()}</span>
+        </p>
+      {/if}
+
+      {#if choice && assessment}
+        <fieldset class="choice" data-testid="assist-choice">
+          <legend>{m.vision_choose()}</legend>
+          {#each options as option (option.option)}
+            <label
+              class="option"
+              data-option={option.option}
+              data-low={option.low_confidence}
+              data-testid={`assist-option-${option.option}`}
+            >
+              <input
+                type="radio"
+                name="assist-option"
+                value={option.option}
+                bind:group={selected}
+                disabled={assist.busy !== null}
+              />
+              <span class="option-body">
+                <span class="option-head">
+                  <span class="option-title">{actionTitle(option.action)}</span>
+                  {#if option.low_confidence}
+                    <span class="low-mark mono"
+                      >{m.vision_low_confidence_mark()} · {formatNumber(
+                        confidencePercent(option.confidence ?? 0),
+                      )} %</span
+                    >
+                  {:else if option.option === 'fallback'}
+                    <span class="fallback-mark mono">{m.vision_fallback_mark()}</span>
+                  {/if}
+                </span>
+                {#if option.low_confidence}
+                  <span class="option-text">
+                    {lowConfidenceLine(option.action, option.confidence ?? 0)}
+                  </span>
+                  <span class="gauge" aria-hidden="true">
+                    <span
+                      class="gauge-fill"
+                      style:width={`${confidencePercent(option.confidence ?? 0)}%`}
+                    ></span>
+                  </span>
+                  <span class="quiet small">{m.vision_low_confidence_hint()}</span>
+                {:else}
+                  <span class="option-text">{m.vision_fallback_hint_choice()}</span>
+                {/if}
+                {#if option.steps?.length}
+                  <ol class="option-steps" aria-label={m.vision_steps()}>
+                    {#each option.steps as step (step.index)}
+                      <li><span class="num mono">{step.index + 1}</span>{stepDescription(step)}</li>
+                    {/each}
+                  </ol>
+                {/if}
+              </span>
+            </label>
+          {/each}
+        </fieldset>
+      {/if}
+
+      {#if proposal.action === 'return_to_dock' && !choice}
         <section class="dock-plan" data-testid="assist-dock" data-fallback={proposal.fallback}>
           <h3>{m.vision_dock_title()}</h3>
           <p>{m.vision_dock_hint()}</p>
           {#if proposal.fallback}
             <p class="fallback-note" data-testid="assist-fallback">
               <span class="fallback-mark mono">{m.vision_fallback_mark()}</span>
-              <span>{m.vision_fallback_hint()}</span>
+              <span
+                >{fallbackReason(proposal) === 'none'
+                  ? m.vision_fallback_hint()
+                  : m.vision_fallback_hint_refused()}</span
+              >
             </p>
+            {#if proposal.model_refused && assessment}
+              <p class="refused-note" data-testid="assist-model-refused">
+                {m.vision_model_refused({
+                  action: actionTitle(assessment.action),
+                  confidence: formatNumber(confidencePercent(assessment.confidence)),
+                })}
+                <span class="mono">{proposal.model_refused}</span>
+              </p>
+            {/if}
             {#if assessment?.abort_reasons.length}
               <ul class="reasons" data-testid="assist-fallback-reasons">
                 {#each assessment.abort_reasons as reason, i (i)}<li>{reason}</li>{/each}
@@ -272,10 +393,10 @@
         </section>
       {/if}
 
-      {#if proposal.action === 'resume'}
+      {#if shownAction === 'resume'}
         <section class="resume-plan" data-testid="assist-resume">
           <h3>{m.vision_resume_title()}</h3>
-          <p data-testid="assist-resume-plan">{resumePlan(proposal.steps.length, proposal.job)}</p>
+          <p data-testid="assist-resume-plan">{resumePlan(shownSteps, proposal.job)}</p>
           {#if proposal.job?.areas.length}
             <ol class="job-areas" aria-label={m.vision_job_areas()} data-testid="assist-job-areas">
               {#each proposal.job.areas as area (area.id)}
@@ -338,7 +459,7 @@
         </p>
       {/if}
 
-      {#if proposal.steps.length}
+      {#if proposal.steps.length && !choice}
         <h3>{m.vision_steps()}</h3>
         <ol class="steps" data-testid="assist-steps">
           {#each proposal.steps as step (step.index)}
@@ -435,13 +556,8 @@
           icon="play"
           pending={assist.busy === 'approve'}
           disabled={assist.busy !== null}
-          onclick={() => assist.approve()}
-          testid="assist-approve"
-          >{proposal?.action === 'return_to_dock'
-            ? m.vision_approve_dock()
-            : proposal?.action === 'resume'
-              ? m.vision_approve_resume()
-              : m.vision_approve()}</Button
+          onclick={approve}
+          testid="assist-approve">{approveLabel(shownAction)}</Button
         >
         <Button
           full
@@ -749,6 +865,139 @@
     color: var(--md-color-ink-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+
+  /* Two options: the safe fallback in a solid frame, the model's uncertain recommendation in a
+     dashed amber one with its confidence as a gauge; the picked one gets the focus colour. */
+  .choice {
+    display: grid;
+    gap: var(--md-space-2);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .choice legend {
+    margin-bottom: var(--md-space-2);
+    padding: 0;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+  }
+
+  .option {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--md-space-2);
+    align-items: start;
+    padding: var(--md-space-2) var(--md-space-3);
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+    border-inline-start: 3px solid var(--md-state-returning);
+    background: var(--md-color-surface);
+    cursor: pointer;
+  }
+
+  .option[data-low='true'] {
+    border-style: dashed;
+    border-color: var(--md-state-paused);
+    border-inline-start: 3px solid var(--md-state-paused);
+    background: var(--md-state-paused-bg);
+  }
+
+  .option:has(input:checked) {
+    outline: 2px solid var(--md-color-focus);
+    outline-offset: -1px;
+  }
+
+  .option input {
+    width: 20px;
+    height: 20px;
+    margin: 2px 0 0;
+    accent-color: var(--md-color-focus);
+  }
+
+  .option-body {
+    display: grid;
+    gap: var(--md-space-1);
+    min-width: 0;
+  }
+
+  .option-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--md-space-1) var(--md-space-2);
+  }
+
+  .option-title {
+    font-weight: var(--md-weight-semibold);
+  }
+
+  .option-text,
+  .low-line {
+    font-size: var(--md-font-size-14);
+    line-height: var(--md-line-20);
+  }
+
+  .low-mark {
+    padding: 0 var(--md-space-1);
+    border: var(--md-hairline) dashed var(--md-state-paused);
+    border-radius: var(--md-radius-1);
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-12);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .gauge {
+    display: block;
+    height: 4px;
+    background: var(--md-color-surface-sunken);
+  }
+
+  .gauge-fill {
+    display: block;
+    height: 100%;
+    background: var(--md-state-paused);
+  }
+
+  .option-steps {
+    display: grid;
+    gap: var(--md-space-1);
+    margin: var(--md-space-1) 0 0;
+    padding: 0;
+    font-size: var(--md-font-size-13);
+    list-style: none;
+  }
+
+  .option-steps li {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .low-note {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--md-space-1) var(--md-space-2);
+    align-items: center;
+    margin: 0;
+    padding: var(--md-space-2) var(--md-space-3);
+    border: var(--md-hairline) dashed var(--md-state-paused);
+    background: var(--md-state-paused-bg);
+  }
+
+  .low-note .quiet {
+    grid-column: 1 / -1;
+  }
+
+  .refused-note {
+    font-size: var(--md-font-size-13);
   }
 
   .stereo-note {

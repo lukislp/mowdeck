@@ -316,8 +316,18 @@ class Proposal:
     """What approval executes: the drive steps, the generic return to dock or resuming the
     paused job (after optional drive steps)."""
     fallback: bool = False
-    """The model recommended nothing, but return to dock was applicable: the service offers it
-    as a rule based fallback (labelled as such; it still needs a human approval)."""
+    """``action`` is the rule based return to dock fallback, not the model's recommendation
+    (labelled as such; it still needs a human approval)."""
+    low_confidence: bool = False
+    """The model's recommendation is offered below the confidence threshold: as ``action``
+    itself, or as ``alternative_action`` next to the fallback."""
+    alternative_action: ProposalAction | None = None
+    """The model's low-confidence recommendation offered next to the default fallback
+    ``action``; an approval with option ``model`` executes it instead."""
+    model_refused: str | None = None
+    """Why the model's low-confidence recommendation is not offered (a failed safety check)."""
+    approved_option: str | None = None
+    """Which option the approval chose: ``model`` or ``fallback``."""
 
     @property
     def final(self) -> bool:

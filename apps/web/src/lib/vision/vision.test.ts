@@ -16,9 +16,13 @@ import {
 import { AssistStore, POLL_MS, viewOf, type AssistTimers } from './assist.svelte';
 import { autoAvailability, canToggle, limitsText, triggerNote } from './auto';
 import {
+  actionTitle,
+  approveLabel,
   confidencePercent,
   expiryCountdown,
+  fallbackReason,
   formatCost,
+  lowConfidenceLine,
   riskLabel,
   situationLabel,
   stateLabel,
@@ -86,6 +90,11 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     return_command_id: null,
     action: 'drive',
     fallback: false,
+    low_confidence: false,
+    alternative_action: null,
+    model_refused: null,
+    approved_option: null,
+    options: [],
     can_retry: false,
     rounds_left: 2,
     ...overrides,
@@ -967,5 +976,84 @@ describe('assist store: stereo preference', () => {
       ['GET', '/api/v1/vision/me/preferences'],
     ]);
     expect(calls[0]?.body).toEqual({ stereo_frames: false });
+  });
+});
+
+describe('vision low-confidence options', () => {
+  const CHOICE = proposal({
+    ...PROPOSED,
+    action: 'return_to_dock',
+    fallback: true,
+    low_confidence: true,
+    alternative_action: 'resume',
+    assessment: { ...PROPOSED.assessment!, confidence: 0.55, action: 'resume' },
+    options: [
+      {
+        option: 'fallback',
+        action: 'return_to_dock',
+        default: true,
+        low_confidence: false,
+        confidence: null,
+        steps: [],
+      },
+      {
+        option: 'model',
+        action: 'resume',
+        default: false,
+        low_confidence: true,
+        confidence: 0.55,
+        steps: STEPS,
+      },
+    ],
+  });
+
+  it('says what the model recommends and how sure it is, in both languages', () => {
+    expect(lowConfidenceLine('resume', 0.55, 'de')).toBe(
+      'Die KI empfiehlt „Mähauftrag fortsetzen“, aber nur mit 55 % Sicherheit.',
+    );
+    expect(lowConfidenceLine('resume', 0.55, 'en')).toBe(
+      'The AI recommends “Continue the mowing job”, but only with 55 % confidence.',
+    );
+    expect(actionTitle('drive', 'de')).toBe('Freifahren (Messer aus)');
+    expect(approveLabel('resume', 'en')).toBe(m.vision_approve_resume({}, { locale: 'en' }));
+    expect(approveLabel('return_to_dock', 'en')).toBe(m.vision_approve_dock({}, { locale: 'en' }));
+  });
+
+  it('claims "no recommendation" only when the model recommended nothing', () => {
+    expect(fallbackReason(CHOICE)).toBe('choice');
+    const refused = proposal({ ...CHOICE, alternative_action: null, model_refused: 'geofence' });
+    expect(fallbackReason(refused)).toBe('refused');
+    const none = proposal({
+      ...CHOICE,
+      alternative_action: null,
+      assessment: { ...CHOICE.assessment!, action: 'none' },
+    });
+    expect(fallbackReason(none)).toBe('none');
+  });
+
+  it('sends the chosen option with the approval, nothing without a choice', async () => {
+    const { api, calls } = fakeClient(() => json(CHOICE));
+    await api.approve('p1', 'model');
+    await api.approve('p1');
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'POST /api/v1/vision/proposals/p1/approve',
+      'POST /api/v1/vision/proposals/p1/approve',
+    ]);
+    expect(calls[0]!.body).toEqual({ option: 'model' });
+    expect(calls[1]!.body).toBeNull();
+  });
+
+  it('approves the picked option through the store', async () => {
+    const timers = manualTimers();
+    const api = fakeApi({
+      proposals: vi.fn(async () => [CHOICE]),
+      proposal: vi.fn(async () => CHOICE),
+      approve: vi.fn(async () => ({ ...CHOICE, state: 'executing' as const })),
+    });
+    const store = new AssistStore(api, timers);
+    await store.open(MOWER);
+    expect(store.view).toBe('proposed');
+    await store.approve('model');
+    expect(api.approve).toHaveBeenCalledWith('p1', 'model');
   });
 });
