@@ -27,6 +27,7 @@ from identity.adapters.api.schemas import (
     AccountPatch,
     ApiTokenIn,
     ApiTokenOut,
+    ApiTokensPurgedOut,
     AuditOut,
     MemberOut,
     PasswordSetIn,
@@ -307,12 +308,38 @@ async def create_token(
     return ApiTokenOut.of(created.token, created.secret)
 
 
+@router.post("/api-tokens/purge-revoked")
+async def purge_revoked_tokens(
+    account_id: UUID, _: ManageUsers, services: ServicesDep, ctx: Ctx
+) -> ApiTokensPurgedOut:
+    """Delete every revoked API token of the account for good; active tokens stay. Each one is
+    audited (``api_token.purged``); the audit history of the tokens stays."""
+    purged = await services.tokens.purge_revoked(account_id, ctx)
+    return ApiTokensPurgedOut(deleted=len(purged), ids=[token.id for token in purged])
+
+
 @router.delete("/api-tokens/{token_id}", status_code=204)
 async def revoke_token(
-    account_id: UUID, token_id: UUID, _: ManageUsers, services: ServicesDep, ctx: Ctx
+    account_id: UUID,
+    token_id: UUID,
+    _: ManageUsers,
+    services: ServicesDep,
+    ctx: Ctx,
+    purge: Annotated[
+        bool,
+        Query(
+            description=(
+                "Delete the revoked token for good instead of revoking it; "
+                "409 while the token is not revoked"
+            )
+        ),
+    ] = False,
 ) -> None:
-    """Revoke an API token."""
-    await services.tokens.revoke(account_id, token_id, ctx)
+    """Revoke an API token; with ``purge=true`` delete an already revoked one for good."""
+    if purge:
+        await services.tokens.purge(account_id, token_id, ctx)
+    else:
+        await services.tokens.revoke(account_id, token_id, ctx)
 
 
 # --- audit ----------------------------------------------------------------------------------------

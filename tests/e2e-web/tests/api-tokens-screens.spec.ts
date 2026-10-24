@@ -1,7 +1,8 @@
 /**
  * Review screenshots of the API tokens section (run: pnpm --filter e2e-web screens): the list
  * with a view-only and a full Home Assistant token and three revoked ones folded away, the
- * revoked ones opened, the presets with the full one chosen and its warning, the custom
+ * revoked ones opened (with "Widerrufene entfernen" and a remove button per row), the
+ * confirmation sheet before removing them, the presets with the full one chosen and its warning, the custom
  * selection, and the one-time secret right after creating a token (as the page lands, no
  * scrolling by the test), light and dark, at phone (390 x 844) and desktop (1280 x 800) width,
  * written to apps/web/screenshots/api-tokens-*.png.
@@ -100,6 +101,13 @@ for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
     await expect(folded.getByTestId('token-revoked-row')).toHaveCount(3);
     await top(folded);
     await both(page, `api-tokens-revoked-${size}`);
+
+    // The confirmation before every revoked token is deleted for good.
+    await folded.getByTestId('token-purge-all').click();
+    const confirm = page.getByTestId('token-purge-confirm');
+    await expect(confirm).toHaveAttribute('aria-label', '3 widerrufene Tokens entfernen?');
+    await both(page, `api-tokens-purge-${size}`);
+    await confirm.getByRole('button', { name: 'Abbrechen' }).click();
     await folded.locator('summary').click();
 
     // The presets with the full one chosen and its warning.
