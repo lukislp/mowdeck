@@ -8,8 +8,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { authFetch, REQUEST_TIMEOUT_MS } from '$lib/api/client';
-import { RealtimeClient, type SocketLike } from '$lib/realtime/client.svelte';
+import { authFetch, REQUEST_TIMEOUT_MS } from '#lib/api/client.js';
+import { RealtimeClient, type SocketLike } from '#lib/realtime/client.svelte.js';
 
 import { SessionManager } from './session.svelte';
 

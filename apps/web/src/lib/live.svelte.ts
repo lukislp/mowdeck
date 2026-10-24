@@ -5,18 +5,18 @@
  */
 import { SvelteSet } from 'svelte/reactivity';
 
-import { fleetApi, identityApi, unwrap } from '$lib/api/client';
-import { asProblem } from '$lib/api/problem';
-import { session } from '$lib/auth/session.svelte';
-import { commandLabel, outcomeLabel, problemMessage } from '$lib/i18n';
-import { quietSettingResult } from '$lib/mower/device-settings';
-import { quietLightResult } from '$lib/mower/light';
-import { m } from '$lib/paraglide/messages';
-import { RealtimeClient } from '$lib/realtime/client.svelte';
-import { CommandStore, type CommandKind } from '$lib/stores/commands.svelte';
-import { lastLoad } from '$lib/stores/last-load';
-import { mowers } from '$lib/stores/mowers.svelte';
-import { toasts } from '$lib/stores/ui.svelte';
+import { fleetApi, identityApi, unwrap } from '#lib/api/client.js';
+import { asProblem } from '#lib/api/problem.js';
+import { session } from '#lib/auth/session.svelte.js';
+import { commandLabel, outcomeLabel, problemMessage } from '#lib/i18n.js';
+import { quietSettingResult } from '#lib/mower/device-settings.js';
+import { quietLightResult } from '#lib/mower/light.js';
+import { m } from '#lib/paraglide/messages.js';
+import { RealtimeClient } from '#lib/realtime/client.svelte.js';
+import { CommandStore, type CommandKind } from '#lib/stores/commands.svelte.js';
+import { lastLoad } from '#lib/stores/last-load.js';
+import { mowers } from '#lib/stores/mowers.svelte.js';
+import { toasts } from '#lib/stores/ui.svelte.js';
 
 /** Mowers whose access ended while the app was open (the detail page says so). */
 export const revoked = new SvelteSet<string>();

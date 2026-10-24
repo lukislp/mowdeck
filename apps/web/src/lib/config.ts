@@ -8,7 +8,7 @@
  * of a development build.
  */
 
-import { DEFAULT_SOURCE, parseSource, type SourceInfo } from '$lib/legal/source';
+import { DEFAULT_SOURCE, parseSource, type SourceInfo } from '#lib/legal/source.js';
 
 export interface MapTilesConfig {
   /** URL template with `{z}`, `{x}`, `{y}` and optionally `{s}` and `{r}`. */
@@ -29,7 +29,7 @@ export interface RuntimeConfig {
    * domains. The simulator's test pattern works without it.
    */
   cameraEnabled: boolean;
-  /** The build and where its source code is (AGPL-3.0 section 13, `$lib/legal/source`). */
+  /** The build and where its source code is (AGPL-3.0 section 13, `#lib/legal/source.js`). */
   source: SourceInfo;
 }
 

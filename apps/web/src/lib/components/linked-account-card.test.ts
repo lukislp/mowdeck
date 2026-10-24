@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiProblem, PROBLEM_PREFIX } from '$lib/api/problem';
-import type { LinkedAccount } from '$lib/linked/accounts';
-import { m } from '$lib/paraglide/messages';
+import { ApiProblem, PROBLEM_PREFIX } from '#lib/api/problem.js';
+import type { LinkedAccount } from '#lib/linked/accounts.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import LinkedAccountCard from './LinkedAccountCard.svelte';
 

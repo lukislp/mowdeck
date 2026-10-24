@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { availability, polygonArea, primaryCommand } from '$lib/mower/commands';
-import type { AppModule } from '$lib/modules/types';
-import { visibleModules } from '$lib/shell/registry.svelte';
+import { availability, polygonArea, primaryCommand } from '#lib/mower/commands.js';
+import type { AppModule } from '#lib/modules/types.js';
+import { visibleModules } from '#lib/shell/registry.svelte.js';
 
 import { authFetch } from './client';
 import {

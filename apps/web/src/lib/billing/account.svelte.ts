@@ -4,8 +4,8 @@
  * (Checkout for a first subscription, the customer portal afterwards). One instance per account
  * page; the caller only creates it when the probe found billing enabled.
  */
-import { billingApi, unwrap } from '$lib/api/client';
-import { asProblem, type ApiProblem } from '$lib/api/problem';
+import { billingApi, unwrap } from '#lib/api/client.js';
+import { asProblem, type ApiProblem } from '#lib/api/problem.js';
 
 import type { Invoice, SubscriptionSummary } from './billing';
 

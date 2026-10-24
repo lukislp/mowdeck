@@ -7,17 +7,17 @@
   import { Button, Field } from '@mowdeck/ui';
   import { untrack } from 'svelte';
 
-  import { asProblem } from '$lib/api/problem';
-  import { problemMessage } from '$lib/i18n';
+  import { asProblem } from '#lib/api/problem.js';
+  import { problemMessage } from '#lib/i18n.js';
   import {
     AREA_NAME_MAX,
     initialRenameValue,
     renameIntent,
     saveAreaName,
-  } from '$lib/mower/area-names';
-  import { areaLabel, isPlaceholderName, type AreaNames } from '$lib/mower/map-labels';
-  import { m } from '$lib/paraglide/messages';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/mower/area-names.js';
+  import { areaLabel, isPlaceholderName, type AreaNames } from '#lib/mower/map-labels.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   interface Props {
     mowerId: string;

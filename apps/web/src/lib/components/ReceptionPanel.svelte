@@ -6,7 +6,7 @@
   out; a stale mower (no live link) dims the values, they are the last ones it reported.
 -->
 <script lang="ts">
-  import { formatNumber } from '$lib/i18n';
+  import { formatNumber } from '#lib/i18n.js';
   import {
     SIGNAL_BARS,
     correctionAge,
@@ -17,9 +17,9 @@
     type GnssStatus,
     type SelfCheck,
     type SignalStatus,
-  } from '$lib/mower/reception';
-  import { gnssSolutionLabel, networkLabel, selfCheckReason } from '$lib/mower/reception-labels';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/mower/reception.js';
+  import { gnssSolutionLabel, networkLabel, selfCheckReason } from '#lib/mower/reception-labels.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     gnss: GnssStatus | null;

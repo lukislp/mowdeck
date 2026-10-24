@@ -3,7 +3,7 @@
  * unlimited), the checks Entitlements makes (`PlanIn`: key pattern, name, limits as whole numbers
  * from 0, trial days 0 to 365) and the body of `PUT /entitlements/plans/{key}` (the whole plan).
  */
-import { LIMIT_KEYS, type LimitKey, type PlanDetail, type PlanIn } from '$lib/plan/types';
+import { LIMIT_KEYS, type LimitKey, type PlanDetail, type PlanIn } from '#lib/plan/types.js';
 
 export const PLAN_KEY_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 

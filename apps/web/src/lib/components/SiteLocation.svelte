@@ -8,15 +8,15 @@
 <script lang="ts">
   import { Button, Field, Panel, ProblemNotice, Readout } from '@mowdeck/ui';
 
-  import { fleetApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import type { components } from '$lib/generated/fleet';
-  import { formatNumber, problemMessage } from '$lib/i18n';
-  import { permissions } from '$lib/live.svelte';
-  import { m } from '$lib/paraglide/messages';
-  import { isValidTimeZone, parseNumber } from '$lib/schedules/form';
-  import { toasts } from '$lib/stores/ui.svelte';
+  import { fleetApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import type { components } from '#lib/generated/fleet.js';
+  import { formatNumber, problemMessage } from '#lib/i18n.js';
+  import { permissions } from '#lib/live.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { isValidTimeZone, parseNumber } from '#lib/schedules/form.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   type Site = components['schemas']['SiteOut'];
 

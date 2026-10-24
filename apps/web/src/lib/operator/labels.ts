@@ -1,5 +1,5 @@
 /** Words for the operator console: account kinds and statuses (Identity), probe verdicts. */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import type { ProbeVerdict } from './system';
 

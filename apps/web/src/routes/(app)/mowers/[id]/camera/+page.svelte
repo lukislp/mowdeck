@@ -9,18 +9,18 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { clock } from '$lib/clock.svelte';
-  import CameraPanel from '$lib/components/CameraPanel.svelte';
-  import LiveStatus from '$lib/components/LiveStatus.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import StopBar from '$lib/components/StopBar.svelte';
-  import type { components as Fleet } from '$lib/generated/fleet';
-  import { activityLabel, presenceLabel, problemMessage, valuesAgeLabel } from '$lib/i18n';
-  import { realtime, revoked } from '$lib/live.svelte';
-  import { m } from '$lib/paraglide/messages';
-  import { mowers as states } from '$lib/stores/mowers.svelte';
+  import { fleetApi, telemetryApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import CameraPanel from '#lib/components/CameraPanel.svelte';
+  import LiveStatus from '#lib/components/LiveStatus.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import StopBar from '#lib/components/StopBar.svelte';
+  import type { components as Fleet } from '#lib/generated/fleet.js';
+  import { activityLabel, presenceLabel, problemMessage, valuesAgeLabel } from '#lib/i18n.js';
+  import { realtime, revoked } from '#lib/live.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { mowers as states } from '#lib/stores/mowers.svelte.js';
 
   type Mower = Fleet['schemas']['MowerOut'];
 

@@ -1,7 +1,7 @@
 /** Words of the base station page (de and en through Paraglide), exhaustive per enum. */
-import type { ApiProblem } from '$lib/api/problem';
-import { problemMessage } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
+import type { ApiProblem } from '#lib/api/problem.js';
+import { problemMessage } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import type { BaseStationState, BaseUpdateBlocker, FirmwareInfo } from './base-stations';
 

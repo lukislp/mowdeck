@@ -5,7 +5,7 @@
  * `MowerState.drive_calibration`; the page passes it in through `status()`. The page constructs
  * the flow with the real calls; `drive-calibration.test.ts` drives it with fakes.
  */
-import { asProblem, type ApiProblem } from '$lib/api/problem';
+import { asProblem, type ApiProblem } from '#lib/api/problem.js';
 
 import {
   calibrationPayload,

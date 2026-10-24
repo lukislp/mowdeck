@@ -11,8 +11,8 @@
 <script lang="ts">
   import type { HeatGap } from '@mowdeck/ui';
 
-  import { formatNumber } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  import { formatNumber } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     /** Spots, largest first, with their index in the answer. */

@@ -3,9 +3,9 @@
  * it (spot runs then use the default values), and `MowerOut.drive_calibration` shows the stored
  * one. Permission `can_drive`.
  */
-import { fleetApi, unwrap } from '$lib/api/client';
-import type { DriveCalibration, DriveCalibrationIn } from '$lib/mower/drive-calibration';
-import { storedCalibrationOf } from '$lib/mower/drive-calibration';
+import { fleetApi, unwrap } from '#lib/api/client.js';
+import type { DriveCalibration, DriveCalibrationIn } from '#lib/mower/drive-calibration.js';
+import { storedCalibrationOf } from '#lib/mower/drive-calibration.js';
 
 const path = (mowerId: string) => ({ params: { path: { mower_id: mowerId } } });
 

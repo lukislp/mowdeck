@@ -1,21 +1,20 @@
 <script lang="ts">
   import { Button, Icon, ProblemNotice, TopBar } from '@mowdeck/ui';
 
-  import { goto } from '$app/navigation';
-
-  import { fleetApi, unwrap } from '$lib/api/client';
-  import { asProblem } from '$lib/api/problem';
-  import NotificationBadge from '$lib/components/NotificationBadge.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { formatAge, problemMessage } from '$lib/i18n';
-  import { clock } from '$lib/clock.svelte';
-  import { alarmPosition, isAlarm } from '$lib/notifications/kinds';
-  import { inbox } from '$lib/notifications/runtime';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import { safePath } from '$lib/push/payload';
-  import type { InboxItem } from '$lib/stores/inbox.svelte';
-  import { toasts } from '$lib/stores/ui.svelte';
+  import { fleetApi, unwrap } from '#lib/api/client.js';
+  import { asProblem } from '#lib/api/problem.js';
+  import NotificationBadge from '#lib/components/NotificationBadge.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { formatAge, problemMessage } from '#lib/i18n.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import { navigatePath } from '#lib/navigate.js';
+  import { alarmPosition, isAlarm } from '#lib/notifications/kinds.js';
+  import { inbox } from '#lib/notifications/runtime.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import { safePath } from '#lib/push/payload.js';
+  import type { InboxItem } from '#lib/stores/inbox.svelte.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   let names = $state<Record<string, string>>({});
   let marking = $state(false);
@@ -67,7 +66,7 @@
 
   async function open(item: InboxItem): Promise<void> {
     void inbox.markRead(item.id).catch(() => undefined);
-    if (item.url || item.mower_id) await goto(safePath(item.url, item.mower_id));
+    if (item.url || item.mower_id) await navigatePath(safePath(item.url, item.mower_id));
   }
 
   async function acknowledge(item: InboxItem): Promise<void> {

@@ -3,7 +3,7 @@
  * obstacle detection, laps around no-go zones, path order and the start progress. A mower
  * declares what it offers in `capabilities.start_options`; the start sheet shows only that,
  * under "Mehr". An option left empty (null) is not sent, so the mower keeps its own setting.
- * Pure, unit tested (`job-options.test.ts`); labels live in `$lib/i18n`.
+ * Pure, unit tested (`job-options.test.ts`); labels live in `#lib/i18n.js`.
  */
 
 /** Obstacle detection modes in the order of the contracts' `ObstacleDetection`. */

@@ -8,15 +8,15 @@
 <script lang="ts">
   import { Button, Sheet, type IconName } from '@mowdeck/ui';
 
-  import { outcomeLabel } from '$lib/i18n';
+  import { outcomeLabel } from '#lib/i18n.js';
   import {
     resultTone,
     type MaintenanceAction,
     type MaintenanceBlocker,
-  } from '$lib/mower/maintenance';
-  import { actionText, maintenanceBlockerText } from '$lib/mower/maintenance-labels';
-  import { m } from '$lib/paraglide/messages';
-  import type { CommandOutcome } from '$lib/stores/commands.svelte';
+  } from '#lib/mower/maintenance.js';
+  import { actionText, maintenanceBlockerText } from '#lib/mower/maintenance-labels.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import type { CommandOutcome } from '#lib/stores/commands.svelte.js';
 
   interface Props {
     actions: MaintenanceAction[];

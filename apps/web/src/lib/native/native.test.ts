@@ -5,7 +5,7 @@ import { nativeBridge, type CapacitorBridge, type NativeBridge } from './capacit
 import { pathFromDeepLink, pathFromNotificationAction } from './links';
 import { InboxNotifier, notificationNumber, toLocalNotification } from './local';
 import { NativeShell } from './shell.svelte';
-import type { InboxItem } from '$lib/stores/inbox.svelte';
+import type { InboxItem } from '#lib/stores/inbox.svelte.js';
 
 // --- a fake of the injected window.Capacitor ------------------------------------------------
 

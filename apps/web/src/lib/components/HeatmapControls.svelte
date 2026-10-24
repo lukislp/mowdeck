@@ -12,7 +12,7 @@
 <script lang="ts">
   import { heatScale } from '@mowdeck/ui';
 
-  import { formatNumber } from '$lib/i18n';
+  import { formatNumber } from '#lib/i18n.js';
   import {
     HEAT_CELL_SIZES,
     HEAT_LAYERS,
@@ -21,8 +21,8 @@
     type HeatCellSize,
     type HeatLayer,
     type HeatPeriod,
-  } from '$lib/map/heatmap';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/map/heatmap.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     layer: HeatLayer;

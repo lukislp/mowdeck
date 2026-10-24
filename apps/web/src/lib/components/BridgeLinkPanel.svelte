@@ -8,17 +8,22 @@
 <script lang="ts">
   import { Button, Icon } from '@mowdeck/ui';
 
-  import { asProblem } from '$lib/api/problem';
+  import { asProblem } from '#lib/api/problem.js';
   import {
     BRIDGE_GUIDE_URL,
     type BridgeLink,
     type BridgeScanReply,
     type LinkStatus,
-  } from '$lib/fleet/links';
-  import { formatDateTime, problemMessage } from '$lib/i18n';
-  import { outdatedText, rssiText, scanErrorText, scanProblemText } from '$lib/mower/bridge-link';
-  import { m } from '$lib/paraglide/messages';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/fleet/links.js';
+  import { formatDateTime, problemMessage } from '#lib/i18n.js';
+  import {
+    outdatedText,
+    rssiText,
+    scanErrorText,
+    scanProblemText,
+  } from '#lib/mower/bridge-link.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   interface Props {
     link: BridgeLink | null;

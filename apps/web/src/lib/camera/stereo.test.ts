@@ -1,7 +1,7 @@
 /** Both front cameras: pairing, the layouts, per-track numbers, duplicate pictures, the viewer. */
 import { describe, expect, it, vi } from 'vitest';
 
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import { buildSnapshot, EventLog, trackSnapshot, trackSummary } from './diagnostics';
 import { BOTH, cameraLabel, cameraOptions } from './labels';

@@ -4,9 +4,9 @@
  * the feature key as the error's `parameter` and the refusal reason as its `code`. The texts
  * name the limit or feature in words; `notifyPlanProblem` puts them in a toast.
  */
-import type { ApiProblem } from '$lib/api/problem';
-import { m } from '$lib/paraglide/messages';
-import { toasts } from '$lib/stores/ui.svelte';
+import type { ApiProblem } from '#lib/api/problem.js';
+import { m } from '#lib/paraglide/messages.js';
+import { toasts } from '#lib/stores/ui.svelte.js';
 
 import { featureLabel, isLimitKey, limitLabel } from './labels';
 

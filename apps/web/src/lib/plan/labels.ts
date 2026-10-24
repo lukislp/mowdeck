@@ -5,8 +5,8 @@
  * own): the known ones have a translation, the rest show the catalogue's English description or
  * the key.
  */
-import { m } from '$lib/paraglide/messages';
-import type { Glyph, Tone } from '$lib/schedules/labels';
+import { m } from '#lib/paraglide/messages.js';
+import type { Glyph, Tone } from '#lib/schedules/labels.js';
 
 import type { LimitKey, PlanSource, PlanStatus } from './types';
 

@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
-import { initialState, type KindSchema, type OptionSchema } from '$lib/connection/form';
-import { m } from '$lib/paraglide/messages';
+import { initialState, type KindSchema, type OptionSchema } from '#lib/connection/form.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import ConnectionForm from './ConnectionForm.svelte';
 

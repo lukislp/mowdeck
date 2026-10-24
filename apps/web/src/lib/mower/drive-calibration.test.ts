@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiProblem } from '$lib/api/problem';
-import { setLocale } from '$lib/paraglide/runtime';
+import { ApiProblem } from '#lib/api/problem.js';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 import {
   calibConditionHint,

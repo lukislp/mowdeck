@@ -1,8 +1,8 @@
 /** The translated texts of `MowerMap` (the library takes every text as a prop). */
 import type { MowerMapLabels } from '@mowdeck/ui';
 
-import { formatNumber } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
+import { formatNumber } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
 
 /** A vendor name that is only a long number (a hash such as "4525245168006937683"). */
 const HASH_NAME = /^\d{8,}$/;

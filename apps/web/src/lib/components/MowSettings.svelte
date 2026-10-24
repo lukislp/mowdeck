@@ -11,23 +11,23 @@
   Layout: on phones the section is collapsed to the summary line plus "Anpassen"
   (`start-settings-toggle`); expanded it shows the pattern tiles, then the numeric settings. From
   1024 px it is always open (the toggle is hidden) and the sheet puts it beside the area list.
-  The page owns the draft (`$lib/mower/mow-pattern`), the start and saving the defaults.
+  The page owns the draft (`#lib/mower/mow-pattern.js`), the start and saving the defaults.
 -->
 <script lang="ts">
   import { Switch } from '@mowdeck/ui';
 
-  import MowOptions from '$lib/components/MowOptions.svelte';
-  import { patternSummary } from '$lib/i18n';
-  import type { JobOptionsSpec } from '$lib/mower/job-options';
-  import type { Range } from '$lib/mower/limits';
+  import MowOptions from '#lib/components/MowOptions.svelte';
+  import { patternSummary } from '#lib/i18n.js';
+  import type { JobOptionsSpec } from '#lib/mower/job-options.js';
+  import type { Range } from '#lib/mower/limits.js';
   import {
     toPattern,
     type PatternDraft,
     type PatternName,
     type SpacingRange,
-  } from '$lib/mower/mow-pattern';
-  import type { SetpointDraft } from '$lib/mower/setpoints';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/mower/mow-pattern.js';
+  import type { SetpointDraft } from '#lib/mower/setpoints.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     /** Patterns the mower runs natively, in sheet order. */

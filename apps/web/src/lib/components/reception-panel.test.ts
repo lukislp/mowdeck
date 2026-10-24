@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import ReceptionPanel from './ReceptionPanel.svelte';
 
-import { setLocale } from '$lib/paraglide/runtime';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 beforeEach(() => setLocale('de', { reload: false }));
 

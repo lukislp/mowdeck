@@ -10,9 +10,9 @@
 
   import { page } from '$app/state';
 
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { operatorAccess } from '$lib/operator/access.svelte';
-  import { m } from '$lib/paraglide/messages';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { operatorAccess } from '#lib/operator/access.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   let { children }: { children: Snippet } = $props();
 

@@ -1,7 +1,7 @@
 <!-- A plan status (active, trial, grace, expired) as a state word with glyph in the state colours. -->
 <script lang="ts">
-  import { statusLabel, statusTone } from '$lib/plan/labels';
-  import type { PlanStatus } from '$lib/plan/types';
+  import { statusLabel, statusTone } from '#lib/plan/labels.js';
+  import type { PlanStatus } from '#lib/plan/types.js';
 
   import ToneBadge from './ToneBadge.svelte';
 

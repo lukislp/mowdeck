@@ -2,14 +2,14 @@
  * Latest state per mower, from REST and the socket. The newest `observed_at` wins, then the
  * newest link heartbeat (REST and the socket can race), so a store entry never goes back in time.
  * Online and offline follow the gateway's link heartbeat, not the age of the values (ADR 0040,
- * `$lib/mower/presence`).
+ * `#lib/mower/presence.js`).
  */
 import { SvelteMap } from 'svelte/reactivity';
 
-import type { components } from '$lib/generated/telemetry';
-import { isNewer, isOnline, oldValuesAge } from '$lib/mower/presence';
+import type { components } from '#lib/generated/telemetry.js';
+import { isNewer, isOnline, oldValuesAge } from '#lib/mower/presence.js';
 
-export { OFFLINE_AFTER_MS, VALUES_OLD_AFTER_MS } from '$lib/mower/presence';
+export { OFFLINE_AFTER_MS, VALUES_OLD_AFTER_MS } from '#lib/mower/presence.js';
 
 export type MowerState = components['schemas']['MowerState'];
 

@@ -5,10 +5,10 @@
   or uncounted limit shows a hatched gauge.
 -->
 <script lang="ts">
-  import { formatNumber } from '$lib/i18n';
-  import { limitLabel } from '$lib/plan/labels';
-  import type { LimitRow } from '$lib/plan/usage';
-  import { m } from '$lib/paraglide/messages';
+  import { formatNumber } from '#lib/i18n.js';
+  import { limitLabel } from '#lib/plan/labels.js';
+  import type { LimitRow } from '#lib/plan/usage.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     row: LimitRow;

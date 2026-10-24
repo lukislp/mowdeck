@@ -13,8 +13,8 @@
     formatDriveSpeed,
     snapDriveSpeed,
     type DriveSpeedSetting,
-  } from '$lib/mower/drive-calibration';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/mower/drive-calibration.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     setting: DriveSpeedSetting;

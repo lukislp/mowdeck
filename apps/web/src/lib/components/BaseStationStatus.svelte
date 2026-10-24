@@ -6,10 +6,10 @@
   mower that reported it and when.
 -->
 <script lang="ts">
-  import { formatLatLon, type BaseStationState } from '$lib/fleet/base-stations';
-  import { correctionLabel, solutionLabel } from '$lib/fleet/base-station-labels';
-  import { formatAge, formatNumber } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  import { formatLatLon, type BaseStationState } from '#lib/fleet/base-stations.js';
+  import { correctionLabel, solutionLabel } from '#lib/fleet/base-station-labels.js';
+  import { formatAge, formatNumber } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     state: BaseStationState | null;

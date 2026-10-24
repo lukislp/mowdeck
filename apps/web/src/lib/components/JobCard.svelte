@@ -6,9 +6,9 @@
   the socket; nothing here estimates.
 -->
 <script lang="ts">
-  import { formatNumber } from '$lib/i18n';
-  import { JOB_TICKS, formatRunTime, litTicks, type JobView } from '$lib/mower/job';
-  import { m } from '$lib/paraglide/messages';
+  import { formatNumber } from '#lib/i18n.js';
+  import { JOB_TICKS, formatRunTime, litTicks, type JobView } from '#lib/mower/job.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     job: JobView;

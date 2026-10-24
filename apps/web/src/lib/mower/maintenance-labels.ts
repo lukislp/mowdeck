@@ -1,5 +1,5 @@
 /** Words of the maintenance actions (de and en through Paraglide), exhaustive per action. */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import { neededRight, type MaintenanceAction, type MaintenanceBlocker } from './maintenance';
 

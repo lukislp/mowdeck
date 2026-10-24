@@ -1,7 +1,3 @@
-/// <reference types="@sveltejs/kit" />
-/// <reference no-default-lib="true"/>
-/// <reference lib="esnext" />
-/// <reference lib="webworker" />
 /**
  * Offline shell: the built app, the static files and the SPA fallback are precached per
  * version. Navigations try the network first and fall back to the cached shell; app assets are
@@ -14,21 +10,29 @@
  * key. The worker never calls the API (it has no token): the renewed subscription waits in the
  * push cache until the page posts it (`PushDevice.syncPending`).
  */
-import { build, files, version } from '$service-worker';
+import { version } from '$app/env';
+import { assets, immutable } from '$app/manifest';
+import { self as sw } from '$app/service-worker';
 
 import {
   fallbackMessage,
   notificationOptions,
   parsePushPayload,
   FALLBACK_URL,
-} from '$lib/push/payload';
-import { PUSH_CACHE, readVapidKey, savePending, urlBase64ToUint8Array } from '$lib/push/store';
+} from '#lib/push/payload.js';
+import { PUSH_CACHE, readVapidKey, savePending, urlBase64ToUint8Array } from '#lib/push/store.js';
 
-const sw = self as unknown as ServiceWorkerGlobalScope;
 const CACHE = `mowdeck-shell-${version}`;
 const SHELL = '/200.html';
+// `$app/manifest` lists paths relative to the base path; the app is served at the root (no
+// `paths.base`), so the absolute pathname the fetch handler compares with is `/` + path.
+const absolute = ({ path }: { path: string }) => `/${path}`;
 // The legal pages' Markdown stays out of the cache: the operator replaces it without a new build.
-const ASSETS = [...build, ...files.filter((file) => !file.startsWith('/legal/')), SHELL];
+const ASSETS = [
+  ...immutable.map(absolute),
+  ...assets.map(absolute).filter((path) => !path.startsWith('/legal/')),
+  SHELL,
+];
 
 sw.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));

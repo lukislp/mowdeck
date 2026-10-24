@@ -6,9 +6,9 @@
 <script lang="ts">
   import { Icon } from '@mowdeck/ui';
 
-  import { formatDate } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { accountPlan } from '$lib/plan/plan.svelte';
+  import { formatDate } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { accountPlan } from '#lib/plan/plan.svelte.js';
 
   const plan = $derived(accountPlan.current);
 </script>

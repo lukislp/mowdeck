@@ -9,10 +9,10 @@
  */
 import createClient from 'openapi-fetch';
 
-import { authFetch, fleetApi, unwrap } from '$lib/api/client';
-import { session } from '$lib/auth/session.svelte';
-import type { components, paths as FleetPaths } from '$lib/generated/fleet';
-import type { components as Telemetry } from '$lib/generated/telemetry';
+import { authFetch, fleetApi, unwrap } from '#lib/api/client.js';
+import { session } from '#lib/auth/session.svelte.js';
+import type { components, paths as FleetPaths } from '#lib/generated/fleet.js';
+import type { components as Telemetry } from '#lib/generated/telemetry.js';
 
 export const BLE_BRIDGE = 'ble_bridge';
 

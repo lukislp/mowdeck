@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-09)
+Accepted (2026-10-09). Addendum of 2026-10-24 below: the web app moved to SvelteKit 3.
 
 ## Context
 
@@ -38,3 +38,14 @@ The design ([Design: web app](../dev/design-web-app.md), sections 1, 3, 6, 9 and
 - The menu follows the installation: a stack without Fleet shows no mower module.
 - The map is a schematic SVG plan until Task 11 adds Leaflet; geometry stays in local metres on the wire and is converted in the browser.
 - Moving to SvelteKit 3 later is a separate, mechanical migration (`$lib` imports, configuration in `vite.config.ts`, `$app/state` already in use).
+
+## Addendum: migrated to SvelteKit 3 (2026-10-24)
+
+The owner lifted the deferral: the web app runs on `@sveltejs/kit` 3.0.1 with `@sveltejs/adapter-static` 4.0.0 (was 2.70.3 and 3.0.10); Svelte 5.57.2, Vite 8.3.4, `@sveltejs/vite-plugin-svelte` 7.3.1 and TypeScript 6.0.3 already met Kit 3's minimums and stay. Kit 3.1.0 (2026-10-14) was not taken because it was younger than the two weeks the supply-chain rules ask for. The root `engines` rises to Node `>=22.17.0`, Kit 3's floor. The migration started with `sv migrate sveltekit-3` (sv 1.1.1) and was finished by hand:
+
+- The configuration moved from `svelte.config.js` into the `sveltekit({...})` plugin options in `vite.config.ts`, unchanged in substance: adapter-static with `fallback: '200.html'` and `strict`, `serviceWorker.register: false` (the app registers the worker itself, as a module) and `version.pollInterval: 0`. The app stays a static SPA (`ssr = false`, `prerender = false`); the CSP hashes and the nginx image are unchanged in kind.
+- `$lib` became `#lib`, declared as `"#lib/*": "./src/lib/*"` under `imports` in `apps/web/package.json`; every import names its file with the extension.
+- The service worker moved to `src/service-worker/index.ts` with its own `tsconfig.json` (extends `$app/tsconfig/service-worker`, type-checked by `pnpm check`); `$service-worker` is replaced by `$app/env` (`version`), `$app/manifest` (`immutable`, `assets`, paths relative to the root) and `$app/service-worker` (`self`).
+- `goto` options: `replaceState` became `replace`, `noScroll` and `keepFocus` became `reset: false`, and `replaceState(...)` became `goto(..., { shallow: true, replace: true, state })`. Because `goto` now rejects a path without a route, destinations that come from outside the code (`?next=`, notifications, deep links of the native shell, service worker messages) go through `navigatePath`, which loads such a path as a full page so the fallback shows the "not found" page as before.
+- `page.url` is read-only; the two places that edit a copy build it from `page.url.href`.
+- The `pnpm.overrides` entry that lifted Kit 2's `cookie` to 0.7 (GHSA-pxg6-pf52-xh8x) is gone, Kit 3 depends on `cookie` 2 itself, and the two Kit 2 advisories accepted in `osv-scanner.toml` (GHSA-27mw-82g8-phjj, GHSA-pfhg-q3qv-9q6r, fixed in Kit 3.0.0) are removed. Dependabot no longer ignores the Kit and adapter-static majors.

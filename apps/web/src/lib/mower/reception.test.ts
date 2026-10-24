@@ -16,7 +16,7 @@ import {
   selfCheckReason,
 } from './reception-labels';
 
-import { setLocale } from '$lib/paraglide/runtime';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 beforeEach(() => setLocale('de', { reload: false }));
 

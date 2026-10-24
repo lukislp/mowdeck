@@ -6,7 +6,7 @@
   target offers: the mower's capabilities, for a group what every member offers (the members
   are listed with their models); a value left empty takes the mower's saved mow defaults, else
   its own setting. Changing the target clears what the new target does not offer.
-  Client checks mirror the Scheduler's rules (`$lib/schedules/form`) and run on submit, then
+  Client checks mirror the Scheduler's rules (`#lib/schedules/form.js`) and run on submit, then
   live; the server's 422 answer lands on the same fields. The page owns loading and saving.
 -->
 <script lang="ts">
@@ -24,17 +24,17 @@
   } from '@mowdeck/ui';
   import { tick, untrack, type Snippet } from 'svelte';
 
-  import { telemetryApi } from '$lib/api/client';
-  import type { ApiProblem } from '$lib/api/problem';
-  import AreaPlan from '$lib/components/AreaPlan.svelte';
-  import MowOptions from '$lib/components/MowOptions.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import type { MapTilesConfig } from '$lib/config';
-  import { formatNumber, problemMessage } from '$lib/i18n';
-  import { displayModel } from '$lib/mower/limits';
-  import { areaNamer, mapLabels } from '$lib/mower/map-labels';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
+  import { telemetryApi } from '#lib/api/client.js';
+  import type { ApiProblem } from '#lib/api/problem.js';
+  import AreaPlan from '#lib/components/AreaPlan.svelte';
+  import MowOptions from '#lib/components/MowOptions.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import type { MapTilesConfig } from '#lib/config.js';
+  import { formatNumber, problemMessage } from '#lib/i18n.js';
+  import { displayModel } from '#lib/mower/limits.js';
+  import { areaNamer, mapLabels } from '#lib/mower/map-labels.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
   import {
     LIMITS,
     parseNumber,
@@ -44,7 +44,7 @@
     type FormIssue,
     type FormIssues,
     type ScheduleFormState,
-  } from '$lib/schedules/form';
+  } from '#lib/schedules/form.js';
   import {
     NO_OFFER,
     commonOffer,
@@ -53,9 +53,9 @@
     mowSummary,
     offersAnything,
     type CapsLike,
-  } from '$lib/schedules/mow-options';
-  import { formatDuration, weekdayShort } from '$lib/schedules/recurrence';
-  import { WEEKDAYS, type Locale, type Weekday } from '$lib/schedules/types';
+  } from '#lib/schedules/mow-options.js';
+  import { formatDuration, weekdayShort } from '#lib/schedules/recurrence.js';
+  import { WEEKDAYS, type Locale, type Weekday } from '#lib/schedules/types.js';
 
   interface Target {
     id: string;

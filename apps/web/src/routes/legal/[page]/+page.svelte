@@ -1,7 +1,7 @@
 <!--
   A legal page of the installation (imprint, terms, privacy): the operator's Markdown from
   `/legal/<page>.md` (static/legal, replaceable with a volume), rendered with the tiny safe subset
-  of `$lib/legal/markdown` as plain text nodes (no HTML from the file is ever interpreted). The
+  of `#lib/legal/markdown.js` as plain text nodes (no HTML from the file is ever interpreted). The
   shipped files are placeholders, so the page always says so.
 -->
 <script lang="ts">
@@ -9,15 +9,15 @@
 
   import { page } from '$app/state';
 
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
   import {
     isLegalPage,
     parseMarkdown,
     type Block,
     type Inline,
     type LegalPage,
-  } from '$lib/legal/markdown';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/legal/markdown.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   const key = $derived(page.params.page ?? '');
   const known = $derived(isLegalPage(key));

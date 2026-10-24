@@ -39,24 +39,24 @@
   import { Button, ProblemNotice, tokenValue } from '@mowdeck/ui';
   import { onDestroy, onMount } from 'svelte';
 
-  import { fleetApi, unwrap } from '$lib/api/client';
-  import { trackSummary } from '$lib/camera/diagnostics';
-  import { CameraPlayerFactory } from '$lib/camera/factory';
-  import { FREEZE_POLL_MS, FreezeWatch, frameCounter } from '$lib/camera/freeze';
-  import { cameraLabel } from '$lib/camera/labels';
-  import type { CameraLayout, CameraTile } from '$lib/camera/layout';
-  import type { CameraPlayer } from '$lib/camera/player';
+  import { fleetApi, unwrap } from '#lib/api/client.js';
+  import { trackSummary } from '#lib/camera/diagnostics.js';
+  import { CameraPlayerFactory } from '#lib/camera/factory.js';
+  import { FREEZE_POLL_MS, FreezeWatch, frameCounter } from '#lib/camera/freeze.js';
+  import { cameraLabel } from '#lib/camera/labels.js';
+  import type { CameraLayout, CameraTile } from '#lib/camera/layout.js';
+  import type { CameraPlayer } from '#lib/camera/player.js';
   import {
     meanAbsDifference,
     SAME_PICTURE_INTERVAL_MS,
     SamePictureWatch,
     thumbnail,
-  } from '$lib/camera/sameness';
-  import type { CameraErrorKind, CameraInfo } from '$lib/camera/session';
-  import type { PatternColors } from '$lib/camera/test-pattern';
-  import { CameraViewer } from '$lib/camera/viewer.svelte';
-  import { loadConfig } from '$lib/config';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/camera/sameness.js';
+  import type { CameraErrorKind, CameraInfo } from '#lib/camera/session.js';
+  import type { PatternColors } from '#lib/camera/test-pattern.js';
+  import { CameraViewer } from '#lib/camera/viewer.svelte.js';
+  import { loadConfig } from '#lib/config.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     mowerId: string;

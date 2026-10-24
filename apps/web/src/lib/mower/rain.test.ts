@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { HourBar } from '$lib/schedules/preview';
+import type { HourBar } from '#lib/schedules/preview.js';
 import { currentBar, rainNow, rainWarning, readoutBars, stripBars } from './rain';
 
 const H = 3_600_000;

@@ -2,8 +2,8 @@
  * Sites of the fleet: the list the pickers use and the one way a site is created (the sites
  * page and the inline "new site" of the linked-account flow).
  */
-import { fleetApi, unwrap } from '$lib/api/client';
-import type { components } from '$lib/generated/fleet';
+import { fleetApi, unwrap } from '#lib/api/client.js';
+import type { components } from '#lib/generated/fleet.js';
 
 export type Site = components['schemas']['SiteOut'];
 export type SiteIn = components['schemas']['SiteIn'];

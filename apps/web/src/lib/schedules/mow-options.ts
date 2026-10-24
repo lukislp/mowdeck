@@ -11,7 +11,7 @@
  * mower's saved mow defaults, else the mower's own setting. Pure, unit tested
  * (`mow-options.test.ts`).
  */
-import { formatNumber, obstacleLabel, orderLabel, patternLabel } from '$lib/i18n';
+import { formatNumber, obstacleLabel, orderLabel, patternLabel } from '#lib/i18n.js';
 import {
   NO_OPTIONS,
   OBSTACLE_MODES,
@@ -20,8 +20,8 @@ import {
   type JobOptionsDraft,
   type JobOptionsSpec,
   type OptionRange,
-} from '$lib/mower/job-options';
-import { bladeRange, speedRange, type Range } from '$lib/mower/limits';
+} from '#lib/mower/job-options.js';
+import { bladeRange, speedRange, type Range } from '#lib/mower/limits.js';
 import {
   ANGLE_MAX,
   BORDER_LAPS_MAX,
@@ -32,9 +32,9 @@ import {
   type LoosePatternDraft,
   type PatternName,
   type SpacingRange,
-} from '$lib/mower/mow-pattern';
-import type { SetpointDraft } from '$lib/mower/setpoints';
-import { m } from '$lib/paraglide/messages';
+} from '#lib/mower/mow-pattern.js';
+import type { SetpointDraft } from '#lib/mower/setpoints.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import type { Schedule, ScheduleIn } from './types';
 

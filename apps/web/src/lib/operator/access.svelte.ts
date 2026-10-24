@@ -7,7 +7,7 @@
  * network failure) hides the operator console quietly; it is no error, so nothing is logged.
  * The services check every operator request again.
  */
-import { apiFetch } from '$lib/api/client';
+import { apiFetch } from '#lib/api/client.js';
 
 export type ProbeFn = () => Promise<boolean>;
 

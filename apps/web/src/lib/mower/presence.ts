@@ -9,7 +9,7 @@
  * lost (`connected: false`). States from before the field carry no `heartbeat_at`; then
  * `observed_at` stands in, as it did before.
  */
-import type { components } from '$lib/generated/telemetry';
+import type { components } from '#lib/generated/telemetry.js';
 
 type MowerState = components['schemas']['MowerState'];
 /** The fields presence reads (spot conditions pass a narrower state). */

@@ -3,11 +3,11 @@
 
   import { goto } from '$app/navigation';
 
-  import { asProblem, problemFromResponse, type ApiProblem } from '$lib/api/problem';
-  import { IDENTITY, session } from '$lib/auth/session.svelte';
-  import AuthFrame from '$lib/components/AuthFrame.svelte';
-  import { problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  import { asProblem, problemFromResponse, type ApiProblem } from '#lib/api/problem.js';
+  import { IDENTITY, session } from '#lib/auth/session.svelte.js';
+  import AuthFrame from '#lib/components/AuthFrame.svelte';
+  import { problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   let username = $state('');
   let password = $state('');
@@ -34,7 +34,7 @@
       if (!response.ok) throw await problemFromResponse(response);
       await session.login(username.trim(), password);
       password = '';
-      await goto('/mowers', { replaceState: true });
+      await goto('/mowers', { replace: true });
     } catch (error) {
       problem = asProblem(error);
     } finally {

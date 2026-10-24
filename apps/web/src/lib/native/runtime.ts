@@ -1,8 +1,8 @@
 /**
  * The app's native shell singleton, wired to the Notifications API. Inert in a browser.
  */
-import { notificationsApi, unwrap } from '$lib/api/client';
-import { ApiProblem } from '$lib/api/problem';
+import { notificationsApi, unwrap } from '#lib/api/client.js';
+import { ApiProblem } from '#lib/api/problem.js';
 
 import { nativeBridge } from './capacitor';
 import { NativeShell } from './shell.svelte';

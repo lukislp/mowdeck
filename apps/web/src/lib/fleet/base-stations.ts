@@ -6,9 +6,9 @@
  * station has no connection of its own: its state comes from a linked mower
  * (`MowerState.base_station`), its firmware is checked and installed through one.
  */
-import { fleetApi, fleetSlowApi, unwrap } from '$lib/api/client';
-import type { components as Fleet } from '$lib/generated/fleet';
-import type { components as Telemetry } from '$lib/generated/telemetry';
+import { fleetApi, fleetSlowApi, unwrap } from '#lib/api/client.js';
+import type { components as Fleet } from '#lib/generated/fleet.js';
+import type { components as Telemetry } from '#lib/generated/telemetry.js';
 
 export type BaseStation = Fleet['schemas']['BaseStationOut'];
 export type BaseStationIn = Fleet['schemas']['BaseStationIn'];

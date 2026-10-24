@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AppModule } from '$lib/modules/types';
-import { builtIn, navModules, visibleModules } from '$lib/shell/registry.svelte';
+import type { AppModule } from '#lib/modules/types.js';
+import { builtIn, navModules, visibleModules } from '#lib/shell/registry.svelte.js';
 
 import { forwardTarget, sectionHref, settingsSections } from './sections';
 

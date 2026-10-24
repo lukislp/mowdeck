@@ -7,20 +7,20 @@
 <script lang="ts">
   import { Panel, ProblemNotice } from '@mowdeck/ui';
 
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import LinkedAccountCard from '$lib/components/LinkedAccountCard.svelte';
-  import LinkedAccountConnect from '$lib/components/LinkedAccountConnect.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { problemMessage } from '$lib/i18n';
-  import type { LinkedAccount } from '$lib/linked/accounts';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import LinkedAccountCard from '#lib/components/LinkedAccountCard.svelte';
+  import LinkedAccountConnect from '#lib/components/LinkedAccountConnect.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { problemMessage } from '#lib/i18n.js';
+  import type { LinkedAccount } from '#lib/linked/accounts.js';
   import {
     linkAccount,
     listLinkedAccounts,
     removeLinkedAccount,
     syncAccount,
-  } from '$lib/linked/api';
-  import { m } from '$lib/paraglide/messages';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/linked/api.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   let accounts = $state<LinkedAccount[] | null>(null);
   let problem = $state<ApiProblem | null>(null);

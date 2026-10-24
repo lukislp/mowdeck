@@ -14,9 +14,9 @@ import {
   type MapSpot,
 } from '@mowdeck/ui';
 
-import type { components as Planner } from '$lib/generated/planner';
-import type { components as Telemetry } from '$lib/generated/telemetry';
-import { m } from '$lib/paraglide/messages';
+import type { components as Planner } from '#lib/generated/planner.js';
+import type { components as Telemetry } from '#lib/generated/telemetry.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import {
   bridgeSignal,

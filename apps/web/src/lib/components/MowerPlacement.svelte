@@ -6,13 +6,13 @@
 <script lang="ts">
   import { Button, Icon, Panel, ProblemNotice, Select } from '@mowdeck/ui';
 
-  import { fleetApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { displaySites, type Group, type Mower, type Site } from '$lib/fleet/data';
-  import { sortSites, toggleGroup } from '$lib/fleet/places';
-  import { problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { toasts } from '$lib/stores/ui.svelte';
+  import { fleetApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { displaySites, type Group, type Mower, type Site } from '#lib/fleet/data.js';
+  import { sortSites, toggleGroup } from '#lib/fleet/places.js';
+  import { problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   interface Props {
     mower: Mower;

@@ -2,8 +2,8 @@
  * Fleet's linked account endpoints. Linking and re-reading log in to the vendor cloud and use
  * the client with the longer deadline; the rest is ordinary.
  */
-import { fleetApi, fleetSlowApi, unwrap } from '$lib/api/client';
-import type { components } from '$lib/generated/fleet';
+import { fleetApi, fleetSlowApi, unwrap } from '#lib/api/client.js';
+import type { components } from '#lib/generated/fleet.js';
 
 import type {
   LinkedAccount,

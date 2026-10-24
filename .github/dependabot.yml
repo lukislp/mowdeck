@@ -54,7 +54,7 @@ updates:
     schedule:
       interval: daily
     # Only minor and patch updates are grouped; every major arrives as its own PR so that one
-    # breaking upgrade (SvelteKit, adapter-static, jsdom, ...) cannot hold back the routine bumps.
+    # breaking upgrade (SvelteKit, jsdom, ...) cannot hold back the routine bumps.
     groups:
       dev:
         dependency-type: development
@@ -66,14 +66,6 @@ updates:
         update-types: ["version-update:semver-major"]
       # typescript-eslint does not support TypeScript 7 yet; revisit once it declares support.
       - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-      # SvelteKit 3 is a migration, not a bump: svelte.config.js moves into vite.config.ts,
-      # every $lib import becomes #lib with an explicit extension, $service-worker and the
-      # shallow-routing/goto APIs change, and adapter-static 4 requires Kit 3. The web app stays
-      # on 2.x by owner decision (ADR 0020); both majors move together in a dedicated migration.
-      - dependency-name: "@sveltejs/kit"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@sveltejs/adapter-static"
         update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "fix(deps)"

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { ApiProblem, PROBLEM_PREFIX } from '$lib/api/problem';
-import { m } from '$lib/paraglide/messages';
+import { ApiProblem, PROBLEM_PREFIX } from '#lib/api/problem.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import fleetSpec from '../../../openapi/fleet.json';
 import {

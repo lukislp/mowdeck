@@ -1,9 +1,9 @@
 import createClient from 'openapi-fetch';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiProblem } from '$lib/api/problem';
-import type { paths } from '$lib/generated/vision';
-import { m } from '$lib/paraglide/messages';
+import { ApiProblem } from '#lib/api/problem.js';
+import type { paths } from '#lib/generated/vision.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import {
   isVisionProblem,

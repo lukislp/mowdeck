@@ -4,7 +4,7 @@
  * the account's subscriptions is this browser's. Everything the browser provides is injected,
  * so the flow is tested with a fake `PushManager`.
  */
-import { isAppleMobile, isInstalledDisplay, readInstallEnvironment } from '$lib/install/context';
+import { isAppleMobile, isInstalledDisplay, readInstallEnvironment } from '#lib/install/context.js';
 
 import { sameKey, saveVapidKey, takePending, urlBase64ToUint8Array } from './store';
 

@@ -5,27 +5,28 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import { session } from '$lib/auth/session.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { nativeShell } from '$lib/native/runtime';
-  import { inbox, pushDevice } from '$lib/notifications/runtime';
-  import { operatorAccess } from '$lib/operator/access.svelte';
-  import { m } from '$lib/paraglide/messages';
-  import { accountPlan } from '$lib/plan/plan.svelte';
-  import { builtIn, navModules, registry, visibleModules } from '$lib/shell/registry.svelte';
+  import { session } from '#lib/auth/session.svelte.js';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { nativeShell } from '#lib/native/runtime.js';
+  import { navigatePath } from '#lib/navigate.js';
+  import { inbox, pushDevice } from '#lib/notifications/runtime.js';
+  import { operatorAccess } from '#lib/operator/access.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import { builtIn, navModules, registry, visibleModules } from '#lib/shell/registry.svelte.js';
 
   let { children }: { children: Snippet } = $props();
 
   $effect(() => {
     if (session.status === 'anonymous') {
       const next = page.url.pathname + page.url.search;
-      void goto(`/login?next=${encodeURIComponent(next)}`, { replaceState: true });
+      void goto(`/login?next=${encodeURIComponent(next)}`, { replace: true });
     } else if (session.status === 'authenticated') {
       void registry.load();
       void operatorAccess.load();
       void accountPlan.load();
       if (session.me?.must_change_password && page.url.pathname !== '/settings') {
-        void goto('/settings?password=1#profile', { replaceState: true });
+        void goto('/settings?password=1#profile', { replace: true });
       }
     }
   });
@@ -79,7 +80,7 @@
     const onMessage = (event: MessageEvent) => {
       const data = event.data as { type?: string; url?: string } | null;
       if (data?.type === 'navigate' && typeof data.url === 'string' && data.url.startsWith('/')) {
-        void goto(data.url);
+        void navigatePath(data.url);
       } else if (data?.type === 'push-renewed') {
         sync();
       }

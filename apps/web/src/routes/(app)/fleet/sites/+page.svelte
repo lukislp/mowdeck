@@ -8,15 +8,15 @@
 <script lang="ts">
   import { Button, Field, Icon, Panel, ProblemNotice, Select, Sheet, TopBar } from '@mowdeck/ui';
 
-  import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { session } from '$lib/auth/session.svelte';
-  import BulkSheet from '$lib/components/BulkSheet.svelte';
-  import FleetTabs from '$lib/components/FleetTabs.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import type { BulkKind } from '$lib/fleet/bulk';
-  import { loadPlaces, type Places, type Site } from '$lib/fleet/data';
-  import { createSite } from '$lib/fleet/sites';
+  import { fleetApi, telemetryApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { session } from '#lib/auth/session.svelte.js';
+  import BulkSheet from '#lib/components/BulkSheet.svelte';
+  import FleetTabs from '#lib/components/FleetTabs.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import type { BulkKind } from '#lib/fleet/bulk.js';
+  import { loadPlaces, type Places, type Site } from '#lib/fleet/data.js';
+  import { createSite } from '#lib/fleet/sites.js';
   import {
     addressLine,
     siteBody,
@@ -26,12 +26,12 @@
     type SiteField,
     type SiteForm,
     type SiteIssue,
-  } from '$lib/fleet/places';
-  import { formatNumber, problemMessage } from '$lib/i18n';
-  import { permissions } from '$lib/live.svelte';
-  import { m } from '$lib/paraglide/messages';
-  import { notifyPlanProblem } from '$lib/plan/problems';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/fleet/places.js';
+  import { formatNumber, problemMessage } from '#lib/i18n.js';
+  import { permissions } from '#lib/live.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { notifyPlanProblem } from '#lib/plan/problems.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 

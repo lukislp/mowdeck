@@ -43,7 +43,7 @@ describe('initialRenameValue', () => {
 describe('saveAreaName', () => {
   it('PUTs the name and answers all names', async () => {
     const put = vi.fn(async () => ({ data: { names: { a1: 'Hof' } }, error: undefined }));
-    vi.doMock('$lib/api/client', () => ({
+    vi.doMock('#lib/api/client.js', () => ({
       fleetApi: { PUT: put },
       unwrap: async (p: Promise<{ data: unknown }>) => (await p).data,
     }));
@@ -54,6 +54,6 @@ describe('saveAreaName', () => {
       params: { path: { mower_id: 'm-1', area_id: 'a1' } },
       body: { name: null },
     });
-    vi.doUnmock('$lib/api/client');
+    vi.doUnmock('#lib/api/client.js');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DriveFrame } from '$lib/realtime/client.svelte';
+import type { DriveFrame } from '#lib/realtime/client.svelte.js';
 
 import { DrivePilot, IDLE_FRAME_MS, clampReverse } from './pilot';
 

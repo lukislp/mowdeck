@@ -8,8 +8,8 @@
  */
 import { untrack } from 'svelte';
 
-import { asProblem } from '$lib/api/problem';
-import { problemMessage } from '$lib/i18n';
+import { asProblem } from '#lib/api/problem.js';
+import { problemMessage } from '#lib/i18n.js';
 import {
   containingArea,
   spotCenter,

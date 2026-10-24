@@ -4,10 +4,10 @@
  * of the bulk registration, and the account problems mapped to the app's texts. Pure functions,
  * no DOM and no requests.
  */
-import type { ApiProblem } from '$lib/api/problem';
-import type { components } from '$lib/generated/fleet';
-import { problemMessage } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
+import type { ApiProblem } from '#lib/api/problem.js';
+import type { components } from '#lib/generated/fleet.js';
+import { problemMessage } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
 
 export type LinkedAccount = components['schemas']['LinkedAccountOut'];
 export type LinkedAccountDetail = components['schemas']['LinkedAccountDetail'];

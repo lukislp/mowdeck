@@ -3,7 +3,7 @@
  * 30 UTC days with gaps filled, bar geometry, the battery trace as an SVG path that breaks over
  * gaps, the blade change threshold level and the error counts in order. No DOM, unit tested.
  */
-import type { components } from '$lib/generated/telemetry';
+import type { components } from '#lib/generated/telemetry.js';
 
 export type HealthTotals = components['schemas']['MowerHealthOut'];
 export type HealthDay = components['schemas']['HealthDayOut'];

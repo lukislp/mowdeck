@@ -10,7 +10,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseConfig } from '$lib/config';
+import { parseConfig } from '#lib/config.js';
 
 import { OFFICIAL_REPOSITORY, sourceCodeUrl } from './source';
 

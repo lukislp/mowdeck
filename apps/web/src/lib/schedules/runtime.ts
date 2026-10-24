@@ -3,8 +3,8 @@
  * and the rights per target. The UI asks `POST /me/permissions` only to decide what to render;
  * the Scheduler checks `can_edit_schedule` and `can_control` again on every call.
  */
-import { fleetApi, schedulerApi, telemetryApi, unwrap } from '$lib/api/client';
-import { permissions, type ObjectRef } from '$lib/live.svelte';
+import { fleetApi, schedulerApi, telemetryApi, unwrap } from '#lib/api/client.js';
+import { permissions, type ObjectRef } from '#lib/live.svelte.js';
 
 import type { CapsLike } from './mow-options';
 import type { Preview, Run, Schedule } from './types';

@@ -7,7 +7,7 @@
  * up when the app starts), and the ids already shown are remembered, so an item never notifies
  * twice. Items the user already read are skipped.
  */
-import type { InboxItem } from '$lib/stores/inbox.svelte';
+import type { InboxItem } from '#lib/stores/inbox.svelte.js';
 
 const SEEN_KEY = 'mowdeck.native.seen';
 const SEEN_MAX = 300;

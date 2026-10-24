@@ -1,25 +1,5 @@
 # OSV-Scanner configuration, also read by the OpenSSF Scorecard Vulnerabilities check. It sits
 # next to pnpm-lock.yaml and uv.lock because OSV-Scanner looks for it beside the lock file.
 # Every entry is an explicit, time-boxed acceptance; CONTRIBUTING.md says when to remove one.
-
-[[IgnoredVulns]]
-id = "GHSA-27mw-82g8-phjj"
-ignoreUntil = 2027-01-24
-reason = """\
-@sveltejs/kit 2.70.3: XSS through an untrusted cache-control header set with setHeaders on a \
-prerendered page. Fixed only in Kit 3.0.0; no 2.x release carries the fix, and the Kit 3 \
-migration is deferred by owner decision (ADR 0020, Dependabot ignores the major). Unreachable \
-here: the web app is a static SPA with ssr = false and prerender = false (src/routes/+layout.ts), \
-no route calls setHeaders and nothing is prerendered. Remove with the Kit 3 migration or once a \
-2.x fix lands, or re-check by the ignoreUntil date."""
-
-[[IgnoredVulns]]
-id = "GHSA-pfhg-q3qv-9q6r"
-ignoreUntil = 2027-01-24
-reason = """\
-@sveltejs/kit 2.70.3: open redirect through enhanced form submission (use:enhance) on routes that \
-accept paths starting with //. Fixed only in Kit 3.0.0; no 2.x release carries the fix, and the \
-Kit 3 migration is deferred by owner decision (ADR 0020). Unreachable here: the app has no form \
-actions (no +page.server files, adapter-static with ssr = false) and never imports $app/forms or \
-uses use:enhance. Remove with the Kit 3 migration or once a 2.x fix lands, or re-check by the \
-ignoreUntil date."""
+#
+# No advisory is accepted at the moment.

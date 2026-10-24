@@ -7,11 +7,11 @@
  * charging in its dock); this only avoids offering the obvious refusal and names the unmet
  * condition.
  */
-import { fleetApi, unwrap } from '$lib/api/client';
-import type { ApiProblem } from '$lib/api/problem';
-import type { components } from '$lib/generated/telemetry';
-import { problemMessage } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
+import { fleetApi, unwrap } from '#lib/api/client.js';
+import type { ApiProblem } from '#lib/api/problem.js';
+import type { components } from '#lib/generated/telemetry.js';
+import { problemMessage } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
 
 export type FirmwareInfo = components['schemas']['FirmwareInfo'];
 export type FirmwareUpdateState = FirmwareInfo['update_state'];

@@ -5,7 +5,7 @@
 
   import { page } from '$app/state';
 
-  import { m } from '$lib/paraglide/messages';
+  import { m } from '#lib/paraglide/messages.js';
 
   const tabs: {
     href: string;

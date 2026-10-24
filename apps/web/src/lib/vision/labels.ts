@@ -3,9 +3,9 @@
  * situations, proposal states, risk flags and step outcomes. Pure (the locale is a parameter,
  * defaulting to the current one), so both languages are testable.
  */
-import { m } from '$lib/paraglide/messages';
-import { getLocale } from '$lib/paraglide/runtime';
-import type { Locale } from '$lib/schedules/types';
+import { m } from '#lib/paraglide/messages.js';
+import { getLocale } from '#lib/paraglide/runtime.js';
+import type { Locale } from '#lib/schedules/types.js';
 
 import type {
   JobArea,

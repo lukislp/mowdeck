@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { components } from '$lib/generated/telemetry';
+import type { components } from '#lib/generated/telemetry.js';
 
 import {
   OFFLINE_AFTER_MS,

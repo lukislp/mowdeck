@@ -15,7 +15,7 @@
     type FieldIssue,
     type KindSchema,
     type OptionSchema,
-  } from '$lib/connection/form';
+  } from '#lib/connection/form.js';
   import {
     groupLabel,
     issueMessage,
@@ -23,8 +23,8 @@
     kindTitle,
     optionHelp,
     optionLabel,
-  } from '$lib/connection/text';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/connection/text.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     schema: KindSchema;

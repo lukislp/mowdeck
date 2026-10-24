@@ -5,7 +5,7 @@
   dashed line marks the probability threshold. `summary` is the accessible description.
 -->
 <script lang="ts">
-  import type { HourBar } from '$lib/schedules/preview';
+  import type { HourBar } from '#lib/schedules/preview.js';
 
   interface Props {
     bars: HourBar[];
