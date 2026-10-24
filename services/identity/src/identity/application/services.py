@@ -12,10 +12,13 @@ from identity.application.authenticators import (
     ApiTokenAuthenticator,
     AuthenticatorRegistry,
     GitHubAuthenticator,
+    PasskeyAuthenticator,
     PasswordAuthenticator,
 )
 from identity.application.deps import Deps
+from identity.application.passkeys import PasskeyService
 from identity.application.platform import PlatformService
+from identity.application.ports import PasskeyCeremonies
 from identity.application.ratelimit import TokenBucketLimiter
 from identity.application.roles import RoleService
 from identity.application.sessions import SessionService
@@ -36,7 +39,9 @@ class Services:
     tokens: ApiTokenService = field(init=False)
     audit: AuditService = field(init=False)
     platform: PlatformService = field(init=False)
+    passkeys: PasskeyService = field(init=False)
     ip_limiter: TokenBucketLimiter | None = None
+    ceremonies: PasskeyCeremonies | None = None
 
     def __post_init__(self) -> None:
         limiter = self.ip_limiter or TokenBucketLimiter(per_minute=10, capacity=20)
@@ -47,6 +52,7 @@ class Services:
         self.tokens = ApiTokenService(self.deps)
         self.audit = AuditService(self.deps.store)
         self.platform = PlatformService(self.deps)
+        self.passkeys = PasskeyService(self.deps, self.ceremonies)
 
 
 def build_services(
@@ -57,6 +63,7 @@ def build_services(
     ip_per_minute: float = 10,
     ip_burst: int = 20,
     github_login: bool = False,
+    ceremonies: PasskeyCeremonies | None = None,
 ) -> Services:
     """Wire the use cases: token issuer on the active key, authenticators, limiter."""
     issuer = TokenIssuer(
@@ -69,6 +76,13 @@ def build_services(
     registry = AuthenticatorRegistry()
     registry.register(PasswordAuthenticator(deps.store, deps.hasher))
     registry.register(ApiTokenAuthenticator(deps.store, deps.clock))
+    rp = deps.config.passkey_rp
+    if rp is not None and ceremonies is not None:
+        registry.register(
+            PasskeyAuthenticator(
+                deps.store, deps.clock, ceremonies, rp, deps.config.webauthn_timeout
+            )
+        )
     if github_login:
         registry.register(GitHubAuthenticator())
     return Services(
@@ -76,4 +90,5 @@ def build_services(
         issuer,
         registry,
         ip_limiter=TokenBucketLimiter(per_minute=ip_per_minute, capacity=ip_burst),
+        ceremonies=ceremonies if rp is not None else None,
     )

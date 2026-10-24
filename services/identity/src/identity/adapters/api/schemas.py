@@ -1,11 +1,12 @@
 """Request and response bodies of the Identity API."""
 
+import json
 from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from mowdeck_contracts.v1 import AccountKind, UiAreaDef
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 from identity.application.sessions import MeView, TokenPair
 from identity.application.users import MemberView
@@ -16,6 +17,7 @@ from identity.domain.models import (
     CatalogueEntry,
     Level,
     LevelType,
+    Passkey,
     Role,
     RoleAssignment,
 )
@@ -534,3 +536,126 @@ class ReconcileOut(BaseModel):
     writes: int
     deletes: int
     changed_subjects: list[str]
+
+
+# --- passkeys (ADR 0049) ---------------------------------------------------------------------
+
+MAX_CREDENTIAL_JSON = 16_384
+"""Upper bound of a serialised WebAuthn response (real ones are 1 to 3 KB)."""
+
+
+def _bounded_credential(value: dict[str, Any]) -> dict[str, Any]:
+    if len(json.dumps(value, separators=(",", ":"))) > MAX_CREDENTIAL_JSON:
+        msg = "credential is too large"
+        raise ValueError(msg)
+    return value
+
+
+WebAuthnResponse = Annotated[
+    dict[str, Any],
+    AfterValidator(_bounded_credential),
+    Field(
+        description="The PublicKeyCredential as JSON (PublicKeyCredential.toJSON(): id, rawId, "
+        "type, response with base64url fields, clientExtensionResults)"
+    ),
+]
+CodeChallenge = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z0-9_-]{43}$"),
+    Field(description="PKCE S256 challenge of the app: BASE64URL(SHA256(code_verifier))"),
+]
+
+
+class LoginMethodsOut(BaseModel):
+    """Login methods this installation offers (the login page shows what is on)."""
+
+    password: bool = True
+    passkey: bool = Field(description="Passkeys are configured (MOWDECK_IDENTITY_PUBLIC_URL)")
+
+
+class PasskeyOptionsOut(BaseModel):
+    """Options of a WebAuthn ceremony and the id that answers them."""
+
+    ceremony_id: UUID
+    public_key: dict[str, Any] = Field(
+        description="PublicKeyCredentialCreationOptions or ...RequestOptions as JSON (base64url "
+        "binary fields), for PublicKeyCredential.parseCreationOptionsFromJSON / "
+        "parseRequestOptionsFromJSON"
+    )
+
+
+class PasskeyLoginIn(In):
+    """``POST /passkeys/session``: the answer to a login challenge."""
+
+    ceremony_id: UUID
+    credential: WebAuthnResponse
+    account_id: UUID | None = Field(default=None, description="Account to act for (default: own)")
+
+
+class AppCodeIn(In):
+    """``POST /app-login/code``: hand the fresh browser login to the native app."""
+
+    code_challenge: CodeChallenge
+
+
+class AppCodeOut(BaseModel):
+    """A one-time code for the native app (redeemed with the verifier, valid for seconds)."""
+
+    code: str
+    expires_in: int
+
+
+class AppSessionIn(In):
+    """``POST /app-login/session``: the app redeems its code with the PKCE verifier."""
+
+    code: str = Field(min_length=1, max_length=100)
+    code_verifier: str = Field(min_length=43, max_length=128)
+
+
+class PasskeyRegistrationOptionsIn(In):
+    """``POST /me/passkeys/options``: the current password (re-authentication)."""
+
+    password: Password
+
+
+class PasskeyRegistrationIn(In):
+    """``POST /me/passkeys``: the new credential."""
+
+    ceremony_id: UUID
+    credential: WebAuthnResponse
+    name: str | None = Field(default=None, max_length=64)
+
+
+class PasskeyPatch(In):
+    """``PATCH /me/passkeys/{id}``."""
+
+    name: str = Field(min_length=1, max_length=64)
+
+
+class PasskeyOut(BaseModel):
+    """A passkey (never with its public key or credential id)."""
+
+    id: UUID
+    name: str
+    created_at: datetime
+    last_used_at: datetime | None
+    synced: bool = Field(description="A multi-device passkey that may be synced (backup eligible)")
+    backed_up: bool = Field(description="Synced as of the last use")
+    aaguid: str | None = Field(description="Model of the authenticator, if it told")
+    transports: list[str]
+    user_agent: str | None = Field(description="Browser of the registration (a device hint)")
+
+    @classmethod
+    def of(cls, p: Passkey) -> "PasskeyOut":
+        """From the entity."""
+        return cls(
+            id=p.id,
+            name=p.name,
+            created_at=p.created_at,
+            last_used_at=p.last_used_at,
+            synced=p.backup_eligible,
+            backed_up=p.backed_up,
+            aaguid=p.aaguid,
+            transports=p.transports,
+            user_agent=p.created_user_agent,
+        )

@@ -6,6 +6,12 @@
   and is audited as ``session.refresh_reuse``. The JWT ``sid`` is the family id.
 * Throttling: per client IP in memory (token bucket) and per username in the database (too
   many failures in the window answer 429 until the window has passed).
+* Passkeys (ADR 0049): ``passkey_challenge`` and ``login_passkey`` run the passwordless login
+  through the ``passkey`` authenticator plug-in and start the same session as a password login.
+* Native app hand-off (ADR 0049): the app has a login run in the system browser. Whatever the
+  method, the browser ends up with a fresh session and exchanges it (``issue_app_code``) for a
+  one-time code bound to the app's PKCE challenge; ``redeem_app_code`` turns code and verifier
+  into the app's own session.
 """
 
 from dataclasses import dataclass, field
@@ -16,22 +22,31 @@ from mowdeck_auth.issuer import IssuedToken, TokenIssuer
 from mowdeck_contracts.v1 import Principal, PrincipalKind
 
 from identity.application.access import token_principal, user_principal
-from identity.application.authenticators import AuthenticatorRegistry
+from identity.application.authenticators import (
+    AuthenticatorRegistry,
+    AuthResult,
+    Challenge,
+    ChallengeAuthenticator,
+)
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.application.ports import Ge, Tx
 from identity.application.ratelimit import TokenBucketLimiter
 from identity.domain.credentials import (
+    new_app_code,
     new_refresh_token,
     normalize_username,
     sha256_hex,
+    validate_code_challenge,
     validate_password,
+    verifier_matches,
 )
 from identity.domain.errors import AuthenticationFailed, ForbiddenError, NotFoundError, RateLimited
 from identity.domain.models import (
     Account,
     AccountStatus,
     ApiToken,
+    AppLoginCode,
     LoginAttempt,
     Membership,
     Session,
@@ -205,7 +220,13 @@ class SessionService:
         return pair
 
     async def _start_session(
-        self, user_id: UUID, account_id: UUID | None, ctx: RequestContext
+        self,
+        user_id: UUID,
+        account_id: UUID | None,
+        ctx: RequestContext,
+        *,
+        method: str = "password",
+        details: dict[str, object] | None = None,
     ) -> TokenPair:
         now = self.deps.clock()
         config = self.deps.config
@@ -248,9 +269,10 @@ class SessionService:
                 target_type="user",
                 target_id=str(found.id),
                 details={
-                    "method": "password",
+                    "method": method,
                     "session": str(session.family_id),
                     "jti": str(access.token_id),
+                    **(details or {}),
                 },
             )
             entry.actor_subject, entry.actor_kind, entry.actor_name = (
@@ -259,7 +281,196 @@ class SessionService:
                 found.display_name,
             )
             await tx.audit.add(entry)
+            if method == "passkey" and details and "via" not in details:
+                used = ctx.audit_entry(
+                    at=now,
+                    action="passkey.used",
+                    account_id=acct.id,
+                    target_type="user",
+                    target_id=str(found.id),
+                    details={"passkey": details.get("passkey"), "session": str(session.family_id)},
+                )
+                used.actor_subject, used.actor_kind, used.actor_name = (
+                    entry.actor_subject,
+                    entry.actor_kind,
+                    entry.actor_name,
+                )
+                await tx.audit.add(used)
         return TokenPair(access, principal, refresh, session.idle_expires_at)
+
+    # --- passkeys (ADR 0049) --------------------------------------------------------------------
+
+    def _passkeys(self) -> ChallengeAuthenticator:
+        authenticator = self.authenticators.challenger("passkey")
+        if authenticator is None:
+            msg = "passkeys are not enabled on this installation"
+            raise ForbiddenError(msg)
+        return authenticator
+
+    async def passkey_challenge(self, ctx: RequestContext) -> Challenge:
+        """Options for a passwordless login (rate limited like the password login)."""
+        self._limit_ip(ctx)
+        return await self._passkeys().challenge()
+
+    async def login_passkey(
+        self, ceremony_id: UUID, credential: str, account_id: UUID | None, ctx: RequestContext
+    ) -> TokenPair:
+        """Passwordless login with a passkey: the same session as a password login."""
+        self._limit_ip(ctx)
+        result = await self._passkeys().authenticate(
+            {"ceremony_id": str(ceremony_id), "credential": credential}
+        )
+        if not result.ok or result.subject_id is None:
+            await self._record_passkey_failure(ctx, result)
+            raise AuthenticationFailed(result.reason or "failed")
+        try:
+            return await self._start_session(
+                result.subject_id,
+                account_id,
+                ctx,
+                method="passkey",
+                details={"passkey": result.credential_ref},
+            )
+        except AuthenticationFailed as exc:
+            failed = AuthResult(
+                False,
+                result.subject_id,
+                "passkey",
+                exc.reason,
+                credential_ref=result.credential_ref,
+            )
+            await self._record_passkey_failure(ctx, failed)
+            raise
+
+    # --- native app hand-off (ADR 0049) -----------------------------------------------------------
+
+    async def issue_app_code(self, ctx: RequestContext, code_challenge: str) -> str:
+        """Hand the caller's fresh browser login to the native app.
+
+        Login-method agnostic: whatever started the session in the system browser (password,
+        passkey, a redirect provider) ends here. The session must be younger than
+        ``app_handoff_login_age`` (a session left in the browser is never handed over silently);
+        it is ended in the same transaction, and the one-time code is bound to the app's PKCE
+        challenge.
+        """
+        validate_code_challenge(code_challenge)
+        principal = self._user_principal(ctx)
+        if principal.session_id is None or principal.account_id is None:
+            msg = "only a login session can be handed to the app"
+            raise ForbiddenError(msg)
+        now = self.deps.clock()
+        code = new_app_code()
+        async with self.deps.uow() as work:
+            tx = work.tx
+            family = await tx.sessions.find(
+                family_id=principal.session_id, order_by="created_at", limit=1
+            )
+            live = await tx.sessions.count(family_id=principal.session_id, revoked_at=None)
+            fresh = (
+                bool(family)
+                and live > 0
+                and now - family[0].created_at <= self.deps.config.app_handoff_login_age
+            )
+            if not fresh:
+                await work.audit(
+                    ctx,
+                    "app_login.denied",
+                    account_id=principal.account_id,
+                    target=("user", principal.subject),
+                    details={"session": str(principal.session_id), "reason": "login not fresh"},
+                    outcome="denied",
+                )
+            else:
+                await self._revoke_family(tx, principal.session_id, "handed to the app")
+                await tx.app_login_codes.add(
+                    AppLoginCode(
+                        id=uuid4(),
+                        code_hash=sha256_hex(code),
+                        code_challenge=code_challenge,
+                        user_id=principal.subject,
+                        account_id=principal.account_id,
+                        created_at=now,
+                        expires_at=now + self.deps.config.app_code_ttl,
+                        source_session=principal.session_id,
+                    )
+                )
+                await work.audit(
+                    ctx,
+                    "app_login.code_issued",
+                    account_id=principal.account_id,
+                    target=("user", principal.subject),
+                    details={"session": str(principal.session_id)},
+                )
+        if not fresh:
+            msg = "log in again to hand the login to the app"
+            raise ForbiddenError(msg)
+        return code
+
+    async def redeem_app_code(self, code: str, verifier: str, ctx: RequestContext) -> TokenPair:
+        """The native app's half of the hand-off: the one-time code and the PKCE verifier of the
+        challenge it was issued for give a normal session (as a password login does)."""
+        self._limit_ip(ctx)
+        now = self.deps.clock()
+        async with self.deps.store.transaction() as tx:
+            record = await tx.app_login_codes.get(code_hash=sha256_hex(code))
+            taken = await tx.app_login_codes.delete(id=record.id) if record else 0
+            found = await tx.users.get(id=record.user_id) if record else None
+        reason = None
+        if record is None or taken != 1:
+            reason = "unknown app code"
+        elif now >= record.expires_at:
+            reason = "expired app code"
+        elif not verifier_matches(record.code_challenge, verifier):
+            reason = "app code verifier mismatch"
+        elif found is None or found.status is not Status.ACTIVE:
+            reason = "user disabled"
+        if reason is not None or record is None:
+            await self._record_handoff_failure(ctx, record, reason or "failed")
+            raise AuthenticationFailed(reason or "failed")
+        details: dict[str, object] = {"via": "app", "from_session": str(record.source_session)}
+        return await self._start_session(
+            record.user_id, record.account_id, ctx, method="app_handoff", details=details
+        )
+
+    async def _record_handoff_failure(
+        self, ctx: RequestContext, record: AppLoginCode | None, reason: str
+    ) -> None:
+        now = self.deps.clock()
+        async with self.deps.store.transaction() as tx:
+            entry = ctx.audit_entry(
+                at=now,
+                action="app_login.failed",
+                outcome="failure",
+                account_id=record.account_id if record else None,
+                details={"reason": reason},
+                target_type="user" if record else None,
+                target_id=str(record.user_id) if record else None,
+            )
+            await tx.audit.add(entry)
+
+    async def _record_passkey_failure(self, ctx: RequestContext, result: AuthResult) -> None:
+        """Audit a failed passkey login. No ``login_attempts`` row: a passkey has no secret to
+        guess, and failures must not lock the user's password login (the IP limit applies)."""
+        now = self.deps.clock()
+        details: dict[str, object] = {"method": "passkey", "reason": result.reason or "failed"}
+        if result.credential_ref:
+            details["passkey"] = result.credential_ref
+        async with self.deps.store.transaction() as tx:
+            accounts: list[UUID | None] = [None]
+            if result.subject_id is not None:
+                memberships = await tx.memberships.find(user_id=result.subject_id)
+                accounts = [m.account_id for m in memberships] or [None]
+            for account in accounts:
+                entry = ctx.audit_entry(
+                    at=now,
+                    action="session.login_failed",
+                    outcome="failure",
+                    account_id=account,
+                    details=details,
+                    target_type="user" if result.subject_id else None,
+                    target_id=str(result.subject_id) if result.subject_id else None,
+                )
+                await tx.audit.add(entry)
 
     async def _rehash(self, user_id: UUID, password: str) -> None:
         new_hash = await self.deps.hasher.hash(password)

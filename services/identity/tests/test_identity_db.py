@@ -25,6 +25,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from identity_support import PASSWORD, harness
 from mowdeck_service_kit.db import async_database_url
+from passkey_support import SoftAuthenticator
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -34,6 +35,7 @@ from identity.adapters.db.store import SqlStore
 from identity.adapters.db.tables import metadata
 from identity.adapters.memory import MemoryStore
 from identity.application.ports import Ge, Gt, In, Lt, Store
+from identity.domain.credentials import s256_challenge
 from identity.domain.errors import ConflictError
 from identity.domain.models import (
     Account,
@@ -313,3 +315,60 @@ async def test_full_flow_on_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
         "api_token.purged",
     } <= {e["action"] for e in audit}
     assert deleted.status_code == 202
+
+
+@needs_db
+async def test_passkeys_and_app_handoff_on_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Binary credential ids and keys, JSONB transports, single-use challenges and codes."""
+    origin = "https://mowdeck.example.org"
+    async with (
+        store_of("postgres", monkeypatch) as store,
+        harness(store=store, identity_public_url=origin) as h,
+    ):
+        lukas = await h.register("lukas")
+        soft = SoftAuthenticator(origin, counting=True)
+        options = await h.client.post(
+            "/api/v1/identity/me/passkeys/options",
+            headers=lukas.headers,
+            json={"password": PASSWORD},
+        )
+        body = options.json()
+        created = await h.client.post(
+            "/api/v1/identity/me/passkeys",
+            headers=lukas.headers,
+            json={
+                "ceremony_id": body["ceremony_id"],
+                "credential": soft.create(body["public_key"]),
+            },
+        )
+        logins = []
+        for _ in range(2):
+            challenge = (await h.client.post("/api/v1/identity/passkeys/challenge")).json()
+            payload = {
+                "ceremony_id": challenge["ceremony_id"],
+                "credential": soft.get(challenge["public_key"]),
+            }
+            logins.append(await h.client.post("/api/v1/identity/passkeys/session", json=payload))
+        replay = await h.client.post("/api/v1/identity/passkeys/session", json=payload)
+        verifier = "v" * 43
+        issued = await h.client.post(
+            "/api/v1/identity/app-login/code",
+            headers={"Authorization": f"Bearer {logins[1].json()['access_token']}"},
+            json={"code_challenge": s256_challenge(verifier)},
+        )
+        app = await h.client.post(
+            "/api/v1/identity/app-login/session",
+            json={"code": issued.json()["code"], "code_verifier": verifier},
+        )
+        listed = await h.client.get("/api/v1/identity/me/passkeys", headers=lukas.headers)
+        async with store.transaction() as tx:
+            [stored] = await tx.passkeys.find(user_id=lukas.user_id)
+            leftovers = await tx.webauthn_challenges.count() + await tx.app_login_codes.count()
+    assert created.status_code == 201, created.text
+    assert [r.status_code for r in logins] == [200, 200]
+    assert replay.status_code == 401
+    assert issued.status_code == 200 and app.status_code == 200
+    assert stored.credential_id == soft.credentials[0].credential_id
+    assert stored.sign_count == 2 and stored.transports == ["internal", "hybrid"]
+    assert listed.json()[0]["last_used_at"] is not None
+    assert leftovers == 0

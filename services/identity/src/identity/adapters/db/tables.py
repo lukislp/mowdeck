@@ -219,6 +219,49 @@ permission_catalogue = Table(
     Column("retired", Boolean, nullable=False, server_default=text("false")),
 )
 
+# Passkeys (ADR 0049): credentials, ceremony challenges; the app login hand-off codes.
+passkeys = Table(
+    "passkeys",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("credential_id", LargeBinary, nullable=False, unique=True),
+    Column("public_key", LargeBinary, nullable=False),
+    Column("sign_count", BigInteger, nullable=False),
+    Column("name", String(64), nullable=False),
+    Column("created_at", TS, nullable=False),
+    Column("transports", JSONB, nullable=False),
+    Column("aaguid", String(36)),
+    Column("backup_eligible", Boolean, nullable=False, server_default=text("false")),
+    Column("backed_up", Boolean, nullable=False, server_default=text("false")),
+    Column("last_used_at", TS),
+    Column("created_user_agent", String(200)),
+)
+
+webauthn_challenges = Table(
+    "webauthn_challenges",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("purpose", String(16), nullable=False),
+    Column("challenge", LargeBinary, nullable=False),
+    Column("created_at", TS, nullable=False),
+    Column("expires_at", TS, nullable=False, index=True),
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True),
+)
+
+app_login_codes = Table(
+    "app_login_codes",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("code_hash", String(64), nullable=False, unique=True),
+    Column("code_challenge", String(64), nullable=False),
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("account_id", Uuid, _account_fk(), nullable=False),
+    Column("created_at", TS, nullable=False),
+    Column("expires_at", TS, nullable=False, index=True),
+    Column("source_session", Uuid),
+)
+
 # Schema only in Phase 1 (design section 5): support access and invitations.
 support_grants = Table(
     "support_grants",

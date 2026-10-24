@@ -6,7 +6,7 @@ from enum import StrEnum
 
 from mowdeck_contracts.v1 import Principal
 
-from identity.domain.models import AuditEntry
+from identity.domain.models import AuditEntry, RelyingParty
 
 
 class RegistrationMode(StrEnum):
@@ -38,6 +38,14 @@ class IdentityConfig:
     key_promote_after: timedelta = timedelta(hours=1)
     key_retire_after: timedelta = timedelta(hours=1)
     login_attempt_retention: timedelta = timedelta(days=30)
+    passkey_rp: RelyingParty | None = None
+    """The WebAuthn relying party; None turns passkeys off (no public URL configured)."""
+    webauthn_timeout: timedelta = timedelta(minutes=5)
+    """How long a registration or login ceremony may take (the challenge lives as long)."""
+    app_code_ttl: timedelta = timedelta(seconds=60)
+    """Lifetime of a one-time code that hands a browser login to the native app."""
+    app_handoff_login_age: timedelta = timedelta(minutes=5)
+    """Only a browser login session younger than this can be handed to the app."""
 
 
 @dataclass(frozen=True, slots=True)

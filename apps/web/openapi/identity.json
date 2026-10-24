@@ -272,6 +272,66 @@
         "title": "ApiTokensPurgedOut",
         "type": "object"
       },
+      "AppCodeIn": {
+        "additionalProperties": false,
+        "description": "``POST /app-login/code``: hand the fresh browser login to the native app.",
+        "properties": {
+          "code_challenge": {
+            "description": "PKCE S256 challenge of the app: BASE64URL(SHA256(code_verifier))",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "title": "Code Challenge",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code_challenge"
+        ],
+        "title": "AppCodeIn",
+        "type": "object"
+      },
+      "AppCodeOut": {
+        "description": "A one-time code for the native app (redeemed with the verifier, valid for seconds).",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "expires_in"
+        ],
+        "title": "AppCodeOut",
+        "type": "object"
+      },
+      "AppSessionIn": {
+        "additionalProperties": false,
+        "description": "``POST /app-login/session``: the app redeems its code with the PKCE verifier.",
+        "properties": {
+          "code": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "code_verifier": {
+            "maxLength": 128,
+            "minLength": 43,
+            "title": "Code Verifier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "code_verifier"
+        ],
+        "title": "AppSessionIn",
+        "type": "object"
+      },
       "AssignmentIn": {
         "additionalProperties": false,
         "description": "A role at a level (inside ``POST /users``).",
@@ -563,6 +623,26 @@
           "password"
         ],
         "title": "LoginIn",
+        "type": "object"
+      },
+      "LoginMethodsOut": {
+        "description": "Login methods this installation offers (the login page shows what is on).",
+        "properties": {
+          "passkey": {
+            "description": "Passkeys are configured (MOWDECK_IDENTITY_PUBLIC_URL)",
+            "title": "Passkey",
+            "type": "boolean"
+          },
+          "password": {
+            "default": true,
+            "title": "Password",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "passkey"
+        ],
+        "title": "LoginMethodsOut",
         "type": "object"
       },
       "MeOut": {
@@ -888,6 +968,218 @@
           "version"
         ],
         "title": "ModuleDescriptor",
+        "type": "object"
+      },
+      "PasskeyLoginIn": {
+        "additionalProperties": false,
+        "description": "``POST /passkeys/session``: the answer to a login challenge.",
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Account to act for (default: own)",
+            "title": "Account Id"
+          },
+          "ceremony_id": {
+            "format": "uuid",
+            "title": "Ceremony Id",
+            "type": "string"
+          },
+          "credential": {
+            "additionalProperties": true,
+            "description": "The PublicKeyCredential as JSON (PublicKeyCredential.toJSON(): id, rawId, type, response with base64url fields, clientExtensionResults)",
+            "title": "Credential",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ceremony_id",
+          "credential"
+        ],
+        "title": "PasskeyLoginIn",
+        "type": "object"
+      },
+      "PasskeyOptionsOut": {
+        "description": "Options of a WebAuthn ceremony and the id that answers them.",
+        "properties": {
+          "ceremony_id": {
+            "format": "uuid",
+            "title": "Ceremony Id",
+            "type": "string"
+          },
+          "public_key": {
+            "additionalProperties": true,
+            "description": "PublicKeyCredentialCreationOptions or ...RequestOptions as JSON (base64url binary fields), for PublicKeyCredential.parseCreationOptionsFromJSON / parseRequestOptionsFromJSON",
+            "title": "Public Key",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ceremony_id",
+          "public_key"
+        ],
+        "title": "PasskeyOptionsOut",
+        "type": "object"
+      },
+      "PasskeyOut": {
+        "description": "A passkey (never with its public key or credential id).",
+        "properties": {
+          "aaguid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Model of the authenticator, if it told",
+            "title": "Aaguid"
+          },
+          "backed_up": {
+            "description": "Synced as of the last use",
+            "title": "Backed Up",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "synced": {
+            "description": "A multi-device passkey that may be synced (backup eligible)",
+            "title": "Synced",
+            "type": "boolean"
+          },
+          "transports": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transports",
+            "type": "array"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Browser of the registration (a device hint)",
+            "title": "User Agent"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "last_used_at",
+          "synced",
+          "backed_up",
+          "aaguid",
+          "transports",
+          "user_agent"
+        ],
+        "title": "PasskeyOut",
+        "type": "object"
+      },
+      "PasskeyPatch": {
+        "additionalProperties": false,
+        "description": "``PATCH /me/passkeys/{id}``.",
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PasskeyPatch",
+        "type": "object"
+      },
+      "PasskeyRegistrationIn": {
+        "additionalProperties": false,
+        "description": "``POST /me/passkeys``: the new credential.",
+        "properties": {
+          "ceremony_id": {
+            "format": "uuid",
+            "title": "Ceremony Id",
+            "type": "string"
+          },
+          "credential": {
+            "additionalProperties": true,
+            "description": "The PublicKeyCredential as JSON (PublicKeyCredential.toJSON(): id, rawId, type, response with base64url fields, clientExtensionResults)",
+            "title": "Credential",
+            "type": "object"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "ceremony_id",
+          "credential"
+        ],
+        "title": "PasskeyRegistrationIn",
+        "type": "object"
+      },
+      "PasskeyRegistrationOptionsIn": {
+        "additionalProperties": false,
+        "description": "``POST /me/passkeys/options``: the current password (re-authentication).",
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "PasskeyRegistrationOptionsIn",
         "type": "object"
       },
       "PasswordChangeIn": {
@@ -3251,6 +3543,121 @@
         ]
       }
     },
+    "/api/v1/identity/accounts/{account_id}/users/{user_id}/passkeys": {
+      "get": {
+        "description": "Passkeys of a sub-user of this account (persons manage their own: 403).",
+        "operationId": "list_user_passkeys_api_v1_identity_accounts__account_id__users__user_id__passkeys_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PasskeyOut"
+                  },
+                  "title": "Response List User Passkeys Api V1 Identity Accounts  Account Id  Users  User Id  Passkeys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List User Passkeys",
+        "tags": [
+          "identity: accounts"
+        ]
+      }
+    },
+    "/api/v1/identity/accounts/{account_id}/users/{user_id}/passkeys/{passkey_id}": {
+      "delete": {
+        "description": "Remove a passkey of a sub-user of this account (its password stays).",
+        "operationId": "remove_user_passkey_api_v1_identity_accounts__account_id__users__user_id__passkeys__passkey_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "passkey_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Passkey Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove User Passkey",
+        "tags": [
+          "identity: accounts"
+        ]
+      }
+    },
     "/api/v1/identity/accounts/{account_id}/users/{user_id}/password": {
       "post": {
         "description": "Set a temporary password of a sub-user (must be changed at the next login).",
@@ -3308,6 +3715,132 @@
         ]
       }
     },
+    "/api/v1/identity/app-login/code": {
+      "post": {
+        "description": "Native app hand-off (ADR 0049), browser side: exchange the caller's fresh login session\n(any login method, at most a few minutes old) for a one-time code bound to the app's PKCE\nchallenge. The browser session ends; the page sends the code to the app's URL scheme.",
+        "operationId": "app_login_code_api_v1_identity_app_login_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppCodeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppCodeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "App Login Code",
+        "tags": [
+          "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/app-login/session": {
+      "post": {
+        "description": "Native app hand-off, app side: the one-time code and the PKCE verifier give the app a\nnormal session (the same tokens and cookie as ``POST /session``). The code is single use.",
+        "operationId": "app_login_session_api_v1_identity_app_login_session_post",
+        "parameters": [
+          {
+            "description": "`cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too.",
+            "in": "header",
+            "name": "X-Mowdeck-Refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too.",
+              "title": "X-Mowdeck-Refresh"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppSessionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "App Login Session",
+        "tags": [
+          "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/login-methods": {
+      "get": {
+        "description": "Which login methods the installation offers (public; the login page asks).",
+        "operationId": "login_methods_api_v1_identity_login_methods_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginMethodsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Login Methods",
+        "tags": [
+          "identity: passkeys"
+        ]
+      }
+    },
     "/api/v1/identity/me": {
       "get": {
         "description": "The caller: claims of the current token, user data and memberships.",
@@ -3327,6 +3860,203 @@
         "summary": "Me",
         "tags": [
           "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/me/passkeys": {
+      "get": {
+        "description": "The caller's passkeys, newest first.",
+        "operationId": "my_passkeys_api_v1_identity_me_passkeys_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PasskeyOut"
+                  },
+                  "title": "Response My Passkeys Api V1 Identity Me Passkeys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Passkeys",
+        "tags": [
+          "identity: passkeys"
+        ]
+      },
+      "post": {
+        "description": "Finish adding a passkey (audited as ``passkey.added``).",
+        "operationId": "add_passkey_api_v1_identity_me_passkeys_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRegistrationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Passkey",
+        "tags": [
+          "identity: passkeys"
+        ]
+      }
+    },
+    "/api/v1/identity/me/passkeys/options": {
+      "post": {
+        "description": "Start adding a passkey: the current password again, then options for\n``navigator.credentials.create()`` (discoverable, user verification required).",
+        "operationId": "passkey_registration_options_api_v1_identity_me_passkeys_options_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRegistrationOptionsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Passkey Registration Options",
+        "tags": [
+          "identity: passkeys"
+        ]
+      }
+    },
+    "/api/v1/identity/me/passkeys/{passkey_id}": {
+      "delete": {
+        "description": "Remove one of the caller's passkeys; the password always stays.",
+        "operationId": "remove_passkey_api_v1_identity_me_passkeys__passkey_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "passkey_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Passkey Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Passkey",
+        "tags": [
+          "identity: passkeys"
+        ]
+      },
+      "patch": {
+        "description": "Rename one of the caller's passkeys.",
+        "operationId": "rename_passkey_api_v1_identity_me_passkeys__passkey_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "passkey_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Passkey Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Passkey",
+        "tags": [
+          "identity: passkeys"
         ]
       }
     },
@@ -3430,6 +4160,90 @@
         "summary": "My Platform",
         "tags": [
           "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/passkeys/challenge": {
+      "post": {
+        "description": "Start a passwordless login: options for ``navigator.credentials.get()`` with user\nverification required and no ``allowCredentials`` (discoverable credentials).",
+        "operationId": "passkey_challenge_api_v1_identity_passkeys_challenge_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Passkey Challenge",
+        "tags": [
+          "identity: passkeys"
+        ]
+      }
+    },
+    "/api/v1/identity/passkeys/session": {
+      "post": {
+        "description": "Finish a passwordless login: the same tokens and cookie as ``POST /session``.",
+        "operationId": "passkey_login_api_v1_identity_passkeys_session_post",
+        "parameters": [
+          {
+            "description": "`cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too.",
+            "in": "header",
+            "name": "X-Mowdeck-Refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too.",
+              "title": "X-Mowdeck-Refresh"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyLoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Passkey Login",
+        "tags": [
+          "identity: passkeys"
         ]
       }
     },

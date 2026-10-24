@@ -136,7 +136,7 @@ def build_app(
 
 
 def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio.Task[None]]:
-    """Module descriptors, key rotation and attempt purge, periodic reconcile."""
+    """Module descriptors, key rotation and purges, periodic reconcile."""
     services, store = runtime.services, runtime.store
     assert services is not None and store is not None  # noqa: S101 - called after start()
     keys, catalogue = runtime.keys, runtime.catalogue
@@ -156,8 +156,12 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
         if done:
             _log.info("signing keys rotated", actions=done)
         await keys.load()
+        now = runtime.clock()
         async with store.transaction() as tx:
-            await tx.login_attempts.delete(at=Lt(runtime.clock() - retention))
+            await tx.login_attempts.delete(at=Lt(now - retention))
+            # Passkey ceremonies and app login codes nobody finished (ADR 0049).
+            await tx.webauthn_challenges.delete(expires_at=Lt(now))
+            await tx.app_login_codes.delete(expires_at=Lt(now))
 
     tasks = [
         asyncio.create_task(catalogue_loop(), name="catalogue"),

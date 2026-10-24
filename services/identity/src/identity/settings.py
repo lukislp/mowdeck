@@ -9,10 +9,13 @@ from datetime import timedelta
 from typing import Literal
 
 from mowdeck_auth import DEFAULT_AUDIENCE, DEFAULT_ISSUER
-from mowdeck_service_kit import ServiceSettings
+from mowdeck_service_kit import ServiceSettings, get_logger
 from pydantic import Field, SecretStr
 
 from identity.application.context import IdentityConfig, RegistrationMode
+from identity.domain.models import RelyingParty
+
+_log = get_logger("identity.settings")
 
 
 class Settings(ServiceSettings):
@@ -99,6 +102,19 @@ class Settings(ServiceSettings):
     identity_github_login: bool = False
     """Feature flag of the GitHub login (not implemented in Phase 1; must stay off)."""
 
+    identity_public_url: str = ""
+    """The address users open MowDeck at, e.g. ``https://mowdeck.example.org``. Passkeys are
+    bound to it (WebAuthn relying party: its host is the RP ID, its origin the only accepted
+    origin); empty turns passkeys off. Needs HTTPS (plain HTTP only for ``localhost``) and a host
+    name, not an IP address. Changing the host later makes existing passkeys unusable."""
+
+    identity_passkey_rp_id: str = ""
+    """RP ID of the passkeys when it should be a parent domain of the host of the public URL
+    (e.g. ``example.org``); empty: that host."""
+
+    identity_passkey_rp_name: str = Field(default="MowDeck", max_length=64)
+    """Name of the relying party that authenticators show next to the passkey."""
+
     identity_maintenance_seconds: float = Field(default=60, ge=1)
     """Interval of the maintenance loop (key rotation, key reload, attempt purge)."""
 
@@ -118,7 +134,26 @@ class Settings(ServiceSettings):
             login_failure_window=timedelta(seconds=self.identity_login_failure_window_seconds),
             login_max_failures=self.identity_login_max_failures,
             key_rotation=timedelta(days=self.identity_key_rotation_days),
+            passkey_rp=self.relying_party(),
         )
+
+    def relying_party(self) -> RelyingParty | None:
+        """The WebAuthn relying party from the public URL; None (passkeys off) when it is not
+        set or not usable, which is logged instead of stopping the service: a wrong value must
+        not lock everyone out of the password login."""
+        if not self.identity_public_url.strip():
+            return None
+        try:
+            return RelyingParty.from_public_url(
+                self.identity_public_url,
+                rp_id=self.identity_passkey_rp_id,
+                name=self.identity_passkey_rp_name,
+            )
+        except ValueError as exc:
+            _log.error(
+                "passkeys are off: MOWDECK_IDENTITY_PUBLIC_URL is not usable", reason=str(exc)
+            )
+            return None
 
     @property
     def module_urls(self) -> list[str]:
