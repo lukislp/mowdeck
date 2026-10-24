@@ -4,14 +4,14 @@
 # Base images: public defaults, overridable with --build-arg (the pinned list is
 # infra/compose/.env.example, which CI passes).
 
-ARG NODE_IMAGE=public.ecr.aws/docker/library/node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+ARG NODE_IMAGE=public.ecr.aws/docker/library/node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
 ARG NGINX_IMAGE=public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine@sha256:56b8272e43a0525f67aed68d1e0794a712d10e3e45a563e118e9a77c817e6f86
 
 # The build stage runs on the build machine's platform: its output (static files) is the same for
 # every target, so a multi-arch build (release workflow) compiles the app once, without QEMU.
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS build
 WORKDIR /repo
-# pnpm through Corepack (part of Node 22): the first pnpm call downloads the version named by
+# pnpm through Corepack (bundled with Node 24; Node 25 and later no longer ship it): the first pnpm call downloads the version named by
 # "packageManager" in the root package.json and checks it against the sha512 recorded there.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable pnpm
