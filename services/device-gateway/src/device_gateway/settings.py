@@ -57,8 +57,8 @@ class Settings(ServiceSettings):
 
     photo_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     """Longest time an adapter may take for a still image (``gateway.mower.<id>.photo``),
-    including a frame of the capture worker (stream token, the mower starting to publish, the
-    first decoded frame). Keep it below Vision's ``VISION_PHOTO_TIMEOUT_SECONDS``."""
+    including a frame of the camera relay (the mower starting to publish, the first decoded
+    frame). Keep it below Vision's ``VISION_PHOTO_TIMEOUT_SECONDS``."""
 
     path_preview_timeout_seconds: float = Field(default=75.0, gt=0, le=120)
     """Longest wait for a route the mower plans for a preview (``gateway.mower.<id>.path.preview``):
@@ -89,20 +89,12 @@ class Settings(ServiceSettings):
     """Shared secret of the relay's frame tap (``MOWDECK_RELAY_FRAMES_TOKEN`` there). Empty:
     no relay frames."""
 
-    capture_url: str | None = None
-    """Deprecated (ADR 0045): base URL of the capture worker (``http://vision-capture:8000``,
-    ADR 0035), tried only when the relay is not configured, not reachable or has no source
-    driver for the mower's camera. Empty: no capture worker."""
-
-    capture_token: SecretStr | None = None
-    """Shared secret sent to the capture worker (``MOWDECK_CAPTURE_TOKEN`` there)."""
-
     capture_timeout_seconds: float = Field(default=20.0, gt=0, le=60)
-    """How long a frame source (the camera relay, at most 30 s; the capture worker) may take
-    for one frame."""
+    """How long the camera relay may take for one frame (it holds a snapshot lease at most 30 s).
+    The name stays from the removed capture worker (ADR 0035)."""
 
     capture_max_width: int = Field(default=1280, ge=160, le=3840)
-    """Frames wider than this are scaled down (by the relay and by the worker)."""
+    """Frames wider than this are scaled down by the relay."""
 
     fleet_retry_max_seconds: float = Field(default=30.0, gt=0, le=3600)
     """Upper bound of the backoff between ``fleet.mowers.list`` attempts."""

@@ -302,7 +302,7 @@ jobs:
       - name: Use the image mirror
         run: sh infra/mirror-env.sh | tee -a "$GITHUB_ENV"
       # The same build arguments as the images job; nothing selects the Agora Web SDK
-      # (WEB_AGORA_SDK) or the capture worker (WITH_CAPTURE), so the Dockerfile defaults apply.
+      # (WEB_AGORA_SDK), so the Dockerfile defaults apply.
       - name: Build arguments
         id: args
         env:

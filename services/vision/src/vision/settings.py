@@ -142,8 +142,8 @@ class Settings(ServiceSettings):
 
     vision_photo_timeout_seconds: float = Field(default=35.0, gt=0, le=120)
     """Timeout of a photo request to the Device-Gateway. A simulator answers at once; a real
-    camera through the capture worker (ADR 0035) needs the stream token, the mower to start
-    publishing and the first decoded frame, typically 5 to 15 s."""
+    camera through the camera relay (ADR 0045) may need the mower to start publishing and the
+    first decoded frame, typically 5 to 15 s."""
 
     vision_dark_frame_threshold: float = Field(default=40.0, ge=0, le=255)
     """A gateway photo whose mean luminance (0..255) is below this is too dark: a mower with a

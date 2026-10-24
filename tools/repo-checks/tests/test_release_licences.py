@@ -4,11 +4,11 @@ Static half of the release licence guard; the release workflow's job ``licence-g
 built images themselves (``scripts/licence_gate.py``, tested here too). Guarded:
 
 * the Agora SDKs are proprietary and never redistributed: no workflow builds or pushes
-  ``integrations/agora-bridge`` or the capture worker image (``vision-capture``, which contains
-  the Agora Web SDK); the released Dockerfiles keep their Agora-free defaults
-  (``WITH_CAPTURE=false``, ``WEB_AGORA_SDK=exclude``); no released Python image depends on an
-  Agora package (uv.lock); the web build runs the bundle guard (apps/web/build-tools); no Agora
-  binary is committed;
+  ``integrations/agora-bridge`` or the removed capture worker image (``vision-capture``, which
+  contained the Agora Web SDK); the released Dockerfiles name no Agora SDK except the web
+  image's switch that keeps it out (``WEB_AGORA_SDK=exclude``); no released Python image
+  depends on an Agora package or Playwright (uv.lock); the web build runs the bundle guard
+  (apps/web/build-tools); no Agora binary is committed;
 * every released image declares its licences (``org.opencontainers.image.licenses`` in its
   Dockerfile, equal to the gate's expectation) and carries the MowDeck licence texts; the
   GPL-3.0 adapter (mowdeck-control-mammotion) only ends up in device-gateway, whose label names
@@ -71,8 +71,7 @@ NOT_MIRRORED = {
     "playwright": "Apache-2.0 with Chrome for Testing (Google terms), MPL-2.0, LGPL-2.1",
 }
 
-# Non-comment Dockerfile lines that may name Agora: the switches that keep it out. The vision
-# Dockerfile's capture build (WITH_CAPTURE=true, never released) is checked by its default.
+# Non-comment Dockerfile lines that may name Agora: the switches that keep it out.
 DOCKERFILE_AGORA_LINES = {
     "apps/web/Dockerfile": {
         "ARG WEB_AGORA_SDK=exclude",
@@ -163,14 +162,14 @@ def test_no_workflow_builds_agora_or_the_capture_image(repo_root: Path, workflow
 def test_released_dockerfiles_keep_agora_out(repo_root: Path) -> None:
     for entry in _matrix(repo_root, "images"):
         text = (repo_root / entry["file"]).read_text("utf-8")
-        if entry["file"] == "services/vision/Dockerfile":
-            continue
         allowed = DOCKERFILE_AGORA_LINES.get(entry["file"], set())
         for line in _code_lines(text):
             if AGORA.search(line):
                 assert line in allowed, f"{entry['file']}: {line!r} names Agora"
     vision = (repo_root / "services/vision/Dockerfile").read_text("utf-8")
-    assert vision.count("ARG WITH_CAPTURE=false") == 2, "vision: capture (Agora) off by default"
+    # The capture worker (Playwright, Chromium, the Agora Web SDK) is removed (ADR 0045).
+    for removed in ("WITH_CAPTURE", "playwright", "/opt/agora"):
+        assert removed not in vision, f"vision: {removed} belongs to the removed capture worker"
     web = (repo_root / "apps/web/Dockerfile").read_text("utf-8")
     assert "ARG WEB_AGORA_SDK=exclude" in web
 
@@ -197,7 +196,7 @@ def test_python_images_contain_no_agora_and_gpl_only_where_declared(repo_root: P
         closure = _closure(lock, entry["image"])
         agora = sorted(name for name in closure if AGORA_PACKAGE.match(name))
         assert not agora, f"{entry['image']} installs {agora}"
-        assert "playwright" not in closure, f"{entry['image']}: the capture extra is not released"
+        assert "playwright" not in closure, f"{entry['image']}: no headless browser is released"
         if GPL_ADAPTER in closure:
             assert "GPL-3.0-only" in entry["licenses"], f"{entry['image']}: GPL-3.0 adapter"
         else:

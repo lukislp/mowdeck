@@ -41,7 +41,7 @@ import asyncio
 import contextlib
 import hashlib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -187,12 +187,6 @@ def _cancelling() -> bool:
     return task is not None and task.cancelling() > 0
 
 
-def snapshot_camera_uid(session: CameraSession) -> int | None:
-    """The camera a snapshot shows: the first camera with a publisher uid (the front or left
-    one on Mammotion mowers, slot 0, uid 1); None (the first publisher) without one."""
-    return next((camera.uid for camera in session.cameras if camera.uid is not None), None)
-
-
 class MowerSession:
     """Supervises the connection of one mower and executes its commands."""
 
@@ -255,14 +249,12 @@ class MowerSession:
            unless it raises :class:`~mowdeck_control.PhotoUnavailable`;
         2. the camera relay (ADR 0045), when configured: a frame of the session it holds or
            starts for this connection's account and mower (no second vendor session while
-           someone watches), within the Vision limits;
-        3. the deprecated capture worker (ADR 0035), when configured, with a fresh vendor
-           session of the connection.
+           someone watches), within the Vision limits.
 
         A source that cannot serve the mower at all (:class:`SnapshotUnavailable`: not
-        reachable, switched off, no driver for the camera's provider) hands over to the next;
-        any other failure (a limit, an offline mower, no frame in time) is final, so a refusal
-        of the relay is never bypassed through the worker.
+        reachable, switched off, no driver for the camera's provider) hands over to the next
+        configured one, if any; any other failure (a limit, an offline mower, no frame in time)
+        is final.
 
         Raises :class:`~mowdeck_control.NotConnected` while the link is down,
         :class:`PhotoUnsupported` when no source applies (no camera, nothing configured) and
@@ -285,9 +277,9 @@ class MowerSession:
         With ``max_frames`` above 1 a source that takes frame sets (the camera relay:
         :class:`FrameSetSnapshotter`) gives one frame of each front camera, left first, with
         side and capture time, each at most ``max_bytes / max_frames`` so the set stays
-        within ``max_bytes``; every other source (the adapter's own photo, the capture worker)
-        gives its single frame. The camera the app shows is no filter: a set always asks for
-        both front cameras.
+        within ``max_bytes``; every other source (the adapter's own photo, a source without
+        frame sets) gives its single frame. The camera the app shows is no filter: a set always
+        asks for both front cameras.
         """
         controller = self._controller
         if controller is None:
@@ -313,24 +305,14 @@ class MowerSession:
         max_frames: int,
         max_bytes: int,
     ) -> CameraFrames:
-        connection = controller.connection
         capabilities = await controller.capabilities()
         if capabilities.camera is CameraAccess.NONE:
             raise PhotoUnsupported("this connection has no camera")
-        vendor: CameraSession | None = None
-        fetched = False
         handed_over: SnapshotFailed | None = None
+        target = SnapshotTarget(
+            account_id=self.registration.account_id, mower_id=self.mower_id, demand=demand
+        )
         for snapshotter in self._snapshotters:
-            target = SnapshotTarget(
-                account_id=self.registration.account_id, mower_id=self.mower_id, demand=demand
-            )
-            if snapshotter.needs_camera_session:
-                if not fetched:
-                    vendor = await camera_session_of(connection)
-                    fetched = True
-                if vendor is None:
-                    continue
-                target = replace(target, session=vendor, camera_uid=snapshot_camera_uid(vendor))
             try:
                 if max_frames > 1 and isinstance(snapshotter, FrameSetSnapshotter):
                     found = await snapshotter.frame_set(
@@ -357,7 +339,6 @@ class MowerSession:
                 "camera frame captured",
                 mower_id=str(self.mower_id),
                 source=type(snapshotter).__name__,
-                camera_uid=target.camera_uid,
                 frames=len(found.frames),
                 sides=[frame.side for frame in found.frames],
                 missing=list(found.missing),
