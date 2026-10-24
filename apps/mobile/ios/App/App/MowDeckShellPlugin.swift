@@ -44,7 +44,8 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getInstallationId(_ call: CAPPluginCall) {
         do {
-            call.resolve(["id": try InstallationID.current()])
+            let id = try InstallationID.current()
+            call.resolve(["id": id])
         } catch {
             call.reject("installation id not available", nil, error)
         }
