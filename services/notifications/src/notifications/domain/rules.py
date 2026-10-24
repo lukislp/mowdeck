@@ -605,11 +605,15 @@ def vision_proposal_event(payload: VisionProposalCreated, minutes: int) -> Notif
     error started it automatically (ADR 0035, with ``error_code``): recipients need
     ``can_drive``, the notification opens the proposal (``payload.link``), the body varies by
     task, or is the return to dock or resume body when the proposal is the dock command or
-    continues the paused job."""
+    continues the paused job; a choice body when the model's low-confidence recommendation is
+    offered next to the dock fallback (``alternative_action``)."""
     automatic = payload.trigger is VisionTrigger.ERROR
     variant = (
         payload.action if payload.action in ("return_to_dock", "resume") else payload.task.value
     )
+    if payload.alternative_action in ("resume", "drive"):
+        # The model's low-confidence recommendation next to the dock fallback: a choice.
+        variant = f"choice_{payload.alternative_action}"
     return NotificationEvent.of(
         NotificationKind.VISION_AUTO_PROPOSAL if automatic else NotificationKind.VISION_PROPOSAL,
         payload.mower_id,

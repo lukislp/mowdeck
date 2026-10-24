@@ -125,6 +125,30 @@ async def test_notifications_vision_return_to_dock_proposal_says_so() -> None:
         assert not any("steps" in i["body"] for i in items)
 
 
+async def test_notifications_vision_low_confidence_choice_says_both_options() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner, name="Vorgarten")
+        await h.subscribe_all(owner, enabled_kinds=[*KINDS, "vision_auto_proposal"], language="de")
+        choice = _proposal(
+            h,
+            mower_id,
+            owner.account_id,
+            confidence=0.55,
+            steps=0,
+            action="return_to_dock",
+            fallback=True,
+            low_confidence=True,
+            alternative_action="resume",
+            trigger=VisionTrigger.ERROR,
+            error_code="1201",
+        )
+        await _publish(h, choice, owner.account_id)
+        [item] = await h.inbox(owner)
+        assert "fortzusetzen, aber nur mit 55 % Sicherheit" in item["body"]
+        assert "Rückkehr zur Ladestation" in item["body"] and "wählen" in item["body"]
+
+
 async def test_notifications_vision_auto_proposal_names_the_error() -> None:
     async with harness() as h:
         owner = await h.owner()

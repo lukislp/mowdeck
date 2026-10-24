@@ -18,7 +18,11 @@
  * it (the job's areas, current and next, shown in the sheet); approving drives the short maneuver
  * with the blades off, then `resume_mow` goes out while the stuck error is still reported (a
  * manual drive does not clear it on a LUBA), the job continues, the error clears after a few
- * metres and the mower mows again.
+ * metres and the mower mows again. (e) Low confidence: with `fake/unsure_resume` (resume at 55 %,
+ * below the 60 % threshold) the sheet offers two options, the dock fallback preselected and the
+ * model's resume marked "Unsicher · 55 %" with the sentence "Die KI empfiehlt „Mähauftrag
+ * fortsetzen“, aber nur mit 55 % Sicherheit" (never "kein Manöver empfohlen"); the owner picks
+ * the resume, approves, and the maneuver plus `resume_mow` run like any resume.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
@@ -312,6 +316,74 @@ test('vision: a mower stuck in a two-area job continues it after an approved res
   });
   const items = ((await sessions.json()) as { items: { origin?: string | null }[] }).items;
   expect(items.some((item) => item.origin === 'vision')).toBe(true);
+  await sheet.getByTestId('assist-done').click();
+  csp.assertNone();
+});
+
+test('vision: an unsure resume is offered next to the dock fallback and the owner picks it', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(300_000);
+  const csp = watchCsp(page);
+  const owner = await registerByApi(request, actor('vision-unsure'));
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  const saved = await request.put('/api/v1/vision/me/provider', {
+    headers: auth,
+    data: { model: 'fake/unsure_resume' },
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+  const mowerId = await createStuckMower(request, owner, `Luba unsure ${RUN}`);
+  await waitForMap(request, owner, mowerId);
+  await commandByApi(request, owner, mowerId, { kind: 'start_mow', area_ids: ['front', 'back'] });
+  await loginByUi(page, owner);
+  await page.goto(`/mowers/${mowerId}`);
+  await expect(page.getByTestId('mower-state')).toContainText('Fehler', { timeout: 60_000 });
+
+  await page.getByRole('button', { name: 'Mit KI-Hilfe befreien' }).click();
+  const sheet = page.getByRole('dialog', { name: 'KI-Hilfe' });
+  await sheet.getByTestId('assist-start').click();
+  await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'proposed', {
+    timeout: 30_000,
+  });
+  const choice = sheet.getByTestId('assist-choice');
+  await expect(choice).toContainText('Welche Option soll laufen?');
+  const fallback = sheet.getByTestId('assist-option-fallback');
+  const model = sheet.getByTestId('assist-option-model');
+  await expect(fallback).toContainText('Zurück zur Ladestation');
+  await expect(fallback).toContainText('Rückfalloption');
+  await expect(fallback.getByRole('radio')).toBeChecked();
+  await expect(model).toContainText(
+    'Die KI empfiehlt „Mähauftrag fortsetzen“, aber nur mit 55 % Sicherheit.',
+  );
+  await expect(model).toContainText('Unsicher · 55 %');
+  await expect(sheet).not.toContainText('kein Manöver empfohlen');
+  await expect(
+    sheet.getByRole('button', { name: 'Freigeben und zur Ladestation schicken' }),
+  ).toBeVisible();
+  const listed = await request.get(`/api/v1/vision/mowers/${mowerId}/proposals?limit=1`, {
+    headers: auth,
+  });
+  const newest = (
+    (await listed.json()) as {
+      items: { action: string; alternative_action: string | null; low_confidence: boolean }[];
+    }
+  ).items[0];
+  expect(newest).toMatchObject({
+    action: 'return_to_dock',
+    alternative_action: 'resume',
+    low_confidence: true,
+  });
+
+  // Pick the model's resume: the job plan appears and the button follows the choice.
+  await model.getByRole('radio').check();
+  await expect(sheet.getByTestId('assist-resume-plan')).toContainText('Back lawn');
+  await sheet.getByRole('button', { name: 'Freigeben und Auftrag fortsetzen' }).click();
+  await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'recovered', {
+    timeout: 45_000,
+  });
+  await expect(sheet.getByTestId('assist-outcome')).toContainText('Der Mähauftrag läuft weiter.');
+  await expect(page.getByTestId('mower-state')).toContainText('Mäht', { timeout: 30_000 });
   await sheet.getByTestId('assist-done').click();
   csp.assertNone();
 });

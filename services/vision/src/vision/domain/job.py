@@ -96,8 +96,9 @@ class JobContext(BaseModel):
 
     status: JobStatus = Field(
         description="`running`, `paused` (resume_mow continues it), `paused_by_error` (the job "
-        "stopped with the current error; it continues once the error cleared), `returning`, "
-        "`spot_run` (driven by MowDeck; resume_mow cannot continue it)."
+        "stopped with the current error; resume_mow continues it, and a stuck error clears "
+        "only once the resumed job moved the mower), `returning`, `spot_run` (driven by "
+        "MowDeck; resume_mow cannot continue it)."
     )
     source: JobSource = Field(
         description="`mow_path`: the mower's own route of the job; `start_command`: the "
@@ -275,8 +276,8 @@ def job_context(
         note = problem
     elif status == "paused_by_error":
         note = (
-            "the job is paused by the error; resume continues it once the error cleared (a "
-            "short drive first clears a stuck error)"
+            "the job is paused by the error; resume continues it after an optional short "
+            "drive (a stuck error stays until the resumed job moved the mower)"
         )
     else:
         note = "the job is paused; resume continues it"

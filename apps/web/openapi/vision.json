@@ -1,6 +1,29 @@
 {
   "components": {
     "schemas": {
+      "ApproveIn": {
+        "description": "``POST /proposals/{id}/approve``: which option runs (the body is optional).",
+        "properties": {
+          "option": {
+            "anyOf": [
+              {
+                "enum": [
+                  "model",
+                  "fallback"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`model`: the model's recommendation (also a low-confidence one offered next to the fallback); `fallback`: the rule based return to dock. Omitted: the default option (`action`). An option the proposal does not offer answers 422.",
+            "title": "Option"
+          }
+        },
+        "title": "ApproveIn",
+        "type": "object"
+      },
       "AssessmentOut": {
         "description": "What the model thinks (without the steps, which are listed separately).",
         "properties": {
@@ -588,6 +611,61 @@
         "title": "ModuleDescriptor",
         "type": "object"
       },
+      "OptionOut": {
+        "description": "One option a waiting proposal offers; the user approves one of them.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ProposalAction"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model's confidence (null for the fallback).",
+            "title": "Confidence"
+          },
+          "default": {
+            "description": "What an approval without an option runs (`action`).",
+            "title": "Default",
+            "type": "boolean"
+          },
+          "low_confidence": {
+            "description": "The model recommends it with a confidence below the threshold.",
+            "title": "Low Confidence",
+            "type": "boolean"
+          },
+          "option": {
+            "description": "`model`: the model's recommendation; `fallback`: the rule based return to dock. Pass it to `approve`.",
+            "enum": [
+              "model",
+              "fallback"
+            ],
+            "title": "Option",
+            "type": "string"
+          },
+          "steps": {
+            "description": "The drive steps (blades off) of this option.",
+            "items": {
+              "$ref": "#/components/schemas/StepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "option",
+          "action",
+          "default",
+          "low_confidence"
+        ],
+        "title": "OptionOut",
+        "type": "object"
+      },
       "PermissionDef": {
         "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
         "properties": {
@@ -779,7 +857,18 @@
           "action": {
             "$ref": "#/components/schemas/ProposalAction",
             "default": "drive",
-            "description": "What approval executes: `drive` (the steps, blades off), `return_to_dock` (the normal dock command; no steps) or `resume` (the steps, if any, then the paused job continues with `resume_mow`). `none` only on rejected rows."
+            "description": "The default option, what an approval without a choice executes (after an approval: what runs): `drive` (the steps, blades off), `return_to_dock` (the normal dock command; no steps) or `resume` (the steps, if any, then the paused job continues with `resume_mow`). `none` only on rejected rows."
+          },
+          "alternative_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalAction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model's low-confidence recommendation next to the fallback `action`; approve it with option `model`."
           },
           "analysed_at": {
             "anyOf": [
@@ -814,6 +903,22 @@
                 "type": "null"
               }
             ]
+          },
+          "approved_option": {
+            "anyOf": [
+              {
+                "enum": [
+                  "model",
+                  "fallback"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which option the approval ran.",
+            "title": "Approved Option"
           },
           "assessment": {
             "anyOf": [
@@ -901,7 +1006,7 @@
           },
           "fallback": {
             "default": false,
-            "description": "The model recommended nothing; Vision offers return to dock as a rule based fallback because it applies (mower in a mapped area linked to the dock, no safety stop). It still needs an approval.",
+            "description": "`action` is the rule based return to dock fallback, not the model's recommendation: it applies (mower in a mapped area linked to the dock, no safety stop). It still needs an approval.",
             "title": "Fallback",
             "type": "boolean"
           },
@@ -958,10 +1063,36 @@
             "title": "Light Used",
             "type": "boolean"
           },
+          "low_confidence": {
+            "default": false,
+            "description": "The model's recommendation is offered although its confidence is below the threshold: as `action`, or as `alternative_action` next to the fallback.",
+            "title": "Low Confidence",
+            "type": "boolean"
+          },
+          "model_refused": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the model's low-confidence recommendation is not offered (it failed a safety check: not applicable, step limits, position, geofence or no-go zone).",
+            "title": "Model Refused"
+          },
           "mower_id": {
             "format": "uuid",
             "title": "Mower Id",
             "type": "string"
+          },
+          "options": {
+            "description": "While `proposed`: the options to choose from, the default first.",
+            "items": {
+              "$ref": "#/components/schemas/OptionOut"
+            },
+            "title": "Options",
+            "type": "array"
           },
           "provider_family": {
             "anyOf": [
@@ -2140,7 +2271,7 @@
     },
     "/api/v1/vision/proposals/{proposal_id}/approve": {
       "post": {
-        "description": "Approve: the steps are driven on the caller's behalf (blades off, dead-man 1 s). One\napproval per proposal; 409 ``vision-proposal-expired`` after ``expires_at``.",
+        "description": "Approve: the chosen option runs on the caller's behalf (blades off, dead-man 1 s). The\noptional body picks the option (``model`` or ``fallback``; omitted: the default\n``action``). One approval per proposal; 409 ``vision-proposal-expired`` after\n``expires_at``; 422 for an option the proposal does not offer.",
         "operationId": "approve_api_v1_vision_proposals__proposal_id__approve_post",
         "parameters": [
           {
@@ -2154,6 +2285,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ApproveIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
