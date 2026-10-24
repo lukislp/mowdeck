@@ -4,6 +4,11 @@ A token is its own subject (``api_token:<id>``) with ``member`` on its account a
 tuples for its grants. It never inherits the creator's rights, can never hold administrative
 keys (``users.manage``, ``billing.manage``, ``audit.view``), and is revoked when its creator is
 disabled or removed. The secret is shown once; only its SHA-256 is stored.
+
+Revoked tokens stay listed until the owner deletes them for good (``purge`` for one,
+``purge_revoked`` for all of the account). Only revoked tokens can be deleted: an active token
+is revoked first, so its ``api_token.revoked`` event always goes out. The audit rows of a deleted
+token stay (``audit_log`` is append-only and refers to the token by id only, no foreign key).
 """
 
 from collections.abc import Sequence
@@ -16,8 +21,10 @@ from mowdeck_contracts.v1 import IDENTITY_API_TOKEN_REVOKED, ApiTokenRevoked, Pr
 
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
+from identity.application.ports import In
+from identity.application.work import Work
 from identity.domain.credentials import new_api_token, sha256_hex
-from identity.domain.errors import ForbiddenError, InvalidInput, NotFoundError
+from identity.domain.errors import ConflictError, ForbiddenError, InvalidInput, NotFoundError
 from identity.domain.models import ApiToken, TokenGrant
 from identity.domain.permissions import validate_token_grant
 
@@ -133,3 +140,56 @@ class ApiTokenService:
                     details={"name": token.name},
                 )
         return token
+
+    async def purge(self, account_id: UUID, token_id: UUID, ctx: RequestContext) -> ApiToken:
+        """Delete a revoked token of the account for good (404 for other accounts' tokens,
+        409 for a token that is not revoked yet)."""
+        async with self.deps.uow() as work:
+            work.account_id = account_id
+            token = await work.tx.api_tokens.get(id=token_id, account_id=account_id)
+            if token is None:
+                msg = "API token not found"
+                raise NotFoundError(msg)
+            if token.revoked_at is None:
+                msg = "revoke the API token before deleting it"
+                raise ConflictError(msg)
+            await work.tx.api_tokens.delete(id=token.id, account_id=account_id)
+            await _purged(work, ctx, account_id, token, bulk=False)
+        return token
+
+    async def purge_revoked(self, account_id: UUID, ctx: RequestContext) -> list[ApiToken]:
+        """Delete every revoked token of the account for good; active ones stay untouched."""
+        async with self.deps.uow() as work:
+            work.account_id = account_id
+            tokens = await work.tx.api_tokens.find(
+                account_id=account_id, order_by="created_at", descending=True
+            )
+            revoked = [token for token in tokens if token.revoked_at is not None]
+            if revoked:
+                await work.tx.api_tokens.delete(
+                    account_id=account_id, id=In([token.id for token in revoked])
+                )
+            for token in revoked:
+                await _purged(work, ctx, account_id, token, bulk=True)
+        return revoked
+
+
+async def _purged(
+    work: Work, ctx: RequestContext, account_id: UUID, token: ApiToken, *, bulk: bool
+) -> None:
+    """Reconcile the deleted token's subject (drops any tuple left over: the account reconcile
+    no longer sees it) and audit it by name and prefix, never by secret."""
+    work.touch(api_token(token.id))
+    await work.audit(
+        ctx,
+        "api_token.purged",
+        account_id=account_id,
+        target=("api_token", token.id),
+        details={
+            "name": token.name,
+            "prefix": token.prefix,
+            "revoked_at": token.revoked_at.isoformat() if token.revoked_at else None,
+            "revoke_reason": token.revoke_reason,
+            "bulk": bulk,
+        },
+    )
