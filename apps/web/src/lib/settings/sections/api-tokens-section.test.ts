@@ -170,4 +170,103 @@ describe('ApiTokensSection', () => {
     await waitFor(() => expect(post).toHaveBeenCalledOnce());
     expect(sentPermissions()).toEqual(['mower.drive', 'mower.view', 'schedule.edit']);
   });
+
+  it('shows the new secret on top, focused and described, and copies it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(ApiTokensSection);
+    await screen.findByTestId('token-row');
+    await named('Home Assistant');
+    await fireEvent.click(screen.getByTestId('token-create'));
+
+    const secret = await screen.findByTestId('token-secret');
+    // Above the list, so it is the first thing in the section.
+    const list = screen.getByTestId('token-list');
+    expect(secret.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(secret));
+    expect(secret.getAttribute('tabindex')).toBe('-1');
+    const title = document.getElementById(secret.getAttribute('aria-labelledby')!);
+    expect(title?.textContent).toContain('Neues Token');
+    expect(title?.textContent).toContain('Home Assistant');
+    const note = document.getElementById(secret.getAttribute('aria-describedby')!);
+    expect(note?.textContent).toContain('nur jetzt angezeigt');
+    expect(screen.getByTestId('token-secret-value').textContent).toBe('mdk_secret');
+
+    await fireEvent.click(screen.getByTestId('token-secret-copy'));
+    expect(writeText).toHaveBeenCalledWith('mdk_secret');
+    await waitFor(() =>
+      expect(screen.getByTestId('token-secret-status').textContent).toContain('Kopiert'),
+    );
+    expect(screen.getByTestId('token-secret-status').getAttribute('role')).toBe('status');
+
+    // Stays until dismissed; then the focus goes back to the form.
+    await fireEvent.click(screen.getByTestId('token-secret-dismiss'));
+    expect(screen.queryByTestId('token-secret')).toBeNull();
+    expect(document.activeElement?.id).toBe('token-name');
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('without a clipboard says how to copy the secret by hand', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    render(ApiTokensSection);
+    await named('LAN');
+    await fireEvent.click(screen.getByTestId('token-create'));
+    await screen.findByTestId('token-secret');
+    await fireEvent.click(screen.getByTestId('token-secret-copy'));
+    const status = screen.getByTestId('token-secret-status');
+    await waitFor(() => expect(status.textContent).toContain('Strg+C'));
+    expect(status.classList).not.toContain('md-visually-hidden');
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('lists active tokens first and folds revoked ones into a closed disclosure', async () => {
+    const revokedToken = (id: string, name: string, at: string) => ({
+      ...TOKEN,
+      id,
+      name,
+      revoked_at: at,
+    });
+    get.mockImplementation(async (path: string) =>
+      path.endsWith('/permissions')
+        ? CATALOGUE
+        : [
+            revokedToken('r1', 'Altes Tablet', '2026-10-21T08:00:00Z'),
+            TOKEN,
+            revokedToken('r2', 'Test', '2026-10-22T08:00:00Z'),
+            { ...TOKEN, id: 't2', name: 'Neuer', created_at: '2026-10-23T10:00:00Z' },
+          ],
+    );
+    render(ApiTokensSection);
+    const list = await screen.findByTestId('token-list');
+    expect(
+      within(list)
+        .getAllByTestId('token-row')
+        .map((r) => r.dataset.name),
+    ).toEqual(['Neuer', 'Home Assistant']);
+    expect(within(list).getAllByRole('button', { name: 'Widerrufen' })).toHaveLength(2);
+
+    const folded = screen.getByTestId('token-revoked') as HTMLDetailsElement;
+    expect(folded.tagName).toBe('DETAILS');
+    expect(folded.open).toBe(false);
+    expect(folded.querySelector('summary')?.textContent).toContain('Widerrufene Tokens (2)');
+    const rows = within(folded).getAllByTestId('token-revoked-row');
+    // Newest revocation first, no revoke button, no chips.
+    expect(rows.map((r) => r.dataset.name)).toEqual(['Test', 'Altes Tablet']);
+    expect(within(folded).queryByRole('button')).toBeNull();
+    expect(within(folded).queryByTestId('token-chips')).toBeNull();
+  });
+
+  it('says so when every token is revoked', async () => {
+    get.mockImplementation(async (path: string) =>
+      path.endsWith('/permissions')
+        ? CATALOGUE
+        : [{ ...TOKEN, revoked_at: '2026-10-21T08:00:00Z' }],
+    );
+    render(ApiTokensSection);
+    expect((await screen.findByTestId('token-no-active')).textContent).toContain(
+      'Keine aktiven API-Tokens',
+    );
+    expect(screen.queryByTestId('token-list')).toBeNull();
+    expect(screen.getByTestId('token-revoked').textContent).toContain('Widerrufene Tokens (1)');
+  });
 });
