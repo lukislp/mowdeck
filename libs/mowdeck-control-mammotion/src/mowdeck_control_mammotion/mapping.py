@@ -417,7 +417,9 @@ def raw_of(
     ``blade_used_s`` and ``blade_used_warn_s`` when the device reported them (> 0); Telemetry
     prefers them over its own blade hours. The device's lifetime battery cycle counter is added
     as ``bat_cycles`` (see :func:`battery_cycles_of`) when reported; Telemetry prefers it over
-    its own cycle count.
+    its own cycle count. The device's lifetime working time and distance are added as
+    ``work_time_s`` and ``mileage_m`` (see :func:`lifetime_totals_of`) when reported; Telemetry
+    shows them next to its own mowing hours and distance.
     """
     rd = device.report_data
     rtk = rd.rtk
@@ -447,6 +449,11 @@ def raw_of(
     cycles = battery_cycles_of(device)
     if cycles is not None:
         raw["bat_cycles"] = cycles
+    work_time, mileage = lifetime_totals_of(device)
+    if work_time is not None:
+        raw["work_time_s"] = work_time
+    if mileage is not None:
+        raw["mileage_m"] = mileage
     work = rd.work
     if work.cutter_offset > 0:
         raw["cutter_offset_m"] = float(work.cutter_offset)
@@ -598,6 +605,31 @@ def battery_cycles_of(device: MowerDevice) -> int | None:
         return cycles
     bms = _int(device.mower_state.charge_settings.bat_cycle_times)
     return bms if bms > 0 else None
+
+
+def lifetime_totals_of(device: MowerDevice) -> tuple[int | None, int | None]:
+    """The mower's lifetime working time (seconds) and distance (metres), None when unknown.
+
+    PyMammotion fills ``report_data.maintenance.work_time`` and ``.mileage`` from the
+    maintenance block of the device report (the same block as the blade counter, the vendor
+    app's "total working time" and "total distance"); ``report_data.dev.work_time_sec`` and
+    ``.mileage`` (from the ``deviceOtherInfo`` / ``networkInfo`` properties) are the fallback.
+    Zero means "not reported".
+    """
+    rd = device.report_data
+    return (
+        _first_positive(rd.maintenance.work_time, rd.dev.work_time_sec),
+        _first_positive(rd.maintenance.mileage, rd.dev.mileage),
+    )
+
+
+def _first_positive(*values: object) -> int | None:
+    """The first value that holds a positive number, as an int; None when none does."""
+    for value in values:
+        number = _int(value)
+        if number > 0:
+            return number
+    return None
 
 
 def blade_height_of(device: MowerDevice) -> int | None:

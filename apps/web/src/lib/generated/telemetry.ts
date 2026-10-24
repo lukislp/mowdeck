@@ -194,10 +194,12 @@ export type paths = {
         /**
          * Set Blade Threshold
          * @description Set the mower's blade reminder threshold in hours (``can_manage_mowers``, like the blade
-         *     reset); ``null`` returns to the default (``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``). The
-         *     reminder is armed again when the hours since the change lie below the new threshold.
-         *     Works before the first telemetry, too. The mower's own warning (``device_blade_warn_hours``)
-         *     is not touched.
+         *     reset); ``null`` drops it, so the mower follows its own warning again
+         *     (``device_blade_warn_hours``) when it reports one, else the default
+         *     (``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``); ``blade_hours_threshold_effective`` names the
+         *     threshold in effect. The reminder is armed again when the blade hours shown lie below the
+         *     new effective threshold. Works before the first telemetry, too. The warning stored on the
+         *     mower itself is not changed.
          */
         put: operations["set_blade_threshold_api_v1_telemetry_mowers__mower_id__health_blade_threshold_put"];
         post?: never;
@@ -557,7 +559,7 @@ export type components = {
         BladeThresholdIn: {
             /**
              * Hours
-             * @description Blade hours after which MowDeck reminds of a blade change; null returns to the installation's default.
+             * @description Blade hours after which MowDeck reminds of a blade change; null drops the mower's own threshold: the mower's own warning applies again when it reports one, else the installation's default.
              */
             hours: number | null;
         };
@@ -1453,15 +1455,26 @@ export type components = {
             blade_hours_since_change: number;
             /**
              * Blade Hours Threshold
-             * @description Hours after which a reminder is sent: the mower's own threshold set in MowDeck, else the installation's default.
+             * @description MowDeck's threshold: the one set for the mower in MowDeck, else the installation's default. The reminder uses blade_hours_threshold_effective.
              */
             blade_hours_threshold: number;
             /**
              * Blade Hours Threshold Custom
-             * @description The mower has its own threshold (`PUT .../health/blade-threshold`); false: the default applies.
+             * @description The mower has its own threshold (`PUT .../health/blade-threshold`); false: the mower's own warning or the default applies.
              * @default false
              */
             blade_hours_threshold_custom: boolean;
+            /**
+             * Blade Hours Threshold Effective
+             * @description The one threshold in effect, used by the reminder and to show: the threshold set in MowDeck (source custom), else the mower's own warning while it reports its own blade counter (device), else the installation's default (default).
+             */
+            blade_hours_threshold_effective: number;
+            /**
+             * Blade Hours Threshold Source
+             * @description Where blade_hours_threshold_effective comes from.
+             * @enum {string}
+             */
+            blade_hours_threshold_source: "custom" | "device" | "default";
             /**
              * Blade Source
              * @description Which blade counter to show as hours since the blade change: the mower's own (device) or MowDeck's (telemetry, blade_hours_since_change).
@@ -1485,7 +1498,20 @@ export type components = {
              * @description The mower's own blade warning threshold in hours; null when not reported.
              */
             device_blade_warn_hours: number | null;
-            /** Distance M */
+            /**
+             * Device Distance M
+             * @description The mower's own lifetime distance in metres, as the vendor app shows it; null when the mower does not report one.
+             */
+            device_distance_m?: number | null;
+            /**
+             * Device Mowing Hours
+             * @description The mower's own lifetime working time in hours, as the vendor app shows it; null when the mower does not report one.
+             */
+            device_mowing_hours?: number | null;
+            /**
+             * Distance M
+             * @description MowDeck's own distance in metres since `since`.
+             */
             distance_m: number;
             /**
              * Errors
@@ -1499,7 +1525,10 @@ export type components = {
              * Format: uuid
              */
             mower_id: string;
-            /** Mowing Hours */
+            /**
+             * Mowing Hours
+             * @description MowDeck's own count of hours with activity mowing since `since`.
+             */
             mowing_hours: number;
             /**
              * Since

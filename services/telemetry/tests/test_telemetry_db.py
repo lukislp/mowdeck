@@ -624,3 +624,27 @@ async def test_telemetry_db_health_stores_the_blade_threshold(
     assert stored is not None and stored.blade_threshold_seconds == 12.5 * 3600
     assert stored.since == NOW
     assert cleared is not None and cleared.blade_threshold_seconds is None
+
+
+@pytest.mark.parametrize("kind", KINDS)
+async def test_telemetry_db_health_stores_the_device_lifetime_totals(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account, mower = uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        services = build_services(store, TelemetryConfig(), lambda: NOW)
+        await services.ingest.record_state(make_state(mower, account, at=NOW))
+        without = await store.health_of(account, mower)
+        await services.ingest.record_state(
+            make_state(
+                mower,
+                account,
+                at=NOW + seconds(10),
+                raw={"work_time_s": 1_234_567, "mileage_m": 456_789},
+            )
+        )
+        stored = await store.health_of(account, mower)
+    assert without is not None
+    assert (without.device_mowing_seconds, without.device_distance_m) == (None, None)
+    assert stored is not None
+    assert (stored.device_mowing_seconds, stored.device_distance_m) == (1_234_567, 456_789)

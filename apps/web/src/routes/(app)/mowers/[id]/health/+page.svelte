@@ -1,8 +1,10 @@
 <!--
   Health of one mower (Telemetry, ADR 0027): blade hours since the change against the change
-  interval (the mower's own counter and warning threshold when it reports them, as the vendor app
-  shows them; MowDeck's own counter otherwise, which then stays visible in the totals), the running totals
-  (battery cycles from the mower's own lifetime counter when it reports one, MowDeck's count beside it), the last 30 UTC days as bar strips, the battery of the last
+  interval (the mower's own counter when it reports one, as the vendor app shows it; MowDeck's own
+  counter otherwise, which then stays visible in the totals; the interval is the one effective
+  threshold Telemetry names: set in MowDeck, else the mower's own warning, else the default), the
+  running totals (mowing hours, distance and battery cycles from the mower's own lifetime counters
+  when it reports them, MowDeck's counts beside them), the last 30 UTC days as bar strips, the battery of the last
   24 hours, errors by code and the blade changes. "Blades replaced" records a change; it needs
   `can_manage_mowers` (checked first, and hidden for good after a 403).
 -->
@@ -37,6 +39,7 @@
     durationParts,
     errorRows,
     fillDays,
+    lifetimeTotals,
     thresholdLevel,
     thresholdShare,
     type BatteryPoint,
@@ -190,7 +193,14 @@
   };
   const extremes = $derived(batteryExtremes(battery));
   const errors = $derived(totals ? errorRows(totals.errors) : []);
-  const km = $derived((totals?.distance_m ?? 0) >= 1000);
+  const lifetime = $derived(totals ? lifetimeTotals(totals) : null);
+
+  /** A distance readout: metres below one kilometre, kilometres above. */
+  function distance(metres: number): { text: string; unit: string } {
+    return metres >= 1000
+      ? { text: formatNumber(metres / 1000, 2), unit: 'km' }
+      : { text: formatNumber(metres), unit: 'm' };
+  }
 
   function hours(value: number): string {
     return formatNumber(value, value < 10 ? 2 : 1);
@@ -296,7 +306,11 @@
               : '—'}
           </span>
           {#if meter?.source === 'device'}
-            <span data-testid="health-blade-source">{m.health_blade_source_device()}</span>
+            <span data-testid="health-blade-source" data-threshold-source={meter.thresholdSource}
+              >{meter.thresholdSource === 'custom'
+                ? m.health_blade_source_device_custom()
+                : m.health_blade_source_device()}</span
+            >
           {:else}
             <span>
               {totals?.blade_changed_at
@@ -333,23 +347,41 @@
             />
           {/if}
           <Readout
-            label={m.health_mowing()}
-            value={totals ? duration(totals.mowing_hours).text : null}
-            unit={totals ? duration(totals.mowing_hours).unit : 'h'}
+            label={lifetime?.mowingSource === 'device'
+              ? m.health_mowing_device()
+              : m.health_mowing()}
+            value={lifetime ? duration(lifetime.mowingHours).text : null}
+            unit={lifetime ? duration(lifetime.mowingHours).unit : 'h'}
             emptyText={m.no_data()}
             testid="health-mowing-hours"
           />
+          {#if lifetime?.mowingSource === 'device'}
+            <Readout
+              label={m.health_mowing_mowdeck()}
+              value={duration(lifetime.trackedHours).text}
+              unit={duration(lifetime.trackedHours).unit}
+              emptyText={m.no_data()}
+              testid="health-mowing-hours-mowdeck"
+            />
+          {/if}
           <Readout
-            label={m.health_distance()}
-            value={totals
-              ? km
-                ? formatNumber(totals.distance_m / 1000, 2)
-                : formatNumber(totals.distance_m)
-              : null}
-            unit={km ? 'km' : 'm'}
+            label={lifetime?.distanceSource === 'device'
+              ? m.health_distance_device()
+              : m.health_distance()}
+            value={lifetime ? distance(lifetime.distanceM).text : null}
+            unit={lifetime ? distance(lifetime.distanceM).unit : 'm'}
             emptyText={m.no_data()}
             testid="health-distance"
           />
+          {#if lifetime?.distanceSource === 'device'}
+            <Readout
+              label={m.health_distance_mowdeck()}
+              value={distance(lifetime.trackedDistanceM).text}
+              unit={distance(lifetime.trackedDistanceM).unit}
+              emptyText={m.no_data()}
+              testid="health-distance-mowdeck"
+            />
+          {/if}
           <Readout
             label={cycles?.source === 'device' ? m.health_cycles_device() : m.health_cycles()}
             value={cycles ? formatNumber(cycles.cycles) : null}
