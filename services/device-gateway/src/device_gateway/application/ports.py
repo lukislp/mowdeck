@@ -7,7 +7,6 @@ from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
-    CameraSession,
     CloudProvider,
     CommandResult,
     DiscoveredDevice,
@@ -50,11 +49,6 @@ class SnapshotTarget:
 
     account_id: UUID
     mower_id: UUID
-    session: CameraSession | None = field(default=None, repr=False)
-    """A fresh vendor camera session (secret token) for sources that join the camera
-    themselves (``needs_camera_session``); None for the camera relay, which asks for its own."""
-    camera_uid: int | None = None
-    """The camera of ``session`` to take (the first with a publisher uid)."""
     demand: VisionDemand = VisionDemand.ROUTINE
     """Why the photo is wanted (``PhotoRequest.demand``): the relay lets ``error_analysis``
     wake a sleeping mower and skips the Vision budget for it."""
@@ -64,16 +58,10 @@ class CameraSnapshotter(Protocol):
     """Still frames of a mower's live camera, for adapters that offer a camera but cannot take
     a photo themselves (no ``PhotoCapture``), such as the Mammotion cloud connection.
 
-    Two implementations, tried in this order: the camera relay (ADR 0045,
-    ``RelaySnapshotter``: a frame of the session the relay holds or starts, never a second
-    vendor session while someone watches) and the deprecated capture worker (ADR 0035,
-    ``HttpCameraSnapshotter``: joins the vendor channel with its own session).
+    The implementation is the camera relay's frame tap (ADR 0045, ``RelaySnapshotter``: a
+    frame of the session the relay holds or starts, never a second vendor session while someone
+    watches). The capture worker of ADR 0035 that joined the vendor channel itself is removed.
     """
-
-    @property
-    def needs_camera_session(self) -> bool:
-        """True when the source joins the camera itself and needs a vendor session."""
-        ...
 
     async def snapshot(self, target: SnapshotTarget, *, timeout_seconds: float) -> Photo:
         """One JPEG; raises :class:`SnapshotUnavailable` (try the next source) or

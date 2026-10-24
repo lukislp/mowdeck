@@ -412,13 +412,10 @@ services:
       # reuses the session a viewer holds or starts one within the Vision limits.
       MOWDECK_RELAY_URL: ${GATEWAY_RELAY_URL:-}
       MOWDECK_RELAY_FRAMES_TOKEN: ${RELAY_FRAMES_TOKEN:-}
-      # Deprecated (ADR 0045, kept for one release): the capture worker of the `capture`
-      # profile (http://vision-capture:8000), tried only when the relay is not configured, not
-      # reachable or has no driver for the camera. Both empty: mowers without an own photo
-      # function answer photo requests with "unsupported" (AI assist then needs the camera
-      # panel's frame).
-      MOWDECK_CAPTURE_URL: ${GATEWAY_CAPTURE_URL:-}
-      MOWDECK_CAPTURE_TOKEN: ${CAPTURE_TOKEN:-}
+      # Both empty: mowers without an own photo function answer photo requests with
+      # "unsupported" (AI assist then needs the camera panel's frame). The capture worker of
+      # ADR 0035 (profile `capture`, MOWDECK_CAPTURE_URL) is removed. How long the relay may take
+      # for one frame:
       MOWDECK_CAPTURE_TIMEOUT_SECONDS: ${CAPTURE_TIMEOUT_SECONDS:-20}
       MOWDECK_PHOTO_TIMEOUT_SECONDS: ${GATEWAY_PHOTO_TIMEOUT_SECONDS:-30}
       # Access tokens are verified locally against Identity's public keys.
@@ -906,45 +903,6 @@ services:
         condition: service_completed_successfully
       authz-bootstrap:
         condition: service_completed_successfully
-    networks: [mowdeck]
-
-  # DEPRECATED (ADR 0045): Vision takes its frames from the camera relay's frame tap; this
-  # worker stays for one release as the fallback for mowers the relay cannot serve.
-  # Still frames of live cameras without an open browser (ADR 0035): headless Chromium with the
-  # Agora Web SDK, only with `--profile capture` (COMPOSE_PROFILES=capture) and
-  # GATEWAY_CAPTURE_URL=http://vision-capture:8000. The Vision image built with
-  # WITH_CAPTURE=true (Playwright and Chromium, about 0.5 GB more); internal only, no route.
-  vision-capture:
-    image: mowdeck/vision-capture:${MOWDECK_VERSION:-dev}
-    profiles: [capture]
-    build:
-      context: ../..
-      dockerfile: services/vision/Dockerfile
-      args:
-        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f}
-        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a}
-        WITH_CAPTURE: "true"
-    command: ["python", "-m", "vision.capture"]
-    restart: unless-stopped
-    read_only: true
-    tmpfs: [/tmp]
-    environment:
-      <<: *source-code
-      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
-      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
-      MOWDECK_LOG_FORMAT: json
-      # Chromium writes its profile and caches below HOME (the root file system is read-only).
-      HOME: /tmp
-      MOWDECK_CAPTURE_TOKEN: ${CAPTURE_TOKEN:-}
-      MOWDECK_CAPTURE_MAX_CONCURRENCY: ${CAPTURE_MAX_CONCURRENCY:-2}
-      MOWDECK_CAPTURE_BROWSER_CHANNEL: ${CAPTURE_BROWSER_CHANNEL:-}
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-    stop_grace_period: 20s
     networks: [mowdeck]
 
   # --- Camera relay (ADR 0045): only with `--profile relay` ---------------------------------

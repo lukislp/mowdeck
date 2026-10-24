@@ -15,9 +15,9 @@
   answer are never part of the event. ``trigger`` says whether a user asked (``manual``) or the
   mower's error started the analysis automatically (``error``, with ``error_code``; opt-in per
   user, ADR 0035); Notifications sends the automatic ones as ``vision_auto_proposal``.
-* :class:`CameraSnapshotRequest` (HTTP, internal): the Device-Gateway asks the capture worker
-  (``vision-capture``, ADR 0035) for one still frame of a live camera session; the answer is the
-  JPEG itself.
+* :class:`CameraSnapshotRequest` (deprecated, no producer or consumer): the request of the
+  capture worker (``vision-capture``, ADR 0035), removed with the camera relay's frame tap
+  (ADR 0045). It stays in ``v1`` because ``v1`` removes nothing (versioning rules).
 
 Feature keys of the plans (``infra/entitlements/plans.yaml``): :data:`FEATURE_AI_RECOVER` for
 AI assist with the user's own provider, :data:`FEATURE_AI_RECOVER_HOSTED` for the provider of
@@ -29,7 +29,7 @@ from enum import StrEnum
 from typing import Final, Literal, Self
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 from mowdeck_contracts.v1.camera import CameraSession
@@ -338,15 +338,21 @@ class VisionProposalUpdated(ContractModel):
 
 
 CAPTURE_MAX_BYTES: Final = 512 * 1024
-"""Upper size cap of a captured frame (the same cap as a photo reply)."""
+"""Upper size cap of a captured frame (the same cap as a photo reply). Deprecated with
+:class:`CameraSnapshotRequest`."""
 
 
 class CameraSnapshotRequest(ContractModel):
-    """``POST /capture`` of the capture worker (internal HTTP, ADR 0035): one still frame of the
-    camera ``camera_uid`` (Agora publisher uid; None: the first publisher) in ``session``.
+    """Deprecated: nothing sends or answers it since the capture worker was removed (ADR 0045;
+    Vision's frames come from the camera relay's frame tap, ``VisionFrameSetRequest``). Kept in
+    ``v1`` only because ``v1`` removes nothing; it goes with ``v2``.
 
-    The session carries the secret token; neither side logs it. The reply is ``image/jpeg``.
+    Was ``POST /capture`` of the capture worker (internal HTTP, ADR 0035): one still frame of the
+    camera ``camera_uid`` (Agora publisher uid; None: the first publisher) in ``session``. The
+    session carries the secret token; neither side logs it. The reply was ``image/jpeg``.
     """
+
+    model_config = ConfigDict(json_schema_extra={"deprecated": True})
 
     session: CameraSession
     camera_uid: int | None = Field(default=None, ge=0)

@@ -200,6 +200,8 @@ def test_vision_proposal_event_trigger_is_manual_unless_an_error_started_it() ->
 
 
 def test_camera_snapshot_request_bounds_and_keeps_the_token_out_of_repr() -> None:
+    # Deprecated (the capture worker is removed, ADR 0045) but kept: v1 removes nothing.
+    assert CameraSnapshotRequest.model_json_schema()["deprecated"] is True
     session = CameraSession(
         provider=CameraProvider.AGORA,
         app_id="app",
