@@ -44,4 +44,9 @@ class SecretsUnavailable(VisionError):  # noqa: N818 - reads as a state
 
 class PhotoUnavailable(VisionError):  # noqa: N818 - reads as a state
     """An automatic analysis needs a photo from the mower and none could be taken (never
-    reaches the API: automatic analyses have no caller)."""
+    reaches the API: automatic analyses have no caller). ``proposal`` is the failed proposal
+    that records why, so the owner learns about it."""
+
+    def __init__(self, message: str, proposal: object | None = None) -> None:
+        super().__init__(message)
+        self.proposal = proposal

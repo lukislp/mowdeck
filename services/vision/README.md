@@ -65,7 +65,7 @@ Proposal states: `analysing`, then `proposed` (waits for approval until `expires
 | Direction | Subject | Contract | Notes |
 | --- | --- | --- | --- |
 | publishes | `event.vision.proposal.created` | `VisionProposalCreated` (with `trigger`, `error_code`; `action` is the default option, `low_confidence` and `alternative_action` the model's uncertain recommendation next to the fallback) | Notifications turns it into `vision_proposal`, or `vision_auto_proposal` for an automatic one, for users with `can_drive`; Realtime pushes it as `vision_proposal` `created` |
-| publishes | `event.vision.proposal.updated` | `VisionProposalUpdated` (`proposal_id`, `mower_id`, `account_id`, `task`, `round`, `state`, `final`, `action`, `steps`, `fallback`, `low_confidence`, `alternative_action`, `expires_at`, `link`, `trigger`, `error_code`, `updated_at`; no images) | after every state change except to `proposed` (approve, verify, finish, reject, expire, sweep); Realtime pushes it as `vision_proposal` `updated` |
+| publishes | `event.vision.proposal.updated` | `VisionProposalUpdated` (`proposal_id`, `mower_id`, `account_id`, `task`, `round`, `state`, `final`, `action`, `steps`, `fallback`, `low_confidence`, `alternative_action`, `expires_at`, `link`, `trigger`, `error_code`, `photo_problem`, `signal_dbm`, `updated_at`; no images) | after every state change except to `proposed` (approve, verify, finish, reject, expire, sweep); Realtime pushes it as `vision_proposal` `updated` |
 | publishes | `command.mower.<id>` | `CommandEnvelope` (`ManualDrive`) | frames of an approved maneuver, `correlation_id` `drive:<session>` |
 | requests | `fleet.drive.start`, `fleet.drive.stop` | `DriveStartRequest` (`origin: vision`), `DriveStopRequest` (`completed`, `aborted`) | on behalf of the approver |
 | requests | `fleet.commands.issue` | `IssueCommandRequest` (`origin: vision`) | `return_to_dock` after a successful Find Dock or an approved dock proposal; `resume_mow` for an approved `resume`; `set_light` on and off around a dark photo (on the requester's behalf) |
@@ -83,9 +83,12 @@ Dark photos (users mow at night): when the service takes the photo itself (the r
 1. A recoverable error (`domain/auto.py`): activity `error`, not `raw.lifted`, and the normalised code (lower case, a leading minus dropped) in `VISION_AUTO_ERROR_CODES`, or `drive_recoverable`. Default codes: stuck or trapped (`stuck`, 1201, 1421, 11112, 2000701), blocked by an obstacle (1206, 1214 channel or recharge route obstructed, 11113, 11121, 11122), outside the work area (1100, 1145, 1411, 1422), wheel slip (1032, 1218, 11132, 11134). Never lift or tilt stops, low battery, blade or motor errors.
 2. Only entering an error counts: the shared watch `auto_watch` (one row per mower, swapped under a row lock) holds the current recoverable code; a replica skips the database for non-error states while it believes the mower is fine (refreshed every 60 s).
 3. In a background task: states older than `VISION_AUTO_MAX_STATE_AGE_SECONDS` are ignored; no analysis when any proposal of the mower was created within `VISION_AUTO_COOLDOWN_MINUTES` or one is open; at most `VISION_AUTO_DAILY_PER_MOWER` automatic analyses per mower and UTC day; the plan needs `ai_recover`.
-4. The opted-in users, longest opted in first: the first with `can_drive` on the mower (OpenFGA), a usable provider (own or the installation's) and daily quota left is the requester. The round is a normal one with the gateway's photo (none: no analysis) and the dark-frame light, recorded with `trigger = error`. Nothing is executed without an approval.
+4. The opted-in users, longest opted in first: the first with `can_drive` on the mower (OpenFGA), a usable provider (own or the installation's) and daily quota left is the requester. The round is a normal one with the gateway's photo and the dark-frame light, recorded with `trigger = error`. Nothing is executed without an approval.
+5. The photo ([ADR 0035 addendum 2026-10-24](../../docs/adr/0035-server-side-camera-frames-and-automatic-analysis.md)): up to `VISION_AUTO_PHOTO_ATTEMPTS` requests, `VISION_AUTO_PHOTO_RETRY_SECONDS` apart, none started after `VISION_AUTO_PHOTO_WINDOW_SECONDS`, only while the mower still reports an error; a lone camera of a stereo pair is asked for again while attempts are left. Without any photo no model is asked: a `failed` proposal records the likely cause in `photo_problem` (`weak_wifi` or `weak_mobile` with `signal_dbm`, `offline`, `no_frame`; `domain/photo.py`), `vision.proposal.updated` carries it, and Notifications tells the owner ("KI-Analyse ohne Kamerabild") to start the analysis by hand once the connection is better.
 
-Skips are logged with a reason (`disabled`, `stale`, `cooldown`, `open_proposal`, `daily_budget`, `not_in_plan`, `no_subscriber`, `no_photo`).
+Skips are logged with a reason (`disabled`, `stale`, `cooldown`, `open_proposal`, `daily_budget`, `not_in_plan`, `no_subscriber`, `no_photo`); `no_photo` is never silent, it leaves the failed proposal described above.
+
+Manual requests: a single uploaded camera frame (the camera panel showed one camera) becomes the gateway's stereo pair when the requester keeps `stereo_frames` and the pair arrives within `VISION_STEREO_UPGRADE_SECONDS`; without any photo the analysis runs on the map and the proposal says why (`photo_problem`).
 
 ## Capture worker (deprecated)
 
@@ -158,6 +161,10 @@ The kit settings (`MOWDECK_DATABASE_URL`, `MOWDECK_NATS_URL`, ...), OpenFGA (`MO
 | `MOWDECK_VISION_AUTO_DAILY_PER_MOWER` | `20` | Automatic analyses per mower and UTC day (0: none); the per-user cap applies on top. |
 | `MOWDECK_VISION_AUTO_ERROR_CODES` | see above | Comma separated error codes that start an automatic analysis (besides `drive_recoverable`). |
 | `MOWDECK_VISION_AUTO_MAX_STATE_AGE_SECONDS` | `120.0` | Older states (a backlog after a restart) start nothing. |
+| `MOWDECK_VISION_AUTO_PHOTO_ATTEMPTS` | `3` | Photo requests of an automatic analysis before it records "no photo". |
+| `MOWDECK_VISION_AUTO_PHOTO_RETRY_SECONDS` | `15.0` | Pause between two photo requests of an automatic analysis. |
+| `MOWDECK_VISION_AUTO_PHOTO_WINDOW_SECONDS` | `150.0` | No photo request of an automatic analysis starts after this long (each also waits up to `MOWDECK_VISION_PHOTO_TIMEOUT_SECONDS`). |
+| `MOWDECK_VISION_STEREO_UPGRADE_SECONDS` | `8.0` | A manual request with a single camera frame waits this long for the gateway's stereo pair; 0 never asks. |
 | `MOWDECK_VISION_SWEEP_SECONDS` | `30.0` | Interval of the sweep (expiry, interrupted work, image purge). |
 
 ## Data model

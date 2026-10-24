@@ -35,6 +35,7 @@
     fallbackReason,
     lowConfidenceLine,
     jobAreaLabel,
+    photoProblemText,
     resumePlan,
     riskLabel,
     situationLabel,
@@ -140,6 +141,11 @@
   const provider = $derived(assist.provider);
 
   const title = $derived(shownTask === 'find_dock' ? m.vision_find_dock() : m.vision_title());
+  const photoProblem = $derived(proposal ? photoProblemText(proposal) : null);
+  /** An automatic analysis that could not run without a camera photo. */
+  const autoWithoutPhoto = $derived(
+    !!photoProblem && proposal?.state === 'failed' && proposal.trigger === 'error',
+  );
 
   // The options of a waiting proposal; with two the user picks one (the default preselected,
   // reset only when another proposal or another set of options arrives, not on every poll).
@@ -416,6 +422,16 @@
         </section>
       {/if}
 
+      {#if photoProblem}
+        <section class="photo-note" data-testid="assist-photo-problem">
+          <h3>{m.vision_photo_none()}</h3>
+          <p>{photoProblem}</p>
+          <p class="quiet small">
+            {autoWithoutPhoto ? m.vision_photo_auto_failed() : m.vision_photo_map_only()}
+          </p>
+        </section>
+      {/if}
+
       {#if triggerNote(proposal)}
         <p class="trigger-note" data-testid="assist-trigger" title={m.vision_trigger_error_hint()}>
           <span class="mark" aria-hidden="true"></span>
@@ -528,7 +544,7 @@
           {:else if proposal.state === 'rejected'}
             <p>{m.vision_outcome_rejected()}</p>
           {/if}
-          {#if proposal.detail}<p class="detail" data-testid="assist-detail">
+          {#if proposal.detail && !autoWithoutPhoto}<p class="detail" data-testid="assist-detail">
               {proposal.detail}
             </p>{/if}
         </div>
@@ -576,6 +592,15 @@
           testid="assist-cancel">{m.vision_cancel()}</Button
         >
       {:else if assist.view === 'outcome'}
+        {#if autoWithoutPhoto}
+          <Button
+            variant="primary"
+            full
+            icon="send"
+            onclick={() => assist.fresh()}
+            testid="assist-start-by-hand">{m.vision_start_by_hand()}</Button
+          >
+        {/if}
         {#if assist.canRetry}
           <Button
             variant="primary"
@@ -998,6 +1023,26 @@
 
   .refused-note {
     font-size: var(--md-font-size-13);
+  }
+
+  /* No camera photo: a dashed, signal-less frame; the cause in words, never a soft glow. */
+  .photo-note {
+    display: grid;
+    gap: var(--md-space-1);
+    padding: var(--md-space-2) var(--md-space-3);
+    border: var(--md-hairline) dashed var(--md-color-line-strong);
+    border-inline-start: 3px solid var(--md-state-error);
+    background: var(--md-color-surface-sunken);
+  }
+
+  .photo-note h3,
+  .photo-note p {
+    margin: 0;
+  }
+
+  .photo-note p {
+    font-size: var(--md-font-size-14);
+    line-height: var(--md-line-20);
   }
 
   .stereo-note {

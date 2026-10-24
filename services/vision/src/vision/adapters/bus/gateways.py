@@ -40,6 +40,7 @@ from mowdeck_service_kit.bus import BusError, EventBus, publish_command, publish
 from mowdeck_service_kit.correlation import get_correlation_id
 from pydantic import ValidationError
 
+from vision.application.ports import PhotoCapture
 from vision.domain.models import Image
 
 _log = get_logger("vision.bus")
@@ -95,16 +96,23 @@ class BusPhotoSource:
         self.timeout_seconds = timeout_seconds
 
     async def photos(self, mower_id: UUID, account_id: UUID) -> list[Image]:
+        """The images of :meth:`capture` (empty when none can be had)."""
+        return (await self.capture(mower_id, account_id)).images
+
+    async def capture(
+        self, mower_id: UUID, account_id: UUID, *, timeout_seconds: float | None = None
+    ) -> PhotoCapture:
         """The images of one moment from the gateway (logged without content): both front
         cameras, left first, when it takes them through the camera relay, else its single
-        image; empty when none can be had.
+        image; none, with the reason, when none can be had.
 
         Every photo Vision asks for helps a mower with a problem (AI assist, the automatic
         analysis of a recoverable error), so it is an ``error_analysis``: through the camera
         relay it may wake a sleeping mower and is not bound by the Vision budget (ADR 0045).
         A gateway of an older release ignores ``max_frames`` and answers its single image."""
         if self.bus is None:
-            return []
+            return PhotoCapture([], "no_bus")
+        timeout = timeout_seconds if timeout_seconds is not None else self.timeout_seconds
         try:
             message = await self.bus.request(
                 photo_subject(mower_id),
@@ -114,19 +122,25 @@ class BusPhotoSource:
                     demand=VisionDemand.ERROR_ANALYSIS,
                     max_frames=VISION_FRAME_SET_MAX_FRAMES,
                 ),
-                timeout=self.timeout_seconds,
+                timeout=timeout,
             )
             reply = message.model(PhotoReply)
         except (BusError, ValidationError) as exc:
-            _log.info("no photo from the gateway", mower_id=str(mower_id), error=type(exc).__name__)
-            return []
+            _log.info(
+                "no photo from the gateway",
+                mower_id=str(mower_id),
+                error=type(exc).__name__,
+                timeout_s=timeout,
+            )
+            return PhotoCapture([], "timeout" if isinstance(exc, BusError) else "invalid reply")
         if reply.error is not None:
             _log.info(
                 "the gateway delivered no photo",
                 mower_id=str(mower_id),
                 code=reply.error.code.value,
+                detail=reply.error.detail,
             )
-            return []
+            return PhotoCapture([], f"{reply.error.code.value}: {reply.error.detail}"[:300])
         images = _images(reply)
         _log.info(
             "photo received",
@@ -136,7 +150,7 @@ class BusPhotoSource:
             missing=reply.frames_missing,
             bytes=sum(len(image.data) for image in images),
         )
-        return images
+        return PhotoCapture(images, None if images else "empty reply")
 
 
 def _decode(data: str) -> bytes | None:

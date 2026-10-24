@@ -23,6 +23,7 @@ import {
   fallbackReason,
   formatCost,
   lowConfidenceLine,
+  photoProblemText,
   riskLabel,
   situationLabel,
   stateLabel,
@@ -95,6 +96,8 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     model_refused: null,
     approved_option: null,
     options: [],
+    photo_problem: null,
+    signal_dbm: null,
     can_retry: false,
     rounds_left: 2,
     ...overrides,
@@ -1055,5 +1058,45 @@ describe('vision low-confidence options', () => {
     expect(store.view).toBe('proposed');
     await store.approve('model');
     expect(api.approve).toHaveBeenCalledWith('p1', 'model');
+  });
+});
+
+describe('vision analysis without a camera photo', () => {
+  const NO_PHOTO = proposal({
+    state: 'failed',
+    final: true,
+    trigger: 'error',
+    trigger_error_code: '1201',
+    photo_problem: 'weak_wifi',
+    signal_dbm: -79,
+    detail:
+      'no photo after 3 attempts: weak Wi-Fi (-79 dBm), the camera stream did not get through',
+  });
+
+  it('says why there is no photo, in both languages', () => {
+    expect(photoProblemText(NO_PHOTO, 'de')).toBe(
+      'Das WLAN des Mähers war zu schwach (-79 dBm), der Kamerastrom kam nicht durch.',
+    );
+    expect(photoProblemText(NO_PHOTO, 'en')).toBe(
+      "The mower's Wi-Fi was too weak (-79 dBm); the camera stream did not get through.",
+    );
+    expect(photoProblemText({ photo_problem: 'offline', signal_dbm: null }, 'en')).toBe(
+      'The mower could not be reached.',
+    );
+    expect(photoProblemText({ photo_problem: 'no_frame', signal_dbm: null }, 'de')).toBe(
+      'Die Kamera lieferte nicht rechtzeitig ein Bild.',
+    );
+    expect(photoProblemText(proposal())).toBeNull();
+  });
+
+  it('leaves the failed automatic analysis for a request by hand', async () => {
+    const timers = manualTimers();
+    const api = fakeApi({ proposal: vi.fn(async () => NO_PHOTO) });
+    const store = new AssistStore(api, timers);
+    await store.open(MOWER, 'p1');
+    expect(store.view).toBe('outcome');
+    store.fresh();
+    expect(store.view).toBe('ready');
+    expect(store.proposal).toBeNull();
   });
 });
