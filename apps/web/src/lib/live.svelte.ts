@@ -9,6 +9,7 @@ import { fleetApi, identityApi, unwrap } from '$lib/api/client';
 import { asProblem } from '$lib/api/problem';
 import { session } from '$lib/auth/session.svelte';
 import { commandLabel, outcomeLabel, problemMessage } from '$lib/i18n';
+import { quietSettingResult } from '$lib/mower/device-settings';
 import { quietLightResult } from '$lib/mower/light';
 import { m } from '$lib/paraglide/messages';
 import { RealtimeClient } from '$lib/realtime/client.svelte';
@@ -42,6 +43,7 @@ export const commands = new CommandStore({
 commands.onFinal((command) => {
   if (command.kind === 'emergency_stop' && command.status === 'executed') return;
   if (quietLightResult(command, realtime.drive?.mowerId ?? null)) return;
+  if (quietSettingResult(command)) return;
   toasts.push(
     command.status === 'executed' ? 'ok' : 'error',
     m.command_toast({ command: commandLabel(command.kind), result: outcomeLabel(command.status) }),
