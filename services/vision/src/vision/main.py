@@ -4,14 +4,23 @@
 builds the app and serves it. Tests call :func:`build_app` with their own settings, store,
 provider factory, authorizer, bus, entitlements, clock and principal resolver.
 
-Startup: subscribe the mower view (telemetry, maps, commands, results), the automatic analysis
-(durable `vision-auto`, unless switched off) and Identity's user
-events, start the sweep, warm LiteLLM up in a thread (its import is slow). Readiness: the bus
-(kit), the database and OpenFGA.
+Startup: import LiteLLM first (see below), then subscribe the mower view (telemetry, maps,
+commands, results), the automatic analysis (durable `vision-auto`, unless switched off) and
+Identity's user events, start the sweep. Readiness: the bus (kit), the database and OpenFGA.
+
+LiteLLM is imported at the very start of the startup, on the main thread, before the service
+subscribes to anything or serves a request; it takes 2 to 7 s. It used to be imported in a
+worker thread while the main thread went on with the startup and the first states, requests
+and database calls, which import their own modules lazily. Two threads importing an overlapping
+set of modules can trip Python's module-lock deadlock detection, so the warm-up thread
+sometimes failed ("loading litellm failed", ``_DeadlockError``) and the first analysis paid the
+whole import instead. With nothing else running yet there is no second importer. A failed
+import is logged once as a warning; the first analysis tries again (``load_litellm``).
 """
 
 import asyncio
 import contextlib
+import time
 from collections.abc import Mapping
 
 from fastapi import FastAPI
@@ -128,6 +137,8 @@ def build_app(
     background: list[asyncio.Task[None]] = []
 
     async def startup(app: FastAPI) -> None:
+        if warm_litellm:  # users may configure a LiteLLM provider at any time
+            _import_litellm()
         active_bus: EventBus | None = app.state.bus
         providers = ProviderService(
             store=store_ref,
@@ -234,8 +245,6 @@ def build_app(
         app.state.subscriptions = subscriptions
         if sweep:
             background.append(asyncio.create_task(_sweeper(service, settings.vision_sweep_seconds)))
-        if warm_litellm:  # users may configure a LiteLLM provider at any time
-            background.append(asyncio.create_task(_warm_litellm()))
         _log.info(
             "vision started",
             hosted_default=hosted.model if hosted.enabled else None,
@@ -289,13 +298,19 @@ async def _sweeper(service: VisionService, interval: float) -> None:
         await asyncio.sleep(interval)
 
 
-async def _warm_litellm() -> None:
-    """Import LiteLLM in a thread so the first analysis does not wait for it."""
+def _import_litellm() -> None:
+    """Import LiteLLM on the calling (main) thread so the first analysis does not wait for it
+    and no other thread imports at the same time (see the module docstring)."""
+    started = time.monotonic()
     try:
-        await asyncio.to_thread(load_litellm)
-        _log.info("litellm loaded")
-    except Exception:
-        _log.exception("loading litellm failed")
+        load_litellm()
+    except Exception as exc:
+        _log.warning(
+            "litellm not loaded at startup, the first analysis tries again",
+            error=f"{type(exc).__name__}: {exc}"[:300],
+        )
+        return
+    _log.info("litellm loaded", seconds=round(time.monotonic() - started, 1))
 
 
 def default_principal_resolver(

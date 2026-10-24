@@ -29,7 +29,7 @@ A vision model can look at a snapshot of a stuck mower and suggest how to free i
 
 - Nothing moves without a human decision; the controller's dead-man timer and blade rules apply to every frame, and a crashed Vision instance stops the mower within one second.
 - Images go to the chosen model provider; for cloud models they leave the installation (the settings page says so), local models (Ollama, OpenAI-compatible endpoints) keep them inside.
-- LiteLLM makes the image about twice as large as the other services (about 710 MB) and its import takes seconds; the service imports it lazily and warms it up in a thread. Its price map is the bundled one (no request at startup), so cost estimates follow the LiteLLM version.
+- LiteLLM makes the image about twice as large as the other services (about 710 MB) and its import takes seconds; the service imports it at the start of its startup, on the main thread before it subscribes to anything or serves a request (a warm-up thread racing the startup's own imports sometimes failed), and lazily again if that failed. Its price map is the bundled one (no request at startup), so cost estimates follow the LiteLLM version.
 - Each Vision instance follows telemetry, maps, commands and results of every mower (ephemeral consumers); fine for the expected fleet sizes, a shard filter can follow.
 - The hosted model costs the operator money per analysis; the caps bound it, Billing does not meter it yet.
 - Not covered yet: realtime push of proposal updates (clients poll), Web Push actions to approve from the notification itself.
