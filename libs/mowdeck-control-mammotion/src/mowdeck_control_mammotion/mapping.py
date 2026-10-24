@@ -1456,6 +1456,17 @@ _CAMERA_PLACEMENTS: Final[Mapping[int, CameraPlacement]] = {
 }
 
 
+def manual_blades_on_height(device_name: str, configured_mm: int) -> int:
+    """``cut_knife_height`` of the ``operate_on_device`` that switches the blades on while
+    driving manually: 0 for the Yuka family (Yuka, Yuka mini, mini 2, ML), as PyMammotion's
+    ``async_start_stop_blades`` and Mammotion-HA send it, else ``configured_mm`` (the
+    connection's ``manual_blade_height_mm``). Switching off and the session's other
+    ``operate_on_device`` keep ``configured_mm``, as there."""
+    if DeviceType.is_yuka(device_name) or DeviceType.is_yuka_mini(device_name):
+        return 0
+    return configured_mm
+
+
 def has_camera(device_name: str, product_key: str = "") -> bool:
     """True for models with a camera: every Mammotion mower except the Luba 1."""
     return is_mower(device_name, product_key) and not DeviceType.is_luba1(device_name, product_key)

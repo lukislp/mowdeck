@@ -457,6 +457,9 @@ class MammotionDualConnection(MammotionCloudConnection):
                 self._port,
                 blades_allowed=self.link_options.allow_manual_blades,
                 blade_height_mm=self.link_options.manual_blade_height_mm,
+                blades_on_height_mm=mapping.manual_blades_on_height(
+                    self._port.device_name, self.link_options.manual_blade_height_mm
+                ),
                 sensor_stop=self._sensor_stop_reason,
                 link_up=self.ble_connected,
                 max_run_speed_mps=manual_run_speed(

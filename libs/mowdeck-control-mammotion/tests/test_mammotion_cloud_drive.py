@@ -551,3 +551,40 @@ async def test_mammotion_fake_cloud_refuses_cloud_driving_for_a_shared_account()
     finally:
         await owner.disconnect()
         await shared.disconnect()
+
+
+# --- blade height when switching the blades on (Yuka family: 0) ------------------------------
+
+
+def test_mammotion_blades_on_height_is_zero_for_the_yuka_family() -> None:
+    """PyMammotion's ``async_start_stop_blades`` and Mammotion-HA send ``cut_knife_height=0``
+    for a Yuka or Yuka mini when the blades go on; a LUBA gets the configured height."""
+    assert mapping.manual_blades_on_height("Yuka-ABC123", 60) == 0
+    assert mapping.manual_blades_on_height("Yuka-MN12345", 45) == 0
+    assert mapping.manual_blades_on_height("Luba-VP12345", 45) == 45
+
+
+@pytest.mark.parametrize("link", ["cloud", "ble"])
+@pytest.mark.parametrize(("name", "on_height"), [("Yuka-ABC123", 0), ("Luba-VPDRYRUN", 45)])
+async def test_mammotion_blades_on_height_per_model_on_both_links(
+    link: str, name: str, on_height: int
+) -> None:
+    port = FakeMammotionPort(device_name=name)
+    port.cloud_drive = True
+    options = {"allow_manual_blades": True, "manual_blade_height_mm": 45, "device_name": name}
+    conn: Any = cloud(port, **options)[0] if link == "cloud" else ble(port, **options)[0]
+    await conn.connect()
+    try:
+        session = await conn.start_drive_session()
+        port.sent.clear()
+        await session.update(0.3, 0.0, True)
+        await session.update(0.3, 0.0, False)
+        heights = [
+            (c.kwargs["main_ctrl"], c.kwargs["cut_knife_height"])
+            for c in port.sent
+            if c.name == "operate_on_device"
+        ]
+        assert heights == [(1, on_height), (0, 45)]  # off keeps the configured height
+        await session.close()
+    finally:
+        await conn.disconnect()

@@ -127,6 +127,9 @@ class MammotionBleProxyConnection(MammotionBase):
             self._port,
             blades_allowed=self.options.allow_manual_blades,
             blade_height_mm=self.options.manual_blade_height_mm,
+            blades_on_height_mm=mapping.manual_blades_on_height(
+                self._port.device_name, self.options.manual_blade_height_mm
+            ),
             sensor_stop=self._sensor_stop_reason,
             max_run_speed_mps=manual_run_speed(
                 self.options.manual_drive_speed_mps, mapping.drive_speed_of(self._port.device())

@@ -137,6 +137,7 @@ class CloudDriveSession:
         *,
         blades_allowed: bool,
         blade_height_mm: int,
+        blades_on_height_mm: int | None = None,
         sensor_stop: Callable[[], str | None],
         max_run_speed_mps: float,
         fence_acknowledged: bool = False,
@@ -148,6 +149,11 @@ class CloudDriveSession:
         self._link = link
         self._blades_allowed = blades_allowed
         self._blade_height_mm = blade_height_mm
+        self._blades_on_height_mm = (
+            blade_height_mm if blades_on_height_mm is None else blades_on_height_mm
+        )
+        """``cut_knife_height`` when switching the blades on (0 for the Yuka family,
+        :func:`~mowdeck_control_mammotion.mapping.manual_blades_on_height`)."""
         self._sensor_stop = sensor_stop
         self._max_run_speed = max_run_speed_mps
         self._fence_acknowledged = fence_acknowledged
@@ -427,7 +433,7 @@ class CloudDriveSession:
             priority=priority,
             main_ctrl=1 if on else 0,
             cut_knife_ctrl=1 if on else 0,
-            cut_knife_height=self._blade_height_mm,
+            cut_knife_height=self._blades_on_height_mm if on else self._blade_height_mm,
             max_run_speed=self._max_run_speed,
         )
         self._blades_on = on
