@@ -5,9 +5,18 @@ spike 0001 section 3.3), selects the mower by ``device_name`` or ``iot_id`` and 
 through the Mammotion MQTT broker (``MQTTTransport``) or, for pre-2025 devices, Aliyun
 (``AliyunMQTTTransport``); PyMammotion picks the transport from the device list.
 
-Manual driving is off: PyMammotion's cloud ``RemoteDriveSession`` has never been run against a
-mower (its own documentation says so) and the owner's firmware (1.30.29.26) is below the
-1.30.31.19 threshold that restores movement over Wi-Fi. Joystick driving needs the BLE bridge.
+Manual driving (ADR 0049): over the vendor's cloud remote drive
+(:class:`~mowdeck_control_mammotion.cloud_drive.CloudDriveSession` on PyMammotion's
+``RemoteDriveSession``), offered while the option ``cloud_drive`` is on (the default), the mower
+supports it (:meth:`~mowdeck_control_mammotion.port.MammotionPort.remote_drive_supported`:
+firmware 1.30.31.19 or newer on a LUBA 2, function code ``002.002``) and it has a map (the vendor
+app hides it without one). It drives forwards and turns only (``drive_reverse`` false), blades as
+over the bridge (``allow_manual_blades``). The control token is only granted to the mower's
+owner account; a shared account is refused with code 50803, which the session reports as
+:data:`~mowdeck_control_mammotion.cloud_drive.OWNER_ACCOUNT_REQUIRED`. While a session is open
+the refresh loop is in ``drive`` mode (a report request about once a second); a drive calibration
+cannot ask for faster reports over the cloud (:data:`CLOUD_MIN_DRIVE_POLL_S`). The emergency
+stop zeroes and releases an open session before its own steps.
 
 Live camera (ADR 0032): :meth:`MammotionCloudConnection.get_camera_session` asks the Mammotion
 cloud for an Agora stream token (``get_stream_subscription``, which also makes the mower
@@ -65,10 +74,12 @@ from mowdeck_contracts.v1 import (
     FirmwareInfo,
     utc_now,
 )
-from mowdeck_control import ConnectionConfig, NotConnected
+from mowdeck_control import CommandRejected, ConnectionConfig, DriveSession, NotConnected
 
 from mowdeck_control_mammotion import mapping
 from mowdeck_control_mammotion.base import MammotionBase
+from mowdeck_control_mammotion.cloud_drive import FENCE_ACK_WINDOW_S, CloudDriveSession
+from mowdeck_control_mammotion.drive import manual_run_speed
 from mowdeck_control_mammotion.esphome import EsphomeUnavailable, scan_proxy
 from mowdeck_control_mammotion.options import CloudOptions
 from mowdeck_control_mammotion.port import (
@@ -79,6 +90,7 @@ from mowdeck_control_mammotion.port import (
     NoTransportAvailableError,
     OpenedClient,
     PortClosedError,
+    RemoteDriveInfo,
     VideoResourceResponse,
     login_cloud_client,
     select_handle,
@@ -90,6 +102,14 @@ _log = logging.getLogger("mowdeck_control_mammotion.cloud")
 CAMERA_REQUEST_TIMEOUT_S: Final = 10.0
 """Longest wait for the stream token (PyMammotion retries an empty answer once)."""
 VIDEO_RESOURCE_TIMEOUT_S: Final = 3.0
+CLOUD_MIN_DRIVE_POLL_S: Final = 1.0
+"""Shortest drive interval over the cloud: one undebounced report request per second (the
+vendor's server bans clients that ask too often)."""
+CLOUD_DRIVE_OFF: Final = "manual driving over the cloud is switched off for this mower"
+CLOUD_DRIVE_UNSUPPORTED: Final = (
+    "this mower cannot be driven over the Mammotion cloud (firmware 1.30.31.19 or newer and a map "
+    "are needed); use the Bluetooth bridge"
+)
 
 
 class BridgeScanner(Protocol):
@@ -133,6 +153,9 @@ class MammotionCloudConnection(MammotionBase):
         )
         self.options = options
         self._scanner: BridgeScanner = scanner or scan_proxy
+        self._cloud_session: CloudDriveSession | None = None
+        self._fence_warned_at: float | None = None
+        """Monotonic time of the last vendor fence warning that ended a cloud session."""
 
     def _link_label(self) -> str:
         return "cloud" if self._port.link_up else "cloud (no usable transport)"
@@ -145,6 +168,86 @@ class MammotionCloudConnection(MammotionBase):
 
     def _links_supported(self) -> list[str]:
         return [LINK_BLE_BRIDGE]
+
+    # --- manual driving over the cloud (ADR 0049) -------------------------------------------
+
+    def cloud_drive_available(self) -> bool:
+        """The option is on, the mower supports the cloud remote drive and has a map."""
+        return (
+            self.options.cloud_drive
+            and self._port.remote_drive_supported()
+            and mapping.has_vendor_map(self._port.device())
+        )
+
+    def _manual_drive_offered(self) -> bool:
+        return self._connected and self.cloud_drive_available()
+
+    def _manual_blades_allowed(self) -> bool:
+        return self.options.allow_manual_blades
+
+    def _drive_reverse_offered(self) -> bool:
+        return False
+
+    def _min_drive_poll_s(self) -> float:
+        return CLOUD_MIN_DRIVE_POLL_S
+
+    def _drive_active(self) -> bool:
+        session = self._cloud_session
+        return session is not None and session.driving
+
+    async def start_drive_session(self) -> DriveSession:
+        self._require_connected()
+        return await self._start_cloud_drive()
+
+    async def _start_cloud_drive(self) -> CloudDriveSession:
+        """Open a cloud drive session (see the module docstring); an open one is closed first."""
+        if not self.options.cloud_drive:
+            raise CommandRejected(CLOUD_DRIVE_OFF)
+        if not self.cloud_drive_available():
+            raise CommandRejected(CLOUD_DRIVE_UNSUPPORTED)
+        self._require_no_sensor_stop()
+        await self._close_cloud_session()
+        try:
+            link = self._port.remote_drive()
+        except (NoTransportAvailableError, PortClosedError) as exc:
+            raise NotConnected("no usable Mammotion cloud connection for driving") from exc
+        now = asyncio.get_running_loop().time()
+        warned = self._fence_warned_at
+        session = CloudDriveSession(
+            self._port,
+            link,
+            blades_allowed=self.options.allow_manual_blades,
+            blade_height_mm=self.options.manual_blade_height_mm,
+            sensor_stop=self._sensor_stop_reason,
+            max_run_speed_mps=manual_run_speed(
+                self.options.manual_drive_speed_mps, mapping.drive_speed_of(self._port.device())
+            ),
+            fence_acknowledged=warned is not None and now - warned <= FENCE_ACK_WINDOW_S,
+            on_end=self._on_cloud_drive_end,
+        )
+        await session.begin()
+        self._cloud_session = session
+        self.boost_refresh()
+        self._publish(force=True)
+        return session
+
+    def _on_cloud_drive_end(self, event: RemoteDriveInfo) -> None:
+        if event.kind == "approach_fence":
+            with contextlib.suppress(RuntimeError):
+                self._fence_warned_at = asyncio.get_running_loop().time()
+        if self._connected:
+            self._publish(force=True)
+
+    async def _close_cloud_session(self) -> None:
+        session, self._cloud_session = self._cloud_session, None
+        if session is not None:
+            await session.close()
+
+    async def _halt_drive(self) -> None:
+        await self._close_cloud_session()
+
+    async def _before_close(self) -> None:
+        await self._close_cloud_session()
 
     # --- firmware (FirmwarePort, ADR 0038) ----------------------------------------------------
 

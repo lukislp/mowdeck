@@ -43,6 +43,8 @@ from mowdeck_control_mammotion.port import (
     PortClosedError,
     Priority,
     ProductVersionInfo,
+    RemoteDriveInfo,
+    RemoteDriveListener,
     RootHashList,
     StateListener,
     StreamSubscriptionResponse,
@@ -322,6 +324,122 @@ _MODE_AFTER: Final[dict[str, WorkMode]] = {
 }
 
 
+class FakeRemoteDrive:
+    """:class:`~mowdeck_control_mammotion.port.RemoteDriveLink` without the network: PyMammotion's
+    remote-drive session as the adapter sees it (ADR 0049).
+
+    ``refuse`` makes ``start`` refuse the token with that detail (``"50803"``: the account does
+    not own the mower), ``occupied`` reports another driver. ``frames`` records every input the
+    session accepted while active (a negative linear speed is sent as 0, like the vendor), plus
+    the forced zero frame of a ``stop`` or a vendor end; ``moving`` tells whether the last one
+    keeps the mower moving (the real session repeats it after every ack).
+    :meth:`approach_fence` and :meth:`end_by_vendor` play the vendor's events.
+    """
+
+    def __init__(self) -> None:
+        self._phase = "idle"
+        self.refuse: str | None = None
+        self.occupied = False
+        self.start_error: Exception | None = None
+        self.drive_error: Exception | None = None
+        self.fence_paused = False
+        self.frames: list[tuple[int, int]] = []
+        self.ignored: list[tuple[int, int]] = []
+        """Inputs dropped outside ``active`` or while fence paused."""
+        self.starts = 0
+        self.confirms = 0
+        self.releases = 0
+        """Token releases (``stop`` of a granted session or a vendor end)."""
+        self.acknowledged = 0
+        self._listeners: list[RemoteDriveListener] = []
+
+    @property
+    def phase(self) -> str:
+        return self._phase
+
+    @property
+    def moving(self) -> bool:
+        """True while the last accepted input of an active session is not zero."""
+        return self._phase == "active" and bool(self.frames) and self.frames[-1] != (0, 0)
+
+    def subscribe(self, listener: RemoteDriveListener) -> Callable[[], None]:
+        self._listeners.append(listener)
+
+        def unsubscribe() -> None:
+            with contextlib.suppress(ValueError):
+                self._listeners.remove(listener)
+
+        return unsubscribe
+
+    @property
+    def listener_count(self) -> int:
+        return len(self._listeners)
+
+    async def emit(self, kind: str, detail: str | None = None) -> None:
+        for listener in list(self._listeners):
+            await listener(RemoteDriveInfo(kind, detail))
+
+    async def start(self) -> bool:
+        if self._phase != "idle":
+            msg = f"remote drive is already {self._phase}"
+            raise RuntimeError(msg)
+        if self.start_error is not None:
+            raise self.start_error
+        self.starts += 1
+        if self.occupied:
+            await self.emit("occupied_by_other", "13*****789")
+            return False
+        if self.refuse is not None:
+            await self.emit("token_unavailable", self.refuse)
+            return False
+        self._phase = "safety_notice"
+        return True
+
+    async def confirm(self) -> None:
+        if self._phase != "safety_notice":
+            msg = f"remote drive is {self._phase}, not awaiting confirmation"
+            raise RuntimeError(msg)
+        self.confirms += 1
+        self._phase = "active"
+
+    async def drive(self, linear: int, angular: int) -> None:
+        if self.drive_error is not None:
+            raise self.drive_error
+        if self._phase != "active" or self.fence_paused:
+            self.ignored.append((linear, angular))
+            return
+        self.frames.append((max(linear, 0), angular))
+
+    def acknowledge_fence_warning(self) -> None:
+        if self.fence_paused:
+            self.fence_paused = False
+            self.acknowledged += 1
+
+    async def stop(self) -> None:
+        if self._phase in ("idle", "exiting"):
+            return
+        if self._phase == "active":
+            self.frames.append((0, 0))  # the forced stop frame
+        self._phase = "idle"
+        self.fence_paused = False
+        self.releases += 1
+
+    async def approach_fence(self) -> None:
+        """The vendor's fence warning: a zero frame, input dropped until acknowledged."""
+        self.fence_paused = True
+        self.frames.append((0, 0))
+        await self.emit("approach_fence")
+
+    async def end_by_vendor(self, kind: str, detail: str | None = None) -> None:
+        """A vendor end (``network_poor``, ``idle_timeout``, ...): forced stop, token released,
+        then the event."""
+        if self._phase == "active":
+            self.frames.append((0, 0))
+        self._phase = "idle"
+        self.releases += 1
+        await self.emit(kind, detail)
+
+
 @dataclass(slots=True)
 class SentCommand:
     """One command the fake received."""
@@ -476,6 +594,10 @@ class FakeMammotionPort:
         stored like PyMammotion's reducer in ``report_data.basestation_info``; None: no answer
         (the request times out)."""
         self._device_ota_task: asyncio.Task[None] | None = None
+        self.cloud_drive = False
+        """Whether the mower accepts the cloud remote drive (``remote_drive_supported``)."""
+        self.remote = FakeRemoteDrive()
+        """The cloud remote-drive session :meth:`remote_drive` hands out (ADR 0049)."""
         self._emitted = asyncio.Event()
         self._listeners: list[StateListener] = []
         self._notification_listeners: list[NotificationListener] = []
@@ -706,6 +828,16 @@ class FakeMammotionPort:
 
     def ble_rssi(self) -> int | None:
         return self.rssi if self.ble_connected() else None
+
+    def remote_drive_supported(self) -> bool:
+        return self._open and self.cloud_drive
+
+    def remote_drive(self) -> FakeRemoteDrive:
+        if not self._open:
+            raise PortClosedError("fake port is closed")
+        if not self.link:
+            raise NoTransportAvailableError("fake link is down")
+        return self.remote
 
     async def attach_bridge(self, link: BridgeLink) -> None:
         if not self._open:
@@ -1051,6 +1183,7 @@ __all__ = [
     "STRIPE_LINE_HASH",
     "CommandTimeoutError",
     "FakeMammotionPort",
+    "FakeRemoteDrive",
     "PathLine",
     "SentCommand",
     "dock_buffer",

@@ -516,6 +516,8 @@
   "conn_cloud_refresh_active_help": "How often the mower is asked for a fresh status report while it mows, returns or is paused away from the dock. More requests, so more 4G traffic while it works; the idle interval is unchanged. 2 to 60 seconds.",
   "conn_cloud_report_stream": "Live reports while mowing (s)",
   "conn_cloud_report_stream_help": "Length of the continuous report window kept open while the mower works, renewed every half window. About one report per second, so the live position stays smooth. 0 turns it off. 10 to 300 seconds.",
+  "conn_cloud_drive": "Manual driving over the cloud",
+  "conn_cloud_drive_help": "Joystick, nudges, AI assist moves and spot mowing over the Mammotion cloud when no Bluetooth bridge is connected: forwards and turns only, about 0.3 s delay. Needs the account that owns the mower; off: driving over the bridge only.",
   "conn_map_sync_timeout": "Map timeout (s)",
   "conn_map_sync_timeout_help": "How long to wait for the map after connecting.",
   "conn_confirm_timeout": "Confirmation timeout (s)",

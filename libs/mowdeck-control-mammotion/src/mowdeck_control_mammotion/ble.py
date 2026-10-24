@@ -16,7 +16,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 
-from mowdeck_contracts.v1 import BASE_STATION_OPTION, ConnectionKind, MowerActivity, utc_now
+from mowdeck_contracts.v1 import BASE_STATION_OPTION, ConnectionKind, utc_now
 from mowdeck_control import CommandRejected, ConnectionConfig, DriveSession
 
 from mowdeck_control_mammotion import mapping
@@ -139,12 +139,6 @@ class MammotionBleProxyConnection(MammotionBase):
         """An open drive session switches the refresh loop to its ``drive`` mode (report window
         plus undebounced polls about once a second), so spot runs get a fresh pose."""
         return self._session is not None and self._session.is_open
-
-    def _sensor_stop_reason(self) -> str | None:
-        state = self._snapshot()
-        if state.activity is MowerActivity.ERROR:
-            return f"the mower reports an error ({state.error_code})"
-        return None
 
     async def _before_close(self) -> None:
         session, self._session = self._session, None

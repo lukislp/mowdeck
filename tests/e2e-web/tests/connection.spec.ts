@@ -86,9 +86,16 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     expect(offered).toEqual(expect.arrayContaining(['simulated', 'cloud', 'ble_bridge']));
     const cloud = items.find((k) => k.kind === 'cloud')!;
     expect(cloud.linked_account).toBe(true);
+    // The device from the account's list, and the drive calibration (cloud driving, ADR 0049).
     expect(cloud.options.filter((o) => o.managed).map((o) => o.key)).toEqual([
       'device_name',
       'iot_id',
+      'drive_full_speed_mps',
+      'drive_full_yaw_rate_dps',
+      'drive_dead_zone',
+      'drive_turn_dead_zone',
+      'drive_speed_setting',
+      'calibrated_at',
     ]);
 
     await loginByUi(page, owner);

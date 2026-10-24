@@ -516,6 +516,8 @@
   "conn_cloud_refresh_active_help": "Wie oft der Mäher um einen frischen Statusbericht gebeten wird, solange er mäht, zurückfährt oder abseits der Station pausiert. Mehr Anfragen, also mehr 4G-Verkehr während der Arbeit; das Intervall im Ruhezustand bleibt gleich. 2 bis 60 Sekunden.",
   "conn_cloud_report_stream": "Live-Berichte beim Mähen (s)",
   "conn_cloud_report_stream_help": "Länge des Dauer-Berichtsfensters, das offen gehalten wird, solange der Mäher arbeitet, und alle halbe Fensterlänge erneuert wird. Etwa ein Bericht pro Sekunde, die Live-Position bleibt flüssig. 0 schaltet es aus. 10 bis 300 Sekunden.",
+  "conn_cloud_drive": "Manuelles Fahren über die Cloud",
+  "conn_cloud_drive_help": "Joystick, Stupser, KI-Befreiung und Spot-Mähen über die Mammotion-Cloud, wenn keine Bluetooth-Bridge verbunden ist: nur vorwärts und drehen, etwa 0,3 s Verzögerung. Braucht das Konto, dem der Mäher gehört; aus: Fahren nur über die Bridge.",
   "conn_map_sync_timeout": "Karten-Timeout (s)",
   "conn_map_sync_timeout_help": "So lange wird nach dem Verbinden auf die Karte gewartet.",
   "conn_confirm_timeout": "Bestätigungs-Timeout (s)",

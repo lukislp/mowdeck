@@ -21,7 +21,11 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    :mod:`mowdeck_control.safety` apply to every frame. A non-drive command ends the session, except
    ``SetLight`` (switching the light while driving at night keeps the session). When the adapter has
    no drive link (``NotConnected`` from ``start_drive_session`` or a frame) the frame is ``failed``
-   with the adapter's words and the session ends.
+   with the adapter's words and the session ends. A frame that drives backwards (``linear`` below
+   0) is ``rejected`` without ``capabilities.drive_reverse`` (the Mammotion cloud drive, ADR
+   0049), never sent with the backwards part cut off. A session that implements
+   :class:`~mowdeck_control.connection.FrameDeadlineCapable` is told every accepted frame's
+   ``ttl_ms``, so a link that repeats the last speed by itself zeroes it in time as well.
 7. ``SetBladeHeight`` and ``SetSpeed`` are checked against the capabilities, ``StartMow`` against
    the map (area ids must exist) and, if a pattern is given, against the native patterns. A
    ``StartMow`` with a ``spot_plan`` runs as a route only when ``capabilities.custom_paths`` is
@@ -192,6 +196,7 @@ from mowdeck_control.connection import (
     current_path_of,
     dispatch_of,
     drive_speed_port_of,
+    frame_deadline_of,
     maintenance_port_of,
     report_rate_port_of,
     settings_port_of,
@@ -224,6 +229,11 @@ StateCallback = Callable[[MowerState], Awaitable[None] | None]
 
 MAX_REASON_LENGTH = 500
 DEFAULT_DEDUP_SIZE = 1024
+NO_REVERSE_REASON = (
+    "this drive link cannot drive backwards (Mammotion cloud driving); drive forwards and turn, "
+    "or use the Bluetooth bridge"
+)
+"""Result reason of a backwards frame without ``capabilities.drive_reverse``."""
 _DRIVE_BLOCKING_ACTIVITIES = frozenset({MowerActivity.MOWING, MowerActivity.RETURNING})
 _JOB_ACTIVITIES = frozenset({MowerActivity.MOWING, MowerActivity.PAUSED, MowerActivity.RETURNING})
 """Activities of a running job: no path preview then (rule 10)."""
@@ -859,6 +869,10 @@ class MowerController:
             return self._result(
                 envelope, CommandStatus.REJECTED, "pause or end the job before driving manually"
             )
+        if frame.linear < 0 and not caps.drive_reverse:
+            # Never drop the backwards part silently: a recovery or a turn that needs it would
+            # do something else than planned (ADR 0049, the cloud drive cannot reverse).
+            return self._result(envelope, CommandStatus.REJECTED, NO_REVERSE_REASON)
         decision = decide_manual_blade(frame, caps, state.activity)
         if self._session is None or not self._session.is_open:
             try:
@@ -885,6 +899,9 @@ class MowerController:
                 envelope, CommandStatus.FAILED, f"adapter error: {type(exc).__name__}"
             )
         self._arm_deadman(frame.ttl_ms)
+        deadline = frame_deadline_of(self._session)
+        if deadline is not None:
+            deadline.expect_next_frame_within(frame.ttl_ms / 1000)
         return self._result(envelope, CommandStatus.ACCEPTED, decision.forced_off_reason)
 
     def _arm_deadman(self, ttl_ms: int) -> None:

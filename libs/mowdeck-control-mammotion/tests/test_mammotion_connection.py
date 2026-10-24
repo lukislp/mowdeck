@@ -459,7 +459,7 @@ async def test_mammotion_capabilities_over_cloud() -> None:
     assert caps.blade_height_range_mm == (25, 70)
     assert (caps.min_speed_mps, caps.max_speed_mps) == (0.2, 0.6)
     assert "random_angle" in caps.native_patterns
-    with pytest.raises(CommandRejected, match="not available over cloud"):
+    with pytest.raises(CommandRejected, match="cannot be driven over the Mammotion cloud"):
         await conn.start_drive_session()
 
 
