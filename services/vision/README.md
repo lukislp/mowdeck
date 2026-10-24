@@ -172,6 +172,8 @@ The kit settings (`MOWDECK_DATABASE_URL`, `MOWDECK_NATS_URL`, ...), OpenFGA (`MO
 | `application` | `assist.py` (requests, decisions, rounds, sweeps), `executor.py` (drive session, frames, safety watch, verification, return to dock), `providers.py` (settings, resolution, test), `ports.py` |
 | `adapters` | `api` (routes, schemas, problem mapping), `bus` (view, Fleet, photos, publisher, subscriptions), `db` (tables, store, migrations), `providers` (LiteLLM, fake, prompt and schema), `crypto.py`, `memory.py` |
 
+Startup imports LiteLLM first, on the main thread, before the service subscribes to anything or serves a request (2 to 7 s, logged as `litellm loaded` with the seconds). A warm-up thread used to import it while the startup went on and sometimes tripped Python's module-lock deadlock detection (`loading litellm failed`), so the first analysis paid the import. A failed import is a single warning; the first analysis tries again.
+
 ## Local start
 
 ```bash
