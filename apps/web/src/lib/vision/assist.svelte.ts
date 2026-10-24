@@ -9,6 +9,7 @@ import { asProblem, type ApiProblem } from '$lib/api/problem';
 import {
   VISION_PROBLEMS,
   visionCalls,
+  type ApprovalOption,
   type Proposal,
   type ProviderSettings,
   type VisionApi,
@@ -143,6 +144,18 @@ export class AssistStore {
     }
   }
 
+  /**
+   * Leave a finished proposal for a new request (the sheet shows "ready" again), e.g. after an
+   * automatic analysis that got no camera photo.
+   */
+  fresh(): void {
+    if (this.busy || (this.proposal && !this.proposal.final)) return;
+    this.#stopPolling();
+    this.#generation += 1;
+    this.proposal = null;
+    this.problem = null;
+  }
+
   /** Ask for a maneuver; on a conflict (a proposal is open) show that one instead. */
   async start(task: VisionTask, images: VisionImage[] = []): Promise<void> {
     const mowerId = this.mowerId;
@@ -169,8 +182,11 @@ export class AssistStore {
     }
   }
 
-  approve(): Promise<void> {
-    return this.#decide('approve', (id) => this.#api.approve(id));
+  /** Approve the proposal; `option` picks one when it offers two (default: its `action`). */
+  approve(option?: ApprovalOption): Promise<void> {
+    return this.#decide('approve', (id) =>
+      option ? this.#api.approve(id, option) : this.#api.approve(id),
+    );
   }
 
   /** Reject a proposal, or cancel the running maneuver. */

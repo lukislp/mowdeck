@@ -28,6 +28,14 @@ fits (``dock_route``). The model may answer ``return_to_dock``; when it recommen
 the dock command fits and no risk flag is set, the service offers it as a labelled fallback
 (``fallback``). Either way it is a proposal: nothing runs before a human approves it.
 
+Low confidence (ADR 0033 addendum 2026-10-24): a recommendation below ``min_confidence`` is
+kept when it passes the same checks as any proposal, its drive steps dead-reckoned from the
+mower's pose against the geofence (:func:`~vision.domain.rules.path_problem`). With an
+applicable dock fallback the proposal then offers two options: ``action`` is the fallback (the
+default, what an approval without a choice runs) and ``alternative_action`` the model's
+recommendation; :meth:`VisionService.approve` takes ``option`` (``model`` or ``fallback``).
+A recommendation that fails a check is not offered and ``model_refused`` says why.
+
 Resume (:mod:`vision.domain.job`): the context says which mowing job the mower was running
 (``job``: the planned areas in order, done, current and next, the entry of the connection to
 the next area), from the gateway's route of the job, the state and the newest start. The model
@@ -36,14 +44,26 @@ approval the optional drive steps run like a ``drive``, then ``resume_mow`` cont
 
 Automatic analyses (ADR 0035, :meth:`VisionService.request_auto`, started by
 :class:`~vision.application.auto.AutoAnalysis`): the same round as a manual request, on behalf
-of the user who opted in, always with the gateway's photo (none: no analysis), recorded with
-``trigger = error`` and the error code; the approval stays with a human.
+of the user who opted in, always with the gateway's photo, recorded with ``trigger = error`` and
+the error code; the approval stays with a human. The photo is asked for up to
+``auto_photo_attempts`` times, ``auto_photo_retry_seconds`` apart, within
+``auto_photo_window_seconds``, and only while the mower still reports the error; a single camera
+of a stereo pair is asked for again while attempts are left (the pair is preferred). Without any
+photo no model is asked: a ``failed`` proposal records why (``photo_problem`` in the context:
+weak Wi-Fi or mobile signal with its dBm, offline, or no frame; :mod:`vision.domain.photo`) and
+is announced, so the owner learns that the analysis could not run and can start it by hand.
+
+Photo problems of manual requests: without uploaded frames the gateway's photo is used as
+before; when it fails the analysis goes on with the map, and the context and the proposal say
+why there is no photo. A single uploaded camera frame (the camera panel showed one camera) is
+replaced by the gateway's stereo pair when the requester keeps ``stereo_frames`` and the gateway
+delivers one within ``stereo_upgrade_seconds``, so every analysis prefers stereo plus the map.
 """
 
 import asyncio
 import contextlib
 import time
-from collections.abc import Collection, Coroutine, Mapping
+from collections.abc import Collection, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
@@ -53,9 +73,11 @@ from mowdeck_contracts.v1 import (
     FEATURE_AI_RECOVER,
     CommandRequest,
     IssueCommandRequest,
+    MowerActivity,
     Principal,
     PrincipalRef,
     SetLight,
+    VisionPhotoProblem,
     VisionProposalCreated,
     VisionProposalState,
     VisionProposalUpdated,
@@ -97,11 +119,20 @@ from vision.domain.models import (
     ProposalAction,
     ProposalState,
     ProposalStep,
+    ProposedStep,
     ProviderConfig,
     ProviderRequest,
     StoredImage,
 )
-from vision.domain.rules import day_start, decide
+from vision.domain.photo import PhotoDiagnosis, diagnose
+from vision.domain.rules import (
+    Geofence,
+    PathCheck,
+    day_start,
+    decide,
+    path_problem,
+    start_problem,
+)
 
 _log = get_logger("vision.assist")
 
@@ -114,6 +145,10 @@ OPEN_STATES = frozenset(
         ProposalState.VERIFYING,
     }
 )
+
+
+ApprovalOption = Literal["model", "fallback"]
+"""Which option of a proposal an approval runs."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +178,18 @@ class AssistConfig:
     """Two frames captured further apart than this are not a stereo pair."""
     map_image: bool = True
     """Add the top-down map rendering as one extra image (on top of ``max_images``)."""
+    geofence_margin_m: float = 2.0
+    """Margin around the mapped areas for the path check of a low-confidence recommendation
+    (the executor's geofence margin)."""
+    auto_photo_attempts: int = 3
+    """Photo requests of an automatic analysis before it gives up (at least 1)."""
+    auto_photo_retry_seconds: float = 15.0
+    """Pause between two photo requests of an automatic analysis."""
+    auto_photo_window_seconds: float = 150.0
+    """No further photo request of an automatic analysis starts after this long."""
+    stereo_upgrade_seconds: float = 8.0
+    """How long a manual request with a single camera frame waits for the gateway's stereo pair
+    (0: never asks)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,13 +307,23 @@ class VisionService:
 
     async def request_auto(self, principal: Principal, mower_id: UUID, error_code: str) -> Proposal:
         """An automatic analysis on ``principal``'s behalf after the mower entered a recoverable
-        error (``can_drive`` checked by the caller). Raises like :meth:`request` and
-        :class:`~vision.domain.errors.PhotoUnavailable` when the gateway delivers no photo."""
+        error (``can_drive`` checked by the caller). Raises like :meth:`request`; the provider
+        and the quota are checked before the photo is waited for. Without a photo after the
+        retries (see the module docstring) it records a ``failed`` proposal with the reason
+        and raises :class:`~vision.domain.errors.PhotoUnavailable` carrying it."""
         account = _account(principal)
         await require_feature(self.entitlements, account, FEATURE_AI_RECOVER)
         open_proposal = await self.store.open_proposal(mower_id)
         if open_proposal is not None:
             raise ConflictError(f"a proposal for this mower is {open_proposal.state}")
+        provider = await self.providers.resolve(principal)
+        await self._check_quota(principal.subject, account, provider)
+        photos, problem, attempts = await self._auto_photos(
+            principal, mower_id, account, error_code
+        )
+        if not photos:
+            failed = await self._no_photo(principal, mower_id, error_code, problem, attempts)
+            raise PhotoUnavailable(failed.detail or "no photo", proposal=failed)
         return await self._start_round(
             principal,
             mower_id,
@@ -277,7 +334,108 @@ class VisionService:
             parent=None,
             trigger=VisionTrigger.ERROR,
             error_code=error_code,
+            gateway_photos=photos,
         )
+
+    async def _auto_photos(
+        self, principal: Principal, mower_id: UUID, account: UUID, error_code: str
+    ) -> tuple[list[Image], str | None, int]:
+        """The gateway's photo for an automatic analysis: up to ``auto_photo_attempts``
+        requests within ``auto_photo_window_seconds``, ``auto_photo_retry_seconds`` apart,
+        while the mower still reports an error; a lone camera of a stereo pair is asked for
+        again while attempts are left (with ``stereo_frames``). Returns the best images, the
+        last problem and the number of requests."""
+        config = self.config
+        started = self.view.monotonic()
+        wants_pair = (await self.providers.preferences(principal)).stereo_frames
+        best: list[Image] = []
+        problem: str | None = None
+        attempts = 0
+        while True:
+            attempts += 1
+            capture = await self.photos.capture(mower_id, account)
+            if capture.images:
+                if len(capture.images) >= len(best):
+                    best = capture.images
+                lone_side = len(best) == 1 and best[0].side is not None
+                if not (wants_pair and lone_side):
+                    break
+                problem = "only one camera of the stereo pair"
+            else:
+                problem = capture.problem or "no photo"
+            elapsed = self.view.monotonic() - started
+            if (
+                attempts >= max(1, config.auto_photo_attempts)
+                or elapsed + config.auto_photo_retry_seconds > config.auto_photo_window_seconds
+                or not self._still_in_error(mower_id, account)
+            ):
+                break
+            _log.info(
+                "automatic analysis: photo again",
+                mower_id=str(mower_id),
+                error_code=error_code,
+                attempt=attempts,
+                problem=problem,
+                retry_in_s=config.auto_photo_retry_seconds,
+            )
+            await asyncio.sleep(config.auto_photo_retry_seconds)
+        return best, None if best else problem, attempts
+
+    def _still_in_error(self, mower_id: UUID, account: UUID) -> bool:
+        """The mower still reports an error (no state known: assume it does)."""
+        observed = self.view.state(mower_id)
+        if observed is None or observed.state.account_id != account:
+            return True
+        return observed.state.activity is MowerActivity.ERROR
+
+    async def _no_photo(
+        self,
+        principal: Principal,
+        mower_id: UUID,
+        error_code: str,
+        problem: str | None,
+        attempts: int,
+    ) -> Proposal:
+        """Record a ``failed`` automatic proposal that says why there is no photo, and
+        announce it (``vision.proposal.updated``: Notifications tells the owner)."""
+        account = _account(principal)
+        observed = self.view.state(mower_id)
+        state = observed.state if observed and observed.state.account_id == account else None
+        diagnosis = diagnose(state, problem)
+        context = self._context(mower_id, account, VisionTask.RECOVER, 0, []).model_copy(
+            update={"photo_problem": diagnosis.problem, "signal_dbm": diagnosis.signal_dbm}
+        )
+        now = self.clock()
+        proposal = Proposal(
+            id=uuid4(),
+            chain_id=uuid4(),
+            round=1,
+            account_id=account,
+            mower_id=mower_id,
+            task=VisionTask.RECOVER,
+            state=ProposalState.FAILED,
+            requested_by=principal.ref(),
+            created_at=now,
+            updated_at=now,
+            context=context.model_dump(mode="json"),
+            trigger=VisionTrigger.ERROR,
+            trigger_error_code=error_code,
+            detail=diagnosis.text(attempts),
+            action=ProposalAction.NONE,
+        )
+        await self.store.add_proposal(proposal, [])
+        _log.warning(
+            "automatic analysis without photo",
+            proposal_id=str(proposal.id),
+            mower_id=str(mower_id),
+            error_code=error_code,
+            problem=diagnosis.problem.value,
+            signal_dbm=diagnosis.signal_dbm,
+            gateway=problem,
+            attempts=attempts,
+        )
+        await self._announce(proposal.id)
+        return proposal
 
     def spawn(self, coro: Coroutine[Any, Any, None], name: str) -> None:
         """Run ``coro`` as a tracked background task (awaited by :meth:`idle`)."""
@@ -305,14 +463,22 @@ class VisionService:
         history: list[Proposal] | None = None,
         trigger: VisionTrigger = VisionTrigger.MANUAL,
         error_code: str | None = None,
+        gateway_photos: list[Image] | None = None,
     ) -> Proposal:
         account = _account(principal)
         provider = await self.providers.resolve(principal)
         await self._check_quota(principal.subject, account, provider)
         light_used = restore_light = False
+        photo_problem: str | None = None
         images, stereo = await self._stereo(principal, mower_id, images)
+        if images and not stereo:
+            images, stereo = await self._stereo_upgrade(principal, mower_id, account, images)
         if not images:
-            photos = await self.photos.photos(mower_id, account)
+            if gateway_photos is not None:
+                photos = gateway_photos
+            else:
+                capture = await self.photos.capture(mower_id, account)
+                photos, photo_problem = capture.images, capture.problem
             if not photos and trigger is VisionTrigger.ERROR:
                 raise PhotoUnavailable("the mower delivered no photo")
             if photos and self._light_helps(mower_id, account, photos):
@@ -320,6 +486,7 @@ class VisionService:
                 if lit:
                     photos, light_used = lit, True
             images, stereo = await self._stereo(principal, mower_id, photos)
+        diagnosis = self._diagnosis(mower_id, account, photo_problem) if not images else None
         now = self.clock()
         map_image = self._map_image(mower_id, account)
         if map_image is not None:
@@ -333,6 +500,17 @@ class VisionService:
             stereo,
             map_image=map_image is not None,
         )
+        if diagnosis is not None:
+            context = context.model_copy(
+                update={"photo_problem": diagnosis.problem, "signal_dbm": diagnosis.signal_dbm}
+            )
+            _log.info(
+                "analysis without a camera photo",
+                mower_id=str(mower_id),
+                problem=diagnosis.problem.value,
+                signal_dbm=diagnosis.signal_dbm,
+                gateway=photo_problem,
+            )
         proposal = Proposal(
             id=uuid4(),
             chain_id=chain_id,
@@ -386,7 +564,40 @@ class VisionService:
         )
         return proposal
 
+    def _diagnosis(self, mower_id: UUID, account: UUID, problem: str | None) -> PhotoDiagnosis:
+        observed = self.view.state(mower_id)
+        state = observed.state if observed and observed.state.account_id == account else None
+        return diagnose(state, problem)
+
     # --- stereo frames --------------------------------------------------------------------
+
+    async def _stereo_upgrade(
+        self, principal: Principal, mower_id: UUID, account: UUID, images: list[Image]
+    ) -> tuple[list[Image], bool]:
+        """A single uploaded camera frame (the camera panel showed one camera) becomes the
+        gateway's stereo pair of the same moment when the requester keeps ``stereo_frames``
+        and the gateway delivers one within ``stereo_upgrade_seconds``; else the upload stays.
+        Several uploads, a pair or a phone photo without a camera are kept as they are."""
+        seconds = self.config.stereo_upgrade_seconds
+        single_camera = len(images) == 1 and images[0].camera is not None
+        if seconds <= 0 or not single_camera:
+            return images, False
+        if not (await self.providers.preferences(principal)).stereo_frames:
+            return images, False
+        capture = await self.photos.capture(mower_id, account, timeout_seconds=seconds)
+        pair = stereo_pair(capture.images, self.config.stereo_max_skew_ms)
+        if not pair:
+            _log.info(
+                "single camera frame kept, no stereo pair from the gateway",
+                mower_id=str(mower_id),
+                problem=capture.problem,
+                images=len(capture.images),
+            )
+            return images, False
+        _log.info(
+            "single camera frame replaced by the gateway's stereo pair", mower_id=str(mower_id)
+        )
+        return pair, True
 
     async def _stereo(
         self, principal: Principal, mower_id: UUID, images: list[Image]
@@ -587,6 +798,30 @@ class VisionService:
             last_start=self.view.last_start(mower_id) if state is not None else None,
         )
 
+    def _path_check(self, proposal: Proposal) -> PathCheck:
+        """The path check of a low-confidence recommendation on the newest state and map (the
+        executor checks the same geofence again while it drives)."""
+
+        def check(steps: Sequence[ProposedStep]) -> str | None:
+            observed = self.view.state(proposal.mower_id)
+            if observed is None or observed.state.account_id != proposal.account_id:
+                return "no state of the mower is known"
+            problem = start_problem(proposal.task, observed.state)
+            if problem is not None:
+                return problem
+            mapped = self.view.mower_map(proposal.mower_id)
+            if mapped is None or mapped[0] != proposal.account_id:
+                return "no map of the mower: the geofence cannot be checked"
+            mower_map = mapped[1]
+            return path_problem(
+                steps,
+                pose=pose_of(observed.state, mower_map),
+                fence=Geofence(mower_map, self.config.geofence_margin_m),
+                motion=self.config.motion,
+            )
+
+        return check
+
     async def _analyse(
         self,
         proposal: Proposal,
@@ -625,6 +860,7 @@ class VisionService:
             allow_fallback=not tried_dock,
             job=context.job,
             task=proposal.task,
+            path_check=self._path_check(proposal),
         )
         state, detail = decision.state, decision.detail
         drive = decision.action in (ProposalAction.DRIVE, ProposalAction.RESUME)
@@ -653,12 +889,7 @@ class VisionService:
         )
         expires = now + timedelta(seconds=self.config.proposal_ttl_seconds)
         if state is ProposalState.PROPOSED and drive:
-            await self.store.put_steps(
-                [
-                    ProposalStep(proposal.id, i, s.linear, s.angular, s.seconds)
-                    for i, s in enumerate(assessment.result.proposal)
-                ]
-            )
+            await self.store.put_steps(_audit_steps(proposal.id, assessment.result.proposal))
         changed = await self._update(
             proposal.id,
             {
@@ -670,6 +901,9 @@ class VisionService:
                 "provider_model": assessment.model,
                 "action": decision.action,
                 "fallback": decision.fallback,
+                "low_confidence": decision.low_confidence,
+                "alternative_action": decision.alternative,
+                "model_refused": decision.model_refused,
                 "updated_at": now,
             },
             states={ProposalState.ANALYSING},
@@ -682,6 +916,9 @@ class VisionService:
             confidence=assessment.result.confidence,
             action=decision.action.value,
             fallback=decision.fallback,
+            low_confidence=decision.low_confidence,
+            alternative=decision.alternative.value if decision.alternative else None,
+            model_refused=decision.model_refused,
             steps=len(assessment.result.proposal),
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
@@ -689,13 +926,7 @@ class VisionService:
             latency_ms=usage.latency_ms,
         )
         if changed and state is ProposalState.PROPOSED:
-            event_action: Literal["drive", "return_to_dock", "resume"] = (
-                "resume"
-                if decision.action is ProposalAction.RESUME
-                else "return_to_dock"
-                if decision.action is ProposalAction.RETURN_TO_DOCK
-                else "drive"
-            )
+            event_action = _event_action(decision.action) or "drive"
             await self.events.proposal_created(
                 VisionProposalCreated(
                     proposal_id=proposal.id,
@@ -709,6 +940,8 @@ class VisionService:
                     steps=len(assessment.result.proposal) if drive else 0,
                     action=event_action,
                     fallback=decision.fallback,
+                    low_confidence=decision.low_confidence,
+                    alternative_action=_event_action(decision.alternative),
                     expires_at=expires,
                     link=f"/mowers/{proposal.mower_id}?assist={proposal.id}",
                     created_at=now,
@@ -775,6 +1008,8 @@ class VisionService:
                     else "return_to_dock"
                 )
             steps = len(proposal.assessment.proposal) if proposal.assessment and drive else 0
+            photo_problem = proposal.context.get("photo_problem")
+            signal_dbm = proposal.context.get("signal_dbm")
             await self.events.proposal_updated(
                 VisionProposalUpdated(
                     proposal_id=proposal.id,
@@ -787,12 +1022,16 @@ class VisionService:
                     action=action,
                     steps=min(steps, 6),
                     fallback=proposal.fallback,
+                    low_confidence=proposal.low_confidence,
+                    alternative_action=_event_action(proposal.alternative_action),
                     expires_at=proposal.expires_at
                     if proposal.state is ProposalState.PROPOSED
                     else None,
                     link=f"/mowers/{proposal.mower_id}?assist={proposal.id}",
                     trigger=proposal.trigger,
                     error_code=proposal.trigger_error_code,
+                    photo_problem=VisionPhotoProblem(photo_problem) if photo_problem else None,
+                    signal_dbm=signal_dbm if isinstance(signal_dbm, int) else None,
                     updated_at=proposal.updated_at,
                 )
             )
@@ -801,14 +1040,22 @@ class VisionService:
 
     # --- decisions ------------------------------------------------------------------------
 
-    async def approve(self, principal: Principal, proposal_id: UUID) -> Proposal:
+    async def approve(
+        self, principal: Principal, proposal_id: UUID, option: ApprovalOption | None = None
+    ) -> Proposal:
         """Approve a proposal (``can_drive`` checked by the API): drive it on the approver's
-        behalf. One approval per proposal; refused after ``expires_at``."""
+        behalf. One approval per proposal; refused after ``expires_at``.
+
+        ``option`` picks what runs: ``model`` (the model's recommendation; with a default dock
+        fallback that is ``alternative_action``) or ``fallback`` (the dock fallback); None runs
+        the default ``action``. An option the proposal does not offer is refused
+        (:class:`~vision.domain.errors.InvalidInput`)."""
         account = _account(principal)
         proposal = await self._get(account, proposal_id)
         await require_feature(self.entitlements, account, FEATURE_AI_RECOVER)
         if proposal.state is not ProposalState.PROPOSED:
             raise ConflictError(f"the proposal is {proposal.state}")
+        chosen = _choose(proposal, option)
         now = self.clock()
         if proposal.expires_at is None or proposal.expires_at <= now:
             await self._update(
@@ -818,17 +1065,25 @@ class VisionService:
             )
             raise ProposalExpired("the proposal expired: request a new analysis")
         approver = principal.ref()
-        changed = await self._update(
-            proposal_id,
-            {
-                "state": ProposalState.EXECUTING,
-                "approved_by": approver,
-                "approved_at": now,
-                "started_at": now,
-                "updated_at": now,
-            },
-            states={ProposalState.PROPOSED},
-        )
+        changes: dict[str, Any] = {
+            "state": ProposalState.EXECUTING,
+            "approved_by": approver,
+            "approved_at": now,
+            "started_at": now,
+            "updated_at": now,
+            "approved_option": "fallback" if proposal.fallback else "model",
+        }
+        if chosen is not None:
+            # The model's alternative replaces the default fallback: it is what runs now.
+            changes |= {
+                "action": chosen,
+                "fallback": False,
+                "alternative_action": None,
+                "approved_option": "model",
+            }
+            if chosen in (ProposalAction.DRIVE, ProposalAction.RESUME) and proposal.assessment:
+                await self.store.put_steps(_audit_steps(proposal.id, proposal.assessment.proposal))
+        changed = await self._update(proposal_id, changes, states={ProposalState.PROPOSED})
         if not changed:
             raise ConflictError("the proposal was decided by someone else")
         approved = await self._get(account, proposal_id)
@@ -837,6 +1092,9 @@ class VisionService:
             "vision proposal approved",
             proposal_id=str(proposal_id),
             approved_by=str(approver.subject),
+            option=changes["approved_option"],
+            action=approved.action.value,
+            low_confidence=approved.low_confidence,
         )
         self._spawn(self._execute(approved, approver, account), f"vision-execute-{proposal_id}")
         return approved
@@ -1027,10 +1285,52 @@ class VisionService:
         return counts
 
 
+EventAction = Literal["drive", "return_to_dock", "resume"]
+
+_EVENT_ACTIONS: dict[ProposalAction, EventAction] = {
+    ProposalAction.DRIVE: "drive",
+    ProposalAction.RETURN_TO_DOCK: "return_to_dock",
+    ProposalAction.RESUME: "resume",
+}
+
+
+def _event_action(action: ProposalAction | None) -> EventAction | None:
+    return _EVENT_ACTIONS.get(action) if action is not None else None
+
+
+def _audit_steps(proposal_id: UUID, steps: Sequence[ProposedStep]) -> list[ProposalStep]:
+    return [
+        ProposalStep(proposal_id, i, s.linear, s.angular, s.seconds) for i, s in enumerate(steps)
+    ]
+
+
+def _choose(proposal: Proposal, option: ApprovalOption | None) -> ProposalAction | None:
+    """The action that replaces the default when ``option`` picks the model's alternative (None:
+    the default ``action`` runs); refuses an option the proposal does not offer."""
+    if option is None:
+        return None
+    if option == "fallback":
+        if not proposal.fallback:
+            raise InvalidInput("this proposal offers no dock fallback")
+        return None
+    if not proposal.fallback:
+        return None  # the default is the model's recommendation itself
+    if proposal.alternative_action is None:
+        raise InvalidInput("this proposal offers no recommendation of the model")
+    return proposal.alternative_action
+
+
 def _account(principal: Principal) -> UUID:
     if principal.account_id is None:
         raise InvalidInput("this operation needs an account-scoped principal")
     return principal.account_id
 
 
-__all__ = ["FINAL_STATES", "OPEN_STATES", "AssistConfig", "ProposalDetails", "VisionService"]
+__all__ = [
+    "FINAL_STATES",
+    "OPEN_STATES",
+    "ApprovalOption",
+    "AssistConfig",
+    "ProposalDetails",
+    "VisionService",
+]

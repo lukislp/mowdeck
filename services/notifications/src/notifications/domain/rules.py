@@ -57,6 +57,7 @@ confirming state arrives.
 """
 
 import math
+from dataclasses import replace
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -68,6 +69,8 @@ from mowdeck_contracts.v1 import (
     NotificationKind,
     RtkFixStatus,
     VisionProposalCreated,
+    VisionProposalState,
+    VisionProposalUpdated,
     VisionTrigger,
 )
 
@@ -600,16 +603,47 @@ def observe_blade_hours(
     return w, events
 
 
+def vision_no_photo_event(payload: VisionProposalUpdated) -> NotificationEvent | None:
+    """``vision_auto_proposal`` for an automatic analysis that got no camera photo (state
+    ``failed``, trigger ``error``, ``photo_problem`` set): nothing was analysed or driven, the
+    body names the likely cause (weak Wi-Fi or mobile signal with its dBm, offline, no frame)
+    and asks the owner to start the analysis by hand once the connection is better. None for
+    any other update."""
+    if (
+        payload.trigger is not VisionTrigger.ERROR
+        or payload.state is not VisionProposalState.FAILED
+        or payload.photo_problem is None
+    ):
+        return None
+    event = NotificationEvent.of(
+        NotificationKind.VISION_AUTO_PROPOSAL,
+        payload.mower_id,
+        payload.account_id,
+        payload.updated_at,
+        str(payload.proposal_id),
+        variant=f"no_photo_{payload.photo_problem.value}",
+        link=payload.link,
+        relation="can_drive",
+        error_code=payload.error_code or "",
+        signal_dbm=payload.signal_dbm if payload.signal_dbm is not None else "",
+    )
+    return replace(event, title_key=f"{NotificationKind.VISION_AUTO_PROPOSAL.value}.title_no_photo")
+
+
 def vision_proposal_event(payload: VisionProposalCreated, minutes: int) -> NotificationEvent:
     """``vision_proposal`` for a proposal of AI assist, ``vision_auto_proposal`` when the mower's
     error started it automatically (ADR 0035, with ``error_code``): recipients need
     ``can_drive``, the notification opens the proposal (``payload.link``), the body varies by
     task, or is the return to dock or resume body when the proposal is the dock command or
-    continues the paused job."""
+    continues the paused job; a choice body when the model's low-confidence recommendation is
+    offered next to the dock fallback (``alternative_action``)."""
     automatic = payload.trigger is VisionTrigger.ERROR
     variant = (
         payload.action if payload.action in ("return_to_dock", "resume") else payload.task.value
     )
+    if payload.alternative_action in ("resume", "drive"):
+        # The model's low-confidence recommendation next to the dock fallback: a choice.
+        variant = f"choice_{payload.alternative_action}"
     return NotificationEvent.of(
         NotificationKind.VISION_AUTO_PROPOSAL if automatic else NotificationKind.VISION_PROPOSAL,
         payload.mower_id,

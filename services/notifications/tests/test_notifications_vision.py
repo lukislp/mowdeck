@@ -6,12 +6,16 @@ from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
     VISION_PROPOSAL_CREATED,
+    VISION_PROPOSAL_UPDATED,
     EventEnvelope,
     NotificationKind,
     NotificationSeverity,
     PrincipalKind,
     PrincipalRef,
+    VisionPhotoProblem,
     VisionProposalCreated,
+    VisionProposalState,
+    VisionProposalUpdated,
     VisionTask,
     VisionTrigger,
 )
@@ -123,6 +127,83 @@ async def test_notifications_vision_return_to_dock_proposal_says_so() -> None:
         assert len(items) == 2
         assert all("return to the dock on the mapped paths" in i["body"].lower() for i in items)
         assert not any("steps" in i["body"] for i in items)
+
+
+async def test_notifications_vision_low_confidence_choice_says_both_options() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner, name="Vorgarten")
+        await h.subscribe_all(owner, enabled_kinds=[*KINDS, "vision_auto_proposal"], language="de")
+        choice = _proposal(
+            h,
+            mower_id,
+            owner.account_id,
+            confidence=0.55,
+            steps=0,
+            action="return_to_dock",
+            fallback=True,
+            low_confidence=True,
+            alternative_action="resume",
+            trigger=VisionTrigger.ERROR,
+            error_code="1201",
+        )
+        await _publish(h, choice, owner.account_id)
+        [item] = await h.inbox(owner)
+        assert "fortzusetzen, aber nur mit 55 % Sicherheit" in item["body"]
+        assert "Rückkehr zur Ladestation" in item["body"] and "wählen" in item["body"]
+
+
+async def test_notifications_vision_auto_analysis_without_photo_says_why() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner, name="Vorgarten")
+        await h.subscribe_all(owner, enabled_kinds=[*KINDS, "vision_auto_proposal"], language="de")
+        proposal_id = uuid4()
+        failed = VisionProposalUpdated(
+            proposal_id=proposal_id,
+            mower_id=mower_id,
+            account_id=owner.account_id,
+            task=VisionTask.RECOVER,
+            round=1,
+            state=VisionProposalState.FAILED,
+            final=True,
+            link=f"/mowers/{mower_id}?assist={proposal_id}",
+            trigger=VisionTrigger.ERROR,
+            error_code="1201",
+            photo_problem=VisionPhotoProblem.WEAK_WIFI,
+            signal_dbm=-79,
+            updated_at=h.clock.now,
+        )
+        await _publish_update(h, failed, owner.account_id)
+        # Any other update (a manual failure, an automatic one with a photo) notifies nobody.
+        await _publish_update(
+            h,
+            failed.model_copy(update={"proposal_id": uuid4(), "photo_problem": None}),
+            owner.account_id,
+        )
+        await _publish_update(
+            h,
+            failed.model_copy(update={"proposal_id": uuid4(), "trigger": VisionTrigger.MANUAL}),
+            owner.account_id,
+        )
+        [item] = await h.inbox(owner)
+        assert item["kind"] == "vision_auto_proposal"
+        assert item["title"] == "Vorgarten: KI-Analyse ohne Kamerabild"
+        assert "Fehler 1201" in item["body"] and "WLAN" in item["body"]
+        assert "-79 dBm" in item["body"] and "von Hand" in item["body"]
+        assert item["url"].endswith(f"/mowers/{mower_id}?assist={proposal_id}")
+
+
+async def _publish_update(h: Harness, payload: VisionProposalUpdated, account_id: UUID) -> None:
+    await publish_event(
+        h.bus,
+        EventEnvelope[VisionProposalUpdated](
+            type=VISION_PROPOSAL_UPDATED,
+            producer="vision",
+            account_id=account_id,
+            payload=payload,
+        ),
+    )
 
 
 async def test_notifications_vision_auto_proposal_names_the_error() -> None:

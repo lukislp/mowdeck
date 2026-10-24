@@ -199,8 +199,10 @@ export type paths = {
         put?: never;
         /**
          * Approve
-         * @description Approve: the steps are driven on the caller's behalf (blades off, dead-man 1 s). One
-         *     approval per proposal; 409 ``vision-proposal-expired`` after ``expires_at``.
+         * @description Approve: the chosen option runs on the caller's behalf (blades off, dead-man 1 s). The
+         *     optional body picks the option (``model`` or ``fallback``; omitted: the default
+         *     ``action``). One approval per proposal; 409 ``vision-proposal-expired`` after
+         *     ``expires_at``; 422 for an option the proposal does not offer.
          */
         post: operations["approve_api_v1_vision_proposals__proposal_id__approve_post"];
         delete?: never;
@@ -315,6 +317,17 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
+        /**
+         * ApproveIn
+         * @description ``POST /proposals/{id}/approve``: which option runs (the body is optional).
+         */
+        ApproveIn: {
+            /**
+             * Option
+             * @description `model`: the model's recommendation (also a low-confidence one offered next to the fallback); `fallback`: the rule based return to dock. Omitted: the default option (`action`). An option the proposal does not offer answers 422.
+             */
+            option?: ("model" | "fallback") | null;
+        };
         /**
          * AssessmentOut
          * @description What the model thinks (without the steps, which are listed separately).
@@ -555,6 +568,39 @@ export type components = {
             version: string;
         };
         /**
+         * OptionOut
+         * @description One option a waiting proposal offers; the user approves one of them.
+         */
+        OptionOut: {
+            action: components["schemas"]["ProposalAction"];
+            /**
+             * Confidence
+             * @description The model's confidence (null for the fallback).
+             */
+            confidence?: number | null;
+            /**
+             * Default
+             * @description What an approval without an option runs (`action`).
+             */
+            default: boolean;
+            /**
+             * Low Confidence
+             * @description The model recommends it with a confidence below the threshold.
+             */
+            low_confidence: boolean;
+            /**
+             * Option
+             * @description `model`: the model's recommendation; `fallback`: the rule based return to dock. Pass it to `approve`.
+             * @enum {string}
+             */
+            option: "model" | "fallback";
+            /**
+             * Steps
+             * @description The drive steps (blades off) of this option.
+             */
+            steps?: components["schemas"]["StepOut"][];
+        };
+        /**
          * PermissionDef
          * @description A permission a module defines, e.g. ``mower.control``.
          *
@@ -666,15 +712,22 @@ export type components = {
          */
         ProposalOut: {
             /**
-             * @description What approval executes: `drive` (the steps, blades off), `return_to_dock` (the normal dock command; no steps) or `resume` (the steps, if any, then the paused job continues with `resume_mow`). `none` only on rejected rows.
+             * @description The default option, what an approval without a choice executes (after an approval: what runs): `drive` (the steps, blades off), `return_to_dock` (the normal dock command; no steps) or `resume` (the steps, if any, then the paused job continues with `resume_mow`). `none` only on rejected rows.
              * @default drive
              */
             action: components["schemas"]["ProposalAction"];
+            /** @description The model's low-confidence recommendation next to the fallback `action`; approve it with option `model`. */
+            alternative_action?: components["schemas"]["ProposalAction"] | null;
             /** Analysed At */
             analysed_at: string | null;
             /** Approved At */
             approved_at: string | null;
             approved_by: components["schemas"]["PrincipalRef"] | null;
+            /**
+             * Approved Option
+             * @description Which option the approval ran.
+             */
+            approved_option?: ("model" | "fallback") | null;
             assessment: components["schemas"]["AssessmentOut"] | null;
             /** Can Retry */
             can_retry: boolean;
@@ -706,7 +759,7 @@ export type components = {
             expires_at: string | null;
             /**
              * Fallback
-             * @description The model recommended nothing; Vision offers return to dock as a rule based fallback because it applies (mower in a mapped area linked to the dock, no safety stop). It still needs an approval.
+             * @description `action` is the rule based return to dock fallback, not the model's recommendation: it applies (mower in a mapped area linked to the dock, no safety stop). It still needs an approval.
              * @default false
              */
             fallback: boolean;
@@ -736,10 +789,28 @@ export type components = {
              */
             light_used: boolean;
             /**
+             * Low Confidence
+             * @description The model's recommendation is offered although its confidence is below the threshold: as `action`, or as `alternative_action` next to the fallback.
+             * @default false
+             */
+            low_confidence: boolean;
+            /**
+             * Model Refused
+             * @description Why the model's low-confidence recommendation is not offered (it failed a safety check: not applicable, step limits, position, geofence or no-go zone).
+             */
+            model_refused?: string | null;
+            /**
              * Mower Id
              * Format: uuid
              */
             mower_id: string;
+            /**
+             * Options
+             * @description While `proposed`: the options to choose from, the default first.
+             */
+            options?: components["schemas"]["OptionOut"][];
+            /** @description The mower's camera delivered no photo, and why: `weak_wifi` or `weak_mobile` (with `signal_dbm`), `offline` or `no_frame`. With state `failed` and trigger `error` the automatic analysis could not run; otherwise the model saw only the map and uploaded images. */
+            photo_problem?: components["schemas"]["VisionPhotoProblem"] | null;
             /** Provider Family */
             provider_family: string | null;
             /** Provider Model */
@@ -754,6 +825,11 @@ export type components = {
             round: number;
             /** Rounds Left */
             rounds_left: number;
+            /**
+             * Signal Dbm
+             * @description With a weak signal: the mower's signal in dBm.
+             */
+            signal_dbm?: number | null;
             /** Started At */
             started_at: string | null;
             state: components["schemas"]["ProposalState"];
@@ -1013,6 +1089,13 @@ export type components = {
             /** Error Type */
             type: string;
         };
+        /**
+         * VisionPhotoProblem
+         * @description Why an analysis got no camera photo from the mower (the most likely cause, judged from
+         *     the mower's state at the time and the gateway's answer).
+         * @enum {string}
+         */
+        VisionPhotoProblem: "weak_wifi" | "weak_mobile" | "offline" | "no_frame";
         /**
          * VisionTask
          * @description What AI assist is asked to do.
@@ -1342,7 +1425,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApproveIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

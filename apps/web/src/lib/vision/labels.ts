@@ -9,6 +9,7 @@ import type { Locale } from '$lib/schedules/types';
 
 import type {
   JobArea,
+  Proposal,
   ProposalJob,
   ProposalState,
   ProposalStep,
@@ -257,4 +258,77 @@ export function resumePlan(
   if (area && next) return `${first} ${m.vision_resume_target_next({ area, next }, options)}`;
   if (area) return `${first} ${m.vision_resume_target({ area }, options)}`;
   return `${first} ${m.vision_resume_target_unknown({}, options)}`;
+}
+
+type OfferedAction = Proposal['action'];
+
+/** The title of an option ("Continue the mowing job", "Return to the dock", "Free drive"). */
+export function actionTitle(action: OfferedAction, locale: Locale = current()): string {
+  const options = { locale };
+  switch (action) {
+    case 'resume':
+      return m.vision_resume_title({}, options);
+    case 'return_to_dock':
+      return m.vision_dock_title({}, options);
+    case 'drive':
+      return m.vision_drive_title({}, options);
+    default:
+      return m.vision_action_none({}, options);
+  }
+}
+
+/** The approve button for the option that runs. */
+export function approveLabel(action: OfferedAction, locale: Locale = current()): string {
+  const options = { locale };
+  if (action === 'return_to_dock') return m.vision_approve_dock({}, options);
+  if (action === 'resume') return m.vision_approve_resume({}, options);
+  return m.vision_approve({}, options);
+}
+
+/**
+ * The model's recommendation below the confidence threshold, in one sentence: "The AI
+ * recommends “Continue the mowing job”, but only with 55 % confidence."
+ */
+export function lowConfidenceLine(
+  action: OfferedAction,
+  confidence: number,
+  locale: Locale = current(),
+): string {
+  return m.vision_low_confidence_line(
+    { action: actionTitle(action, locale), confidence: confidencePercent(confidence) },
+    { locale },
+  );
+}
+
+/**
+ * Why the dock fallback is offered: the model recommended nothing (only then may the sheet say
+ * so), its recommendation is the alternative next to it, or it failed a check.
+ */
+export function fallbackReason(proposal: Proposal): 'none' | 'choice' | 'refused' {
+  if (proposal.alternative_action) return 'choice';
+  const recommended = proposal.assessment?.action ?? 'none';
+  return recommended === 'none' ? 'none' : 'refused';
+}
+/**
+ * Why the analysis got no camera photo ("The mower's Wi-Fi was too weak (-79 dBm); the camera
+ * stream did not get through."); null when it had one.
+ */
+export function photoProblemText(
+  proposal: Pick<Proposal, 'photo_problem' | 'signal_dbm'>,
+  locale: Locale = current(),
+): string | null {
+  const options = { locale };
+  const dbm = String(proposal.signal_dbm ?? '?');
+  switch (proposal.photo_problem) {
+    case 'weak_wifi':
+      return m.vision_photo_weak_wifi({ dbm }, options);
+    case 'weak_mobile':
+      return m.vision_photo_weak_mobile({ dbm }, options);
+    case 'offline':
+      return m.vision_photo_offline({}, options);
+    case 'no_frame':
+      return m.vision_photo_no_frame({}, options);
+    default:
+      return null;
+  }
 }

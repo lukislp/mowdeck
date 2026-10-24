@@ -525,15 +525,22 @@ export type Type11 = "notification"
 export type VisionProposalEvent = ("created" | "updated")
 export type MowerId7 = string
 /**
- * `drive`, `return_to_dock`, or `resume` (optional drive steps, then the paused job continues); null before the analysis decided one.
+ * The default option, what an approval without a choice runs (after an approval: what runs): `drive`, `return_to_dock`, or `resume` (optional drive steps, then the paused job continues); null before the analysis decided one.
  */
 export type Action = (("drive" | "return_to_dock" | "resume") | null)
+/**
+ * The model's low-confidence recommendation next to the fallback `action`; the choice is made in MowDeck.
+ */
+export type AlternativeAction = (("drive" | "return_to_dock" | "resume") | null)
 export type Confidence = (number | null)
 export type ErrorCode1 = (string | null)
 /**
  * Approval deadline while `proposed`; null otherwise.
  */
 export type ExpiresAt = (string | null)
+/**
+ * `action` is the rule based return to dock fallback.
+ */
 export type Fallback = boolean
 export type Final = boolean
 export type Id1 = string
@@ -541,8 +548,21 @@ export type Id1 = string
  * App path of the proposal.
  */
 export type Link = string
+/**
+ * The model's recommendation is offered below the confidence threshold.
+ */
+export type LowConfidence = boolean
 export type MowerId8 = string
+/**
+ * Why an analysis got no camera photo from the mower (the most likely cause, judged from
+ * the mower's state at the time and the gateway's answer).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "VisionPhotoProblem".
+ */
+export type VisionPhotoProblem = ("weak_wifi" | "weak_mobile" | "offline" | "no_frame")
 export type Round = number
+export type SignalDbm = (number | null)
 export type Situation = (string | null)
 /**
  * Lifecycle of an AI assist proposal (one round).
@@ -1219,6 +1239,7 @@ type: Type12
  */
 export interface VisionProposalSummary {
 action?: Action
+alternative_action?: AlternativeAction
 confidence?: Confidence
 error_code?: ErrorCode1
 expires_at?: ExpiresAt
@@ -1226,8 +1247,14 @@ fallback?: Fallback
 final: Final
 id: Id1
 link: Link
+low_confidence?: LowConfidence
 mower_id: MowerId8
+/**
+ * The analysis got no camera photo, and why.
+ */
+photo_problem?: (VisionPhotoProblem | null)
 round: Round
+signal_dbm?: SignalDbm
 situation?: Situation
 state: VisionProposalState
 steps?: Steps2

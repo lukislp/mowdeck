@@ -8,8 +8,11 @@ and a short approach computed from the scene context; ``fake/dock`` answers
 resumable (with a stuck error first a short backward move and a turn towards the entry of the
 connection to the next area; else like ``fake/recover``); ``fake/decline`` recommends
 nothing, like a cautious model ("recovery not recommended", which lets the service's dock
-fallback step in); ``fake/people`` flags people, ``fake/low_confidence`` is unsure,
-``fake/empty`` proposes nothing, ``fake/fail`` and ``fake/invalid`` fail like a broken model.
+fallback step in); ``fake/people`` flags people, ``fake/low_confidence`` is unsure (its
+recovery maneuver at confidence 0.2), ``fake/unsure_resume`` answers like ``fake/resume`` but
+at confidence 0.55, below the default threshold (the live case of 2026-10-24: the service
+offers it next to the dock fallback), ``fake/empty`` proposes nothing, ``fake/fail`` and
+``fake/invalid`` fail like a broken model.
 """
 
 import math
@@ -110,6 +113,8 @@ class FakeVisionProvider:
             )
         elif self.mode == "resume" and _resume_applies(context, task):
             answer = _resume_answer(context)
+        elif self.mode == "unsure_resume" and _resume_applies(context, task):
+            answer = _resume_answer(context).model_copy(update={"confidence": 0.55})
         elif self.mode == "dock" and _dock_applies(context):
             answer = AssessmentOut(
                 situation=Situation.AWAY_FROM_DOCK,

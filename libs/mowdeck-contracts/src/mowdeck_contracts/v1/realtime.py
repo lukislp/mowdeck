@@ -46,7 +46,12 @@ from mowdeck_contracts.v1.envelopes import CommandResult
 from mowdeck_contracts.v1.mower import MowerState
 from mowdeck_contracts.v1.notifications import NotificationKind, NotificationSeverity
 from mowdeck_contracts.v1.principal import PrincipalKind
-from mowdeck_contracts.v1.vision import VisionProposalState, VisionTask, VisionTrigger
+from mowdeck_contracts.v1.vision import (
+    VisionPhotoProblem,
+    VisionProposalState,
+    VisionTask,
+    VisionTrigger,
+)
 
 RequestId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._:-]{1,64}$")]
 """Chosen by the client and echoed in the answer, so it can match answers to requests."""
@@ -370,15 +375,31 @@ class VisionProposalSummary(ContractModel):
     final: bool
     action: Literal["drive", "return_to_dock", "resume"] | None = Field(
         default=None,
-        description="`drive`, `return_to_dock`, or `resume` (optional drive steps, then the "
-        "paused job continues); null before the analysis decided one.",
+        description="The default option, what an approval without a choice runs (after an "
+        "approval: what runs): `drive`, `return_to_dock`, or `resume` (optional drive steps, "
+        "then the paused job continues); null before the analysis decided one.",
     )
     steps: int = Field(default=0, ge=0, le=6)
-    fallback: bool = False
+    fallback: bool = Field(
+        default=False, description="`action` is the rule based return to dock fallback."
+    )
+    low_confidence: bool = Field(
+        default=False,
+        description="The model's recommendation is offered below the confidence threshold.",
+    )
+    alternative_action: Literal["drive", "return_to_dock", "resume"] | None = Field(
+        default=None,
+        description="The model's low-confidence recommendation next to the fallback `action`; "
+        "the choice is made in MowDeck.",
+    )
     confidence: float | None = Field(default=None, ge=0, le=1)
     situation: str | None = Field(default=None, max_length=64)
     trigger: VisionTrigger = VisionTrigger.MANUAL
     error_code: str | None = Field(default=None, max_length=64)
+    photo_problem: VisionPhotoProblem | None = Field(
+        default=None, description="The analysis got no camera photo, and why."
+    )
+    signal_dbm: int | None = Field(default=None, ge=-150, le=-1)
     expires_at: UtcDateTime | None = Field(
         default=None, description="Approval deadline while `proposed`; null otherwise."
     )

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import PrincipalRef, VisionTask, VisionTrigger
+from mowdeck_contracts.v1 import PrincipalRef, VisionPhotoProblem, VisionTask, VisionTrigger
 from pydantic import AwareDatetime, BaseModel, Field
 
 from vision.application.assist import ProposalDetails
@@ -24,6 +24,7 @@ from vision.domain.models import (
     ProposalAction,
     ProposalState,
     ProposalStep,
+    ProposedStep,
     RiskFlag,
     StepOutcome,
     UserPreferences,
@@ -71,6 +72,17 @@ class RetryIn(BaseModel):
     """``POST /proposals/{id}/retry``: optional fresh snapshots."""
 
     images: list[ImageIn] = Field(default_factory=list, max_length=8)
+
+
+class ApproveIn(BaseModel):
+    """``POST /proposals/{id}/approve``: which option runs (the body is optional)."""
+
+    option: Literal["model", "fallback"] | None = Field(
+        default=None,
+        description="`model`: the model's recommendation (also a low-confidence one offered "
+        "next to the fallback); `fallback`: the rule based return to dock. Omitted: the "
+        "default option (`action`). An option the proposal does not offer answers 422.",
+    )
 
 
 class AssessmentOut(BaseModel):
@@ -188,6 +200,26 @@ class JobOut(BaseModel):
         )
 
 
+class OptionOut(BaseModel):
+    """One option a waiting proposal offers; the user approves one of them."""
+
+    option: Literal["model", "fallback"] = Field(
+        description="`model`: the model's recommendation; `fallback`: the rule based return "
+        "to dock. Pass it to `approve`."
+    )
+    action: ProposalAction
+    default: bool = Field(description="What an approval without an option runs (`action`).")
+    low_confidence: bool = Field(
+        description="The model recommends it with a confidence below the threshold."
+    )
+    confidence: float | None = Field(
+        default=None, description="The model's confidence (null for the fallback)."
+    )
+    steps: list["StepOut"] = Field(
+        default_factory=list, description="The drive steps (blades off) of this option."
+    )
+
+
 class ProposalOut(BaseModel):
     """A proposal of AI assist (poll it while ``final`` is false)."""
 
@@ -207,15 +239,38 @@ class ProposalOut(BaseModel):
     assessment: AssessmentOut | None
     action: ProposalAction = Field(
         default=ProposalAction.DRIVE,
-        description="What approval executes: `drive` (the steps, blades off), "
-        "`return_to_dock` (the normal dock command; no steps) or `resume` (the steps, if any, "
-        "then the paused job continues with `resume_mow`). `none` only on rejected rows.",
+        description="The default option, what an approval without a choice executes (after an "
+        "approval: what runs): `drive` (the steps, blades off), `return_to_dock` (the normal "
+        "dock command; no steps) or `resume` (the steps, if any, then the paused job continues "
+        "with `resume_mow`). `none` only on rejected rows.",
     )
     fallback: bool = Field(
         default=False,
-        description="The model recommended nothing; Vision offers return to dock as a rule "
-        "based fallback because it applies (mower in a mapped area linked to the dock, no "
-        "safety stop). It still needs an approval.",
+        description="`action` is the rule based return to dock fallback, not the model's "
+        "recommendation: it applies (mower in a mapped area linked to the dock, no safety "
+        "stop). It still needs an approval.",
+    )
+    low_confidence: bool = Field(
+        default=False,
+        description="The model's recommendation is offered although its confidence is below "
+        "the threshold: as `action`, or as `alternative_action` next to the fallback.",
+    )
+    alternative_action: ProposalAction | None = Field(
+        default=None,
+        description="The model's low-confidence recommendation next to the fallback `action`; "
+        "approve it with option `model`.",
+    )
+    model_refused: str | None = Field(
+        default=None,
+        description="Why the model's low-confidence recommendation is not offered (it failed "
+        "a safety check: not applicable, step limits, position, geofence or no-go zone).",
+    )
+    approved_option: Literal["model", "fallback"] | None = Field(
+        default=None, description="Which option the approval ran."
+    )
+    options: list[OptionOut] = Field(
+        default_factory=list,
+        description="While `proposed`: the options to choose from, the default first.",
     )
     job: JobOut | None = Field(
         default=None,
@@ -240,6 +295,16 @@ class ProposalOut(BaseModel):
     )
     trigger_error_code: str | None = Field(
         default=None, description="With trigger `error`: the error code that started it."
+    )
+    photo_problem: VisionPhotoProblem | None = Field(
+        default=None,
+        description="The mower's camera delivered no photo, and why: `weak_wifi` or "
+        "`weak_mobile` (with `signal_dbm`), `offline` or `no_frame`. With state `failed` and "
+        "trigger `error` the automatic analysis could not run; otherwise the model saw only "
+        "the map and uploaded images.",
+    )
+    signal_dbm: int | None = Field(
+        default=None, description="With a weak signal: the mower's signal in dBm."
     )
     detail: str | None = Field(description="Why it was rejected, failed or how it ended.")
     analysed_at: datetime | None
@@ -313,6 +378,11 @@ class ProposalOut(BaseModel):
             else None,
             action=proposal.action,
             fallback=proposal.fallback,
+            low_confidence=proposal.low_confidence,
+            alternative_action=proposal.alternative_action,
+            model_refused=proposal.model_refused,
+            approved_option=_APPROVED_OPTIONS.get(proposal.approved_option or ""),
+            options=_options(proposal),
             job=JobOut.of(proposal.context),
             steps=step_out,
             image_count=proposal.image_count,
@@ -321,6 +391,8 @@ class ProposalOut(BaseModel):
             frames=[FrameOut.of(f) for f in proposal.frames],
             trigger=proposal.trigger,
             trigger_error_code=proposal.trigger_error_code,
+            photo_problem=_photo_problem(proposal.context),
+            signal_dbm=_signal_dbm(proposal.context),
             detail=proposal.detail,
             analysed_at=proposal.analysed_at,
             expires_at=proposal.expires_at,
@@ -347,6 +419,76 @@ class ProposalOut(BaseModel):
             can_retry=details.can_retry,
             rounds_left=details.rounds_left,
         )
+
+
+_APPROVED_OPTIONS: dict[str, Literal["model", "fallback"]] = {
+    "model": "model",
+    "fallback": "fallback",
+}
+
+
+def _pending_steps(steps: list[ProposedStep]) -> list[StepOut]:
+    return [
+        StepOut(
+            index=i,
+            linear=s.linear,
+            angular=s.angular,
+            seconds=s.seconds,
+            outcome=StepOutcome.PENDING,
+        )
+        for i, s in enumerate(steps)
+    ]
+
+
+def _option_steps(proposal: Proposal, action: ProposalAction) -> list[StepOut]:
+    answer = proposal.assessment
+    if answer is None or action not in (ProposalAction.DRIVE, ProposalAction.RESUME):
+        return []
+    return _pending_steps(answer.proposal)
+
+
+def _options(proposal: Proposal) -> list[OptionOut]:
+    """The options of a waiting proposal, the default first (none in any other state)."""
+    answer = proposal.assessment
+    if proposal.state is not ProposalState.PROPOSED or answer is None:
+        return []
+    if proposal.action is ProposalAction.NONE:
+        return []
+    options = [
+        OptionOut(
+            option="fallback" if proposal.fallback else "model",
+            action=proposal.action,
+            default=True,
+            low_confidence=proposal.low_confidence and not proposal.fallback,
+            confidence=None if proposal.fallback else answer.confidence,
+            steps=[] if proposal.fallback else _option_steps(proposal, proposal.action),
+        )
+    ]
+    if proposal.fallback and proposal.alternative_action is not None:
+        options.append(
+            OptionOut(
+                option="model",
+                action=proposal.alternative_action,
+                default=False,
+                low_confidence=proposal.low_confidence,
+                confidence=answer.confidence,
+                steps=_option_steps(proposal, proposal.alternative_action),
+            )
+        )
+    return options
+
+
+def _photo_problem(context: dict[str, object]) -> VisionPhotoProblem | None:
+    value = context.get("photo_problem")
+    try:
+        return VisionPhotoProblem(value) if isinstance(value, str) else None
+    except ValueError:
+        return None
+
+
+def _signal_dbm(context: dict[str, object]) -> int | None:
+    value = context.get("signal_dbm")
+    return value if isinstance(value, int) and -150 <= value <= -1 else None
 
 
 class ProposalPageOut(BaseModel):
