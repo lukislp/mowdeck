@@ -62,7 +62,7 @@ Format and auto-fix: `uv run poe fmt`.
 
 ## Frontend checks
 
-The web app (`apps/web`), the design system (`libs/mowdeck-ui`), the type generator (`tools/ts-codegen`) and the Playwright gate (`tests/e2e-web`) form a pnpm workspace. Requirements: Node 22 (`.node-version`) and pnpm 10.34.6 (`corepack enable`). CI runs the same steps in the job `web`:
+The web app (`apps/web`), the design system (`libs/mowdeck-ui`), the type generator (`tools/ts-codegen`) and the Playwright gate (`tests/e2e-web`) form a pnpm workspace. Requirements: Node 24 (24.21 or newer, `.node-version`) and pnpm 10.34.6 (`corepack enable`). CI runs the same steps in the job `web`:
 
 ```bash
 pnpm install --frozen-lockfile

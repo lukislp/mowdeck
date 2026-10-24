@@ -6,7 +6,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Decisions: [ADR 0020](../
 
 ## Dev loop
 
-Requirements: Node 22 (22.17 or newer), pnpm 10.34.6 (`corepack enable`), Docker for the Compose stack. Commands run from the repository root.
+Requirements: Node 24 (24.21 or newer), pnpm 10.34.6 (`corepack enable`), Docker for the Compose stack. Commands run from the repository root.
 
 ```bash
 docker compose -f infra/compose/docker-compose.yml up -d --build --wait   # the API (and the built app at http://localhost)
@@ -44,7 +44,7 @@ AI assist ("KI-Hilfe", Vision service, `/api/v1/vision`): on the mower page a st
 
 ## Docker image
 
-`Dockerfile` (build context: the repository root): `public.ecr.aws/docker/library/node:22.23.3-alpine` installs the workspace with `--frozen-lockfile` and builds; the runtime is `public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine` (uid 101, port 8080) with `nginx/default.conf` and `nginx/security-headers.conf` (CSP from `build/csp.conf`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options: DENY`, COOP). `/_app/immutable/` is cached for a year, everything else revalidated, unknown paths get `200.html`; `/healthz` answers `ok`. Compose runs it read-only with a tmpfs at `/tmp`.
+`Dockerfile` (build context: the repository root): `public.ecr.aws/docker/library/node:24.21.0-alpine` installs the workspace with `--frozen-lockfile` and builds; the runtime is `public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine` (uid 101, port 8080) with `nginx/default.conf` and `nginx/security-headers.conf` (CSP from `build/csp.conf`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options: DENY`, COOP). `/_app/immutable/` is cached for a year, everything else revalidated, unknown paths get `200.html`; `/healthz` answers `ok`. Compose runs it read-only with a tmpfs at `/tmp`.
 
 ### Map tiles (runtime configuration)
 

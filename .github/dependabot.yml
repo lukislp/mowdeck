@@ -60,8 +60,10 @@ updates:
         dependency-type: development
         update-types: ["minor", "patch"]
     ignore:
-      # @types/node follows the Node runtime (22, see "engines" in package.json and the Node
-      # image); it is raised together with the runtime, not on its own.
+      # @types/node follows the Node runtime (24, see "engines" in package.json, .node-version and
+      # NODE_IMAGE); its major is raised together with the runtime, not on its own (next: Node 26,
+      # planned for mid-November 2026, docs/dev/web-app.md "Node version"). 24.x minors and
+      # patches still arrive in the dev group.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
       # typescript-eslint does not support TypeScript 7 yet; revisit once it declares support.
