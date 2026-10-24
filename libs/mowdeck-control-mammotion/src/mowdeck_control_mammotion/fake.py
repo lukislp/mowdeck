@@ -13,6 +13,7 @@ PyMammotion's ``MowPathSaga`` (:func:`install_mow_path`).
 
 import asyncio
 import contextlib
+import copy
 import math
 import time
 from collections.abc import Callable, Sequence
@@ -246,7 +247,6 @@ def sample_device(
     device.mower_state.product_key = product_key
     device.mower_state.sub_model_id = sub_model_id
     device.mower_state.swversion = "1.30.29.26"
-    device.mower_state.travel_speed = 0.4
     dev = device.report_data.dev
     dev.sys_status = int(WorkMode.MODE_READY)
     dev.charge_state = 1
@@ -499,11 +499,17 @@ class FakeMammotionPort:
         (:meth:`_apply_setting`) while ``settings_follow_writes``."""
         self.settings_follow_writes = True
         self.lamp_bright = 80
+        self.blade_follows_writes = True
+        """Whether ``set_blade_height`` changes the reported ``knife_height`` (False: a mower that
+        keeps reporting the old height)."""
         self.speed_answer: float | None = 0.4
-        """The speed setting for manual driving the mower reports on ``get_speed`` (answer
+        """The mower's own speed setting it reports on ``get_speed`` (answer
         ``bidire_speed_read_set``), stored like PyMammotion's reducer in
         ``mower_state.travel_speed``; None: no answer (the read times out). ``set_speed``
-        changes it while the mower answers."""
+        changes it while the mower answers, and it survives a gateway restart
+        (:meth:`after_restart`). 0.4 m/s on purpose: not the adapter's default of 0.3, so a
+        start that ignores the mower's setting shows. :func:`sample_device` starts unread
+        (``travel_speed`` 0), as PyMammotion does after a restart."""
         """``lamp_bright`` of an answer while the lamp is on."""
         """``(model_id, sub_model_id)`` that ``get_device_product_model`` stores on the device,
         like PyMammotion's reducer on the ``device_product_type_info`` answer (None: no
@@ -986,6 +992,30 @@ class FakeMammotionPort:
         self._device.mower_state.travel_speed = speed
         await self.emit()
 
+    def after_restart(self) -> "FakeMammotionPort":
+        """A new port to the same mower, as after a gateway restart or deploy.
+
+        PyMammotion's cache starts empty again: no answer to ``get_speed`` yet
+        (``travel_speed`` 0) and no route settings of a job (``work``). The mower keeps what it
+        holds itself: its speed setting (:attr:`speed_answer`, which ``set_speed`` changed), the
+        headlamp, the map, the work mode and the report values (blade height included).
+        """
+        device = copy.deepcopy(self._device)
+        device.mower_state.travel_speed = 0.0
+        device.work = type(device.work)()
+        port = FakeMammotionPort(
+            device,
+            device_name=self._device_name,
+            product_key=self._product_key,
+            firmware=self._firmware,
+            model=self._model,
+            cooperative=self.cooperative,
+            product_model=self.product_model,
+        )
+        port.speed_answer = self.speed_answer
+        port.light_answer = self.light_answer
+        return port
+
     async def deliver_base_station_info(self, answer: dict[str, int]) -> None:
         """Store a ``basestation_info`` answer (``base.to_app``) like PyMammotion's reducer in
         ``report_data.basestation_info`` and notify the listeners."""
@@ -1101,6 +1131,11 @@ class FakeMammotionPort:
         if command == "set_speed":
             if self.speed_answer is not None:
                 self.speed_answer = float((kwargs or {}).get("speed", 0.0))
+            return
+        if command == "set_blade_height" and self.blade_follows_writes:
+            # the mower moves its cutting deck and reports the new height
+            self._device.report_data.work.knife_height = int((kwargs or {}).get("height", 0))
+            await self.emit()
             return
         if command == "set_car_manual_light":
             if self.light_answer is not None and self.light_follows_writes:
