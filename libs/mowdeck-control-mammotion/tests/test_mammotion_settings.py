@@ -58,9 +58,52 @@ def test_luba_2_declares_its_settings_and_the_charge_levels_with_new_firmware() 
     assert (recharge.key, recharge.max, recharge.unit) == ("recharge_level", 30, "%")
 
 
-@pytest.mark.parametrize("name", ["Yuka-ABC123", "Luba-ABC123", "Spino-ABC", "RTK12345"])
+@pytest.mark.parametrize("name", ["Luba-ABC123", "Spino-ABC", "Spino-S1ABC", "RTK12345"])
 def test_other_families_declare_no_settings(name: str) -> None:
     assert settings.settings_of(name, CHARGE_FIRMWARE) == []
+
+
+YUKA_BASE = ["rain_detection", "turn_style", "traversal_mode"]
+YUKA_VOICE = ["voice_enabled", "voice_volume", "voice_gender", "non_work_hours"]
+
+
+@pytest.mark.parametrize(
+    ("name", "blade_speed", "night_light", "wildlife"),
+    [
+        ("Yuka-ABC123", False, False, True),  # the original Yuka (LUBA_YUKA)
+        ("Yuka-MN12345", True, True, True),  # YUKA mini
+        ("Yuka-YM12345", True, True, True),  # YUKA mini 2
+        ("Yuka-VP12345", True, False, True),  # YUKA VP (MN241)
+        ("Yuka-MV12345", True, False, False),  # YUKA MV: no night light, no wildlife safety
+        ("Yuka-ML12345", True, True, True),
+        ("Ezy-VT12345", True, True, False),  # MN100: no wildlife safety
+        ("Ezy-LD12345", True, True, True),  # MN101
+        ("Yuka-HS12345", True, True, True),  # MN260
+    ],
+)
+def test_yuka_models_declare_what_pymammotion_supports_for_them(
+    name: str, blade_speed: bool, night_light: bool, wildlife: bool
+) -> None:
+    expected = (
+        YUKA_BASE
+        + (["blade_speed"] if blade_speed else [])
+        + ["side_led"]
+        + (["night_light"] if night_light else [])
+        + (["wildlife_safety"] if wildlife else [])
+        + CHARGE_KEYS
+        + YUKA_VOICE
+    )
+    assert [s.key for s in settings.settings_of(name, CHARGE_FIRMWARE)] == expected
+    old = [s.key for s in settings.settings_of(name, "1.12.9")]  # before 1.13 and 2.1.1.5
+    assert old == [k for k in expected if k not in CHARGE_KEYS and k != "wildlife_safety"]
+
+
+def test_blade_speed_is_a_mowing_enum_of_the_yuka_only() -> None:
+    spec = next(s for s in settings.settings_of("Yuka-MN12345", "") if s.key == "blade_speed")
+    assert (spec.group, spec.options) == ("mowing", ["slow", "normal", "fast"])
+    # PyMammotion also offers it for these LUBA models; ADR 0046 leaves it out for them.
+    for luba in ("Luba-VPDRYRUN", "Luba-MN12345", "Luba-VA12345"):
+        assert "blade_speed" not in [s.key for s in settings.settings_of(luba, "")]
 
 
 async def test_settings_are_read_at_connect_and_reported() -> None:
@@ -258,3 +301,65 @@ async def test_rain_sensor_comes_from_the_self_check() -> None:
     port.report = False
     assert (await conn.get_state()).rain_detected is None
     await conn.disconnect()
+
+
+def _yuka_port(name: str = "Yuka-MN12345", **mower_state: Any) -> FakeMammotionPort:
+    device = sample_device(name, product_key="")
+    for field, value in mower_state.items():
+        setattr(device.mower_state, field, value)
+    return FakeMammotionPort(device, device_name=name, product_key="", firmware=CHARGE_FIRMWARE)
+
+
+async def test_a_yuka_reads_its_settings_with_the_replies_pymammotion_routes() -> None:
+    port = _yuka_port(
+        rain_detection=True, traversal_mode=1, cutter_mode=2, recharge_level=25, resume_level=90
+    )
+    conn, _ = cloud(port)
+    state = await _connected(conn)
+    caps = await conn.capabilities()
+    assert "blade_speed" in [s.key for s in caps.settings]
+    assert state.settings["blade_speed"] == "fast"
+    assert state.settings["rain_detection"] is True
+    assert state.settings["traversal_mode"] == "follow_perimeter"
+    assert state.settings["night_light"] is False
+    assert (state.settings["recharge_level"], state.settings["resume_level"]) == (25, 90)
+    replies = {(c.name, c.expected_field) for c in port.sent if is_setting_read(c.name, c.kwargs)}
+    assert ("get_cutter_mode", "current_cutter_mode") in replies
+    assert ("read_write_device", "nav_sys_param_cmd") in replies  # like the LUBA 2
+    assert ("read_recharge_level", "nav_sys_param_cmd") in replies
+    await conn.disconnect()
+
+
+@pytest.mark.parametrize(("value", "mode"), [("slow", 1), ("normal", 0), ("fast", 2)])
+async def test_a_yuka_sets_its_blade_speed(value: str, mode: int) -> None:
+    conn, port = cloud(_yuka_port())
+    await _connected(conn)
+    port.sent.clear()
+    outcome = await conn.set_setting("blade_speed", value)
+    assert outcome.status is CommandStatus.EXECUTED, outcome.reason
+    assert _writes(port) == [("set_cutter_mode", {"cutter_mode": mode})]
+    assert ("get_cutter_mode", "current_cutter_mode") in [
+        (c.name, c.expected_field) for c in port.sent
+    ]
+    assert (await conn.get_state()).settings["blade_speed"] == value
+    await conn.disconnect()
+
+
+async def test_an_unknown_cutter_mode_stays_out_of_the_state() -> None:
+    conn, _ = cloud(_yuka_port(cutter_mode=7))
+    state = await _connected(conn)
+    assert "blade_speed" not in state.settings
+    await conn.disconnect()
+
+
+async def test_a_yuka_mv_has_no_night_light_and_the_luba_2_no_blade_speed() -> None:
+    conn, _ = cloud(_yuka_port("Yuka-MV12345"))
+    await _connected(conn)
+    with pytest.raises(CommandRejected, match="no setting 'night_light'"):
+        await conn.set_setting("night_light", True)
+    await conn.disconnect()
+    luba, _ = cloud()
+    await _connected(luba)
+    with pytest.raises(CommandRejected, match="no setting 'blade_speed'"):
+        await luba.set_setting("blade_speed", "fast")
+    await luba.disconnect()

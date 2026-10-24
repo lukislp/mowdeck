@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-23); amends [ADR 0043](0043-turn-styles.md) (the mower's own turn setting may now be written).
+Accepted (2026-10-23); amends [ADR 0043](0043-turn-styles.md) (the mower's own turn setting may now be written). Amended 2026-10-25 (Yuka family, see below).
 
 ## Context
 
@@ -14,7 +14,7 @@ The mower also reports when its rain sensor stops it from starting; clients want
 
 ## Decision
 
-**Settings are declared, not hard-coded.** `MowerCapabilities.settings` lists what the connection can read and change, one `SettingSpec` per setting: a manufacturer-neutral `key`, a `type` (`bool`, `int`, `enum`, `time_window`), a `group` for clients (`weather`, `battery`, `lights`, `driving`, `safety`, `voice`, `schedule`), and for `int` its `min`, `max`, `step` and `unit`, for `enum` its `options`. The known keys and what they mean are `SETTING_KEYS` in the contracts; an adapter may only declare those, so clients can label every setting without knowing the vendor. A `time_window` value is `{start, end}` (`HH:MM`, `end` before `start` crosses midnight) or null for "none".
+**Settings are declared, not hard-coded.** `MowerCapabilities.settings` lists what the connection can read and change, one `SettingSpec` per setting: a manufacturer-neutral `key`, a `type` (`bool`, `int`, `enum`, `time_window`), a `group` for clients (`weather`, `battery`, `lights`, `driving`, `mowing`, `safety`, `voice`, `schedule`; `mowing` since 2026-10-25), and for `int` its `min`, `max`, `step` and `unit`, for `enum` its `options`. The known keys and what they mean are `SETTING_KEYS` in the contracts; an adapter may only declare those, so clients can label every setting without knowing the vendor. A `time_window` value is `{start, end}` (`HH:MM`, `end` before `start` crosses midnight) or null for "none".
 
 **Current values in the state.** `MowerState.settings` maps each declared key to its value as the mower reported it. A key the mower has not answered yet is missing (never a guessed default), so a client shows "unknown" instead of a wrong value.
 
@@ -50,6 +50,15 @@ Mammotion (`mowdeck_control_mammotion.settings`, the commands and replies Mammot
 Writes go out once with user priority, then the setting is read back; the declared settings are read at connect with the device information (background priority, again while unanswered). `rain_detected` is `report_data.dev.self_check_status == 20` ("Mowing is disabled on rainy days"), which the mower reports only while `rain_detection` is on.
 
 Left out on purpose: the rain delay and the rain protection modes (X5 series only), the charge limit and smart charging (a read-modify-write of the off-peak charging window, which the vendor resets to 00:00 to 00:00 when it is sent unread; and not available on the owner's firmware), `auto_change_direction` (a start option that the vendor excludes for the LUBA 2), blade speed, and every Yuka and Spino setting.
+
+## Amendment 2026-10-25: Yuka family
+
+Owner decision: the Yuka models get every setting PyMammotion 0.10.9 supports for them, with PyMammotion's own gates per model and firmware ("what PyMammotion offers, the Yuka can do; its author tested it, so accept his assumptions"). The reason for leaving them out above no longer holds: PyMammotion routes the read/write parameters of every `DeviceType.is_luba_pro` model over `nav_sys_param_cmd` (`MammotionCommand.read_write_device`, the same check as Mammotion-HA's `_rw_expected_field`), and that includes every Yuka. Mammotion-HA (at PyMammotion 0.10.9) creates the same entities for the Yuka.
+
+- The Mammotion adapter now declares settings for every `is_luba_pro` model (`DeviceType.is_yuka` included): `rain_detection`, `turn_style`, `traversal_mode`, `side_led`, `voice_*` and `non_work_hours` on every Yuka; `night_light` where `is_support_fill_light` holds and the model is not the Yuka MV (the app hides it there; this gate was missing above); `wildlife_safety` by `supports_wildlife_safety` (not the Yuka MV and Ezy VT, firmware 1.13); the charge levels by `supports_charge_limit` (firmware 2.1.1.5).
+- New key `blade_speed` (`enum`: `slow`, `normal`, `fast`; group `mowing`, new): `set_cutter_mode` (PyMammotion's `CuttingSpeedMode` 1, 0, 2), read `get_cutter_mode`, answer `current_cutter_mode`. Declared for the Yuka models of `DeviceType.is_support_blade_speed` (every Yuka but the original one). PyMammotion offers it for several LUBA models as well (the LUBA 2 AWD X among them); for them it stays left out as decided above until the owner decides otherwise.
+- Still left out: the Yuka's grass collector. The manual sweep and dump (`manual_grass_collection`, `manual_pour_grass`) move the collector, which a setting must not do; the dump interval (`collect_grass_frequency`) and the mow, dump and edge switches are job options of a start (Mammotion-HA's `operation_settings`), which belong to `start_options` (ADR 0030), not here. Spino: pool cleaners are no `is_luba_pro` model and PyMammotion has no mower setting for them, so none.
+- Not verified on a Yuka: MowDeck has none; the declaration, reads and writes follow PyMammotion and Mammotion-HA and are tested with the fake port.
 
 ## Consequences
 
