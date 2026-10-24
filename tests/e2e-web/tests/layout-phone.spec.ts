@@ -114,6 +114,7 @@ for (const width of [360, 390]) {
       '/fleet',
       '/fleet/sites',
       '/fleet/groups',
+      '/fleet/base-stations',
       '/notifications',
       '/settings',
       '/account',
