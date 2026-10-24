@@ -7,7 +7,7 @@
  * server is usually internal. Notification payloads carry an app URL (`url`), reduced to a path
  * on this origin by the same rule as Web Push, so a notification never opens a foreign site.
  */
-import { FALLBACK_URL, safePath } from '$lib/push/payload';
+import { FALLBACK_URL, safePath } from '#lib/push/payload.js';
 
 export const SCHEME = 'mowdeck:';
 

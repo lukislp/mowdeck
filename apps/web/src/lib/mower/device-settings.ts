@@ -4,7 +4,7 @@
  * from `MowerState.settings`; a change is the command `set_setting {key, value}`. Pure and unit
  * tested (`device-settings.test.ts`); the words are in `device-settings-labels.ts`.
  */
-import type { components } from '$lib/generated/telemetry';
+import type { components } from '#lib/generated/telemetry.js';
 
 type Schemas = components['schemas'];
 export type SettingSpec = Schemas['SettingSpec'];

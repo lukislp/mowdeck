@@ -5,10 +5,10 @@
  * A built-in module is shown when the user holds its permission and either it is `core` or a
  * ui_area with the same route exists (the backing service is deployed). If the endpoint fails,
  * the menu falls back to the permission check alone; it never blocks the emergency stop.
- * Operator modules (`platformAdmin`) follow the operator probe of `$lib/operator/access`.
+ * Operator modules (`platformAdmin`) follow the operator probe of `#lib/operator/access`.
  */
-import { identityApi, unwrap } from '$lib/api/client';
-import type { AppModule } from '$lib/modules/types';
+import { identityApi, unwrap } from '#lib/api/client.js';
+import type { AppModule } from '#lib/modules/types.js';
 
 const found = import.meta.glob<{ default: AppModule }>('../modules/*/module.ts', { eager: true });
 

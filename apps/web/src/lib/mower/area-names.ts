@@ -1,5 +1,5 @@
 /** Custom area names in Fleet (`PUT /mowers/{id}/area-names/{area_id}`); the mower keeps its own. */
-import { fleetApi, unwrap } from '$lib/api/client';
+import { fleetApi, unwrap } from '#lib/api/client.js';
 
 import { isPlaceholderName, type AreaNames } from './map-labels';
 

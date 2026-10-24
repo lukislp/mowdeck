@@ -15,7 +15,13 @@
   import { Stepper } from '@mowdeck/ui';
   import type { Snippet } from 'svelte';
 
-  import { formatNumber, formatPercent, obstacleLabel, orderLabel, patternLabel } from '$lib/i18n';
+  import {
+    formatNumber,
+    formatPercent,
+    obstacleLabel,
+    orderLabel,
+    patternLabel,
+  } from '#lib/i18n.js';
   import {
     NO_OPTIONS,
     optionsSet,
@@ -23,8 +29,8 @@
     stepProgress,
     type JobOptionsDraft,
     type JobOptionsSpec,
-  } from '$lib/mower/job-options';
-  import type { Range } from '$lib/mower/limits';
+  } from '#lib/mower/job-options.js';
+  import type { Range } from '#lib/mower/limits.js';
   import {
     ANGLE_MAX,
     BORDER_LAPS_MAX,
@@ -36,9 +42,9 @@
     type LoosePatternDraft,
     type PatternName,
     type SpacingRange,
-  } from '$lib/mower/mow-pattern';
-  import { BLADE_STEP_MM, SPEED_STEP_MPS, type SetpointDraft } from '$lib/mower/setpoints';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/mower/mow-pattern.js';
+  import { BLADE_STEP_MM, SPEED_STEP_MPS, type SetpointDraft } from '#lib/mower/setpoints.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     /** Patterns the mower runs natively, in sheet order (none: no pattern controls). */
@@ -74,7 +80,7 @@
 
   const MM = 'mm';
   const MPS = 'm/s';
-  /** Units are not translated (see `$lib/i18n`). */
+  /** Units are not translated (see `#lib/i18n.js`). */
   const CM = 'cm';
   const withSetpoints = $derived(bladeRange !== null || speedRange !== null);
   const withAngle = $derived(angleApplies(draft.name ?? 'stripes'));

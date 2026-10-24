@@ -9,14 +9,14 @@
     type RtkFix,
   } from '@mowdeck/ui';
 
-  import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { session } from '$lib/auth/session.svelte';
-  import { clock } from '$lib/clock.svelte';
-  import LiveStatus from '$lib/components/LiveStatus.svelte';
-  import PlanBanner from '$lib/components/PlanBanner.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import type { components } from '$lib/generated/fleet';
+  import { fleetApi, telemetryApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { session } from '#lib/auth/session.svelte.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import LiveStatus from '#lib/components/LiveStatus.svelte';
+  import PlanBanner from '#lib/components/PlanBanner.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import type { components } from '#lib/generated/fleet.js';
   import {
     activityLabel,
     connectionLabel,
@@ -24,15 +24,20 @@
     formatNumber,
     problemMessage,
     rtkLabel,
-  } from '$lib/i18n';
-  import { realtime } from '$lib/live.svelte';
-  import { displayModel } from '$lib/mower/limits';
-  import { m } from '$lib/paraglide/messages';
-  import { lastLoad } from '$lib/stores/last-load';
-  import { mowers as states } from '$lib/stores/mowers.svelte';
-  import { install } from '$lib/stores/ui.svelte';
-  import { displaySites } from '$lib/fleet/data';
-  import { QUICK_FILTERS, passesQuick, sectionsBySite, type QuickFilter } from '$lib/fleet/places';
+  } from '#lib/i18n.js';
+  import { realtime } from '#lib/live.svelte.js';
+  import { displayModel } from '#lib/mower/limits.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { lastLoad } from '#lib/stores/last-load.js';
+  import { mowers as states } from '#lib/stores/mowers.svelte.js';
+  import { install } from '#lib/stores/ui.svelte.js';
+  import { displaySites } from '#lib/fleet/data.js';
+  import {
+    QUICK_FILTERS,
+    passesQuick,
+    sectionsBySite,
+    type QuickFilter,
+  } from '#lib/fleet/places.js';
 
   type Mower = components['schemas']['MowerOut'];
   type Site = components['schemas']['SiteOut'];

@@ -6,11 +6,11 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
 
   $effect(() => {
     const id = encodeURIComponent(page.params.id ?? '');
-    void goto(`/mowers/${id}${page.url.search}`, { replaceState: true });
+    void goto(`/mowers/${id}${page.url.search}`, { replace: true });
   });
 </script>
 

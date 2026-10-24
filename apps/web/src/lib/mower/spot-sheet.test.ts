@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { fromWgs84, toWgs84, type GeoReference, type MapSpot } from '@mowdeck/ui';
 
-import { setLocale } from '$lib/paraglide/runtime';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 import {
   SPOT_SPEED_MAX_MPS,

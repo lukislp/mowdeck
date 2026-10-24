@@ -4,7 +4,7 @@
   most 0.3 m/s), the turns at lane ends (ADR 0043), the blades (off by default: a dry run; on only when the mower allows blades
   while driving, with a second confirmation), the Planner's preview (duration, segments,
   warnings) and the start conditions as green and red rows. "Starten" is enabled only when every
-  row is green and a preview exists. The flow (`$lib/mower/spot-sheet.svelte`) owns the state;
+  row is green and a preview exists. The flow (`#lib/mower/spot-sheet.svelte.js`) owns the state;
   this file is markup.
 
   Desktop: the side sheet with everything and the start row in its footer. Phones (`phone`): a
@@ -37,9 +37,9 @@
     type SnapPoint,
   } from '@mowdeck/ui';
 
-  import { formatNumber } from '$lib/i18n';
-  import { formatSpotDuration } from '$lib/mower/duration';
-  import { ANGLE_MAX, ANGLE_STEP } from '$lib/mower/mow-pattern';
+  import { formatNumber } from '#lib/i18n.js';
+  import { formatSpotDuration } from '#lib/mower/duration.js';
+  import { ANGLE_MAX, ANGLE_STEP } from '#lib/mower/mow-pattern.js';
   import {
     FALLBACK_CUTTING_WIDTH_MM,
     SPOT_CORNERS_MAX,
@@ -56,9 +56,9 @@
     hasTurnKinds,
     turnStyleHint,
     type TurnStyle,
-  } from '$lib/mower/spot-sheet';
-  import type { SpotSheetFlow } from '$lib/mower/spot-sheet.svelte';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/mower/spot-sheet.js';
+  import type { SpotSheetFlow } from '#lib/mower/spot-sheet.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     flow: SpotSheetFlow;

@@ -3,7 +3,7 @@
  * contract (`SETTING_KEYS`) with a hint, their options and the groups. A key, option or group the
  * app does not know yet (a newer adapter) is shown readable from its name.
  */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import type { SettingGroup, SettingsBlocker } from './device-settings';
 

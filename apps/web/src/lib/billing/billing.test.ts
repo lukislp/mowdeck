@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiProblem } from '$lib/api/problem';
-import { m } from '$lib/paraglide/messages';
+import { ApiProblem } from '#lib/api/problem.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import { BillingAccount, type BillingLoaders } from './account.svelte';
 import {

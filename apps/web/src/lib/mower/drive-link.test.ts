@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { setLocale } from '$lib/paraglide/runtime';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 import {
   LINK_MIN_RSSI_DBM,

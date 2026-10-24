@@ -2,10 +2,10 @@
  * The app's notification singletons: the inbox store and this device's Web Push, wired to the
  * Notifications API (`/api/v1/notifications`).
  */
-import { notificationsApi, unwrap } from '$lib/api/client';
-import { ApiProblem } from '$lib/api/problem';
-import { PushDevice } from '$lib/push/device';
-import { InboxStore } from '$lib/stores/inbox.svelte';
+import { notificationsApi, unwrap } from '#lib/api/client.js';
+import { ApiProblem } from '#lib/api/problem.js';
+import { PushDevice } from '#lib/push/device.js';
+import { InboxStore } from '#lib/stores/inbox.svelte.js';
 
 export const inbox = new InboxStore({
   list: (limit) =>

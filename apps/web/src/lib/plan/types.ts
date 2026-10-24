@@ -1,5 +1,5 @@
 /** The Entitlements types the web app uses (from the generated OpenAPI types). */
-import type { components } from '$lib/generated/entitlements';
+import type { components } from '#lib/generated/entitlements.js';
 
 type Schemas = components['schemas'];
 

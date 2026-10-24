@@ -1,5 +1,7 @@
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
@@ -15,7 +17,21 @@ const agora = agoraIncluded(process.env.MOWDECK_WEB_AGORA_SDK);
 
 export default defineConfig({
   plugins: [
-    sveltekit(),
+    // SvelteKit 3 as a static SPA (its options live here, there is no svelte.config.js): every
+    // route is client rendered, unknown paths fall back to 200.html (served by nginx with
+    // try_files). The app registers the service worker itself (update prompt, native shell).
+    sveltekit({
+      preprocess: vitePreprocess(),
+      compilerOptions: { runes: true },
+      adapter: adapter({
+        pages: 'build',
+        assets: 'build',
+        fallback: '200.html',
+        strict: true,
+      }),
+      serviceWorker: { register: false },
+      version: { pollInterval: 0 },
+    }),
     paraglideVitePlugin({
       project: './project.inlang',
       outdir: './src/lib/paraglide',
@@ -105,6 +121,7 @@ export default defineConfig({
         'src/lib/native/local.ts',
         'src/lib/native/apns.ts',
         'src/lib/native/shell.svelte.ts',
+        'src/lib/navigate.ts',
       ],
       reporter: ['text-summary'],
       thresholds: { lines: 80 },

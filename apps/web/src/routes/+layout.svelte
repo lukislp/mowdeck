@@ -6,14 +6,13 @@
   import { ToastRegion } from '@mowdeck/ui';
   import { onMount, type Snippet } from 'svelte';
 
-  import { goto } from '$app/navigation';
-
-  import { session } from '$lib/auth/session.svelte';
-  import { startLive } from '$lib/live.svelte';
-  import { nativeShell } from '$lib/native/runtime';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import { appUpdate, install, toasts } from '$lib/stores/ui.svelte';
+  import { session } from '#lib/auth/session.svelte.js';
+  import { startLive } from '#lib/live.svelte.js';
+  import { nativeShell } from '#lib/native/runtime.js';
+  import { navigatePath } from '#lib/navigate.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import { appUpdate, install, toasts } from '#lib/stores/ui.svelte.js';
 
   let { children }: { children: Snippet } = $props();
 
@@ -25,7 +24,7 @@
     void appUpdate.register(install.native);
     if (session.status === 'unknown') void session.restore().catch(() => undefined);
     // Inside the iOS/Android app shell: deep links and notification taps (inert in a browser).
-    return nativeShell.start((path) => void goto(path));
+    return nativeShell.start((path) => void navigatePath(path));
   });
 </script>
 

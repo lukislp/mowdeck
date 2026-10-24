@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
-import { NO_OPTIONS, type JobOptionsSpec } from '$lib/mower/job-options';
-import { FALLBACK, offeredPatterns } from '$lib/mower/mow-pattern';
-import { setLocale } from '$lib/paraglide/runtime';
+import { NO_OPTIONS, type JobOptionsSpec } from '#lib/mower/job-options.js';
+import { FALLBACK, offeredPatterns } from '#lib/mower/mow-pattern.js';
+import { setLocale } from '#lib/paraglide/runtime.js';
 
 import MowSettings from './MowSettings.svelte';
 

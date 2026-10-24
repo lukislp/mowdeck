@@ -3,7 +3,7 @@
  * per session and again on demand (the account page). Null while unknown or when Entitlements is
  * not deployed: then nothing about plans is shown, and the services decide as always.
  */
-import { entitlementsApi, unwrap } from '$lib/api/client';
+import { entitlementsApi, unwrap } from '#lib/api/client.js';
 
 import type { ResolvedPlan } from './types';
 import { isRestricted } from './usage';

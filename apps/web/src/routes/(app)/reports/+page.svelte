@@ -4,7 +4,7 @@
   availability (share of the elapsed period online), per mower and in total, with the fleet's
   daily mowing hours as a bar strip. One call (`GET /telemetry/reports/summary`) brings the day
   totals of every visible mower; the site filter uses Fleet's `site_id`. CSV export and "copy as
-  table" are built in the browser (`$lib/reports/csv.ts`).
+  table" are built in the browser (`#lib/reports/csv.ts`).
 -->
 <script lang="ts">
   import {
@@ -20,16 +20,16 @@
     TopBar,
   } from '@mowdeck/ui';
 
-  import { telemetryApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import DailyBars from '$lib/components/DailyBars.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { loadPlaces, type Places } from '$lib/fleet/data';
-  import { sortSites } from '$lib/fleet/places';
-  import { durationParts } from '$lib/health/series';
-  import { formatNumber, problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
+  import { telemetryApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import DailyBars from '#lib/components/DailyBars.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { loadPlaces, type Places } from '#lib/fleet/data.js';
+  import { sortSites } from '#lib/fleet/places.js';
+  import { durationParts } from '#lib/health/series.js';
+  import { formatNumber, problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
   import {
     PERIODS,
     customRangeIssue,
@@ -43,9 +43,9 @@
     type DayRange,
     type Period,
     type ReportDay,
-  } from '$lib/reports/aggregate';
-  import { CSV_DIALECTS, csvFileName, toCsv, toTsv } from '$lib/reports/csv';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/reports/aggregate.js';
+  import { CSV_DIALECTS, csvFileName, toCsv, toTsv } from '#lib/reports/csv.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   let places = $state<Places | null>(null);
   let problem = $state<ApiProblem | null>(null);

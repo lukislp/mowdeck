@@ -1,18 +1,18 @@
 <script lang="ts">
   import { Button, Icon, ProblemNotice, Sheet, Switch, TopBar } from '@mowdeck/ui';
 
-  import { schedulerApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { clock } from '$lib/clock.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import ToneBadge from '$lib/components/ToneBadge.svelte';
-  import { formatAge, problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import { outcomeLook, verdictLook } from '$lib/schedules/labels';
-  import { parsePreview } from '$lib/schedules/preview';
-  import { mowSummary } from '$lib/schedules/mow-options';
-  import { formatCountdown, formatFiring, recurrenceSummary } from '$lib/schedules/recurrence';
+  import { schedulerApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { clock } from '#lib/clock.svelte.js';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import ToneBadge from '#lib/components/ToneBadge.svelte';
+  import { formatAge, problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import { outcomeLook, verdictLook } from '#lib/schedules/labels.js';
+  import { parsePreview } from '#lib/schedules/preview.js';
+  import { mowSummary } from '#lib/schedules/mow-options.js';
+  import { formatCountdown, formatFiring, recurrenceSummary } from '#lib/schedules/recurrence.js';
   import {
     loadLastRun,
     loadPreview,
@@ -21,9 +21,9 @@
     targetRights,
     type Rights,
     type Targets,
-  } from '$lib/schedules/runtime';
-  import type { Locale, Preview, Run, Schedule } from '$lib/schedules/types';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/schedules/runtime.js';
+  import type { Locale, Preview, Run, Schedule } from '#lib/schedules/types.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   let schedules = $state<Schedule[] | null>(null);
   let loadProblem = $state<ApiProblem | null>(null);

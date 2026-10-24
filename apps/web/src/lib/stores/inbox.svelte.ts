@@ -4,7 +4,7 @@
  * while the app is open and refreshes when the window gets the focus or becomes visible again.
  * The API and the timers are injected for the tests.
  */
-import type { components } from '$lib/generated/notifications';
+import type { components } from '#lib/generated/notifications.js';
 
 export type InboxItem = components['schemas']['InboxItemOut'];
 

@@ -7,11 +7,11 @@
 <script lang="ts">
   import { Icon, ProblemNotice } from '@mowdeck/ui';
 
-  import { formatDate } from '$lib/i18n';
-  import { featureLabel } from '$lib/plan/labels';
-  import type { LimitKey, ResolvedPlan } from '$lib/plan/types';
-  import { isRestricted, limitRows, statusUntil } from '$lib/plan/usage';
-  import { m } from '$lib/paraglide/messages';
+  import { formatDate } from '#lib/i18n.js';
+  import { featureLabel } from '#lib/plan/labels.js';
+  import type { LimitKey, ResolvedPlan } from '#lib/plan/types.js';
+  import { isRestricted, limitRows, statusUntil } from '#lib/plan/usage.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   import LimitMeter from './LimitMeter.svelte';
   import PlanStatusBadge from './PlanStatusBadge.svelte';

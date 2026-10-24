@@ -5,7 +5,11 @@
  */
 import type { ToastItem, ToastTone } from '@mowdeck/ui';
 
-import { installContext, readInstallEnvironment, type InstallContext } from '$lib/install/context';
+import {
+  installContext,
+  readInstallEnvironment,
+  type InstallContext,
+} from '#lib/install/context.js';
 
 // --- toasts -------------------------------------------------------------------------------------
 

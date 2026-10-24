@@ -5,8 +5,8 @@
  * `vision_proposal` (AI assist waits for approval) links to `/mowers/<id>?assist=<proposal>`,
  * and so does `vision_auto_proposal` (the same, started automatically by a mower error).
  */
-import type { components } from '$lib/generated/notifications';
-import { m } from '$lib/paraglide/messages';
+import type { components } from '#lib/generated/notifications.js';
+import { m } from '#lib/paraglide/messages.js';
 
 /**
  * The firmware kinds (ADR 0038) are listed here until the Notifications OpenAPI document carries

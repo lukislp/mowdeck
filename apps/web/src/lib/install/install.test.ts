@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { install } from '$lib/stores/ui.svelte';
+import { install } from '#lib/stores/ui.svelte.js';
 
 import {
   installContext,

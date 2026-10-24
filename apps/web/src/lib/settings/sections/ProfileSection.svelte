@@ -1,23 +1,23 @@
 <script lang="ts">
   import { Button, Field, Panel, ProblemNotice, Readout, SegmentedControl } from '@mowdeck/ui';
 
-  import { goto, replaceState } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import { fleetApi, identityApi, schedulerApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { session } from '$lib/auth/session.svelte';
-  import { probeBilling, type BillingStatus } from '$lib/billing/billing';
-  import BillingPanel from '$lib/components/BillingPanel.svelte';
-  import PlanPanel from '$lib/components/PlanPanel.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { problemMessage, roleLabel } from '$lib/i18n';
-  import { nativeShell } from '$lib/native/runtime';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale, setLocale } from '$lib/paraglide/runtime';
-  import { accountPlan } from '$lib/plan/plan.svelte';
-  import type { LimitKey } from '$lib/plan/types';
-  import { install, theme, toasts, type ThemeChoice } from '$lib/stores/ui.svelte';
+  import { fleetApi, identityApi, schedulerApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { session } from '#lib/auth/session.svelte.js';
+  import { probeBilling, type BillingStatus } from '#lib/billing/billing.js';
+  import BillingPanel from '#lib/components/BillingPanel.svelte';
+  import PlanPanel from '#lib/components/PlanPanel.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { problemMessage, roleLabel } from '#lib/i18n.js';
+  import { nativeShell } from '#lib/native/runtime.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale, setLocale } from '#lib/paraglide/runtime.js';
+  import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import type { LimitKey } from '#lib/plan/types.js';
+  import { install, theme, toasts, type ThemeChoice } from '#lib/stores/ui.svelte.js';
 
   const me = $derived(session.me);
   const mustChange = $derived(me?.must_change_password === true);
@@ -95,9 +95,9 @@
     if (outcome === 'success') toasts.push('ok', m.billing_success());
     else toasts.push('info', m.billing_cancelled());
     void accountPlan.load(true);
-    const url = new URL(page.url);
+    const url = new URL(page.url.href);
     url.searchParams.delete('billing');
-    replaceState(url, page.state);
+    void goto(url, { shallow: true, replace: true, state: page.state });
   });
 
   async function changePassword(event: SubmitEvent): Promise<void> {
@@ -124,7 +124,7 @@
     // App shell: remove this device's APNs token while the session can still do so.
     await nativeShell.signingOut();
     await session.logout();
-    await goto('/login', { replaceState: true });
+    await goto('/login', { replace: true });
   }
 </script>
 

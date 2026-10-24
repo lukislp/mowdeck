@@ -20,7 +20,7 @@
  */
 import { isZero, limitVector, type StickVector } from '@mowdeck/ui';
 
-import type { DriveFrame } from '$lib/realtime/client.svelte';
+import type { DriveFrame } from '#lib/realtime/client.svelte.js';
 
 /** A held, centred stick refreshes the session this often. */
 export const IDLE_FRAME_MS = 500;

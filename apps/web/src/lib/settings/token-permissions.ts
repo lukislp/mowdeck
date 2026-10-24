@@ -6,8 +6,8 @@
  * `implied_by` (e.g. `telemetry.view` follows `mower.view`) come with the token at exchange time,
  * so the body carries only the keys the owner chose; the implied ones are shown as included.
  */
-import type { components } from '$lib/generated/identity';
-import { m } from '$lib/paraglide/messages';
+import type { components } from '#lib/generated/identity.js';
+import { m } from '#lib/paraglide/messages.js';
 
 export type CatalogueEntry = components['schemas']['PermissionOut'];
 export type TokenBody = components['schemas']['ApiTokenIn'];

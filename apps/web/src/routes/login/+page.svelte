@@ -1,15 +1,15 @@
 <script lang="ts">
   import { Button, Field, ProblemNotice } from '@mowdeck/ui';
 
-  import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { session } from '$lib/auth/session.svelte';
-  import AuthFrame from '$lib/components/AuthFrame.svelte';
-  import { loadConfig } from '$lib/config';
-  import { problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { session } from '#lib/auth/session.svelte.js';
+  import AuthFrame from '#lib/components/AuthFrame.svelte';
+  import { loadConfig } from '#lib/config.js';
+  import { problemMessage } from '#lib/i18n.js';
+  import { navigatePath } from '#lib/navigate.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   let username = $state('');
   let password = $state('');
@@ -22,7 +22,7 @@
   });
 
   $effect(() => {
-    if (session.status === 'authenticated') void goto(next, { replaceState: true });
+    if (session.status === 'authenticated') void navigatePath(next, { replace: true });
   });
 
   // Links to the legal pages only when the installation turns them on (`/config.json`).
@@ -38,8 +38,8 @@
     try {
       await session.login(username.trim(), password);
       password = '';
-      await goto(session.me?.must_change_password ? '/settings?password=1#profile' : next, {
-        replaceState: true,
+      await navigatePath(session.me?.must_change_password ? '/settings?password=1#profile' : next, {
+        replace: true,
       });
     } catch (error) {
       problem = asProblem(error);

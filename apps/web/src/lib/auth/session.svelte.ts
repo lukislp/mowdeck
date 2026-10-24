@@ -17,7 +17,7 @@
  *   replaced meanwhile, takes the new token instead of refreshing again: one 401 wave (and one
  *   expiry across several tabs) costs exactly one refresh.
  */
-import { ApiProblem, problemFromResponse } from '$lib/api/problem';
+import { ApiProblem, problemFromResponse } from '#lib/api/problem.js';
 
 export const IDENTITY = '/api/v1/identity';
 const REFRESH_LEAD_MS = 60_000;

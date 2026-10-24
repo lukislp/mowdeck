@@ -1,10 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
-import { offeredPatterns } from '$lib/mower/mow-pattern';
-import { setLocale } from '$lib/paraglide/runtime';
-import { emptyForm } from '$lib/schedules/form';
-import { emptyMow, type CapsLike } from '$lib/schedules/mow-options';
+import { offeredPatterns } from '#lib/mower/mow-pattern.js';
+import { setLocale } from '#lib/paraglide/runtime.js';
+import { emptyForm } from '#lib/schedules/form.js';
+import { emptyMow, type CapsLike } from '#lib/schedules/mow-options.js';
 
 import MowOptions from './MowOptions.svelte';
 import MowSettings from './MowSettings.svelte';

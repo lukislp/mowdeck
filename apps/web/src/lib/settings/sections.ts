@@ -4,7 +4,7 @@
  * (`/account`, `/settings/users`, ...) forward to the anchor and keep the query, so links from
  * mails, Stripe's return URL (`/account?billing=success#plan`) and bookmarks still work.
  */
-import type { AppModule } from '$lib/modules/types';
+import type { AppModule } from '#lib/modules/types.js';
 
 export const SETTINGS_ROUTE = '/settings';
 

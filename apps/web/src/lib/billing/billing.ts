@@ -7,9 +7,9 @@
  * that is not JSON with `enabled: true` therefore means "billing disabled": the app then shows
  * no billing element at all.
  */
-import type { components } from '$lib/generated/billing';
-import { m } from '$lib/paraglide/messages';
-import { getLocale } from '$lib/paraglide/runtime';
+import type { components } from '#lib/generated/billing.js';
+import { m } from '#lib/paraglide/messages.js';
+import { getLocale } from '#lib/paraglide/runtime.js';
 
 export type BillingStatus = components['schemas']['BillingStatusOut'];
 export type BillingPlan = components['schemas']['StatusPlanOut'];

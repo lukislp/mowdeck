@@ -1,12 +1,12 @@
 # web
 
-The MowDeck web app: a SvelteKit 2 single-page PWA (Svelte 5, Vite 8, adapter-static with the `200.html` fallback, `ssr = false`), German by default with English. In the Compose stack the service `web` serves it at `/` on the same origin as the API.
+The MowDeck web app: a SvelteKit 3 single-page PWA (Svelte 5, Vite 8, adapter-static 4 with the `200.html` fallback, `ssr = false`), German by default with English. In the Compose stack the service `web` serves it at `/` on the same origin as the API.
 
 Licence: AGPL-3.0-only (see the repository `LICENSE`). Decisions: [ADR 0020](../../docs/adr/0020-web-app-architecture.md) (architecture) and [ADR 0021](../../docs/adr/0021-browser-auth-flow.md) (authentication in the browser). Developer guide: [docs/dev/web-app.md](../../docs/dev/web-app.md). Design: [docs/dev/design-web-app.md](../../docs/dev/design-web-app.md).
 
 ## Dev loop
 
-Requirements: Node 22 (22.12 or newer), pnpm 10.34.6 (`corepack enable`), Docker for the Compose stack. Commands run from the repository root.
+Requirements: Node 22 (22.17 or newer), pnpm 10.34.6 (`corepack enable`), Docker for the Compose stack. Commands run from the repository root.
 
 ```bash
 docker compose -f infra/compose/docker-compose.yml up -d --build --wait   # the API (and the built app at http://localhost)
@@ -86,14 +86,16 @@ The direct vendor camera path (ADR 0032) needs the Agora Web SDK (`agora-rtc-sdk
 
 | Path | Content |
 | --- | --- |
-| `svelte.config.js`, `vite.config.ts` | SvelteKit (adapter-static, service worker registered by the app), Vite (Paraglide plugin, API proxy, Vitest) |
+| `vite.config.ts` | SvelteKit 3 options in `sveltekit({...})` (adapter-static, service worker registered by the app, no version polling), Vite (Paraglide plugin, API proxy, Vitest); there is no `svelte.config.js` |
+| `package.json` `imports` | `#lib/*` points at `src/lib/*` (SvelteKit 3 no longer generates `$lib`); imports name the file with its extension, e.g. `#lib/api/client.js`, `#lib/auth/session.svelte.js` |
 | `messages/de.json`, `messages/en.json`, `project.inlang/` | Paraglide messages (German is the base locale) and project settings |
 | `src/app.html` | Document shell; loads `theme-init.js` before the first paint |
-| `src/service-worker.ts` | Precaches the shell per version, network-first navigations with the cached `200.html`, never touches `/api`; Web Push: `push`, `notificationclick`, `pushsubscriptionchange` |
+| `src/service-worker/index.ts` (own `tsconfig.json`, checked by `pnpm check`) | Precaches the shell per version, network-first navigations with the cached `200.html`, never touches `/api`; Web Push: `push`, `notificationclick`, `pushsubscriptionchange` |
 | `src/lib/api/` | `openapi-fetch` clients per service, the fetch wrapper (bearer, `X-Correlation-ID`, one retry after refresh on 401), `ApiProblem` |
 | `src/lib/auth/session.svelte.ts` | Access token in memory, cookie-only refresh, Web Lock `mowdeck-refresh`, BroadcastChannel `mowdeck-auth` |
 | `src/lib/realtime/client.svelte.ts` | One socket per tab, ref-counted subscriptions, backoff, re-auth on refresh; manual drive sessions (`startDrive`, `sendFrame` with the client-side rate limit, `stopDrive`, `onDrive`) |
 | `src/lib/stores/` | `mowers` (newest `observed_at` wins, then the newest `heartbeat_at`; offline when the gateway's link heartbeat is older than 45 s or the state says `connected: false`, see `src/lib/mower/presence.ts` and ADR 0040), `commands` (pending until result, polling fallback), `inbox` (notifications, unread count, polled every 60 s and on focus), `ui` (toasts, theme, install offer, update) |
+| `src/lib/navigate.ts` | `navigatePath`: client-side navigation to a path from outside the code (`?next=`, a notification, a deep link, a service worker message); a path without a route loads as a full page, because SvelteKit 3's `goto` rejects it |
 | `src/lib/install/` | `context.ts`: native app shell, installed web app, iPhone/iPad tab or other browser, which decides the install hint |
 | `src/lib/push/` | `device.ts` (push support, subscription flow, this device), `payload.ts` (the `WebPushPayload` for the service worker), `store.ts` (VAPID key and renewed subscription in the Cache API, shared with the worker) |
 | `src/lib/notifications/` | Kind and channel texts and tones, the inbox and push singletons wired to the API |

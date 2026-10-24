@@ -14,9 +14,9 @@
     updateOffered,
     type FirmwareInfo,
     type UpdateBlocker,
-  } from '$lib/fleet/firmware';
-  import { formatAge, formatNumber } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  } from '#lib/fleet/firmware.js';
+  import { formatAge, formatNumber } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     info: FirmwareInfo | null;

@@ -2,7 +2,7 @@
  * The connection kinds this installation accepts, with their option schemas
  * (`GET /api/v1/fleet/connection-kinds`), loaded once per page load.
  */
-import { fleetApi, unwrap } from '$lib/api/client';
+import { fleetApi, unwrap } from '#lib/api/client.js';
 
 import type { KindSchema } from './form';
 

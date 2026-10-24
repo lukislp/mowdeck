@@ -4,7 +4,7 @@
  *
  * The values are the mower's own report (Mammotion: whole minutes); nothing here estimates.
  */
-import type { components } from '$lib/generated/telemetry';
+import type { components } from '#lib/generated/telemetry.js';
 
 export type JobProgress = components['schemas']['JobProgress'];
 

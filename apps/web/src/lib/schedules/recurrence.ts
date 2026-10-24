@@ -3,7 +3,7 @@
  * the countdown to the next firing. Pure (the locale is a parameter), so both languages are
  * unit tested (`recurrence.test.ts`).
  */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import { WEEKDAYS, isWeekday, type Locale, type Schedule, type Weekday } from './types';
 

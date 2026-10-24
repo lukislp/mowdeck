@@ -3,7 +3,7 @@
  * (`scheduler.domain.rules.validate_schedule` and the request models), the request bodies, and
  * the mapping of a 422 answer to the fields. Pure and unit tested (`form.test.ts`).
  */
-import type { ApiProblem } from '$lib/api/problem';
+import type { ApiProblem } from '#lib/api/problem.js';
 
 import { emptyMow, mowBody, mowDraftOf, type MowDraft } from './mow-options';
 import { clockTime } from './recurrence';
@@ -24,7 +24,7 @@ export interface ScheduleFormState {
   duration: string;
   /** Areas in mowing order (a mower target; empty means every area). */
   areaIds: string[];
-  /** The start settings (`$lib/schedules/mow-options`): pattern keys and setpoints. */
+  /** The start settings (`#lib/schedules/mow-options.js`): pattern keys and setpoints. */
   mow: MowDraft;
   /** Angles used round robin, one per run (replace the angle). */
   rotation: number[];

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const sendCommand = vi.fn(async () => true);
 
-vi.mock('$lib/live.svelte', () => ({
+vi.mock('#lib/live.svelte.js', () => ({
   commands: { latest: () => undefined },
   sendCommand: (...args: unknown[]) => sendCommand(...(args as [])),
 }));

@@ -4,8 +4,8 @@
  * Anything else falls back to the schema's English `title` and `description`, so a new adapter
  * kind renders without a change here.
  */
-import { connectionLabel } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
+import { connectionLabel } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import type { FieldIssue, KindSchema, OptionSchema } from './form';
 

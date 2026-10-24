@@ -4,7 +4,7 @@
  * the words for a run that ended because the link did not come up or dropped (`link_lost`).
  * Pure, so `drive-link.test.ts` covers it; the spot sheet and the calibration panel use it.
  */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import { rssiText } from './bridge-link';
 

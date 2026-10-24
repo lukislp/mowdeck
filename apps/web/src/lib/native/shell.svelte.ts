@@ -15,7 +15,7 @@ import { ApnsRegistration, type ApnsApi, type ApnsState } from './apns';
 import type { NativeBridge, NativePlatform } from './capacitor';
 import { pathFromDeepLink, pathFromNotificationAction } from './links';
 import { CHANNELS, InboxNotifier, toLocalNotification } from './local';
-import type { InboxItem } from '$lib/stores/inbox.svelte';
+import type { InboxItem } from '#lib/stores/inbox.svelte.js';
 
 export interface NativeShellDeps {
   bridge: NativeBridge | null;

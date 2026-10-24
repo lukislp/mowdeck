@@ -3,7 +3,7 @@
   never alone, the offline tone with a dashed outline. `value` lands in `data-value` for tests.
 -->
 <script lang="ts">
-  import type { Glyph, Tone } from '$lib/schedules/labels';
+  import type { Glyph, Tone } from '#lib/schedules/labels.js';
 
   interface Props {
     tone: Tone;

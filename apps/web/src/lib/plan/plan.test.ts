@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { ApiProblem, problemFromBody } from '$lib/api/problem';
-import { problemMessage } from '$lib/i18n';
-import { toasts } from '$lib/stores/ui.svelte';
+import { ApiProblem, problemFromBody } from '#lib/api/problem.js';
+import { problemMessage } from '#lib/i18n.js';
+import { toasts } from '#lib/stores/ui.svelte.js';
 
 import {
   featureLabel,

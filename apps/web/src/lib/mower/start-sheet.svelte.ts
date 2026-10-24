@@ -8,8 +8,8 @@
  */
 import { untrack } from 'svelte';
 
-import { asProblem } from '$lib/api/problem';
-import type { HourBar } from '$lib/schedules/preview';
+import { asProblem } from '#lib/api/problem.js';
+import type { HourBar } from '#lib/schedules/preview.js';
 
 import type { Range } from './limits';
 import {

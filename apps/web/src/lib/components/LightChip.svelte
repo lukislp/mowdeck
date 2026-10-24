@@ -8,9 +8,9 @@
   the mower has the `light` capability.
 -->
 <script lang="ts">
-  import { lightReasonText } from '$lib/i18n';
-  import { lightView, type LightInput } from '$lib/mower/light';
-  import { m } from '$lib/paraglide/messages';
+  import { lightReasonText } from '#lib/i18n.js';
+  import { lightView, type LightInput } from '#lib/mower/light.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props extends LightInput {
     onchange: (on: boolean) => void;

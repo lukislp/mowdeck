@@ -13,12 +13,12 @@
   import { Button, Field, Icon, Panel, ProblemNotice, Sheet } from '@mowdeck/ui';
   import { tick } from 'svelte';
 
-  import { identityApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import { session } from '$lib/auth/session.svelte';
-  import type { components } from '$lib/generated/identity';
-  import { formatDateTime, problemMessage } from '$lib/i18n';
-  import { m } from '$lib/paraglide/messages';
+  import { identityApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { session } from '#lib/auth/session.svelte.js';
+  import type { components } from '#lib/generated/identity.js';
+  import { formatDateTime, problemMessage } from '#lib/i18n.js';
+  import { m } from '#lib/paraglide/messages.js';
   import {
     DEFAULT_CHOICE,
     POWERFUL,
@@ -37,7 +37,7 @@
     tokenGrantable,
     type CatalogueEntry,
     type Choice,
-  } from '$lib/settings/token-permissions';
+  } from '#lib/settings/token-permissions.js';
 
   type Token = components['schemas']['ApiTokenOut'];
 

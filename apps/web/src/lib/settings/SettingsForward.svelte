@@ -6,15 +6,15 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { builtIn } from '$lib/shell/registry.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { builtIn } from '#lib/shell/registry.svelte.js';
 
   import { SETTINGS_ROUTE, forwardTarget } from './sections';
 
   $effect(() => {
     const target =
       forwardTarget(builtIn, page.url.pathname, page.url.search, page.url.hash) ?? SETTINGS_ROUTE;
-    void goto(target, { replaceState: true });
+    void goto(target, { replace: true });
   });
 </script>
 

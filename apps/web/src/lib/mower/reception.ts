@@ -4,7 +4,7 @@
  * (`rain_detected`) and the error category (`error_category`). Pure and unit tested
  * (`reception.test.ts`); the words are in `reception-labels.ts`.
  */
-import type { components } from '$lib/generated/telemetry';
+import type { components } from '#lib/generated/telemetry.js';
 
 type Schemas = components['schemas'];
 export type GnssStatus = Schemas['GnssStatus'];

@@ -8,9 +8,9 @@
   import { Button, Field, ProblemNotice } from '@mowdeck/ui';
   import { tick } from 'svelte';
 
-  import { asProblem } from '$lib/api/problem';
-  import { accountIssue, emailLooksValid, type AccountIssue } from '$lib/linked/accounts';
-  import { m } from '$lib/paraglide/messages';
+  import { asProblem } from '#lib/api/problem.js';
+  import { accountIssue, emailLooksValid, type AccountIssue } from '#lib/linked/accounts.js';
+  import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
     onconnect: (email: string, password: string) => Promise<void>;

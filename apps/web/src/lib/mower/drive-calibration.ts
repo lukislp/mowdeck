@@ -5,9 +5,9 @@
  * words, and the snapping of the driving-speed slider. The flow itself (start, stop, save,
  * remove) is `drive-calibration.svelte.ts`; both are unit tested in `drive-calibration.test.ts`.
  */
-import type { components as Telemetry } from '$lib/generated/telemetry';
-import { formatNumber } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
+import type { components as Telemetry } from '#lib/generated/telemetry.js';
+import { formatNumber } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
 
 import {
   bridgeSignal,

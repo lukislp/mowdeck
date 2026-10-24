@@ -1,7 +1,7 @@
 <!-- The socket's state as a small indicator: a square lamp and a word. -->
 <script lang="ts">
-  import { m } from '$lib/paraglide/messages';
-  import type { Phase } from '$lib/realtime/client.svelte';
+  import { m } from '#lib/paraglide/messages.js';
+  import type { Phase } from '#lib/realtime/client.svelte.js';
 
   let { phase, tooMany = false }: { phase: Phase; tooMany?: boolean } = $props();
 

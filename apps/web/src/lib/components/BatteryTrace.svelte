@@ -4,7 +4,7 @@
   ink (it breaks over gaps). Min, max and the latest value are readouts beside it.
 -->
 <script lang="ts">
-  import { batteryPath, type BatteryPoint } from '$lib/health/series';
+  import { batteryPath, type BatteryPoint } from '#lib/health/series.js';
 
   interface Props {
     points: BatteryPoint[];

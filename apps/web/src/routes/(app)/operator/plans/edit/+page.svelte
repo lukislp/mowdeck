@@ -11,10 +11,10 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
-  import { entitlementsApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import { problemMessage } from '$lib/i18n';
+  import { entitlementsApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { problemMessage } from '#lib/i18n.js';
   import {
     planBody,
     planForm,
@@ -22,12 +22,12 @@
     validatePlan,
     type PlanForm,
     type PlanIssue,
-  } from '$lib/operator/plans';
-  import { m } from '$lib/paraglide/messages';
-  import { featureLabel, limitLabel } from '$lib/plan/labels';
-  import { accountPlan } from '$lib/plan/plan.svelte';
-  import { LIMIT_KEYS, type Feature, type PlanDetail } from '$lib/plan/types';
-  import { toasts } from '$lib/stores/ui.svelte';
+  } from '#lib/operator/plans.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { featureLabel, limitLabel } from '#lib/plan/labels.js';
+  import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import { LIMIT_KEYS, type Feature, type PlanDetail } from '#lib/plan/types.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
 
   const key = $derived(page.url.searchParams.get('key'));
   const creating = $derived(!key);

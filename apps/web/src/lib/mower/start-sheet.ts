@@ -5,10 +5,10 @@
  */
 import type { Activity } from '@mowdeck/ui';
 
-import type { ApiProblem } from '$lib/api/problem';
-import { problemMessage } from '$lib/i18n';
-import { m } from '$lib/paraglide/messages';
-import type { Verdict } from '$lib/schedules/types';
+import type { ApiProblem } from '#lib/api/problem.js';
+import { problemMessage } from '#lib/i18n.js';
+import { m } from '#lib/paraglide/messages.js';
+import type { Verdict } from '#lib/schedules/types.js';
 
 import { polygonArea } from './commands';
 import { estimateMinutes } from './duration';

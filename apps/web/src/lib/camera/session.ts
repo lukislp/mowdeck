@@ -3,8 +3,8 @@
  * the refresh timing and the error words. The session holds a short-lived secret token: it lives
  * in memory only, is never stored and never logged.
  */
-import type { ApiProblem } from '$lib/api/problem';
-import type { components } from '$lib/generated/fleet';
+import type { ApiProblem } from '#lib/api/problem.js';
+import type { components } from '#lib/generated/fleet.js';
 
 export type CameraSession = components['schemas']['CameraSession'];
 export type CameraInfo = components['schemas']['CameraInfo'];

@@ -3,7 +3,7 @@
  * which patterns the start sheet offers, what it pre-fills (the mower's saved mow defaults,
  * else stripes at 0° with one border lap) and what it sends, including the job options a mower
  * declares (`./job-options`). Pure, unit tested (`mow-pattern.test.ts`); the labels live in
- * `$lib/i18n` (`patternSummary`).
+ * `#lib/i18n` (`patternSummary`).
  */
 import {
   OBSTACLE_MODES,

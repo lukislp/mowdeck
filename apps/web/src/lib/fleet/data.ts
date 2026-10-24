@@ -3,10 +3,10 @@
  * mowers the user can see, and the translated words of bulk outcomes and assignment levels.
  * Group members come from the mowers' `group_ids` (Fleet's group list carries no members).
  */
-import { fleetApi, unwrap } from '$lib/api/client';
-import type { components } from '$lib/generated/fleet';
-import { m } from '$lib/paraglide/messages';
-import type { Glyph, Tone } from '$lib/schedules/labels';
+import { fleetApi, unwrap } from '#lib/api/client.js';
+import type { components } from '#lib/generated/fleet.js';
+import { m } from '#lib/paraglide/messages.js';
+import type { Glyph, Tone } from '#lib/schedules/labels.js';
 
 import type { BulkKind, BulkLineState } from './bulk';
 

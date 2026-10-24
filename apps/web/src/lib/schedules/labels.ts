@@ -2,7 +2,7 @@
  * Schedule texts and tones in the active locale: rain verdicts and run outcomes as badges in
  * the state colour language (exhaustive switches, so a new contract value fails the type check).
  */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import type { VerdictBadge } from './preview';
 import type { RunOutcome } from './types';

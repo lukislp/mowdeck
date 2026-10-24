@@ -23,13 +23,13 @@
 
   import { page } from '$app/state';
 
-  import { fleetApi, telemetryApi, unwrap } from '$lib/api/client';
-  import { asProblem, type ApiProblem } from '$lib/api/problem';
-  import BatteryTrace from '$lib/components/BatteryTrace.svelte';
-  import DailyBars from '$lib/components/DailyBars.svelte';
-  import SlowLoading from '$lib/components/SlowLoading.svelte';
-  import StopBar from '$lib/components/StopBar.svelte';
-  import type { components as Fleet } from '$lib/generated/fleet';
+  import { fleetApi, telemetryApi, unwrap } from '#lib/api/client.js';
+  import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import BatteryTrace from '#lib/components/BatteryTrace.svelte';
+  import DailyBars from '#lib/components/DailyBars.svelte';
+  import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import StopBar from '#lib/components/StopBar.svelte';
+  import type { components as Fleet } from '#lib/generated/fleet.js';
   import {
     batteryExtremes,
     batteryQuery,
@@ -45,13 +45,13 @@
     type BatteryPoint,
     type HealthTotals,
     type ThresholdLevel,
-  } from '$lib/health/series';
-  import { formatDateTime, formatNumber, problemMessage } from '$lib/i18n';
-  import { permissions, revoked } from '$lib/live.svelte';
-  import { m } from '$lib/paraglide/messages';
-  import { getLocale } from '$lib/paraglide/runtime';
-  import { toasts } from '$lib/stores/ui.svelte';
-  import type { components as Telemetry } from '$lib/generated/telemetry';
+  } from '#lib/health/series.js';
+  import { formatDateTime, formatNumber, problemMessage } from '#lib/i18n.js';
+  import { permissions, revoked } from '#lib/live.svelte.js';
+  import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
+  import { toasts } from '#lib/stores/ui.svelte.js';
+  import type { components as Telemetry } from '#lib/generated/telemetry.js';
 
   type Mower = Fleet['schemas']['MowerOut'];
   type BladeChange = Telemetry['schemas']['BladeChangeOut'];

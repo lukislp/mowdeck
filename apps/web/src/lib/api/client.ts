@@ -8,16 +8,16 @@
  */
 import createClient from 'openapi-fetch';
 
-import { session } from '$lib/auth/session.svelte';
-import type { paths as BillingPaths } from '$lib/generated/billing';
-import type { paths as EntitlementsPaths } from '$lib/generated/entitlements';
-import type { paths as FleetPaths } from '$lib/generated/fleet';
-import type { paths as IdentityPaths } from '$lib/generated/identity';
-import type { paths as NotificationsPaths } from '$lib/generated/notifications';
-import type { paths as PlannerPaths } from '$lib/generated/planner';
-import type { paths as SchedulerPaths } from '$lib/generated/scheduler';
-import type { paths as TelemetryPaths } from '$lib/generated/telemetry';
-import type { paths as VisionPaths } from '$lib/generated/vision';
+import { session } from '#lib/auth/session.svelte.js';
+import type { paths as BillingPaths } from '#lib/generated/billing.js';
+import type { paths as EntitlementsPaths } from '#lib/generated/entitlements.js';
+import type { paths as FleetPaths } from '#lib/generated/fleet.js';
+import type { paths as IdentityPaths } from '#lib/generated/identity.js';
+import type { paths as NotificationsPaths } from '#lib/generated/notifications.js';
+import type { paths as PlannerPaths } from '#lib/generated/planner.js';
+import type { paths as SchedulerPaths } from '#lib/generated/scheduler.js';
+import type { paths as TelemetryPaths } from '#lib/generated/telemetry.js';
+import type { paths as VisionPaths } from '#lib/generated/vision.js';
 
 import { ApiProblem, problemFromBody } from './problem';
 

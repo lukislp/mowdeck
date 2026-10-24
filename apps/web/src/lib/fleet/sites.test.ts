@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const post = vi.fn();
 const get = vi.fn();
-vi.mock('$lib/api/client', () => ({
+vi.mock('#lib/api/client.js', () => ({
   fleetApi: { POST: (...a: unknown[]) => post(...a), GET: (...a: unknown[]) => get(...a) },
   unwrap: async (p: Promise<unknown>) => p,
 }));

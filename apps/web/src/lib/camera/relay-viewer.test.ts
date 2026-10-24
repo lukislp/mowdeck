@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiProblem } from '$lib/api/problem';
+import { ApiProblem } from '#lib/api/problem.js';
 
 import { DEFAULT_OPTIONS, type CameraTransport } from './options';
 import type { CameraPlayer, PlayerEvents } from './player';

@@ -3,7 +3,7 @@
  * Paraglide). Every enum is translated exhaustively; a self-check reason the app does not know
  * is shown readable with its vendor name.
  */
-import { m } from '$lib/paraglide/messages';
+import { m } from '#lib/paraglide/messages.js';
 
 import {
   readableKey,

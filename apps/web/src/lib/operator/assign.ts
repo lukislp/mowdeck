@@ -3,7 +3,7 @@
  * sent as the end of that day) and the required reason (kept in the history). Without an end date
  * Entitlements uses the plan's trial days or the installation's grace days.
  */
-import type { AssignmentIn, PlanStatus } from '$lib/plan/types';
+import type { AssignmentIn, PlanStatus } from '#lib/plan/types.js';
 
 export interface AssignForm {
   plan: string;
