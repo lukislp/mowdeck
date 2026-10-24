@@ -20,6 +20,7 @@ from mowdeck_contracts.v1 import (
     MowerMap,
     MowerState,
     MowPath,
+    VisionPhotoProblem,
     VisionTask,
 )
 from mowdeck_control.geo import distance, from_wgs84, local_angle, point_in_polygon
@@ -162,6 +163,15 @@ class SceneContext(BaseModel):
     map_image: bool = Field(
         default=False,
         description="The last image is a top-down rendering of the map around the mower.",
+    )
+    photo_problem: VisionPhotoProblem | None = Field(
+        default=None,
+        description="The mower's camera delivered no photo, and why (`weak_wifi`, "
+        "`weak_mobile`, `offline`, `no_frame`): no image shows the scene around the mower; "
+        "judge from the map and the context only.",
+    )
+    signal_dbm: int | None = Field(
+        default=None, description="With a weak signal: the mower's signal in dBm."
     )
 
 

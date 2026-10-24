@@ -24,6 +24,7 @@ from mowdeck_contracts.v1 import (
     MowerRegistration,
     MowerState,
     VisionProposalCreated,
+    VisionProposalUpdated,
     drive_session_of,
 )
 from mowdeck_service_kit import get_logger
@@ -40,6 +41,7 @@ from notifications.domain.rules import (
     observe_command,
     observe_connection,
     observe_state,
+    vision_no_photo_event,
     vision_proposal_event,
 )
 
@@ -165,6 +167,16 @@ class Watcher:
                 await tx.put_watch(updated)
         await self._fanout.dispatch(events)
         return events
+
+    async def on_vision_update(self, payload: VisionProposalUpdated) -> list[NotificationEvent]:
+        """An automatic analysis got no camera photo: tell the users who may drive the mower
+        why, so the skip is never silent (other updates notify nobody)."""
+        event = vision_no_photo_event(payload)
+        if event is None:
+            return []
+        await self._check_account(payload.mower_id, payload.account_id, "event")
+        await self._fanout.dispatch([event])
+        return [event]
 
     async def on_vision_proposal(self, payload: VisionProposalCreated) -> list[NotificationEvent]:
         """AI assist proposed a maneuver: tell the account's users who may drive the mower
