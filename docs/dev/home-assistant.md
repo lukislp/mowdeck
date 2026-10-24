@@ -4,7 +4,28 @@ The Home Assistant (HACS) integration `mowdeck` lives in its own repository, [`l
 
 ## Installation
 
-HACS: add `https://github.com/lukislp/mowdeck-hacs` as a custom repository of type Integration (once that repository is public), install **MowDeck** and restart Home Assistant. Without HACS, copy `custom_components/mowdeck` into `<config>/custom_components/`. The repository README describes the API token (Settings, API tokens), the configuration, the entities (including the camera light switch and the area select with MowDeck's area names), the actions and troubleshooting.
+HACS: add `https://github.com/lukislp/mowdeck-hacs` as a custom repository of type Integration (once that repository is public), install **MowDeck** and restart Home Assistant. Without HACS, copy `custom_components/mowdeck` into `<config>/custom_components/`. The repository README describes the API token (Settings, API tokens; see [API token](#api-token) below), the configuration, the entities (including the camera light switch and the area select with MowDeck's area names), the actions and troubleshooting.
+
+## API token
+
+The integration authenticates with an API token of the account. Create it in the web app under **Settings, API tokens** (`/settings#api-tokens`) and pick the rights:
+
+| Preset | Permissions | In Home Assistant |
+| --- | --- | --- |
+| Nur ansehen | `mower.view` | read only: states, map, cameras, health, notifications (an account-wide `mower.view` implies `notifications.view`) |
+| Home Assistant – Grundfunktionen (default) | `mower.view`, `mower.control` | also start, pause, dock, end job, blade height, mowing speed, light, **Run now** |
+| Home Assistant – vollständig | adds `mower.drive`, `fleet.manage`, `schedule.edit` | everything the integration offers (mowdeck-hacs 0.17 and newer) |
+| Eigene Auswahl | any keys an API token may hold | as chosen |
+
+What the three extra keys unlock:
+
+- `mower.drive`: the nudge buttons, `mowdeck.spot_mow` (with `mower.control`), **Start AI analysis** and the Vision notifications. It moves the mower directly.
+- `fleet.manage`: the mower's own settings, the maintenance buttons (**Blade changed**, the blade change reminder), installing mower firmware and the RTK base station's firmware. It changes devices and can update firmware.
+- `schedule.edit`: the schedule switches and **Skip next run**.
+
+The web app marks `mower.drive` and `fleet.manage` as powerful rights. Basics stays the default: choose full only when Home Assistant should do all of the above. Every token from the web app is granted on the whole account. A grant on a site, group or single mower is possible through the API (`POST /api/v1/identity/accounts/{account_id}/api-tokens`, one entry in `grants` per level).
+
+The integration asks which of these the token holds (`POST /api/v1/identity/me/permissions`) and creates only the entities whose action it may run. A token keeps the rights it was created with: to add rights, create a new token, enter it with **Reconfigure** on the integration and revoke the old one. The permission table of the integration is in the [mowdeck-hacs README](https://github.com/lukislp/mowdeck-hacs#create-an-api-token-in-mowdeck). Keep it and the presets in `apps/web/src/lib/settings/token-permissions.ts` in step: when the integration needs a new key, add it to the full preset.
 
 ## Contract
 
