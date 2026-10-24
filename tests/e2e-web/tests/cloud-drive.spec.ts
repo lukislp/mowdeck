@@ -10,8 +10,9 @@
  * - A shared account (`shared-...@fake.mowdeck.test`, refused with code 50803 like the real
  *   vendor): the nudge is rejected with the owner account reason.
  *
- * The fake devices have fixed IoT ids (one physical mower per installation), so every test
- * removes its cloud mowers and linked accounts again.
+ * The fake devices have fixed IoT ids (one physical mower per installation), so the test
+ * removes its cloud mowers and linked accounts again. One MowDeck user does both parts: every
+ * registration and login counts against the Identity rate limit of the whole suite.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
@@ -111,11 +112,11 @@ async function nudge(
   return record;
 }
 
-test('cloud drive: owner account drives forwards, no reverse; the drive page', async ({
+test('cloud drive: owner account forwards only and the drive page; a shared account is refused', async ({
   page,
   request,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
   const csp = watchCsp(page);
   const owner = await registerByApi(request, actor('cloud-drive'));
   try {
@@ -157,22 +158,16 @@ test('cloud drive: owner account drives forwards, no reverse; the drive page', a
     await page.getByTestId('drive-stop').click();
     await expect(page.getByTestId('drive-state')).toHaveText('Startklar');
     csp.assertNone();
-  } finally {
-    await removeCloudSetup(request, owner);
-  }
-});
 
-test('cloud drive: a shared account is told to use the owner account', async ({ request }) => {
-  test.setTimeout(180_000);
-  const owner = await registerByApi(request, actor('cloud-shared'));
-  try {
-    const mowerId = await cloudMower(request, owner, `shared-cdrive-${RUN}@fake.mowdeck.test`);
+    // The same mower through a shared account: the vendor refuses the control token (50803).
+    await removeCloudSetup(request, owner);
+    const shared = await cloudMower(request, owner, `shared-cdrive-${RUN}@fake.mowdeck.test`);
     await expect
-      .poll(async () => (await driveCapabilities(request, owner, mowerId))?.manual_drive, {
+      .poll(async () => (await driveCapabilities(request, owner, shared))?.manual_drive, {
         timeout: 60_000,
       })
       .toBe(true);
-    const refused = await nudge(request, owner, mowerId, 0.4);
+    const refused = await nudge(request, owner, shared, 0.4);
     expect(refused.status).toBe('rejected');
     expect(refused.reason).toContain("needs the mower's owner account");
   } finally {

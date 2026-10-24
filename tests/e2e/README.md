@@ -53,7 +53,7 @@ CI runs the same in the job `e2e` (`.github/workflows/ci.yml`) and uploads `dock
 | `stack not reachable` | The test stack is not up (`pnpm e2e:stack up`), or a service is not healthy: `pnpm e2e:stack ps` |
 | `refusing to run against ...` | The base URL is not a test stack (no e2e marker): start one with `pnpm e2e:stack up`; never point the test at the stack you use |
 | `register` answers 403 | Identity runs with `IDENTITY_REGISTRATION=closed`; the test needs `open` (the default in `.env.example`) |
-| `register` or `session` answers 429 | Traefik's rate limit on the Identity auth routes (10 per minute, burst 20) after many runs in a row: wait a minute |
+| `register` or `session` answers 429 | Traefik's rate limit on the Identity auth routes after many runs in a row (300 per minute, burst 100 on test stacks through `docker-compose.e2e.yml`; 10 per minute, burst 20 in production): wait a minute |
 | Mower never `docked` | `docker compose logs device-gateway` (mower registered, loaded from fleet), `docker compose logs telemetry` (consumer running, no account mismatch warnings); Fleet answered 503 (OpenFGA) |
 | `role 'operator'` missing | Identity's seeded roles changed; `GET /api/v1/identity/accounts/<id>/roles` |
 | Anna's `start_mow` is 403 | The Operator assignment did not reach OpenFGA: `docker compose logs identity`; decisions are cached for 5 s |
