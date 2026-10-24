@@ -27,8 +27,9 @@ command, argument and reply field is the one Mammotion-HA uses (``coordinator.py
                             ``DeviceType.supports_wildlife_safety`` (model and firmware)
 ``blade_speed``             ``set_cutter_mode(cutter_mode)`` (0 ``normal``, 1 ``slow``, 2
                             ``fast``); read ``get_cutter_mode``, answer ``current_cutter_mode``
-                            (``mower_state.cutter_mode``); Yuka models of
-                            ``DeviceType.is_support_blade_speed`` only
+                            (``mower_state.cutter_mode``); models of
+                            ``DeviceType.is_support_blade_speed`` (LUBA 2 AWD X and other
+                            LUBA variants, every Yuka but the original one)
 ``recharge_level``,         ``set_recharge_level(level)`` (15 to 30 %, or -1 for smart) and
 ``smart_recharge_level``    ``read_recharge_level``, answer ``nav_sys_param_cmd``
                             (``mower_state.recharge_level``, 0 until read); leaving smart writes
@@ -57,7 +58,7 @@ is tested against; the Yuka settings follow PyMammotion 0.10.9 and are not verif
 Left out on purpose: the rain delay and rain protection modes (X5 series only), the charge
 limit and smart charging (a read-modify-write of the off-peak charging window that resets it
 when sent unread), ``auto_change_direction`` (a start option of other models, excluded for the
-LUBA 2), the blade speed of the LUBA 2 family (ADR 0046), every Spino setting (pool cleaners
+LUBA 2), every Spino setting (pool cleaners
 are no ``is_luba_pro`` model), and the Yuka's grass collector: the manual sweep and dump are
 actions that move the collector, and the dump interval and the mow, dump and edge switches are
 job options (Mammotion-HA's ``operation_settings``), not settings of the mower. None of these
@@ -187,7 +188,7 @@ def _night_light(name: str, _firmware: str) -> bool:
 
 
 def _blade_speed_supported(name: str, _firmware: str) -> bool:
-    return DeviceType.is_yuka(name) and DeviceType.is_support_blade_speed(name)
+    return DeviceType.is_support_blade_speed(name)
 
 
 def _wildlife(device: MowerDevice) -> SettingValue | type[_Unknown]:
