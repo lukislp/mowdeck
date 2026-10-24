@@ -214,9 +214,16 @@ class UserNotifications:
     # --- APNs devices --------------------------------------------------------------------
 
     async def add_apns_device(
-        self, user_id: UUID, account_id: UUID, *, token: str, device_name: str | None
+        self,
+        user_id: UUID,
+        account_id: UUID,
+        *,
+        token: str,
+        device_name: str | None,
+        installation_id: UUID | None = None,
     ) -> ApnsDevice:
-        """Store the iOS app's device token (hex, kept in lower case) for the user."""
+        """Store the iOS app's device token (hex, kept in lower case) for the user; with an
+        ``installation_id`` it replaces the installation's earlier token."""
         normalized = token.strip().lower()
         if not _APNS_TOKEN.match(normalized):
             msg = "token: 64 to 200 hexadecimal characters"
@@ -230,6 +237,7 @@ class UserNotifications:
                 token=normalized,
                 device_name=name,
                 created_at=self._clock(),
+                installation_id=installation_id,
             )
         )
 

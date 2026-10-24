@@ -27,6 +27,7 @@ from mowdeck_contracts.v1 import MowerActivity, NotificationKind, NotificationSe
 from mowdeck_service_kit.db import async_database_url
 from notifications_support import API, AUTH, P256DH, T0, harness, make_state, seconds
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from notifications.adapters.db.migrate import alembic_config
@@ -622,3 +623,138 @@ async def test_notifications_apns_db_migration_adds_and_removes_the_channel(
             assert await stored_channels() == [[], ["log"], ["ntfy", "webpush"]]
         finally:
             await engine.dispose()
+
+
+@pytest.mark.parametrize("kind", KINDS)
+async def test_notifications_apns_db_one_row_per_installation(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user, other, account = uuid4(), uuid4(), uuid4()
+    install, second_install = uuid4(), uuid4()
+    old, new, newest = "a1" * 32, "b2" * 32, "c3" * 32
+
+    def device(owner: UUID, token: str, installation: UUID | None, at: float = 0) -> ApnsDevice:
+        return ApnsDevice(uuid4(), owner, account, token, "iPhone", T0 + seconds(at), installation)
+
+    async with store_of(kind, monkeypatch) as store:
+        first = await store.add_apns_device(device(user, old, install))
+        assert first.installation_id == install
+        # A new token of the same installation replaces the old one, id and time kept.
+        rotated = await store.add_apns_device(device(user, new, install, 5))
+        assert (rotated.id, rotated.token, rotated.created_at) == (first.id, new, T0)
+        assert [d.token for d in await store.apns_devices(user, account)] == [new]
+        # The same token again (same installation) stays one row.
+        again = await store.add_apns_device(device(user, new, install, 6))
+        assert again.id == first.id
+        assert len(await store.apns_devices(user, account)) == 1
+
+        # An old shell (no installation id) registered `newest` before the update: once the
+        # updated shell registers it for the installation, the older row goes.
+        legacy = await store.add_apns_device(device(user, newest, None, 7))
+        assert legacy.installation_id is None
+        assert len(await store.apns_devices(user, account)) == 2
+        merged = await store.add_apns_device(device(user, newest, install, 8))
+        assert merged.id == first.id
+        assert [(d.id, d.token) for d in await store.apns_devices(user, account)] == [
+            (first.id, newest)
+        ]
+
+        # A token without an installation id keeps the installation it is known under.
+        kept = await store.add_apns_device(device(user, newest, None, 9))
+        assert (kept.id, kept.installation_id) == (first.id, install)
+
+        # Another installation (the iPad) is its own row.
+        ipad = await store.add_apns_device(device(user, old, second_install, 10))
+        assert [d.id for d in await store.apns_devices(user, account)] == [first.id, ipad.id]
+
+        # Another user on the same installation: the token moves with the installation id.
+        moved = await store.add_apns_device(device(other, old, second_install, 11))
+        assert moved.id == ipad.id and moved.user_id == other
+        assert [d.id for d in await store.apns_devices(user, account)] == [first.id]
+        # Old shells: one row per token, as before.
+        a = await store.add_apns_device(device(other, "d4" * 32, None, 12))
+        b = await store.add_apns_device(device(other, "e5" * 32, None, 13))
+        assert [d.id for d in await store.apns_devices(other, account)] == [ipad.id, a.id, b.id]
+
+
+@needs_db
+async def test_notifications_apns_db_installation_migration_up_and_down(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with temporary_database() as url:
+        await migrate(url, monkeypatch, "0005")
+        engine = create_async_engine(async_database_url(url))
+        user, account = uuid4(), uuid4()
+        insert = text(
+            "INSERT INTO apns_devices (id, user_id, account_id, token, device_name, created_at)"
+            " VALUES (:id, :user, :account, :token, 'MowDeck iOS', now())"
+        )
+
+        async def columns() -> set[str]:
+            async with engine.connect() as conn:
+                rows = await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns"
+                        " WHERE table_name = 'apns_devices'"
+                    )
+                )
+                return {row[0] for row in rows}
+
+        try:
+            async with engine.begin() as conn:
+                for token in ("a1" * 32, "b2" * 32):
+                    await conn.execute(
+                        insert, {"id": uuid4(), "user": user, "account": account, "token": token}
+                    )
+            await migrate(url, monkeypatch, "0006")
+            assert "installation_id" in await columns()
+            async with engine.begin() as conn:
+                count = await conn.execute(
+                    text("SELECT count(*) FROM apns_devices WHERE installation_id IS NULL")
+                )
+                assert count.scalar_one() == 2  # existing rows keep working without an id
+                install = uuid4()
+                await conn.execute(
+                    text("UPDATE apns_devices SET installation_id = :i WHERE token = :t"),
+                    {"i": install, "t": "a1" * 32},
+                )
+            with pytest.raises(Exception, match="uq_apns_devices_user_installation"):
+                async with engine.begin() as conn:
+                    await conn.execute(
+                        text("UPDATE apns_devices SET installation_id = :i WHERE token = :t"),
+                        {"i": install, "t": "b2" * 32},
+                    )
+            await migrate(url, monkeypatch, "0005", down=True)
+            assert "installation_id" not in await columns()
+            async with engine.connect() as conn:
+                left = await conn.execute(text("SELECT count(*) FROM apns_devices"))
+                assert left.scalar_one() == 2
+        finally:
+            await engine.dispose()
+
+
+@needs_db
+async def test_notifications_apns_db_concurrent_first_registration_is_retried(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, account, install = uuid4(), uuid4(), uuid4()
+    async with store_of("sql", monkeypatch) as store:
+        assert isinstance(store, SqlStore)
+        winner = await store.add_apns_device(
+            ApnsDevice(uuid4(), user, account, "a1" * 32, None, T0, install)
+        )
+        put = store._put_apns_device  # simulate losing the insert race
+        calls = 0
+
+        async def lose_once(conn: Any, device: ApnsDevice) -> ApnsDevice:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise IntegrityError("INSERT", {}, Exception("uq"))
+            return await put(conn, device)
+
+        monkeypatch.setattr(store, "_put_apns_device", lose_once)
+        again = await store.add_apns_device(
+            ApnsDevice(uuid4(), user, account, "b2" * 32, None, T0, install)
+        )
+        assert calls == 2 and again.id == winner.id and again.token == "b2" * 32

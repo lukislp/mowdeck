@@ -86,6 +86,7 @@ def _apns(row: Any) -> ApnsDevice:
         token=row.token,
         device_name=row.device_name,
         created_at=row.created_at,
+        installation_id=row.installation_id,
     )
 
 
@@ -390,6 +391,44 @@ class SqlStore:
             )
 
     async def add_apns_device(self, device: ApnsDevice) -> ApnsDevice:
+        # Two registrations of a new installation at once: the second insert hits
+        # uq_apns_devices_user_installation and, run again, finds the first one's row.
+        try:
+            async with self.engine.begin() as conn:
+                return await self._put_apns_device(conn, device)
+        except sa.exc.IntegrityError:
+            async with self.engine.begin() as conn:
+                return await self._put_apns_device(conn, device)
+
+    async def _put_apns_device(self, conn: AsyncConnection, device: ApnsDevice) -> ApnsDevice:
+        a = tables.apns_devices.c
+        if device.installation_id is not None:
+            current = (
+                await conn.execute(
+                    sa.select(a.id)
+                    .where(a.user_id == device.user_id, a.installation_id == device.installation_id)
+                    .with_for_update()
+                )
+            ).one_or_none()
+            if current is not None:
+                # The installation's new token replaces the old one in its row (id kept); a
+                # row that already held the new token (an older registration) goes.
+                await conn.execute(
+                    sa.delete(tables.apns_devices).where(
+                        a.token == device.token, a.id != current.id
+                    )
+                )
+                updated = await conn.execute(
+                    sa.update(tables.apns_devices)
+                    .where(a.id == current.id)
+                    .values(
+                        token=device.token,
+                        account_id=device.account_id,
+                        device_name=device.device_name,
+                    )
+                    .returning(tables.apns_devices)
+                )
+                return _apns(updated.one())
         insert = pg_insert(tables.apns_devices).values(
             id=device.id,
             user_id=device.user_id,
@@ -397,14 +436,16 @@ class SqlStore:
             token=device.token,
             device_name=device.device_name,
             created_at=device.created_at,
+            installation_id=device.installation_id,
         )
+        moved = ["user_id", "account_id", "device_name"]
+        if device.installation_id is not None:
+            moved.append("installation_id")  # without one, a known installation is kept
         statement = insert.on_conflict_do_update(
-            index_elements=["token"],
-            set_={k: insert.excluded[k] for k in ("user_id", "account_id", "device_name")},
+            index_elements=["token"], set_={k: insert.excluded[k] for k in moved}
         ).returning(tables.apns_devices)
-        async with self.engine.begin() as conn:
-            result = await conn.execute(statement)
-            return _apns(result.one())
+        result = await conn.execute(statement)
+        return _apns(result.one())
 
     async def apns_devices(self, user_id: UUID, account_id: UUID) -> list[ApnsDevice]:
         a = tables.apns_devices.c
