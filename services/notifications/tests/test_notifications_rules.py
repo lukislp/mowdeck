@@ -546,6 +546,20 @@ def test_notifications_blade_maintenance_event_and_cooldown() -> None:
     assert again == []  # normal cooldown
 
 
+def test_notifications_blade_maintenance_uses_telemetrys_effective_threshold() -> None:
+    # Telemetry sends the counter it shows (the mower's own) and the one effective threshold
+    # (here the mower's own warning); the reminder names exactly those, no second threshold.
+    crossing = BladeHoursThreshold(
+        mower_id=MOWER,
+        account_id=ACCOUNT,
+        blade_hours_since_change=100.2,
+        threshold_hours=100,
+        crossed_at=T0,
+    )
+    _, events = observe_blade_hours(None, crossing, T0, CONFIG)
+    assert events[0].params == {"hours": 100, "threshold": 100}
+
+
 def _firmware(**changes: object) -> FirmwareInfo:
     values: dict[str, object] = {"installed": "1.30.29.26", "update_state": "idle"}
     values.update(changes)

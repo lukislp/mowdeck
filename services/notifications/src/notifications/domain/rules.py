@@ -586,7 +586,9 @@ def observe_blade_hours(
     watch: MowerWatch | None, payload: BladeHoursThreshold, now: datetime, config: RuleConfig
 ) -> tuple[MowerWatch | None, list[NotificationEvent]]:
     """Telemetry's blade hours crossed the threshold: one ``blade_maintenance`` per crossing
-    (the normal cooldown applies when the mower has a watch)."""
+    (the normal cooldown applies when the mower has a watch). Telemetry sends the blade
+    counter it shows and the one effective threshold (set in MowDeck, else the mower's own
+    warning, else the default), so the reminder names the same numbers as the web and HA."""
     event = NotificationEvent.of(
         NotificationKind.BLADE_MAINTENANCE,
         payload.mower_id,

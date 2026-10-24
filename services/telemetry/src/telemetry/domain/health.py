@@ -22,6 +22,18 @@ each new state only needs that row:
   The newest positive value is kept on the totals row and shown instead of MowDeck's own
   count (which only starts with the first state Telemetry received); a state without it keeps
   the stored value.
+* **Device lifetime totals.** Mowers that count their working time and distance over their
+  lifetime (Mammotion: ``report_data.maintenance.work_time`` and ``.mileage``) send them as
+  ``raw.work_time_s`` (seconds) and ``raw.mileage_m`` (metres). The newest positive values are
+  kept on the totals row and shown instead of MowDeck's own mowing hours and distance (which
+  only start with the first state Telemetry received); a state without them keeps the stored
+  values.
+* **Blade reminder threshold.** One effective threshold per mower (:func:`effective_threshold`):
+  the threshold the owner set in MowDeck, else the mower's own warning when it reports its own
+  blade counter, else the configured default. The reminder compares it with the counter shown
+  (:func:`blade_counter_seconds`: the mower's own when it reports one, else MowDeck's hours
+  since the change) and is armed again whenever that counter lies below the threshold (a blade
+  reset in MowDeck or in the vendor app, a higher threshold).
 * **Mowing hours.** The same interval accounting with ``activity == mowing``.
 * **Distance.** Haversine metres between consecutive positions. A step longer than
   ``max_step_m`` (RTK jumps) or across a gap longer than ``max_gap`` is skipped; the cursor
@@ -47,7 +59,7 @@ that shows them. A state whose ``observed_at`` is not after the cursor changes n
 import math
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from mowdeck_contracts.v1 import MowerActivity, MowerState
@@ -105,8 +117,12 @@ class HealthRow:
     """The mower's own lifetime battery cycle counter (``raw.bat_cycles``), None when it never
     sent one."""
     blade_threshold_seconds: float | None = None
-    """The mower's own blade reminder threshold set in MowDeck; None: the configured default
-    (``HealthLimits.blade_threshold_seconds``)."""
+    """The mower's own blade reminder threshold set in MowDeck; None: follow the mower's own
+    warning when it reports one, else the configured default (see :func:`effective_threshold`)."""
+    device_mowing_seconds: float | None = None
+    """The mower's own lifetime working time (``raw.work_time_s``), None when it never sent one."""
+    device_distance_m: float | None = None
+    """The mower's own lifetime distance (``raw.mileage_m``), None when it never sent one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,22 +187,50 @@ class HealthStep:
     threshold_crossed: bool
 
 
-def threshold_seconds(row: HealthRow, limits: HealthLimits) -> float:
-    """The blade reminder threshold of a mower: its own, else the configured default."""
+ThresholdSource = Literal["custom", "device", "default"]
+"""Where the effective blade reminder threshold comes from."""
+
+
+def effective_threshold(row: HealthRow, limits: HealthLimits) -> tuple[float, ThresholdSource]:
+    """The blade reminder threshold in effect and its source: the threshold set in MowDeck
+    (``custom``), else the mower's own warning while it reports its own blade counter
+    (``device``), else the configured default (``default``)."""
     if row.blade_threshold_seconds is not None:
-        return row.blade_threshold_seconds
-    return limits.blade_threshold_seconds
+        return row.blade_threshold_seconds, "custom"
+    if row.device_blade_seconds is not None and row.device_blade_warn_seconds is not None:
+        return row.device_blade_warn_seconds, "device"
+    return limits.blade_threshold_seconds, "default"
+
+
+def threshold_seconds(row: HealthRow, limits: HealthLimits) -> float:
+    """The effective blade reminder threshold in seconds (see :func:`effective_threshold`)."""
+    return effective_threshold(row, limits)[0]
+
+
+def blade_counter_seconds(row: HealthRow) -> float:
+    """The blade time since the change that MowDeck shows and reminds about: the mower's own
+    counter when it reports one, else MowDeck's own count since the last recorded change."""
+    if row.device_blade_seconds is not None:
+        return row.device_blade_seconds
+    return row.blade_seconds_since_change
+
+
+def due(row: HealthRow, limits: HealthLimits) -> bool:
+    """Whether the blade counter shown reached the effective threshold."""
+    return blade_counter_seconds(row) >= threshold_seconds(row, limits)
 
 
 def set_threshold(
     row: HealthRow, seconds: float | None, limits: HealthLimits, now: datetime
 ) -> HealthRow:
-    """The row with a new blade reminder threshold (None: back to the default). The reminder
-    is armed again when the hours since the change lie below the new threshold; above it, a
-    reminder already sent stays sent and one not yet sent follows with the next state."""
+    """The row with a new blade reminder threshold (None: follow the mower's own warning, else
+    the default). The reminder is armed again when the counter shown lies below the new
+    effective threshold; above it, a reminder already sent stays sent and one not yet sent
+    follows with the next state."""
     changed = replace(row, blade_threshold_seconds=seconds, updated_at=now)
-    below = changed.blade_seconds_since_change < threshold_seconds(changed, limits)
-    return replace(changed, blade_threshold_notified=row.blade_threshold_notified and not below)
+    return replace(
+        changed, blade_threshold_notified=row.blade_threshold_notified and due(changed, limits)
+    )
 
 
 def utc_day(at: datetime) -> date:
@@ -294,10 +338,7 @@ def advance(
     ):
         errors[state.error_code or UNKNOWN_ERROR] = 1
 
-    since_change = current.blade_seconds_since_change + blade
-    notified = current.blade_threshold_notified
-    crossed = not notified and since_change >= threshold_seconds(current, limits)
-    new_row = replace(
+    counted = replace(
         current,
         updated_at=now,
         since=current.since or at,
@@ -307,8 +348,7 @@ def advance(
         battery_cycles=current.battery_cycles + cycles,
         charge_sessions=current.charge_sessions + sessions,
         errors=merge_errors(current.errors, errors),
-        blade_seconds_since_change=since_change,
-        blade_threshold_notified=notified or crossed,
+        blade_seconds_since_change=current.blade_seconds_since_change + blade,
         last_observed_at=at,
         last_activity=state.activity.value,
         last_charging=charging,
@@ -323,7 +363,13 @@ def advance(
         or current.device_blade_warn_seconds,
         device_battery_cycles=device_count(state.raw, "bat_cycles")
         or current.device_battery_cycles,
+        device_mowing_seconds=device_seconds(state.raw, "work_time_s")
+        or current.device_mowing_seconds,
+        device_distance_m=device_seconds(state.raw, "mileage_m") or current.device_distance_m,
     )
+    reached = due(counted, limits)
+    crossed = reached and not current.blade_threshold_notified
+    new_row = replace(counted, blade_threshold_notified=reached)
     events = Delta(
         day=utc_day(at), battery_cycles=cycles, charge_sessions=sessions, errors=errors, jobs=jobs
     )

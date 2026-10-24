@@ -16,8 +16,10 @@ from telemetry.domain.health import (
     HealthRow,
     advance,
     apply_delta,
+    blade_counter_seconds,
     device_count,
     device_seconds,
+    effective_threshold,
     haversine_m,
     reset_blade,
     set_threshold,
@@ -315,3 +317,84 @@ def test_blade_threshold_per_mower_arms_the_reminder_again() -> None:
     assert below.blade_threshold_notified is False  # armed again
     default = set_threshold(below, None, limits, T0)
     assert default.blade_threshold_seconds is None and default.blade_threshold_notified is False
+
+
+def _row(**fields: Any) -> HealthRow:
+    return HealthRow(mower_id=MOWER, account_id=ACCOUNT, updated_at=T0, **fields)
+
+
+def test_effective_threshold_custom_then_device_then_default() -> None:
+    limits = HealthLimits(blade_threshold_seconds=50 * 3600.0)
+    device = {"device_blade_seconds": 297322.0, "device_blade_warn_seconds": 360000.0}
+    # Custom set in MowDeck wins over the mower's own warning.
+    assert effective_threshold(_row(blade_threshold_seconds=7200.0, **device), limits) == (
+        7200.0,
+        "custom",
+    )
+    # No custom one: the mower's own warning while it reports its own counter.
+    assert effective_threshold(_row(**device), limits) == (360000.0, "device")
+    # A warning without the device counter, or a counter without a warning: the default.
+    assert effective_threshold(_row(device_blade_warn_seconds=360000.0), limits) == (
+        180000.0,
+        "default",
+    )
+    assert effective_threshold(_row(device_blade_seconds=10.0), limits) == (180000.0, "default")
+    assert effective_threshold(_row(), limits) == (180000.0, "default")
+
+
+def test_blade_counter_prefers_the_device_counter() -> None:
+    assert blade_counter_seconds(_row(blade_seconds_since_change=360.0)) == 360.0
+    row = _row(blade_seconds_since_change=360.0, device_blade_seconds=297322.0)
+    assert blade_counter_seconds(row) == 297322.0
+
+
+def test_device_counter_crosses_the_device_warning_once_and_rearms_after_a_vendor_reset() -> None:
+    limits = HealthLimits(blade_threshold_seconds=3600.0)
+    warn = 100 * 3600
+    row, _, crossings = run(
+        [
+            # The live case: 82.6 h of 100 h; MowDeck's own 1 h default does not apply.
+            state(0, raw={"blade_used_s": 297322, "blade_used_warn_s": warn}),
+            state(10, MOWING, raw={"blade_used_s": 297322}),
+            state(20, MOWING, raw={"blade_used_s": warn}),  # reached the mower's warning
+            state(30, MOWING, raw={"blade_used_s": warn + 10}),  # once only
+        ],
+        limits,
+    )
+    assert crossings == 1 and row.blade_threshold_notified is True
+    # Blades replaced in the vendor app: the counter drops, the reminder is armed again.
+    row, _, crossings = run(
+        [state(40, raw={"blade_used_s": 60}), state(50, raw={"blade_used_s": warn + 1})],
+        limits,
+        row,
+    )
+    assert crossings == 1
+
+
+def test_custom_threshold_applies_to_the_device_counter() -> None:
+    limits = HealthLimits(blade_threshold_seconds=3600.0)
+    start = _row(blade_threshold_seconds=80 * 3600.0)
+    row, _, crossings = run(
+        [state(0, raw={"blade_used_s": 297322, "blade_used_warn_s": 360000})], limits, start
+    )
+    assert crossings == 1  # 82.6 h >= the 80 h set in MowDeck (the mower warns at 100 h)
+    # Back to following the mower: 82.6 h < 100 h, the reminder is armed again.
+    following = set_threshold(row, None, limits, T0)
+    assert effective_threshold(following, limits) == (360000.0, "device")
+    assert following.blade_threshold_notified is False
+
+
+def test_telemetry_health_keeps_the_newest_device_lifetime_totals() -> None:
+    row, _, _ = run([state(0), state(10)])
+    assert (row.device_mowing_seconds, row.device_distance_m) == (None, None)
+    row, _, _ = run(
+        [
+            state(20, raw={"work_time_s": 3_600_000, "mileage_m": 400_000}),
+            state(30, raw={"work_time_s": 3_600_600, "mileage_m": 400_150.5}),
+            state(40),  # not reported: the stored values stay
+            state(50, raw={"work_time_s": 0, "mileage_m": -1}),  # not reported either
+        ],
+        row=row,
+    )
+    assert (row.device_mowing_seconds, row.device_distance_m) == (3_600_600, 400_150.5)
+    assert (row.mowing_seconds, row.distance_m) == (0, 0)  # MowDeck's own stay separate

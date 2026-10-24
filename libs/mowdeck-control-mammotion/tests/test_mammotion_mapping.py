@@ -320,6 +320,31 @@ def test_mammotion_raw_carries_the_device_battery_cycle_counter_when_reported() 
     assert _state(device).raw["bat_cycles"] == 152
 
 
+def test_mammotion_raw_carries_the_device_lifetime_totals_when_reported() -> None:
+    device = sample_device()
+    raw = _state(device).raw
+    assert "work_time_s" not in raw and "mileage_m" not in raw
+    # The properties (deviceOtherInfo) are the fallback ...
+    device.report_data.dev.work_time_sec = 3_600_000
+    device.report_data.dev.mileage = 400_000
+    raw = _state(device).raw
+    assert (raw["work_time_s"], raw["mileage_m"]) == (3_600_000, 400_000)
+    # ... the maintenance block of the report wins.
+    device.report_data.maintenance.work_time = 3_700_000
+    device.report_data.maintenance.mileage = 410_500
+    raw = _state(device).raw
+    assert (raw["work_time_s"], raw["mileage_m"]) == (3_700_000, 410_500)
+
+
+def test_mammotion_lifetime_totals_skip_zero_negative_and_corrupt_fields() -> None:
+    device = sample_device()
+    device.report_data.maintenance.work_time = -5
+    device.report_data.maintenance.mileage = None  # type: ignore[assignment]
+    device.report_data.dev.work_time_sec = 0
+    device.report_data.dev.mileage = 1200
+    assert mapping.lifetime_totals_of(device) == (None, 1200)
+
+
 def test_mammotion_raw_carries_cutter_geometry_and_position_type() -> None:
     device = sample_device()
     raw = _state(device).raw

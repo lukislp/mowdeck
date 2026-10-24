@@ -148,7 +148,14 @@ export interface BladeMeter {
   threshold: number;
   /** `device`: the mower's own counter (reset in the vendor app); `telemetry`: MowDeck's. */
   source: BladeSource;
+  /**
+   * Where the interval comes from: `custom` set in MowDeck, `device` the mower's own warning,
+   * `default` MowDeck's default.
+   */
+  thresholdSource: ThresholdSource;
 }
+
+export type ThresholdSource = HealthTotals['blade_hours_threshold_source'];
 
 type BladeFields = Pick<
   HealthTotals,
@@ -157,27 +164,77 @@ type BladeFields = Pick<
   | 'blade_hours_threshold'
   | 'device_blade_hours'
   | 'device_blade_warn_hours'
->;
+> &
+  Partial<
+    Pick<
+      HealthTotals,
+      | 'blade_hours_threshold_custom'
+      | 'blade_hours_threshold_effective'
+      | 'blade_hours_threshold_source'
+    >
+  >;
+
+/** The interval of an answer without the effective threshold (an older Telemetry). */
+function fallbackThreshold(totals: BladeFields, device: boolean): [number, ThresholdSource] {
+  if (totals.blade_hours_threshold_custom) return [totals.blade_hours_threshold, 'custom'];
+  const warn = totals.device_blade_warn_hours;
+  if (device && warn != null && warn > 0) return [warn, 'device'];
+  return [totals.blade_hours_threshold, 'default'];
+}
 
 /**
- * The blade meter: the mower's own counter and warning threshold when it reports them (that is
- * what the vendor app shows), MowDeck's own counter and configured threshold otherwise. A device
- * counter without its own threshold uses the configured one.
+ * The blade meter: the mower's own counter when it reports one (that is what the vendor app
+ * shows), MowDeck's own counter otherwise; against the one effective interval Telemetry names
+ * (set in MowDeck, else the mower's own warning, else MowDeck's default), the same one the
+ * reminder uses.
  */
 export function bladeMeter(totals: BladeFields): BladeMeter {
   const device = totals.device_blade_hours;
-  if (totals.blade_source === 'device' && device != null) {
-    const warn = totals.device_blade_warn_hours;
-    return {
-      hours: device,
-      threshold: warn != null && warn > 0 ? warn : totals.blade_hours_threshold,
-      source: 'device',
-    };
+  const isDevice = totals.blade_source === 'device' && device != null;
+  const effective = totals.blade_hours_threshold_effective;
+  const source = totals.blade_hours_threshold_source;
+  const [threshold, thresholdSource] =
+    effective != null && source != null ? [effective, source] : fallbackThreshold(totals, isDevice);
+  if (isDevice) {
+    return { hours: device, threshold, source: 'device', thresholdSource };
   }
   return {
     hours: totals.blade_hours_since_change,
-    threshold: totals.blade_hours_threshold,
+    threshold,
     source: 'telemetry',
+    thresholdSource,
+  };
+}
+
+/** Mowing hours and distance to show: the mower's lifetime values when it reports them. */
+export interface LifetimeTotals {
+  mowingHours: number;
+  /** `device`: the mower's own lifetime working time; `telemetry`: MowDeck's own count. */
+  mowingSource: BladeSource;
+  distanceM: number;
+  distanceSource: BladeSource;
+  /** MowDeck's own count since it started tracking. */
+  trackedHours: number;
+  trackedDistanceM: number;
+}
+
+type LifetimeFields = Pick<HealthTotals, 'mowing_hours' | 'distance_m'> &
+  Partial<Pick<HealthTotals, 'device_mowing_hours' | 'device_distance_m'>>;
+
+/**
+ * Mowing hours and distance: the mower's own lifetime counters when it reports them (MowDeck's
+ * own only start with its first state), MowDeck's otherwise; each one on its own.
+ */
+export function lifetimeTotals(totals: LifetimeFields): LifetimeTotals {
+  const hours = totals.device_mowing_hours;
+  const distance = totals.device_distance_m;
+  return {
+    mowingHours: hours ?? totals.mowing_hours,
+    mowingSource: hours != null ? 'device' : 'telemetry',
+    distanceM: distance ?? totals.distance_m,
+    distanceSource: distance != null ? 'device' : 'telemetry',
+    trackedHours: totals.mowing_hours,
+    trackedDistanceM: totals.distance_m,
   };
 }
 
