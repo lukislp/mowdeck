@@ -265,6 +265,31 @@ async def test_full_flow_on_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
             "/api/v1/identity/session", json={"username": "anna", "password": PASSWORD}
         )
         removed = await h.client.delete(lukas.url(f"/users/{anna_id}"), headers=lukas.headers)
+        level = {"type": "account", "id": str(lukas.account_id)}
+        token_ids = []
+        for name in ("old", "older", "kept"):
+            made = await h.client.post(
+                lukas.url("/api-tokens"),
+                headers=lukas.headers,
+                json={"name": name, "grants": [{"level": level, "permissions": ["mower.view"]}]},
+            )
+            token_ids.append(made.json()["id"])
+        for token_id in token_ids[:2]:
+            await h.client.delete(lukas.url(f"/api-tokens/{token_id}"), headers=lukas.headers)
+        purge_one = await h.client.delete(
+            lukas.url(f"/api-tokens/{token_ids[0]}"),
+            headers=lukas.headers,
+            params={"purge": "true"},
+        )
+        purge_active = await h.client.delete(
+            lukas.url(f"/api-tokens/{token_ids[2]}"),
+            headers=lukas.headers,
+            params={"purge": "true"},
+        )
+        purge_rest = await h.client.post(
+            lukas.url("/api-tokens/purge-revoked"), headers=lukas.headers
+        )
+        tokens_left = await h.client.get(lukas.url("/api-tokens"), headers=lukas.headers)
         audit = await h.audit(lukas)
         deleted = await h.client.request(
             "DELETE", lukas.url(), headers=lukas.headers, json={"password": PASSWORD}
@@ -274,11 +299,17 @@ async def test_full_flow_on_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
     assert disabled.json()["status"] == "disabled"
     assert login.status_code == 401
     assert removed.status_code == 204
+    assert purge_one.status_code == 204
+    assert purge_active.status_code == 409
+    assert purge_rest.json() == {"deleted": 1, "ids": [token_ids[1]]}
+    assert [t["name"] for t in tokens_left.json()] == ["kept"]
     assert {
         "account.registered",
         "user.created",
         "role.assigned",
         "user.disabled",
         "user.deleted",
+        "api_token.revoked",
+        "api_token.purged",
     } <= {e["action"] for e in audit}
     assert deleted.status_code == 202

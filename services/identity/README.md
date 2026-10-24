@@ -11,7 +11,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 - **Roles** are named bundles of permission keys per account. Owner and Admin are fixed relations (`account#owner`, `account#admin`); Manager, Operator, Viewer and custom roles are editable. A role is assigned at a level (account, site, group, mower) and Identity writes the expanded `grant_*` tuples (ADR 0014).
 - **Sessions**: password login, 10 minute EdDSA access tokens, opaque refresh tokens with rotation and reuse detection; for browsers a cookie-only refresh transport and a short reuse grace after a lost response ([ADR 0021](../../docs/adr/0021-browser-auth-flow.md)).
 - **API tokens** (Home Assistant) with explicit grants capped at the creator's rights, exchanged for access tokens.
-- **Audit log** of every permission change and every token issue or revocation, with the correlation id.
+- **Audit log** of every permission change and every token issue, revocation or deletion, with the correlation id.
 
 ## Interfaces
 
@@ -60,7 +60,8 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | POST | `/accounts/{account_id}/role-assignments` | `can_manage_users` | `{subject_id, role_id, level:{type,id}}` with anti-escalation |
 | DELETE | `/accounts/{account_id}/role-assignments/{id}` | `can_manage_users` | |
 | GET, POST | `/accounts/{account_id}/api-tokens` | `can_manage_users` | Create returns the secret once; users only |
-| DELETE | `/accounts/{account_id}/api-tokens/{token_id}` | `can_manage_users` | Revoke |
+| DELETE | `/accounts/{account_id}/api-tokens/{token_id}` | `can_manage_users` | Revoke. With `?purge=true`: delete an already revoked token for good (204; 409 while it is not revoked, so an active token is always revoked first) |
+| POST | `/accounts/{account_id}/api-tokens/purge-revoked` | `can_manage_users` | Delete every revoked token of the account for good: `{deleted, ids}`; active tokens stay |
 | GET | `/accounts/{account_id}/audit` | `can_view_audit` | Filters `action`, `actor`, `target_id`, `since`; pages with `before_id`, `limit` |
 
 (`/accounts/...` paths are under `/api/v1/identity`.)
@@ -70,6 +71,7 @@ Rules enforced by the use cases:
 - **Anti-escalation.** Assigning a role at a level needs every effective key of the role on that level (asked in OpenFGA as the computed relation, so an Operator on group North cannot hand out Manager there); creating or editing a role needs its keys on the whole account; an API token grant needs its keys on its level. Only the owner assigns or revokes Admin; nobody assigns Owner. Levels below the account must belong to the account (Fleet's `account` tuple), else 404.
 - **Role bundling.** Every `mower.*` and `schedule.*` key needs `mower.view` in the same role. Keys that do not exist on a level are not granted there.
 - **API tokens** can never hold `users.manage`, `billing.manage` or `audit.view`.
+- **Revoked API tokens** stay listed until the owner deletes them (there is no automatic retention). Only revoked tokens can be deleted, one (`?purge=true`) or all of the account (`purge-revoked`); each deleted token is audited as `api_token.purged` with its name, prefix, revocation time and reason (never the secret), and its subject is reconciled once more so no tuple outlives the row. Nothing references `api_tokens` by foreign key: `audit_log` keeps the token id as text and is append-only, so the token's history (`api_token.created`, `api_token.exchanged`, `api_token.revoked`) stays.
 - **Guards.** The owner cannot be disabled or removed; only the owner disables or removes an admin; nobody disables or removes themselves.
 
 ### Browser sessions
