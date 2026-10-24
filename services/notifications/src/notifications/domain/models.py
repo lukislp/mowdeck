@@ -505,6 +505,10 @@ class ApnsDevice:
     """The APNs device token in lower case hex (a capability: never returned by the API)."""
     device_name: str | None
     created_at: datetime
+    installation_id: UUID | None = None
+    """The app installation the token belongs to (a UUID the iOS shell keeps in the Keychain);
+    a new token of the same installation replaces the old one. None for shells that do not send
+    it (one row per token, as before)."""
 
     def target(self) -> dict[str, Any]:
         """The delivery target the APNs channel receives."""

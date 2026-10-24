@@ -121,7 +121,7 @@ The Notifications service sends straight to Apple with your APNs auth key (token
 3. **The environment follows the build on the phones**: a build installed from the Mac with a development profile registers with the APNs sandbox (`development`), a TestFlight build with production APNs (`production`). One server talks to one environment, so a phone with the other kind of build gets no background push (Apple answers `BadDeviceToken` and the server drops that token). The key needs "Sandbox & Production"; a team key for all topics works for every app of the team.
 4. Check: the notifications log says `notification channels ... apns`; Settings → Notifications in the app shows "Apple Push: on"; "Send test notification" arrives with the app closed.
 
-Device tokens are stored per user (`POST /api/v1/notifications/me/push/apns`) and removed on logout and when Apple reports them as unregistered. The channel "iPhone app" can be switched off in the notification preferences like Web Push or ntfy; quiet hours apply, theft alarms break through them and through Focus (time-sensitive).
+Device tokens are stored per user (`POST /api/v1/notifications/me/push/apns`), one per app installation, and removed on logout and when Apple reports them as unregistered. The app keeps an installation id in the iOS Keychain (only on this device, kept across updates and reinstalls); a new token of the same installation replaces the old one, so a reinstalled or updated app does not get every notification twice. App builds without the installation id keep one registration per token; install a new TestFlight build to get it. The channel "iPhone app" can be switched off in the notification preferences like Web Push or ntfy; quiet hours apply, theft alarms break through them and through Focus (time-sensitive).
 
 ## Android
 
@@ -177,6 +177,7 @@ On Windows `@capacitor/assets` can fail with `EBUSY` on `mipmap-anydpi-v26/ic_la
 | "No MowDeck server answers at this address" | Wrong address, phone not in the network/VPN, or a certificate the phone does not trust (see [What the server needs](#what-the-server-needs)). |
 | Login page shows, login fails | The server is on plain HTTP; the session cookie needs HTTPS. |
 | "Apple Push: failed" | No network to Apple, or the build has no `aps-environment` (re-run `provision.sh`, check its `APNs:` line). |
+| Every notification arrives twice on one device | Old registrations of the same device from a build without the installation id. Install the current build (it replaces its own older token); a token that is no longer used is removed when Apple reports it unregistered, or delete the device's rows on the server. |
 | Apple Push on, but nothing arrives in the background | Server without APNs key (the panel says so), `APNS_ENVIRONMENT` does not match the build (`development` for a Mac-installed build, `production` for TestFlight), or a different bundle id on server and app. The notifications log names Apple's reason (`BadDeviceToken`, `TopicDisallowed`, ...). |
 | `errSecInternalComponent` over SSH | `~/.mowdeck-sign-pass` missing or wrong. |
 | `sign-and-install.sh`: no iPhone found | Unlock the phone; pair by USB once; Wi-Fi install needs the same network. |

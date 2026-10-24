@@ -52,6 +52,8 @@ Texts are data: `src/notifications/messages/en.json` and `de.json` map message k
 
 `apns` is a default channel; migration 0005 (table `apns_devices`) adds it to the `channels` of every stored preference, so users who saved preferences before still get pushes on their iPhone.
 
+One APNs registration per app installation (migration 0006): the iOS shell sends a stable `installation_id` (a UUID in its Keychain) with every token, and `apns_devices` is unique per `(user_id, installation_id)` besides per `token`. A device that gets a new token (reinstall, TestFlight over a development build, token rotation) therefore replaces its row instead of adding one, which earlier made every notification arrive twice: APNs keeps accepting an installation's old tokens for a while. Rows without an id (older app builds) keep one row per token; the cleanup on Apple's `Unregistered`/`BadDeviceToken` stays the second safety net.
+
 ## Recipients and delivery
 
 1. The users of the mower's account whose preferences follow the mower (`all_mowers` or the mower in `mower_ids`) and enable the kind, plus every user of the account who registered a target (Web Push subscription, APNs device or ntfy target) but never saved preferences: they count with the defaults, that is every mower they can view, the default kinds (all rule kinds except `job_started`), the default channels, no quiet hours, UTC and `MOWDECK_NOTIFICATIONS_DEFAULT_LANGUAGE`. Saved preferences always win. A user with neither preferences nor a target gets nothing ([ADR 0022](../../docs/adr/0022-notifications-rules-and-delivery.md#amendment-2026-10-22-defaults-for-users-who-never-saved-preferences)).
@@ -93,7 +95,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | POST | `/api/v1/notifications/push-subscriptions` | user | Store `PushSubscription.toJSON()`; 201; the same endpoint again replaces it |
 | DELETE | `/api/v1/notifications/push-subscriptions/{id}` | user | 204, 404 for any other id |
 | GET | `/api/v1/notifications/me/push/apns` | user | The caller's iOS devices, oldest first: `{items: [{id, device_name, token_suffix, created_at}]}` (the token itself is never returned, `token_suffix` is its last 8 hex characters) |
-| POST | `/api/v1/notifications/me/push/apns` | user | Register the iOS app: `{token, device_name?}` (token hex, 64 to 200 characters, case-insensitive, stored in lower case; name up to 100); 201; the same token again moves it to the caller (id kept) |
+| POST | `/api/v1/notifications/me/push/apns` | user | Register the iOS app: `{token, device_name?, installation_id?}` (token hex, 64 to 200 characters, case-insensitive, stored in lower case; name up to 100; `installation_id` a UUID); 201; one row per installation: a new token of the caller's known `installation_id` replaces that row's token (id kept, a row that held the new token is removed); the same token again moves it to the caller (id kept). Without `installation_id` (app builds before it) each token is its own row, as before |
 | DELETE | `/api/v1/notifications/me/push/apns/{id}` | user | 204 (the app calls it on logout), 404 for any other id |
 | GET, PUT, DELETE | `/api/v1/notifications/ntfy` | user | `{server_url, topic, token?}`; the token is stored, never returned (`has_token`); a `PUT` without `token` (or `null`) keeps the stored token, `""` removes it |
 | POST | `/api/v1/notifications/test` | user | A test notification over every configured channel of the caller; 202 `{notification_id, channels}`; 429 with `Retry-After` within `TEST_INTERVAL_SECONDS` |

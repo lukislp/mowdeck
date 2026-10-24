@@ -53,6 +53,7 @@ export class NativeShell {
             api: deps.apns,
             storage: deps.storage,
             deviceName: 'MowDeck iOS',
+            installationId: () => this.#installationId(),
             onChange: (state) => (this.apns = state),
           })
         : null;
@@ -74,6 +75,17 @@ export class NativeShell {
   #plugin(name: string) {
     const bridge = this.#deps.bridge;
     return bridge && bridge.has(name) ? bridge.plugin(name) : null;
+  }
+
+  /**
+   * The installation id the iOS shell keeps in the Keychain (survives app updates and
+   * reinstalls on this device); null for shells without `getInstallationId`.
+   */
+  async #installationId(): Promise<string | null> {
+    const shell = this.#plugin('MowDeckShell');
+    if (!shell) return null;
+    const result = await shell.call<{ id?: unknown } | undefined>('getInstallationId');
+    return typeof result?.id === 'string' ? result.id : null;
   }
 
   /**

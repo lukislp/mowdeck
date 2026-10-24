@@ -6,7 +6,7 @@ The MowDeck apps for iPhone and Android: Capacitor 8 shells that load the web ap
 | --- | --- |
 | `capacitor.config.ts` | App id `app.mowdeck.mobile`, name, plugins; `server.url` is set natively at start from the stored address |
 | `index.html`, `offline.html`, `src/` | The two bundled pages: first-launch server screen and "server not reachable" (built to `www/` by Vite) |
-| `src/shell.ts` | JavaScript side of the shell's own plugin `MowDeckShell` (server address) |
+| `src/shell.ts` | JavaScript side of the shell's own plugin `MowDeckShell` (server address; on iOS the installation id for APNs, kept in the Keychain) |
 | `ios/` | Xcode project (Swift Package Manager). `MainViewController.swift` sets the server, `MowDeckShellPlugin.swift`, `App.entitlements` (push) |
 | `android/` | Gradle project. `MainActivity.java`, `ShellSettings.java`, `MowDeckShellPlugin.java`, release signing from the environment |
 | `resources/` | Icon and splash sources (`scripts/make-resources.py`), sizes by `pnpm assets` |

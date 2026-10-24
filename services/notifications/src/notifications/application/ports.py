@@ -177,8 +177,13 @@ class Store(Protocol):
         ...
 
     async def add_apns_device(self, device: ApnsDevice) -> ApnsDevice:
-        """Store an iOS device; the same token replaces the earlier owner, account and name (the
-        id is kept)."""
+        """Store an iOS device, one row per app installation and per token (the id is kept).
+
+        With an ``installation_id``, the user's row of that installation gets the new token,
+        account and name (a token rotated by iOS replaces the old one; a row that already held
+        the new token is deleted). Otherwise, and for an installation not yet known, the same
+        token replaces the earlier owner, account and name (and the installation, when given).
+        """
         ...
 
     async def apns_devices(self, user_id: UUID, account_id: UUID) -> list[ApnsDevice]:

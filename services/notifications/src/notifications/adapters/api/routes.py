@@ -142,9 +142,14 @@ async def add_apns_device(
     _plan: PushInPlan,
 ) -> ApnsDeviceOut:
     """Register the iOS app's APNs device token for the caller (plan feature
-    ``notifications.push``); the same token again replaces the earlier owner and name."""
+    ``notifications.push``); the same token again replaces the earlier owner and name, and a
+    new token of a known ``installation_id`` replaces that installation's earlier token."""
     stored = await services.users.add_apns_device(
-        principal.subject, account_id, token=body.token, device_name=body.device_name
+        principal.subject,
+        account_id,
+        token=body.token,
+        device_name=body.device_name,
+        installation_id=body.installation_id,
     )
     return ApnsDeviceOut.of(stored)
 

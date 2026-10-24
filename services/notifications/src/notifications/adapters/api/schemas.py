@@ -162,6 +162,15 @@ class ApnsDeviceIn(BaseModel):
     device_name: str | None = Field(
         default=None, max_length=100, examples=["Lukas' iPhone"], description="Shown in the list."
     )
+    installation_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Stable id of the app installation (a UUID the iOS shell keeps in the Keychain). A"
+            " new token of the same installation replaces the earlier one, so a device never"
+            " holds two registrations. Without it (older app builds) each token is its own"
+            " device."
+        ),
+    )
 
 
 class ApnsDeviceOut(BaseModel):
