@@ -265,10 +265,12 @@ async def set_blade_threshold(
     body: BladeThresholdIn,
 ) -> MowerHealthOut:
     """Set the mower's blade reminder threshold in hours (``can_manage_mowers``, like the blade
-    reset); ``null`` returns to the default (``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``). The
-    reminder is armed again when the hours since the change lie below the new threshold.
-    Works before the first telemetry, too. The mower's own warning (``device_blade_warn_hours``)
-    is not touched."""
+    reset); ``null`` drops it, so the mower follows its own warning again
+    (``device_blade_warn_hours``) when it reports one, else the default
+    (``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``); ``blade_hours_threshold_effective`` names the
+    threshold in effect. The reminder is armed again when the blade hours shown lie below the
+    new effective threshold. Works before the first telemetry, too. The warning stored on the
+    mower itself is not changed."""
     row = await services.health.set_blade_threshold(account_id, mower_id, body.hours)
     return MowerHealthOut.of(row, threshold_hours=services.health.threshold_hours)
 

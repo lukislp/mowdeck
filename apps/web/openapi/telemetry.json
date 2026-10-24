@@ -361,7 +361,7 @@
                 "type": "null"
               }
             ],
-            "description": "Blade hours after which MowDeck reminds of a blade change; null returns to the installation's default.",
+            "description": "Blade hours after which MowDeck reminds of a blade change; null drops the mower's own threshold: the mower's own warning applies again when it reports one, else the installation's default.",
             "title": "Hours"
           }
         },
@@ -2280,15 +2280,30 @@
             "type": "number"
           },
           "blade_hours_threshold": {
-            "description": "Hours after which a reminder is sent: the mower's own threshold set in MowDeck, else the installation's default.",
+            "description": "MowDeck's threshold: the one set for the mower in MowDeck, else the installation's default. The reminder uses blade_hours_threshold_effective.",
             "title": "Blade Hours Threshold",
             "type": "number"
           },
           "blade_hours_threshold_custom": {
             "default": false,
-            "description": "The mower has its own threshold (`PUT .../health/blade-threshold`); false: the default applies.",
+            "description": "The mower has its own threshold (`PUT .../health/blade-threshold`); false: the mower's own warning or the default applies.",
             "title": "Blade Hours Threshold Custom",
             "type": "boolean"
+          },
+          "blade_hours_threshold_effective": {
+            "description": "The one threshold in effect, used by the reminder and to show: the threshold set in MowDeck (source custom), else the mower's own warning while it reports its own blade counter (device), else the installation's default (default).",
+            "title": "Blade Hours Threshold Effective",
+            "type": "number"
+          },
+          "blade_hours_threshold_source": {
+            "description": "Where blade_hours_threshold_effective comes from.",
+            "enum": [
+              "custom",
+              "device",
+              "default"
+            ],
+            "title": "Blade Hours Threshold Source",
+            "type": "string"
           },
           "blade_source": {
             "description": "Which blade counter to show as hours since the blade change: the mower's own (device) or MowDeck's (telemetry, blade_hours_since_change).",
@@ -2339,7 +2354,32 @@
             "description": "The mower's own blade warning threshold in hours; null when not reported.",
             "title": "Device Blade Warn Hours"
           },
+          "device_distance_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mower's own lifetime distance in metres, as the vendor app shows it; null when the mower does not report one.",
+            "title": "Device Distance M"
+          },
+          "device_mowing_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mower's own lifetime working time in hours, as the vendor app shows it; null when the mower does not report one.",
+            "title": "Device Mowing Hours"
+          },
           "distance_m": {
+            "description": "MowDeck's own distance in metres since `since`.",
             "title": "Distance M",
             "type": "number"
           },
@@ -2357,6 +2397,7 @@
             "type": "string"
           },
           "mowing_hours": {
+            "description": "MowDeck's own count of hours with activity mowing since `since`.",
             "title": "Mowing Hours",
             "type": "number"
           },
@@ -2386,6 +2427,8 @@
           "blade_hours_since_change",
           "blade_changed_at",
           "blade_hours_threshold",
+          "blade_hours_threshold_effective",
+          "blade_hours_threshold_source",
           "device_blade_hours",
           "device_blade_warn_hours",
           "blade_source",
@@ -4183,7 +4226,7 @@
     },
     "/api/v1/telemetry/mowers/{mower_id}/health/blade-threshold": {
       "put": {
-        "description": "Set the mower's blade reminder threshold in hours (``can_manage_mowers``, like the blade\nreset); ``null`` returns to the default (``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``). The\nreminder is armed again when the hours since the change lie below the new threshold.\nWorks before the first telemetry, too. The mower's own warning (``device_blade_warn_hours``)\nis not touched.",
+        "description": "Set the mower's blade reminder threshold in hours (``can_manage_mowers``, like the blade\nreset); ``null`` drops it, so the mower follows its own warning again\n(``device_blade_warn_hours``) when it reports one, else the default\n(``MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD``); ``blade_hours_threshold_effective`` names the\nthreshold in effect. The reminder is armed again when the blade hours shown lie below the\nnew effective threshold. Works before the first telemetry, too. The warning stored on the\nmower itself is not changed.",
         "operationId": "set_blade_threshold_api_v1_telemetry_mowers__mower_id__health_blade_threshold_put",
         "parameters": [
           {

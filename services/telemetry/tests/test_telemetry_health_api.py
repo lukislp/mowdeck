@@ -117,6 +117,9 @@ async def test_telemetry_health_totals_days_and_battery_over_http() -> None:
     assert body["mowing_hours"] == round(70 / 3600, 4)
     assert body["blade_hours_since_change"] == body["blade_hours"]
     assert body["blade_changed_at"] is None and body["blade_hours_threshold"] == 50.0
+    assert body["blade_hours_threshold_effective"] == 50.0
+    assert body["blade_hours_threshold_source"] == "default"
+    assert body["device_mowing_hours"] is None and body["device_distance_m"] is None
     assert body["blade_source"] == "telemetry"  # the simulator has no device counter
     assert body["device_blade_hours"] is None and body["device_blade_warn_hours"] is None
     assert 66 < body["distance_m"] < 67
@@ -438,6 +441,71 @@ async def test_telemetry_health_prefers_the_device_blade_counter() -> None:
     assert body["blade_source"] == "device"
     assert (body["device_blade_hours"], body["device_blade_warn_hours"]) == (12.0, 100.0)
     assert body["blade_hours_since_change"] == round(30 / 3600, 4)  # own counter stays
+    # One threshold: the mower's own warning, not MowDeck's default of 50 h.
+    assert body["blade_hours_threshold"] == 50.0
+    assert body["blade_hours_threshold_effective"] == 100.0
+    assert body["blade_hours_threshold_source"] == "device"
+
+
+async def test_telemetry_health_effective_threshold_custom_and_back_to_the_mower() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        await h.publish_state(
+            make_state(
+                mower_id,
+                owner.account_id,
+                at=T0,
+                raw={"blade_used_s": 297322, "blade_used_warn_s": 360000},
+            )
+        )
+        path = f"{API}/mowers/{mower_id}/health/blade-threshold"
+        custom = await h.client.put(path, headers=owner.headers, json={"hours": 80})
+        await h.publish_state(
+            make_state(
+                mower_id, owner.account_id, at=T0 + seconds(10), raw={"blade_used_s": 297400}
+            )
+        )
+        events = h.bus.messages(THRESHOLD_SUBJECT)
+        following = await h.client.put(path, headers=owner.headers, json={"hours": None})
+    assert custom.status_code == 200, custom.text
+    body = custom.json()
+    assert (body["blade_hours_threshold_effective"], body["blade_hours_threshold_source"]) == (
+        80.0,
+        "custom",
+    )
+    # The reminder compares the counter shown (the mower's 82.6 h) with the effective 80 h.
+    assert len(events) == 1
+    payload = events[0].model(EventEnvelope[BladeHoursThreshold]).payload
+    assert payload.threshold_hours == 80.0
+    assert payload.blade_hours_since_change == pytest.approx(297400 / 3600)
+    back = following.json()
+    assert back["blade_hours_threshold_custom"] is False
+    assert (back["blade_hours_threshold_effective"], back["blade_hours_threshold_source"]) == (
+        100.0,
+        "device",
+    )
+
+
+async def test_telemetry_health_device_lifetime_totals() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        await mow(h, owner, mower_id, 0, 2)
+        await h.publish_state(
+            make_state(
+                mower_id,
+                owner.account_id,
+                at=T0 + seconds(30),
+                raw={"work_time_s": 1_234_567, "mileage_m": 456_789},
+            )
+        )
+        response = await h.client.get(f"{API}/mowers/{mower_id}/health", headers=owner.headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["device_mowing_hours"] == round(1_234_567 / 3600, 4)
+    assert body["device_distance_m"] == 456_789
+    assert body["mowing_hours"] > 0  # MowDeck's own count stays separate
 
 
 async def test_telemetry_health_prefers_the_device_battery_cycle_counter() -> None:

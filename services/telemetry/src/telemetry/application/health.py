@@ -74,8 +74,8 @@ class Health:
     async def set_blade_threshold(
         self, account_id: UUID, mower_id: UUID, hours: float | None
     ) -> HealthRow:
-        """Set the mower's blade reminder threshold (None: back to the default). Works before
-        the first telemetry, too."""
+        """Set the mower's blade reminder threshold (None: follow the mower's own warning, else
+        the default). Works before the first telemetry, too."""
         now = self._clock()
         async with self._store.transaction() as tx:
             current = await tx.health(mower_id)

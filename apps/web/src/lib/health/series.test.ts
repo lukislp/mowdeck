@@ -11,6 +11,7 @@ import {
   durationParts,
   errorRows,
   fillDays,
+  lifetimeTotals,
   thresholdLevel,
   thresholdShare,
   type BatteryPoint,
@@ -116,22 +117,93 @@ describe('health series', () => {
       device_blade_hours: null,
       device_blade_warn_hours: null,
     };
-    expect(bladeMeter(own)).toEqual({ hours: 3.5, threshold: 50, source: 'telemetry' });
+    expect(bladeMeter(own)).toEqual({
+      hours: 3.5,
+      threshold: 50,
+      source: 'telemetry',
+      thresholdSource: 'default',
+    });
     const device = {
       ...own,
       blade_source: 'device' as const,
       device_blade_hours: 12,
       device_blade_warn_hours: 100,
     };
-    expect(bladeMeter(device)).toEqual({ hours: 12, threshold: 100, source: 'device' });
+    expect(bladeMeter(device)).toEqual({
+      hours: 12,
+      threshold: 100,
+      source: 'device',
+      thresholdSource: 'device',
+    });
     // no device threshold: the configured one
     expect(bladeMeter({ ...device, device_blade_warn_hours: null })).toEqual({
       hours: 12,
       threshold: 50,
       source: 'device',
+      thresholdSource: 'default',
     });
+    // an older Telemetry without the effective threshold: one set in MowDeck still wins
+    expect(
+      bladeMeter({ ...device, blade_hours_threshold: 80, blade_hours_threshold_custom: true }),
+    ).toMatchObject({ threshold: 80, thresholdSource: 'custom' });
     // inconsistent answer (device source without a value): MowDeck's own counter
     expect(bladeMeter({ ...device, device_blade_hours: null }).source).toBe('telemetry');
+  });
+
+  it('uses the one effective threshold Telemetry names', () => {
+    // The live case: the mower's 82.59 h of its own 100 h, MowDeck's default 50 h unused.
+    const live = {
+      blade_source: 'device' as const,
+      blade_hours_since_change: 0.1,
+      blade_hours_threshold: 50,
+      blade_hours_threshold_custom: false,
+      blade_hours_threshold_effective: 100,
+      blade_hours_threshold_source: 'device' as const,
+      device_blade_hours: 82.59,
+      device_blade_warn_hours: 100,
+    };
+    expect(bladeMeter(live)).toEqual({
+      hours: 82.59,
+      threshold: 100,
+      source: 'device',
+      thresholdSource: 'device',
+    });
+    const custom = {
+      ...live,
+      blade_hours_threshold: 80,
+      blade_hours_threshold_custom: true,
+      blade_hours_threshold_effective: 80,
+      blade_hours_threshold_source: 'custom' as const,
+    };
+    const meter = bladeMeter(custom);
+    expect(meter).toMatchObject({ hours: 82.59, threshold: 80, thresholdSource: 'custom' });
+    expect(thresholdLevel(meter.hours, meter.threshold)).toBe('due');
+  });
+
+  it('shows the lifetime totals of the mower when it reports them', () => {
+    const own = { mowing_hours: 0.14, distance_m: 151 };
+    expect(lifetimeTotals(own)).toEqual({
+      mowingHours: 0.14,
+      mowingSource: 'telemetry',
+      distanceM: 151,
+      distanceSource: 'telemetry',
+      trackedHours: 0.14,
+      trackedDistanceM: 151,
+    });
+    expect(
+      lifetimeTotals({ ...own, device_mowing_hours: 1012.5, device_distance_m: 432100 }),
+    ).toEqual({
+      mowingHours: 1012.5,
+      mowingSource: 'device',
+      distanceM: 432100,
+      distanceSource: 'device',
+      trackedHours: 0.14,
+      trackedDistanceM: 151,
+    });
+    // each counter on its own
+    expect(
+      lifetimeTotals({ ...own, device_mowing_hours: null, device_distance_m: 9 }),
+    ).toMatchObject({ mowingSource: 'telemetry', distanceSource: 'device', distanceM: 9 });
   });
 
   it('takes the battery cycles from the device counter when the mower reports one', () => {

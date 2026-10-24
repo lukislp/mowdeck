@@ -35,7 +35,13 @@ from mowdeck_service_kit import get_logger
 from telemetry.application.context import TelemetryConfig
 from telemetry.application.ports import Clock, HealthEvents, Store, Tx
 from telemetry.domain.errors import AccountMismatchError, UnknownMowerError
-from telemetry.domain.health import HealthLimits, advance, apply_delta, threshold_seconds
+from telemetry.domain.health import (
+    HealthLimits,
+    advance,
+    apply_delta,
+    blade_counter_seconds,
+    threshold_seconds,
+)
 from telemetry.domain.models import CommandEvent, DirectoryEntry, LatestRow, SnapshotRow
 from telemetry.domain.rules import (
     decide,
@@ -134,7 +140,7 @@ class Ingest:
         return BladeHoursThreshold(
             mower_id=state.mower_id,
             account_id=state.account_id,
-            blade_hours_since_change=step.row.blade_seconds_since_change / 3600,
+            blade_hours_since_change=blade_counter_seconds(step.row) / 3600,
             threshold_hours=threshold_seconds(step.row, self._limits) / 3600,
             blade_changed_at=step.row.blade_changed_at,
             crossed_at=state.observed_at,
