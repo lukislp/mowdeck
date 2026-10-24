@@ -1,8 +1,10 @@
 /**
  * Review screenshots of the API tokens section (run: pnpm --filter e2e-web screens): the list
- * with a view-only and a full Home Assistant token, the presets with the full one chosen and its
- * warning, and the custom selection, light and dark, at phone (390 x 844) and desktop
- * (1280 x 800) width, written to apps/web/screenshots/api-tokens-*.png.
+ * with a view-only and a full Home Assistant token and three revoked ones folded away, the
+ * revoked ones opened, the presets with the full one chosen and its warning, the custom
+ * selection, and the one-time secret right after creating a token (as the page lands, no
+ * scrolling by the test), light and dark, at phone (390 x 844) and desktop (1280 x 800) width,
+ * written to apps/web/screenshots/api-tokens-*.png.
  */
 import { fileURLToPath } from 'node:url';
 
@@ -30,12 +32,19 @@ async function tokenByApi(
   owner: Actor,
   name: string,
   permissions: string[],
+  revoke = false,
 ): Promise<void> {
-  const response = await request.post(`/api/v1/identity/accounts/${owner.accountId}/api-tokens`, {
-    headers: { Authorization: `Bearer ${owner.token}` },
+  const base = `/api/v1/identity/accounts/${owner.accountId}/api-tokens`;
+  const headers = { Authorization: `Bearer ${owner.token}` };
+  const response = await request.post(base, {
+    headers,
     data: { name, grants: [{ level: { type: 'account', id: owner.accountId }, permissions }] },
   });
   expect(response.status(), await response.text()).toBe(201);
+  if (!revoke) return;
+  const { id } = (await response.json()) as { id: string };
+  const revoked = await request.delete(`${base}/${id}`, { headers });
+  expect(revoked.ok(), await revoked.text()).toBe(true);
 }
 
 /** Scroll `element` to the top, clear of the sticky top bar and section strip on phones. */
@@ -54,6 +63,9 @@ async function top(element: Locator): Promise<void> {
 for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
   test(`api token screenshots at ${size} width`, async ({ browser, request }) => {
     const owner = await registerByApi(request, actor(`shot-tokens-${size}`));
+    for (const name of ['Testskript', 'Altes Handy', 'Home Assistant (alt)']) {
+      await tokenByApi(request, owner, name, ['mower.view', 'mower.control'], true);
+    }
     await tokenByApi(request, owner, 'Wohnzimmer-Tablet', ['mower.view']);
     await tokenByApi(request, owner, 'Home Assistant', [
       'mower.view',
@@ -81,6 +93,15 @@ for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
     await top(section);
     await both(page, `api-tokens-${size}`);
 
+    // The revoked tokens opened.
+    const folded = section.getByTestId('token-revoked');
+    await expect(folded.locator('summary')).toContainText('(3)');
+    await folded.locator('summary').click();
+    await expect(folded.getByTestId('token-revoked-row')).toHaveCount(3);
+    await top(folded);
+    await both(page, `api-tokens-revoked-${size}`);
+    await folded.locator('summary').click();
+
     // The presets with the full one chosen and its warning.
     await section.getByTestId('token-preset-full').check();
     await section.locator('#token-name').fill('Home Assistant Garten');
@@ -94,6 +115,17 @@ for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
     await expect(custom.getByTestId('token-perm-mower.drive')).toBeVisible();
     await top(custom);
     await both(page, `api-tokens-custom-${size}`);
+
+    // Right after creating a token from the bottom of the form: the secret as the page lands.
+    await section.getByTestId('token-preset-basic').check();
+    await section.locator('#token-name').fill('Home Assistant Garten');
+    await section.getByTestId('token-create').scrollIntoViewIfNeeded();
+    await section.getByTestId('token-create').click();
+    const secret = section.getByTestId('token-secret');
+    await expect(secret).toBeFocused();
+    await expect(secret.getByTestId('token-secret-value')).toBeInViewport({ ratio: 1 });
+    await page.waitForTimeout(600); // smooth scroll settles
+    await both(page, `api-tokens-secret-${size}`);
     await context.close();
   });
 }
