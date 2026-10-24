@@ -5,6 +5,10 @@
   are mower setpoints (separate commands, not part of the defaults): with the model's ranges the
   section offers two steppers (`setpoints`, bindable; the page sends the changed values before
   the start), without them it shows the current values and jumps to the page's steppers.
+  The job options the mower declares (`options`, from `capabilities.start_options`: obstacle
+  detection, laps around no-go zones, path order, start progress) sit behind "Mehr"
+  (`start-more-toggle`), like the vendor app's task assignment; an option left empty keeps the
+  mower's own setting, and the start progress belongs to this start only (never remembered).
   Layout: on phones the section is collapsed to the summary line plus "Anpassen"
   (`start-settings-toggle`); expanded it shows the pattern tiles, then the numeric settings. From
   1024 px it is always open (the toggle is hidden) and the sheet puts it beside the area list.
@@ -13,7 +17,22 @@
 <script lang="ts">
   import { Stepper, Switch } from '@mowdeck/ui';
 
-  import { formatNumber, patternLabel, patternSummary } from '$lib/i18n';
+  import {
+    formatNumber,
+    formatPercent,
+    obstacleLabel,
+    orderLabel,
+    patternLabel,
+    patternSummary,
+  } from '$lib/i18n';
+  import {
+    NO_OPTIONS,
+    optionsSet,
+    stepObstacleLaps,
+    stepProgress,
+    type JobOptionsDraft,
+    type JobOptionsSpec,
+  } from '$lib/mower/job-options';
   import {
     ANGLE_MAX,
     ANGLE_STEP,
@@ -46,6 +65,8 @@
     setpoints?: SetpointDraft;
     bladeRange?: Range | null;
     speedRange?: Range | null;
+    /** The job options the mower offers, or null (no "Mehr"). */
+    options?: JobOptionsSpec | null;
   }
   let {
     offered,
@@ -58,6 +79,7 @@
     setpoints = $bindable({ bladeMm: null, speedMps: null }),
     bladeRange = null,
     speedRange = null,
+    options = null,
   }: Props = $props();
 
   const MM = 'mm';
@@ -90,6 +112,15 @@
 
   function space(direction: 1 | -1): void {
     if (spacing) draft = { ...draft, spacingMm: stepSpacing(draft.spacingMm, direction, spacing) };
+  }
+
+  /** "Mehr": the job options, folded away until asked for. */
+  let moreOpen = $state(false);
+  const opts = $derived(draft.options ?? NO_OPTIONS);
+  const optionCount = $derived(optionsSet(draft.options));
+
+  function setOptions(change: Partial<JobOptionsDraft>): void {
+    draft = { ...draft, options: { ...opts, ...change } };
   }
 
   /** The angle the stripes of the glyph run at (diagonal adds 45°, as the mower does). */
@@ -321,6 +352,184 @@
           >
         {/if}
         <span class="hint small">{m.start_setpoints()}</span>
+      </div>
+    {/if}
+
+    {#if options}
+      <div class="more" class:open={moreOpen} data-testid="start-more">
+        <button
+          type="button"
+          class="more-toggle"
+          aria-expanded={moreOpen}
+          aria-controls="start-more-body"
+          data-testid="start-more-toggle"
+          onclick={() => (moreOpen = !moreOpen)}
+        >
+          <span>{optionCount ? m.start_more_count({ count: optionCount }) : m.start_more()}</span>
+          <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6 L8 10 L12 6" />
+          </svg>
+        </button>
+        {#if moreOpen}
+          <div class="more-body" id="start-more-body">
+            {#if options.detection.length}
+              <div class="choice" data-testid="start-obstacle">
+                <span class="label" id="start-obstacle-label">{m.start_obstacle()}</span>
+                <div class="segments" role="radiogroup" aria-labelledby="start-obstacle-label">
+                  {#each options.detection as mode (mode)}
+                    <button
+                      type="button"
+                      role="radio"
+                      class="segment"
+                      aria-checked={opts.detection === mode}
+                      data-value={mode}
+                      data-testid="start-obstacle-{mode}"
+                      onclick={() =>
+                        setOptions({ detection: opts.detection === mode ? null : mode })}
+                      >{obstacleLabel(mode)}</button
+                    >
+                  {/each}
+                </div>
+                <span class="range">
+                  {#if opts.detection === null}
+                    <span class="auto">{m.start_option_default()}</span>
+                  {:else}
+                    <span
+                      >{opts.detection === 'sensitive'
+                        ? m.start_obstacle_hint_sensitive()
+                        : ''}</span
+                    >
+                    <button
+                      type="button"
+                      class="reset"
+                      onclick={() => setOptions({ detection: null })}
+                      >{m.start_option_reset()}</button
+                    >
+                  {/if}
+                </span>
+              </div>
+            {/if}
+            {#if options.orders.length}
+              <div class="choice" data-testid="start-order">
+                <span class="label" id="start-order-label">{m.start_order()}</span>
+                <div class="segments" role="radiogroup" aria-labelledby="start-order-label">
+                  {#each options.orders as order (order)}
+                    <button
+                      type="button"
+                      role="radio"
+                      class="segment"
+                      aria-checked={opts.order === order}
+                      data-value={order}
+                      data-testid="start-order-{order}"
+                      onclick={() => setOptions({ order: opts.order === order ? null : order })}
+                      >{orderLabel(order)}</button
+                    >
+                  {/each}
+                </div>
+                <span class="range">
+                  {#if opts.order === null}
+                    <span class="auto">{m.start_option_default()}</span>
+                  {:else}
+                    <span></span>
+                    <button type="button" class="reset" onclick={() => setOptions({ order: null })}
+                      >{m.start_option_reset()}</button
+                    >
+                  {/if}
+                </span>
+              </div>
+            {/if}
+            <div class="dials">
+              {#if options.obstacleLaps}
+                {@const limits = options.obstacleLaps}
+                <div
+                  class="dial"
+                  role="group"
+                  aria-labelledby="start-nogo-label"
+                  data-testid="start-nogo-laps"
+                >
+                  <span class="label" id="start-nogo-label">{m.start_nogo_laps()}</span>
+                  <div class="row">
+                    <button
+                      type="button"
+                      class="nudge"
+                      aria-label={m.start_nogo_fewer()}
+                      disabled={opts.obstacleLaps !== null && opts.obstacleLaps <= limits[0]}
+                      onclick={() =>
+                        setOptions({
+                          obstacleLaps: stepObstacleLaps(opts.obstacleLaps, -1, limits),
+                        })}>−</button
+                    >
+                    <output class="value" data-value={opts.obstacleLaps ?? ''} aria-live="polite">
+                      {#if opts.obstacleLaps === null}
+                        <span class="auto">{m.start_option_default()}</span>
+                      {:else}
+                        {opts.obstacleLaps}
+                      {/if}
+                    </output>
+                    <button
+                      type="button"
+                      class="nudge"
+                      aria-label={m.start_nogo_more()}
+                      disabled={opts.obstacleLaps !== null && opts.obstacleLaps >= limits[1]}
+                      onclick={() =>
+                        setOptions({
+                          obstacleLaps: stepObstacleLaps(opts.obstacleLaps, 1, limits),
+                        })}>+</button
+                    >
+                  </div>
+                  {#if opts.obstacleLaps !== null}
+                    <span class="range">
+                      <span></span>
+                      <button
+                        type="button"
+                        class="reset"
+                        onclick={() => setOptions({ obstacleLaps: null })}
+                        >{m.start_option_reset()}</button
+                      >
+                    </span>
+                  {/if}
+                </div>
+              {/if}
+              {#if options.progress}
+                {@const limits = options.progress}
+                <div
+                  class="dial"
+                  role="group"
+                  aria-labelledby="start-progress-label"
+                  data-testid="start-progress"
+                >
+                  <span class="label" id="start-progress-label">{m.start_progress()}</span>
+                  <div class="row">
+                    <button
+                      type="button"
+                      class="nudge"
+                      aria-label={m.start_progress_lower()}
+                      disabled={opts.progress <= limits[0]}
+                      onclick={() =>
+                        setOptions({ progress: stepProgress(opts.progress, -1, limits) })}>−</button
+                    >
+                    <output class="value" data-value={opts.progress} aria-live="polite"
+                      >{formatPercent(opts.progress)}</output
+                    >
+                    <button
+                      type="button"
+                      class="nudge"
+                      aria-label={m.start_progress_raise()}
+                      disabled={opts.progress >= limits[1]}
+                      onclick={() =>
+                        setOptions({ progress: stepProgress(opts.progress, 1, limits) })}>+</button
+                    >
+                  </div>
+                  <span class="meter" style:--progress="{opts.progress}%" aria-hidden="true"></span>
+                </div>
+              {/if}
+            </div>
+            {#if options.progress}
+              <p class="hint small">{m.start_progress_hint()}</p>
+            {/if}
+            <p class="hint small">{m.start_more_hint()}</p>
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -558,6 +767,114 @@
     text-decoration: underline;
     text-underline-offset: 3px;
     cursor: pointer;
+  }
+
+  .more {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md-space-2);
+    border-block: var(--md-hairline) solid var(--md-color-line);
+  }
+
+  .more-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--md-space-2);
+    min-block-size: var(--md-target);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--md-color-ink);
+    font: inherit;
+    font-size: var(--md-font-size-12);
+    line-height: var(--md-line-16);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .chevron {
+    inline-size: 1rem;
+    block-size: 1rem;
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform var(--md-motion-fast) var(--md-ease);
+  }
+
+  .more.open .chevron {
+    transform: rotate(180deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chevron,
+    .segment {
+      transition: none;
+    }
+  }
+
+  .more-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md-space-3);
+    padding-block-end: var(--md-space-3);
+  }
+
+  .choice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md-space-1);
+  }
+
+  .segments {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    border: var(--md-border-control) solid var(--md-color-line-strong);
+    border-radius: var(--md-radius-2);
+    overflow: hidden;
+  }
+
+  .segment {
+    min-block-size: var(--md-target);
+    padding: 0 var(--md-space-1);
+    border: 0;
+    border-inline-start: var(--md-hairline) solid var(--md-color-line);
+    background: var(--md-color-surface);
+    color: var(--md-color-ink);
+    font: inherit;
+    font-size: var(--md-font-size-13);
+    line-height: var(--md-line-16);
+    font-weight: var(--md-weight-medium);
+    cursor: pointer;
+    transition: background-color var(--md-motion-fast) var(--md-ease);
+  }
+
+  .segment:first-child {
+    border-inline-start: 0;
+  }
+
+  .segment[aria-checked='true'] {
+    background: var(--md-color-ink);
+    color: var(--md-color-ink-inverse);
+  }
+
+  .segment:focus-visible {
+    outline-offset: -3px;
+  }
+
+  .meter {
+    display: block;
+    block-size: 3px;
+    background: linear-gradient(
+      to right,
+      var(--md-color-ink) var(--progress),
+      var(--md-color-line) var(--progress)
+    );
   }
 
   .summary {

@@ -8,6 +8,7 @@ import type { Activity, RtkFix } from '@mowdeck/ui';
 import type { ApiProblem } from '$lib/api/problem';
 import type { components } from '$lib/generated/telemetry';
 import type { LightReason } from '$lib/mower/light';
+import type { ObstacleDetection, PathOrder } from '$lib/mower/job-options';
 import { angleApplies, minLaps, type MowPattern, type PatternName } from '$lib/mower/mow-pattern';
 import { isOnline, linkSeenAt, oldValuesAge } from '$lib/mower/presence';
 import { m } from '$lib/paraglide/messages';
@@ -142,7 +143,34 @@ function lapsLabel(laps: number): string {
   return m.start_laps_many({ count: laps });
 }
 
-/** "Streifen 45° · 1 Randrunde" (plus the spacing when one was chosen). */
+/** The app's name of an obstacle detection mode (as in the Mammotion app). */
+export function obstacleLabel(mode: ObstacleDetection): string {
+  switch (mode) {
+    case 'off':
+      return m.start_obstacle_off();
+    case 'slow_touch':
+      return m.start_obstacle_slow_touch();
+    case 'less_touch':
+      return m.start_obstacle_less_touch();
+    case 'standard':
+      return m.start_obstacle_standard();
+    case 'sensitive':
+      return m.start_obstacle_sensitive();
+  }
+}
+
+export function orderLabel(order: PathOrder): string {
+  return order === 'border_first' ? m.start_order_border_first() : m.start_order_grid_first();
+}
+
+/** A whole percentage in the locale's style ("40 %" in German, "40%" in English). */
+export function formatPercent(value: number): string {
+  return new Intl.NumberFormat(getLocale(), { style: 'percent', maximumFractionDigits: 0 }).format(
+    value / 100,
+  );
+}
+
+/** "Streifen 45° · 1 Randrunde" (plus the spacing when one was chosen and "ab 40 %"). */
 export function patternSummary(pattern: MowPattern): string {
   const head = angleApplies(pattern.name)
     ? `${patternLabel(pattern.name)} ${formatNumber(pattern.angle_deg)}°`
@@ -150,6 +178,9 @@ export function patternSummary(pattern: MowPattern): string {
   const parts = [head, lapsLabel(Math.max(pattern.border_laps, minLaps(pattern.name)))];
   if (pattern.spacing_m != null) {
     parts.push(m.start_summary_spacing({ cm: formatNumber(pattern.spacing_m * 100) }));
+  }
+  if (pattern.start_progress_pct) {
+    parts.push(m.start_summary_progress({ percent: formatPercent(pattern.start_progress_pct) }));
   }
   return parts.join(' · ');
 }

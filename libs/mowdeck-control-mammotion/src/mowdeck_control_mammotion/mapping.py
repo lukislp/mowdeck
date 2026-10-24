@@ -56,6 +56,8 @@ from mowdeck_contracts.v1 import (
     MowPathKind,
     MowPathProgress,
     NetworkKind,
+    ObstacleDetection,
+    PathOrder,
     PositionSource,
     ProxyInfo,
     RtkCorrectionLink,
@@ -67,6 +69,7 @@ from mowdeck_contracts.v1 import (
     SettingValue,
     SignalStatus,
     StartMow,
+    StartOptions,
     TurnStyle,
 )
 from mowdeck_contracts.v1 import DeviceType as DiscoveredType
@@ -79,9 +82,11 @@ from mowdeck_control_mammotion.port import (
     CheckDeviceVersion,
     CoordinateConverter,
     CuttingMode,
+    DetectionStrategy,
     DeviceType,
     FrameList,
     MowerDevice,
+    MowOrder,
     MowPathPacket,
     OperationSettings,
     OTAProgress,
@@ -1280,6 +1285,58 @@ def maintenance_actions_of(
     return frozenset(actions)
 
 
+_START_OPTION_FAMILIES: Final = frozenset({DeviceType.LUBA_2, DeviceType.LUBA_VP})
+"""Model families whose job options were checked against the Mammotion app: LUBA 2 AWD
+(``Luba-VS``) and LUBA 2 AWD X (``Luba-VP``), whose "task assignment" offers obstacle
+detection, laps around no-go zones, path order and start progress."""
+
+OBSTACLE_LAPS_RANGE: Final = (0, 4)
+"""``ObstacleLapsMode`` in PyMammotion: none to four laps around each no-go zone."""
+START_PROGRESS_RANGE_PCT: Final = (0, 99)
+"""``start_progress`` in percent; Mammotion's cloud schema caps it at 99 (Mammotion-HA)."""
+DEFAULT_OBSTACLE_LAPS: Final = 1
+"""``obstacle_laps`` sent when a start sets none (PyMammotion's ``OperationSettings`` default,
+what this adapter always sent)."""
+_PATH_ORDER: Final[Mapping[PathOrder, MowOrder]] = {
+    PathOrder.BORDER_FIRST: MowOrder.border_first,
+    PathOrder.GRID_FIRST: MowOrder.grid_first,
+}
+
+
+def detection_strategies_of(
+    device_name: str, firmware: str = "", product_key: str = ""
+) -> list[DetectionStrategy]:
+    """The obstacle detection modes the app offers on this model and firmware, in its order
+    (``DetectionStrategy.for_device``: LUBA 2 AWD below firmware 1.12.0 has the old touch
+    list, newer firmware and the AWD X have off / standard / sensitive); empty outside
+    :data:`_START_OPTION_FAMILIES`."""
+    if DeviceType.value_of_str(device_name, product_key or "") not in _START_OPTION_FAMILIES:
+        return []
+    return DetectionStrategy.for_device(device_name, firmware)
+
+
+def start_options_of(device_name: str, firmware: str = "", product_key: str = "") -> StartOptions:
+    """The job options of a model (``MowerCapabilities.start_options``, ADR 0030).
+
+    LUBA 2 AWD and AWD X: obstacle detection with the app's modes for the firmware (named by
+    PyMammotion's option keys: ``off``, ``slow_touch``, ``less_touch``, ``standard``,
+    ``sensitive``), zero to four laps around no-go zones, both path orders and a start progress
+    of 0 to 99 %. Other models keep only the laps around no-go zones, which this adapter
+    already took as a pattern extra (``obstacle_laps``) for every model.
+    """
+    strategies = detection_strategies_of(device_name, firmware, product_key)
+    if not strategies:
+        return StartOptions(obstacle_laps_range=OBSTACLE_LAPS_RANGE)
+    return StartOptions(
+        obstacle_detection=[
+            ObstacleDetection(strategy.option_key(strategies)) for strategy in strategies
+        ],
+        obstacle_laps_range=OBSTACLE_LAPS_RANGE,
+        orders=[PathOrder.BORDER_FIRST, PathOrder.GRID_FIRST],
+        start_progress_range_pct=START_PROGRESS_RANGE_PCT,
+    )
+
+
 def capabilities_of(
     device: MowerDevice,
     *,
@@ -1295,6 +1352,7 @@ def capabilities_of(
     drive_speed: bool = False,
     settings: Sequence[SettingSpec] = (),
     maintenance: bool = False,
+    firmware: str = "",
 ) -> MowerCapabilities:
     """Capabilities of one mower over one link (``links_supported`` and ``firmware_update``
     describe the connection, ADR 0038).
@@ -1311,7 +1369,8 @@ def capabilities_of(
     (:func:`drive_speed_setting_of`). ``drive_reverse`` follows ``manual_drive``: every drive
     session of this adapter is a Bluetooth one (``send_movement``), which takes a negative
     linear speed (ADR 0043). ``maintenance``: the connection can send the maintenance commands
-    (:func:`maintenance_actions_of`, ADR 0048).
+    (:func:`maintenance_actions_of`, ADR 0048). ``firmware`` picks the obstacle detection
+    modes of the job options (:func:`start_options_of`).
     """
     profile = model_profile(device_name, product_key)
     with_camera = camera and has_camera(device_name, product_key)
@@ -1344,6 +1403,7 @@ def capabilities_of(
         drive_reverse=manual_drive,
         drive_speed_setting=drive_speed_setting_of(device, product_key) if drive_speed else None,
         settings=list(settings),
+        start_options=start_options_of(device_name, firmware, product_key),
     )
 
 
@@ -1719,15 +1779,25 @@ def route_plan(
     blade_height_mm: int,
     speed_mps: float,
     path_spacing_cm: tuple[int, int] | None = None,
+    detection: Sequence[DetectionStrategy] = (),
 ) -> RoutePlan:
     """Map ``StartMow`` (area ids and ``pattern`` settings) to PyMammotion route settings.
 
     ``pattern`` keys: ``name`` (stripes, diagonal, checkerboard, edge_only, random_angle),
-    ``angle_deg``, ``spacing_m``, ``border_laps`` and ``order`` (as in
-    :meth:`MowRequest.from_start_mow`), plus Mammotion extras ``angle_mode`` (absolute,
-    relative, random), ``obstacle_laps`` (0 to 4), ``blade_height_mm`` and ``speed_mps``.
+    ``angle_deg``, ``spacing_m``, ``border_laps`` and the job options ``obstacle_detection``,
+    ``obstacle_laps``, ``order`` and ``start_progress_pct`` (as in
+    :meth:`MowRequest.from_start_mow`, checked against ``capabilities.start_options``), plus
+    Mammotion extras ``angle_mode`` (absolute, relative, random), ``blade_height_mm`` and
+    ``speed_mps``.
 
-    ``order`` is validated but not sent: no PyMammotion 0.10.9 field for it could be verified.
+    The job options go where Mammotion-HA puts them: ``obstacle_detection`` becomes
+    ``ultra_wave`` (the value of the app's option in ``detection``, the model's
+    :func:`detection_strategies_of`), ``obstacle_laps`` and ``start_progress`` bytes 1 and 3 of
+    the route's ``path_order`` buffer, ``order`` its byte 0 (``border_mode``: 0 border first,
+    1 grid first). An option the start leaves out keeps what this adapter sent before:
+    PyMammotion's ``ultra_wave`` default, :data:`DEFAULT_OBSTACLE_LAPS`, progress 0, and
+    ``border_mode`` equal to the border laps (the adapter's value since the first release;
+    whether the firmware reads byte 0 as the order or as laps is not verified on a mower).
     Raises ``ValueError`` (or ``UnsupportedPattern``) for invalid settings.
     """
     request = MowRequest.from_start_mow(command)
@@ -1742,10 +1812,6 @@ def route_plan(
     if path_spacing_cm is not None and not path_spacing_cm[0] <= spacing_cm <= path_spacing_cm[1]:
         low, high = path_spacing_cm
         msg = f"spacing_m must be between {low / 100} and {high / 100} on this mower"
-        raise ValueError(msg)
-    obstacle_laps = int(settings.get("obstacle_laps", 1))
-    if not 0 <= obstacle_laps <= 4:
-        msg = "obstacle_laps must be between 0 and 4"
         raise ValueError(msg)
     blade = int(settings.get("blade_height_mm", blade_height_mm))
     speed = float(settings.get("speed_mps", speed_mps))
@@ -1767,12 +1833,24 @@ def route_plan(
         toward=toward,
         toward_included_angle=90,
         toward_mode=int(_angle_mode(settings, job.pattern)),
-        border_mode=job.border_laps,
+        border_mode=int(_PATH_ORDER[job.order]) if job.order is not None else job.border_laps,
         mowing_laps=job.border_laps,
-        obstacle_laps=obstacle_laps,
+        obstacle_laps=DEFAULT_OBSTACLE_LAPS if job.obstacle_laps is None else job.obstacle_laps,
+        start_progress=job.start_progress_pct or 0,
         areas=list(zone_hashes),
     )
+    if job.obstacle_detection is not None:
+        operation.ultra_wave = _ultra_wave(job.obstacle_detection, detection)
     return RoutePlan(zone_hashes=zone_hashes, settings=operation, job=job)
+
+
+def _ultra_wave(mode: ObstacleDetection, detection: Sequence[DetectionStrategy]) -> int:
+    """The ``ultra_wave`` value of the app's option ``mode`` among ``detection``."""
+    try:
+        return int(DetectionStrategy.from_option_key(mode.value, list(detection)))
+    except ValueError:
+        msg = f"obstacle detection {mode.value!r} is not offered by this mower"
+        raise ValueError(msg) from None
 
 
 def movement_wire(linear: float, angular: float) -> tuple[int, int]:

@@ -1366,6 +1366,8 @@ export type components = {
              * @description The mower's own settings this connection can read and change with `set_setting` (ADR 0046), each with its type and range or options; current values in `MowerState.settings`. Empty when the connection offers none.
              */
             settings?: components["schemas"]["SettingSpec"][];
+            /** @description Job options a native start may carry besides the pattern (obstacle detection, laps around no-go zones, path order, start progress; ADR 0030). Clients show only what is declared here. */
+            start_options?: components["schemas"]["StartOptions"];
             /**
              * Undock
              * @description The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).
@@ -1866,6 +1868,24 @@ export type components = {
          */
         NetworkKind: "wifi" | "mobile" | "ble" | "none";
         /**
+         * ObstacleDetection
+         * @description How eagerly the mower avoids obstacles during a native job (``MowPattern``).
+         *
+         *     Which modes a mower offers depends on its model and firmware
+         *     (``MowerCapabilities.start_options.obstacle_detection``). The names follow the vendor apps:
+         *     ``off`` is the plain bump-and-turn behaviour, ``standard`` avoids obstacles it sees ahead,
+         *     ``sensitive`` additionally avoids areas that are not lawn; ``slow_touch`` and
+         *     ``less_touch`` exist only on older firmware.
+         * @enum {string}
+         */
+        ObstacleDetection: "off" | "slow_touch" | "less_touch" | "standard" | "sensitive";
+        /**
+         * PathOrder
+         * @description Whether the border laps run before or after the fill of a native job.
+         * @enum {string}
+         */
+        PathOrder: "border_first" | "grid_first";
+        /**
          * PermissionDef
          * @description A permission a module defines, e.g. ``mower.control``.
          *
@@ -2139,6 +2159,43 @@ export type components = {
              * @enum {string}
              */
             state: "preparing" | "undocking" | "waiting_rtk" | "transit" | "spot_mowing" | "paused_rtk" | "returning" | "stopping" | "done" | "aborted" | "failed";
+        };
+        /**
+         * StartOptions
+         * @description The job options a native start may carry besides the pattern (``MowPattern``), as one
+         *     mower declares them (ADR 0030 amendment of 2026-10-24).
+         *
+         *     Everything defaults to "not offered": a client shows an option only when it is declared
+         *     here, and the connection refuses a start that sets an option it does not declare. An option
+         *     a start leaves out (None) is not sent, so the mower keeps its own default.
+         */
+        StartOptions: {
+            /**
+             * Obstacle Detection
+             * @description Obstacle detection modes the mower offers, in the order a client shows them (`MowPattern.obstacle_detection`); empty when it offers no choice.
+             */
+            obstacle_detection?: components["schemas"]["ObstacleDetection"][];
+            /**
+             * Obstacle Laps Range
+             * @description Inclusive (min, max) laps around each no-go zone (`MowPattern.obstacle_laps`), if settable.
+             */
+            obstacle_laps_range?: [
+                number,
+                number
+            ] | null;
+            /**
+             * Orders
+             * @description Path orders the mower offers (`MowPattern.order`); empty when it offers no choice.
+             */
+            orders?: components["schemas"]["PathOrder"][];
+            /**
+             * Start Progress Range Pct
+             * @description Inclusive (min, max) progress in percent a job may start at (`MowPattern.start_progress_pct`), if settable.
+             */
+            start_progress_range_pct?: [
+                number,
+                number
+            ] | null;
         };
         /**
          * StateHistory

@@ -56,6 +56,11 @@ What it simulates:
   (:data:`SIMULATED_SETTINGS`) with ``SetSetting`` and their values in ``MowerState.settings``,
   and a rain sensor (``rain_detected``, test hook :meth:`SimulatedMower.set_raining`) that, with
   ``rain_detection`` on, blocks the self-check (``rain``) and rejects a start.
+* the job options of a native start (``SimulationConfig.start_options``, ADR 0030): it declares
+  :data:`SIMULATED_START_OPTIONS`, keeps the options of the latest start in ``job_options``,
+  starts the route at ``start_progress_pct`` (the mowed part before it is skipped and counted as
+  mowed) and, with ``stuck_after_seconds``, gets stuck twice as fast with obstacle detection
+  ``off`` and half as fast with ``sensitive``;
 * maintenance commands (:class:`~mowdeck_control.connection.MaintenanceCapable`, ADR 0048):
   ``restart_mower`` keeps the mower ``offline`` for ``restart_seconds`` simulated seconds (every
   command but the emergency stop and the light is refused meanwhile), then it reports docked (or
@@ -123,6 +128,8 @@ from mowdeck_contracts.v1 import (
     MowPathKind,
     MowPathProgress,
     NetworkKind,
+    ObstacleDetection,
+    PathOrder,
     PauseMow,
     PositionSource,
     ProxyInfo,
@@ -147,6 +154,7 @@ from mowdeck_contracts.v1 import (
     SignalStatus,
     SpotMowPlan,
     StartMow,
+    StartOptions,
     SyncMap,
     TurnStyle,
     utc_now,
@@ -203,6 +211,23 @@ _GNSS_SOLUTION: Final[Mapping[RtkFixStatus, GnssSolution]] = {
     RtkFixStatus.NONE: GnssSolution.SINGLE,
     RtkFixStatus.UNKNOWN: GnssSolution.UNKNOWN,
 }
+
+SIMULATED_START_OPTIONS: Final = StartOptions(
+    obstacle_detection=[
+        ObstacleDetection.OFF,
+        ObstacleDetection.STANDARD,
+        ObstacleDetection.SENSITIVE,
+    ],
+    obstacle_laps_range=(0, 4),
+    orders=[PathOrder.BORDER_FIRST, PathOrder.GRID_FIRST],
+    start_progress_range_pct=(0, 99),
+)
+"""The job options the simulated mower offers: those of a LUBA 2 AWD on current firmware."""
+_STUCK_FACTOR: Final[Mapping[ObstacleDetection, float]] = {
+    ObstacleDetection.OFF: 0.5,
+    ObstacleDetection.SENSITIVE: 2.0,
+}
+"""How much sooner (below 1) or later a job gets stuck with ``stuck_after_seconds``."""
 
 LIFT_ERROR_CODE: Final = "lifted"
 SPOT_AREA_ID: Final = "spot"
@@ -366,7 +391,10 @@ class SimulationConfig:
     """Lifetime of a fake camera session (short values exercise the client's refresh)."""
     stuck_after_seconds: float | None = None
     """Development only: get stuck after this many simulated seconds of mowing in a job (once
-    per job), so AI assist can be demonstrated. None: never."""
+    per job), so AI assist can be demonstrated; obstacle detection ``off`` halves it and
+    ``sensitive`` doubles it. None: never."""
+    start_options: bool = True
+    """Offer the job options of a native start (:data:`SIMULATED_START_OPTIONS`)."""
     unstuck_backward_m: float = 0.3
     """Backward distance that frees a stuck mower."""
     resume_clear_m: float = 2.0
@@ -514,6 +542,8 @@ class _Job:
     """Simulated seconds since the start of the simulator when the job began."""
     mowing_s: float = 0.0
     stuck_done: bool = False
+    stuck_after_s: float | None = None
+    """When this job gets stuck (``stuck_after_seconds`` scaled by its obstacle detection)."""
 
 
 @dataclass(slots=True)
@@ -677,6 +707,10 @@ class SimulatedMower:
                 else None
             ),
         )
+        if self.config.start_options:
+            self._capabilities = self._capabilities.model_copy(
+                update={"start_options": SIMULATED_START_OPTIONS}
+            )
         if self.config.settings:
             self._capabilities = self._capabilities.model_copy(
                 update={"settings": list(SIMULATED_SETTINGS)}
@@ -690,6 +724,9 @@ class SimulatedMower:
         mower that keeps publishing until it is told to stop (ADR 0045)."""
         self.camera_releases: list[str | None] = []
         """The ``channel`` of every :meth:`release_camera_session` call, in order."""
+        self.job_options: dict[str, Any] = {}
+        """The job options of the latest native start as ``MowPattern`` keys (only those it
+        set), e.g. ``{"obstacle_detection": "sensitive", "start_progress_pct": 40}``."""
         self.maintenance_log: list[str] = []
         """The kind of every maintenance command the simulated mower ran, in order."""
         self._restart_remaining_s = 0.0
@@ -1558,6 +1595,10 @@ class SimulatedMower:
             return Outcome.rejected(planned)
         job, legs, mow_length = planned
         path = self._route_path(legs, job.area_ids)
+        skipped, skipped_m = _skip_to_progress(legs, job.start_progress_pct or 0, mow_length)
+        stuck_after = self.config.stuck_after_seconds
+        if stuck_after is not None and job.obstacle_detection is not None:
+            stuck_after *= _STUCK_FACTOR.get(job.obstacle_detection, 1.0)
 
         def begin() -> None:
             status = self._status
@@ -1566,10 +1607,18 @@ class SimulatedMower:
                 area_ids=job.area_ids,
                 pattern=job.pattern,
                 mow_length_m=mow_length,
+                mowed_m=skipped_m,
                 started_s=self._elapsed_s,
+                stuck_after_s=stuck_after,
             )
-            self._path, self._path_done = path, 0
-            status.legs = legs
+            self.job_options = _job_options(job)
+            if skipped:
+                # Drive (blades off) to where the skipped part ends, then mow on from there.
+                self._path, self._path_done = path, skipped - 1
+                status.legs = [_Leg(legs[skipped - 1].target, blade=False), *legs[skipped:]]
+            else:
+                self._path, self._path_done = path, 0
+                status.legs = legs
             status.activity = MowerActivity.MOWING
             status.resume_activity = None
             status.emergency_stopped = False
@@ -1664,6 +1713,7 @@ class SimulatedMower:
                 mow_length_m=mow_length,
                 plan_hash=plan.plan_hash,
                 started_s=self._elapsed_s,
+                stuck_after_s=self.config.stuck_after_seconds,
             )
             status.legs = legs
             status.activity = MowerActivity.MOWING
@@ -1913,7 +1963,7 @@ class SimulatedMower:
             if leg.blade and self._job is not None:
                 self._job.mowed_m += moved
                 self._job.mowing_s += step
-                limit = self.config.stuck_after_seconds
+                limit = self._job.stuck_after_s
                 if limit is not None and not self._job.stuck_done and self._job.mowing_s >= limit:
                     self._job.stuck_done = True
                     self._moving_speed = speed
@@ -2078,3 +2128,31 @@ def create_simulated_connection(config: ConnectionConfig) -> SimulatedMower:
         config=sim_config,
         base_station=BaseStationRef.model_validate(base) if base is not None else None,
     )
+
+
+def _skip_to_progress(legs: Sequence[_Leg], percent: int, mow_length: float) -> tuple[int, float]:
+    """How many legs a start at ``percent`` skips, and the mowing length they hold: whole legs
+    until the next one would pass that share of ``mow_length``; none at 0 %."""
+    if percent <= 0 or mow_length <= 0:
+        return 0, 0.0
+    goal = mow_length * percent / 100.0
+    done = 0.0
+    here: LocalPoint | None = None
+    for index, leg in enumerate(legs):
+        length = distance(here, leg.target) if leg.blade and here is not None else 0.0
+        if done + length > goal:
+            return index, done
+        done += length
+        here = leg.target
+    return len(legs), done
+
+
+def _job_options(job: NativeJob) -> dict[str, Any]:
+    """The job options a native start set, as ``MowPattern`` keys."""
+    options: dict[str, Any] = {
+        "obstacle_detection": job.obstacle_detection.value if job.obstacle_detection else None,
+        "obstacle_laps": job.obstacle_laps,
+        "order": job.order.value if job.order else None,
+        "start_progress_pct": job.start_progress_pct,
+    }
+    return {key: value for key, value in options.items() if value is not None}

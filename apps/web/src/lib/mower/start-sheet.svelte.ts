@@ -20,8 +20,10 @@ import {
   type MowPath,
   type PreviewState,
 } from './mow-path';
+import type { JobOptionsSpec } from './job-options';
 import {
   FALLBACK,
+  defaultsOf,
   initialDraft,
   toPattern,
   type MowPattern,
@@ -52,6 +54,8 @@ export interface StartSheetContext {
   /** Patterns the mower runs natively (none: the start names no pattern). */
   offered: readonly PatternName[];
   spacing: SpacingRange | null;
+  /** The job options the mower offers (`capabilities.start_options`), or null for none. */
+  jobOptions?: JobOptionsSpec | null;
   /** The mower's saved mow defaults, or null. */
   savedPattern: MowPattern | null;
   bladeRange: Range | null;
@@ -167,7 +171,7 @@ export class StartSheetFlow {
     const ctx = this.deps.context();
     const known = new Set(ctx.areas.map((a) => a.id));
     this.picked = this.picked.filter((areaId) => known.has(areaId));
-    this.patternDraft = initialDraft(ctx.savedPattern, ctx.offered, ctx.spacing);
+    this.patternDraft = initialDraft(ctx.savedPattern, ctx.offered, ctx.spacing, ctx.jobOptions);
     this.rememberPattern = true;
     this.#setpointStart = initialSetpoints(
       ctx.reportedBladeMm,
@@ -259,9 +263,9 @@ export class StartSheetFlow {
         sent &&
         pattern &&
         remember &&
-        defaultsChanged(pattern, ctx.savedPattern, ctx.offered, ctx.spacing)
+        defaultsChanged(pattern, ctx.savedPattern, ctx.offered, ctx.spacing, ctx.jobOptions)
       ) {
-        await this.deps.saveDefaults(pattern);
+        await this.deps.saveDefaults(defaultsOf(pattern));
       }
     } finally {
       this.starting = false;

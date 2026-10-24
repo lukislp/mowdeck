@@ -436,3 +436,88 @@ describe('StartSheetFlow', () => {
     expect(start).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('StartSheetFlow job options', () => {
+  const OPTIONS = {
+    detection: ['off', 'standard', 'sensitive'],
+    obstacleLaps: [0, 4],
+    orders: ['border_first', 'grid_first'],
+    progress: [0, 99],
+  } as const satisfies StartSheetContext['jobOptions'];
+
+  it('opens with the saved options, sends them and keeps the progress out of the defaults', async () => {
+    const saved: MowPattern = { ...STRIPES, obstacle_detection: 'sensitive', order: 'grid_first' };
+    const f = fake({
+      ctx: {
+        jobOptions: {
+          ...OPTIONS,
+          detection: [...OPTIONS.detection],
+          orders: [...OPTIONS.orders],
+        },
+        savedPattern: saved,
+      },
+    });
+    const requests: unknown[] = [];
+    f.deps.start = async (request) => {
+      requests.push(request);
+      return true;
+    };
+    const flow = new StartSheetFlow(f.deps);
+    flow.picked = ['a'];
+    flow.open();
+    expect(flow.patternDraft.options).toEqual({
+      detection: 'sensitive',
+      obstacleLaps: null,
+      order: 'grid_first',
+      progress: 0,
+    });
+    flow.patternDraft = {
+      ...flow.patternDraft,
+      options: { detection: 'sensitive', obstacleLaps: 0, order: 'grid_first', progress: 40 },
+    };
+    await flow.start();
+    expect(requests).toEqual([
+      {
+        area_ids: ['a'],
+        pattern: {
+          ...STRIPES,
+          obstacle_detection: 'sensitive',
+          obstacle_laps: 0,
+          order: 'grid_first',
+          start_progress_pct: 40,
+        },
+      },
+    ]);
+    // The changed laps are remembered, the start progress is not.
+    expect(f.saved).toEqual([{ ...saved, obstacle_laps: 0 }]);
+  });
+
+  it('does not save the defaults when only the start progress changed', async () => {
+    const f = fake({
+      ctx: {
+        jobOptions: { ...OPTIONS, detection: [...OPTIONS.detection], orders: [...OPTIONS.orders] },
+      },
+    });
+    const flow = new StartSheetFlow(f.deps);
+    flow.picked = ['a'];
+    flow.open();
+    flow.patternDraft = {
+      ...flow.patternDraft,
+      options: { detection: null, obstacleLaps: null, order: null, progress: 50 },
+    };
+    await flow.start();
+    expect(f.sent).toEqual(['start_mow']);
+    expect(f.saved).toEqual([]);
+  });
+
+  it('counts a changed option as a change of the defaults', () => {
+    const spec = { ...OPTIONS, detection: [...OPTIONS.detection], orders: [...OPTIONS.orders] };
+    expect(defaultsChanged(STRIPES, null, ['stripes'], null, spec)).toBe(false);
+    expect(
+      defaultsChanged({ ...STRIPES, obstacle_detection: 'off' }, STRIPES, ['stripes'], null, spec),
+    ).toBe(true);
+    expect(
+      defaultsChanged({ ...STRIPES, start_progress_pct: 30 }, STRIPES, ['stripes'], null, spec),
+    ).toBe(false);
+  });
+});

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { commandLabel, patternLabel, patternSummary } from '$lib/i18n';
+import {
+  commandLabel,
+  formatPercent,
+  obstacleLabel,
+  orderLabel,
+  patternLabel,
+  patternSummary,
+} from '$lib/i18n';
 import { setLocale } from '$lib/paraglide/runtime';
 
 describe('pattern labels', () => {
@@ -30,6 +37,26 @@ describe('pattern labels', () => {
     expect(patternSummary({ name: 'checkerboard', angle_deg: 90, border_laps: 2 })).toBe(
       'Checkerboard 90° · 2 border laps',
     );
+    setLocale('de', { reload: false });
+  });
+});
+
+describe('job option labels', () => {
+  it('names the options like the vendor app and shows the start progress', () => {
+    setLocale('de', { reload: false });
+    expect(obstacleLabel('sensitive')).toBe('Empfindlich');
+    expect(obstacleLabel('off')).toBe('Aus');
+    expect(orderLabel('grid_first')).toBe('Zuerst Zickzack');
+    expect(formatPercent(40)).toBe('40\u00a0%');
+    expect(
+      patternSummary({ name: 'stripes', angle_deg: 0, border_laps: 1, start_progress_pct: 40 }),
+    ).toBe('Streifen 0° · 1 Randrunde · ab 40\u00a0%');
+    setLocale('en', { reload: false });
+    expect(obstacleLabel('standard')).toBe('Standard');
+    expect(orderLabel('border_first')).toBe('Border first');
+    expect(
+      patternSummary({ name: 'stripes', angle_deg: 0, border_laps: 1, start_progress_pct: 40 }),
+    ).toBe('Stripes 0° · 1 border lap · from 40%');
     setLocale('de', { reload: false });
   });
 });

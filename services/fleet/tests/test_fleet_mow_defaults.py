@@ -10,6 +10,12 @@ from fleet.adapters.memory import MemoryStore
 from fleet.domain.models import MowDefaults
 
 DIAGONAL = {"name": "diagonal", "angle_deg": 45, "border_laps": 2}
+NO_OPTIONS = {
+    "obstacle_detection": None,
+    "obstacle_laps": None,
+    "order": None,
+    "start_progress_pct": None,
+}
 
 
 def _actions(store: MemoryStore) -> list[str]:
@@ -30,7 +36,13 @@ async def test_fleet_mow_defaults_set_read_reset_and_audit() -> None:
 
         saved = await h.client.put(url, headers=owner.headers, json={"pattern": DIAGONAL})
         assert saved.status_code == 200, saved.text
-        expected = {"name": "diagonal", "angle_deg": 45.0, "border_laps": 2, "spacing_m": None}
+        expected = {
+            "name": "diagonal",
+            "angle_deg": 45.0,
+            "border_laps": 2,
+            "spacing_m": None,
+            **NO_OPTIONS,
+        }
         assert saved.json()["mow_defaults"] == {"pattern": expected}
 
         one = await h.client.get(f"{API}/mowers/{mower['id']}", headers=owner.headers)
@@ -54,6 +66,7 @@ async def test_fleet_mow_defaults_set_read_reset_and_audit() -> None:
             "angle_deg": 0.0,
             "border_laps": 1,
             "spacing_m": None,
+            **NO_OPTIONS,
         }
         cleared = await h.client.put(url, headers=owner.headers, json={"pattern": None})
         assert cleared.status_code == 200
@@ -75,7 +88,11 @@ async def test_fleet_mow_defaults_set_read_reset_and_audit() -> None:
         {"pattern": {"angle_deg": 200}},
         {"pattern": {"border_laps": 5}},
         {"pattern": {"spacing_m": 0.01}},
-        {"pattern": {"name": "stripes", "obstacle_laps": 2}},
+        {"pattern": {"name": "stripes", "angle_mode": "relative"}},
+        {"pattern": {"obstacle_detection": "eager"}},
+        {"pattern": {"obstacle_laps": 5}},
+        {"pattern": {"order": "sideways"}},
+        {"pattern": {"start_progress_pct": 100}},
         {"pattern": DIAGONAL, "account_id": str(uuid4())},
         {},
     ],
@@ -88,6 +105,33 @@ async def test_fleet_mow_defaults_refuse_invalid_bodies(body: dict[str, object])
             f"{API}/mowers/{mower['id']}/mow-defaults", headers=owner.headers, json=body
         )
     assert response.status_code == 422, response.text
+
+
+async def test_fleet_mow_defaults_keep_the_job_options() -> None:
+    store = MemoryStore()
+    options = {
+        "obstacle_detection": "sensitive",
+        "obstacle_laps": 0,
+        "order": "grid_first",
+        "start_progress_pct": 20,
+    }
+    async with harness(store=store) as h:
+        owner = await h.owner()
+        mower = await h.register(owner)
+        url = f"{API}/mowers/{mower['id']}/mow-defaults"
+        saved = await h.client.put(url, headers=owner.headers, json={"pattern": options})
+        assert saved.status_code == 200, saved.text
+        pattern = saved.json()["mow_defaults"]["pattern"]
+        assert {key: pattern[key] for key in options} == options
+        row = next(r for r in store.tables.mowers.rows.values() if str(r.id) == mower["id"])
+        assert row.mow_defaults is not None
+        assert row.mow_defaults.pattern.obstacle_detection == "sensitive"
+        audit = next(
+            a.details
+            for a in store.tables.audit.rows.values()
+            if a.action == "mower.mow_defaults_changed"
+        )
+        assert audit["mow_defaults"]["pattern"]["start_progress_pct"] == 20
 
 
 async def test_fleet_mow_defaults_need_can_control() -> None:

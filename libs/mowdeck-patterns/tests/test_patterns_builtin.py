@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from mowdeck_contracts.v1 import MowerCapabilities, StartMow
+from mowdeck_contracts.v1 import MowerCapabilities, PathOrder, StartMow, StartOptions
 from mowdeck_control.translation import MowRequest, plan_to_native_job
 from mowdeck_patterns import (
     Area,
@@ -261,7 +261,8 @@ def test_native_jobs_translate_to_the_mower(
     assert job is not None
     assert job.items() >= expected.items()
     caps = MowerCapabilities(
-        native_patterns=frozenset({"stripes", "diagonal", "checkerboard", "edge_only"})
+        native_patterns=frozenset({"stripes", "diagonal", "checkerboard", "edge_only"}),
+        start_options=StartOptions(orders=[PathOrder.BORDER_FIRST, PathOrder.GRID_FIRST]),
     )
     native = plan_to_native_job(
         MowRequest.from_start_mow(StartMow(area_ids=["front"], pattern=job)), caps

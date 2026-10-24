@@ -5,7 +5,13 @@ from uuid import uuid4
 
 import pytest
 from mowdeck_authz import mower
-from mowdeck_contracts.v1 import MODULE_DESCRIPTOR_PATH, SpotMowPlan, StartMow
+from mowdeck_contracts.v1 import (
+    MODULE_DESCRIPTOR_PATH,
+    PathOrder,
+    SpotMowPlan,
+    StartMow,
+    StartOptions,
+)
 from mowdeck_control import default_map, plan_transit, to_wgs84
 from mowdeck_service_kit.testing import FakeEntitlements
 from planner_support import API, FLEET, LUBA_LIKE, harness
@@ -254,6 +260,8 @@ async def test_planner_execution_modes_on_a_mower_without_custom_paths() -> None
         )
     assert native.json()["execution"]["mode"] == "native"
     assert native.json()["execution"]["native_job"]["border_laps"] == 1
+    # border_fill asks for the border first; a mower without a path order choice keeps its own.
+    assert "order" not in native.json()["execution"]["native_job"]
     assert spot.json()["execution"]["mode"] == "unsupported"
     assert spiral.json()["execution"]["mode"] == "unsupported"
 
@@ -343,3 +351,20 @@ async def test_planner_shapes_lane_ends_for_a_turn_style() -> None:
     assert fallback_body["turn_style"] == "arc"
     assert not any(f["properties"]["reverse"] for f in turns(fallback_body))
     assert any("cannot reverse" in w for w in fallback_body["warnings"])
+
+
+async def test_planner_native_job_keeps_the_order_a_mower_offers() -> None:
+    offers_order = LUBA_LIKE.model_copy(
+        update={"start_options": StartOptions(orders=[PathOrder.BORDER_FIRST])}
+    )
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.mower(owner, offers_order)
+        native = await h.preview(
+            owner,
+            mower_id=str(mower_id),
+            area={"area_id": "front"},
+            chain=[{"pattern": "border_fill", "settings": {"laps": 2}}],
+        )
+    job = native.json()["execution"]["native_job"]
+    assert (job["border_laps"], job["order"]) == (2, "border_first")

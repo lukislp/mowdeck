@@ -2452,7 +2452,10 @@ export type components = {
         /**
          * MowPattern
          * @description The pattern settings of a native start (``StartMow.pattern``) that every client offers:
-         *     the pattern, its base angle, the border laps and the path spacing.
+         *     the pattern, its base angle, the border laps and the path spacing, plus the job options a
+         *     mower may declare in ``MowerCapabilities.start_options`` (obstacle detection, laps around
+         *     no-go zones, path order, start progress; ADR 0030 amendment of 2026-10-24). An option left
+         *     None is not sent, so the mower keeps its own default.
          *
          *     Adapters may accept further keys in ``StartMow.pattern``; this is the common, validated
          *     part, also kept per mower as the mowing defaults in Fleet (``MowerOut.mow_defaults``).
@@ -2478,11 +2481,25 @@ export type components = {
              * @enum {string}
              */
             name: "stripes" | "diagonal" | "checkerboard" | "edge_only" | "random_angle";
+            /** @description Obstacle detection mode of the job; None keeps the mower's default. Offered modes: `MowerCapabilities.start_options.obstacle_detection`. */
+            obstacle_detection?: components["schemas"]["ObstacleDetection"] | null;
+            /**
+             * Obstacle Laps
+             * @description Laps around each no-go zone; None keeps the mower's default. Model limits: `MowerCapabilities.start_options.obstacle_laps_range`.
+             */
+            obstacle_laps?: number | null;
+            /** @description Border laps before or after the fill; None keeps the mower's default. Offered orders: `MowerCapabilities.start_options.orders`. */
+            order?: components["schemas"]["PathOrder"] | null;
             /**
              * Spacing M
              * @description Distance between neighbouring paths in metres; None for the mower's own default. Model limits: `MowerCapabilities.path_spacing_range_mm`.
              */
             spacing_m?: number | null;
+            /**
+             * Start Progress Pct
+             * @description Start the job at this progress in percent, skipping the first part of the route; None (or 0) starts at the beginning. Model limits: `MowerCapabilities.start_options.start_progress_range_pct`.
+             */
+            start_progress_pct?: number | null;
         };
         /**
          * MowPatternIn
@@ -2508,12 +2525,44 @@ export type components = {
              * @enum {string}
              */
             name: "stripes" | "diagonal" | "checkerboard" | "edge_only" | "random_angle";
+            /** @description Obstacle detection mode of the job; None keeps the mower's default. Offered modes: `MowerCapabilities.start_options.obstacle_detection`. */
+            obstacle_detection?: components["schemas"]["ObstacleDetection"] | null;
+            /**
+             * Obstacle Laps
+             * @description Laps around each no-go zone; None keeps the mower's default. Model limits: `MowerCapabilities.start_options.obstacle_laps_range`.
+             */
+            obstacle_laps?: number | null;
+            /** @description Border laps before or after the fill; None keeps the mower's default. Offered orders: `MowerCapabilities.start_options.orders`. */
+            order?: components["schemas"]["PathOrder"] | null;
             /**
              * Spacing M
              * @description Distance between neighbouring paths in metres; None for the mower's own default. Model limits: `MowerCapabilities.path_spacing_range_mm`.
              */
             spacing_m?: number | null;
+            /**
+             * Start Progress Pct
+             * @description Start the job at this progress in percent, skipping the first part of the route; None (or 0) starts at the beginning. Model limits: `MowerCapabilities.start_options.start_progress_range_pct`.
+             */
+            start_progress_pct?: number | null;
         };
+        /**
+         * ObstacleDetection
+         * @description How eagerly the mower avoids obstacles during a native job (``MowPattern``).
+         *
+         *     Which modes a mower offers depends on its model and firmware
+         *     (``MowerCapabilities.start_options.obstacle_detection``). The names follow the vendor apps:
+         *     ``off`` is the plain bump-and-turn behaviour, ``standard`` avoids obstacles it sees ahead,
+         *     ``sensitive`` additionally avoids areas that are not lawn; ``slow_touch`` and
+         *     ``less_touch`` exist only on older firmware.
+         * @enum {string}
+         */
+        ObstacleDetection: "off" | "slow_touch" | "less_touch" | "standard" | "sensitive";
+        /**
+         * PathOrder
+         * @description Whether the border laps run before or after the fill of a native job.
+         * @enum {string}
+         */
+        PathOrder: "border_first" | "grid_first";
         /**
          * PathPreviewRequest
          * @description Body of ``POST /api/v1/fleet/mowers/{id}/path-preview``: the areas and pattern of a

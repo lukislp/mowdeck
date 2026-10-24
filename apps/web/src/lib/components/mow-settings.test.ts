@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
+import { NO_OPTIONS, type JobOptionsSpec } from '$lib/mower/job-options';
 import { FALLBACK, offeredPatterns } from '$lib/mower/mow-pattern';
 import { setLocale } from '$lib/paraglide/runtime';
 
@@ -119,5 +120,96 @@ describe('MowSettings', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByTestId('start-settings').classList.contains('expanded')).toBe(true);
     expect(toggle).toHaveTextContent('Weniger');
+  });
+
+  describe('job options behind "Mehr"', () => {
+    const OPTIONS = {
+      detection: ['off', 'standard', 'sensitive'],
+      obstacleLaps: [0, 4],
+      orders: ['border_first', 'grid_first'],
+      progress: [0, 99],
+    } satisfies JobOptionsSpec;
+    const DRAFT = { ...FALLBACK, options: { ...NO_OPTIONS } };
+
+    it('hides "Mehr" when the mower declares no options', () => {
+      render(MowSettings, {
+        props: { offered: ALL, spacing: null, draft: { ...FALLBACK }, remember: true },
+      });
+      expect(screen.queryByTestId('start-more')).toBeNull();
+    });
+
+    it('offers the declared options with the vendor names and sets them', async () => {
+      setLocale('de', { reload: false });
+      render(MowSettings, {
+        props: {
+          offered: ALL,
+          spacing: null,
+          draft: { ...DRAFT },
+          remember: true,
+          options: OPTIONS,
+        },
+      });
+      const checked = (id: string) => screen.getByTestId(id).getAttribute('aria-checked');
+      const toggle = screen.getByTestId('start-more-toggle');
+      expect(toggle).toHaveTextContent('Mehr');
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('start-obstacle')).toBeNull();
+      await fireEvent.click(toggle);
+
+      const modes = screen.getByTestId('start-obstacle').querySelectorAll('[role="radio"]');
+      expect([...modes].map((b) => b.textContent?.trim())).toEqual([
+        'Aus',
+        'Standard',
+        'Empfindlich',
+      ]);
+      expect(screen.getByTestId('start-obstacle').textContent).toContain('Mäher');
+      await fireEvent.click(screen.getByTestId('start-obstacle-sensitive'));
+      expect(checked('start-obstacle-sensitive')).toBe('true');
+      expect(screen.getByTestId('start-obstacle').textContent).toContain('kein Rasen');
+
+      await fireEvent.click(screen.getByTestId('start-order-grid_first'));
+      expect(screen.getByTestId('start-order-grid_first')).toHaveTextContent('Zuerst Zickzack');
+      expect(checked('start-order-grid_first')).toBe('true');
+      // A second tap gives the choice back to the mower.
+      await fireEvent.click(screen.getByTestId('start-order-grid_first'));
+      expect(checked('start-order-grid_first')).toBe('false');
+      expect(checked('start-order-border_first')).toBe('false');
+
+      await fireEvent.click(screen.getByLabelText('Weniger Runden um Sperrzonen'));
+      expect(screen.getByTestId('start-nogo-laps').querySelector('output')?.dataset.value).toBe(
+        '0',
+      );
+      await fireEvent.click(screen.getByLabelText('Später beginnen'));
+      await fireEvent.click(screen.getByLabelText('Später beginnen'));
+      expect(screen.getByTestId('start-progress').querySelector('output')).toHaveTextContent(
+        '10 %',
+      );
+      expect(summary()).toBe('Streifen 0° · 1 Randrunde · ab 10\u00a0%');
+      expect(toggle).toHaveTextContent('Mehr · 3');
+
+      // Back to the mower's own setting.
+      await fireEvent.click(
+        screen.getByTestId('start-obstacle').querySelector('.reset') as HTMLElement,
+      );
+      expect(checked('start-obstacle-sensitive')).toBe('false');
+      expect(toggle).toHaveTextContent('Mehr · 2');
+    });
+
+    it('shows only the options the mower declares', async () => {
+      render(MowSettings, {
+        props: {
+          offered: ALL,
+          spacing: null,
+          draft: { ...DRAFT },
+          remember: true,
+          options: { detection: [], obstacleLaps: [0, 4], orders: [], progress: null },
+        },
+      });
+      await fireEvent.click(screen.getByTestId('start-more-toggle'));
+      expect(screen.getByTestId('start-nogo-laps')).toBeInTheDocument();
+      expect(screen.queryByTestId('start-obstacle')).toBeNull();
+      expect(screen.queryByTestId('start-order')).toBeNull();
+      expect(screen.queryByTestId('start-progress')).toBeNull();
+    });
   });
 });

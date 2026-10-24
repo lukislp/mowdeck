@@ -178,3 +178,12 @@ def test_scheduler_run_pattern_merges_the_mower_defaults() -> None:
     # The schedule only sets the angle.
     assert pattern_for_run({"angle": 90}, [], 0, defaults) == {**defaults, "angle_deg": 90.0}
     assert pattern_for_run(None, [0, 120], 1, defaults) == {**defaults, "angle_deg": 120.0}
+
+
+def test_scheduler_run_pattern_carries_the_job_options_of_the_defaults() -> None:
+    # The job options saved with the mowing defaults reach every scheduled start (ADR 0030).
+    options = {"obstacle_detection": "sensitive", "obstacle_laps": 0, "order": "grid_first"}
+    defaults = {"name": "stripes", "angle_deg": 0.0, "border_laps": 1, **options}
+    run = pattern_for_run({"angle": 45}, [], 0, defaults)
+    assert {key: run[key] for key in options} == options
+    assert run["angle_deg"] == 45.0
