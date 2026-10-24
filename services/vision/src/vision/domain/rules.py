@@ -14,6 +14,14 @@ Safety rules (ADR 0033, plan "Risiken"):
 * Dock fallback: when the model recommends nothing (or something not allowed) without any risk
   flag and return to dock is applicable, the service still offers ``return_to_dock``, labelled
   as a rule based fallback. Like every proposal it runs only after a human approves it.
+* Low confidence (ADR 0033 addendum 2026-10-24): an answer below the confidence threshold that
+  recommends ``drive``, ``resume`` or ``return_to_dock`` is not discarded. When it passes the
+  same checks as any proposal (applicable, steps within the limits, a known position and
+  heading, the planned path inside the geofence and outside every no-go zone) it is offered
+  marked ``low_confidence``: next to the dock fallback when that applies (the fallback is then
+  the default option, the model's recommendation the alternative), or alone. When it fails a
+  check it is not offered and the reason is kept (``model_refused``). A human picks the
+  option; nothing runs without that approval. Above the threshold nothing changes.
 * While executing, the run aborts at once on an emergency stop, on a sensor stop (any error
   that is not ``drive_recoverable``, or the lift flag), on a new error, when the mower starts
   doing something else (mowing, returning, docked), when it goes offline, when no state arrived
@@ -24,7 +32,7 @@ Safety rules (ADR 0033, plan "Risiken"):
 """
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final
@@ -39,10 +47,17 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_control.geo import distance, point_in_polygon
 
-from vision.domain.context import Pose
+from vision.domain.context import Motion, Pose
 from vision.domain.dock import DockRoute, hardware_fault
 from vision.domain.job import JobContext
-from vision.domain.models import AssessmentOut, ProposalAction, ProposalState, ProposedStep
+from vision.domain.models import (
+    MAX_STEP_SECONDS,
+    MAX_STEPS,
+    AssessmentOut,
+    ProposalAction,
+    ProposalState,
+    ProposedStep,
+)
 
 FRAME_TTL_MS: Final = 1000
 """Dead-man time of every drive frame."""
@@ -95,21 +110,78 @@ def evaluate(
 
 @dataclass(frozen=True, slots=True)
 class Decision:
-    """What becomes of an analysed proposal."""
+    """What becomes of an analysed proposal.
+
+    ``action`` is the default option: what an approval without a choice executes.
+    ``alternative`` is the model's low-confidence recommendation offered next to a default dock
+    fallback.
+    """
 
     state: ProposalState
     detail: str | None
     action: ProposalAction
     fallback: bool = False
+    low_confidence: bool = False
+    """The model's recommendation is offered although its confidence is below the threshold
+    (as ``action`` when it is offered alone, as ``alternative`` next to the fallback)."""
+    alternative: ProposalAction | None = None
+    """The model's low-confidence recommendation next to the default dock fallback."""
+    model_refused: str | None = None
+    """Why the model's low-confidence recommendation is not offered (a failed check)."""
 
 
 FALLBACK_PREFIX: Final = "Fallback: return to dock"
+
+PathCheck = Callable[[Sequence[ProposedStep]], str | None]
+"""Checks planned drive steps against the mower's position and the geofence (None: fine)."""
+
+_OFFERABLE: Final = frozenset(
+    {ProposalAction.DRIVE, ProposalAction.RESUME, ProposalAction.RETURN_TO_DOCK}
+)
 
 
 def dock_fallback_applies(answer: AssessmentOut, dock: DockRoute | None) -> bool:
     """Return to dock may be offered although the model did not recommend it: no risk flag and
     the route check finds it applicable."""
     return dock is not None and dock.return_to_dock_applicable and not answer.risk
+
+
+def recommends(answer: AssessmentOut) -> bool:
+    """The model recommended a maneuver (``drive`` with steps, ``resume`` or
+    ``return_to_dock``), whatever its confidence."""
+    if answer.action is ProposalAction.DRIVE:
+        return bool(answer.proposal)
+    return answer.action in _OFFERABLE
+
+
+def _executed_action(answer: AssessmentOut) -> ProposalAction:
+    return (
+        answer.action
+        if answer.action in (ProposalAction.RETURN_TO_DOCK, ProposalAction.RESUME)
+        else ProposalAction.DRIVE
+    )
+
+
+def low_confidence_problem(
+    answer: AssessmentOut,
+    *,
+    dock: DockRoute | None,
+    job: JobContext | None,
+    task: VisionTask,
+    path_check: PathCheck | None,
+) -> str | None:
+    """Why the model's low-confidence recommendation may not be offered (None: it may): the
+    same checks as any proposal (:func:`evaluate` without the threshold), and its drive steps
+    must pass ``path_check``. Without a check the steps are refused: a path that cannot be
+    checked is never offered below the threshold."""
+    state, why = evaluate(answer, min_confidence=0.0, dock=dock, job=job, task=task)
+    if state is not ProposalState.PROPOSED:
+        return why or "the recommendation is not applicable"
+    if answer.action is ProposalAction.RETURN_TO_DOCK or not answer.proposal:
+        return None
+    if path_check is None:
+        return "the planned path cannot be checked"
+    return path_check(answer.proposal)
 
 
 def decide(
@@ -120,22 +192,132 @@ def decide(
     allow_fallback: bool = True,
     job: JobContext | None = None,
     task: VisionTask = VisionTask.RECOVER,
+    path_check: PathCheck | None = None,
 ) -> Decision:
     """The model's answer through :func:`evaluate`, then the dock fallback (not offered again
-    when ``allow_fallback`` is false: an earlier round already tried it without success)."""
+    when ``allow_fallback`` is false: an earlier round already tried it without success).
+
+    Below the threshold a recommendation that passes :func:`low_confidence_problem` is offered
+    marked ``low_confidence``: next to the fallback (which stays the default option) or alone.
+    A risk flag still refuses everything; above the threshold nothing changes."""
+    if not answer.risk and answer.confidence < min_confidence and recommends(answer):
+        return _decide_low_confidence(
+            answer,
+            min_confidence=min_confidence,
+            dock=dock,
+            allow_fallback=allow_fallback,
+            job=job,
+            task=task,
+            path_check=path_check,
+        )
     state, detail = evaluate(answer, min_confidence=min_confidence, dock=dock, job=job, task=task)
     if state is ProposalState.PROPOSED:
-        action = (
-            answer.action
-            if answer.action in (ProposalAction.RETURN_TO_DOCK, ProposalAction.RESUME)
-            else ProposalAction.DRIVE
-        )
-        return Decision(state, None, action)
+        return Decision(state, None, _executed_action(answer))
     if allow_fallback and dock_fallback_applies(answer, dock):
         assert dock is not None  # noqa: S101 - checked by dock_fallback_applies
-        text = f"{FALLBACK_PREFIX} ({dock.reason}). The model recommended nothing: {detail}"
+        lead = (
+            f"The model's {answer.action.value} is not offered"
+            if recommends(answer)
+            else "The model recommended nothing"
+        )
+        text = f"{FALLBACK_PREFIX} ({dock.reason}). {lead}: {detail}"
         return Decision(ProposalState.PROPOSED, text[:500], ProposalAction.RETURN_TO_DOCK, True)
     return Decision(state, detail, answer.action)
+
+
+def _decide_low_confidence(
+    answer: AssessmentOut,
+    *,
+    min_confidence: float,
+    dock: DockRoute | None,
+    allow_fallback: bool,
+    job: JobContext | None,
+    task: VisionTask,
+    path_check: PathCheck | None,
+) -> Decision:
+    below = f"confidence {answer.confidence:.2f} below {min_confidence:.2f}"
+    action = _executed_action(answer)
+    problem = low_confidence_problem(answer, dock=dock, job=job, task=task, path_check=path_check)
+    fallback = allow_fallback and dock_fallback_applies(answer, dock)
+    if problem is None and (action is ProposalAction.RETURN_TO_DOCK or not fallback):
+        text = f"The model recommends {action.value} with low confidence ({below})."
+        return Decision(ProposalState.PROPOSED, text, action, low_confidence=True)
+    if problem is None:
+        assert dock is not None  # noqa: S101 - fallback implies a dock route
+        text = (
+            f"{FALLBACK_PREFIX} ({dock.reason}). The model recommends {action.value} with low "
+            f"confidence ({below}): offered as the alternative."
+        )
+        return Decision(
+            ProposalState.PROPOSED,
+            text[:500],
+            ProposalAction.RETURN_TO_DOCK,
+            fallback=True,
+            low_confidence=True,
+            alternative=action,
+        )
+    refused = problem[:300]
+    if fallback:
+        assert dock is not None  # noqa: S101 - fallback implies a dock route
+        text = (
+            f"{FALLBACK_PREFIX} ({dock.reason}). The model's {action.value} ({below}) is not "
+            f"offered: {refused}"
+        )
+        return Decision(
+            ProposalState.PROPOSED,
+            text[:500],
+            ProposalAction.RETURN_TO_DOCK,
+            fallback=True,
+            model_refused=refused,
+        )
+    text = f"{below}; the model's {action.value} is not offered: {refused}"
+    return Decision(ProposalState.REJECTED_BY_AI, text[:500], answer.action, model_refused=refused)
+
+
+def path_problem(
+    steps: Sequence[ProposedStep],
+    *,
+    pose: Pose | None,
+    fence: "Geofence | None",
+    motion: Motion,
+    sample_seconds: float = 0.1,
+) -> str | None:
+    """Why planned drive steps must not be offered (None: they may): the step limits, a known
+    position (and heading when the plan drives), a start inside the geofence, and the
+    dead-reckoned path (``motion``'s typical speed and turn rate) never leaving the geofence or
+    entering a no-go zone. Blades stay off whatever the steps say: no step can carry them."""
+    if not steps:
+        return None
+    if len(steps) > MAX_STEPS:
+        return f"more than {MAX_STEPS} steps"
+    for index, step in enumerate(steps, 1):
+        if not 0 < step.seconds <= MAX_STEP_SECONDS:
+            return f"step {index} lasts {step.seconds:g} s (at most {MAX_STEP_SECONDS:g} s)"
+        if abs(step.linear) > 1 or abs(step.angular) > 1:
+            return f"step {index} is outside the drive limits"
+    if fence is None:
+        return "no map of the mower: the geofence cannot be checked"
+    if pose is None:
+        return "the position of the mower is unknown"
+    if pose.theta_rad is None and any(abs(step.linear) > 0 for step in steps):
+        return "the heading of the mower is unknown: the planned path cannot be checked"
+    start = fence.violation((pose.x, pose.y))
+    if start is not None:
+        return start
+    x, y, theta = pose.x, pose.y, pose.theta_rad or 0.0
+    turn = math.radians(motion.turn_deg_per_s_at_1)
+    for index, step in enumerate(steps, 1):
+        ticks = max(1, math.ceil(step.seconds / sample_seconds))
+        dt = step.seconds / ticks
+        for _ in range(ticks):
+            theta += step.angular * turn * dt
+            speed = step.linear * motion.linear_mps_at_1
+            x += speed * math.cos(theta) * dt
+            y += speed * math.sin(theta) * dt
+            violation = fence.violation((x, y))
+            if violation is not None:
+                return f"step {index} leaves the safe area ({violation})"
+    return None
 
 
 def frames_for(step: ProposedStep, rate_hz: float) -> int:

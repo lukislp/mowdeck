@@ -28,6 +28,14 @@ fits (``dock_route``). The model may answer ``return_to_dock``; when it recommen
 the dock command fits and no risk flag is set, the service offers it as a labelled fallback
 (``fallback``). Either way it is a proposal: nothing runs before a human approves it.
 
+Low confidence (ADR 0033 addendum 2026-10-24): a recommendation below ``min_confidence`` is
+kept when it passes the same checks as any proposal, its drive steps dead-reckoned from the
+mower's pose against the geofence (:func:`~vision.domain.rules.path_problem`). With an
+applicable dock fallback the proposal then offers two options: ``action`` is the fallback (the
+default, what an approval without a choice runs) and ``alternative_action`` the model's
+recommendation; :meth:`VisionService.approve` takes ``option`` (``model`` or ``fallback``).
+A recommendation that fails a check is not offered and ``model_refused`` says why.
+
 Resume (:mod:`vision.domain.job`): the context says which mowing job the mower was running
 (``job``: the planned areas in order, done, current and next, the entry of the connection to
 the next area), from the gateway's route of the job, the state and the newest start. The model
@@ -43,7 +51,7 @@ of the user who opted in, always with the gateway's photo (none: no analysis), r
 import asyncio
 import contextlib
 import time
-from collections.abc import Collection, Coroutine, Mapping
+from collections.abc import Collection, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
@@ -97,11 +105,19 @@ from vision.domain.models import (
     ProposalAction,
     ProposalState,
     ProposalStep,
+    ProposedStep,
     ProviderConfig,
     ProviderRequest,
     StoredImage,
 )
-from vision.domain.rules import day_start, decide
+from vision.domain.rules import (
+    Geofence,
+    PathCheck,
+    day_start,
+    decide,
+    path_problem,
+    start_problem,
+)
 
 _log = get_logger("vision.assist")
 
@@ -114,6 +130,10 @@ OPEN_STATES = frozenset(
         ProposalState.VERIFYING,
     }
 )
+
+
+ApprovalOption = Literal["model", "fallback"]
+"""Which option of a proposal an approval runs."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +163,9 @@ class AssistConfig:
     """Two frames captured further apart than this are not a stereo pair."""
     map_image: bool = True
     """Add the top-down map rendering as one extra image (on top of ``max_images``)."""
+    geofence_margin_m: float = 2.0
+    """Margin around the mapped areas for the path check of a low-confidence recommendation
+    (the executor's geofence margin)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -587,6 +610,30 @@ class VisionService:
             last_start=self.view.last_start(mower_id) if state is not None else None,
         )
 
+    def _path_check(self, proposal: Proposal) -> PathCheck:
+        """The path check of a low-confidence recommendation on the newest state and map (the
+        executor checks the same geofence again while it drives)."""
+
+        def check(steps: Sequence[ProposedStep]) -> str | None:
+            observed = self.view.state(proposal.mower_id)
+            if observed is None or observed.state.account_id != proposal.account_id:
+                return "no state of the mower is known"
+            problem = start_problem(proposal.task, observed.state)
+            if problem is not None:
+                return problem
+            mapped = self.view.mower_map(proposal.mower_id)
+            if mapped is None or mapped[0] != proposal.account_id:
+                return "no map of the mower: the geofence cannot be checked"
+            mower_map = mapped[1]
+            return path_problem(
+                steps,
+                pose=pose_of(observed.state, mower_map),
+                fence=Geofence(mower_map, self.config.geofence_margin_m),
+                motion=self.config.motion,
+            )
+
+        return check
+
     async def _analyse(
         self,
         proposal: Proposal,
@@ -625,6 +672,7 @@ class VisionService:
             allow_fallback=not tried_dock,
             job=context.job,
             task=proposal.task,
+            path_check=self._path_check(proposal),
         )
         state, detail = decision.state, decision.detail
         drive = decision.action in (ProposalAction.DRIVE, ProposalAction.RESUME)
@@ -653,12 +701,7 @@ class VisionService:
         )
         expires = now + timedelta(seconds=self.config.proposal_ttl_seconds)
         if state is ProposalState.PROPOSED and drive:
-            await self.store.put_steps(
-                [
-                    ProposalStep(proposal.id, i, s.linear, s.angular, s.seconds)
-                    for i, s in enumerate(assessment.result.proposal)
-                ]
-            )
+            await self.store.put_steps(_audit_steps(proposal.id, assessment.result.proposal))
         changed = await self._update(
             proposal.id,
             {
@@ -670,6 +713,9 @@ class VisionService:
                 "provider_model": assessment.model,
                 "action": decision.action,
                 "fallback": decision.fallback,
+                "low_confidence": decision.low_confidence,
+                "alternative_action": decision.alternative,
+                "model_refused": decision.model_refused,
                 "updated_at": now,
             },
             states={ProposalState.ANALYSING},
@@ -682,6 +728,9 @@ class VisionService:
             confidence=assessment.result.confidence,
             action=decision.action.value,
             fallback=decision.fallback,
+            low_confidence=decision.low_confidence,
+            alternative=decision.alternative.value if decision.alternative else None,
+            model_refused=decision.model_refused,
             steps=len(assessment.result.proposal),
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
@@ -689,13 +738,7 @@ class VisionService:
             latency_ms=usage.latency_ms,
         )
         if changed and state is ProposalState.PROPOSED:
-            event_action: Literal["drive", "return_to_dock", "resume"] = (
-                "resume"
-                if decision.action is ProposalAction.RESUME
-                else "return_to_dock"
-                if decision.action is ProposalAction.RETURN_TO_DOCK
-                else "drive"
-            )
+            event_action = _event_action(decision.action) or "drive"
             await self.events.proposal_created(
                 VisionProposalCreated(
                     proposal_id=proposal.id,
@@ -709,6 +752,8 @@ class VisionService:
                     steps=len(assessment.result.proposal) if drive else 0,
                     action=event_action,
                     fallback=decision.fallback,
+                    low_confidence=decision.low_confidence,
+                    alternative_action=_event_action(decision.alternative),
                     expires_at=expires,
                     link=f"/mowers/{proposal.mower_id}?assist={proposal.id}",
                     created_at=now,
@@ -787,6 +832,8 @@ class VisionService:
                     action=action,
                     steps=min(steps, 6),
                     fallback=proposal.fallback,
+                    low_confidence=proposal.low_confidence,
+                    alternative_action=_event_action(proposal.alternative_action),
                     expires_at=proposal.expires_at
                     if proposal.state is ProposalState.PROPOSED
                     else None,
@@ -801,14 +848,22 @@ class VisionService:
 
     # --- decisions ------------------------------------------------------------------------
 
-    async def approve(self, principal: Principal, proposal_id: UUID) -> Proposal:
+    async def approve(
+        self, principal: Principal, proposal_id: UUID, option: ApprovalOption | None = None
+    ) -> Proposal:
         """Approve a proposal (``can_drive`` checked by the API): drive it on the approver's
-        behalf. One approval per proposal; refused after ``expires_at``."""
+        behalf. One approval per proposal; refused after ``expires_at``.
+
+        ``option`` picks what runs: ``model`` (the model's recommendation; with a default dock
+        fallback that is ``alternative_action``) or ``fallback`` (the dock fallback); None runs
+        the default ``action``. An option the proposal does not offer is refused
+        (:class:`~vision.domain.errors.InvalidInput`)."""
         account = _account(principal)
         proposal = await self._get(account, proposal_id)
         await require_feature(self.entitlements, account, FEATURE_AI_RECOVER)
         if proposal.state is not ProposalState.PROPOSED:
             raise ConflictError(f"the proposal is {proposal.state}")
+        chosen = _choose(proposal, option)
         now = self.clock()
         if proposal.expires_at is None or proposal.expires_at <= now:
             await self._update(
@@ -818,17 +873,25 @@ class VisionService:
             )
             raise ProposalExpired("the proposal expired: request a new analysis")
         approver = principal.ref()
-        changed = await self._update(
-            proposal_id,
-            {
-                "state": ProposalState.EXECUTING,
-                "approved_by": approver,
-                "approved_at": now,
-                "started_at": now,
-                "updated_at": now,
-            },
-            states={ProposalState.PROPOSED},
-        )
+        changes: dict[str, Any] = {
+            "state": ProposalState.EXECUTING,
+            "approved_by": approver,
+            "approved_at": now,
+            "started_at": now,
+            "updated_at": now,
+            "approved_option": "fallback" if proposal.fallback else "model",
+        }
+        if chosen is not None:
+            # The model's alternative replaces the default fallback: it is what runs now.
+            changes |= {
+                "action": chosen,
+                "fallback": False,
+                "alternative_action": None,
+                "approved_option": "model",
+            }
+            if chosen in (ProposalAction.DRIVE, ProposalAction.RESUME) and proposal.assessment:
+                await self.store.put_steps(_audit_steps(proposal.id, proposal.assessment.proposal))
+        changed = await self._update(proposal_id, changes, states={ProposalState.PROPOSED})
         if not changed:
             raise ConflictError("the proposal was decided by someone else")
         approved = await self._get(account, proposal_id)
@@ -837,6 +900,9 @@ class VisionService:
             "vision proposal approved",
             proposal_id=str(proposal_id),
             approved_by=str(approver.subject),
+            option=changes["approved_option"],
+            action=approved.action.value,
+            low_confidence=approved.low_confidence,
         )
         self._spawn(self._execute(approved, approver, account), f"vision-execute-{proposal_id}")
         return approved
@@ -1027,10 +1093,52 @@ class VisionService:
         return counts
 
 
+EventAction = Literal["drive", "return_to_dock", "resume"]
+
+_EVENT_ACTIONS: dict[ProposalAction, EventAction] = {
+    ProposalAction.DRIVE: "drive",
+    ProposalAction.RETURN_TO_DOCK: "return_to_dock",
+    ProposalAction.RESUME: "resume",
+}
+
+
+def _event_action(action: ProposalAction | None) -> EventAction | None:
+    return _EVENT_ACTIONS.get(action) if action is not None else None
+
+
+def _audit_steps(proposal_id: UUID, steps: Sequence[ProposedStep]) -> list[ProposalStep]:
+    return [
+        ProposalStep(proposal_id, i, s.linear, s.angular, s.seconds) for i, s in enumerate(steps)
+    ]
+
+
+def _choose(proposal: Proposal, option: ApprovalOption | None) -> ProposalAction | None:
+    """The action that replaces the default when ``option`` picks the model's alternative (None:
+    the default ``action`` runs); refuses an option the proposal does not offer."""
+    if option is None:
+        return None
+    if option == "fallback":
+        if not proposal.fallback:
+            raise InvalidInput("this proposal offers no dock fallback")
+        return None
+    if not proposal.fallback:
+        return None  # the default is the model's recommendation itself
+    if proposal.alternative_action is None:
+        raise InvalidInput("this proposal offers no recommendation of the model")
+    return proposal.alternative_action
+
+
 def _account(principal: Principal) -> UUID:
     if principal.account_id is None:
         raise InvalidInput("this operation needs an account-scoped principal")
     return principal.account_id
 
 
-__all__ = ["FINAL_STATES", "OPEN_STATES", "AssistConfig", "ProposalDetails", "VisionService"]
+__all__ = [
+    "FINAL_STATES",
+    "OPEN_STATES",
+    "ApprovalOption",
+    "AssistConfig",
+    "ProposalDetails",
+    "VisionService",
+]

@@ -2367,8 +2367,26 @@
             }
           ],
           "default": null,
-          "description": "`drive`, `return_to_dock`, or `resume` (optional drive steps, then the paused job continues); null before the analysis decided one.",
+          "description": "The default option, what an approval without a choice runs (after an approval: what runs): `drive`, `return_to_dock`, or `resume` (optional drive steps, then the paused job continues); null before the analysis decided one.",
           "title": "Action"
+        },
+        "alternative_action": {
+          "anyOf": [
+            {
+              "enum": [
+                "drive",
+                "return_to_dock",
+                "resume"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The model's low-confidence recommendation next to the fallback `action`; the choice is made in MowDeck.",
+          "title": "Alternative Action"
         },
         "confidence": {
           "anyOf": [
@@ -2413,6 +2431,7 @@
         },
         "fallback": {
           "default": false,
+          "description": "`action` is the rule based return to dock fallback.",
           "title": "Fallback",
           "type": "boolean"
         },
@@ -2430,6 +2449,12 @@
           "maxLength": 300,
           "title": "Link",
           "type": "string"
+        },
+        "low_confidence": {
+          "default": false,
+          "description": "The model's recommendation is offered below the confidence threshold.",
+          "title": "Low Confidence",
+          "type": "boolean"
         },
         "mower_id": {
           "format": "uuid",

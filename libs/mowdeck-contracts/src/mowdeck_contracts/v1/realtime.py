@@ -370,11 +370,23 @@ class VisionProposalSummary(ContractModel):
     final: bool
     action: Literal["drive", "return_to_dock", "resume"] | None = Field(
         default=None,
-        description="`drive`, `return_to_dock`, or `resume` (optional drive steps, then the "
-        "paused job continues); null before the analysis decided one.",
+        description="The default option, what an approval without a choice runs (after an "
+        "approval: what runs): `drive`, `return_to_dock`, or `resume` (optional drive steps, "
+        "then the paused job continues); null before the analysis decided one.",
     )
     steps: int = Field(default=0, ge=0, le=6)
-    fallback: bool = False
+    fallback: bool = Field(
+        default=False, description="`action` is the rule based return to dock fallback."
+    )
+    low_confidence: bool = Field(
+        default=False,
+        description="The model's recommendation is offered below the confidence threshold.",
+    )
+    alternative_action: Literal["drive", "return_to_dock", "resume"] | None = Field(
+        default=None,
+        description="The model's low-confidence recommendation next to the fallback `action`; "
+        "the choice is made in MowDeck.",
+    )
     confidence: float | None = Field(default=None, ge=0, le=1)
     situation: str | None = Field(default=None, max_length=64)
     trigger: VisionTrigger = VisionTrigger.MANUAL

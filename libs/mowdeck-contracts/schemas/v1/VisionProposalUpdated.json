@@ -60,8 +60,26 @@
         }
       ],
       "default": null,
-      "description": "The proposed maneuver (`drive`, `return_to_dock`, or `resume`: optional drive steps, then the paused job continues); null before the analysis decided one.",
+      "description": "The default option (`drive`, `return_to_dock`, or `resume`: optional drive steps, then the paused job continues); once approved, the option that runs; null before the analysis decided one.",
       "title": "Action"
+    },
+    "alternative_action": {
+      "anyOf": [
+        {
+          "enum": [
+            "drive",
+            "return_to_dock",
+            "resume"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The model's low-confidence recommendation next to the fallback `action` (after an approval of it, `action` names it and this is null).",
+      "title": "Alternative Action"
     },
     "error_code": {
       "anyOf": [
@@ -105,6 +123,12 @@
       "maxLength": 300,
       "title": "Link",
       "type": "string"
+    },
+    "low_confidence": {
+      "default": false,
+      "description": "The model's recommendation is offered below the confidence threshold.",
+      "title": "Low Confidence",
+      "type": "boolean"
     },
     "mower_id": {
       "format": "uuid",

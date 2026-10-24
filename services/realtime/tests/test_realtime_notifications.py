@@ -304,6 +304,31 @@ async def test_realtime_resume_proposal_carries_its_action() -> None:
         assert done["proposal"]["state"] == "recovered"
 
 
+async def test_realtime_low_confidence_choice_carries_both_options() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        client = await h.connect_as(owner)
+        await client.subscribe(mower_id)
+        event = created(owner.account_id, mower_id).model_copy(
+            update={
+                "action": "return_to_dock",
+                "steps": 0,
+                "fallback": True,
+                "low_confidence": True,
+                "alternative_action": "resume",
+                "confidence": 0.55,
+            }
+        )
+        await _event(h, VISION_PROPOSAL_CREATED, owner.account_id, event)
+        message = await client.expect("vision_proposal")
+        RealtimeServerMessage.model_validate(message)
+        summary = message["proposal"]
+        # Old readers keep `action` (the default, the fallback); new ones see the choice.
+        assert summary["action"] == "return_to_dock" and summary["fallback"] is True
+        assert summary["low_confidence"] is True and summary["alternative_action"] == "resume"
+
+
 async def test_realtime_event_with_mismatching_account_is_dropped() -> None:
     async with harness() as h:
         owner = await h.owner()
