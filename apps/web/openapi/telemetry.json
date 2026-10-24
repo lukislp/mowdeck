@@ -2147,6 +2147,10 @@
             "title": "Settings",
             "type": "array"
           },
+          "start_options": {
+            "$ref": "#/components/schemas/StartOptions",
+            "description": "Job options a native start may carry besides the pattern (obstacle detection, laps around no-go zones, path order, start progress; ADR 0030). Clients show only what is declared here."
+          },
           "undock": {
             "default": false,
             "description": "The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).",
@@ -2996,6 +3000,27 @@
         "title": "NetworkKind",
         "type": "string"
       },
+      "ObstacleDetection": {
+        "description": "How eagerly the mower avoids obstacles during a native job (``MowPattern``).\n\nWhich modes a mower offers depends on its model and firmware\n(``MowerCapabilities.start_options.obstacle_detection``). The names follow the vendor apps:\n``off`` is the plain bump-and-turn behaviour, ``standard`` avoids obstacles it sees ahead,\n``sensitive`` additionally avoids areas that are not lawn; ``slow_touch`` and\n``less_touch`` exist only on older firmware.",
+        "enum": [
+          "off",
+          "slow_touch",
+          "less_touch",
+          "standard",
+          "sensitive"
+        ],
+        "title": "ObstacleDetection",
+        "type": "string"
+      },
+      "PathOrder": {
+        "description": "Whether the border laps run before or after the fill of a native job.",
+        "enum": [
+          "border_first",
+          "grid_first"
+        ],
+        "title": "PathOrder",
+        "type": "string"
+      },
       "PermissionDef": {
         "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
         "properties": {
@@ -3502,6 +3527,75 @@
           "state"
         ],
         "title": "SpotRunStatus",
+        "type": "object"
+      },
+      "StartOptions": {
+        "description": "The job options a native start may carry besides the pattern (``MowPattern``), as one\nmower declares them (ADR 0030 amendment of 2026-10-24).\n\nEverything defaults to \"not offered\": a client shows an option only when it is declared\nhere, and the connection refuses a start that sets an option it does not declare. An option\na start leaves out (None) is not sent, so the mower keeps its own default.",
+        "properties": {
+          "obstacle_detection": {
+            "description": "Obstacle detection modes the mower offers, in the order a client shows them (`MowPattern.obstacle_detection`); empty when it offers no choice.",
+            "items": {
+              "$ref": "#/components/schemas/ObstacleDetection"
+            },
+            "maxItems": 8,
+            "title": "Obstacle Detection",
+            "type": "array"
+          },
+          "obstacle_laps_range": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive (min, max) laps around each no-go zone (`MowPattern.obstacle_laps`), if settable.",
+            "title": "Obstacle Laps Range"
+          },
+          "orders": {
+            "description": "Path orders the mower offers (`MowPattern.order`); empty when it offers no choice.",
+            "items": {
+              "$ref": "#/components/schemas/PathOrder"
+            },
+            "maxItems": 2,
+            "title": "Orders",
+            "type": "array"
+          },
+          "start_progress_range_pct": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive (min, max) progress in percent a job may start at (`MowPattern.start_progress_pct`), if settable.",
+            "title": "Start Progress Range Pct"
+          }
+        },
+        "title": "StartOptions",
         "type": "object"
       },
       "StateHistory": {

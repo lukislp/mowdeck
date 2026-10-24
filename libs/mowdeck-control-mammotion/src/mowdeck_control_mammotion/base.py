@@ -976,6 +976,7 @@ class MammotionBase:
                 self._port.device_name, self._port.firmware(), self._port.product_key()
             ),
             maintenance=True,
+            firmware=self._port.firmware(),
         )
         if self._base_offered():
             caps = caps.model_copy(update={"base_station_firmware_update": True})
@@ -1638,6 +1639,9 @@ class MammotionBase:
                 blade_height_mm=self._default_blade_height(device),
                 speed_mps=self._speed_mps or DEFAULT_SPEED_MPS,
                 path_spacing_cm=spacing,
+                detection=mapping.detection_strategies_of(
+                    self._port.device_name, self._port.firmware(), self._port.product_key()
+                ),
             )
         except (ValueError, UnsupportedPattern) as exc:
             raise CommandRejected(str(exc)) from exc

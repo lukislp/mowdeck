@@ -38,6 +38,7 @@ from mowdeck_contracts.v1 import (
 from mowdeck_control.geo import from_wgs84, to_wgs84
 from mowdeck_control.spot_run import SpotRunConfig
 from mowdeck_control.transit import REASON_NO_ROUTE, NoRouteError, plan_transit
+from mowdeck_control.translation import without_undeclared_options
 from mowdeck_patterns import (
     Area,
     InvalidArea,
@@ -314,6 +315,9 @@ class Planning:
         native = self.native_job(spec, chain, mower_spec, area)
         if native is not None and caps is not None and not caps.supports_pattern(native["name"]):
             native = None
+        if native is not None and caps is not None:
+            # A job option the mower does not offer (border_fill's order) stays the mower's own.
+            native = without_undeclared_options(native, caps)
         if caps is None:
             return Execution("unknown", "the mower's capabilities are not known", native)
         if caps.custom_paths:

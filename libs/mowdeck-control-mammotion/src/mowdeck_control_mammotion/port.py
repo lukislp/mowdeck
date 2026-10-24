@@ -107,7 +107,12 @@ from pymammotion.data.model.hash_list import (
 )
 from pymammotion.data.model.hash_list import MowPath as MowPathFrame
 from pymammotion.data.model.location import Dock, LocationPoint
-from pymammotion.data.model.mowing_modes import CuttingMode, PathAngleSetting
+from pymammotion.data.model.mowing_modes import (
+    CuttingMode,
+    DetectionStrategy,
+    MowOrder,
+    PathAngleSetting,
+)
 from pymammotion.data.model.report_info import LocationData
 from pymammotion.device.handle import DeviceHandle
 from pymammotion.http.model.camera_stream import (
@@ -153,6 +158,7 @@ __all__ = [
     "CommandTimeoutError",
     "CoordinateConverter",
     "CuttingMode",
+    "DetectionStrategy",
     "DeviceHandle",
     "DeviceType",
     "Dock",
@@ -167,6 +173,7 @@ __all__ = [
     "LoginFailedError",
     "MammotionClient",
     "MammotionPort",
+    "MowOrder",
     "MowPathFetchError",
     "MowPathFrame",
     "MowPathPacket",

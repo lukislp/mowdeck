@@ -159,7 +159,18 @@ Every code gets a manufacturer-neutral category in `raw.error_category` (`errors
 
 **No automatic resend of job commands.** PyMammotion's `send_command_and_wait` drives `DeviceMessageBroker.send_and_wait` (`pymammotion/messaging/broker.py`, `retries=2`), which calls the send again on every attempt that gets no reply within `send_timeout`. Until 2026-10-10 the adapter sent `start_job` that way, waiting for `zone_start_precent_t`; the LUBA 2 never answered with it, so the start was re-sent after 30 s and restarted the mower the owner had just paused in the app, and the command was reported `failed` after 60 s while the mower was mowing. `MammotionPort.send_and_wait` is therefore reserved for idempotent requests (reads and the route request: planning the same route twice is harmless). Commands that change what the mower does go through `MammotionPort.send` (`send_command_with_args`, `Priority.USER`): sent once on the caller's task; PyMammotion's `execute_command` repeats it only when the cloud answers with a gateway timeout.
 
-Pattern settings in `StartMow.pattern`: `name`, `angle_deg`, `spacing_m`, `border_laps`, `order` (validated, not sent: no field for it could be verified), plus `angle_mode` (`absolute`, `relative`, `random`), `obstacle_laps`, `blade_height_mm` and `speed_mps`.
+Pattern settings in `StartMow.pattern`: `name`, `angle_deg`, `spacing_m`, `border_laps`, the job options `obstacle_detection`, `obstacle_laps`, `order` and `start_progress_pct` (ADR 0030 amendment 2026-10-24, checked against `capabilities.start_options`), plus `angle_mode` (`absolute`, `relative`, `random`), `blade_height_mm` and `speed_mps`.
+
+**Job options** (`mapping.start_options_of`, `mapping.route_plan`). The Mammotion app's "task assignment" offers them under "Mehr"; the adapter declares them for the LUBA 2 AWD (`Luba-VS`) and AWD X (`Luba-VP`) only, other models keep just `obstacle_laps` (0 to 4, as before). Where each one goes, as Mammotion-HA sends it:
+
+| `MowPattern` | Values | PyMammotion | Left out |
+| --- | --- | --- | --- |
+| `obstacle_detection` | the app's options for model and firmware (`DetectionStrategy.for_device`): `off` (1), `standard` (10), `sensitive` (11) from firmware 1.12.0 and on the AWD X; below 1.12.0 on the AWD `off` (0), `slow_touch` (1), `less_touch` (2), `standard` (10) | `ultra_wave` | PyMammotion's default 2, as the adapter always sent |
+| `obstacle_laps` | 0 to 4 | `obstacle_laps`, byte 1 of `path_order` | 1, as before |
+| `order` | `border_first` (0), `grid_first` (1) | `border_mode`, byte 0 of `path_order` | the border laps, as the adapter sent since its first release |
+| `start_progress_pct` | 0 to 99 (the cloud caps it at 99) | `start_progress`, byte 3 of `path_order` | 0 |
+
+Verified against PyMammotion 0.10.9 (`OperationSettings`, `create_path_order`, `DetectionStrategy`, `MowOrder`) and Mammotion-HA (`lawn_mower.py` start schema, `select.py`, translations); not verified on a mower: whether the firmware reads byte 0 of `path_order` as the order (PyMammotion's `PathOrderSettings` docstring calls it "boundary laps") and that `start_progress` is a percentage. Without `order` the adapter keeps sending the border laps there, so existing starts behave as before.
 
 Why the emergency stop pauses instead of `cancel_job`: pausing is what the app uses to halt a running job; it stops in place and keeps the job, so a person decides what happens next, while what `cancel_job` does with a mower out on the lawn is not documented.
 

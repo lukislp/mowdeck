@@ -144,6 +144,7 @@ from mowdeck_control.translation import (
     NativeJob,
     Pattern,
     plan_to_native_job,
+    without_undeclared_options,
 )
 
 __version__ = "0.1.0"
@@ -254,4 +255,5 @@ __all__ = [
     "to_wgs84",
     "transit_start",
     "weak_link_problem",
+    "without_undeclared_options",
 ]

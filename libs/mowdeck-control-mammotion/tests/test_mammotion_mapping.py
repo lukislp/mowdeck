@@ -15,6 +15,7 @@ from mowdeck_contracts.v1 import (
     RtkFixStatus,
     RtkSource,
     StartMow,
+    StartOptions,
     TurnStyle,
 )
 from mowdeck_control import UnsupportedPattern
@@ -39,9 +40,11 @@ from mowdeck_control_mammotion.fake import (
 from mowdeck_control_mammotion.port import (
     CuttingMode,
     MowerDevice,
+    OperationSettings,
     PathAngleSetting,
     PathType,
     WorkMode,
+    build_route_information,
 )
 
 
@@ -744,8 +747,143 @@ def test_mammotion_pattern_extras_and_border_laps() -> None:
         }
     )
     s = plan.settings
-    assert (s.channel_width, s.mowing_laps, s.border_mode, s.obstacle_laps) == (30, 3, 3, 2)
+    # ``order`` is sent since the job options (ADR 0030): byte 0 of the route buffer, 1 = grid.
+    assert (s.channel_width, s.mowing_laps, s.border_mode, s.obstacle_laps) == (30, 3, 1, 2)
     assert (s.blade_height, s.speed) == (45, 0.5)
+
+
+def _luba_plan(pattern: dict[str, Any], firmware: str = "") -> mapping.RoutePlan:
+    caps = mapping.capabilities_of(
+        sample_device(),
+        device_name="Luba-VP1",
+        product_key="a1nf9kRBWoH",
+        manual_drive=False,
+        manual_drive_blades=False,
+        firmware=firmware,
+    )
+    return mapping.route_plan(
+        StartMow(area_ids=[str(FRONT_HASH)], pattern=pattern),
+        caps,
+        blade_height_mm=55,
+        speed_mps=0.3,
+        path_spacing_cm=(20, 35),
+        detection=mapping.detection_strategies_of("Luba-VP1", firmware),
+    )
+
+
+def test_mammotion_luba_2_declares_the_apps_job_options() -> None:
+    options = mapping.start_options_of("Luba-VP1")
+    assert [mode.value for mode in options.obstacle_detection] == ["off", "standard", "sensitive"]
+    assert options.obstacle_laps_range == (0, 4)
+    assert [order.value for order in options.orders] == ["border_first", "grid_first"]
+    assert options.start_progress_range_pct == (0, 99)
+    assert _caps().start_options == options
+    # The LUBA 2 AWD below firmware 1.12.0 still has the old touch modes.
+    old = mapping.start_options_of("Luba-VS1", "1.11.5")
+    assert [mode.value for mode in old.obstacle_detection] == [
+        "off",
+        "slow_touch",
+        "less_touch",
+        "standard",
+    ]
+    assert [m.value for m in mapping.start_options_of("Luba-VS1", "1.12.0").obstacle_detection] == [
+        "off",
+        "standard",
+        "sensitive",
+    ]
+
+
+@pytest.mark.parametrize("device_name", ["Luba-ABCDE", "Yuka-ABC", "Luba-MN123"])
+def test_mammotion_other_models_keep_only_the_no_go_laps(device_name: str) -> None:
+    options = mapping.start_options_of(device_name)
+    assert options == StartOptions(obstacle_laps_range=(0, 4))
+    assert mapping.detection_strategies_of(device_name) == []
+
+
+@pytest.mark.parametrize(
+    ("pattern", "fields"),
+    [
+        (
+            {"obstacle_detection": "sensitive"},
+            {"ultra_wave": 11},
+        ),
+        ({"obstacle_detection": "standard"}, {"ultra_wave": 10}),
+        ({"obstacle_detection": "off"}, {"ultra_wave": 1}),
+        ({"obstacle_laps": 0}, {"obstacle_laps": 0}),
+        ({"obstacle_laps": 4}, {"obstacle_laps": 4}),
+        ({"order": "border_first", "border_laps": 2}, {"border_mode": 0, "mowing_laps": 2}),
+        ({"order": "grid_first", "border_laps": 2}, {"border_mode": 1, "mowing_laps": 2}),
+        ({"start_progress_pct": 40}, {"start_progress": 40}),
+    ],
+)
+def test_mammotion_job_options_reach_the_route(
+    pattern: dict[str, Any], fields: dict[str, int]
+) -> None:
+    s = _luba_plan(pattern).settings
+    assert {key: getattr(s, key) for key in fields} == fields
+
+
+def test_mammotion_job_options_left_out_keep_what_was_sent_before() -> None:
+    s = _luba_plan({"border_laps": 2}).settings
+    defaults = OperationSettings()
+    assert s.ultra_wave == defaults.ultra_wave
+    assert (s.obstacle_laps, s.start_progress) == (1, 0)
+    assert s.border_mode == 2, "without an order byte 0 stays the border laps, as before"
+
+
+def test_mammotion_job_options_reach_the_route_buffer() -> None:
+    plan = _luba_plan(
+        {"obstacle_laps": 3, "order": "grid_first", "start_progress_pct": 25}, firmware="1.12.3"
+    )
+    route = build_route_information("Luba-VP1", None, plan.settings)
+    raw = route.path_order.encode("latin-1")
+    assert (raw[0], raw[1], raw[3]) == (1, 3, 25)
+    assert route.obstacle_laps == 3
+
+
+def test_mammotion_old_firmware_maps_its_own_touch_modes() -> None:
+    caps = mapping.capabilities_of(
+        sample_device(),
+        device_name="Luba-VS1",
+        product_key="a1nf9kRBWoH",
+        manual_drive=False,
+        manual_drive_blades=False,
+        firmware="1.10.2",
+    )
+    detection = mapping.detection_strategies_of("Luba-VS1", "1.10.2")
+    command = StartMow(area_ids=[str(FRONT_HASH)], pattern={"obstacle_detection": "off"})
+    plan = mapping.route_plan(command, caps, blade_height_mm=55, speed_mps=0.3, detection=detection)
+    assert plan.settings.ultra_wave == 0, "off is 0 on the old list, 1 on the new one"
+    slow = StartMow(area_ids=[str(FRONT_HASH)], pattern={"obstacle_detection": "less_touch"})
+    assert (
+        mapping.route_plan(
+            slow, caps, blade_height_mm=55, speed_mps=0.3, detection=detection
+        ).settings.ultra_wave
+        == 2
+    )
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        {"obstacle_detection": "slow_touch"},  # an old-firmware mode on new firmware
+        {"start_progress_pct": 100},
+        {"obstacle_laps": 5},
+        {"order": "sideways"},
+    ],
+)
+def test_mammotion_job_options_outside_the_declaration_are_refused(
+    pattern: dict[str, Any],
+) -> None:
+    with pytest.raises(ValueError):
+        _luba_plan(pattern)
+
+
+def test_mammotion_detection_without_the_vendor_list_is_refused() -> None:
+    # The capabilities say "sensitive", but the strategies of the route plan lack it.
+    command = StartMow(area_ids=[str(FRONT_HASH)], pattern={"obstacle_detection": "sensitive"})
+    with pytest.raises(ValueError, match="not offered"):
+        mapping.route_plan(command, _caps(), blade_height_mm=55, speed_mps=0.3)
 
 
 def test_mammotion_start_sheet_pattern_reaches_the_route_plan() -> None:
@@ -763,7 +901,7 @@ def test_mammotion_start_sheet_pattern_reaches_the_route_plan() -> None:
     )
     s = plan.settings
     assert (s.toward, s.toward_mode) == (45, PathAngleSetting.absolute_angle)
-    assert (s.mowing_laps, s.border_mode) == (2, 2)
+    assert (s.mowing_laps, s.border_mode) == (2, 2)  # no order: byte 0 as before
     assert plan.job.border_laps == 2
     assert plan.job.passes == (45.0,)
     assert s.channel_width == 25  # no spacing given: the default 0.25 m

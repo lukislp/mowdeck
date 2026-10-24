@@ -510,6 +510,38 @@ async def test_mammotion_start_mow_sequence_in_mammotion_ha_order() -> None:
     assert route.channel_width == 25
 
 
+async def test_mammotion_start_mow_sends_the_job_options() -> None:
+    conn, port = cloud()
+    await conn.connect()
+    caps = await conn.capabilities()
+    assert [mode.value for mode in caps.start_options.obstacle_detection] == [
+        "off",
+        "standard",
+        "sensitive",
+    ]
+    pattern = {
+        "obstacle_detection": "sensitive",
+        "obstacle_laps": 0,
+        "order": "grid_first",
+        "start_progress_pct": 30,
+    }
+    outcome = await conn.execute(StartMow(area_ids=[FRONT], pattern=pattern))
+    assert outcome.status is CommandStatus.EXECUTED
+    route = port.sent[0].kwargs["generate_route_information"]
+    assert route.ultra_wave == 11
+    assert route.obstacle_laps == 0
+    raw = route.path_order.encode("latin-1")
+    assert (raw[0], raw[1], raw[3]) == (1, 0, 30)
+
+
+async def test_mammotion_start_mow_refuses_an_option_it_does_not_offer() -> None:
+    conn, port = cloud()
+    await conn.connect()
+    with pytest.raises(CommandRejected, match="obstacle detection 'slow_touch'"):
+        await conn.execute(StartMow(area_ids=[FRONT], pattern={"obstacle_detection": "slow_touch"}))
+    assert port.names() == []
+
+
 async def test_mammotion_start_mow_ends_a_paused_job_first() -> None:
     conn, port = cloud()
     await conn.connect()

@@ -14,7 +14,15 @@ from pydantic import Field, PlainSerializer, model_validator
 from mowdeck_contracts.v1._base import ContractModel
 from mowdeck_contracts.v1.calibration import DriveSpeedSetting
 from mowdeck_contracts.v1.maintenance import MaintenanceAction
-from mowdeck_contracts.v1.mower import ConnectionKind, RtkSource
+from mowdeck_contracts.v1.mower import (
+    MAX_OBSTACLE_LAPS,
+    MAX_START_PROGRESS_PCT,
+    ConnectionKind,
+    MowPattern,
+    ObstacleDetection,
+    PathOrder,
+    RtkSource,
+)
 from mowdeck_contracts.v1.settings import SettingSpec
 
 
@@ -66,6 +74,82 @@ MaintenanceActions = Annotated[
     PlainSerializer(_sorted_actions, return_type=list[MaintenanceAction], when_used="always"),
 ]
 """A set of maintenance actions, serialised as a sorted list."""
+
+
+def _check_range(name: str, value: tuple[int, int] | None, high: int) -> None:
+    if value is not None and not 0 <= value[0] <= value[1] <= high:
+        msg = f"{name} must be (min, max) with 0 <= min <= max <= {high}"
+        raise ValueError(msg)
+
+
+class StartOptions(ContractModel):
+    """The job options a native start may carry besides the pattern (``MowPattern``), as one
+    mower declares them (ADR 0030 amendment of 2026-10-24).
+
+    Everything defaults to "not offered": a client shows an option only when it is declared
+    here, and the connection refuses a start that sets an option it does not declare. An option
+    a start leaves out (None) is not sent, so the mower keeps its own default.
+    """
+
+    obstacle_detection: list[ObstacleDetection] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Obstacle detection modes the mower offers, in the order a client shows "
+        "them (`MowPattern.obstacle_detection`); empty when it offers no choice.",
+    )
+    obstacle_laps_range: tuple[int, int] | None = Field(
+        default=None,
+        description="Inclusive (min, max) laps around each no-go zone "
+        "(`MowPattern.obstacle_laps`), if settable.",
+    )
+    orders: list[PathOrder] = Field(
+        default_factory=list,
+        max_length=2,
+        description="Path orders the mower offers (`MowPattern.order`); empty when it offers "
+        "no choice.",
+    )
+    start_progress_range_pct: tuple[int, int] | None = Field(
+        default=None,
+        description="Inclusive (min, max) progress in percent a job may start at "
+        "(`MowPattern.start_progress_pct`), if settable.",
+    )
+
+    @model_validator(mode="after")
+    def _check_shape(self) -> Self:
+        if len(set(self.obstacle_detection)) != len(self.obstacle_detection):
+            msg = "obstacle_detection must not list a mode twice"
+            raise ValueError(msg)
+        if len(set(self.orders)) != len(self.orders):
+            msg = "orders must not list an order twice"
+            raise ValueError(msg)
+        _check_range("obstacle_laps_range", self.obstacle_laps_range, MAX_OBSTACLE_LAPS)
+        _check_range(
+            "start_progress_range_pct", self.start_progress_range_pct, MAX_START_PROGRESS_PCT
+        )
+        return self
+
+    def problem(self, pattern: MowPattern) -> str | None:
+        """Why the job options of ``pattern`` do not fit this mower; None when they do (or
+        when it sets none). A start progress of 0 is the beginning and always fits."""
+        if pattern.obstacle_detection is not None and (
+            pattern.obstacle_detection not in self.obstacle_detection
+        ):
+            return f"obstacle detection {pattern.obstacle_detection.value!r} is not offered"
+        if pattern.obstacle_laps is not None:
+            if self.obstacle_laps_range is None:
+                return "laps around no-go zones are not settable on this mower"
+            low, high = self.obstacle_laps_range
+            if not low <= pattern.obstacle_laps <= high:
+                return f"obstacle_laps must be between {low} and {high} on this mower"
+        if pattern.order is not None and pattern.order not in self.orders:
+            return f"path order {pattern.order.value!r} is not offered"
+        if pattern.start_progress_pct:
+            if self.start_progress_range_pct is None:
+                return "a start progress is not settable on this mower"
+            low, high = self.start_progress_range_pct
+            if not low <= pattern.start_progress_pct <= high:
+                return f"start_progress_pct must be between {low} and {high} on this mower"
+        return None
 
 
 class MowerCapabilities(ContractModel):
@@ -172,6 +256,12 @@ class MowerCapabilities(ContractModel):
         description="The connection can ask the manufacturer's firmware service for the linked "
         "RTK base station and install its updates (`firmware_check` with target "
         "`base_station`, `base_station_firmware_update`; ADR 0047).",
+    )
+    start_options: StartOptions = Field(
+        default_factory=StartOptions,
+        description="Job options a native start may carry besides the pattern (obstacle "
+        "detection, laps around no-go zones, path order, start progress; ADR 0030). Clients "
+        "show only what is declared here.",
     )
 
     @model_validator(mode="after")

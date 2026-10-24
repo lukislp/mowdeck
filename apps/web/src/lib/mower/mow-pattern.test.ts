@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_SPACING_MM,
+  defaultsOf,
   FALLBACK,
   angleApplies,
   initialDraft,
@@ -127,5 +128,72 @@ describe('pattern json', () => {
     expect(angleApplies('random_angle')).toBe(false);
     expect(minLaps('edge_only')).toBe(1);
     expect(minLaps('diagonal')).toBe(0);
+  });
+});
+
+describe('job options in the pattern', () => {
+  const SPEC = {
+    detection: ['off', 'standard', 'sensitive'],
+    obstacleLaps: [0, 4],
+    orders: ['border_first', 'grid_first'],
+    progress: [0, 99],
+  } as const;
+
+  it('opens with options only when the mower offers them', () => {
+    expect(initialDraft(null, ALL, null).options).toBeUndefined();
+    expect(
+      initialDraft({ obstacle_laps: 2 }, ALL, null, {
+        ...SPEC,
+        detection: [...SPEC.detection],
+        orders: [...SPEC.orders],
+      }).options,
+    ).toEqual({ detection: null, obstacleLaps: 2, order: null, progress: 0 });
+  });
+
+  it('sends the set options with the pattern', () => {
+    expect(
+      toPattern({
+        ...FALLBACK,
+        options: { detection: 'standard', obstacleLaps: null, order: 'border_first', progress: 0 },
+      }),
+    ).toEqual({
+      name: 'stripes',
+      angle_deg: 0,
+      border_laps: 1,
+      obstacle_detection: 'standard',
+      order: 'border_first',
+    });
+    expect(defaultsOf({ ...toPattern(FALLBACK), start_progress_pct: 20 })).toEqual(
+      toPattern(FALLBACK),
+    );
+  });
+
+  it('compares and reads the options', () => {
+    const a = { name: 'stripes' as const, angle_deg: 0, border_laps: 1 };
+    expect(samePattern(a, { ...a, obstacle_detection: null, start_progress_pct: 0 })).toBe(true);
+    expect(samePattern(a, { ...a, obstacle_laps: 0 })).toBe(false);
+    expect(samePattern(a, { ...a, order: 'grid_first' })).toBe(false);
+    expect(samePattern(a, { ...a, obstacle_detection: 'sensitive' })).toBe(false);
+    expect(samePattern(a, { ...a, start_progress_pct: 10 })).toBe(false);
+    expect(
+      readPattern({
+        ...a,
+        obstacle_detection: 'sensitive',
+        obstacle_laps: 0,
+        order: 'grid_first',
+        start_progress_pct: 30,
+      }),
+    ).toEqual({
+      ...a,
+      spacing_m: null,
+      obstacle_detection: 'sensitive',
+      obstacle_laps: 0,
+      order: 'grid_first',
+      start_progress_pct: 30,
+    });
+    expect(readPattern({ ...a, obstacle_detection: 'eager', order: 'sideways' })).toEqual({
+      ...a,
+      spacing_m: null,
+    });
   });
 });

@@ -94,6 +94,7 @@
     speedRange as speedLimits,
   } from '$lib/mower/limits';
   import { lightCapable as isLightCapable, setLight } from '$lib/mower/light';
+  import { jobOptionsSpec } from '$lib/mower/job-options';
   import { areaNamer, mapLabels } from '$lib/mower/map-labels';
   import {
     offeredPatterns,
@@ -167,6 +168,7 @@
     links_supported?: string[];
     camera?: string;
     light?: boolean;
+    start_options?: unknown;
   };
 
   const id = $derived(page.params.id ?? '');
@@ -274,6 +276,7 @@
       areas: mowerMap?.areas ?? [],
       offered,
       spacing: spacingLimits,
+      jobOptions,
       savedPattern,
       bladeRange,
       speedRange,
@@ -1026,6 +1029,7 @@
   // pattern and the mower uses its own settings, as before.
   const offered = $derived(offeredPatterns(caps?.native_patterns));
   const spacingLimits = $derived(spacingRange(caps?.path_spacing_range_mm));
+  const jobOptions = $derived(jobOptionsSpec(caps?.start_options));
   const savedPattern = $derived(readPattern(mower?.mow_defaults?.pattern));
 
   const mapPath = $derived(
@@ -1931,6 +1935,7 @@
             <MowSettings
               {offered}
               spacing={spacingLimits}
+              options={jobOptions}
               bind:draft={sheet.patternDraft}
               bind:remember={sheet.rememberPattern}
               blade={ms?.blade_height_mm != null ? `${formatNumber(ms.blade_height_mm)} mm` : null}

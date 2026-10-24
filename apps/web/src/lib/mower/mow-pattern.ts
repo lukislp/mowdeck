@@ -1,9 +1,19 @@
 /**
  * The pattern settings of a native start (`StartMow.pattern`, the contracts' `MowPattern`):
  * which patterns the start sheet offers, what it pre-fills (the mower's saved mow defaults,
- * else stripes at 0° with one border lap) and what it sends. Pure, unit tested
- * (`mow-pattern.test.ts`); the labels live in `$lib/i18n` (`patternSummary`).
+ * else stripes at 0° with one border lap) and what it sends, including the job options a mower
+ * declares (`./job-options`). Pure, unit tested (`mow-pattern.test.ts`); the labels live in
+ * `$lib/i18n` (`patternSummary`).
  */
+import {
+  OBSTACLE_MODES,
+  PATH_ORDERS,
+  initialOptions,
+  optionKeys,
+  type JobOptionKeys,
+  type JobOptionsDraft,
+  type JobOptionsSpec,
+} from './job-options';
 
 /** Pattern names in the order the start sheet shows them. */
 export const PATTERN_NAMES = [
@@ -22,8 +32,11 @@ export const BORDER_LAPS_MAX = 4;
 export const DEFAULT_SPACING_MM = 250;
 export const SPACING_STEP_MM = 10;
 
-/** `MowPattern` as JSON. `spacing_m` is absent (or null) for the mower's own default. */
-export interface MowPattern {
+/**
+ * `MowPattern` as JSON. `spacing_m` and the job options are absent (or null) for the mower's
+ * own setting.
+ */
+export interface MowPattern extends JobOptionKeys {
   name: PatternName;
   angle_deg: number;
   border_laps: number;
@@ -36,6 +49,8 @@ export interface PatternDraft {
   angle: number;
   laps: number;
   spacingMm: number | null;
+  /** The job options, when the mower offers any (`./job-options`). */
+  options?: JobOptionsDraft;
 }
 
 export type SpacingRange = readonly [min: number, max: number];
@@ -88,6 +103,7 @@ export function initialDraft(
   saved: Partial<MowPattern> | null | undefined,
   offered: readonly PatternName[],
   spacing: SpacingRange | null,
+  options: JobOptionsSpec | null = null,
 ): PatternDraft {
   const wanted = isPatternName(saved?.name) ? saved.name : FALLBACK.name;
   const name = offered.includes(wanted)
@@ -105,7 +121,9 @@ export function initialDraft(
     spacing && finite(saved?.spacing_m)
       ? clamp(Math.round(saved.spacing_m * 1000), spacing[0], spacing[1])
       : null;
-  return { name, angle, laps, spacingMm };
+  const draft: PatternDraft = { name, angle, laps, spacingMm };
+  if (options) draft.options = initialOptions(saved, options);
+  return draft;
 }
 
 /** The draft as `StartMow.pattern` (and as the body of `PUT .../mow-defaults`). */
@@ -116,7 +134,17 @@ export function toPattern(draft: PatternDraft): MowPattern {
     border_laps: Math.max(draft.laps, minLaps(draft.name)),
   };
   if (draft.spacingMm !== null) pattern.spacing_m = draft.spacingMm / 1000;
-  return pattern;
+  return { ...pattern, ...optionKeys(draft.options) };
+}
+
+/**
+ * The pattern as mow defaults: without the start progress, which belongs to one start (the
+ * sheet always opens at 0 %).
+ */
+export function defaultsOf(pattern: MowPattern): MowPattern {
+  const defaults = { ...pattern };
+  delete defaults.start_progress_pct;
+  return defaults;
 }
 
 /** Whether two patterns say the same (a missing spacing equals null). */
@@ -126,7 +154,11 @@ export function samePattern(a: MowPattern | null | undefined, b: MowPattern | nu
     a.name === b.name &&
     a.angle_deg === b.angle_deg &&
     a.border_laps === b.border_laps &&
-    (a.spacing_m ?? null) === (b.spacing_m ?? null)
+    (a.spacing_m ?? null) === (b.spacing_m ?? null) &&
+    (a.obstacle_detection ?? null) === (b.obstacle_detection ?? null) &&
+    (a.obstacle_laps ?? null) === (b.obstacle_laps ?? null) &&
+    (a.order ?? null) === (b.order ?? null) &&
+    (a.start_progress_pct || null) === (b.start_progress_pct || null)
   );
 }
 
@@ -141,10 +173,21 @@ export function readPattern(value: unknown): MowPattern | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
   if (!isPatternName(raw.name ?? 'stripes')) return null;
-  return {
+  const pattern: MowPattern = {
     name: (raw.name as PatternName | undefined) ?? 'stripes',
     angle_deg: finite(raw.angle_deg) ? raw.angle_deg : 0,
     border_laps: finite(raw.border_laps) ? raw.border_laps : 0,
     spacing_m: finite(raw.spacing_m) ? raw.spacing_m : null,
   };
+  if ((OBSTACLE_MODES as readonly unknown[]).includes(raw.obstacle_detection)) {
+    pattern.obstacle_detection = raw.obstacle_detection as MowPattern['obstacle_detection'];
+  }
+  if (finite(raw.obstacle_laps)) pattern.obstacle_laps = raw.obstacle_laps;
+  if ((PATH_ORDERS as readonly unknown[]).includes(raw.order)) {
+    pattern.order = raw.order as MowPattern['order'];
+  }
+  if (finite(raw.start_progress_pct) && raw.start_progress_pct > 0) {
+    pattern.start_progress_pct = raw.start_progress_pct;
+  }
+  return pattern;
 }

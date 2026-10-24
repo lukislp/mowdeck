@@ -275,10 +275,43 @@ NATIVE_PATTERN_NAMES: tuple[str, ...] = (
 MAX_BORDER_LAPS = 4
 """Most border laps a native job runs (LUBA: 0 to 4)."""
 
+MAX_OBSTACLE_LAPS = 4
+"""Most laps a native job runs around each no-go zone (LUBA: 0 to 4)."""
+
+MAX_START_PROGRESS_PCT = 99
+"""Highest progress a native job may start at, in percent (Mammotion's cloud caps it at 99)."""
+
+
+class ObstacleDetection(StrEnum):
+    """How eagerly the mower avoids obstacles during a native job (``MowPattern``).
+
+    Which modes a mower offers depends on its model and firmware
+    (``MowerCapabilities.start_options.obstacle_detection``). The names follow the vendor apps:
+    ``off`` is the plain bump-and-turn behaviour, ``standard`` avoids obstacles it sees ahead,
+    ``sensitive`` additionally avoids areas that are not lawn; ``slow_touch`` and
+    ``less_touch`` exist only on older firmware.
+    """
+
+    OFF = "off"
+    SLOW_TOUCH = "slow_touch"
+    LESS_TOUCH = "less_touch"
+    STANDARD = "standard"
+    SENSITIVE = "sensitive"
+
+
+class PathOrder(StrEnum):
+    """Whether the border laps run before or after the fill of a native job."""
+
+    BORDER_FIRST = "border_first"
+    GRID_FIRST = "grid_first"
+
 
 class MowPattern(ContractModel):
     """The pattern settings of a native start (``StartMow.pattern``) that every client offers:
-    the pattern, its base angle, the border laps and the path spacing.
+    the pattern, its base angle, the border laps and the path spacing, plus the job options a
+    mower may declare in ``MowerCapabilities.start_options`` (obstacle detection, laps around
+    no-go zones, path order, start progress; ADR 0030 amendment of 2026-10-24). An option left
+    None is not sent, so the mower keeps its own default.
 
     Adapters may accept further keys in ``StartMow.pattern``; this is the common, validated
     part, also kept per mower as the mowing defaults in Fleet (``MowerOut.mow_defaults``).
@@ -307,6 +340,31 @@ class MowPattern(ContractModel):
         le=2.0,
         description="Distance between neighbouring paths in metres; None for the mower's own "
         "default. Model limits: `MowerCapabilities.path_spacing_range_mm`.",
+    )
+    obstacle_detection: ObstacleDetection | None = Field(
+        default=None,
+        description="Obstacle detection mode of the job; None keeps the mower's default. "
+        "Offered modes: `MowerCapabilities.start_options.obstacle_detection`.",
+    )
+    obstacle_laps: int | None = Field(
+        default=None,
+        ge=0,
+        le=MAX_OBSTACLE_LAPS,
+        description="Laps around each no-go zone; None keeps the mower's default. Model "
+        "limits: `MowerCapabilities.start_options.obstacle_laps_range`.",
+    )
+    order: PathOrder | None = Field(
+        default=None,
+        description="Border laps before or after the fill; None keeps the mower's default. "
+        "Offered orders: `MowerCapabilities.start_options.orders`.",
+    )
+    start_progress_pct: int | None = Field(
+        default=None,
+        ge=0,
+        le=MAX_START_PROGRESS_PCT,
+        description="Start the job at this progress in percent, skipping the first part of "
+        "the route; None (or 0) starts at the beginning. Model limits: "
+        "`MowerCapabilities.start_options.start_progress_range_pct`.",
     )
 
 

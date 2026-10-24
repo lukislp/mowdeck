@@ -12,7 +12,9 @@ import type { Verdict } from '$lib/schedules/types';
 
 import { polygonArea } from './commands';
 import { estimateMinutes } from './duration';
+import type { JobOptionsSpec } from './job-options';
 import {
+  defaultsOf,
   initialDraft,
   samePattern,
   toPattern,
@@ -46,16 +48,18 @@ export function previewFailure(problem: ApiProblem): string {
 
 /**
  * The defaults change only when the started pattern differs from what the sheet opened with:
- * the saved defaults, else the fallback for the offered patterns.
+ * the saved defaults, else the fallback for the offered patterns. The start progress is never
+ * part of the defaults (`defaultsOf`).
  */
 export function defaultsChanged(
   pattern: MowPattern,
   saved: MowPattern | null,
   offered: readonly PatternName[],
   spacing: SpacingRange | null,
+  options: JobOptionsSpec | null = null,
 ): boolean {
-  const before = saved ?? toPattern(initialDraft(null, offered, spacing));
-  return !samePattern(pattern, before);
+  const before = saved ?? toPattern(initialDraft(null, offered, spacing, options));
+  return !samePattern(defaultsOf(pattern), defaultsOf(before));
 }
 
 export interface JobEstimate {

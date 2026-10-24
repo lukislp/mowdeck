@@ -63,7 +63,7 @@ from mowdeck_contracts.v1.camera import (
     RelayEndpoint,
     RelayTile,
 )
-from mowdeck_contracts.v1.capabilities import CameraAccess, MowerCapabilities
+from mowdeck_contracts.v1.capabilities import CameraAccess, MowerCapabilities, StartOptions
 from mowdeck_contracts.v1.cloud import (
     CloudDiscoverError,
     CloudDiscoverErrorCode,
@@ -228,6 +228,8 @@ from mowdeck_contracts.v1.mow_path import (
 )
 from mowdeck_contracts.v1.mower import (
     COMMAND_MODELS,
+    MAX_OBSTACLE_LAPS,
+    MAX_START_PROGRESS_PCT,
     NATIVE_PATTERN_NAMES,
     BaseStationFirmwareUpdate,
     ConnectionKind,
@@ -240,6 +242,8 @@ from mowdeck_contracts.v1.mower import (
     MowerCommand,
     MowerState,
     MowPattern,
+    ObstacleDetection,
+    PathOrder,
     PauseMow,
     PositionSource,
     ResumeMow,
@@ -447,11 +451,13 @@ __all__ = [
     "MAINTENANCE_ACTIONS",
     "MAINTENANCE_COMMAND_MODELS",
     "MAX_CALIBRATION_STEP_S",
+    "MAX_OBSTACLE_LAPS",
     "MAX_PATH_POINTS",
     "MAX_SPOT_MOW_SPEED_MPS",
     "MAX_SPOT_POLYGON_POINTS",
     "MAX_SPOT_SEGMENTS",
     "MAX_SPOT_SPEED_MPS",
+    "MAX_START_PROGRESS_PCT",
     "MAX_TRACK_POINTS",
     "MIN_CALIBRATION_STEP_S",
     "MODULE_DESCRIPTOR_PATH",
@@ -628,6 +634,8 @@ __all__ = [
     "NotificationRaised",
     "NotificationSent",
     "NotificationSeverity",
+    "ObstacleDetection",
+    "PathOrder",
     "PathPreviewError",
     "PathPreviewErrorCode",
     "PathPreviewGatewayRequest",
@@ -708,6 +716,7 @@ __all__ = [
     "SpotStop",
     "SpotTarget",
     "StartMow",
+    "StartOptions",
     "SubscriptionChanged",
     "SubscriptionStatus",
     "SyncMap",
