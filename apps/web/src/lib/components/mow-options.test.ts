@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { offeredPatterns } from '$lib/mower/mow-pattern';
 import { setLocale } from '$lib/paraglide/runtime';
 import { emptyForm } from '$lib/schedules/form';
-import { emptyMow } from '$lib/schedules/mow-options';
+import { emptyMow, type CapsLike } from '$lib/schedules/mow-options';
 
 import MowOptions from './MowOptions.svelte';
 import MowSettings from './MowSettings.svelte';
@@ -121,7 +121,7 @@ describe('MowOptions (shared by the start sheet and the schedule editor)', () =>
 
 describe('ScheduleForm start settings', () => {
   const GROUP = 'g1';
-  const props = (capabilities: Record<string, unknown> | null) => ({
+  const props = (capabilities: Record<string, CapsLike> | null) => ({
     form: emptyForm('2026-10-24', { type: 'group', id: GROUP }),
     mowers: [
       { id: 'm1', name: 'Luba' },
