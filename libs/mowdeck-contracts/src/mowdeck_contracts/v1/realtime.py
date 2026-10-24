@@ -46,7 +46,12 @@ from mowdeck_contracts.v1.envelopes import CommandResult
 from mowdeck_contracts.v1.mower import MowerState
 from mowdeck_contracts.v1.notifications import NotificationKind, NotificationSeverity
 from mowdeck_contracts.v1.principal import PrincipalKind
-from mowdeck_contracts.v1.vision import VisionProposalState, VisionTask, VisionTrigger
+from mowdeck_contracts.v1.vision import (
+    VisionPhotoProblem,
+    VisionProposalState,
+    VisionTask,
+    VisionTrigger,
+)
 
 RequestId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._:-]{1,64}$")]
 """Chosen by the client and echoed in the answer, so it can match answers to requests."""
@@ -391,6 +396,10 @@ class VisionProposalSummary(ContractModel):
     situation: str | None = Field(default=None, max_length=64)
     trigger: VisionTrigger = VisionTrigger.MANUAL
     error_code: str | None = Field(default=None, max_length=64)
+    photo_problem: VisionPhotoProblem | None = Field(
+        default=None, description="The analysis got no camera photo, and why."
+    )
+    signal_dbm: int | None = Field(default=None, ge=-150, le=-1)
     expires_at: UtcDateTime | None = Field(
         default=None, description="Approval deadline while `proposed`; null otherwise."
     )

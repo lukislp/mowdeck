@@ -144,6 +144,18 @@ export class AssistStore {
     }
   }
 
+  /**
+   * Leave a finished proposal for a new request (the sheet shows "ready" again), e.g. after an
+   * automatic analysis that got no camera photo.
+   */
+  fresh(): void {
+    if (this.busy || (this.proposal && !this.proposal.final)) return;
+    this.#stopPolling();
+    this.#generation += 1;
+    this.proposal = null;
+    this.problem = null;
+  }
+
   /** Ask for a maneuver; on a conflict (a proposal is open) show that one instead. */
   async start(task: VisionTask, images: VisionImage[] = []): Promise<void> {
     const mowerId = this.mowerId;

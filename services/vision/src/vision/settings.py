@@ -184,5 +184,22 @@ class Settings(ServiceSettings):
     vision_auto_max_state_age_seconds: float = Field(default=120.0, gt=0, le=3600)
     """States older than this (a backlog after a restart) never start an automatic analysis."""
 
+    vision_auto_photo_attempts: int = Field(default=3, ge=1, le=10)
+    """Photo requests of an automatic analysis before it records "no photo" (live case
+    2026-10-24: the camera stream of a mower on weak Wi-Fi stalled; a later request can get
+    through once the stream restarted)."""
+
+    vision_auto_photo_retry_seconds: float = Field(default=15.0, ge=0, le=300)
+    """Pause between two photo requests of an automatic analysis."""
+
+    vision_auto_photo_window_seconds: float = Field(default=150.0, ge=0, le=900)
+    """No further photo request of an automatic analysis starts after this long (the bound of
+    the retries; each request also waits up to ``VISION_PHOTO_TIMEOUT_SECONDS``)."""
+
+    vision_stereo_upgrade_seconds: float = Field(default=8.0, ge=0, le=60)
+    """A manual request with a single camera frame (the camera panel showed one camera) waits
+    this long for the gateway's stereo pair of both front cameras and uses it instead; 0 never
+    asks."""
+
     vision_sweep_seconds: float = Field(default=30.0, ge=1, le=3600)
     """Interval of the sweep (expiry, interrupted work, image purge)."""

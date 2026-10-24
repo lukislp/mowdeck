@@ -20,8 +20,12 @@ replica) passes every ``MowerState`` to :meth:`AutoAnalysis.on_state`:
 3. The users of the account who opted in, longest opted in first: the first who holds
    ``can_drive`` on the mower and has a usable provider (own, or the installation default) and
    daily quota left becomes the requester. :meth:`VisionService.request_auto` takes the gateway's
-   photo (the capture worker for a real camera, the light for a dark frame), creates the proposal
-   with ``trigger = error`` and analyses it like a manual request. Notifications turns the
+   photo (the camera relay for a real camera, the light for a dark frame), asking again within a
+   bounded time when none comes or only one camera of a stereo pair, creates the proposal with
+   ``trigger = error`` and analyses it like a manual request. Without any photo it records a
+   ``failed`` proposal saying why (weak Wi-Fi with its dBm, offline, no frame), which
+   Notifications sends to the owner as ``vision_auto_proposal`` ("no photo"), so the skip is
+   never silent. Notifications turns the
    ``vision.proposal.created`` event into ``vision_auto_proposal``. Nothing moves without a human
    approval.
 """
@@ -221,7 +225,14 @@ class AutoAnalysis:
                     reason=type(exc).__name__,
                 )
                 continue
-            except PhotoUnavailable:
+            except PhotoUnavailable as exc:
+                # The failed proposal is recorded and announced: the owner learns why.
+                _log.info(
+                    "automatic analysis recorded without photo",
+                    mower_id=str(mower_id),
+                    error_code=code,
+                    detail=exc.message,
+                )
                 return Skip.NO_PHOTO
             except ConflictError:
                 return Skip.OPEN_PROPOSAL

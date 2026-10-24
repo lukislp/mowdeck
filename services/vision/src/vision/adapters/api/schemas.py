@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import PrincipalRef, VisionTask, VisionTrigger
+from mowdeck_contracts.v1 import PrincipalRef, VisionPhotoProblem, VisionTask, VisionTrigger
 from pydantic import AwareDatetime, BaseModel, Field
 
 from vision.application.assist import ProposalDetails
@@ -296,6 +296,16 @@ class ProposalOut(BaseModel):
     trigger_error_code: str | None = Field(
         default=None, description="With trigger `error`: the error code that started it."
     )
+    photo_problem: VisionPhotoProblem | None = Field(
+        default=None,
+        description="The mower's camera delivered no photo, and why: `weak_wifi` or "
+        "`weak_mobile` (with `signal_dbm`), `offline` or `no_frame`. With state `failed` and "
+        "trigger `error` the automatic analysis could not run; otherwise the model saw only "
+        "the map and uploaded images.",
+    )
+    signal_dbm: int | None = Field(
+        default=None, description="With a weak signal: the mower's signal in dBm."
+    )
     detail: str | None = Field(description="Why it was rejected, failed or how it ended.")
     analysed_at: datetime | None
     expires_at: datetime | None = Field(description="Approval is refused after this time.")
@@ -381,6 +391,8 @@ class ProposalOut(BaseModel):
             frames=[FrameOut.of(f) for f in proposal.frames],
             trigger=proposal.trigger,
             trigger_error_code=proposal.trigger_error_code,
+            photo_problem=_photo_problem(proposal.context),
+            signal_dbm=_signal_dbm(proposal.context),
             detail=proposal.detail,
             analysed_at=proposal.analysed_at,
             expires_at=proposal.expires_at,
@@ -464,6 +476,19 @@ def _options(proposal: Proposal) -> list[OptionOut]:
             )
         )
     return options
+
+
+def _photo_problem(context: dict[str, object]) -> VisionPhotoProblem | None:
+    value = context.get("photo_problem")
+    try:
+        return VisionPhotoProblem(value) if isinstance(value, str) else None
+    except ValueError:
+        return None
+
+
+def _signal_dbm(context: dict[str, object]) -> int | None:
+    value = context.get("signal_dbm")
+    return value if isinstance(value, int) and -150 <= value <= -1 else None
 
 
 class ProposalPageOut(BaseModel):

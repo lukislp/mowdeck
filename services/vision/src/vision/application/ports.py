@@ -292,6 +292,16 @@ class MowerView(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class PhotoCapture:
+    """One photo request: the images of one moment, or why there are none."""
+
+    images: list[Image]
+    problem: str | None = None
+    """Without images: ``timeout`` (no answer in time), ``no_bus`` or ``<code>: <detail>`` of
+    the gateway's error (e.g. ``failed: the camera relay answered 504 frame-timeout``)."""
+
+
 class PhotoSource(Protocol):
     """Still images from the mower's adapter (``gateway.mower.<id>.photo``)."""
 
@@ -299,6 +309,13 @@ class PhotoSource(Protocol):
         """The images of one moment: both front cameras (left first, with ``side``, camera and
         capture time) when the gateway takes them through the camera relay, else its single
         image; empty when the gateway cannot deliver one."""
+        ...
+
+    async def capture(
+        self, mower_id: UUID, account_id: UUID, *, timeout_seconds: float | None = None
+    ) -> PhotoCapture:
+        """Like :meth:`photos`, with the reason when there is none; ``timeout_seconds``
+        shortens the wait (None: the configured photo timeout)."""
         ...
 
 
