@@ -133,9 +133,8 @@
   );
   const grouped = $derived(new Set((list ?? []).map((mower) => mower.site_id)).size > 1);
   const canManage = $derived(session.has('fleet.manage'));
-  const showInstall = $derived(
-    !install.standalone && !install.hintDismissed && (install.available || install.ios),
-  );
+  // Never inside the iOS/Android app or an installed web app (`install.offer` is null there).
+  const showInstall = $derived(install.offer !== null && !install.hintDismissed);
 </script>
 
 <svelte:head><title>{m.mowers_title()} · {m.app_name()}</title></svelte:head>
@@ -153,10 +152,10 @@
 <PlanBanner />
 
 {#if showInstall}
-  <div class="install">
+  <div class="install" data-testid="install-hint" data-offer={install.offer}>
     <Icon name="download" size={18} />
-    <span class="text">{install.available ? m.install_hint() : m.install_ios_hint()}</span>
-    {#if install.available}
+    <span class="text">{install.offer === 'prompt' ? m.install_hint() : m.install_ios_hint()}</span>
+    {#if install.offer === 'prompt'}
       <Button variant="ghost" onclick={() => install.prompt()}>{m.install_action()}</Button>
     {/if}
     <Button

@@ -4,6 +4,8 @@
  * the account's subscriptions is this browser's. Everything the browser provides is injected,
  * so the flow is tested with a fake `PushManager`.
  */
+import { isAppleMobile, isInstalledDisplay, readInstallEnvironment } from '$lib/install/context';
+
 import { sameKey, saveVapidKey, takePending, urlBase64ToUint8Array } from './store';
 
 /** What this browser can do: `insecure` (HTTP other than localhost), `ios-install` (iOS and
@@ -22,19 +24,14 @@ export interface PushEnvironment {
 export function detectEnvironment(): PushEnvironment {
   const w = typeof window === 'undefined' ? undefined : window;
   const nav = typeof navigator === 'undefined' ? undefined : navigator;
-  const ios =
-    !!nav &&
-    (/iphone|ipad|ipod/i.test(nav.userAgent) ||
-      (nav.userAgent.includes('Macintosh') && (nav.maxTouchPoints ?? 0) > 1));
+  const install = readInstallEnvironment(w);
   return {
     secure: w?.isSecureContext ?? false,
     serviceWorker: !!nav && 'serviceWorker' in nav,
     pushManager: !!w && 'PushManager' in w,
     notification: !!w && 'Notification' in w,
-    ios,
-    standalone:
-      (w?.matchMedia?.('(display-mode: standalone)').matches ?? false) ||
-      (nav as { standalone?: boolean } | undefined)?.standalone === true,
+    ios: isAppleMobile(install.userAgent, install.maxTouchPoints),
+    standalone: isInstalledDisplay(install),
   };
 }
 
