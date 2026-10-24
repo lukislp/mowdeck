@@ -1,5 +1,5 @@
-"""Photos through the camera relay (ADR 0045) and the fallback order of ``capture_photo``:
-the adapter's own photo, then the relay, then the deprecated capture worker.
+"""Photos through the camera relay (ADR 0045) and the order of ``capture_photo``: the
+adapter's own photo, then the relay (the capture worker of ADR 0035 is removed).
 
 ``RelaySnapshotter`` is checked against an ``httpx.MockTransport`` playing the relay's frame tap.
 """
@@ -23,11 +23,19 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_contracts.v1.relay import VisionDemand
 from mowdeck_contracts.v1.subjects import photo_subject
-from mowdeck_control import MowerConnection, Photo, SimulatedMower, SimulationConfig
+from mowdeck_control import (
+    ConnectionConfig,
+    MowerConnection,
+    Photo,
+    SimulatedMower,
+    SimulationConfig,
+)
+from mowdeck_control_mammotion.cloud import MammotionCloudConnection
 from mowdeck_control_mammotion.fake import FakeMammotionPort
+from mowdeck_control_mammotion.options import CloudOptions
+from mowdeck_control_mammotion.port import Camera, StreamSubscriptionResponse
 from mowdeck_service_kit.bus import InMemoryBus
 from mowdeck_service_kit.testing import lifespan_client
-from test_dg_capture import JPEG, FakeSnapshotter, _cloud_mower, _subscription
 
 from device_gateway.adapters.control.snapshot import RelaySnapshotter
 from device_gateway.application.ports import SnapshotFailed, SnapshotTarget, SnapshotUnavailable
@@ -39,17 +47,53 @@ RELAY_JPEG = b"\xff\xd8\xff\xe0relay-frame\xff\xd9"
 class FakeRelay:
     """Plays ``RelaySnapshotter``: records the targets, answers a JPEG or raises."""
 
-    needs_camera_session = False
-
-    def __init__(self, *, fail: SnapshotFailed | None = None) -> None:
+    def __init__(self, *, fail: SnapshotFailed | None = None, delay: float = 0.0) -> None:
         self.fail = fail
+        self.delay = delay
         self.targets: list[tuple[SnapshotTarget, float]] = []
+        self.active = 0
+        self.max_active = 0
 
     async def snapshot(self, target: SnapshotTarget, *, timeout_seconds: float) -> Photo:
         self.targets.append((target, timeout_seconds))
-        if self.fail is not None:
-            raise self.fail
-        return Photo(RELAY_JPEG, "image/jpeg")
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        try:
+            if self.delay:
+                await asyncio.sleep(self.delay)
+            if self.fail is not None:
+                raise self.fail
+            return Photo(RELAY_JPEG, "image/jpeg")
+        finally:
+            self.active -= 1
+
+
+def _subscription() -> StreamSubscriptionResponse:
+    return StreamSubscriptionResponse(
+        appid="app-id",
+        openEncrypt=0,
+        cameras=[Camera(cameraId=0, token="cam-0"), Camera(cameraId=1, token="cam-1")],
+        channelName="channel-x",
+        areaCode="GLOB",
+        token="007-not-a-real-token",
+        uid=4242,
+    )
+
+
+def _cloud_mower(port: FakeMammotionPort) -> tuple[MowerRegistration, TestProvider]:
+    """A Mammotion cloud connection (PyMammotion's fake port): a live camera, no own photo."""
+    reg = registration()
+
+    def factory(registration: MowerRegistration) -> MowerConnection:
+        options = CloudOptions.parse(
+            {"account": "second@example.com", "password": "pw", "device_name": "Luba-VPDRYRUN"}
+        )
+        config = ConnectionConfig(
+            mower_id=registration.mower_id, account_id=registration.account_id, options={}
+        )
+        return MammotionCloudConnection(port, config, options)
+
+    return reg, TestProvider({reg.mower_id: factory}, tick_seconds=None)
 
 
 def _sim_without_photos(reg: MowerRegistration, *, camera: bool = True) -> TestProvider:
@@ -100,17 +144,14 @@ async def test_dg_relay_the_adapters_own_photo_comes_first() -> None:
 async def test_dg_relay_frames_of_a_mower_without_own_photos_come_from_the_relay() -> None:
     reg = registration()
     relay = FakeRelay()
-    worker = FakeSnapshotter()
-    reply = await _photo(reg, _sim_without_photos(reg), relay_snapshotter=relay, snapshotter=worker)
+    reply = await _photo(reg, _sim_without_photos(reg), relay_snapshotter=relay)
     assert reply.error is None, reply.error
     assert base64.b64decode(reply.image_base64 or "") == RELAY_JPEG
     [(target, timeout)] = relay.targets
     # Account and mower come from the gateway's own connection, never from the request.
     assert (target.account_id, target.mower_id) == (reg.account_id, reg.mower_id)
-    assert target.session is None, "the relay asks for its own vendor session"
     assert target.demand is VisionDemand.ROUTINE
     assert timeout == 7
-    assert worker.calls == []
 
 
 async def test_dg_relay_a_foreign_account_never_reaches_the_relay() -> None:
@@ -121,28 +162,50 @@ async def test_dg_relay_a_foreign_account_never_reaches_the_relay() -> None:
     assert relay.targets == []
 
 
-async def test_dg_relay_an_unavailable_relay_hands_over_to_the_capture_worker() -> None:
-    port_reg, provider = _cloud_mower(_port_with_stream())
-    relay = FakeRelay(fail=SnapshotUnavailable("the camera relay is unreachable: ConnectError"))
-    worker = FakeSnapshotter()
-    reply = await _photo(port_reg, provider, relay_snapshotter=relay, snapshotter=worker)
+async def test_dg_relay_cloud_mower_photo_comes_from_the_relay_without_a_vendor_session() -> None:
+    port = _port_with_stream()
+    port_reg, provider = _cloud_mower(port)
+    relay = FakeRelay()
+    reply = await _photo(port_reg, provider, relay_snapshotter=relay)
     assert reply.error is None, reply.error
-    assert base64.b64decode(reply.image_base64 or "") == JPEG
+    assert base64.b64decode(reply.image_base64 or "") == RELAY_JPEG
+    [(target, _)] = relay.targets
+    assert (target.account_id, target.mower_id) == (port_reg.account_id, port_reg.mower_id)
+    assert port.stream_requests == 0, "the relay asks for its own vendor session"
+
+
+async def test_dg_relay_an_unavailable_relay_fails_a_cloud_mower_with_its_reason() -> None:
+    port = _port_with_stream()
+    port_reg, provider = _cloud_mower(port)
+    relay = FakeRelay(fail=SnapshotUnavailable("the camera relay is unreachable: ConnectError"))
+    reply = await _photo(port_reg, provider, relay_snapshotter=relay)
+    assert reply.error is not None and reply.error.code is PhotoErrorCode.FAILED
+    assert "unreachable" in reply.error.detail
     assert len(relay.targets) == 1
-    assert len(worker.calls) == 1
+    assert port.stream_requests == 0, "no capture worker joins the vendor channel any more"
 
 
 async def test_dg_relay_a_refusal_of_the_relay_is_final() -> None:
     port_reg, provider = _cloud_mower(_port_with_stream())
     relay = FakeRelay(fail=SnapshotFailed("the camera relay answered 409 camera-budget"))
-    worker = FakeSnapshotter()
-    reply = await _photo(port_reg, provider, relay_snapshotter=relay, snapshotter=worker)
+    reply = await _photo(port_reg, provider, relay_snapshotter=relay)
     assert reply.error is not None and reply.error.code is PhotoErrorCode.FAILED
     assert "camera-budget" in reply.error.detail
-    assert worker.calls == [], "a limit of the relay is never bypassed through the worker"
+    assert len(relay.targets) == 1
 
 
-async def test_dg_relay_unavailable_without_a_worker_fails_with_the_relays_reason() -> None:
+async def test_dg_relay_runs_one_photo_per_mower_at_a_time() -> None:
+    port_reg, provider = _cloud_mower(_port_with_stream())
+    relay = FakeRelay(delay=0.1)
+    bus = InMemoryBus()
+    async with lifespan_client(_app(bus, provider, port_reg, relay_snapshotter=relay)):
+        await wait_until(lambda: telemetry(bus, port_reg.mower_id), within=5.0)
+        replies = await asyncio.gather(_ask(bus, port_reg), _ask(bus, port_reg))
+    assert all(r.error is None for r in replies)
+    assert relay.max_active == 1
+
+
+async def test_dg_relay_unavailable_fails_with_the_relays_reason() -> None:
     reg = registration()
     relay = FakeRelay(fail=SnapshotUnavailable("the camera relay answered 503 frames-disabled"))
     reply = await _photo(reg, _sim_without_photos(reg), relay_snapshotter=relay)
@@ -164,12 +227,19 @@ async def test_dg_relay_without_any_frame_source_a_mower_without_photos_is_unsup
     assert reply.error is not None and reply.error.code is PhotoErrorCode.UNSUPPORTED
 
 
-async def test_dg_relay_the_worker_alone_still_works_for_cloud_mowers() -> None:
-    port_reg, provider = _cloud_mower(_port_with_stream())
-    worker = FakeSnapshotter()
-    reply = await _photo(port_reg, provider, snapshotter=worker)
-    assert reply.error is None
-    assert len(worker.calls) == 1
+async def test_dg_relay_without_the_relay_a_cloud_mower_is_unsupported() -> None:
+    port = _port_with_stream()
+    port_reg, provider = _cloud_mower(port)
+    reply = await _photo(port_reg, provider)
+    assert reply.error is not None and reply.error.code is PhotoErrorCode.UNSUPPORTED
+    assert port.stream_requests == 0
+
+
+def test_dg_relay_settings_of_the_removed_capture_worker_are_ignored() -> None:
+    settings = make_settings(capture_url="http://vision-capture:8000", capture_token="left-over")
+    assert not hasattr(settings, "capture_url")
+    assert not hasattr(settings, "capture_token")
+    assert relay_snapshotter_from(settings) is None
 
 
 def _port_with_stream() -> FakeMammotionPort:

@@ -16,4 +16,11 @@ Web app and API: {{ if .Values.ingress.host }}{{ if .Values.ingress.tls }}https{
 No Ingress: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "mowdeck.serviceName" (dict "ctx" . "component" "web") }} 8080:8080
 {{- end }}
 
+{{- if (dig "visionCapture" "enabled" false .Values.services) }}
+
+services.visionCapture is set, but the capture worker (vision-capture) is removed: nothing is
+rendered for it. Vision's camera frames come from the camera relay (services.cameraRelay); drop
+services.visionCapture and secrets.CAPTURE_TOKEN from your values.
+{{- end }}
+
 Operations manual: https://github.com/lukislp/mowdeck/blob/main/docs/ops/helm.md

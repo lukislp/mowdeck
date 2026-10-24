@@ -44,7 +44,7 @@ from device_gateway.adapters.bus.subscriptions import (
 )
 from device_gateway.adapters.control.cloud_accounts import CloudBackend, cloud_backend
 from device_gateway.adapters.control.connections import RegistryConnectionProvider
-from device_gateway.adapters.control.snapshot import HttpCameraSnapshotter, RelaySnapshotter
+from device_gateway.adapters.control.snapshot import RelaySnapshotter
 from device_gateway.application.discovery import CloudDiscoveryService
 from device_gateway.application.gateway import DeviceGateway
 from device_gateway.application.ports import (
@@ -60,17 +60,6 @@ from device_gateway.settings import Settings
 
 # Named explicitly: under "python -m" the module is called __main__.
 _log = get_logger("device_gateway.main")
-
-
-def snapshotter_from(settings: Settings) -> CameraSnapshotter | None:
-    """The capture worker client when ``MOWDECK_CAPTURE_URL`` is set (ADR 0035, deprecated)."""
-    if not settings.capture_url:
-        return None
-    token = settings.capture_token.get_secret_value() if settings.capture_token else None
-    _log.info("camera frames through the capture worker (deprecated)", url=settings.capture_url)
-    return HttpCameraSnapshotter(
-        settings.capture_url, token=token, max_width=settings.capture_max_width
-    )
 
 
 def relay_snapshotter_from(settings: Settings) -> CameraSnapshotter | None:
@@ -98,7 +87,6 @@ def build_app(
     fleet: FleetDirectory | None = None,
     cloud: CloudBackend | None = None,
     cloud_accounts: CloudAccounts | None = None,
-    snapshotter: CameraSnapshotter | None = None,
     relay_snapshotter: CameraSnapshotter | None = None,
 ) -> FastAPI:
     """Build the app. ``bus`` and ``principal_resolver`` default to the kit's behaviour;
@@ -118,15 +106,9 @@ def build_app(
         cloud_factory=backend.factory,
     )
     accounts: CloudAccounts = cloud_accounts or backend.accounts
-    # Fallback order of photos without an adapter photo: the relay, then the capture worker.
-    frames = tuple(
-        source
-        for source in (
-            relay_snapshotter or relay_snapshotter_from(settings),
-            snapshotter or snapshotter_from(settings),
-        )
-        if source is not None
-    )
+    # Photos of mowers without an own photo function come from the camera relay (ADR 0045).
+    relay = relay_snapshotter or relay_snapshotter_from(settings)
+    frames = (relay,) if relay is not None else ()
 
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus

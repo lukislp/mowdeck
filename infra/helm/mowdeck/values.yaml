@@ -213,15 +213,9 @@ config:
   # Compose sets GATEWAY_RELAY_URL by hand; here services.cameraRelay.enabled points the
   # Device-Gateway at the relay's in-cluster Service, with the shared secret
   # secrets.RELAY_FRAMES_TOKEN (empty: no relay frames).
-  # --- Capture worker (services.visionCapture, ADR 0035; DEPRECATED by ADR 0045) ---
-  # Compose sets GATEWAY_CAPTURE_URL by hand; here services.visionCapture.enabled points the
-  # Device-Gateway at the worker's in-cluster Service.
-  # How long the worker waits for the first decoded camera frame.
+  # How long the relay may take for one camera frame (MOWDECK_CAPTURE_TIMEOUT_SECONDS, at most
+  # 30 s). The capture worker of ADR 0035 (services.visionCapture) is removed.
   CAPTURE_TIMEOUT_SECONDS: "20"
-  # Captures at the same time per pod (each a browser page with a video decoder).
-  CAPTURE_MAX_CONCURRENCY: "2"
-  # Empty: Playwright's Chromium headless shell; "chrome" needs an image with Google Chrome.
-  CAPTURE_BROWSER_CHANNEL: ""
   # --- Camera relay (services.cameraRelay, ADR 0045) ---
   # MediaMTX sends the camera media on one ICE port for UDP and TCP, published on the node as a
   # hostPort (services.cameraRelay.mediamtx.hostPort; Compose RELAY_ICE_BIND is
@@ -256,7 +250,6 @@ secrets:
   #   database-url-vision          postgresql://user:pass@host:5432/db
   #   billing-stripe-secret-key, billing-stripe-webhook-secret   only with services.billing
   #   vision-secrets-key, vision-default-api-key   (may be empty)
-  #   capture-token                 only with services.visionCapture (may be empty)
   #   relay-frames-token            only with services.cameraRelay (may be empty)
   #   fleet-credential-encryption-key   FLEET_CREDENTIAL_ENCRYPTION_KEY (may be empty)
   #   fleet-credential-encryption-key-previous   FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS (may be empty)
@@ -293,12 +286,9 @@ secrets:
   # -- Key of the installation's vision model (config.VISION_DEFAULT_MODEL). Empty: the model
   # family's usual variable (e.g. ANTHROPIC_API_KEY via services.vision.extraEnv) or no key.
   VISION_DEFAULT_API_KEY: ""
-  # -- Shared secret between the Device-Gateway and the capture worker (services.visionCapture).
-  # Empty: the worker accepts every request from inside the cluster.
-  CAPTURE_TOKEN: ""
   # -- Shared secret between the Device-Gateway and the camera relay's frame tap (Vision's
   # photos through the relay, services.cameraRelay). Empty: the frame tap is off and photos of
-  # mowers without an own photo function fall back to the capture worker, if enabled.
+  # mowers without an own photo function answer "unsupported".
   RELAY_FRAMES_TOKEN: ""
   # -- Web Push private key (VAPID). Empty: each Notifications pod creates a development pair in
   # an emptyDir on start (lost on restart, and different per replica, so the chart refuses more
@@ -585,20 +575,6 @@ services:
       requests: {cpu: 50m, memory: 192Mi}
       limits: {memory: 768Mi}
     autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
-    pdb: {enabled: false, minAvailable: 1}
-    extraEnv: {}
-    extraVolumes: []
-    extraVolumeMounts: []
-  # Capture worker (ADR 0035): headless Chromium that takes still frames of live cameras, so
-  # AI assist and the automatic analysis work without an open browser. Off by default; the image
-  # is vision-capture (the Vision image built with WITH_CAPTURE=true, about 0.5 GB larger).
-  visionCapture:
-    enabled: false
-    replicas: 1
-    resources:
-      requests: {cpu: 100m, memory: 384Mi}
-      limits: {memory: 1536Mi}
-    autoscaling: {enabled: false, minReplicas: 1, maxReplicas: 2, targetCPUUtilizationPercentage: 75}
     pdb: {enabled: false, minAvailable: 1}
     extraEnv: {}
     extraVolumes: []
