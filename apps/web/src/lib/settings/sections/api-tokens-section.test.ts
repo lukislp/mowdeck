@@ -3,16 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const get = vi.fn();
 const post = vi.fn();
+const del = vi.fn();
 vi.mock('$lib/api/client', () => ({
   identityApi: {
     GET: (...a: unknown[]) => get(...a),
     POST: (...a: unknown[]) => post(...a),
-    DELETE: vi.fn(),
+    DELETE: (...a: unknown[]) => del(...a),
   },
   unwrap: async (p: Promise<unknown>) => p,
 }));
 vi.mock('$lib/auth/session.svelte', () => ({ session: { me: { account_id: 'acc-1' } } }));
 
+import { ApiProblem } from '$lib/api/problem';
 import { setLocale } from '$lib/paraglide/runtime';
 import { CATALOGUE } from '$lib/settings/token-permissions.fixture';
 
@@ -42,6 +44,7 @@ beforeEach(() => {
 afterEach(() => {
   get.mockReset();
   post.mockReset();
+  del.mockReset();
 });
 
 async function named(value: string): Promise<void> {
@@ -250,9 +253,9 @@ describe('ApiTokensSection', () => {
     expect(folded.open).toBe(false);
     expect(folded.querySelector('summary')?.textContent).toContain('Widerrufene Tokens (2)');
     const rows = within(folded).getAllByTestId('token-revoked-row');
-    // Newest revocation first, no revoke button, no chips.
+    // Newest revocation first, no revoke button (only removal), no chips.
     expect(rows.map((r) => r.dataset.name)).toEqual(['Test', 'Altes Tablet']);
-    expect(within(folded).queryByRole('button')).toBeNull();
+    expect(within(folded).queryByRole('button', { name: 'Widerrufen' })).toBeNull();
     expect(within(folded).queryByTestId('token-chips')).toBeNull();
   });
 
@@ -268,5 +271,180 @@ describe('ApiTokensSection', () => {
     );
     expect(screen.queryByTestId('token-list')).toBeNull();
     expect(screen.getByTestId('token-revoked').textContent).toContain('Widerrufene Tokens (1)');
+  });
+
+  describe('removing revoked tokens', () => {
+    const revokedToken = (id: string, name: string, at: string) => ({
+      ...TOKEN,
+      id,
+      name,
+      prefix: `mdk_${id}`,
+      revoked_at: at,
+    });
+    const LIST = [
+      TOKEN,
+      revokedToken('r1', 'Altes Tablet', '2026-10-21T08:00:00Z'),
+      revokedToken('r2', 'Testskript', '2026-10-22T08:00:00Z'),
+    ];
+
+    function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+      let resolve!: (v: T) => void;
+      const promise = new Promise<T>((r) => (resolve = r));
+      return { promise, resolve };
+    }
+
+    function revokedNames(): string[] {
+      return screen.queryAllByTestId('token-revoked-row').map((r) => r.dataset.name ?? '');
+    }
+
+    beforeEach(() => {
+      get.mockImplementation(async (path: string) =>
+        path.endsWith('/permissions') ? CATALOGUE : LIST,
+      );
+    });
+
+    it('removes one revoked token at once and asks Identity to purge it', async () => {
+      const answer = deferred<undefined>();
+      del.mockReturnValue(answer.promise);
+      render(ApiTokensSection);
+      await screen.findByTestId('token-revoked');
+      await fireEvent.click(
+        screen.getByRole('button', { name: '„Altes Tablet“ endgültig entfernen' }),
+      );
+
+      // Gone before Identity answers.
+      expect(revokedNames()).toEqual(['Testskript']);
+      expect(screen.getByTestId('token-revoked').textContent).toContain('Widerrufene Tokens (1)');
+      expect(del).toHaveBeenCalledWith(
+        '/api/v1/identity/accounts/{account_id}/api-tokens/{token_id}',
+        { params: { path: { account_id: 'acc-1', token_id: 'r1' }, query: { purge: true } } },
+      );
+      answer.resolve(undefined);
+      await waitFor(() =>
+        expect(screen.getByTestId('token-purge-status').textContent).toContain(
+          '„Altes Tablet“ entfernt.',
+        ),
+      );
+      // The active token is untouched, and no list reload was needed.
+      expect(screen.getAllByTestId('token-row').map((r) => r.dataset.name)).toEqual([
+        'Home Assistant',
+      ]);
+      expect(get.mock.calls.filter(([path]) => String(path).endsWith('/api-tokens'))).toHaveLength(
+        1,
+      );
+    });
+
+    it('puts a token back and shows the problem when the removal fails', async () => {
+      del.mockRejectedValue(
+        new ApiProblem({ status: 503, title: 'Service Unavailable', detail: 'OpenFGA is down' }),
+      );
+      render(ApiTokensSection);
+      await screen.findByTestId('token-revoked');
+      await fireEvent.click(
+        screen.getByRole('button', { name: '„Testskript“ endgültig entfernen' }),
+      );
+      await waitFor(() => expect(screen.getByText('OpenFGA is down')).toBeTruthy());
+      expect(revokedNames()).toEqual(['Testskript', 'Altes Tablet']);
+      expect(screen.getByTestId('token-purge-status').textContent).toBe('');
+    });
+
+    it('treats a token that is already gone as removed', async () => {
+      del.mockRejectedValue(new ApiProblem({ status: 404, title: 'Not Found' }));
+      render(ApiTokensSection);
+      await screen.findByTestId('token-revoked');
+      await fireEvent.click(
+        screen.getByRole('button', { name: '„Testskript“ endgültig entfernen' }),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('token-purge-status').textContent).toContain('entfernt'),
+      );
+      expect(revokedNames()).toEqual(['Altes Tablet']);
+      expect(screen.queryByText('Not Found')).toBeNull();
+    });
+
+    it('removes all revoked tokens after a confirmation naming the count', async () => {
+      const answer = deferred<{ deleted: number; ids: string[] }>();
+      post.mockReturnValue(answer.promise);
+      render(ApiTokensSection);
+      await screen.findByTestId('token-revoked');
+      await fireEvent.click(screen.getByTestId('token-purge-all'));
+      expect(screen.getByTestId('token-purge-all').textContent).toContain('Widerrufene entfernen');
+
+      const sheet = screen.getByTestId('token-purge-confirm');
+      expect(sheet.getAttribute('aria-label')).toBe('2 widerrufene Tokens entfernen?');
+      expect(sheet.textContent).toContain('nicht rückgängig');
+      expect(within(sheet).getByTestId('token-purge-names').textContent).toContain('Altes Tablet');
+      expect(within(sheet).getByTestId('token-purge-names').textContent).toContain('Testskript');
+
+      // Cancel first: nothing happens.
+      await fireEvent.click(within(sheet).getByRole('button', { name: 'Abbrechen' }));
+      expect(screen.queryByTestId('token-purge-confirm')).toBeNull();
+      expect(post).not.toHaveBeenCalled();
+
+      await fireEvent.click(screen.getByTestId('token-purge-all'));
+      await fireEvent.click(screen.getByTestId('token-purge-go'));
+      // The whole group is gone at once; the active token stays.
+      expect(screen.queryByTestId('token-revoked')).toBeNull();
+      expect(screen.queryByTestId('token-purge-confirm')).toBeNull();
+      expect(screen.getAllByTestId('token-row')).toHaveLength(1);
+      expect(post).toHaveBeenCalledWith(
+        '/api/v1/identity/accounts/{account_id}/api-tokens/purge-revoked',
+        { params: { path: { account_id: 'acc-1' } } },
+      );
+      answer.resolve({ deleted: 2, ids: ['r1', 'r2'] });
+      await waitFor(() =>
+        expect(screen.getByTestId('token-purge-status').textContent).toContain(
+          '2 widerrufene Tokens entfernt.',
+        ),
+      );
+    });
+
+    it('brings the revoked tokens back when the bulk removal fails', async () => {
+      post.mockRejectedValue(
+        new ApiProblem({ status: 403, title: 'Forbidden', detail: 'users.manage needed' }),
+      );
+      render(ApiTokensSection);
+      await screen.findByTestId('token-revoked');
+      await fireEvent.click(screen.getByTestId('token-purge-all'));
+      await fireEvent.click(screen.getByTestId('token-purge-go'));
+      await waitFor(() => expect(screen.getByText('users.manage needed')).toBeTruthy());
+      expect(screen.getByTestId('token-revoked').textContent).toContain('Widerrufene Tokens (2)');
+      expect(revokedNames().sort()).toEqual(['Altes Tablet', 'Testskript']);
+    });
+
+    it('reloads when Identity removed more than the list showed', async () => {
+      post.mockResolvedValue({ deleted: 3, ids: ['r1', 'r2', 'r3'] });
+      render(ApiTokensSection);
+      await screen.findByTestId('token-revoked');
+      await fireEvent.click(screen.getByTestId('token-purge-all'));
+      await fireEvent.click(screen.getByTestId('token-purge-go'));
+      await waitFor(() =>
+        expect(
+          get.mock.calls.filter(([path]) => String(path).endsWith('/api-tokens')),
+        ).toHaveLength(2),
+      );
+    });
+
+    it('speaks English, with the singular for one token', async () => {
+      setLocale('en', { reload: false });
+      get.mockImplementation(async (path: string) =>
+        path.endsWith('/permissions') ? CATALOGUE : [TOKEN, LIST[1]],
+      );
+      post.mockResolvedValue({ deleted: 1, ids: ['r1'] });
+      render(ApiTokensSection);
+      await screen.findByTestId('token-revoked');
+      expect(screen.getByTestId('token-purge-all').textContent).toContain('Remove revoked');
+      expect(screen.getByRole('button', { name: 'Remove “Altes Tablet” for good' })).toBeTruthy();
+      await fireEvent.click(screen.getByTestId('token-purge-all'));
+      expect(screen.getByTestId('token-purge-confirm').getAttribute('aria-label')).toBe(
+        'Remove 1 revoked token?',
+      );
+      await fireEvent.click(screen.getByTestId('token-purge-go'));
+      await waitFor(() =>
+        expect(screen.getByTestId('token-purge-status').textContent).toContain(
+          'Removed 1 revoked token.',
+        ),
+      );
+    });
   });
 });

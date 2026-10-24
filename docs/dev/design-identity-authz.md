@@ -664,7 +664,8 @@ Traefik OSS has no built-in JWT validation middleware **[unverified for v3.7; pl
 | `GET /role-assignments?subject=` | JWT | `can_manage_users` or self | |
 | `POST /role-assignments` | JWT | `can_manage_users` + anti-escalation | `{subject, role_id, level:{type,id}}` |
 | `DELETE /role-assignments/{id}` | JWT | `can_manage_users` | |
-| `GET /api-tokens`, `POST /api-tokens`, `DELETE /api-tokens/{id}` | JWT (user) | `can_manage_users` + anti-escalation | Secret shown once |
+| `GET /api-tokens`, `POST /api-tokens`, `DELETE /api-tokens/{id}` | JWT (user) | `can_manage_users` + anti-escalation | Secret shown once; `DELETE` revokes, `DELETE ?purge=true` deletes a revoked token (409 while active) |
+| `POST /api-tokens/purge-revoked` | JWT (user) | `can_manage_users` | Deletes every revoked token of the account; audit `api_token.purged` per token |
 | `GET /audit` | JWT | `can_view_audit` | Filters: time, actor, action, target; keyset pagination |
 | `POST/GET/DELETE /invitations` | | `can_manage_users` | Deferred |
 | `POST/DELETE /support-grants` | | `can_manage_account` | Deferred (API and UI); model ready |
