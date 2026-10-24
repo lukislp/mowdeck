@@ -542,7 +542,16 @@ export type Id1 = string
  */
 export type Link = string
 export type MowerId8 = string
+/**
+ * Why an analysis got no camera photo from the mower (the most likely cause, judged from
+ * the mower's state at the time and the gateway's answer).
+ * 
+ * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
+ * via the `definition` "VisionPhotoProblem".
+ */
+export type VisionPhotoProblem = ("weak_wifi" | "weak_mobile" | "offline" | "no_frame")
 export type Round = number
+export type SignalDbm = (number | null)
 export type Situation = (string | null)
 /**
  * Lifecycle of an AI assist proposal (one round).
@@ -1227,7 +1236,12 @@ final: Final
 id: Id1
 link: Link
 mower_id: MowerId8
+/**
+ * The analysis got no camera photo, and why.
+ */
+photo_problem?: (VisionPhotoProblem | null)
 round: Round
+signal_dbm?: SignalDbm
 situation?: Situation
 state: VisionProposalState
 steps?: Steps2

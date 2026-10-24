@@ -20,7 +20,8 @@
   acknowledged and ignored.
 * ``event.vision.>`` (JetStream ``EVENTS``, durable ``notifications-vision``):
   ``vision.proposal.created`` becomes ``vision_proposal`` for the users who may drive the mower;
-  other vision events are acknowledged and ignored.
+  ``vision.proposal.updated`` of an automatic analysis without a camera photo becomes
+  ``vision_auto_proposal`` ("no photo"); other vision events are acknowledged and ignored.
 * ``event.identity.grants.changed`` (every instance): drops cached authorization decisions.
 
 A state, command, map snapshot or telemetry event naming another account than the mower
@@ -44,6 +45,7 @@ from mowdeck_contracts.v1 import (
     MOWER_UPDATED,
     TELEMETRY_BLADE_HOURS_THRESHOLD,
     VISION_PROPOSAL_CREATED,
+    VISION_PROPOSAL_UPDATED,
     BladeHoursThreshold,
     CommandEnvelope,
     EventEnvelope,
@@ -53,6 +55,7 @@ from mowdeck_contracts.v1 import (
     MowerState,
     UserChanged,
     VisionProposalCreated,
+    VisionProposalUpdated,
 )
 from mowdeck_contracts.v1.subjects import (
     ALL_COMMANDS,
@@ -235,16 +238,23 @@ def vision_event_handler(watcher: Watcher) -> MessageHandler:
             event = message.model(EventEnvelope[dict[str, Any]])
         except ValidationError as exc:
             raise DropMessage("invalid event envelope") from exc
-        if event.type != VISION_PROPOSAL_CREATED:
+        if event.type not in (VISION_PROPOSAL_CREATED, VISION_PROPOSAL_UPDATED):
             return
         try:
-            proposal = VisionProposalCreated.model_validate(event.payload)
+            proposal = (
+                VisionProposalCreated.model_validate(event.payload)
+                if event.type == VISION_PROPOSAL_CREATED
+                else VisionProposalUpdated.model_validate(event.payload)
+            )
         except ValidationError as exc:
             raise DropMessage(f"invalid {event.type} payload") from exc
         if event.account_id is not None and event.account_id != proposal.account_id:
             raise DropMessage("envelope and payload name different accounts")
         try:
-            await watcher.on_vision_proposal(proposal)
+            if isinstance(proposal, VisionProposalCreated):
+                await watcher.on_vision_proposal(proposal)
+            else:
+                await watcher.on_vision_update(proposal)
         except AccountMismatchError as exc:
             raise DropMessage(exc.message) from exc
 

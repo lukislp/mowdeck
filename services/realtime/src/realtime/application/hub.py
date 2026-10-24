@@ -511,6 +511,8 @@ def proposal_message(
             fallback=event.fallback,
             trigger=event.trigger,
             error_code=event.error_code,
+            photo_problem=event.photo_problem,
+            signal_dbm=event.signal_dbm,
             expires_at=event.expires_at,
             link=event.link,
             updated_at=event.updated_at,

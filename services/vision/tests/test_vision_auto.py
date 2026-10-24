@@ -354,13 +354,16 @@ async def test_vision_auto_requester_must_drive_and_have_a_provider() -> None:
         assert h.factory.calls == []
 
 
-async def test_vision_auto_without_photo_does_not_analyse() -> None:
-    async with harness() as h:
+async def test_vision_auto_without_photo_does_not_analyse_but_records_why() -> None:
+    async with harness(vision_photo_timeout_seconds=0.3) as h:
         owner = h.owner()
         await _store_opt_in(h, owner)
         rig = await h.rig(owner, photos=False)
         assert await _auto(h).trigger(_error(rig), "1201") is Skip.NO_PHOTO
-        assert h.store.proposals == {} and h.factory.calls == []
+        assert h.factory.calls == [], "no model without a photo"
+        [failed] = h.store.proposals.values()
+        assert failed.state is ProposalState.FAILED and failed.trigger is VisionTrigger.ERROR
+        assert failed.detail is not None and failed.detail.startswith("no photo")
 
 
 # --- edge detection ---------------------------------------------------------------------------

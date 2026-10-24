@@ -9,6 +9,7 @@ import type { Locale } from '$lib/schedules/types';
 
 import type {
   JobArea,
+  Proposal,
   ProposalJob,
   ProposalState,
   ProposalStep,
@@ -257,4 +258,28 @@ export function resumePlan(
   if (area && next) return `${first} ${m.vision_resume_target_next({ area, next }, options)}`;
   if (area) return `${first} ${m.vision_resume_target({ area }, options)}`;
   return `${first} ${m.vision_resume_target_unknown({}, options)}`;
+}
+
+/**
+ * Why the analysis got no camera photo ("The mower's Wi-Fi was too weak (-79 dBm); the camera
+ * stream did not get through."); null when it had one.
+ */
+export function photoProblemText(
+  proposal: Pick<Proposal, 'photo_problem' | 'signal_dbm'>,
+  locale: Locale = current(),
+): string | null {
+  const options = { locale };
+  const dbm = String(proposal.signal_dbm ?? '?');
+  switch (proposal.photo_problem) {
+    case 'weak_wifi':
+      return m.vision_photo_weak_wifi({ dbm }, options);
+    case 'weak_mobile':
+      return m.vision_photo_weak_mobile({ dbm }, options);
+    case 'offline':
+      return m.vision_photo_offline({}, options);
+    case 'no_frame':
+      return m.vision_photo_no_frame({}, options);
+    default:
+      return null;
+  }
 }

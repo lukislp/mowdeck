@@ -191,6 +191,10 @@ def build_app(
                 light_wait_seconds=settings.vision_light_wait_seconds,
                 stereo_max_skew_ms=settings.vision_stereo_max_skew_ms,
                 map_image=settings.vision_map_image,
+                auto_photo_attempts=settings.vision_auto_photo_attempts,
+                auto_photo_retry_seconds=settings.vision_auto_photo_retry_seconds,
+                auto_photo_window_seconds=settings.vision_auto_photo_window_seconds,
+                stereo_upgrade_seconds=settings.vision_stereo_upgrade_seconds,
             ),
             fleet=fleet,
         )
