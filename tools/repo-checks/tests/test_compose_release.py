@@ -3,7 +3,7 @@
 Every MowDeck service that a release publishes takes its image from
 ``${MOWDECK_IMAGE_REGISTRY:-mowdeck}/<image>:${MOWDECK_VERSION:-dev}``, so the stack runs the local
 build by default and the signed GHCR images of a release with two variables. agora-bridge (Agora's
-SDK) and vision-capture (Agora Web SDK, retired) are never published and keep local image names.
+SDK) is never published and keeps a local image name.
 ``infra/compose/verify-release.sh`` is tested against fake ``gh``, ``curl``, ``docker`` and
 ``cosign`` commands, without network.
 """
@@ -23,7 +23,6 @@ PATTERN = "${{MOWDECK_IMAGE_REGISTRY:-mowdeck}}/{image}:${{MOWDECK_VERSION:-dev}
 PREFIX = "${MOWDECK_IMAGE_REGISTRY:-mowdeck}/"
 LOCAL_ONLY = {
     "agora-bridge": "mowdeck-local/agora-bridge:local",
-    "vision-capture": "mowdeck/vision-capture:${MOWDECK_VERSION:-dev}",
 }
 REGISTRY = "ghcr.io/lukislp/mowdeck"
 REPO = "lukislp/mowdeck"
@@ -130,7 +129,7 @@ def test_compose_config_resolves_the_images(repo_root: Path, registry: str, vers
         assert services[name]["image"] == f"{registry}/{image}:{version}"
         assert "build" in services[name], f"{name}: `up --build` must keep working"
     assert services["agora-bridge"]["image"] == "mowdeck-local/agora-bridge:local"
-    assert services["vision-capture"]["image"] == f"mowdeck/vision-capture:{version}"
+    assert "vision-capture" not in services, "the capture worker is removed (ADR 0045)"
 
 
 # --- verify-release.sh against fakes ------------------------------------------------------------

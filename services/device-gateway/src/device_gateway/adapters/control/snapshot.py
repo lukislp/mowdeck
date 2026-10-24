@@ -1,5 +1,4 @@
-"""The ``CameraSnapshotter`` port over HTTP: the camera relay's frame tap (ADR 0045) and the
-deprecated capture worker (ADR 0035).
+"""The ``CameraSnapshotter`` port over HTTP: the camera relay's frame tap (ADR 0045).
 
 ``RelaySnapshotter``: ``POST <MOWDECK_RELAY_URL>/internal/v1/frames/snapshot`` with the mower's
 account and id (from the gateway's own connection), ``max_width``, ``max_bytes`` and
@@ -8,8 +7,8 @@ account and id (from the gateway's own connection), ``max_width``, ``max_bytes``
 exactly the request: it reuses the session a viewer holds (no second vendor session) or starts
 one within the Vision limits. A relay that is not reachable, has the frame tap switched off
 (``frames-disabled``) or no source driver for the camera (``camera-relay-unsupported``) is
-:class:`~device_gateway.application.ports.SnapshotUnavailable`, so the gateway may try the
-capture worker; every other answer (a limit, an offline mower, no frame in time) is final.
+:class:`~device_gateway.application.ports.SnapshotUnavailable` (another configured source may
+serve the mower); every other answer (a limit, an offline mower, no frame in time) is final.
 
 ``RelaySnapshotter.frame_set``: ``POST <MOWDECK_RELAY_URL>/internal/v1/frames/set`` with a
 :class:`~mowdeck_contracts.v1.VisionFrameSetRequest` (the same account, mower, principal,
@@ -18,12 +17,6 @@ demand and token; ``max_bytes`` per frame) answers a
 moment, left first, with its side and capture time, and the cameras that gave none. A relay
 without that route (an older release: 404 without a problem document, or 405) is asked for the
 single snapshot instead, so a rolling update never loses the photo.
-
-``HttpCameraSnapshotter`` (deprecated with ADR 0045, kept for one release):
-``POST <MOWDECK_CAPTURE_URL>/api/v1/capture`` with a
-:class:`~mowdeck_contracts.v1.CameraSnapshotRequest` (the camera session including its secret
-token, the camera's Agora uid, the frame timeout) and ``Authorization: Bearer
-<MOWDECK_CAPTURE_TOKEN>`` when a token is configured; the answer is the JPEG.
 
 Tokens and images are never logged; problems carry the HTTP status only.
 """
@@ -35,7 +28,6 @@ from uuid import UUID
 
 import httpx
 from mowdeck_contracts.v1 import (
-    CameraSnapshotRequest,
     PrincipalKind,
     PrincipalRef,
     VisionFrameSetReply,
@@ -109,8 +101,6 @@ def _frames(response: httpx.Response) -> CameraFrames:
 
 class RelaySnapshotter:
     """Asks the camera relay's frame tap for one frame or a frame set (ADR 0045)."""
-
-    needs_camera_session = False
 
     def __init__(
         self,
@@ -214,52 +204,3 @@ class RelaySnapshotter:
             # next source may cover. A refused mower (a "not-found" problem) stays final.
             return SnapshotUnavailable(text)
         return SnapshotFailed(text)
-
-
-class HttpCameraSnapshotter:
-    """Asks the capture worker for one frame (deprecated, ADR 0035)."""
-
-    needs_camera_session = True
-
-    def __init__(
-        self,
-        base_url: str,
-        *,
-        token: str | None = None,
-        max_width: int = 1280,
-        transport: httpx.AsyncBaseTransport | None = None,
-    ) -> None:
-        self.url = base_url.rstrip("/") + "/api/v1/capture"
-        self.token = token or None
-        self.max_width = max_width
-        self._transport = transport
-
-    async def snapshot(self, target: SnapshotTarget, *, timeout_seconds: float) -> Photo:
-        """One JPEG; the HTTP timeout leaves the worker a few seconds beyond its own."""
-        if target.session is None:
-            raise SnapshotUnavailable("the capture worker needs a camera session")
-        body = CameraSnapshotRequest(
-            session=target.session,
-            camera_uid=target.camera_uid,
-            timeout_seconds=timeout_seconds,
-            max_width=self.max_width,
-        )
-        headers = {"Content-Type": "application/json"}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
-        try:
-            async with httpx.AsyncClient(
-                transport=self._transport, timeout=timeout_seconds + 5
-            ) as client:
-                response = await client.post(
-                    self.url, content=body.model_dump_json(), headers=headers
-                )
-        except httpx.TimeoutException as exc:
-            raise SnapshotFailed("the capture worker did not answer in time") from exc
-        except httpx.HTTPError as exc:
-            raise SnapshotFailed(
-                f"the capture worker is unreachable: {type(exc).__name__}"
-            ) from exc
-        if response.status_code != httpx.codes.OK:
-            _log.info("capture worker refused", status=response.status_code)
-        return _jpeg(response, "capture worker")

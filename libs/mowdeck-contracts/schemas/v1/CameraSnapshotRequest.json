@@ -307,7 +307,8 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "``POST /capture`` of the capture worker (internal HTTP, ADR 0035): one still frame of the\ncamera ``camera_uid`` (Agora publisher uid; None: the first publisher) in ``session``.\n\nThe session carries the secret token; neither side logs it. The reply is ``image/jpeg``.",
+  "deprecated": true,
+  "description": "Deprecated: nothing sends or answers it since the capture worker was removed (ADR 0045;\nVision's frames come from the camera relay's frame tap, ``VisionFrameSetRequest``). Kept in\n``v1`` only because ``v1`` removes nothing; it goes with ``v2``.\n\nWas ``POST /capture`` of the capture worker (internal HTTP, ADR 0035): one still frame of the\ncamera ``camera_uid`` (Agora publisher uid; None: the first publisher) in ``session``. The\nsession carries the secret token; neither side logs it. The reply was ``image/jpeg``.",
   "properties": {
     "camera_uid": {
       "anyOf": [

@@ -105,7 +105,7 @@ What a release publishes and under which licence ([LICENSING.md](https://github.
 
 | Artifact | `org.opencontainers.image.licenses` | Notes |
 | --- | --- | --- |
-| `identity`, `fleet`, `telemetry`, `realtime`, `notifications`, `scheduler`, `entitlements`, `billing`, `planner`, `vision`, `camera-relay` | `AGPL-3.0-only AND Apache-2.0` | the service (AGPL-3.0) and the `libs/*` it uses (Apache-2.0); `vision` without the capture worker (`WITH_CAPTURE=false`), `camera-relay` with Debian's ffmpeg (GPL, Debian main) |
+| `identity`, `fleet`, `telemetry`, `realtime`, `notifications`, `scheduler`, `entitlements`, `billing`, `planner`, `vision`, `camera-relay` | `AGPL-3.0-only AND Apache-2.0` | the service (AGPL-3.0) and the `libs/*` it uses (Apache-2.0); `vision` without a browser or Agora SDK (the capture worker is removed), `camera-relay` with Debian's ffmpeg (GPL, Debian main) |
 | `device-gateway` | `AGPL-3.0-only AND Apache-2.0 AND GPL-3.0-only` | contains the GPL-3.0 adapter `mowdeck-control-mammotion` and PyMammotion (GPL-3.0); AGPL-3.0 section 13 and GPL-3.0 section 13 allow the combination |
 | `web` | `AGPL-3.0-only AND Apache-2.0` | built with `WEB_AGORA_SDK=exclude`: no Agora Web SDK; `/THIRD-PARTY-LICENSES.txt` lists every npm package in the bundle with its licence text |
 | `authz-bootstrap` | `AGPL-3.0-only AND Apache-2.0 AND MIT AND GPL-2.0-only` | bootstrap script (AGPL-3.0), the OpenFGA CLI (Apache-2.0), jq (MIT), busybox (GPL-2.0) |
@@ -113,7 +113,7 @@ What a release publishes and under which licence ([LICENSING.md](https://github.
 
 Every service and web image carries `LICENSE`, `LICENSING.md` and `LICENSES/` under `/usr/share/doc/mowdeck`; the third-party Python packages keep their licence files in their `dist-info`, the Debian and Alpine packages under `/usr/share/doc` and `/usr/share/licenses`. The SPDX SBOM files attached to the release list every package with its declared licence.
 
-Never published: `agora-bridge` (contains Agora's native SDK), `vision-capture` (contains the Agora Web SDK) and a web image built with `WEB_AGORA_SDK=include`. Operators who want them build them for their own installation ([integrations/agora-bridge](https://github.com/lukislp/mowdeck/blob/main/integrations/agora-bridge/README.md), [apps/web](https://github.com/lukislp/mowdeck/blob/main/apps/web/README.md#agora-web-sdk-and-third-party-licences)). `tools/repo-checks` (`test_release_licences.py`) keeps them out of every workflow, and the `licence-gate` job checks the built images again.
+Never published: `agora-bridge` (contains Agora's native SDK) and a web image built with `WEB_AGORA_SDK=include`. Operators who want them build them for their own installation ([integrations/agora-bridge](https://github.com/lukislp/mowdeck/blob/main/integrations/agora-bridge/README.md), [apps/web](https://github.com/lukislp/mowdeck/blob/main/apps/web/README.md#agora-web-sdk-and-third-party-licences)). `tools/repo-checks` (`test_release_licences.py`) keeps them out of every workflow, and the `licence-gate` job checks the built images again.
 
 ## Verifying a release
 
