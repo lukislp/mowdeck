@@ -8,9 +8,11 @@ offered.
 Commands (Mammotion-HA order for ``StartMow``, spike 0001 section 3.3):
 
 =================  =========================================================================
-``StartMow``       end a paused job (``cancel_job``), ``generate_route_information`` and wait
-                   for its reply ``bidire_reqconver_path``, then ``start_job`` sent once
-                   (no reply awaited), confirmed by the state mapping to ``mowing``
+``StartMow``       without an explicit speed first ``get_speed`` (the mower's own speed for the
+                   route, ADR 0042 amendment 2026-10-25), end a paused job (``cancel_job``),
+                   ``generate_route_information`` and wait for its reply
+                   ``bidire_reqconver_path``, then ``start_job`` sent once (no reply
+                   awaited), confirmed by the state mapping to ``mowing``
 ``PauseMow``       ``pause_execute_task``, confirmed by the work mode ``MODE_PAUSE``
 ``ResumeMow``      ``resume_execute_task``, confirmed by ``MODE_WORKING``
 ``ReturnToDock``   ``return_to_dock``, confirmed by returning, charging or docked; with
@@ -26,8 +28,10 @@ Commands (Mammotion-HA order for ``StartMow``, spike 0001 section 3.3):
                    ``Priority.USER``, only from the dock; over the cloud on a dual link (link
                    roles: only the drive channel uses the bridge); the spot run watches the
                    state, nothing is confirmed here
-``SetBladeHeight`` ``set_blade_height`` (millimetres)
-``SetSpeed``       ``set_speed`` (metres per second)
+``SetBladeHeight`` ``set_blade_height`` (millimetres); the next area start uses it until the
+                   report shows it, then the reported ``knife_height`` again
+``SetSpeed``       ``set_speed`` (metres per second); the next area start uses it until the
+                   mower confirms it, then the mower's own setting again (``get_speed``)
 drive speed        not a command but :meth:`MammotionBase.get_drive_speed` and
                    :meth:`MammotionBase.set_drive_speed`
                    (:class:`~mowdeck_control.DriveSpeedCapable`, capability
@@ -147,7 +151,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Any, Final
+from typing import Any, Final, NamedTuple
 
 from mowdeck_contracts.v1 import (
     BASE_STATION_OPTION,
@@ -217,7 +221,11 @@ from mowdeck_control_mammotion.port import (
 _log = logging.getLogger("mowdeck_control_mammotion")
 
 DEFAULT_BLADE_HEIGHT_MM: Final = 60
+"""Blade height of an area start only while the mower reports none (``knife_height`` 0)."""
 DEFAULT_SPEED_MPS: Final = 0.3
+"""Speed of an area start only while the mower reports no speed setting of its own (see
+:func:`mapping.configured_speed_of`); the state then says so (``raw.speed_source`` ``default``)
+and the start logs a warning. PyMammotion's ``GenerateRouteInformation`` uses the same default."""
 ROUTE_REQUEST_TIMEOUT_S: Final = 10.0
 """Per-attempt wait for the route reply (PyMammotion retries once); it holds the queue."""
 MAP_MAX_AGE_S: Final = 300.0
@@ -301,6 +309,10 @@ mower answers with the same field, which PyMammotion's reducer stores in
 ``mower_state.travel_speed``."""
 DRIVE_SPEED_READ_TIMEOUT_S: Final = 5.0
 """Wait per attempt for the answer to ``get_speed`` (PyMammotion sends twice, so about 10 s)."""
+JOB_SPEED_READ_TIMEOUT_S: Final = 3.0
+"""Wait per attempt for the ``get_speed`` an area start without an explicit speed sends first
+(a speed changed in the vendor app, or still unread right after a restart); see
+:meth:`MammotionBase._route_for`."""
 SETTING_READ_TIMEOUT_S: Final = 5.0
 """Wait per attempt for the answer to a setting read (PyMammotion sends twice)."""
 SETTING_CONFIRM_S: Final = 3.0
@@ -355,6 +367,13 @@ async def _cancel(task: asyncio.Task[Any] | None, what: str) -> None:
     await asyncio.wait({task})
     if not task.cancelled() and (error := task.exception()) is not None:
         _log.debug("%s had failed before the disconnect: %r", what, error)
+
+
+class _SourcedPlan(NamedTuple):
+    """A route plan and where its speed came from (:class:`mapping.JobSpeed`)."""
+
+    plan: mapping.RoutePlan
+    speed_source: mapping.SpeedSource
 
 
 class MammotionBase:
@@ -423,7 +442,15 @@ class MammotionBase:
         self._map: MowerMap | None = None
         self._map_synced_at: float | None = None
         self._blade_height_mm: int | None = None
+        """An explicit ``SetBladeHeight`` the mower has not reported yet: the next area start
+        uses it; once the report shows it, or after that start, the reported height counts."""
         self._speed_mps: float | None = None
+        """An explicit ``SetSpeed`` the mower has not confirmed yet (same rule as the height):
+        the mower's own setting is the source of truth, this only bridges until it shows it."""
+        self._speed_answered = False
+        """The mower answered a speed read (``get_speed``) since the connect."""
+        self._speed_start_read_failed = False
+        """A speed read before an area start went unanswered (and none was ever answered)."""
         self._light_reported = False
         self._settings_reported: set[str] = set()
         """Settings whose read the mower answered since the connect (ADR 0046)."""
@@ -489,6 +516,8 @@ class MammotionBase:
             self._connected = True
             self._light_reported = False
             self._settings_reported = set()
+            self._speed_answered = False
+            self._speed_start_read_failed = False
             self._unsubscribe = self._port.subscribe(self._on_device_update)
             self._unsubscribe_notifications = self._port.subscribe_notifications(
                 self._on_notification
@@ -726,7 +755,8 @@ class MammotionBase:
         is still missing (firmware: the version commands; model: ``get_device_product_model``;
         RTK origin or dock: :data:`DOCK_BUFFER_COMMAND`). Mowers with a light (both links) also
         read the headlamp (:data:`LIGHT_READ_COMMAND` with :data:`LIGHT_READ_ARGS`) until an
-        answer arrived. At most :data:`DEVICE_INFO_ATTEMPTS`
+        answer arrived, and every mower its speed setting (``get_speed``, the speed an area
+        start without an explicit one uses) until it answered. At most :data:`DEVICE_INFO_ATTEMPTS`
         rounds, ``device_info_retry_s`` apart, all with background priority. Failures are
         ignored (the next round or report may still fill them).
         """
@@ -738,7 +768,8 @@ class MammotionBase:
             commands = self._device_info_requests(first=not attempt)
             read_light = self._light_unknown()
             unread = self._unread_settings()
-            if not commands and not read_light and not unread:
+            read_speed = self._drive_speed_offered() and not self._speed_answered
+            if not commands and not read_light and not unread and not read_speed:
                 return
             for command, kwargs in commands:
                 try:
@@ -750,6 +781,8 @@ class MammotionBase:
             if unread:
                 with contextlib.suppress(Exception):  # the next round tries again
                     await self._read_settings(unread, Priority.BACKGROUND)
+            if read_speed:
+                await self._read_speed(Priority.BACKGROUND, DRIVE_SPEED_READ_TIMEOUT_S)
 
     def _light_unknown(self) -> bool:
         """True for a mower with a light whose state has not been reported yet."""
@@ -779,6 +812,31 @@ class MammotionBase:
         if self._connected:
             self._publish()
         return True
+
+    async def _read_speed(self, priority: Priority, timeout_s: float) -> bool:
+        """Read the mower's speed setting (``get_speed``) and wait for the answer; True when it
+        arrived (best effort, failures only logged)."""
+        try:
+            await self._port.send_and_wait(
+                DRIVE_SPEED_READ_COMMAND,
+                DRIVE_SPEED_REPLY,
+                priority=priority,
+                timeout_s=timeout_s,
+            )
+        except Exception:
+            _log.debug("speed read of %s failed", self._port.device_name, exc_info=True)
+            return False
+        await self._speed_read_answered()
+        return True
+
+    async def _speed_read_answered(self) -> None:
+        """After an answered ``get_speed``: wait briefly for the reducer, then publish."""
+        self._speed_answered = True
+        await self._port.wait_for(
+            lambda device: mapping.drive_speed_of(device) is not None, DRIVE_SPEED_SETTLE_S
+        )
+        if self._connected:
+            self._publish()
 
     def _declared_settings(self) -> list[str]:
         """The keys of the settings this mower declares (ADR 0046)."""
@@ -1073,10 +1131,12 @@ class MammotionBase:
                 case SetBladeHeight():
                     await self._send("set_blade_height", height=command.mm)
                     self._blade_height_mm = command.mm
+                    self._settle_setpoints(self._port.device())  # already reported?
                     return Dispatch.done(Outcome.accepted(f"blade height {command.mm} mm sent"))
                 case SetSpeed():
                     await self._send("set_speed", speed=float(command.mps))
                     self._speed_mps = command.mps
+                    self._settle_setpoints(self._port.device())  # already confirmed?
                     return Dispatch.done(Outcome.accepted(f"speed {command.mps} m/s sent"))
                 case SetLight():
                     return Dispatch.done(await self._set_light(on=command.on))
@@ -1205,13 +1265,8 @@ class MammotionBase:
         except TransportError as exc:
             msg = f"transport error: {type(exc).__name__}"
             raise CommandRejected(msg) from exc
-        await self._port.wait_for(
-            lambda device: mapping.drive_speed_of(device) is not None, DRIVE_SPEED_SETTLE_S
-        )
-        speed = mapping.drive_speed_of(self._port.device())
-        if speed is not None:
-            self._publish()
-        return speed
+        await self._speed_read_answered()
+        return mapping.drive_speed_of(self._port.device())
 
     async def set_drive_speed(self, speed_mps: float) -> None:
         """:class:`~mowdeck_control.DriveSpeedCapable` (ADR 0042): send ``set_speed`` once,
@@ -1593,7 +1648,7 @@ class MammotionBase:
         if activity in (MowerActivity.MOWING, MowerActivity.RETURNING):
             msg = f"the mower is {activity.value}; pause or end the job first"
             raise CommandRejected(msg)
-        plan, route = await self._route_for(command, device)
+        plan, route = await self._route_for(command, device, refresh_speed=True)
         if activity is MowerActivity.PAUSED:
             _log.info("ending the paused job of %s before a new start", self._port.device_name)
             await self._send("cancel_job")
@@ -1613,6 +1668,9 @@ class MammotionBase:
         )
         # ``start_job`` exactly once: no reply to wait for, no automatic resend.
         await self._send("start_job")
+        # The explicit setpoints went out with this job; from now on the mower's own values count.
+        self._speed_mps = None
+        self._blade_height_mm = None
         self._route = route
         self._path_tries = None  # a new job: its route gets fresh attempts
         areas = ", ".join(command.area_ids)
@@ -1621,31 +1679,64 @@ class MammotionBase:
         )
 
     async def _route_for(
-        self, command: StartMow, device: MowerDevice
+        self, command: StartMow, device: MowerDevice, *, refresh_speed: bool = False
     ) -> tuple[mapping.RoutePlan, GenerateRouteInformation]:
         """The route settings of an area start; raises ``CommandRejected`` for unknown areas or
-        settings the mower cannot run."""
+        settings the mower cannot run.
+
+        ``refresh_speed``: read the mower's speed setting first when the start names no speed
+        and no ``SetSpeed`` is pending: again when the mower answered before (it may have
+        changed in the vendor app since), and when it is still unknown (a start right after a
+        gateway restart, before the connect-time read answered). A mower that never answers
+        is asked once per connection, so it does not delay every start."""
         known = set(device.map.area)
         unknown = [a for a in command.area_ids if not a.isdigit() or int(a) not in known]
         if unknown:
             msg = f"unknown area ids: {', '.join(unknown)}"
             raise CommandRejected(msg)
         capabilities = await self.capabilities()
-        spacing = mapping.path_spacing_of(device, self._port.product_key())
+        plan = self._route_plan(command, device, capabilities)  # rejects before any read
+        explicit_speed = "speed_mps" in (command.pattern or {})
+        if (
+            refresh_speed
+            and not explicit_speed
+            and self._speed_mps is None
+            and (self._speed_answered or not self._speed_start_read_failed)
+        ):
+            if not await self._read_speed(Priority.USER, JOB_SPEED_READ_TIMEOUT_S):
+                self._speed_start_read_failed = not self._speed_answered
+            device = self._port.device()
+            plan = self._route_plan(command, device, capabilities)
+        if plan.speed_source == "default" and not explicit_speed:
+            _log.warning(
+                "%s reports no speed setting; the route uses the default %.2f m/s",
+                self._port.device_name,
+                DEFAULT_SPEED_MPS,
+            )
+        return plan.plan, build_route_information(
+            self._port.device_name, device, plan.plan.settings
+        )
+
+    def _route_plan(
+        self, command: StartMow, device: MowerDevice, capabilities: MowerCapabilities
+    ) -> _SourcedPlan:
+        """:func:`mapping.route_plan` with the job speed and blade height of :meth:`_job_speed`
+        and :meth:`_default_blade_height`; ``CommandRejected`` for settings it refuses."""
+        speed = self._job_speed(device)
         try:
             plan = mapping.route_plan(
                 command,
                 capabilities,
                 blade_height_mm=self._default_blade_height(device),
-                speed_mps=self._speed_mps or DEFAULT_SPEED_MPS,
-                path_spacing_cm=spacing,
+                speed_mps=speed.mps,
+                path_spacing_cm=mapping.path_spacing_of(device, self._port.product_key()),
                 detection=mapping.detection_strategies_of(
                     self._port.device_name, self._port.firmware(), self._port.product_key()
                 ),
             )
         except (ValueError, UnsupportedPattern) as exc:
             raise CommandRejected(str(exc)) from exc
-        return plan, build_route_information(self._port.device_name, device, plan.settings)
+        return _SourcedPlan(plan, speed.source)
 
     # --- mow path -------------------------------------------------------------------------
 
@@ -1807,9 +1898,43 @@ class MammotionBase:
         return Outcome.accepted(f"light {label} sent; the mower did not confirm it")
 
     def _default_blade_height(self, device: MowerDevice) -> int:
+        """The blade height of an area start: an unconfirmed ``SetBladeHeight``, else the
+        height the mower reports (``knife_height``), else :data:`DEFAULT_BLADE_HEIGHT_MM`."""
         if self._blade_height_mm is not None:
             return self._blade_height_mm
-        return mapping.blade_height_of(device) or DEFAULT_BLADE_HEIGHT_MM
+        reported = mapping.blade_height_of(device)
+        if reported is not None:
+            return reported
+        _log.warning(
+            "%s reports no blade height; using the default %d mm",
+            self._port.device_name,
+            DEFAULT_BLADE_HEIGHT_MM,
+        )
+        return DEFAULT_BLADE_HEIGHT_MM
+
+    def _job_speed(self, device: MowerDevice) -> mapping.JobSpeed:
+        """The speed of an area start without an explicit one: an unconfirmed ``SetSpeed``,
+        else the mower's own setting (:func:`mapping.configured_speed_of`, within the model's
+        mowing speed range), else :data:`DEFAULT_SPEED_MPS` flagged as ``default``."""
+        if self._speed_mps is not None:
+            return mapping.JobSpeed(self._speed_mps, "setpoint")
+        speed_range = mapping.model_limits(device, self._port.product_key())[1]
+        configured = mapping.configured_speed_of(device, speed_range)
+        if configured is not None:
+            return mapping.JobSpeed(configured, "device")
+        return mapping.JobSpeed(DEFAULT_SPEED_MPS, "default")
+
+    def _settle_setpoints(self, device: MowerDevice) -> None:
+        """Drop an explicit setpoint once the mower shows it: from then on its own value is the
+        truth (a later change in the vendor app wins over an old MowDeck command)."""
+        if self._blade_height_mm is not None and (
+            mapping.blade_height_of(device) == self._blade_height_mm
+        ):
+            self._blade_height_mm = None
+        if self._speed_mps is not None:
+            configured = mapping.drive_speed_of(device)
+            if configured is not None and mapping.same_speed(configured, self._speed_mps):
+                self._speed_mps = None
 
     async def _emergency_stop(self) -> Outcome:
         steps: list[tuple[str, dict[str, Any]]] = [
@@ -1859,7 +1984,7 @@ class MammotionBase:
             link=self._link_label(),
             model=self._port.model(),
             light_reported=self._light_reported,
-            speed_setpoint_mps=self._speed_mps or DEFAULT_SPEED_MPS,
+            job_speed=self._job_speed(device),
             links=self._link_statuses(),
             firmware_info=self._firmware.info,
             fault_since=self._fault_since,
@@ -1882,6 +2007,7 @@ class MammotionBase:
             self._track_firmware(self._port.device())
             self._track_base_update(self._port.device())
             self._track_fault_window()
+            self._settle_setpoints(self._port.device())
             state = self._snapshot()
         except Exception:
             _log.exception("cannot map the state of %s", self._config.mower_id)

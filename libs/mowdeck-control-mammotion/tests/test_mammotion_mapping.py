@@ -120,7 +120,8 @@ def test_mammotion_state_snapshot_of_a_docked_mower() -> None:
     assert state.rtk_source is RtkSource.NETWORK
     assert state.connection is ConnectionKind.CLOUD
     assert state.blade_height_mm == 55
-    assert state.speed_mps == pytest.approx(0.4)
+    assert state.speed_mps is None  # the speed setting is unread until get_speed answers
+    assert "speed_source" not in state.raw
     assert state.firmware == "1.30.29.26"
     assert state.error_code is None
     # docked with a known dock: the dock pose, not the raw position
@@ -294,6 +295,68 @@ def test_mammotion_speed_prefers_the_reported_man_run_speed(
     else:
         assert speed == pytest.approx(expected)
     assert _state(device).speed_mps == speed
+
+
+@pytest.mark.parametrize(
+    ("travel_speed", "work_speed", "speed_range", "expected"),
+    [
+        (0.45, 0.0, (0.2, 0.6), 0.45),  # the answer to get_speed
+        (0.0, 0.35, (0.2, 0.6), 0.35),  # unread: the route settings of the current job
+        (0.45, 0.35, (0.2, 0.6), 0.45),  # the setting wins over the job's echo
+        (0.8, 0.0, (0.2, 0.6), None),  # above the mowing range: a travel speed, not a job speed
+        (0.8, 0.5, (0.2, 0.6), 0.5),
+        (0.8, 0.0, None, 0.8),  # model unknown: any plausible value
+        (0.0, 0.0, (0.2, 0.6), None),  # nothing reported (PyMammotion starts at 0)
+        (9.0, 0.0, None, None),  # implausible
+    ],
+)
+def test_mammotion_configured_speed_is_the_mowers_own_setting(
+    travel_speed: float,
+    work_speed: float,
+    speed_range: tuple[float, float] | None,
+    expected: float | None,
+) -> None:
+    device = sample_device()
+    device.mower_state.travel_speed = travel_speed
+    device.work.speed = work_speed
+    speed = mapping.configured_speed_of(device, speed_range)
+    if expected is None:
+        assert speed is None
+    else:
+        assert speed == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("source", ["setpoint", "device", "default"])
+def test_mammotion_idle_state_shows_the_job_speed_with_its_source(
+    source: mapping.SpeedSource,
+) -> None:
+    device = sample_device()  # docked: man_run_speed 0
+    job_speed = mapping.JobSpeed(0.35, source)
+    state = mapping.state_of(
+        device,
+        mower_id=MOWER_ID,
+        account_id=ACCOUNT_ID,
+        connection=ConnectionKind.CLOUD,
+        device_name="Luba-VP1",
+        firmware="1.30.29.26",
+        observed_at=NOW,
+        job_speed=job_speed,
+    )
+    assert state.speed_mps == pytest.approx(0.35)
+    assert state.raw["speed_source"] == source
+    device.report_data.work.man_run_speed = 42  # working: the reported speed wins
+    state = mapping.state_of(
+        device,
+        mower_id=MOWER_ID,
+        account_id=ACCOUNT_ID,
+        connection=ConnectionKind.CLOUD,
+        device_name="Luba-VP1",
+        firmware="1.30.29.26",
+        observed_at=NOW,
+        job_speed=job_speed,
+    )
+    assert state.speed_mps == pytest.approx(0.42)
+    assert state.raw["speed_source"] == "reported"
 
 
 def test_mammotion_raw_carries_the_device_blade_counter_when_reported() -> None:
