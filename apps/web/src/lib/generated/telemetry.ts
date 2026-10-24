@@ -2071,7 +2071,7 @@ export type components = {
          * @description Where a client shows a setting.
          * @enum {string}
          */
-        SettingGroup: "weather" | "battery" | "lights" | "driving" | "safety" | "voice" | "schedule";
+        SettingGroup: "weather" | "battery" | "lights" | "driving" | "mowing" | "safety" | "voice" | "schedule";
         /**
          * SettingSpec
          * @description One setting a mower has, as its connection declares it (``MowerCapabilities.settings``).

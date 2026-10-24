@@ -151,6 +151,9 @@ describe('labels', () => {
     expect(settingHint('rain_detection')).toContain('Regen');
     expect(optionLabel('turn_style', 'multi_point')).toBe('Mehrpunkt');
     expect(groupLabel('schedule')).toBe('Arbeitszeit');
+    expect(settingLabel('blade_speed')).toBe('Messerdrehzahl');
+    expect(optionLabel('blade_speed', 'fast')).toBe('Schnell');
+    expect(groupLabel('mowing')).toBe('Mähen');
     expect(groupLabel('other')).toBe('Weitere');
     expect(blockerText('offline')).toContain('offline');
   });

@@ -330,6 +330,7 @@
         "battery",
         "lights",
         "driving",
+        "mowing",
         "safety",
         "voice",
         "schedule"
