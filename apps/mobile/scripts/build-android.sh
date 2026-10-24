@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build the Android APK: bundled pages, `cap sync android`, `gradlew assembleRelease`.
-# Prerequisites: Node.js 22 with pnpm, JDK 21, the Android SDK (ANDROID_HOME). Runs on Linux,
+# Prerequisites: Node.js 24 with pnpm, JDK 21, the Android SDK (ANDROID_HOME). Runs on Linux,
 # macOS and Git Bash on Windows; the release workflow runs it on ubuntu for every v* tag.
 #
 # Signing (one keystore for all releases, otherwise an update cannot replace the installed app):

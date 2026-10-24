@@ -54,7 +54,7 @@ TestFlight builds register with **production** APNs: set `APNS_ENVIRONMENT=produ
 
 ## iPhone: build and install from the Mac
 
-Prerequisites on the Mac: Xcode (from the App Store, opened once, `sudo xcode-select -s /Applications/Xcode.app`), Node.js 22 with `corepack enable` (pnpm), git and a clone of this repository. Everything below also works over SSH from the PC.
+Prerequisites on the Mac: Xcode (from the App Store, opened once, `sudo xcode-select -s /Applications/Xcode.app`), Node.js 24 (24.21 or newer) with `corepack enable` (pnpm), git and a clone of this repository. Everything below also works over SSH from the PC.
 
 ### One-time setup
 
@@ -142,7 +142,7 @@ Android has no system push without Google's Firebase Cloud Messaging, and MowDec
 
 ### Build the APK yourself
 
-Prerequisites: Node.js 22 with pnpm, JDK 21, the Android SDK (`ANDROID_HOME`; Android Studio installs it).
+Prerequisites: Node.js 24 (24.21 or newer) with pnpm, JDK 21, the Android SDK (`ANDROID_HOME`; Android Studio installs it).
 
 ```bash
 bash apps/mobile/scripts/build-android.sh   # -> apps/mobile/build/mowdeck-<version>.apk

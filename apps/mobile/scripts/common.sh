@@ -72,7 +72,7 @@ build_number() {
 # downloaded for an app build (LICENSING.md).
 sync_platform() {
     local platform="$1"
-    command -v pnpm > /dev/null || die "pnpm not found: install Node.js 22 and run 'corepack enable'"
+    command -v pnpm > /dev/null || die "pnpm not found: install Node.js 24 and run 'corepack enable'"
     (cd "$REPO_DIR" && pnpm install --frozen-lockfile --filter 'mobile...')
     (cd "$MOBILE_DIR" && pnpm build && pnpm exec cap sync "$platform")
 }

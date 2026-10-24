@@ -13,9 +13,15 @@ The frontend is a pnpm workspace next to the uv workspace. The root holds only c
 | `tools/ts-codegen` | `ts-codegen` | Generates the TypeScript API types (own TypeScript 5.9 for `openapi-typescript`) |
 | `tests/e2e-web` | `e2e-web` | Playwright: the Phase 2 and Phase 3 gates, desktop checks and review screenshots |
 
-Root files: `pnpm-workspace.yaml`, `package.json` (`packageManager: pnpm@10.34.6`, shared lint tooling), `.npmrc` (`engine-strict`, no automatic peers, exact versions), `.node-version` (`22`), `.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `stylelint.config.js`. The root `pyproject.toml` excludes `libs/mowdeck-ui` and `tools/ts-codegen` from the uv workspace.
+Root files: `pnpm-workspace.yaml`, `package.json` (`packageManager: pnpm@10.34.6`, shared lint tooling), `.npmrc` (`engine-strict`, no automatic peers, exact versions), `.node-version` (`24.21.0`), `.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `stylelint.config.js`. The root `pyproject.toml` excludes `libs/mowdeck-ui` and `tools/ts-codegen` from the uv workspace.
 
-Requirements: Node 22 (22.17 or newer), pnpm 10.34.6 (`corepack enable` or `npm install -g pnpm@10.34.6`), and for the dev loop the Compose stack (Docker).
+Requirements: Node 24 (24.21 or newer), pnpm 10.34.6 (`corepack enable` or `npm install -g pnpm@10.34.6`), and for the dev loop the Compose stack (Docker).
+
+### Node version
+
+The workspace runs on Node 24 LTS ("Krypton"). One release is pinned in three places that move together: `.node-version` (`24.21.0`, read by `actions/setup-node` in the `ci`, `release` and `apple-testflight` workflows and by `fnm`/`nvm`), `NODE_IMAGE` under "Image sources" in `infra/compose/.env.example` (`node:24.21.0-alpine` with its index digest; the same default in `apps/web/Dockerfile` and `infra/compose/docker-compose.yml`, kept equal by `tools/repo-checks/tests/test_images.py`) and the root `engines` (`>=24.21.0`, enforced by `engine-strict`). `@types/node` follows the major (24.x). As with every dependency, only releases and image digests at least two weeks old are taken. Dependabot updates none of these: it cannot parse the `*_IMAGE` build arguments, does not touch `.node-version`, and ignores `@types/node` majors, so a Node bump is a deliberate pull request that changes all of them.
+
+Next step: Node 26 enters Active LTS at the end of October 2026; the move is planned once it has been LTS for a few weeks (mid-November 2026), with a 26.x release and image digest at least two weeks old. Beyond the pins above, that move has to replace Corepack, which Node 25 and later no longer ship: the Dockerfile's `corepack enable pnpm` (for example a pinned `npm install -g corepack@<version>` or pnpm's standalone installer, keeping the sha512 check of `packageManager`) and the `corepack enable` in these docs and `apps/mobile/scripts`. CI installs pnpm with `pnpm/action-setup` and is not affected. The e2e-web job runs the Playwright tests in the Node of its pinned Playwright image, independent of `.node-version`.
 
 ## Dev loop
 
