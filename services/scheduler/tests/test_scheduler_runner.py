@@ -25,7 +25,7 @@ async def test_scheduler_fires_and_starts_the_mower_through_fleet() -> None:
             owner,
             target_type="mower",
             target_id=str(mower_id),
-            pattern={"spacing_cm": 20},
+            pattern={"border_laps": 2},
             rotation_angles=[0, 90],
         )
         assert created["next_run_at"] == "2026-10-09T08:30:00Z"
@@ -51,7 +51,7 @@ async def test_scheduler_fires_and_starts_the_mower_through_fleet() -> None:
     first, second = h.commands
     assert first.command.kind == "start_mow"
     # MowPattern-shaped: stripes with one border lap, the rotation's angle as angle_deg.
-    base = {"name": "stripes", "border_laps": 1, "spacing_cm": 20}
+    base = {"name": "stripes", "border_laps": 2}
     assert first.command.model_dump()["pattern"] == {**base, "angle_deg": 0.0}
     assert second.command.model_dump()["pattern"] == {**base, "angle_deg": 90.0}
     assert schedule["rotation_index"] == 2
@@ -407,7 +407,7 @@ async def test_scheduler_starts_from_the_mowers_saved_defaults() -> None:
             owner,
             target_type="mower",
             target_id=str(mower_id),
-            pattern={"angle": 100},
+            pattern={"angle_deg": 100},
             rotation_angles=[45, 225],
         )
         h.clock.set(FIRST + timedelta(seconds=10))

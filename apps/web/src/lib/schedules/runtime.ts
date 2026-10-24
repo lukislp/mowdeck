@@ -3,9 +3,10 @@
  * and the rights per target. The UI asks `POST /me/permissions` only to decide what to render;
  * the Scheduler checks `can_edit_schedule` and `can_control` again on every call.
  */
-import { fleetApi, schedulerApi, unwrap } from '$lib/api/client';
+import { fleetApi, schedulerApi, telemetryApi, unwrap } from '$lib/api/client';
 import { permissions, type ObjectRef } from '$lib/live.svelte';
 
+import type { CapsLike } from './mow-options';
 import type { Preview, Run, Schedule } from './types';
 
 export interface Target {
@@ -62,6 +63,24 @@ export async function loadTargets(): Promise<Targets> {
       isDefault: s.is_default,
     })),
   };
+}
+
+/**
+ * The capabilities of every mower the user can see, by mower id: what a schedule may set for
+ * it. A mower whose gateway never reported any is missing (it offers nothing); a failed request
+ * gives an empty map.
+ */
+export async function loadCapabilities(): Promise<Record<string, CapsLike>> {
+  try {
+    const found = await unwrap(
+      telemetryApi.GET('/api/v1/telemetry/accounts/me/mowers/capabilities'),
+    );
+    return Object.fromEntries(
+      found.items.map((item) => [String(item.mower_id), item.capabilities as CapsLike]),
+    );
+  } catch {
+    return {};
+  }
 }
 
 /** The time zone a target follows without an override (its site, else the default site). */

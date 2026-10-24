@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from typing import Any, ClassVar, Literal, Self
 from uuid import UUID
 
-from mowdeck_contracts.v1 import PrincipalRef, ScheduleRunOutcome
+from mowdeck_contracts.v1 import PrincipalRef, SchedulePattern, ScheduleRunOutcome
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scheduler.application.schedules import Preview
@@ -20,6 +20,31 @@ class In(BaseModel):
     """Base of request bodies: unknown fields are refused (no smuggled ``account_id``)."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+class SchedulePatternIn(SchedulePattern):
+    """The start settings of a schedule (``SchedulePattern``): every key optional, null or left
+    out falls back to the mower's mow defaults, then to the mower's own setting. Unknown keys,
+    including ``start_progress_pct``, are refused."""
+
+    model_config = ConfigDict(**{**SchedulePattern.model_config, "extra": "forbid"})
+
+
+BladeHeight = Field(
+    default=None,
+    ge=10,
+    le=120,
+    description="Blade height in millimetres sent before each start (`set_blade_height`); "
+    "null keeps the mower's own. Must lie within every target mower's "
+    "`blade_height_range_mm`.",
+)
+Speed = Field(
+    default=None,
+    gt=0,
+    le=2,
+    description="Mowing speed in m/s sent before each start (`set_speed`); null keeps the "
+    "mower's own. Must lie within every target mower's speed range.",
+)
 
 
 class RainPause(In):
@@ -74,13 +99,18 @@ class ScheduleIn(In):
         default=None, max_length=64, description="IANA name overriding the site's time zone."
     )
     area_ids: list[str] = Field(default_factory=list, max_length=50)
-    pattern: dict[str, Any] | None = Field(
-        default=None, description="Native pattern settings passed to `StartMow.pattern`."
+    pattern: SchedulePatternIn | None = Field(
+        default=None,
+        description="Start settings of every run (`SchedulePattern`), laid over the mower's "
+        "mow defaults. Settings beyond the angle and the border laps must be offered by every "
+        "mower of the target (422 otherwise).",
     )
+    blade_height_mm: int | None = BladeHeight
+    speed_mps: float | None = Speed
     rotation_angles: list[float] = Field(
         default_factory=list,
         max_length=24,
-        description="Angles used round robin, one per run (sets `pattern.angle`).",
+        description="Angles used round robin, one per run (replace `pattern.angle_deg`).",
     )
     rain_pause: RainPause = Field(default_factory=RainPause)
     pause_running_jobs_on_rain: bool = Field(
@@ -114,7 +144,9 @@ class SchedulePatch(In):
     duration_minutes: int | None = Field(default=None, ge=1, le=1440)
     timezone: str | None = Field(default=None, max_length=64, description="null: the site's")
     area_ids: list[str] | None = Field(default=None, max_length=50)
-    pattern: dict[str, Any] | None = None
+    pattern: SchedulePatternIn | None = Field(default=None, description="null: none")
+    blade_height_mm: int | None = BladeHeight
+    speed_mps: float | None = Speed
     rotation_angles: list[float] | None = Field(default=None, max_length=24)
     rain_pause: RainPause | None = None
     pause_running_jobs_on_rain: bool | None = None
@@ -122,7 +154,7 @@ class SchedulePatch(In):
     enabled: bool | None = None
 
     _NULLABLE: ClassVar[frozenset[str]] = frozenset(
-        {"anchor_date", "interval_days", "timezone", "pattern"}
+        {"anchor_date", "interval_days", "timezone", "pattern", "blade_height_mm", "speed_mps"}
     )
 
     def changes(self) -> dict[str, Any]:
@@ -139,6 +171,8 @@ class SchedulePatch(In):
                     result["timezone_override"] = value
                 case "rain_pause":
                     result["rain"] = value.settings().to_json()
+                case "pattern":
+                    result[name] = value.keys() if value is not None else None
                 case _:
                     result[name] = value
         return result
@@ -160,7 +194,12 @@ class ScheduleOut(BaseModel):
     timezone: str = Field(description="The effective time zone (override or the site's).")
     timezone_override: str | None
     area_ids: list[str]
-    pattern: dict[str, Any] | None
+    pattern: SchedulePattern | None = Field(
+        description="The start settings the schedule sets; keys left out come from the "
+        "mower's mow defaults, then the mower's own setting."
+    )
+    blade_height_mm: int | None
+    speed_mps: float | None
     rotation_angles: list[float]
     rotation_index: int
     rain_pause: RainPause
@@ -193,7 +232,9 @@ class ScheduleOut(BaseModel):
             timezone=item.timezone,
             timezone_override=item.timezone_override,
             area_ids=item.area_ids,
-            pattern=item.pattern,
+            pattern=SchedulePattern.model_validate(item.pattern) if item.pattern else None,
+            blade_height_mm=item.blade_height_mm,
+            speed_mps=item.speed_mps,
             rotation_angles=item.rotation_angles,
             rotation_index=item.rotation_index,
             rain_pause=RainPause.of(item.rain_settings),

@@ -70,6 +70,7 @@ V1_MODELS: Mapping[str, type[BaseModel]] = {
     "ResolveTargetReply": v1.ResolveTargetReply,
     "ScheduleRunRecorded": v1.ScheduleRunRecorded,
     "ScheduleDisabled": v1.ScheduleDisabled,
+    "SchedulePattern": v1.SchedulePattern,
     "DriveStartRequest": v1.DriveStartRequest,
     "DriveStartReply": v1.DriveStartReply,
     "DriveStopRequest": v1.DriveStopRequest,

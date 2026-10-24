@@ -27,8 +27,15 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
+from mowdeck_contracts.v1.capabilities import MowerCapabilities
 from mowdeck_contracts.v1.commands import CommandAccepted, CommandRequest
-from mowdeck_contracts.v1.mower import MowPattern
+from mowdeck_contracts.v1.mower import (
+    MAX_BORDER_LAPS,
+    MAX_OBSTACLE_LAPS,
+    MowPattern,
+    ObstacleDetection,
+    PathOrder,
+)
 from mowdeck_contracts.v1.principal import PrincipalRef
 
 SCHEDULER_RUN_RECORDED: Final = "scheduler.run.recorded"
@@ -92,6 +99,87 @@ class IssueCommandReply(ContractModel):
         return self
 
 
+SCHEDULE_PATTERN_KEYS: Final = (
+    "name",
+    "angle_deg",
+    "border_laps",
+    "spacing_m",
+    "obstacle_detection",
+    "obstacle_laps",
+    "order",
+)
+"""The ``MowPattern`` keys a schedule may set (all but ``start_progress_pct``)."""
+
+
+class SchedulePattern(ContractModel):
+    """The start settings one schedule sets for each of its runs (ADR 0024 amendment of
+    2026-10-24): the keys of :class:`MowPattern` that make sense for a recurring job, each
+    optional. A key left out (None) is not part of the schedule: the run takes it from the
+    mower's mow defaults in Fleet, and without those the mower keeps its own setting (for the
+    pattern, angle and border laps the clients' fallback, stripes at 0 degrees with one lap).
+
+    ``start_progress_pct`` is not offered: it skips the first part of one job's route, which
+    only makes sense to resume an interrupted job, never for every run of a schedule.
+
+    Which values fit one mower is decided with its :class:`MowerCapabilities`
+    (:meth:`problem`); a group schedule must fit every mower of the group.
+    """
+
+    name: Literal["stripes", "diagonal", "checkerboard", "edge_only", "random_angle"] | None = (
+        Field(default=None, description="The native pattern; null: the mow defaults'.")
+    )
+    angle_deg: float | None = Field(
+        default=None,
+        ge=0,
+        le=180,
+        description="Base angle in degrees; null: the mow defaults'. A schedule's "
+        "`rotation_angles` replace it run by run.",
+    )
+    border_laps: int | None = Field(default=None, ge=0, le=MAX_BORDER_LAPS)
+    spacing_m: float | None = Field(
+        default=None,
+        ge=0.05,
+        le=2.0,
+        description="Path spacing in metres; needs `MowerCapabilities.path_spacing_range_mm`.",
+    )
+    obstacle_detection: ObstacleDetection | None = Field(
+        default=None, description="Needs the mode in `start_options.obstacle_detection`."
+    )
+    obstacle_laps: int | None = Field(
+        default=None,
+        ge=0,
+        le=MAX_OBSTACLE_LAPS,
+        description="Needs `start_options.obstacle_laps_range`.",
+    )
+    order: PathOrder | None = Field(default=None, description="Needs the order in `orders`.")
+
+    def keys(self) -> dict[str, object]:
+        """The keys the schedule sets, as JSON values (``StartMow.pattern`` keys)."""
+        return self.model_dump(mode="json", exclude_none=True)
+
+    def problem(self, capabilities: MowerCapabilities) -> str | None:
+        """Why these settings do not fit a mower with ``capabilities``; None when they do.
+
+        The angle and the border laps belong to every native pattern and need no declaration;
+        the pattern name needs ``native_patterns``, the spacing ``path_spacing_range_mm`` and
+        the job options ``start_options`` (:meth:`StartOptions.problem`).
+        """
+        if self.name is not None and not capabilities.supports_pattern(self.name):
+            return f"pattern {self.name!r} is not offered"
+        if self.spacing_m is not None:
+            if capabilities.path_spacing_range_mm is None:
+                return "the path spacing is not settable on this mower"
+            low, high = capabilities.path_spacing_range_mm
+            if not low <= round(self.spacing_m * 1000) <= high:
+                return f"spacing_m must be between {low / 1000:g} and {high / 1000:g} on this mower"
+        options = MowPattern(
+            obstacle_detection=self.obstacle_detection,
+            obstacle_laps=self.obstacle_laps,
+            order=self.order,
+        )
+        return capabilities.start_options.problem(options)
+
+
 class ResolveTargetRequest(ContractModel):
     """Request on ``fleet.targets.resolve``: the mowers of a schedule target."""
 
@@ -112,7 +200,8 @@ class TargetMower(ContractModel):
     mow_pattern: MowPattern | None = Field(
         default=None,
         description="The mower's saved mowing defaults (`MowerOut.mow_defaults.pattern`); "
-        "None when none are saved. A schedule starts from them and sets only its angle.",
+        "None when none are saved. A scheduled start begins with them and lays the keys the "
+        "schedule sets (`SchedulePattern`) over them.",
     )
 
 

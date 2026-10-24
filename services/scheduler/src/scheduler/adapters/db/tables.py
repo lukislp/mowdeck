@@ -53,6 +53,8 @@ schedules = Table(
     Column("timezone_override", String(64)),
     Column("area_ids", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("pattern", JSONB),
+    Column("blade_height_mm", Integer),
+    Column("speed_mps", Float),
     Column("rotation_angles", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("rotation_index", Integer, nullable=False, server_default=text("0")),
     Column("rain", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
@@ -122,4 +124,14 @@ mower_places = Table(
     Column("latitude", Float),
     Column("longitude", Float),
     Column("area_ids", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+)
+
+# Capabilities per mower (device.mower.<id>.capabilities): what a schedule may set for it.
+mower_capabilities = Table(
+    "mower_capabilities",
+    metadata,
+    Column("mower_id", Uuid, primary_key=True),
+    Column("account_id", Uuid, nullable=False),
+    Column("observed_at", TS, nullable=False),
+    Column("capabilities", JSONB, nullable=False),
 )

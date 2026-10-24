@@ -5,12 +5,21 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
+from mowdeck_contracts.v1 import MowerCapabilities
 
 from scheduler.application.runner import compute_next
 from scheduler.domain.errors import InvalidInput
 from scheduler.domain.models import Schedule
 from scheduler.domain.recurrence import Recurrence, local_to_utc, next_after, upcoming
-from scheduler.domain.rules import pattern_for_run, validate_schedule, window_end
+from scheduler.domain.rules import (
+    mower_problem,
+    pattern_for_run,
+    run_settings,
+    schedule_pattern,
+    sets_mower_options,
+    validate_schedule,
+    window_end,
+)
 
 BERLIN = ZoneInfo("Europe/Berlin")
 
@@ -142,6 +151,10 @@ def test_scheduler_validation_normalises_and_refuses() -> None:
         {"area_ids": [""]},
         {"rotation_angles": [float("nan")]},
         {"pattern": {"x": "y" * 5000}},
+        {"pattern": {"border_laps": 9}},
+        {"blade_height_mm": 5},
+        {"speed_mps": 0},
+        {"speed_mps": 2.5},
         {"timezone_override": "Mars/Base"},
         {"rain": {"probability_threshold": 101}},
         {"rain": {"precipitation_mm_threshold": -1}},
@@ -153,37 +166,142 @@ def test_scheduler_validation_normalises_and_refuses() -> None:
 
 
 def test_scheduler_rotation_cycles_through_the_angles() -> None:
-    angles = [pattern_for_run({"spacing": 1}, [0, 45, 90], i)["angle_deg"] for i in range(5)]
+    angles = [pattern_for_run({"border_laps": 2}, [0, 45, 90], i)["angle_deg"] for i in range(5)]
     assert angles == [0, 45, 90, 0, 45]
-    assert "angle" not in pattern_for_run({"angle": 10}, [0, 45], 1)
+    # The rotation replaces the schedule's own angle.
+    assert pattern_for_run({"angle_deg": 10}, [0, 45], 1)["angle_deg"] == 45.0
 
 
 def test_scheduler_run_pattern_is_mow_pattern_shaped() -> None:
     # No settings at all: stripes at 0 degrees with one border lap (the edges get mowed).
     assert pattern_for_run(None, [], 3) == {"name": "stripes", "angle_deg": 0.0, "border_laps": 1}
-    # The legacy key "angle" becomes angle_deg; other keys are kept.
-    assert pattern_for_run({"angle": 200, "spacing": 1}, [], 0) == {
-        "name": "stripes",
-        "angle_deg": 20.0,
-        "border_laps": 1,
-        "spacing": 1,
-    }
     assert pattern_for_run(None, [-45], 0)["angle_deg"] == 135.0
+    assert pattern_for_run(None, [200], 0)["angle_deg"] == 20.0
 
 
 def test_scheduler_run_pattern_merges_the_mower_defaults() -> None:
     defaults = {"name": "diagonal", "angle_deg": 30.0, "border_laps": 2, "spacing_m": 0.3}
-    # Without an angle of its own the schedule runs the defaults unchanged.
+    # Without settings of its own the schedule runs the defaults unchanged.
     assert pattern_for_run(None, [], 0, defaults) == defaults
-    # The schedule only sets the angle.
-    assert pattern_for_run({"angle": 90}, [], 0, defaults) == {**defaults, "angle_deg": 90.0}
+    assert pattern_for_run({"angle_deg": 90}, [], 0, defaults) == {**defaults, "angle_deg": 90.0}
     assert pattern_for_run(None, [0, 120], 1, defaults) == {**defaults, "angle_deg": 120.0}
+
+
+def test_scheduler_run_pattern_precedence_is_schedule_then_defaults_then_mower() -> None:
+    defaults = {
+        "name": "diagonal",
+        "angle_deg": 30.0,
+        "border_laps": 2,
+        "obstacle_detection": "standard",
+        "order": "border_first",
+        "start_progress_pct": 40,
+    }
+    own = {"name": "checkerboard", "border_laps": 0, "obstacle_detection": "sensitive"}
+    run = pattern_for_run(own, [], 0, defaults)
+    assert run == {
+        "name": "checkerboard",  # schedule
+        "angle_deg": 30.0,  # defaults
+        "border_laps": 0,  # schedule (a set 0 is not "unset")
+        "obstacle_detection": "sensitive",  # schedule
+        "order": "border_first",  # defaults
+    }
+    # Nobody sets the spacing or the no-go laps: left out, the mower keeps its own; the start
+    # progress of the defaults never reaches a scheduled run.
+    assert "spacing_m" not in run and "obstacle_laps" not in run
+    assert "start_progress_pct" not in run
 
 
 def test_scheduler_run_pattern_carries_the_job_options_of_the_defaults() -> None:
     # The job options saved with the mowing defaults reach every scheduled start (ADR 0030).
     options = {"obstacle_detection": "sensitive", "obstacle_laps": 0, "order": "grid_first"}
     defaults = {"name": "stripes", "angle_deg": 0.0, "border_laps": 1, **options}
-    run = pattern_for_run({"angle": 45}, [], 0, defaults)
+    run = pattern_for_run({"angle_deg": 45}, [], 0, defaults)
     assert {key: run[key] for key in options} == options
     assert run["angle_deg"] == 45.0
+
+
+AWD_CAPS = MowerCapabilities.model_validate(
+    {
+        "native_patterns": ["stripes", "diagonal"],
+        "path_spacing_range_mm": [200, 350],
+        "blade_height_range_mm": [25, 70],
+        "min_speed_mps": 0.2,
+        "max_speed_mps": 1.0,
+        "start_options": {
+            "obstacle_detection": ["off", "standard", "sensitive"],
+            "obstacle_laps_range": [0, 4],
+            "orders": ["border_first", "grid_first"],
+        },
+    }
+)
+BARE_CAPS = MowerCapabilities.model_validate({"native_patterns": ["stripes"]})
+
+
+def test_scheduler_schedule_pattern_is_normalised_and_checked() -> None:
+    item = _schedule(pattern={"angle_deg": 45, "obstacle_detection": None})
+    validate_schedule(item)
+    assert item.pattern == {"angle_deg": 45.0}
+    empty = _schedule(pattern={})
+    validate_schedule(empty)
+    assert empty.pattern is None
+    assert schedule_pattern({"name": "diagonal", "unknown": 1}) == {"name": "diagonal"}
+
+
+def test_scheduler_mower_problem_follows_the_capabilities() -> None:
+    plain = _schedule(pattern={"angle_deg": 90, "border_laps": 3})
+    # Angle and border laps fit every mower, even one whose capabilities are unknown.
+    assert not sets_mower_options(plain)
+    assert mower_problem(plain, None) is None
+    full = _schedule(
+        pattern={"name": "diagonal", "spacing_m": 0.25, "obstacle_detection": "sensitive"},
+        blade_height_mm=40,
+        speed_mps=0.6,
+    )
+    assert mower_problem(full, AWD_CAPS) is None
+    assert mower_problem(full, None) == "its capabilities are not known yet"
+    assert mower_problem(full, BARE_CAPS) == "pattern 'diagonal' is not offered"
+    assert "blade height is not settable" in (
+        mower_problem(_schedule(blade_height_mm=40), BARE_CAPS) or ""
+    )
+    assert "between 25 and 70" in (mower_problem(_schedule(blade_height_mm=80), AWD_CAPS) or "")
+    assert "speed is not settable" in (mower_problem(_schedule(speed_mps=0.5), BARE_CAPS) or "")
+    assert "between 0.2 and 1" in (mower_problem(_schedule(speed_mps=1.5), AWD_CAPS) or "")
+
+
+def test_scheduler_run_settings_fit_the_mower_and_send_setpoints_first() -> None:
+    schedule = _schedule(
+        pattern={"name": "stripes", "spacing_m": 0.3, "order": "grid_first"},
+        blade_height_mm=40,
+        speed_mps=0.6,
+    )
+    defaults = {"obstacle_detection": "sensitive", "obstacle_laps": 2}
+    fitted = run_settings(schedule, defaults, AWD_CAPS)
+    assert fitted.pattern == {
+        "name": "stripes",
+        "angle_deg": 0.0,
+        "border_laps": 1,
+        "spacing_m": 0.3,
+        "order": "grid_first",
+        "obstacle_detection": "sensitive",
+        "obstacle_laps": 2,
+    }
+    assert [c.model_dump() for c in fitted.setpoints] == [
+        {"kind": "set_blade_height", "mm": 40},
+        {"kind": "set_speed", "mps": 0.6},
+    ]
+    assert fitted.dropped == []
+    # A mower that offers none of it (it changed, or joined the group later): left out.
+    bare = run_settings(schedule, defaults, BARE_CAPS)
+    assert bare.pattern == {"name": "stripes", "angle_deg": 0.0, "border_laps": 1}
+    assert bare.setpoints == []
+    assert bare.dropped == [
+        "obstacle_detection",
+        "obstacle_laps",
+        "order",
+        "spacing_m",
+        "blade_height_mm",
+        "speed_mps",
+    ]
+    # Unknown capabilities: everything goes out as set, the controller decides.
+    unknown = run_settings(schedule, defaults, None)
+    assert unknown.pattern["order"] == "grid_first" and len(unknown.setpoints) == 2

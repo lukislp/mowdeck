@@ -14,8 +14,12 @@ One firing, per target mower (see ADR 0024):
    published);
 3. a mower that is mowing, paused or returning is not started (``skipped_mower_busy``);
 4. the rain pause may hold the run (``skipped_rain``);
-5. ``start_mow`` goes through Fleet (``fleet.commands.issue``) on behalf of the owner, with the
-   schedule's areas (all map areas when none are set) and the pattern of this run (rotation).
+5. the schedule's blade height and speed go out first (``set_blade_height``, ``set_speed``;
+   the controller runs a mower's commands in arrival order), then ``start_mow`` through Fleet
+   (``fleet.commands.issue``) on behalf of the owner, with the schedule's areas (all map areas
+   when none are set) and the settings of this run: schedule over the mower's mow defaults over
+   the mower's own setting, the angle by rotation, fitted to the mower's capabilities
+   (``rules.run_settings``).
 
 Started runs are followed until their job ends: when it rains while the mower is still mowing
 (``pause_running_jobs_on_rain``) or the window closes (``return_to_dock_at_window_end``) the
@@ -62,7 +66,7 @@ from scheduler.domain.rules import (
     CAN_CONTROL,
     FINISHED_ACTIVITIES,
     RUNNING_ACTIVITIES,
-    pattern_for_run,
+    run_settings,
     window_end,
 )
 
@@ -94,6 +98,21 @@ def recorded(run: ScheduleRun) -> ScheduleRunRecorded:
         scheduled_for=run.scheduled_for,
         started_at=run.started_at,
     )
+
+
+def _started_details(
+    area_ids: list[str],
+    pattern: dict[str, object],
+    dropped: list[str],
+) -> str:
+    """The details of a started run: areas, angle, what the mower did not offer."""
+    angle = pattern.get("angle_deg")
+    text = f"areas {', '.join(area_ids)}"
+    if isinstance(angle, int | float):
+        text += f", angle {angle:g}"
+    if dropped:
+        text += f", left out (not offered by the mower): {', '.join(dropped)}"
+    return text
 
 
 def compute_next(schedule: Schedule, after: datetime) -> datetime | None:
@@ -313,48 +332,42 @@ class Runner:
         area_ids = list(schedule.area_ids) or (list(place.area_ids) if place else [])
         if not area_ids:
             return run(Outcome.FAILED, "no areas: set area_ids or wait for the mower's map")
-        command = StartMow(
-            area_ids=area_ids,
-            pattern=pattern_for_run(
-                schedule.pattern,
-                schedule.rotation_angles,
-                schedule.rotation_index,
-                target.mow_pattern.model_dump(mode="json", exclude_none=True)
-                if target.mow_pattern is not None
-                else None,
-            ),
+        settings = run_settings(
+            schedule,
+            target.mow_pattern.model_dump(mode="json", exclude_none=True)
+            if target.mow_pattern is not None
+            else None,
+            await tx.get_capabilities(mower_id),
         )
+        command = StartMow(area_ids=area_ids, pattern=settings.pattern)
         result = run(Outcome.STARTED)
         result.issued_by = issuer.model_dump(mode="json")
-        try:
-            reply = await self.fleet.issue(
-                IssueCommandRequest(
-                    on_behalf_of=issuer,
-                    account_id=schedule.account_id,
-                    mower_id=mower_id,
-                    command=CommandRequest(command=command),
-                    schedule_id=schedule.id,
+        for setpoint in [*settings.setpoints, command]:
+            try:
+                reply = await self.fleet.issue(
+                    IssueCommandRequest(
+                        on_behalf_of=issuer,
+                        account_id=schedule.account_id,
+                        mower_id=mower_id,
+                        command=CommandRequest(command=setpoint),
+                        schedule_id=schedule.id,
+                    )
                 )
-            )
-        except Unavailable as exc:
-            return run(Outcome.FAILED, exc.message)
-        if reply.error is not None:
-            outcome = (
-                Outcome.SKIPPED_PERMISSION
-                if reply.error.code
-                in (IssueCommandErrorCode.FORBIDDEN, IssueCommandErrorCode.NOT_FOUND)
-                else Outcome.FAILED
-            )
-            return run(outcome, f"fleet: {reply.error.code.value}: {reply.error.detail}")
-        assert reply.accepted is not None  # noqa: S101 - the reply has exactly one of both
-        result.command_id = reply.accepted.command_id
+            except Unavailable as exc:
+                return run(Outcome.FAILED, f"{exc.message} ({setpoint.kind})")
+            if reply.error is not None:
+                outcome = (
+                    Outcome.SKIPPED_PERMISSION
+                    if reply.error.code
+                    in (IssueCommandErrorCode.FORBIDDEN, IssueCommandErrorCode.NOT_FOUND)
+                    else Outcome.FAILED
+                )
+                detail = f"fleet: {reply.error.code.value}: {reply.error.detail}"
+                return run(outcome, f"{detail} ({setpoint.kind})")
+            assert reply.accepted is not None  # noqa: S101 - the reply has exactly one of both
+            result.command_id = reply.accepted.command_id
         result.window_end_at = closes
-        pattern = command.pattern or {}
-        result.details = f"areas {', '.join(area_ids)}" + (
-            f", angle {pattern['angle_deg']:g}"
-            if isinstance(pattern.get("angle_deg"), int | float)
-            else ""
-        )
+        result.details = _started_details(area_ids, settings.pattern, settings.dropped)
         return result
 
     def _run(

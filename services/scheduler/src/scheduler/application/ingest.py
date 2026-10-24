@@ -1,7 +1,8 @@
-"""Facts about mowers from the bus: the latest activity (busy check, last position) and the map
-(geo origin for the weather, area ids for "all areas")."""
+"""Facts about mowers from the bus: the latest activity (busy check, last position), the map
+(geo origin for the weather, area ids for "all areas") and the capabilities (what a schedule
+may set for the mower)."""
 
-from mowdeck_contracts.v1 import MowerMapSnapshot, MowerState
+from mowdeck_contracts.v1 import MowerCapabilitiesSnapshot, MowerMapSnapshot, MowerState
 
 from scheduler.application.ports import Store
 from scheduler.domain.models import MowerPlace, MowerStatus
@@ -26,6 +27,16 @@ class Ingest:
                     latitude=position.lat if position else None,
                     longitude=position.lon if position else None,
                 )
+            )
+
+    async def on_capabilities(self, snapshot: MowerCapabilitiesSnapshot) -> bool:
+        """Store the capabilities unless newer ones are stored; True if stored."""
+        async with self.store.transaction() as tx:
+            return await tx.put_capabilities(
+                snapshot.mower_id,
+                snapshot.account_id,
+                snapshot.observed_at,
+                snapshot.capabilities,
             )
 
     async def on_map(self, snapshot: MowerMapSnapshot) -> None:

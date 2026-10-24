@@ -55,6 +55,19 @@ export interface PatternDraft {
 
 export type SpacingRange = readonly [min: number, max: number];
 
+/**
+ * A draft whose pattern keys may be unset: a schedule's settings, where null means "the mower's
+ * saved mow defaults, else its own setting". The start sheet's {@link PatternDraft} is one with
+ * every key set; the shared `MowOptions` component edits both.
+ */
+export interface LoosePatternDraft {
+  name: PatternName | null;
+  angle: number | null;
+  laps: number | null;
+  spacingMm: number | null;
+  options?: JobOptionsDraft;
+}
+
 /** Fallback without saved defaults: stripes, 0°, one border lap (the edges get mowed). */
 export const FALLBACK: PatternDraft = { name: 'stripes', angle: 0, laps: 1, spacingMm: null };
 
@@ -160,6 +173,18 @@ export function samePattern(a: MowPattern | null | undefined, b: MowPattern | nu
     (a.order ?? null) === (b.order ?? null) &&
     (a.start_progress_pct || null) === (b.start_progress_pct || null)
   );
+}
+
+/** One angle step; from an unset angle the first step goes to 0° (down) or 15° (up). */
+export function stepAngle(current: number | null, direction: 1 | -1): number {
+  if (current === null) return direction > 0 ? ANGLE_STEP : 0;
+  return clamp(current + direction * ANGLE_STEP, 0, ANGLE_MAX);
+}
+
+/** One border lap more or fewer; from unset laps the first step goes to 1 (up) or 0 (down). */
+export function stepLaps(current: number | null, direction: 1 | -1, floor: number): number {
+  if (current === null) return clamp(direction > 0 ? 1 : 0, floor, BORDER_LAPS_MAX);
+  return clamp(current + direction, floor, BORDER_LAPS_MAX);
 }
 
 /** A spacing step from the mower's own default starts at the adapter's default, clamped. */

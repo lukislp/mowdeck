@@ -333,6 +333,7 @@ from mowdeck_contracts.v1.relay import (
     camera_side,
 )
 from mowdeck_contracts.v1.scheduler import (
+    SCHEDULE_PATTERN_KEYS,
     SCHEDULER_RUN_RECORDED,
     SCHEDULER_SCHEDULE_DISABLED,
     CommandOrigin,
@@ -343,6 +344,7 @@ from mowdeck_contracts.v1.scheduler import (
     ResolveTargetReply,
     ResolveTargetRequest,
     ScheduleDisabled,
+    SchedulePattern,
     ScheduleRunOutcome,
     ScheduleRunRecorded,
     TargetMower,
@@ -479,6 +481,7 @@ __all__ = [
     "RELAY_TICKET_SECONDS",
     "SCHEDULER_RUN_RECORDED",
     "SCHEDULER_SCHEDULE_DISABLED",
+    "SCHEDULE_PATTERN_KEYS",
     "SECRET_OPTION_KEYS",
     "SETTING_KEYS",
     "SETTING_KEY_PATTERN",
@@ -689,6 +692,7 @@ __all__ = [
     "RtkSource",
     "ScannedDevice",
     "ScheduleDisabled",
+    "SchedulePattern",
     "ScheduleRunOutcome",
     "ScheduleRunRecorded",
     "SegmentKind",

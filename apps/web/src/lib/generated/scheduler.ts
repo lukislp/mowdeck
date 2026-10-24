@@ -260,6 +260,24 @@ export type components = {
             version: string;
         };
         /**
+         * ObstacleDetection
+         * @description How eagerly the mower avoids obstacles during a native job (``MowPattern``).
+         *
+         *     Which modes a mower offers depends on its model and firmware
+         *     (``MowerCapabilities.start_options.obstacle_detection``). The names follow the vendor apps:
+         *     ``off`` is the plain bump-and-turn behaviour, ``standard`` avoids obstacles it sees ahead,
+         *     ``sensitive`` additionally avoids areas that are not lawn; ``slow_touch`` and
+         *     ``less_touch`` exist only on older firmware.
+         * @enum {string}
+         */
+        ObstacleDetection: "off" | "slow_touch" | "less_touch" | "standard" | "sensitive";
+        /**
+         * PathOrder
+         * @description Whether the border laps run before or after the fill of a native job.
+         * @enum {string}
+         */
+        PathOrder: "border_first" | "grid_first";
+        /**
          * PermissionDef
          * @description A permission a module defines, e.g. ``mower.control``.
          *
@@ -502,6 +520,11 @@ export type components = {
             anchor_date?: string | null;
             /** Area Ids */
             area_ids?: string[];
+            /**
+             * Blade Height Mm
+             * @description Blade height in millimetres sent before each start (`set_blade_height`); null keeps the mower's own. Must lie within every target mower's `blade_height_range_mm`.
+             */
+            blade_height_mm?: number | null;
             /** Days Of Week */
             days_of_week?: ("mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun")[];
             /**
@@ -524,13 +547,8 @@ export type components = {
             kind: "weekly" | "every_n_days";
             /** Name */
             name: string;
-            /**
-             * Pattern
-             * @description Native pattern settings passed to `StartMow.pattern`.
-             */
-            pattern?: {
-                [key: string]: unknown;
-            } | null;
+            /** @description Start settings of every run (`SchedulePattern`), laid over the mower's mow defaults. Settings beyond the angle and the border laps must be offered by every mower of the target (422 otherwise). */
+            pattern?: components["schemas"]["SchedulePatternIn"] | null;
             /**
              * Pause Running Jobs On Rain
              * @description Send a running scheduled job back to the dock when it rains.
@@ -545,9 +563,14 @@ export type components = {
             return_to_dock_at_window_end: boolean;
             /**
              * Rotation Angles
-             * @description Angles used round robin, one per run (sets `pattern.angle`).
+             * @description Angles used round robin, one per run (replace `pattern.angle_deg`).
              */
             rotation_angles?: number[];
+            /**
+             * Speed Mps
+             * @description Mowing speed in m/s sent before each start (`set_speed`); null keeps the mower's own. Must lie within every target mower's speed range.
+             */
+            speed_mps?: number | null;
             /**
              * Start Time
              * Format: time
@@ -586,6 +609,8 @@ export type components = {
             anchor_date: string | null;
             /** Area Ids */
             area_ids: string[];
+            /** Blade Height Mm */
+            blade_height_mm: number | null;
             /**
              * Created At
              * Format: date-time
@@ -616,10 +641,8 @@ export type components = {
             next_run_at: string | null;
             /** @description The subject the schedule runs on behalf of. */
             owner: components["schemas"]["PrincipalRef"];
-            /** Pattern */
-            pattern: {
-                [key: string]: unknown;
-            } | null;
+            /** @description The start settings the schedule sets; keys left out come from the mower's mow defaults, then the mower's own setting. */
+            pattern: components["schemas"]["SchedulePattern"] | null;
             /** Pause Running Jobs On Rain */
             pause_running_jobs_on_rain: boolean;
             /** Permission Skips */
@@ -633,6 +656,8 @@ export type components = {
             rotation_index: number;
             /** Skip Until */
             skip_until: string | null;
+            /** Speed Mps */
+            speed_mps: number | null;
             /**
              * Start Time
              * Format: time
@@ -667,6 +692,11 @@ export type components = {
             anchor_date?: string | null;
             /** Area Ids */
             area_ids?: string[] | null;
+            /**
+             * Blade Height Mm
+             * @description Blade height in millimetres sent before each start (`set_blade_height`); null keeps the mower's own. Must lie within every target mower's `blade_height_range_mm`.
+             */
+            blade_height_mm?: number | null;
             /** Days Of Week */
             days_of_week?: ("mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun")[] | null;
             /** Duration Minutes */
@@ -679,10 +709,8 @@ export type components = {
             kind?: ("weekly" | "every_n_days") | null;
             /** Name */
             name?: string | null;
-            /** Pattern */
-            pattern?: {
-                [key: string]: unknown;
-            } | null;
+            /** @description null: none */
+            pattern?: components["schemas"]["SchedulePatternIn"] | null;
             /** Pause Running Jobs On Rain */
             pause_running_jobs_on_rain?: boolean | null;
             rain_pause?: components["schemas"]["RainPause"] | null;
@@ -690,6 +718,11 @@ export type components = {
             return_to_dock_at_window_end?: boolean | null;
             /** Rotation Angles */
             rotation_angles?: number[] | null;
+            /**
+             * Speed Mps
+             * @description Mowing speed in m/s sent before each start (`set_speed`); null keeps the mower's own. Must lie within every target mower's speed range.
+             */
+            speed_mps?: number | null;
             /** Start Time */
             start_time?: string | null;
             /** Target Id */
@@ -701,6 +734,82 @@ export type components = {
              * @description null: the site's
              */
             timezone?: string | null;
+        };
+        /**
+         * SchedulePattern
+         * @description The start settings one schedule sets for each of its runs (ADR 0024 amendment of
+         *     2026-10-24): the keys of :class:`MowPattern` that make sense for a recurring job, each
+         *     optional. A key left out (None) is not part of the schedule: the run takes it from the
+         *     mower's mow defaults in Fleet, and without those the mower keeps its own setting (for the
+         *     pattern, angle and border laps the clients' fallback, stripes at 0 degrees with one lap).
+         *
+         *     ``start_progress_pct`` is not offered: it skips the first part of one job's route, which
+         *     only makes sense to resume an interrupted job, never for every run of a schedule.
+         *
+         *     Which values fit one mower is decided with its :class:`MowerCapabilities`
+         *     (:meth:`problem`); a group schedule must fit every mower of the group.
+         */
+        SchedulePattern: {
+            /**
+             * Angle Deg
+             * @description Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run.
+             */
+            angle_deg?: number | null;
+            /** Border Laps */
+            border_laps?: number | null;
+            /**
+             * Name
+             * @description The native pattern; null: the mow defaults'.
+             */
+            name?: ("stripes" | "diagonal" | "checkerboard" | "edge_only" | "random_angle") | null;
+            /** @description Needs the mode in `start_options.obstacle_detection`. */
+            obstacle_detection?: components["schemas"]["ObstacleDetection"] | null;
+            /**
+             * Obstacle Laps
+             * @description Needs `start_options.obstacle_laps_range`.
+             */
+            obstacle_laps?: number | null;
+            /** @description Needs the order in `orders`. */
+            order?: components["schemas"]["PathOrder"] | null;
+            /**
+             * Spacing M
+             * @description Path spacing in metres; needs `MowerCapabilities.path_spacing_range_mm`.
+             */
+            spacing_m?: number | null;
+        };
+        /**
+         * SchedulePatternIn
+         * @description The start settings of a schedule (``SchedulePattern``): every key optional, null or left
+         *     out falls back to the mower's mow defaults, then to the mower's own setting. Unknown keys,
+         *     including ``start_progress_pct``, are refused.
+         */
+        SchedulePatternIn: {
+            /**
+             * Angle Deg
+             * @description Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run.
+             */
+            angle_deg?: number | null;
+            /** Border Laps */
+            border_laps?: number | null;
+            /**
+             * Name
+             * @description The native pattern; null: the mow defaults'.
+             */
+            name?: ("stripes" | "diagonal" | "checkerboard" | "edge_only" | "random_angle") | null;
+            /** @description Needs the mode in `start_options.obstacle_detection`. */
+            obstacle_detection?: components["schemas"]["ObstacleDetection"] | null;
+            /**
+             * Obstacle Laps
+             * @description Needs `start_options.obstacle_laps_range`.
+             */
+            obstacle_laps?: number | null;
+            /** @description Needs the order in `orders`. */
+            order?: components["schemas"]["PathOrder"] | null;
+            /**
+             * Spacing M
+             * @description Path spacing in metres; needs `MowerCapabilities.path_spacing_range_mm`.
+             */
+            spacing_m?: number | null;
         };
         /**
          * ScheduleRunOutcome

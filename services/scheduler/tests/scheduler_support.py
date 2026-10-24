@@ -30,6 +30,8 @@ from mowdeck_contracts.v1 import (
     GeoReference,
     MapArea,
     MowerActivity,
+    MowerCapabilities,
+    MowerCapabilitiesSnapshot,
     MowerMap,
     MowerMapSnapshot,
     MowerState,
@@ -280,6 +282,16 @@ class Harness:
             ),
         )
         await self.bus.publish(device_subject(mower_id, "map"), snapshot)
+
+    async def capabilities(self, mower_id: UUID, account_id: UUID, **values: Any) -> None:
+        """Publish a capability snapshot like the Device-Gateway."""
+        snapshot = MowerCapabilitiesSnapshot(
+            mower_id=mower_id,
+            account_id=account_id,
+            observed_at=self.clock.now,
+            capabilities=MowerCapabilities.model_validate(values),
+        )
+        await self.bus.publish(device_subject(mower_id, "capabilities"), snapshot)
 
     async def tick(self) -> int:
         """One tick of the runner."""

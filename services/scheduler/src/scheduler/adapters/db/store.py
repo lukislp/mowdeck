@@ -14,6 +14,8 @@ from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from mowdeck_contracts.v1 import MowerCapabilities
+from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -162,6 +164,42 @@ class SqlTx:
         p = tables.mower_places
         row = (await self._conn.execute(sa.select(p).where(p.c.mower_id == mower_id))).first()
         return MowerPlace(**dict(row._mapping)) if row else None
+
+    async def put_capabilities(
+        self,
+        mower_id: UUID,
+        account_id: UUID,
+        observed_at: datetime,
+        capabilities: MowerCapabilities,
+    ) -> bool:
+        c = tables.mower_capabilities
+        values = {
+            "mower_id": mower_id,
+            "account_id": account_id,
+            "observed_at": observed_at,
+            "capabilities": capabilities.model_dump(mode="json"),
+        }
+        insert = pg_insert(c).values(**values)
+        result = await self._conn.execute(
+            insert.on_conflict_do_update(
+                index_elements=[c.c.mower_id],
+                set_={k: insert.excluded[k] for k in values if k != "mower_id"},
+                where=c.c.observed_at < insert.excluded.observed_at,
+            )
+        )
+        return bool(result.rowcount)
+
+    async def get_capabilities(self, mower_id: UUID) -> MowerCapabilities | None:
+        c = tables.mower_capabilities
+        row = (
+            await self._conn.execute(sa.select(c.c.capabilities).where(c.c.mower_id == mower_id))
+        ).first()
+        if row is None:
+            return None
+        try:
+            return MowerCapabilities.model_validate(row.capabilities)
+        except ValidationError:
+            return None  # written by a newer version this one cannot read: unknown
 
     async def purge_runs(self, before: datetime) -> int:
         r = tables.schedule_runs

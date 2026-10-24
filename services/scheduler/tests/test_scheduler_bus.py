@@ -50,6 +50,21 @@ async def test_scheduler_bus_states_and_maps_are_remembered() -> None:
     assert len(h.bus.dropped) >= 3
 
 
+async def test_scheduler_bus_capabilities_are_remembered() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id, other = uuid4(), uuid4()
+        await h.capabilities(mower_id, owner.account_id, native_patterns=["stripes"])
+        snapshot = h.bus.messages(device_subject(mower_id, "capabilities"))[0].data
+        await h.bus.publish(device_subject(other, "capabilities"), snapshot)  # wrong mower
+        await h.bus.publish(device_subject(other, "capabilities"), b"{}")
+        async with h.store.transaction() as tx:
+            stored = await tx.get_capabilities(mower_id)
+            assert await tx.get_capabilities(other) is None
+    assert stored is not None and stored.native_patterns == frozenset({"stripes"})
+    assert len(h.bus.dropped) >= 2
+
+
 async def test_scheduler_bus_state_subject_must_match() -> None:
     async with harness() as h:
         owner = await h.owner()
@@ -131,7 +146,7 @@ async def test_scheduler_app_startup_shutdown_and_wiring() -> None:
     with pytest.raises(ValueError, match="DATABASE_URL"):
         build_app(make_settings())
     async with harness(background_tasks=True, scheduler_tick_seconds=0.1) as h:
-        assert len(h.app.state.subscriptions) == 4  # states, maps, grants, plans
+        assert len(h.app.state.subscriptions) == 5  # states, maps, capabilities, grants, plans
         assert (await h.client.get("/metrics")).status_code == 200
     assert default_principal_resolver({}) is None
     assert MemoryStore().data.schedules == {}

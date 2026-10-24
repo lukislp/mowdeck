@@ -39,6 +39,11 @@ class Schedule:
     timezone_override: str | None = None
     area_ids: list[str] = field(default_factory=list)
     pattern: dict[str, Any] | None = None
+    """The ``SchedulePattern`` keys the schedule sets (none set: None)."""
+    blade_height_mm: int | None = None
+    """Blade height set before each start (``set_blade_height``); None keeps the mower's."""
+    speed_mps: float | None = None
+    """Mowing speed set before each start (``set_speed``); None keeps the mower's."""
     rotation_angles: list[float] = field(default_factory=list)
     rotation_index: int = 0
     rain: dict[str, Any] = field(default_factory=dict)

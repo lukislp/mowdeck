@@ -180,6 +180,27 @@
         "title": "ModuleDescriptor",
         "type": "object"
       },
+      "ObstacleDetection": {
+        "description": "How eagerly the mower avoids obstacles during a native job (``MowPattern``).\n\nWhich modes a mower offers depends on its model and firmware\n(``MowerCapabilities.start_options.obstacle_detection``). The names follow the vendor apps:\n``off`` is the plain bump-and-turn behaviour, ``standard`` avoids obstacles it sees ahead,\n``sensitive`` additionally avoids areas that are not lawn; ``slow_touch`` and\n``less_touch`` exist only on older firmware.",
+        "enum": [
+          "off",
+          "slow_touch",
+          "less_touch",
+          "standard",
+          "sensitive"
+        ],
+        "title": "ObstacleDetection",
+        "type": "string"
+      },
+      "PathOrder": {
+        "description": "Whether the border laps run before or after the fill of a native job.",
+        "enum": [
+          "border_first",
+          "grid_first"
+        ],
+        "title": "PathOrder",
+        "type": "string"
+      },
       "PermissionDef": {
         "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
         "properties": {
@@ -722,6 +743,20 @@
             "title": "Area Ids",
             "type": "array"
           },
+          "blade_height_mm": {
+            "anyOf": [
+              {
+                "maximum": 120.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Blade height in millimetres sent before each start (`set_blade_height`); null keeps the mower's own. Must lie within every target mower's `blade_height_range_mm`.",
+            "title": "Blade Height Mm"
+          },
           "days_of_week": {
             "items": {
               "enum": [
@@ -782,15 +817,13 @@
           "pattern": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SchedulePatternIn"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Native pattern settings passed to `StartMow.pattern`.",
-            "title": "Pattern"
+            "description": "Start settings of every run (`SchedulePattern`), laid over the mower's mow defaults. Settings beyond the angle and the border laps must be offered by every mower of the target (422 otherwise)."
           },
           "pause_running_jobs_on_rain": {
             "default": true,
@@ -807,13 +840,27 @@
             "type": "boolean"
           },
           "rotation_angles": {
-            "description": "Angles used round robin, one per run (sets `pattern.angle`).",
+            "description": "Angles used round robin, one per run (replace `pattern.angle_deg`).",
             "items": {
               "type": "number"
             },
             "maxItems": 24,
             "title": "Rotation Angles",
             "type": "array"
+          },
+          "speed_mps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mowing speed in m/s sent before each start (`set_speed`); null keeps the mower's own. Must lie within every target mower's speed range.",
+            "title": "Speed Mps"
           },
           "start_time": {
             "format": "time",
@@ -895,6 +942,17 @@
             },
             "title": "Area Ids",
             "type": "array"
+          },
+          "blade_height_mm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blade Height Mm"
           },
           "created_at": {
             "format": "date-time",
@@ -982,14 +1040,13 @@
           "pattern": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SchedulePattern"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Pattern"
+            "description": "The start settings the schedule sets; keys left out come from the mower's mow defaults, then the mower's own setting."
           },
           "pause_running_jobs_on_rain": {
             "title": "Pause Running Jobs On Rain",
@@ -1028,6 +1085,17 @@
               }
             ],
             "title": "Skip Until"
+          },
+          "speed_mps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed Mps"
           },
           "start_time": {
             "format": "time",
@@ -1080,6 +1148,8 @@
           "timezone_override",
           "area_ids",
           "pattern",
+          "blade_height_mm",
+          "speed_mps",
           "rotation_angles",
           "rotation_index",
           "rain_pause",
@@ -1128,6 +1198,20 @@
               }
             ],
             "title": "Area Ids"
+          },
+          "blade_height_mm": {
+            "anyOf": [
+              {
+                "maximum": 120.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Blade height in millimetres sent before each start (`set_blade_height`); null keeps the mower's own. Must lie within every target mower's `blade_height_range_mm`.",
+            "title": "Blade Height Mm"
           },
           "days_of_week": {
             "anyOf": [
@@ -1221,14 +1305,13 @@
           "pattern": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SchedulePatternIn"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Pattern"
+            "description": "null: none"
           },
           "pause_running_jobs_on_rain": {
             "anyOf": [
@@ -1276,6 +1359,20 @@
               }
             ],
             "title": "Rotation Angles"
+          },
+          "speed_mps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 2.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mowing speed in m/s sent before each start (`set_speed`); null keeps the mower's own. Must lie within every target mower's speed range.",
+            "title": "Speed Mps"
           },
           "start_time": {
             "anyOf": [
@@ -1331,6 +1428,213 @@
           }
         },
         "title": "SchedulePatch",
+        "type": "object"
+      },
+      "SchedulePattern": {
+        "description": "The start settings one schedule sets for each of its runs (ADR 0024 amendment of\n2026-10-24): the keys of :class:`MowPattern` that make sense for a recurring job, each\noptional. A key left out (None) is not part of the schedule: the run takes it from the\nmower's mow defaults in Fleet, and without those the mower keeps its own setting (for the\npattern, angle and border laps the clients' fallback, stripes at 0 degrees with one lap).\n\n``start_progress_pct`` is not offered: it skips the first part of one job's route, which\nonly makes sense to resume an interrupted job, never for every run of a schedule.\n\nWhich values fit one mower is decided with its :class:`MowerCapabilities`\n(:meth:`problem`); a group schedule must fit every mower of the group.",
+        "properties": {
+          "angle_deg": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run.",
+            "title": "Angle Deg"
+          },
+          "border_laps": {
+            "anyOf": [
+              {
+                "maximum": 4.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Border Laps"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stripes",
+                  "diagonal",
+                  "checkerboard",
+                  "edge_only",
+                  "random_angle"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The native pattern; null: the mow defaults'.",
+            "title": "Name"
+          },
+          "obstacle_detection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObstacleDetection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Needs the mode in `start_options.obstacle_detection`."
+          },
+          "obstacle_laps": {
+            "anyOf": [
+              {
+                "maximum": 4.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Needs `start_options.obstacle_laps_range`.",
+            "title": "Obstacle Laps"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PathOrder"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Needs the order in `orders`."
+          },
+          "spacing_m": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Path spacing in metres; needs `MowerCapabilities.path_spacing_range_mm`.",
+            "title": "Spacing M"
+          }
+        },
+        "title": "SchedulePattern",
+        "type": "object"
+      },
+      "SchedulePatternIn": {
+        "additionalProperties": false,
+        "description": "The start settings of a schedule (``SchedulePattern``): every key optional, null or left\nout falls back to the mower's mow defaults, then to the mower's own setting. Unknown keys,\nincluding ``start_progress_pct``, are refused.",
+        "properties": {
+          "angle_deg": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run.",
+            "title": "Angle Deg"
+          },
+          "border_laps": {
+            "anyOf": [
+              {
+                "maximum": 4.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Border Laps"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stripes",
+                  "diagonal",
+                  "checkerboard",
+                  "edge_only",
+                  "random_angle"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The native pattern; null: the mow defaults'.",
+            "title": "Name"
+          },
+          "obstacle_detection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ObstacleDetection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Needs the mode in `start_options.obstacle_detection`."
+          },
+          "obstacle_laps": {
+            "anyOf": [
+              {
+                "maximum": 4.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Needs `start_options.obstacle_laps_range`.",
+            "title": "Obstacle Laps"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PathOrder"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Needs the order in `orders`."
+          },
+          "spacing_m": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Path spacing in metres; needs `MowerCapabilities.path_spacing_range_mm`.",
+            "title": "Spacing M"
+          }
+        },
+        "title": "SchedulePatternIn",
         "type": "object"
       },
       "ScheduleRunOutcome": {
