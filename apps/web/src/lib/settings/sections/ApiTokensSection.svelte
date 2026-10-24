@@ -2,12 +2,15 @@
   API tokens of the account: the secret of a token just created (on top, focused, until
   dismissed), the active tokens (each token's rights as chips), the revoked ones folded into a
   closed disclosure, and the form for a new one.
+  Revoked tokens can be deleted for good, one by one or all at once after a confirmation sheet;
+  both leave the list at once and come back if Identity refuses (`?purge=true`,
+  `POST .../api-tokens/purge-revoked`). Active tokens are only revoked here, never deleted.
   Rights come from a preset (view only, Home Assistant basics or full) or a custom selection from
   Identity's permission catalogue; every token is granted on the whole account
   (`lib/settings/token-permissions.ts`).
 -->
 <script lang="ts">
-  import { Button, Field, Icon, Panel, ProblemNotice } from '@mowdeck/ui';
+  import { Button, Field, Icon, Panel, ProblemNotice, Sheet } from '@mowdeck/ui';
   import { tick } from 'svelte';
 
   import { identityApi, unwrap } from '$lib/api/client';
@@ -51,6 +54,12 @@
   let busy = $state(false);
   let secretBox = $state<HTMLElement | null>(null);
   let secretCode = $state<HTMLElement | null>(null);
+  /** The confirmation sheet of "remove revoked" is open. */
+  let confirmPurge = $state(false);
+  let purgingAll = $state(false);
+  /** Announced in a live region after a removal. */
+  let purgeNote = $state('');
+  let revokedBox = $state<HTMLDetailsElement | null>(null);
 
   /** Newest first: active tokens in the list, revoked ones folded away below it. */
   const sorted = $derived(
@@ -171,6 +180,77 @@
       await load();
     } catch (error) {
       problem = asProblem(error);
+    }
+  }
+
+  /**
+   * Take tokens out of the list at once; returns how to put back the ones still missing (a
+   * reload in between may have brought them back already).
+   */
+  function takeOut(ids: Set<string>): () => void {
+    const removed = (tokens ?? []).filter((token) => ids.has(token.id));
+    tokens = (tokens ?? []).filter((token) => !ids.has(token.id));
+    return () => {
+      const present = new Set((tokens ?? []).map((token) => token.id));
+      tokens = [...(tokens ?? []), ...removed.filter((token) => !present.has(token.id))];
+    };
+  }
+
+  /** Keep the focus in the revoked group (its summary) when the focused row disappears. */
+  async function refocus(): Promise<void> {
+    await tick();
+    revokedBox?.querySelector('summary')?.focus();
+  }
+
+  async function purge(token: Token): Promise<void> {
+    problem = null;
+    purgeNote = '';
+    const restore = takeOut(new Set([token.id]));
+    void refocus();
+    try {
+      await unwrap(
+        identityApi.DELETE('/api/v1/identity/accounts/{account_id}/api-tokens/{token_id}', {
+          params: { path: { account_id: accountId, token_id: token.id }, query: { purge: true } },
+        }),
+      );
+      purgeNote = m.tokens_purged_one({ name: token.name });
+    } catch (error) {
+      const failed = asProblem(error);
+      // Already gone (another tab or the bulk removal): what the user wanted.
+      if (failed.status === 404) {
+        purgeNote = m.tokens_purged_one({ name: token.name });
+        return;
+      }
+      restore();
+      problem = failed;
+    }
+  }
+
+  async function purgeAll(): Promise<void> {
+    const ids = new Set(revoked.map((token) => token.id));
+    if (ids.size === 0) return;
+    problem = null;
+    purgeNote = '';
+    purgingAll = true;
+    confirmPurge = false;
+    const restore = takeOut(ids);
+    try {
+      const answer = await unwrap(
+        identityApi.POST('/api/v1/identity/accounts/{account_id}/api-tokens/purge-revoked', {
+          params: { path: { account_id: accountId } },
+        }),
+      );
+      purgeNote =
+        answer.deleted === 1
+          ? m.tokens_purged_many_one()
+          : m.tokens_purged_many({ count: answer.deleted });
+      // A token revoked elsewhere since the list was loaded is gone too: show what is left.
+      if (answer.ids.some((id) => !ids.has(id))) await load();
+    } catch (error) {
+      restore();
+      problem = asProblem(error);
+    } finally {
+      purgingAll = false;
     }
   }
 
@@ -337,25 +417,74 @@
     <p class="pad quiet" data-testid="token-no-active">{m.tokens_no_active()}</p>
   {/if}
   {#if revoked.length}
-    <details class="revoked" data-testid="token-revoked">
+    <details class="revoked" data-testid="token-revoked" bind:this={revokedBox}>
       <summary>
         <Icon name="chevron" size={16} />{m.tokens_revoked_group({ count: revoked.length })}
       </summary>
+      <div class="revoked-tools">
+        <p class="revoked-hint">{m.tokens_purge_hint()}</p>
+        <Button
+          icon="trash"
+          pending={purgingAll}
+          testid="token-purge-all"
+          onclick={() => (confirmPurge = true)}>{m.tokens_purge_all()}</Button
+        >
+      </div>
       <ul class="revoked-list">
         {#each revoked as token (token.id)}
           <li data-testid="token-revoked-row" data-name={token.name}>
-            <span class="name">{token.name}</span>
-            <span class="mono">{token.prefix}…</span>
-            <span class="mono revoked-when">
-              {m.tokens_revoked_on()}
-              {formatDateTime(token.revoked_at ?? token.created_at)}
+            <span class="revoked-info">
+              <span class="name">{token.name}</span>
+              <span class="mono">{token.prefix}…</span>
+              <span class="mono revoked-when">
+                {m.tokens_revoked_on()}
+                {formatDateTime(token.revoked_at ?? token.created_at)}
+              </span>
             </span>
+            <button
+              type="button"
+              class="remove"
+              aria-label={m.tokens_purge_one({ name: token.name })}
+              title={m.tokens_purge_one({ name: token.name })}
+              data-testid="token-purge"
+              disabled={purgingAll}
+              onclick={() => purge(token)}
+            >
+              <Icon name="trash" size={16} />
+            </button>
           </li>
         {/each}
       </ul>
     </details>
   {/if}
 {/if}
+
+<p class="md-visually-hidden" role="status" data-testid="token-purge-status">{purgeNote}</p>
+
+<Sheet
+  open={confirmPurge && revoked.length > 0}
+  title={revoked.length === 1
+    ? m.tokens_purge_title_one()
+    : m.tokens_purge_title_many({ count: revoked.length })}
+  closeLabel={m.close()}
+  onclose={() => (confirmPurge = false)}
+  testid="token-purge-confirm"
+>
+  <p class="confirm-body">{m.tokens_purge_body()}</p>
+  <ul class="confirm-names" data-testid="token-purge-names">
+    {#each revoked as token (token.id)}
+      <li><span class="name">{token.name}</span> <span class="mono">{token.prefix}…</span></li>
+    {/each}
+  </ul>
+  {#snippet footer()}
+    <div class="confirm-footer">
+      <Button variant="ghost" onclick={() => (confirmPurge = false)}>{m.cancel()}</Button>
+      <Button variant="danger" icon="trash" testid="token-purge-go" onclick={purgeAll}
+        >{m.tokens_purge_go()}</Button
+      >
+    </div>
+  {/snippet}
+</Sheet>
 
 <Panel label={m.tokens_create_title()}>
   <form class="form" onsubmit={create} novalidate>
@@ -585,14 +714,93 @@
     list-style: none;
   }
 
+  /* Above the list: what removing means, and the one button for all of them. */
+  .revoked-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--md-space-2) var(--md-space-4);
+    padding: var(--md-space-2) var(--md-gutter) var(--md-space-3);
+  }
+
+  .revoked-hint {
+    flex: 1 1 280px;
+    max-width: 62ch;
+    margin: 0;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-13);
+  }
+
   .revoked-list li {
     display: flex;
+    align-items: stretch;
+    border-top: var(--md-hairline) solid var(--md-color-line);
+    color: var(--md-color-ink-muted);
+  }
+
+  .revoked-info {
+    display: flex;
+    flex: 1;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 0 var(--md-space-3);
+    min-width: 0;
     padding: var(--md-space-2) var(--md-gutter);
-    border-top: var(--md-hairline) solid var(--md-color-line);
+  }
+
+  /* One tap target per row, cut off from the text by a hairline like the role tags. */
+  .remove {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: var(--md-target);
+    min-height: var(--md-target);
+    padding: 0;
+    border: 0;
+    border-inline-start: var(--md-hairline) solid var(--md-color-line);
+    background: none;
     color: var(--md-color-ink-muted);
+    cursor: pointer;
+  }
+
+  .remove:hover:not(:disabled) {
+    color: var(--md-state-error);
+  }
+
+  .remove:focus-visible {
+    outline: 2px solid var(--md-color-focus);
+    outline-offset: -2px;
+  }
+
+  .remove:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .confirm-body {
+    margin: 0 0 var(--md-space-3);
+    line-height: var(--md-line-24);
+  }
+
+  .confirm-names {
+    display: grid;
+    gap: var(--md-space-1);
+    margin: 0 0 var(--md-space-3);
+    padding: var(--md-space-2) var(--md-space-3);
+    border-left: 3px solid var(--md-state-error);
+    background: var(--md-color-surface-sunken);
+    list-style: none;
+  }
+
+  .confirm-names .name {
+    font-weight: var(--md-weight-medium);
+  }
+
+  .confirm-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--md-space-2);
   }
 
   .revoked-list .name {

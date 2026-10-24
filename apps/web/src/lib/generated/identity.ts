@@ -102,9 +102,30 @@ export type paths = {
         post?: never;
         /**
          * Revoke Token
-         * @description Revoke an API token.
+         * @description Revoke an API token; with ``purge=true`` delete an already revoked one for good.
          */
         delete: operations["revoke_token_api_v1_identity_accounts__account_id__api_tokens__token_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/accounts/{account_id}/api-tokens/purge-revoked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Purge Revoked Tokens
+         * @description Delete every revoked API token of the account for good; active tokens stay. Each one is
+         *     audited (``api_token.purged``); the audit history of the tokens stays.
+         */
+        post: operations["purge_revoked_tokens_api_v1_identity_accounts__account_id__api_tokens_purge_revoked_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -749,6 +770,22 @@ export type components = {
              * @description The secret, returned only at creation
              */
             token?: string | null;
+        };
+        /**
+         * ApiTokensPurgedOut
+         * @description Revoked API tokens deleted for good.
+         */
+        ApiTokensPurgedOut: {
+            /**
+             * Deleted
+             * @description How many revoked tokens were deleted
+             */
+            deleted: number;
+            /**
+             * Ids
+             * @description Ids of the deleted tokens
+             */
+            ids: string[];
         };
         /**
          * AssignmentIn
@@ -1630,7 +1667,10 @@ export interface operations {
     };
     revoke_token_api_v1_identity_accounts__account_id__api_tokens__token_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Delete the revoked token for good instead of revoking it; 409 while the token is not revoked */
+                purge?: boolean;
+            };
             header?: never;
             path: {
                 account_id: string;
@@ -1646,6 +1686,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_revoked_tokens_api_v1_identity_accounts__account_id__api_tokens_purge_revoked_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiTokensPurgedOut"];
+                };
             };
             /** @description Validation Error */
             422: {
