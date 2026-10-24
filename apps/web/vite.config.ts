@@ -79,6 +79,7 @@ export default defineConfig({
         'src/lib/mower/maintenance.ts',
         'src/lib/health/series.ts',
         'src/lib/plan/usage.ts',
+        'src/lib/settings/token-permissions.ts',
         'src/lib/plan/problems.ts',
         'src/lib/operator/plans.ts',
         'src/lib/operator/assign.ts',
