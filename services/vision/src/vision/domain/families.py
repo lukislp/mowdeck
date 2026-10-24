@@ -112,6 +112,7 @@ FAKE: Final = Family(
         "fake/decline",
         "fake/people",
         "fake/low_confidence",
+        "fake/unsure_resume",
         "fake/fail",
     ),
     None,

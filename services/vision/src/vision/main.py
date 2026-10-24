@@ -191,6 +191,7 @@ def build_app(
                 light_wait_seconds=settings.vision_light_wait_seconds,
                 stereo_max_skew_ms=settings.vision_stereo_max_skew_ms,
                 map_image=settings.vision_map_image,
+                geofence_margin_m=settings.vision_geofence_margin_m,
             ),
             fleet=fleet,
         )

@@ -55,7 +55,7 @@ def proposal_values(changes: Mapping[str, Any]) -> dict[str, Any]:
             values["assessment"] = answer.model_dump(mode="json") if answer else None
             values["situation"] = answer.situation.value if answer else None
             values["confidence"] = answer.confidence if answer else None
-        elif name in ("state", "task", "trigger", "action"):
+        elif name in ("state", "task", "trigger", "action", "alternative_action"):
             values[name] = value.value if hasattr(value, "value") else value
         elif name == "frames":
             values[name] = [frame.to_json() for frame in value]
@@ -106,6 +106,12 @@ def proposal_of(row: Any) -> Proposal:
         return_command_id=v["return_command_id"],
         action=ProposalAction(v["action"]),
         fallback=v["fallback"],
+        low_confidence=v["low_confidence"],
+        alternative_action=ProposalAction(v["alternative_action"])
+        if v["alternative_action"]
+        else None,
+        model_refused=v["model_refused"],
+        approved_option=v["approved_option"],
     )
 
 
@@ -159,6 +165,10 @@ _PROPOSAL_FIELDS = [
     "return_command_id",
     "action",
     "fallback",
+    "low_confidence",
+    "alternative_action",
+    "model_refused",
+    "approved_option",
 ]
 
 

@@ -82,6 +82,12 @@ proposals = Table(
     # whether that is the rule based dock fallback after the model recommended nothing.
     Column("action", String(16), nullable=False, server_default=text("'drive'")),
     Column("fallback", Boolean, nullable=False, server_default=text("false")),
+    # A recommendation below the confidence threshold (revision 0007): offered as `action` or as
+    # the alternative next to the fallback, or refused with the reason; the approved option.
+    Column("low_confidence", Boolean, nullable=False, server_default=text("false")),
+    Column("alternative_action", String(16)),
+    Column("model_refused", String(300)),
+    Column("approved_option", String(16)),
     Index("ix_proposals_account_mower_created", "account_id", "mower_id", "created_at"),
     Index("ix_proposals_chain", "chain_id", "round"),
     Index("ix_proposals_state_updated", "state", "updated_at"),

@@ -230,14 +230,26 @@ class VisionProposalCreated(ContractModel):
     )
     action: Literal["drive", "return_to_dock", "resume"] = Field(
         default="drive",
-        description="`drive`: the drive steps; `return_to_dock`: the normal dock command, the "
-        "mower drives home on its mapped paths by itself; `resume`: the optional drive steps, "
-        "then the paused mowing job continues (`resume_mow`).",
+        description="The default option, what an approval without a choice executes. "
+        "`drive`: the drive steps; `return_to_dock`: the normal dock command, the mower drives "
+        "home on its mapped paths by itself; `resume`: the optional drive steps, then the "
+        "paused mowing job continues (`resume_mow`). With `alternative_action` set this is the "
+        "rule based fallback and the model's low-confidence recommendation is the alternative.",
     )
     fallback: bool = Field(
         default=False,
-        description="The model recommended nothing; the service offers return to dock as a "
-        "rule based fallback (it applies: the mower is in a mapped area linked to the dock).",
+        description="`action` is the rule based return to dock fallback, not the model's "
+        "recommendation (it applies: the mower is in a mapped area linked to the dock).",
+    )
+    low_confidence: bool = Field(
+        default=False,
+        description="The model's recommendation is offered although its confidence is below "
+        "the threshold: as `action`, or as `alternative_action` next to the fallback.",
+    )
+    alternative_action: Literal["drive", "return_to_dock", "resume"] | None = Field(
+        default=None,
+        description="The model's low-confidence recommendation offered next to the fallback "
+        "`action`; the user picks one in MowDeck. Null: only `action` is offered.",
     )
     expires_at: UtcDateTime = Field(description="Approval is refused after this time.")
     link: str = Field(
@@ -272,13 +284,23 @@ class VisionProposalUpdated(ContractModel):
     final: bool = Field(description="True for a state after which nothing changes any more.")
     action: Literal["drive", "return_to_dock", "resume"] | None = Field(
         default=None,
-        description="The proposed maneuver (`drive`, `return_to_dock`, or `resume`: optional "
-        "drive steps, then the paused job continues); null before the analysis decided one.",
+        description="The default option (`drive`, `return_to_dock`, or `resume`: optional "
+        "drive steps, then the paused job continues); once approved, the option that runs; "
+        "null before the analysis decided one.",
     )
     steps: int = Field(
         default=0, ge=0, le=6, description="Number of proposed drive steps (also for `resume`)."
     )
     fallback: bool = False
+    low_confidence: bool = Field(
+        default=False,
+        description="The model's recommendation is offered below the confidence threshold.",
+    )
+    alternative_action: Literal["drive", "return_to_dock", "resume"] | None = Field(
+        default=None,
+        description="The model's low-confidence recommendation next to the fallback `action` "
+        "(after an approval of it, `action` names it and this is null).",
+    )
     expires_at: UtcDateTime | None = Field(
         default=None, description="Approval deadline while `proposed`; null otherwise."
     )

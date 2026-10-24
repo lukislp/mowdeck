@@ -27,7 +27,18 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, Path, Query, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Body,
+    File,
+    Form,
+    Path,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from mowdeck_contracts.v1 import VisionTask
 
 from vision.adapters.api.deps import (
@@ -41,6 +52,7 @@ from vision.adapters.api.deps import (
     ServiceDep,
 )
 from vision.adapters.api.schemas import (
+    ApproveIn,
     FamilyOut,
     PreferencesIn,
     PreferencesOut,
@@ -243,11 +255,18 @@ async def proposal_image(
 
 
 @router.post("/proposals/{proposal_id}/approve")
-async def approve(access: ProposalDriver, service: ServiceDep) -> ProposalOut:
-    """Approve: the steps are driven on the caller's behalf (blades off, dead-man 1 s). One
-    approval per proposal; 409 ``vision-proposal-expired`` after ``expires_at``."""
+async def approve(
+    access: ProposalDriver,
+    service: ServiceDep,
+    body: Annotated[ApproveIn | None, Body()] = None,
+) -> ProposalOut:
+    """Approve: the chosen option runs on the caller's behalf (blades off, dead-man 1 s). The
+    optional body picks the option (``model`` or ``fallback``; omitted: the default
+    ``action``). One approval per proposal; 409 ``vision-proposal-expired`` after
+    ``expires_at``; 422 for an option the proposal does not offer."""
     principal, proposal = access
-    approved = await service.approve(principal, proposal.id)
+    option = body.option if body is not None else None
+    approved = await service.approve(principal, proposal.id, option)
     return ProposalOut.of(approved, await service.store.steps(approved.id))
 
 
