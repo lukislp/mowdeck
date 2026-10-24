@@ -526,6 +526,7 @@ async def harness(
     entitlements: FakeEntitlements | None = None,
     store: MemoryStore | None = None,
     bus: EventBus | None = None,
+    warm_litellm: bool = False,
     **overrides: Any,
 ) -> AsyncIterator[Harness]:
     """The app with fakes, inside its lifespan."""
@@ -546,7 +547,7 @@ async def harness(
         principal_resolver=keys.resolver(),
         entitlements=plans,
         sweep=False,
-        warm_litellm=False,
+        warm_litellm=warm_litellm,
     )
     async with lifespan_client(app) as client:
         h = Harness(client, app, memory, bus, authz, keys, provider_factory, plans, fleet)
