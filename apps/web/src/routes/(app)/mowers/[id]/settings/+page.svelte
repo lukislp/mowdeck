@@ -11,6 +11,7 @@
   import BridgeLinkPanel from '$lib/components/BridgeLinkPanel.svelte';
   import BridgeLinkSheet from '$lib/components/BridgeLinkSheet.svelte';
   import ConnectionForm from '$lib/components/ConnectionForm.svelte';
+  import DeviceSettingsPanel from '$lib/components/DeviceSettingsPanel.svelte';
   import DriveCalibrationPanel from '$lib/components/DriveCalibrationPanel.svelte';
   import DriveSpeedControl from '$lib/components/DriveSpeedControl.svelte';
   import FirmwarePanel from '$lib/components/FirmwarePanel.svelte';
@@ -51,6 +52,8 @@
   import { getLinkedAccount } from '$lib/linked/api';
   import { commands, permissions, realtime, sendCommand } from '$lib/live.svelte';
   import { BridgeLinkFlow } from '$lib/mower/bridge-link.svelte';
+  import { settingSpecs, settingsBlocker } from '$lib/mower/device-settings';
+  import { DeviceSettingsFlow } from '$lib/mower/device-settings.svelte';
   import {
     calibrationConditions,
     driveSpeedLocked,
@@ -157,6 +160,40 @@
       return typeof value === 'string' && value !== '' ? value : null;
     },
     existing: () => bridgeLink,
+  });
+
+  // --- the mower's own settings (ADR 0046) ------------------------------------------------------
+
+  /** The declared settings; the section shows only when the connection declares some. */
+  const settingSpecList = $derived(settingSpecs(caps));
+  /** `set_setting` needs `can_manage_mowers` (and the plan feature `control`, checked by Fleet). */
+  let canManageSettings = $state(false);
+  const deviceSettings = new DeviceSettingsFlow({
+    send: async (command) => (await commands.send(id, command)).id,
+    outcome: (commandId) => commands.get(commandId),
+    problemText: (error) => problemMessage(asProblem(error)),
+  });
+  const settingsBlock = $derived(
+    settingsBlocker({
+      allowed: canManageSettings,
+      features: accountPlan.current?.features ?? null,
+      restricted: accountPlan.restricted,
+      offline: snap === undefined || stale || ms?.activity === 'offline',
+    }),
+  );
+  $effect(() => {
+    void id;
+    deviceSettings.reset();
+  });
+  $effect(() => {
+    const mowerId = id;
+    void permissions.version;
+    void permissions
+      .check(mowerId, ['can_manage_mowers'])
+      .then((result) => {
+        if (mowerId === id) canManageSettings = result.can_manage_mowers;
+      })
+      .catch(() => (canManageSettings = false));
   });
 
   // --- manual driving: speed setting and drive calibration (ADR 0042) -------------------------
@@ -478,6 +515,17 @@
     </div>
   </form>
   <div class="links">
+    {#if settingSpecList.length}
+      <Panel label={m.devset_title()} testid="device-settings-section">
+        <DeviceSettingsPanel
+          specs={settingSpecList}
+          values={ms?.settings ?? null}
+          blocker={settingsBlock}
+          flow={deviceSettings}
+          now={clock.now}
+        />
+      </Panel>
+    {/if}
     {#if bridgeOffered}
       <Panel label={m.bridge_title()} testid="bridge-panel">
         <BridgeLinkPanel
