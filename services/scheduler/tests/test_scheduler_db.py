@@ -12,6 +12,7 @@ memory store, so both implementations behave the same. Locally::
 """
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -23,6 +24,7 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from mowdeck_contracts.v1 import MowerCapabilities
 from mowdeck_service_kit.db import async_database_url
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -133,7 +135,9 @@ def schedule_row(account_id: Any, name: str, **values: Any) -> Schedule:
         "updated_at": NOW,
         "days_of_week": [0, 4],
         "rain": {"enabled": True, "probability_threshold": 50},
-        "pattern": {"angle": 10},
+        "pattern": {"angle_deg": 10.0, "obstacle_detection": "sensitive"},
+        "blade_height_mm": 45,
+        "speed_mps": 0.6,
         "rotation_angles": [0.0, 90.0],
         "area_ids": ["front"],
         "next_run_at": NOW,
@@ -229,6 +233,89 @@ async def test_scheduler_db_store_contract(kind: str, monkeypatch: pytest.Monkey
                 raise RuntimeError("rollback")
         async with store.transaction() as tx:
             assert await tx.get_schedule(later.id) is not None
+
+
+@pytest.mark.parametrize("kind", STORES)
+async def test_scheduler_db_capabilities_keep_the_newest(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mower_id, account_id = uuid4(), uuid4()
+    first = MowerCapabilities(native_patterns=frozenset({"stripes"}))
+    second = MowerCapabilities(
+        native_patterns=frozenset({"stripes", "diagonal"}), blade_height_range_mm=(25, 70)
+    )
+    async with store_of(kind, monkeypatch) as store, store.transaction() as tx:
+        assert await tx.get_capabilities(mower_id) is None
+        assert await tx.put_capabilities(mower_id, account_id, NOW, first)
+        assert not await tx.put_capabilities(
+            mower_id, account_id, NOW - timedelta(minutes=1), second
+        )
+        assert await tx.get_capabilities(mower_id) == first
+        assert await tx.put_capabilities(mower_id, account_id, NOW + timedelta(minutes=1), second)
+        assert await tx.get_capabilities(mower_id) == second
+
+
+@needs_db
+async def test_scheduler_db_migration_0003_keeps_existing_schedules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Revision 0003 rewrites the free patterns of 0002 to ``SchedulePattern`` keys: the legacy
+    ``angle`` the web form wrote becomes ``angle_deg`` (as the runner sent it), anything outside
+    the contract goes, and every new option stays unset."""
+    patterns: dict[str, Any] = {
+        "legacy": {"angle": 200},
+        "both": {"angle": 10, "angle_deg": 30, "border_laps": 2},
+        "foreign": {"spacing_cm": 20, "name": "spiral", "border_laps": 9},
+        "options": {"order": "grid_first", "obstacle_laps": 1, "spacing_m": 0.3},
+        "none": None,
+    }
+    expected: dict[str, Any] = {
+        "legacy": {"angle_deg": 20.0},
+        "both": {"angle_deg": 30.0, "border_laps": 2},
+        "foreign": None,
+        "options": {"order": "grid_first", "obstacle_laps": 1, "spacing_m": 0.3},
+        "none": None,
+    }
+    async with temporary_database() as url:
+        await migrate(url, monkeypatch, "0002")
+        engine = create_async_engine(async_database_url(url))
+        try:
+            async with engine.begin() as conn:
+                for name, pattern in patterns.items():
+                    await conn.execute(
+                        text(
+                            "INSERT INTO schedules (id, account_id, name, target_type, target_id,"
+                            " kind, start_time, duration_minutes, timezone, owner, owner_subject,"
+                            " created_at, updated_at, pattern) VALUES (:id, :account, :name,"
+                            " 'mower', :target, 'weekly', '10:30', 60, 'Europe/Berlin',"
+                            " CAST(:owner AS jsonb), :subject, now(), now(),"
+                            " CAST(:pattern AS jsonb))"
+                        ),
+                        {
+                            "id": uuid4(),
+                            "account": uuid4(),
+                            "name": name,
+                            "target": uuid4(),
+                            "owner": json.dumps({"subject": str(uuid4()), "kind": "user"}),
+                            "subject": uuid4(),
+                            "pattern": None if pattern is None else json.dumps(pattern),
+                        },
+                    )
+            await migrate(url, monkeypatch)
+            async with engine.connect() as conn:
+                rows = (
+                    await conn.execute(
+                        text("SELECT name, pattern, blade_height_mm, speed_mps FROM schedules")
+                    )
+                ).all()
+            assert {row.name: row.pattern for row in rows} == expected
+            assert all(row.blade_height_mm is None and row.speed_mps is None for row in rows)
+            await migrate(url, monkeypatch, "0002", down=True)
+            async with engine.connect() as conn:
+                count = (await conn.execute(text("SELECT count(*) FROM schedules"))).scalar()
+            assert count == len(patterns)
+        finally:
+            await engine.dispose()
 
 
 @needs_db

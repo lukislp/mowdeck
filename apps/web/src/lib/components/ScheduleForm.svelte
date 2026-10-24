@@ -1,7 +1,11 @@
 <!--
   The schedule editor: target (a mower or a group), recurrence (weekday chips and a time, or
   every N days from an anchor date), the window, the areas of the target mower picked on its
-  map in mowing order, the mowing angle with a rotation list, the rain pause and the time zone.
+  map in mowing order, the start settings with a rotation list, the rain pause and the time zone.
+  The start settings use the start sheet's own controls (`MowOptions`), with exactly what the
+  target offers: the mower's capabilities, for a group what every member offers (the members
+  are listed with their models); a value left empty takes the mower's saved mow defaults, else
+  its own setting. Changing the target clears what the new target does not offer.
   Client checks mirror the Scheduler's rules (`$lib/schedules/form`) and run on submit, then
   live; the server's 422 answer lands on the same fields. The page owns loading and saving.
 -->
@@ -23,9 +27,11 @@
   import { telemetryApi } from '$lib/api/client';
   import type { ApiProblem } from '$lib/api/problem';
   import AreaPlan from '$lib/components/AreaPlan.svelte';
+  import MowOptions from '$lib/components/MowOptions.svelte';
   import SlowLoading from '$lib/components/SlowLoading.svelte';
   import type { MapTilesConfig } from '$lib/config';
   import { formatNumber, problemMessage } from '$lib/i18n';
+  import { displayModel } from '$lib/mower/limits';
   import { areaNamer, mapLabels } from '$lib/mower/map-labels';
   import { m } from '$lib/paraglide/messages';
   import { getLocale } from '$lib/paraglide/runtime';
@@ -39,6 +45,15 @@
     type FormIssues,
     type ScheduleFormState,
   } from '$lib/schedules/form';
+  import {
+    NO_OFFER,
+    commonOffer,
+    fitMowDraft,
+    mowBody,
+    mowSummary,
+    offersAnything,
+    type CapsLike,
+  } from '$lib/schedules/mow-options';
   import { formatDuration, weekdayShort } from '$lib/schedules/recurrence';
   import { WEEKDAYS, type Locale, type Weekday } from '$lib/schedules/types';
 
@@ -47,12 +62,18 @@
     name: string;
     /** Mowers: the custom names of their map areas. */
     areaNames?: Readonly<Record<string, string>>;
+    /** Groups: their mowers. */
+    related?: readonly string[];
   }
 
   interface Props {
     form: ScheduleFormState;
     mowers: Target[];
     groups: Target[];
+    /** Names of every mower the user sees, by id (a group's members). */
+    mowerNames?: Readonly<Record<string, string>>;
+    /** The mowers' capabilities by id; null while loading. */
+    capabilities?: Readonly<Record<string, CapsLike>> | null;
     /** The effective time zone of the saved schedule (or the site's), for the hint. */
     siteTimeZone?: string | null;
     tiles?: MapTilesConfig | null;
@@ -67,6 +88,8 @@
     form = $bindable(),
     mowers,
     groups,
+    mowerNames = {},
+    capabilities = null,
     siteTimeZone = null,
     tiles = null,
     pending = false,
@@ -186,7 +209,45 @@
     return value && value > 0 ? formatDuration(value) : null;
   });
 
-  // --- pattern: base angle and the rotation list ------------------------------------------------
+  // --- start settings: what the target's mowers offer -------------------------------------------
+
+  /** The mowers the schedule starts: the mower, or every member of the group. */
+  const members = $derived.by((): string[] => {
+    if (!form.targetId) return [];
+    if (form.targetType === 'mower') return [form.targetId];
+    return [...(groups.find((g) => g.id === form.targetId)?.related ?? [])];
+  });
+  const memberRows = $derived(
+    members.map((id) => {
+      const caps = capabilities?.[id] ?? null;
+      return {
+        id,
+        name: mowerNames[id] ?? mowers.find((x) => x.id === id)?.name ?? id.slice(0, 8),
+        model: caps ? displayModel(caps, null) : null,
+        known: caps !== null,
+      };
+    }),
+  );
+  /** One mower: what it declares; a group: what every member declares. */
+  const offer = $derived(
+    capabilities === null ? NO_OFFER : commonOffer(members.map((id) => capabilities[id])),
+  );
+  const mowParts = $derived(mowSummary({ ...mowBody(form.mow), rotation_angles: form.rotation }));
+
+  // Another target: what it does not offer is cleared (never moved into its range).
+  let fittedFor = untrack(() => `${form.targetType}:${form.targetId}`);
+  $effect(() => {
+    const key = `${form.targetType}:${form.targetId}`;
+    if (capabilities === null || key === fittedFor) return;
+    fittedFor = key;
+    const fitted = fitMowDraft(
+      untrack(() => form.mow),
+      offer,
+    );
+    form.mow = fitted;
+  });
+
+  // --- the rotation list -----------------------------------------------------------------------
 
   let newAngle = $state('');
   const rotationPresets: { label: string; angles: number[] }[] = [
@@ -472,81 +533,120 @@
     {#if err('areas')}<span class="error" role="alert">{err('areas')}</span>{/if}
   </Panel>
 
-  <Panel label={m.sched_section_pattern()}>
+  <Panel label={m.sched_section_pattern()} testid="sched-mow">
     <div class="fields">
-      <Field
-        id="sched-angle"
-        label={m.sched_angle()}
-        hint={m.sched_angle_hint()}
-        inputmode="decimal"
-        mono
-        bind:value={form.angle}
-        error={err('angle')}
-      />
-      <div class="rotation" data-invalid={issues.rotation ? 'true' : undefined}>
-        <span class="label">{m.sched_rotation()}</span>
-        <p class="hint small">{m.sched_rotation_hint()}</p>
-        {#if form.rotation.length}
-          <ol class="angles" data-testid="sched-rotation">
-            {#each form.rotation as angle, i (i)}
-              <li>
-                <span class="mono step">{i + 1}</span>
-                <span class="mono value">{formatNumber(angle, angle % 1 ? 1 : 0)}°</span>
-                <button
-                  type="button"
-                  class="mini turn"
-                  aria-label={m.sched_rotation_up()}
-                  disabled={i === 0}
-                  onclick={() => moveAngle(i, -1)}><Icon name="back" size={16} /></button
-                >
-                <button
-                  type="button"
-                  class="mini turn"
-                  aria-label={m.sched_rotation_down()}
-                  disabled={i === form.rotation.length - 1}
-                  onclick={() => moveAngle(i, 1)}><Icon name="chevron" size={16} /></button
-                >
-                <button
-                  type="button"
-                  class="mini"
-                  aria-label={m.remove()}
-                  onclick={() => removeAngle(i)}><Icon name="close" size={16} /></button
+      <div class="applies" data-testid="sched-mow-members">
+        <span class="label"
+          >{form.targetType === 'group'
+            ? m.sched_mow_applies_group({ count: members.length })
+            : m.sched_mow_applies_mower()}</span
+        >
+        {#if memberRows.length}
+          <ul class="members">
+            {#each memberRows as row (row.id)}
+              <li data-mower={row.id} data-known={row.known}>
+                <span class="member-name">{row.name}</span>
+                <span class="member-model mono"
+                  >{row.known ? (row.model ?? m.no_data()) : m.sched_mow_caps_unknown()}</span
                 >
               </li>
             {/each}
-          </ol>
+          </ul>
         {/if}
-        <div class="add">
-          <Field
-            id="sched-rotation-new"
-            label={m.sched_rotation_add_label()}
-            inputmode="decimal"
-            mono
-            bind:value={newAngle}
-          />
-          <Button
-            icon="plus"
-            disabled={!angleValid || form.rotation.length >= LIMITS.rotation}
-            testid="sched-rotation-add"
-            onclick={addAngle}>{m.sched_rotation_add()}</Button
-          >
-        </div>
-        <div class="presets">
-          {#each rotationPresets as preset (preset.label)}
-            <button
-              type="button"
-              class="preset mono"
-              onclick={() => (form.rotation = [...preset.angles])}>{preset.label}</button
-            >
-          {/each}
-          {#if form.rotation.length}
-            <button type="button" class="preset" onclick={() => (form.rotation = [])}
-              >{m.sched_rotation_clear()}</button
-            >
-          {/if}
-        </div>
-        {#if err('rotation')}<span class="error" role="alert">{err('rotation')}</span>{/if}
+        {#if form.targetType === 'group' && members.length > 1}
+          <p class="hint small">{m.sched_mow_common_hint()}</p>
+        {/if}
       </div>
+      {#if capabilities === null}
+        <p class="hint" role="status"><SlowLoading /></p>
+      {:else if offersAnything(offer)}
+        <p class="mow-summary mono" data-testid="sched-mow-summary">
+          {mowParts.length ? mowParts.join(' · ') : m.sched_mow_defaults()}
+        </p>
+        <div class="mow-options" data-invalid={issues.mow ? 'true' : undefined}>
+          <MowOptions
+            unset
+            prefix="sched-mow"
+            offered={offer.offered}
+            spacing={offer.spacing}
+            options={offer.options}
+            bladeRange={offer.blade}
+            speedRange={offer.speed}
+            bind:draft={form.mow.pattern}
+            bind:setpoints={form.mow.setpoints}
+          />
+        </div>
+        <p class="hint small">{m.sched_mow_hint()}</p>
+      {:else}
+        <p class="hint" data-testid="sched-mow-none">{m.sched_mow_none_offered()}</p>
+      {/if}
+      {#if err('mow')}<span class="error" role="alert">{err('mow')}</span>{/if}
+      {#if offer.offered.length}
+        <div class="rotation" data-invalid={issues.rotation ? 'true' : undefined}>
+          <span class="label">{m.sched_rotation()}</span>
+          <p class="hint small">{m.sched_rotation_hint()}</p>
+          {#if form.rotation.length}
+            <ol class="angles" data-testid="sched-rotation">
+              {#each form.rotation as angle, i (i)}
+                <li>
+                  <span class="mono step">{i + 1}</span>
+                  <span class="mono value">{formatNumber(angle, angle % 1 ? 1 : 0)}°</span>
+                  <button
+                    type="button"
+                    class="mini turn"
+                    aria-label={m.sched_rotation_up()}
+                    disabled={i === 0}
+                    onclick={() => moveAngle(i, -1)}><Icon name="back" size={16} /></button
+                  >
+                  <button
+                    type="button"
+                    class="mini turn"
+                    aria-label={m.sched_rotation_down()}
+                    disabled={i === form.rotation.length - 1}
+                    onclick={() => moveAngle(i, 1)}><Icon name="chevron" size={16} /></button
+                  >
+                  <button
+                    type="button"
+                    class="mini"
+                    aria-label={m.remove()}
+                    onclick={() => removeAngle(i)}><Icon name="close" size={16} /></button
+                  >
+                </li>
+              {/each}
+            </ol>
+          {/if}
+          <div class="add">
+            <Field
+              id="sched-rotation-new"
+              label={m.sched_rotation_add_label()}
+              inputmode="decimal"
+              mono
+              bind:value={newAngle}
+            />
+            <Button
+              icon="plus"
+              disabled={!angleValid || form.rotation.length >= LIMITS.rotation}
+              testid="sched-rotation-add"
+              onclick={addAngle}>{m.sched_rotation_add()}</Button
+            >
+          </div>
+          <div class="presets">
+            {#each rotationPresets as preset (preset.label)}
+              <button
+                type="button"
+                class="preset mono"
+                onclick={() => (form.rotation = [...preset.angles])}>{preset.label}</button
+              >
+            {/each}
+            {#if form.rotation.length}
+              <button type="button" class="preset" onclick={() => (form.rotation = [])}
+                >{m.sched_rotation_clear()}</button
+              >
+            {/if}
+          </div>
+          {#if err('rotation')}<span class="error" role="alert">{err('rotation')}</span>{/if}
+        </div>
+      {/if}
     </div>
   </Panel>
 
@@ -830,6 +930,60 @@
   .mono {
     font-family: var(--md-font-mono);
     font-variant-numeric: tabular-nums;
+  }
+
+  .members {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--md-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .members li {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--md-space-2);
+    padding: var(--md-space-1) var(--md-space-2);
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+    border-radius: var(--md-radius-1);
+    font-size: var(--md-font-size-14);
+  }
+
+  .members li[data-known='false'] {
+    border-style: dashed;
+  }
+
+  .member-name {
+    font-weight: var(--md-weight-medium);
+  }
+
+  .member-model {
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+  }
+
+  .applies {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md-space-1);
+  }
+
+  .mow-summary {
+    margin: 0;
+    padding: var(--md-space-2) var(--md-space-3);
+    border-inline-start: 3px solid var(--md-color-ink);
+    background: var(--md-color-surface-sunken);
+    font-size: var(--md-font-size-14);
+    line-height: var(--md-line-20);
+    font-weight: var(--md-weight-medium);
+  }
+
+  .mow-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md-space-3);
   }
 
   .rotation {

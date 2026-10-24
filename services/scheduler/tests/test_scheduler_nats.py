@@ -1,6 +1,6 @@
 """NATS: a manual run goes over core NATS to Fleet (``fleet.commands.issue``), Fleet publishes the
-command on JetStream, the gateway's results come back, and the map snapshot on the ``DEVICE``
-stream gives the Scheduler the mower's areas and location.
+command on JetStream, the gateway's results come back, and the map and capability snapshots on
+the ``DEVICE`` stream give the Scheduler the mower's areas, location and capabilities.
 
 Runs when ``MOWDECK_TEST_NATS_URL`` is set (CI starts NATS 2.15 with JetStream). Locally::
 
@@ -47,6 +47,12 @@ async def test_scheduler_nats_run_now_goes_through_fleet() -> None:
                 return mower_id in h.store.data.places
 
             await eventually(mapped)
+            await h.capabilities(mower_id, owner.account_id, native_patterns=["stripes"])
+
+            async def capable() -> bool:
+                return mower_id in h.store.data.capabilities
+
+            await eventually(capable)
             created = await h.schedule(
                 owner, target_type="mower", target_id=str(mower_id), area_ids=[]
             )

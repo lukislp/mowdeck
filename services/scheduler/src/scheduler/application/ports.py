@@ -14,6 +14,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import (
     IssueCommandReply,
     IssueCommandRequest,
+    MowerCapabilities,
     ResolveTargetReply,
     ScheduleDisabled,
     ScheduleRunRecorded,
@@ -96,6 +97,20 @@ class Tx(Protocol):
 
     async def get_place(self, mower_id: UUID) -> MowerPlace | None:
         """The map facts of a mower."""
+        ...
+
+    async def put_capabilities(
+        self,
+        mower_id: UUID,
+        account_id: UUID,
+        observed_at: datetime,
+        capabilities: MowerCapabilities,
+    ) -> bool:
+        """Store a mower's capabilities unless newer ones are stored; True if stored."""
+        ...
+
+    async def get_capabilities(self, mower_id: UUID) -> MowerCapabilities | None:
+        """The latest capabilities of a mower; None when its gateway never reported any."""
         ...
 
     async def purge_runs(self, before: datetime) -> int:

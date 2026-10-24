@@ -167,7 +167,7 @@
             }
           ],
           "default": null,
-          "description": "The mower's saved mowing defaults (`MowerOut.mow_defaults.pattern`); None when none are saved. A schedule starts from them and sets only its angle."
+          "description": "The mower's saved mowing defaults (`MowerOut.mow_defaults.pattern`); None when none are saved. A scheduled start begins with them and lays the keys the schedule sets (`SchedulePattern`) over them."
         },
         "mower_id": {
           "format": "uuid",

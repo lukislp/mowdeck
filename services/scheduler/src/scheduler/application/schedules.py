@@ -9,6 +9,12 @@ or changes a schedule becomes its owner: firings run on the owner's behalf and r
 keep the owner, so a toggle from an API token (Home Assistant) does not hand the schedule to
 the token; re-enabling a schedule the Scheduler disabled itself (``disabled_reason``, the owner
 lost ``can_control``) makes the caller the owner, else it would be disabled again.
+
+Start settings (ADR 0024 amendment of 2026-10-24): what a schedule sets beyond the angle and the
+border laps (pattern name, spacing, job options, blade height, speed) must fit every mower of its
+target, judged by the capabilities each mower's gateway reported. A group schedule is checked
+per member, so it can only set what all of them offer; the check runs when the schedule is
+created and whenever its settings or its target change.
 """
 
 from collections.abc import Mapping
@@ -29,10 +35,10 @@ from mowdeck_service_kit.entitlements import (
 
 from scheduler.application.access import Access, subject_of, target_object
 from scheduler.application.context import SchedulerConfig
-from scheduler.application.ports import Clock, FleetGateway, Store
+from scheduler.application.ports import Clock, FleetGateway, Store, Tx
 from scheduler.application.runner import compute_next
 from scheduler.application.weather import WeatherAnswer, WeatherService
-from scheduler.domain.errors import ConflictError, ForbiddenError, NotFoundError
+from scheduler.domain.errors import ConflictError, ForbiddenError, InvalidInput, NotFoundError
 from scheduler.domain.models import Schedule, ScheduleRun
 from scheduler.domain.rain import RainSettings
 from scheduler.domain.recurrence import upcoming
@@ -40,6 +46,8 @@ from scheduler.domain.rules import (
     CAN_CONTROL,
     CAN_EDIT_SCHEDULE,
     CAN_VIEW,
+    mower_problem,
+    sets_mower_options,
     validate_schedule,
     window_end,
 )
@@ -63,6 +71,8 @@ EDITABLE = frozenset(
         "timezone_override",
         "area_ids",
         "pattern",
+        "blade_height_mm",
+        "speed_mps",
         "rotation_angles",
         "rain",
         "pause_running_jobs_on_rain",
@@ -89,6 +99,8 @@ class ScheduleInput:
     timezone_override: str | None = None
     area_ids: list[str] = field(default_factory=list)
     pattern: dict[str, Any] | None = None
+    blade_height_mm: int | None = None
+    speed_mps: float | None = None
     rotation_angles: list[float] = field(default_factory=list)
     rain: dict[str, Any] = field(default_factory=lambda: RainSettings().to_json())
     pause_running_jobs_on_rain: bool = True
@@ -149,6 +161,22 @@ class ScheduleService:
         if not reply.found or reply.timezone is None:
             raise NotFoundError(f"{target_type} not found")
         return reply.timezone
+
+    async def _check_mowers(self, tx: Tx, item: Schedule) -> None:
+        """The start settings must fit every mower of the target (``InvalidInput`` naming
+        each mower that does not offer them)."""
+        if not sets_mower_options(item):
+            return
+        reply = await self.fleet.resolve(item.account_id, item.target_type, item.target_id)
+        if not reply.found:
+            raise NotFoundError(f"{item.target_type} not found")
+        problems = []
+        for target in reply.mowers:
+            problem = mower_problem(item, await tx.get_capabilities(target.mower_id))
+            if problem is not None:
+                problems.append(f"{target.name}: {problem}")
+        if problems:
+            raise InvalidInput("start settings do not fit " + "; ".join(problems))
 
     async def _load(self, account_id: UUID, schedule_id: UUID) -> Schedule:
         async with self.store.transaction() as tx:
@@ -280,6 +308,8 @@ class ScheduleService:
             timezone_override=data.timezone_override,
             area_ids=list(data.area_ids),
             pattern=data.pattern,
+            blade_height_mm=data.blade_height_mm,
+            speed_mps=data.speed_mps,
             rotation_angles=list(data.rotation_angles),
             rain=dict(data.rain),
             pause_running_jobs_on_rain=data.pause_running_jobs_on_rain,
@@ -289,6 +319,7 @@ class ScheduleService:
         validate_schedule(item)
         item.next_run_at = compute_next(item, now) if item.enabled else None
         async with self.store.transaction() as tx:
+            await self._check_mowers(tx, item)
             existing = await tx.count_schedules(account_id)
             if existing >= self.config.max_schedules_per_account:
                 limit = self.config.max_schedules_per_account
@@ -326,6 +357,7 @@ class ScheduleService:
             if item is None:
                 raise NotFoundError(_NOT_FOUND)
             was_enabled = item.enabled
+            settings_before = (item.pattern, item.blade_height_mm, item.speed_mps)
             takes_over = bool(set(changes) - OWNER_NEUTRAL) or (
                 item.enabled is False
                 and changes.get("enabled") is True
@@ -340,6 +372,12 @@ class ScheduleService:
                 item.owner = principal.ref().model_dump(mode="json")
                 item.owner_subject = principal.subject
             validate_schedule(item)
+            if target_changed or settings_before != (
+                item.pattern,
+                item.blade_height_mm,
+                item.speed_mps,
+            ):
+                await self._check_mowers(tx, item)
             if item.enabled and not was_enabled:
                 item.permission_skips = 0
                 item.disabled_reason = None

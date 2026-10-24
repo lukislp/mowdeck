@@ -5,6 +5,7 @@
  */
 import type { ApiProblem } from '$lib/api/problem';
 
+import { emptyMow, mowBody, mowDraftOf, type MowDraft } from './mow-options';
 import { clockTime } from './recurrence';
 import { isWeekday, WEEKDAYS, type Schedule, type ScheduleIn, type Weekday } from './types';
 
@@ -23,9 +24,9 @@ export interface ScheduleFormState {
   duration: string;
   /** Areas in mowing order (a mower target; empty means every area). */
   areaIds: string[];
-  /** Base mowing angle in degrees (`pattern.angle`), empty for the mower's own. */
-  angle: string;
-  /** Angles used round robin, one per run. */
+  /** The start settings (`$lib/schedules/mow-options`): pattern keys and setpoints. */
+  mow: MowDraft;
+  /** Angles used round robin, one per run (replace the angle). */
   rotation: number[];
   rainEnabled: boolean;
   probability: string;
@@ -49,7 +50,7 @@ export type FormField =
   | 'interval_days'
   | 'duration'
   | 'areas'
-  | 'angle'
+  | 'mow'
   | 'rotation'
   | 'probability'
   | 'precipitation'
@@ -76,7 +77,6 @@ export const LIMITS = {
   name: 100,
   intervalDays: [1, 365],
   duration: [1, 24 * 60],
-  angle: [-360, 360],
   rotation: 24,
   areas: 50,
   probability: [0, 100],
@@ -124,7 +124,7 @@ export function emptyForm(
     intervalDays: '3',
     duration: '120',
     areaIds: [],
-    angle: '',
+    mow: emptyMow(),
     rotation: [],
     rainEnabled: true,
     probability: '60',
@@ -141,7 +141,6 @@ export function emptyForm(
 
 /** The form of a stored schedule. */
 export function fromSchedule(schedule: Schedule): ScheduleFormState {
-  const angle = schedule.pattern?.['angle'];
   return {
     name: schedule.name,
     targetType: schedule.target_type === 'group' ? 'group' : 'mower',
@@ -153,7 +152,7 @@ export function fromSchedule(schedule: Schedule): ScheduleFormState {
     intervalDays: String(schedule.interval_days ?? 3),
     duration: String(schedule.duration_minutes),
     areaIds: [...schedule.area_ids],
-    angle: typeof angle === 'number' ? String(angle) : '',
+    mow: mowDraftOf(schedule),
     rotation: [...schedule.rotation_angles],
     rainEnabled: schedule.rain_pause.enabled,
     probability: String(schedule.rain_pause.probability_threshold),
@@ -211,7 +210,6 @@ export function validateForm(state: ScheduleFormState): FormIssues {
   set('duration', checkInteger(state.duration, LIMITS.duration));
   if (state.targetType === 'group' && state.areaIds.length) set('areas', { code: 'group_areas' });
   else if (state.areaIds.length > LIMITS.areas) set('areas', { code: 'count', max: LIMITS.areas });
-  if (state.angle.trim()) set('angle', checkNumber(state.angle, LIMITS.angle));
   if (state.rotation.length > LIMITS.rotation) {
     set('rotation', { code: 'count', max: LIMITS.rotation });
   } else if (state.rotation.some((a) => !Number.isFinite(a) || a < -360 || a > 360)) {
@@ -227,22 +225,8 @@ export function validateForm(state: ScheduleFormState): FormIssues {
   return issues;
 }
 
-/** The pattern to send: the stored one (other keys kept) with the base angle set or removed. */
-function patternOf(
-  state: ScheduleFormState,
-  base: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  const rest = Object.fromEntries(Object.entries(base ?? {}).filter(([key]) => key !== 'angle'));
-  const angle = state.angle.trim() ? parseNumber(state.angle) : null;
-  if (angle !== null) rest['angle'] = angle;
-  return Object.keys(rest).length ? rest : null;
-}
-
 /** The request body (`POST /schedules`; `PATCH` takes the same fields). Validate first. */
-export function toBody(
-  state: ScheduleFormState,
-  basePattern?: Record<string, unknown> | null,
-): ScheduleIn {
+export function toBody(state: ScheduleFormState): ScheduleIn {
   const int = (text: string, fallback: number) => {
     const value = parseNumber(text);
     return value === null ? fallback : Math.round(value);
@@ -259,7 +243,7 @@ export function toBody(
     interval_days: weekly ? null : int(state.intervalDays, 1),
     duration_minutes: int(state.duration, 120),
     area_ids: state.targetType === 'group' ? [] : [...state.areaIds],
-    pattern: patternOf(state, basePattern),
+    ...mowBody(state.mow),
     rotation_angles: [...state.rotation],
     rain_pause: {
       enabled: state.rainEnabled,
@@ -287,7 +271,9 @@ const FIELD_OF_KEY: Record<string, FormField> = {
   interval_days: 'interval_days',
   duration_minutes: 'duration',
   area_ids: 'areas',
-  pattern: 'angle',
+  pattern: 'mow',
+  blade_height_mm: 'mow',
+  speed_mps: 'mow',
   rotation_angles: 'rotation',
   probability_threshold: 'probability',
   precipitation_mm_threshold: 'precipitation',
@@ -305,7 +291,9 @@ const FIELD_OF_MESSAGE: [RegExp, FormField][] = [
   [/^duration_minutes/, 'duration'],
   [/area_ids/, 'areas'],
   [/^rotation_angles/, 'rotation'],
-  [/^pattern/, 'angle'],
+  [/^pattern/, 'mow'],
+  [/^start settings/, 'mow'],
+  [/^(blade_height_mm|speed_mps)/, 'mow'],
   [/time zone/, 'timezone'],
   [/probability_threshold/, 'probability'],
   [/precipitation_mm_threshold/, 'precipitation'],

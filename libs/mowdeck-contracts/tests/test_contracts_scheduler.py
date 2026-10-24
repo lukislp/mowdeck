@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from mowdeck_contracts.v1 import (
+    SCHEDULE_PATTERN_KEYS,
     SCHEDULER_RUN_RECORDED,
     SCHEDULER_SCHEDULE_DISABLED,
     CommandAccepted,
@@ -15,10 +16,14 @@ from mowdeck_contracts.v1 import (
     IssueCommandErrorCode,
     IssueCommandReply,
     IssueCommandRequest,
+    MowerCapabilities,
+    ObstacleDetection,
+    PathOrder,
     PrincipalKind,
     PrincipalRef,
     ResolveTargetReply,
     ResolveTargetRequest,
+    SchedulePattern,
     ScheduleRunOutcome,
     ScheduleRunRecorded,
     StartMow,
@@ -112,3 +117,84 @@ def test_contracts_scheduler_subjects_and_command_view_origin() -> None:
         "event.scheduler.schedule.disabled"
     )
     assert "origin" in CommandView.model_fields and "schedule_id" in CommandView.model_fields
+
+
+# --- SchedulePattern (ADR 0024 amendment 2026-10-24) -------------------------------------------
+
+
+def _caps(**values: object) -> MowerCapabilities:
+    return MowerCapabilities.model_validate(values)
+
+
+AWD = {
+    "native_patterns": ["stripes", "diagonal", "checkerboard"],
+    "path_spacing_range_mm": [200, 350],
+    "start_options": {
+        "obstacle_detection": ["off", "standard", "sensitive"],
+        "obstacle_laps_range": [0, 4],
+        "orders": ["border_first", "grid_first"],
+        "start_progress_range_pct": [0, 99],
+    },
+}
+
+
+def test_schedule_pattern_is_all_optional_and_dumps_only_what_is_set() -> None:
+    assert SchedulePattern().keys() == {}
+    pattern = SchedulePattern(
+        name="diagonal", angle_deg=45, obstacle_detection=ObstacleDetection.SENSITIVE
+    )
+    assert pattern.keys() == {
+        "name": "diagonal",
+        "angle_deg": 45.0,
+        "obstacle_detection": "sensitive",
+    }
+    assert set(SchedulePattern.model_fields) == set(SCHEDULE_PATTERN_KEYS)
+
+
+def test_schedule_pattern_has_no_start_progress() -> None:
+    # A tolerant reader ignores the key; the Scheduler API refuses it (extra fields are 422).
+    assert "start_progress_pct" not in SchedulePattern.model_fields
+    assert SchedulePattern.model_validate({"start_progress_pct": 40}).keys() == {}
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"name": "spiral"},
+        {"angle_deg": -1},
+        {"angle_deg": 181},
+        {"border_laps": 5},
+        {"spacing_m": 0.01},
+        {"obstacle_detection": "loud"},
+        {"obstacle_laps": 5},
+        {"order": "sideways"},
+    ],
+)
+def test_schedule_pattern_refuses_values_out_of_the_contract(values: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        SchedulePattern.model_validate(values)
+
+
+def test_schedule_pattern_problem_follows_the_capabilities() -> None:
+    awd = _caps(**AWD)
+    bare = _caps(native_patterns=["stripes"])
+    full = SchedulePattern(
+        name="diagonal",
+        angle_deg=30,
+        border_laps=2,
+        spacing_m=0.3,
+        obstacle_detection=ObstacleDetection.SENSITIVE,
+        obstacle_laps=1,
+        order=PathOrder.GRID_FIRST,
+    )
+    assert full.problem(awd) is None
+    # Angle and border laps need no declaration.
+    assert SchedulePattern(angle_deg=90, border_laps=4).problem(bare) is None
+    assert SchedulePattern(name="diagonal").problem(bare) == "pattern 'diagonal' is not offered"
+    assert "spacing" in (SchedulePattern(spacing_m=0.3).problem(bare) or "")
+    assert "between 0.2 and 0.35" in (SchedulePattern(spacing_m=0.4).problem(awd) or "")
+    assert "obstacle detection" in (
+        SchedulePattern(obstacle_detection=ObstacleDetection.STANDARD).problem(bare) or ""
+    )
+    assert "no-go" in (SchedulePattern(obstacle_laps=1).problem(bare) or "")
+    assert "path order" in (SchedulePattern(order=PathOrder.GRID_FIRST).problem(bare) or "")

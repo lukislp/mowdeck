@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "ObstacleDetection": {
+      "description": "How eagerly the mower avoids obstacles during a native job (``MowPattern``).\n\nWhich modes a mower offers depends on its model and firmware\n(``MowerCapabilities.start_options.obstacle_detection``). The names follow the vendor apps:\n``off`` is the plain bump-and-turn behaviour, ``standard`` avoids obstacles it sees ahead,\n``sensitive`` additionally avoids areas that are not lawn; ``slow_touch`` and\n``less_touch`` exist only on older firmware.",
+      "enum": [
+        "off",
+        "slow_touch",
+        "less_touch",
+        "standard",
+        "sensitive"
+      ],
+      "title": "ObstacleDetection",
+      "type": "string"
+    },
+    "PathOrder": {
+      "description": "Whether the border laps run before or after the fill of a native job.",
+      "enum": [
+        "border_first",
+        "grid_first"
+      ],
+      "title": "PathOrder",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The start settings one schedule sets for each of its runs (ADR 0024 amendment of\n2026-10-24): the keys of :class:`MowPattern` that make sense for a recurring job, each\noptional. A key left out (None) is not part of the schedule: the run takes it from the\nmower's mow defaults in Fleet, and without those the mower keeps its own setting (for the\npattern, angle and border laps the clients' fallback, stripes at 0 degrees with one lap).\n\n``start_progress_pct`` is not offered: it skips the first part of one job's route, which\nonly makes sense to resume an interrupted job, never for every run of a schedule.\n\nWhich values fit one mower is decided with its :class:`MowerCapabilities`\n(:meth:`problem`); a group schedule must fit every mower of the group.",
+  "properties": {
+    "angle_deg": {
+      "anyOf": [
+        {
+          "maximum": 180,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run.",
+      "title": "Angle Deg"
+    },
+    "border_laps": {
+      "anyOf": [
+        {
+          "maximum": 4,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Border Laps"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "enum": [
+            "stripes",
+            "diagonal",
+            "checkerboard",
+            "edge_only",
+            "random_angle"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The native pattern; null: the mow defaults'.",
+      "title": "Name"
+    },
+    "obstacle_detection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ObstacleDetection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Needs the mode in `start_options.obstacle_detection`."
+    },
+    "obstacle_laps": {
+      "anyOf": [
+        {
+          "maximum": 4,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Needs `start_options.obstacle_laps_range`.",
+      "title": "Obstacle Laps"
+    },
+    "order": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PathOrder"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Needs the order in `orders`."
+    },
+    "spacing_m": {
+      "anyOf": [
+        {
+          "maximum": 2.0,
+          "minimum": 0.05,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Path spacing in metres; needs `MowerCapabilities.path_spacing_range_mm`.",
+      "title": "Spacing M"
+    }
+  },
+  "title": "SchedulePattern",
+  "type": "object"
+}

@@ -1,6 +1,6 @@
 <!--
-  The page body of `/schedules/new` and `/schedules/[id]`: loads the schedule, the targets and
-  the rights, shows the form with the preview beside it (the rain verdict, the forecast strip,
+  The page body of `/schedules/new` and `/schedules/[id]`: loads the schedule, the targets,
+  the rights and the mowers' capabilities (what the start settings may offer), shows the form with the preview beside it (the rain verdict, the forecast strip,
   the next firings), saves with POST or PATCH and deletes. Without the right to edit the target
   the schedule is shown read-only (summary and preview); the Scheduler decides in every case.
 -->
@@ -27,8 +27,10 @@
     toBody,
     type ScheduleFormState,
   } from '$lib/schedules/form';
+  import { mowSummary, type CapsLike } from '$lib/schedules/mow-options';
   import { recurrenceSummary } from '$lib/schedules/recurrence';
   import {
+    loadCapabilities,
     loadPreview,
     loadTargets,
     siteTimeZone,
@@ -42,6 +44,10 @@
 
   let schedule = $state<Schedule | null>(null);
   let targets = $state<Targets>({ mowers: [], groups: [], sites: [] });
+  /** Names of every mower the user sees (a group's members may not all be editable). */
+  let mowerNames = $state<Record<string, string>>({});
+  /** Capabilities by mower id; null while loading. */
+  let capabilities = $state.raw<Record<string, CapsLike> | null>(null);
   let form = $state<ScheduleFormState | null>(null);
   let loadProblem = $state<ApiProblem | null>(null);
   let saveProblem = $state<ApiProblem | null>(null);
@@ -60,8 +66,7 @@
   const dirty = $derived(
     !!schedule &&
       !!form &&
-      JSON.stringify(toBody(form, schedule.pattern)) !==
-        JSON.stringify(toBody(fromSchedule(schedule), schedule.pattern)),
+      JSON.stringify(toBody(form)) !== JSON.stringify(toBody(fromSchedule(schedule))),
   );
   const rain = $derived<RainPause>(
     schedule?.rain_pause ?? {
@@ -86,7 +91,10 @@
   async function load(current: string | null): Promise<void> {
     loadProblem = null;
     try {
+      const caps = loadCapabilities();
       targets = await loadTargets();
+      mowerNames = Object.fromEntries(targets.mowers.map((x) => [x.id, x.name]));
+      void caps.then((found) => (capabilities = found));
       if (current) {
         schedule = await unwrap(
           schedulerApi.GET('/api/v1/scheduler/schedules/{schedule_id}', {
@@ -173,7 +181,7 @@
       schedule = await unwrap(
         schedulerApi.PATCH('/api/v1/scheduler/schedules/{schedule_id}', {
           params: { path: { schedule_id: id } },
-          body: toBody(values, schedule?.pattern),
+          body: toBody(values),
         }),
       );
       form = fromSchedule(schedule);
@@ -256,6 +264,8 @@
           bind:form={() => form!, (value) => (form = value)}
           mowers={targets.mowers}
           groups={targets.groups}
+          {mowerNames}
+          {capabilities}
           siteTimeZone={zone}
           {tiles}
           pending={saving}
@@ -304,6 +314,12 @@
             <Readout
               label={m.sched_timezone()}
               value={schedule.timezone}
+              size="inline"
+              emptyText={m.no_data()}
+            />
+            <Readout
+              label={m.sched_section_pattern()}
+              value={mowSummary(schedule).join(' · ') || m.sched_mow_defaults()}
               size="inline"
               emptyText={m.no_data()}
             />

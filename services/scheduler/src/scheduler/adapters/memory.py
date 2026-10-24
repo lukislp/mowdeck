@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
+from mowdeck_contracts.v1 import MowerCapabilities
+
 from scheduler.domain.models import MowerPlace, MowerStatus, Schedule, ScheduleRun
 
 
@@ -21,6 +23,7 @@ class MemoryData:
     runs: dict[UUID, ScheduleRun] = field(default_factory=dict)
     status: dict[UUID, MowerStatus] = field(default_factory=dict)
     places: dict[UUID, MowerPlace] = field(default_factory=dict)
+    capabilities: dict[UUID, tuple[datetime, MowerCapabilities]] = field(default_factory=dict)
 
 
 class MemoryTx:
@@ -115,6 +118,24 @@ class MemoryTx:
     async def get_place(self, mower_id: UUID) -> MowerPlace | None:
         return copy.deepcopy(self._data.places.get(mower_id))
 
+    async def put_capabilities(
+        self,
+        mower_id: UUID,
+        account_id: UUID,
+        observed_at: datetime,
+        capabilities: MowerCapabilities,
+    ) -> bool:
+        del account_id
+        current = self._data.capabilities.get(mower_id)
+        if current is not None and current[0] >= observed_at:
+            return False
+        self._data.capabilities[mower_id] = (observed_at, capabilities)
+        return True
+
+    async def get_capabilities(self, mower_id: UUID) -> MowerCapabilities | None:
+        found = self._data.capabilities.get(mower_id)
+        return found[1] if found else None
+
     async def purge_runs(self, before: datetime) -> int:
         doomed = [
             r.id
@@ -150,4 +171,5 @@ class MemoryStore:
                 self.data.runs = snapshot.runs
                 self.data.status = snapshot.status
                 self.data.places = snapshot.places
+                self.data.capabilities = snapshot.capabilities
                 raise

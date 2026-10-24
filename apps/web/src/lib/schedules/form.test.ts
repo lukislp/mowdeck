@@ -13,6 +13,7 @@ import {
   validateForm,
   type ScheduleFormState,
 } from './form';
+import { emptyMow } from './mow-options';
 import type { Schedule } from './types';
 
 const MOWER = '11111111-1111-4111-8111-111111111111';
@@ -33,7 +34,17 @@ const stored: Schedule = {
   anchor_date: null,
   interval_days: null,
   area_ids: ['front', 'back'],
-  pattern: { angle: 45, mode: 'zigzag' },
+  pattern: {
+    name: 'diagonal',
+    angle_deg: 45,
+    border_laps: null,
+    spacing_m: 0.25,
+    obstacle_detection: 'sensitive',
+    obstacle_laps: null,
+    order: null,
+  },
+  blade_height_mm: 40,
+  speed_mps: null,
   rotation_angles: [0, 90],
   rotation_index: 1,
   rain_pause: {
@@ -88,7 +99,6 @@ describe('validateForm', () => {
         days: [],
         startTime: '25:00',
         duration: '0',
-        angle: '400',
         rotation: [0, 500],
         probability: '101',
         precipitation: 'x',
@@ -103,7 +113,6 @@ describe('validateForm', () => {
       days: { code: 'days' },
       start_time: { code: 'format' },
       duration: { code: 'range', min: 1, max: 1440 },
-      angle: { code: 'range', min: -360, max: 360 },
       rotation: { code: 'range', min: -360, max: 360 },
       probability: { code: 'range', min: 0, max: 100 },
       precipitation: { code: 'number' },
@@ -139,7 +148,11 @@ describe('validateForm', () => {
 
 describe('toBody and fromSchedule', () => {
   it('builds a weekly body in week order', () => {
-    const body = toBody(form({ days: ['fri', 'mon'], areaIds: ['back', 'front'], angle: '15' }));
+    const mow = emptyMow();
+    mow.pattern.angle = 15;
+    mow.pattern.options.order = 'grid_first';
+    mow.setpoints.speedMps = 0.6;
+    const body = toBody(form({ days: ['fri', 'mon'], areaIds: ['back', 'front'], mow }));
     expect(body).toMatchObject({
       name: 'Morning',
       target_type: 'mower',
@@ -150,7 +163,9 @@ describe('toBody and fromSchedule', () => {
       interval_days: null,
       duration_minutes: 120,
       area_ids: ['back', 'front'],
-      pattern: { angle: 15 },
+      pattern: { angle_deg: 15, order: 'grid_first' },
+      blade_height_mm: null,
+      speed_mps: 0.6,
       timezone: null,
     });
     expect(body.rain_pause).toEqual({
@@ -185,20 +200,33 @@ describe('toBody and fromSchedule', () => {
     expect(body.rain_pause?.precipitation_mm_threshold).toBe(1.5);
   });
 
-  it('round-trips a stored schedule and keeps unknown pattern keys', () => {
+  it('round-trips a stored schedule with its start settings', () => {
     const state = fromSchedule(stored);
+    expect(state.mow.pattern).toMatchObject({ name: 'diagonal', angle: 45, laps: null });
     expect(state).toMatchObject({
       startTime: '07:30',
       days: ['mon', 'thu'],
-      angle: '45',
       rotation: [0, 90],
       probability: '70',
       runWhenUnknown: false,
       returnAtWindowEnd: true,
       timezone: '',
     });
-    expect(toBody(state, stored.pattern).pattern).toEqual({ mode: 'zigzag', angle: 45 });
-    expect(toBody({ ...state, angle: '' }, stored.pattern).pattern).toEqual({ mode: 'zigzag' });
+    expect(toBody(state)).toMatchObject({
+      pattern: {
+        name: 'diagonal',
+        angle_deg: 45,
+        spacing_m: 0.25,
+        obstacle_detection: 'sensitive',
+      },
+      blade_height_mm: 40,
+      speed_mps: null,
+    });
+    expect(toBody({ ...state, mow: emptyMow() })).toMatchObject({
+      pattern: null,
+      blade_height_mm: null,
+      speed_mps: null,
+    });
   });
 });
 
@@ -226,6 +254,9 @@ describe('serverIssues', () => {
     expect(issue('a group schedule mows all areas of each mower (no area_ids)')).toHaveProperty(
       'areas',
     );
+    expect(
+      issue("start settings do not fit Yuka: pattern 'diagonal' is not offered"),
+    ).toHaveProperty('mow');
     expect(issue('something else')).toEqual({});
   });
 

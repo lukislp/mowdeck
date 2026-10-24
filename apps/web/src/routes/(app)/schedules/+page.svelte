@@ -11,6 +11,7 @@
   import { getLocale } from '$lib/paraglide/runtime';
   import { outcomeLook, verdictLook } from '$lib/schedules/labels';
   import { parsePreview } from '$lib/schedules/preview';
+  import { mowSummary } from '$lib/schedules/mow-options';
   import { formatCountdown, formatFiring, recurrenceSummary } from '$lib/schedules/recurrence';
   import {
     loadLastRun,
@@ -216,6 +217,7 @@
       {@const view = parsePreview(previews[schedule.id])}
       {@const right = rightsOf(rights, schedule)}
       {@const last = lastRuns[schedule.id]}
+      {@const mow = mowSummary(schedule)}
       <li
         class="row"
         class:off={!schedule.enabled}
@@ -235,6 +237,11 @@
         <p class="rule mono" data-testid="schedule-rule">
           {recurrenceSummary(schedule, locale)}
         </p>
+        {#if mow.length}
+          <ul class="mow mono" aria-label={m.sched_section_pattern()} data-testid="schedule-mow">
+            {#each mow as part, i (i)}<li>{part}</li>{/each}
+          </ul>
+        {/if}
 
         <dl class="gauges">
           <div class="gauge">
@@ -526,6 +533,23 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* The start settings the schedule sets, as a ruled strip: only what differs from the mower. */
+  .mow {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-13);
+    line-height: var(--md-line-20);
+  }
+
+  .mow li + li::before {
+    content: '·';
+    padding-inline: var(--md-space-1);
+  }
+
   .gauges {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -642,7 +666,8 @@
     }
 
     .head,
-    .rule {
+    .rule,
+    .mow {
       grid-column: 1;
     }
 
