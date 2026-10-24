@@ -10,7 +10,9 @@ publishes /.well-known/jwks.json (Compose services identity and identity-migrate
   "MOWDECK_IDENTITY_ARGON2_PROFILE" $c.IDENTITY_ARGON2_PROFILE
   "MOWDECK_IDENTITY_MODULE_URLS" (join "," $modules)
   "MOWDECK_IDENTITY_TRUST_FORWARDED_FOR" "true"
-  "MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE" $c.IDENTITY_REFRESH_COOKIE_SECURE) }}
+  "MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE" $c.IDENTITY_REFRESH_COOKIE_SECURE
+  "MOWDECK_IDENTITY_PUBLIC_URL" (default (include "mowdeck.publicOrigin" .) $c.IDENTITY_PUBLIC_URL)
+  "MOWDECK_IDENTITY_PASSKEY_RP_ID" (default "" $c.IDENTITY_PASSKEY_RP_ID)) }}
 {{- include "mowdeck.migrationJob" (dict "ctx" . "component" "identity" "key" "identity" "image" "identity" "module" "identity.adapters.db.migrate" "weight" 1) }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "identity" "key" "identity" "image" "identity"
   "env" $env "db" "identity" "migrateModule" "identity.adapters.db.migrate" "authz" true

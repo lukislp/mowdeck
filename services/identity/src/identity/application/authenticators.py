@@ -2,7 +2,7 @@
 
 * :class:`CredentialAuthenticator`: credentials in the request (password, API token, passkey).
   :class:`ChallengeAuthenticator` is a credential authenticator that first hands out a
-  challenge the credentials must answer (passkeys, ADR 0049).
+  challenge the credentials must answer (passkeys, ADR 0050).
 * :class:`RedirectAuthenticator`: a browser round trip to a provider (GitHub, OIDC). Phase 1
   defines the interface and registers a GitHub stub behind a feature flag that is off.
 
@@ -149,7 +149,7 @@ class ApiTokenAuthenticator:
 
 
 class PasskeyAuthenticator:
-    """Passwordless login with a discoverable WebAuthn credential (passkey), ADR 0049.
+    """Passwordless login with a discoverable WebAuthn credential (passkey), ADR 0050.
 
     ``challenge`` stores a single-use login challenge; ``authenticate`` takes
     ``{"ceremony_id", "credential"}`` (the ``PublicKeyCredential`` as JSON text), consumes the

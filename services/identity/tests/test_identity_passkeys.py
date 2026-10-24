@@ -1,4 +1,4 @@
-"""Passkeys (ADR 0049): registration, passwordless login, management, the native app hand-off.
+"""Passkeys (ADR 0050): registration, passwordless login, management, the native app hand-off.
 
 The ceremonies run end to end through the API and the real py_webauthn with a software
 authenticator (``passkey_support``); the negative cases bend one thing at a time.
@@ -18,7 +18,7 @@ from identity.domain.errors import InvalidInput
 from identity.domain.models import RelyingParty
 
 ORIGIN = "https://mowdeck.example.org"
-PASSKEYS = {"identity_public_url": ORIGIN}
+PASSKEYS: dict[str, Any] = {"identity_public_url": ORIGIN}
 VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 """RFC 7636 appendix B."""
 
@@ -395,10 +395,21 @@ async def test_disabled_users_and_removed_passkeys_cannot_log_in() -> None:
     assert password.status_code == 200  # the password always stays
 
 
-async def test_the_login_challenge_is_rate_limited_per_address() -> None:
+async def test_passkey_login_is_rate_limited_per_address() -> None:
     async with harness(**PASSKEYS, identity_login_ip_burst=2, identity_login_ip_per_minute=1) as h:
-        answers = [await h.client.post(f"{API}/passkeys/challenge") for _ in range(3)]
-    assert [a.status_code for a in answers] == [200, 200, 429]
+        # Challenges have the looser limit (every sign-in page asks for one): 30 at once.
+        challenges = [await h.client.post(f"{API}/passkeys/challenge") for _ in range(31)]
+        # Answers have the login limit.
+        answers = [
+            await h.client.post(
+                f"{API}/passkeys/session",
+                json={"ceremony_id": str(uuid4()), "credential": {"id": "x"}},
+            )
+            for _ in range(3)
+        ]
+    assert [c.status_code for c in challenges[:30]] == [200] * 30
+    assert challenges[30].status_code == 429
+    assert [a.status_code for a in answers] == [401, 401, 429]
     assert "retry-after" in answers[2].headers
 
 

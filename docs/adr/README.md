@@ -52,3 +52,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0046](0046-device-settings-as-capabilities.md) | Device settings as capabilities | Accepted |
 | [0047](0047-rtk-base-station-as-a-fleet-device.md) | The RTK base station as a Fleet device | Accepted |
 | [0048](0048-maintenance-commands.md) | Maintenance commands | Accepted |
+| [0050](0050-passkeys-and-app-login-hand-off.md) | Passkeys and the app login hand-off | Accepted |

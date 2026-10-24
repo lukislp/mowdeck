@@ -159,7 +159,7 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
         now = runtime.clock()
         async with store.transaction() as tx:
             await tx.login_attempts.delete(at=Lt(now - retention))
-            # Passkey ceremonies and app login codes nobody finished (ADR 0049).
+            # Passkey ceremonies and app login codes nobody finished (ADR 0050).
             await tx.webauthn_challenges.delete(expires_at=Lt(now))
             await tx.app_login_codes.delete(expires_at=Lt(now))
 

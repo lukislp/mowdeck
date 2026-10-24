@@ -13,6 +13,7 @@
  */
 import { ApnsRegistration, type ApnsApi, type ApnsState } from './apns';
 import type { NativeBridge, NativePlatform } from './capacitor';
+import { handoffAvailable, signInThroughBrowser, type HandoffResult } from './handoff';
 import { pathFromDeepLink, pathFromNotificationAction } from './links';
 import { CHANNELS, InboxNotifier, toLocalNotification } from './local';
 import type { InboxItem } from '#lib/stores/inbox.svelte.js';
@@ -158,6 +159,25 @@ export class NativeShell {
     if (this.platform === 'android') {
       this.ntfy = await this.#deps.ntfyConfigured().catch(() => false);
     }
+  }
+
+  /**
+   * The shell can run a login in the system browser and hand it to the app (passkeys; app
+   * builds with ADR 0050; older builds lack `MowDeckShell.openAuthSession`).
+   */
+  get canSignInThroughBrowser(): boolean {
+    return handoffAvailable(this.#deps.bridge);
+  }
+
+  /** Sign in through the system browser (see `handoff.ts`); `redeem` starts the app session. */
+  async signInThroughBrowser(
+    origin: string,
+    redeem: (code: string, verifier: string) => Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<HandoffResult> {
+    const bridge = this.#deps.bridge;
+    if (!handoffAvailable(bridge)) return 'cancelled';
+    return signInThroughBrowser({ bridge, origin, redeem }, signal);
   }
 
   /** Forget the server: the shell shows its first-launch screen again. */

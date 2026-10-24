@@ -3717,7 +3717,7 @@
     },
     "/api/v1/identity/app-login/code": {
       "post": {
-        "description": "Native app hand-off (ADR 0049), browser side: exchange the caller's fresh login session\n(any login method, at most a few minutes old) for a one-time code bound to the app's PKCE\nchallenge. The browser session ends; the page sends the code to the app's URL scheme.",
+        "description": "Native app hand-off (ADR 0050), browser side: exchange the caller's fresh login session\n(any login method, at most a few minutes old) for a one-time code bound to the app's PKCE\nchallenge. The browser session ends; the page sends the code to the app's URL scheme.",
         "operationId": "app_login_code_api_v1_identity_app_login_code_post",
         "requestBody": {
           "content": {

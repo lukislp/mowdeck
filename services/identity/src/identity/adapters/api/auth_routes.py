@@ -157,7 +157,7 @@ async def logout_all(services: ServicesDep, ctx: Ctx) -> None:
 async def app_login_code(
     body: AppCodeIn, response: Response, services: ServicesDep, ctx: Ctx
 ) -> AppCodeOut:
-    """Native app hand-off (ADR 0049), browser side: exchange the caller's fresh login session
+    """Native app hand-off (ADR 0050), browser side: exchange the caller's fresh login session
     (any login method, at most a few minutes old) for a one-time code bound to the app's PKCE
     challenge. The browser session ends; the page sends the code to the app's URL scheme."""
     code = await services.sessions.issue_app_code(ctx, body.code_challenge)

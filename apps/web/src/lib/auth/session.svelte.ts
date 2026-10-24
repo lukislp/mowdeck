@@ -127,12 +127,43 @@ export class SessionManager {
 
   /** Password login; resolves when `/me` is loaded. Throws {@link ApiProblem}. */
   async login(username: string, password: string): Promise<void> {
-    const response = await this.#post(`${IDENTITY}/session`, { username, password });
+    await this.signIn(`${IDENTITY}/session`, { username, password });
+  }
+
+  /**
+   * A login of any kind whose endpoint answers like `POST /session` (password, passkey, the
+   * native app's code): token into memory, refresh token only as the cookie, then `/me`.
+   */
+  async signIn(url: string, body: object): Promise<void> {
+    const response = await this.#post(url, body);
     if (!response.ok) throw await problemFromResponse(response);
-    const body = (await response.json()) as { access_token: string; expires_in: number };
-    this.#setToken(body.access_token, body.expires_in);
+    const token = (await response.json()) as { access_token: string; expires_in: number };
+    this.#setToken(token.access_token, token.expires_in);
     this.ended = null;
     await this.loadMe();
+  }
+
+  /**
+   * Native app hand-off, browser side (ADR 0050): exchange this fresh login for a one-time code
+   * bound to the app's PKCE challenge. Identity ends the browser session (and drops the cookie);
+   * so does this tab.
+   */
+  async handOffToApp(codeChallenge: string): Promise<string> {
+    const token = this.#token;
+    const response = await this.#deps.fetch(`${IDENTITY}/app-login/code`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ code_challenge: codeChallenge }),
+    });
+    if (!response.ok) throw await problemFromResponse(response);
+    const { code } = (await response.json()) as { code: string };
+    this.#deps.channel?.postMessage({ type: 'logout' });
+    this.#clear('anonymous');
+    return code;
   }
 
   /** Start of the app: get a token from the refresh cookie, if there is one. */

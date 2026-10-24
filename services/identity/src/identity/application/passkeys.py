@@ -1,4 +1,4 @@
-"""Passkeys of users (ADR 0049): adding, listing, renaming and removing WebAuthn credentials.
+"""Passkeys of users (ADR 0050): adding, listing, renaming and removing WebAuthn credentials.
 
 Logging in with a passkey is the authenticator plug-in ``PasskeyAuthenticator`` behind
 ``SessionService.login_passkey``; this module manages the credentials.

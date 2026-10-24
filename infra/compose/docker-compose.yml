@@ -252,13 +252,17 @@ services:
       MOWDECK_IDENTITY_TRUST_FORWARDED_FOR: "true"
       # Plain HTTP in development; set to true behind HTTPS.
       MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE: ${IDENTITY_REFRESH_COOKIE_SECURE:-false}
+      # Passkeys (ADR 0050): the address users open MowDeck at; empty turns passkeys off.
+      MOWDECK_IDENTITY_PUBLIC_URL: ${IDENTITY_PUBLIC_URL:-}
+      MOWDECK_IDENTITY_PASSKEY_RP_ID: ${IDENTITY_PASSKEY_RP_ID:-}
     labels:
       - traefik.enable=true
       - traefik.http.routers.identity.rule=PathPrefix(`/api/v1/identity`)
       - traefik.http.routers.identity.entrypoints=web
       - traefik.http.routers.identity.service=identity
-      # Login, registration and token exchange: rate limited per client IP.
-      - traefik.http.routers.identity-auth.rule=Path(`/api/v1/identity/session`) || Path(`/api/v1/identity/register`) || Path(`/api/v1/identity/token`)
+      # Login (password, passkey, the app's hand-off code), registration and token exchange:
+      # rate limited per client IP.
+      - traefik.http.routers.identity-auth.rule=Path(`/api/v1/identity/session`) || Path(`/api/v1/identity/register`) || Path(`/api/v1/identity/token`) || Path(`/api/v1/identity/passkeys/session`) || Path(`/api/v1/identity/app-login/session`)
       - traefik.http.routers.identity-auth.entrypoints=web
       - traefik.http.routers.identity-auth.priority=100
       - traefik.http.routers.identity-auth.middlewares=identity-ratelimit
@@ -276,6 +280,13 @@ services:
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.average=60
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.burst=30
+      # A passkey challenge checks nothing and every sign-in page asks for one (the autofill
+      # offer): the looser session limit, the answer (/passkeys/session) has the login limit.
+      - traefik.http.routers.identity-passkey-challenge.rule=Path(`/api/v1/identity/passkeys/challenge`)
+      - traefik.http.routers.identity-passkey-challenge.entrypoints=web
+      - traefik.http.routers.identity-passkey-challenge.priority=101
+      - traefik.http.routers.identity-passkey-challenge.middlewares=identity-session-ratelimit
+      - traefik.http.routers.identity-passkey-challenge.service=identity
       - traefik.http.routers.identity-jwks.rule=Path(`/.well-known/jwks.json`)
       - traefik.http.routers.identity-jwks.entrypoints=web
       - traefik.http.routers.identity-jwks.service=identity

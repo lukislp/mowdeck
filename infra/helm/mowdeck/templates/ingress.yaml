@@ -28,6 +28,9 @@ Stripe webhook of Billing when it is enabled), so a rate limit can be attached t
 {{- $auth = append $auth (dict "path" . "type" "Exact" "component" "identity" "port" 8000) }}
 {{- end }}
 {{- $auth = append $auth (dict "path" "/api/v1/identity/session/" "type" "Prefix" "component" "identity" "port" 8000) }}
+{{- /* Passkey login and the app hand-off (ADR 0050); the challenge stays on the main Ingress. */ -}}
+{{- $auth = append $auth (dict "path" "/api/v1/identity/passkeys/session" "type" "Exact" "component" "identity" "port" 8000) }}
+{{- $auth = append $auth (dict "path" "/api/v1/identity/app-login/session" "type" "Exact" "component" "identity" "port" 8000) }}
 {{- if .Values.services.billing.enabled }}
 {{- /* Stripe webhooks carry no token: rate limited like the login routes. */ -}}
 {{- $auth = append $auth (dict "path" "/api/v1/billing/webhooks/stripe" "type" "Exact" "component" "billing" "port" 8000) }}

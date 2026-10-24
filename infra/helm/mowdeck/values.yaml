@@ -60,6 +60,12 @@ config:
   # The refresh cookie is sent over HTTPS only. Keep true behind TLS (the normal case);
   # false only for plain HTTP tests (kind with a port-forward).
   IDENTITY_REFRESH_COOKIE_SECURE: "true"
+  # Passkeys (ADR 0050): the address users open MowDeck at; passkeys are bound to its host.
+  # Empty: https://<ingress.host> when a host is set, otherwise passkeys are off. Changing the
+  # host later makes existing passkeys unusable.
+  IDENTITY_PUBLIC_URL: ""
+  # Optional: a parent domain of that host as the passkeys' RP ID (e.g. example.org).
+  IDENTITY_PASSKEY_RP_ID: ""
 
   # --- Fleet ---
   # Connection kinds accepted when a mower is registered (simulated, cloud, ble_bridge).

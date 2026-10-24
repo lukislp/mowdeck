@@ -219,7 +219,7 @@ permission_catalogue = Table(
     Column("retired", Boolean, nullable=False, server_default=text("false")),
 )
 
-# Passkeys (ADR 0049): credentials, ceremony challenges; the app login hand-off codes.
+# Passkeys (ADR 0050): credentials, ceremony challenges; the app login hand-off codes.
 passkeys = Table(
     "passkeys",
     metadata,

@@ -89,6 +89,7 @@ nav:
       - adr/0046-device-settings-as-capabilities.md
       - adr/0047-rtk-base-station-as-a-fleet-device.md
       - adr/0048-maintenance-commands.md
+      - adr/0050-passkeys-and-app-login-hand-off.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -108,6 +109,7 @@ nav:
       - ops/release.md
       - ops/billing.md
       - ops/mobile-apps.md
+      - ops/passkeys.md
       - ops/source-code.md
   - Spikes:
       - spikes/index.md
@@ -115,4 +117,5 @@ nav:
   - Guides:
       - guides/index.md
       - guides/esp32-bridge-purchase-and-setup.md
+      - guides/passkeys.md
   - Original plan (German): plan/project-plan.de.md

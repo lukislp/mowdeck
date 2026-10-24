@@ -1,4 +1,4 @@
-"""Passkeys (ADR 0049): WebAuthn credentials of users, the challenges of registration and login
+"""Passkeys (ADR 0050): WebAuthn credentials of users, the challenges of registration and login
 ceremonies, and the one-time codes that hand a login in the system browser to the native app.
 
 Revision ID: 0003

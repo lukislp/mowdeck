@@ -538,7 +538,7 @@ class ReconcileOut(BaseModel):
     changed_subjects: list[str]
 
 
-# --- passkeys (ADR 0049) ---------------------------------------------------------------------
+# --- passkeys (ADR 0050) ---------------------------------------------------------------------
 
 MAX_CREDENTIAL_JSON = 16_384
 """Upper bound of a serialised WebAuthn response (real ones are 1 to 3 KB)."""

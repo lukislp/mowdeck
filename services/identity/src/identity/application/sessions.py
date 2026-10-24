@@ -6,9 +6,9 @@
   and is audited as ``session.refresh_reuse``. The JWT ``sid`` is the family id.
 * Throttling: per client IP in memory (token bucket) and per username in the database (too
   many failures in the window answer 429 until the window has passed).
-* Passkeys (ADR 0049): ``passkey_challenge`` and ``login_passkey`` run the passwordless login
+* Passkeys (ADR 0050): ``passkey_challenge`` and ``login_passkey`` run the passwordless login
   through the ``passkey`` authenticator plug-in and start the same session as a password login.
-* Native app hand-off (ADR 0049): the app has a login run in the system browser. Whatever the
+* Native app hand-off (ADR 0050): the app has a login run in the system browser. Whatever the
   method, the browser ends up with a fresh session and exchanges it (``issue_app_code``) for a
   one-time code bound to the app's PKCE challenge; ``redeem_app_code`` turns code and verifier
   into the app's own session.
@@ -102,11 +102,13 @@ class SessionService:
         issuer: TokenIssuer,
         authenticators: AuthenticatorRegistry,
         ip_limiter: TokenBucketLimiter,
+        challenge_limiter: TokenBucketLimiter | None = None,
     ) -> None:
         self.deps = deps
         self.issuer = issuer
         self.authenticators = authenticators
         self.ip_limiter = ip_limiter
+        self.challenge_limiter = challenge_limiter or TokenBucketLimiter(per_minute=60, capacity=30)
 
     # --- helpers -------------------------------------------------------------------------------
 
@@ -122,8 +124,8 @@ class SessionService:
             return principal
         return principal.model_copy(update={"plan": await plans.plan_of(acct.id)})
 
-    def _limit_ip(self, ctx: RequestContext) -> None:
-        wait = self.ip_limiter.take(ctx.ip or "unknown")
+    def _limit_ip(self, ctx: RequestContext, limiter: TokenBucketLimiter | None = None) -> None:
+        wait = (limiter or self.ip_limiter).take(ctx.ip or "unknown")
         if wait > 0:
             msg = "too many attempts from this address; try again later"
             raise RateLimited(msg, int(wait) + 1)
@@ -298,7 +300,7 @@ class SessionService:
                 await tx.audit.add(used)
         return TokenPair(access, principal, refresh, session.idle_expires_at)
 
-    # --- passkeys (ADR 0049) --------------------------------------------------------------------
+    # --- passkeys (ADR 0050) --------------------------------------------------------------------
 
     def _passkeys(self) -> ChallengeAuthenticator:
         authenticator = self.authenticators.challenger("passkey")
@@ -308,8 +310,10 @@ class SessionService:
         return authenticator
 
     async def passkey_challenge(self, ctx: RequestContext) -> Challenge:
-        """Options for a passwordless login (rate limited like the password login)."""
-        self._limit_ip(ctx)
+        """Options for a passwordless login. A challenge checks nothing and every sign-in page
+        asks for one (the autofill offer), so it has the looser limit of refreshes; answering it
+        has the login limit."""
+        self._limit_ip(ctx, self.challenge_limiter)
         return await self._passkeys().challenge()
 
     async def login_passkey(
@@ -342,7 +346,7 @@ class SessionService:
             await self._record_passkey_failure(ctx, failed)
             raise
 
-    # --- native app hand-off (ADR 0049) -----------------------------------------------------------
+    # --- native app hand-off (ADR 0050) -----------------------------------------------------------
 
     async def issue_app_code(self, ctx: RequestContext, code_challenge: str) -> str:
         """Hand the caller's fresh browser login to the native app.

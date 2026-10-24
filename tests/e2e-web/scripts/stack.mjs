@@ -69,6 +69,9 @@ Object.assign(composeEnv, {
   // Own image tag: building here never replaces the images of another stack (mowdeck/*:dev).
   MOWDECK_VERSION: project,
   GATEWAY_HTTP_PORT: `127.0.0.1:${port}`,
+  // Passkeys (ADR 0050) are bound to the address the browser opens: http://localhost works
+  // without HTTPS.
+  IDENTITY_PUBLIC_URL: baseURL,
   GATEWAY_HTTPS_PORT: `127.0.0.1:${port + 1}`,
   POSTGRES_PORT: String(port + 2),
   NATS_CLIENT_PORT: String(port + 3),

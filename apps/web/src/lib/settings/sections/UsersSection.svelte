@@ -10,7 +10,9 @@
   import { identityApi, unwrap } from '#lib/api/client.js';
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
   import { session } from '#lib/auth/session.svelte.js';
+  import { passkeysEnabled } from '#lib/auth/passkey.js';
   import LevelPicker from '#lib/components/LevelPicker.svelte';
+  import UserPasskeysSheet from '#lib/components/UserPasskeysSheet.svelte';
   import { levelLabel, loadPlaces, type LevelType, type Places } from '#lib/fleet/data.js';
   import type { components } from '#lib/generated/identity.js';
   import { formatDateTime, problemMessage, roleLabel } from '#lib/i18n.js';
@@ -46,6 +48,13 @@
   let assignProblem = $state<ApiProblem | null>(null);
   let assigning = $state(false);
   let removing = $state<string | null>(null);
+
+  // Passkeys of a sub-user (admins; ADR 0050), only when the installation has passkeys.
+  let passkeys = $state(false);
+  let passkeysFor = $state<{ id: string; name: string } | null>(null);
+  $effect(() => {
+    void passkeysEnabled().then((on) => (passkeys = on));
+  });
 
   const assignable = $derived(roles.filter((r) => r.kind !== 'system_owner'));
   const roleNames = $derived(new Map(roles.map((r) => [r.id, roleLabel(r.key, r.name)])));
@@ -239,6 +248,18 @@
               testid="assign-{member.username}"
               onclick={() => openAssign(member)}>{m.users_assign()}</Button
             >
+            {#if passkeys && member.subuser}
+              <Button
+                variant="ghost"
+                icon="key"
+                testid="passkeys-{member.username}"
+                onclick={() =>
+                  (passkeysFor = {
+                    id: member.id,
+                    name: member.display_name || member.username,
+                  })}>{m.users_passkeys()}</Button
+              >
+            {/if}
           </div>
         {/if}
       </li>
@@ -309,6 +330,8 @@
     </form>
   </Panel>
 {/if}
+
+<UserPasskeysSheet {accountId} user={passkeysFor} onclose={() => (passkeysFor = null)} />
 
 <Sheet
   open={assignFor !== null}
@@ -448,7 +471,10 @@
   }
 
   .assign {
+    display: flex;
+    flex-wrap: wrap;
     grid-column: 1 / -1;
+    gap: var(--md-space-2);
   }
 
   .status {

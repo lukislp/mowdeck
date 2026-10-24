@@ -26,6 +26,10 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | POST | `/api/v1/identity/session/refresh` | `{refresh_token}` or the cookie plus `X-Requested-With`: rotates; a reused token ends the whole session, except within the reuse grace (below). Accepts `X-Mowdeck-Refresh: cookie-only` like the login |
 | POST | `/api/v1/identity/session/logout` | Ends the session of the refresh token, 204 |
 | POST | `/api/v1/identity/token` | `{grant_type: "api_token", token}`: API token exchange, access token with `kind=api_token` |
+| GET | `/api/v1/identity/login-methods` | `{password, passkey}`: the login methods the installation offers (passkeys need `MOWDECK_IDENTITY_PUBLIC_URL`) |
+| POST | `/api/v1/identity/passkeys/challenge` | Start a passwordless login: `{ceremony_id, public_key}` (request options, user verification required, no `allowCredentials`). Looser rate limit (every sign-in page asks, for the autofill) |
+| POST | `/api/v1/identity/passkeys/session` | `{ceremony_id, credential, account_id?}` (`PublicKeyCredential.toJSON()`): the same tokens and cookie as `POST /session`. 401 with one message for every failure, 429 when throttled |
+| POST | `/api/v1/identity/app-login/session` | Native app hand-off, app side: `{code, code_verifier}` gives the app a session like `POST /session`; the code is single use |
 | GET | `/.well-known/jwks.json` and `/api/v1/identity/.well-known/jwks.json` | Public signing keys (`Cache-Control: max-age=300`). Services inside Compose use `http://identity:8000/.well-known/jwks.json` |
 | GET | `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` | Operations (kit) |
 
@@ -41,6 +45,11 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | GET | `/api/v1/identity/me/platform` | token only | `{"operator_admin": bool}` (`platform:main#operator_admin`, through the authorizer cache); the web app uses it instead of probing `/platform/accounts` |
 | GET | `/api/v1/identity/ui-areas` | token only | Areas of the web app shell: the `ui_areas` of Identity's own descriptor and of the last descriptor every module URL answered with, filtered to the areas whose `required_permission` the caller holds; each with `module`, `module_version`, `route`, `menu_label`, `labels`, `required_permission`. `Cache-Control: private, max-age=300` |
 | POST | `/api/v1/identity/session/logout-all` | token only (users) | Ends every session of the caller |
+| GET | `/api/v1/identity/me/passkeys` | token only (users) | The caller's passkeys (no key material) |
+| POST | `/api/v1/identity/me/passkeys/options` | token only (users) | `{password}` (re-authentication, the username throttle applies): creation options and `ceremony_id` |
+| POST | `/api/v1/identity/me/passkeys` | token only (users) | `{ceremony_id, credential, name?}`: verifies and stores the passkey, 201; 409 for a known credential or more than 20 |
+| PATCH, DELETE | `/api/v1/identity/me/passkeys/{passkey_id}` | token only (users) | Rename `{name}`; remove (the password always stays) |
+| POST | `/api/v1/identity/app-login/code` | token only (users) | Native app hand-off, browser side: `{code_challenge}` (PKCE S256). Ends the caller's login session, which must be younger than 5 minutes (else 403), and returns a one-time code `{code, expires_in}` (60 s) |
 | GET | `/accounts/{account_id}` | `member` | |
 | PATCH | `/accounts/{account_id}` | `can_manage_users` | Name |
 | DELETE | `/accounts/{account_id}` | `can_manage_account` (owner) | `{password}`; 202, status `deleting` with `delete_after`; API tokens revoked, other members' sessions end, their tuples removed |
@@ -53,6 +62,8 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | POST | `/accounts/{account_id}/users/{user_id}/disable`, `/enable` | `can_manage_users` | Disable ends sessions, revokes the API tokens the user created, removes tuples |
 | POST | `/accounts/{account_id}/users/{user_id}/password` | `can_manage_users` | Temporary password of a sub-user |
 | DELETE | `/accounts/{account_id}/users/{user_id}` | `can_manage_users` | Deletes a sub-user, removes a person from the account |
+| GET | `/accounts/{account_id}/users/{user_id}/passkeys` | `can_manage_users` | Passkeys of a sub-user of the account (persons: 403, they manage their own) |
+| DELETE | `/accounts/{account_id}/users/{user_id}/passkeys/{passkey_id}` | `can_manage_users` | Remove a sub-user's passkey (audit `passkey.removed` with `by_admin`) |
 | GET | `/accounts/{account_id}/roles` | `member` | |
 | POST | `/accounts/{account_id}/roles` | `can_manage_users` | Custom role; never more than the actor holds on the account |
 | PATCH, DELETE | `/accounts/{account_id}/roles/{role_id}` | `can_manage_users` | System roles are immutable; an edit reconciles every holder; delete refused while assigned |
@@ -133,8 +144,11 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_DELETION_GRACE_DAYS` | `7` | Grace period of an account deletion |
 | `MOWDECK_IDENTITY_DEFAULT_PLAN` | `unlimited` | Plan of new accounts while billing is off |
 | `MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE` | `true` | `Secure` flag of the refresh cookie (Compose development: `false`) |
+| `MOWDECK_IDENTITY_PUBLIC_URL` | empty | The address users open MowDeck at (`https://mowdeck.example.org`). Passkeys are bound to it: its host is the RP ID, its origin the only accepted one. HTTPS (plain HTTP only for `localhost`), a host name (no IP). Empty or unusable (logged): passkeys off |
+| `MOWDECK_IDENTITY_PASSKEY_RP_ID` | empty | A parent domain of that host as the RP ID (`example.org`); empty: the host |
+| `MOWDECK_IDENTITY_PASSKEY_RP_NAME` | `MowDeck` | Name authenticators show next to the passkey |
 | `MOWDECK_IDENTITY_GITHUB_LOGIN` | `false` | Feature flag of the GitHub login stub (not implemented in Phase 1) |
-| `MOWDECK_IDENTITY_MAINTENANCE_SECONDS` | `60` | Key rotation, key reload, purge of login attempts older than 30 days |
+| `MOWDECK_IDENTITY_MAINTENANCE_SECONDS` | `60` | Key rotation, key reload, purge of login attempts older than 30 days and of expired passkey challenges and app login codes |
 | `MOWDECK_IDENTITY_RECONCILE_SECONDS` | `3600` | Full reconcile interval, 0 disables |
 
 ### Passwords
@@ -143,7 +157,15 @@ Argon2id via `argon2-cffi` 25.1.0. Default `rfc9106_low`: 64 MiB memory, 3 itera
 
 ## Authentication plug-ins
 
-`identity.application.authenticators`: `CredentialAuthenticator` (`PasswordAuthenticator` for `POST /session`, `ApiTokenAuthenticator` for `POST /token`) and `RedirectAuthenticator` (interface for OAuth/OIDC; `GitHubAuthenticator` is a stub that raises `NotImplementedError` and is registered only with `MOWDECK_IDENTITY_GITHUB_LOGIN=true`). The `AuthenticatorRegistry` holds the enabled ones by name.
+`identity.application.authenticators`: `CredentialAuthenticator` (`PasswordAuthenticator` for `POST /session`, `ApiTokenAuthenticator` for `POST /token`, `PasskeyAuthenticator` for `POST /passkeys/session`, which is also a `ChallengeAuthenticator`: it hands out a single-use challenge first) and `RedirectAuthenticator` (interface for OAuth/OIDC; `GitHubAuthenticator` is a stub that raises `NotImplementedError` and is registered only with `MOWDECK_IDENTITY_GITHUB_LOGIN=true`). The `AuthenticatorRegistry` holds the enabled ones by name.
+
+### Passkeys
+
+[ADR 0050](../../docs/adr/0050-passkeys-and-app-login-hand-off.md). WebAuthn with py_webauthn 3.0.1 (BSD-3-Clause) behind the port `PasskeyCeremonies` (`adapters/webauthn.py`). Discoverable credentials, user verification required, attestation `none`, ES256/EdDSA/RS256; the user handle is the user id. Challenges (32 random bytes) live 5 minutes in `webauthn_challenges` and are consumed by the first answer. A login finds the passkey by credential id, checks the user handle, verifies the assertion and refuses a signature counter that did not grow when either counter is non-zero (cloned authenticator; synced passkeys keep 0). The session is the same as after a password login (`session.login` with `method: passkey`, plus `passkey.used`). Passkey failures are audited (`session.login_failed`, `method: passkey`, reason) but write no `login_attempts` row, so they never throttle the password login; the IP limit applies. The password always stays; removing the last passkey is allowed. Audit: `passkey.added`, `passkey.renamed`, `passkey.removed`, `passkey.used`, `passkey.reauth_failed`.
+
+### Native app hand-off
+
+The apps sign in through the system browser and take over the login: the app opens `/login?app_challenge=<S256 of a verifier>&app_state=<random>`, the user signs in there by any method, the page exchanges its fresh session at `POST /app-login/code` for a one-time code (the browser session ends, audit `app_login.code_issued`), navigates to `mowdeck://auth/callback?code=&state=`, and the app redeems code and verifier at `POST /app-login/session` (`session.login` with `method: app_handoff`). Codes are 256-bit, SHA-256 at rest in `app_login_codes`, valid 60 s, deleted on the first attempt. Login-method agnostic: a redirect authenticator only has to start a browser session; the page then hands it over the same way.
 
 ## Signing keys and rotation
 
@@ -173,7 +195,7 @@ Sub-user creation checks the plan limit `max_users` (current: the account's memb
 
 ## Data model
 
-Tables (Alembic revision `0002`): `accounts`, `users`, `memberships` (owner and admin flags, status), `roles` (permission keys as JSON, kind), `role_assignments` (subject, role, level), `sessions` (hashed refresh tokens, family, rotation), `api_tokens` (hashed secret, grants as JSON), `signing_keys`, `audit_log` (append-only: a trigger rejects `UPDATE` and `DELETE`), `login_attempts`, `permission_catalogue`; `support_grants` and `invitations` exist as schema only.
+Tables (Alembic revisions `0002` and `0003`): `accounts`, `users`, `memberships` (owner and admin flags, status), `roles` (permission keys as JSON, kind), `role_assignments` (subject, role, level), `sessions` (hashed refresh tokens, family, rotation), `api_tokens` (hashed secret, grants as JSON), `signing_keys`, `audit_log` (append-only: a trigger rejects `UPDATE` and `DELETE`), `login_attempts`, `permission_catalogue`, `passkeys` (credential id, COSE public key, sign count, transports, AAGUID, name, backup flags, created, last used, user agent of the registration), `webauthn_challenges` (single use, 5 minutes), `app_login_codes` (hashed one-time codes of the app hand-off, 60 s); `support_grants` and `invitations` exist as schema only.
 
 ## Layers
 

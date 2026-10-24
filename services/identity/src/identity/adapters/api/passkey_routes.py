@@ -1,4 +1,4 @@
-"""Passkeys (ADR 0049) under ``/api/v1/identity``.
+"""Passkeys (ADR 0050) under ``/api/v1/identity``.
 
 Login (public, rate limited per client IP like the password login; Traefik's ``identity-auth``
 router covers ``/passkeys/``):
