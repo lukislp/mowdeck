@@ -125,3 +125,52 @@ def test_concurrent_loaders_import_once(monkeypatch: pytest.MonkeyPatch) -> None
         t.join()
     assert calls == 1
     assert all(r is fresh for r in results)
+
+
+async def test_startup_imports_litellm_on_the_main_thread_before_subscribing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from vision_support import harness
+
+    from vision import main
+
+    seen: list[tuple[bool, int]] = []
+
+    def fake_load() -> Any:
+        seen.append((threading.current_thread() is threading.main_thread(), len(subscribed)))
+        return _complete_module()
+
+    subscribed: list[object] = []
+    real_subscribe_all = main.subscribe_all  # type: ignore[attr-defined]
+
+    async def recording_subscribe_all(*args: Any, **kwargs: Any) -> Any:
+        result = await real_subscribe_all(*args, **kwargs)
+        subscribed.append(result)
+        return result
+
+    monkeypatch.setattr(main, "load_litellm", fake_load)
+    monkeypatch.setattr(main, "subscribe_all", recording_subscribe_all)
+    async with harness(warm_litellm=True):
+        pass
+    # Once, on the main thread, before any subscription (nothing else imports concurrently).
+    assert seen == [(True, 0)]
+    assert subscribed, "the startup went on after the import"
+
+
+async def test_startup_survives_a_failed_import_and_logs_no_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from vision_support import harness
+
+    from vision import main
+
+    def failing_load() -> Any:
+        raise ImportError("deadlock detected by _ModuleLock('litellm.utils')")
+
+    monkeypatch.setattr(main, "load_litellm", failing_load)
+    async with harness(warm_litellm=True) as h:
+        response = await h.client.get("/readyz")
+        assert response.status_code == 200
+    out = capsys.readouterr().out
+    assert "litellm not loaded at startup" in out
+    assert "loading litellm failed" not in out and "Traceback" not in out
