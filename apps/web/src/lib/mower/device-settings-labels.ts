@@ -19,6 +19,7 @@ const KEYS: Record<string, readonly [Text, Text]> = {
   side_led: [m.devset_key_side_led, m.devset_hint_side_led],
   turn_style: [m.devset_key_turn_style, m.devset_hint_turn_style],
   traversal_mode: [m.devset_key_traversal_mode, m.devset_hint_traversal_mode],
+  blade_speed: [m.devset_key_blade_speed, m.devset_hint_blade_speed],
   wildlife_safety: [m.devset_key_wildlife_safety, m.devset_hint_wildlife_safety],
   voice_enabled: [m.devset_key_voice_enabled, m.devset_hint_voice_enabled],
   voice_volume: [m.devset_key_voice_volume, m.devset_hint_voice_volume],
@@ -31,6 +32,9 @@ const OPTIONS: Record<string, Text> = {
   'turn_style:multi_point': m.devset_opt_turn_style_multi_point,
   'traversal_mode:direct': m.devset_opt_traversal_mode_direct,
   'traversal_mode:follow_perimeter': m.devset_opt_traversal_mode_follow_perimeter,
+  'blade_speed:slow': m.devset_opt_blade_speed_slow,
+  'blade_speed:normal': m.devset_opt_blade_speed_normal,
+  'blade_speed:fast': m.devset_opt_blade_speed_fast,
   'wildlife_safety:off': m.devset_opt_wildlife_safety_off,
   'wildlife_safety:stop_mowing': m.devset_opt_wildlife_safety_stop_mowing,
   'wildlife_safety:low_speed_mowing': m.devset_opt_wildlife_safety_low_speed_mowing,
@@ -70,6 +74,8 @@ export function groupLabel(group: SettingGroup | 'other' | string): string {
       return m.devset_group_lights();
     case 'driving':
       return m.devset_group_driving();
+    case 'mowing':
+      return m.devset_group_mowing();
     case 'safety':
       return m.devset_group_safety();
     case 'voice':
