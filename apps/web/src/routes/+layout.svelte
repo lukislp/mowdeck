@@ -21,14 +21,15 @@
     document.documentElement.lang = getLocale();
     install.init();
     startLive();
-    void appUpdate.register();
+    // No service worker inside the iOS/Android app shell (it loads each server release as is).
+    void appUpdate.register(install.native);
     if (session.status === 'unknown') void session.restore().catch(() => undefined);
     // Inside the iOS/Android app shell: deep links and notification taps (inert in a browser).
     return nativeShell.start((path) => void goto(path));
   });
 </script>
 
-{#if appUpdate.waiting}
+{#if appUpdate.waiting && !install.native}
   <div class="update" role="status">
     <span>{m.update_available()}</span>
     <button type="button" onclick={() => appUpdate.apply()}>{m.update_reload()}</button>

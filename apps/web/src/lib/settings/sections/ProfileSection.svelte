@@ -193,16 +193,17 @@
   />
 </Panel>
 
-{#if !install.standalone && (install.available || install.ios)}
-  <Panel label={m.account_install()}>
-    {#if install.available}
+<!-- Not inside the iOS/Android app: it is installed natively, the panel has nothing to say. -->
+{#if install.offer}
+  <Panel label={m.account_install()} testid="install-panel">
+    {#if install.offer === 'prompt'}
       <Button icon="download" onclick={() => install.prompt()}>{m.install_action()}</Button>
     {:else}
       <p class="hint">{m.install_ios_hint()}</p>
     {/if}
   </Panel>
 {:else if install.standalone}
-  <Panel label={m.account_install()}>
+  <Panel label={m.account_install()} testid="install-panel">
     <p class="hint">{m.install_installed()}</p>
   </Panel>
 {/if}

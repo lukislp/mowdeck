@@ -1,8 +1,11 @@
 /**
- * Small per-tab UI state: toasts, theme, install prompt, service worker update. Only the theme
- * choice is kept in localStorage (`mowdeck.theme`), never anything about the session.
+ * Small per-tab UI state: toasts, theme, install offer, service worker update. Only the theme
+ * choice and the install hint flags are kept in localStorage (`mowdeck.theme`,
+ * `mowdeck.install-hint-dismissed`, `mowdeck.installed`), never anything about the session.
  */
 import type { ToastItem, ToastTone } from '@mowdeck/ui';
+
+import { installContext, readInstallEnvironment, type InstallContext } from '$lib/install/context';
 
 // --- toasts -------------------------------------------------------------------------------------
 
@@ -63,40 +66,99 @@ export function applyTheme(choice: ThemeChoice): void {
 
 export const theme = new Theme();
 
-// --- install prompt (Chromium) and standalone detection ----------------------------------------
+// --- install offer -------------------------------------------------------------------------------
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+interface RelatedAppsNavigator {
+  getInstalledRelatedApps?: () => Promise<unknown[]>;
+}
+
 const HINT_KEY = 'mowdeck.install-hint-dismissed';
+/** Set on `appinstalled`, cleared when the browser offers installing again. */
+const INSTALLED_KEY = 'mowdeck.installed';
+
+/** What the page offers: the browser's install prompt, the iOS share sheet text, or nothing. */
+export type InstallOffer = 'prompt' | 'ios' | null;
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, on: boolean): void {
+  try {
+    if (on) localStorage.setItem(key, '1');
+    else localStorage.removeItem(key);
+  } catch {
+    // storage blocked: lasts for this page only
+  }
+}
 
 class Install {
+  /** Where the app runs (`src/lib/install/context.ts`). */
+  context = $state<InstallContext>('browser');
+  /** The browser fired `beforeinstallprompt` (Chrome, Edge): installing is possible here. */
   available = $state(false);
-  standalone = $state(false);
-  ios = $state(false);
+  /** This browser installed the web app (remembered `appinstalled`, or related apps). */
+  installedElsewhere = $state(false);
   hintDismissed = $state(false);
   #event: InstallPromptEvent | null = null;
 
-  init(): void {
-    if (typeof window === 'undefined') return;
-    this.standalone = window.matchMedia?.('(display-mode: standalone)').matches ?? false;
-    this.ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    try {
-      this.hintDismissed = localStorage.getItem(HINT_KEY) === '1';
-    } catch {
-      this.hintDismissed = false;
-    }
-    window.addEventListener('beforeinstallprompt', (event) => {
+  /** The app runs inside the native shell. */
+  get native(): boolean {
+    return this.context === 'native-shell';
+  }
+
+  /** The installed web app is running (not a tab). */
+  get standalone(): boolean {
+    return this.context === 'installed';
+  }
+
+  get offer(): InstallOffer {
+    if (this.context === 'native-shell' || this.context === 'installed') return null;
+    if (this.available) return 'prompt';
+    if (this.context === 'ios-browser' && !this.installedElsewhere) return 'ios';
+    return null;
+  }
+
+  init(target?: Window): void {
+    const scope = target ?? (typeof window === 'undefined' ? undefined : window);
+    if (!scope) return;
+    this.context = installContext(readInstallEnvironment(scope));
+    this.hintDismissed = readFlag(HINT_KEY);
+    this.installedElsewhere = readFlag(INSTALLED_KEY);
+    scope.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();
+      if (this.context !== 'browser' && this.context !== 'ios-browser') return;
       this.#event = event as InstallPromptEvent;
       this.available = true;
+      // Chromium offers installing only while the app is not installed: forget an old install.
+      this.installedElsewhere = false;
+      writeFlag(INSTALLED_KEY, false);
     });
-    window.addEventListener('appinstalled', () => {
+    scope.addEventListener('appinstalled', () => {
+      this.#event = null;
       this.available = false;
-      this.standalone = true;
+      this.installedElsewhere = true;
+      writeFlag(INSTALLED_KEY, true);
     });
+    // Chromium answers for the manifest's `related_applications` (the web app itself).
+    const related = (scope.navigator as RelatedAppsNavigator | undefined)?.getInstalledRelatedApps;
+    if (this.context === 'browser' && typeof related === 'function') {
+      void related
+        .call(scope.navigator)
+        .then((apps) => {
+          if (apps.length > 0) this.installedElsewhere = true;
+        })
+        .catch(() => undefined);
+    }
   }
 
   async prompt(): Promise<void> {
@@ -110,11 +172,7 @@ class Install {
 
   dismissHint(): void {
     this.hintDismissed = true;
-    try {
-      localStorage.setItem(HINT_KEY, '1');
-    } catch {
-      // ignore
-    }
+    writeFlag(HINT_KEY, true);
   }
 }
 
@@ -126,8 +184,22 @@ class AppUpdate {
   waiting = $state<ServiceWorker | null>(null);
   #applying = false;
 
-  async register(): Promise<void> {
+  /**
+   * Register the service worker. Inside the native app shell (`native`) there is none: the
+   * shell loads every server release as it is (ADR 0036), so a worker left from an earlier
+   * version is removed and no update banner appears.
+   */
+  async register(native = false): Promise<void> {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    if (native) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+      } catch {
+        // nothing registered, or the WebView has no service workers
+      }
+      return;
+    }
     if (!import.meta.env.PROD) return;
     try {
       const registration = await navigator.serviceWorker.register('/service-worker.js', {
