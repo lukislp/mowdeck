@@ -31,14 +31,8 @@ dependencies = [
   "python-multipart>=0.0.20",
 ]
 
-[project.optional-dependencies]
-# The capture worker (python -m vision.capture, ADR 0035): headless Chromium with the Agora Web
-# SDK for still frames of a live camera. Only the image built with WITH_CAPTURE=true has it.
-capture = ["playwright==1.63.0"]
-
 [project.scripts]
 vision = "vision.main:main"
-vision-capture = "vision.capture.app:main"
 vision-migrate = "vision.adapters.db.migrate:main"
 
 [tool.uv.sources]

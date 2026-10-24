@@ -149,12 +149,6 @@ ignore_missing_imports = true
 module = ["agora_bridge.agora_sdk"]
 disallow_subclassing_any = false
 
-# Playwright drives the headless browser of the Vision capture worker (optional extra
-# vision[capture], ADR 0035); it is not installed in the default environment.
-[[tool.mypy.overrides]]
-module = ["playwright.*"]
-ignore_missing_imports = true
-
 # pywebpush and py-vapid (Web Push in services/notifications) ship no type information.
 [[tool.mypy.overrides]]
 module = ["pywebpush.*", "py_vapid.*", "http_ece.*"]

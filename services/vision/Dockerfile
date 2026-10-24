@@ -7,15 +7,6 @@
 # Only this service and the workspace libraries it depends on are installed. The runtime image
 # runs as the non-root user "app" (uid 10001), writes nothing at runtime (read-only root file
 # system; mount a tmpfs at /tmp) and has no architecture specific steps (amd64 and arm64).
-#
-# The capture worker (ADR 0035, `python -m vision.capture`) needs a browser: build with
-#
-#   docker build -f services/vision/Dockerfile --build-arg WITH_CAPTURE=true \
-#     -t mowdeck/vision-capture:dev .
-#
-# which adds the extra `capture` (Playwright), Playwright's Chromium headless shell with its
-# system libraries and the pinned Agora Web SDK (checked against its npm sha512) at
-# /opt/agora. Without the argument (the default) the image stays without a browser.
 
 ARG PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a
@@ -23,9 +14,6 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0
 FROM ${UV_IMAGE} AS uv
 
 FROM ${PYTHON_IMAGE} AS build
-ARG WITH_CAPTURE=false
-ARG AGORA_SDK_VERSION=4.24.8
-ARG AGORA_SDK_SHA512=TkHDu1HxYcjfbvpmOfOAucSgMJRlphODQlVN6fwAMCh7yIKt6J4O3wITNCvUkEVi9aaZTjeJOZ+onFUu/zlnuw==
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -37,22 +25,13 @@ COPY pyproject.toml uv.lock ./
 COPY libs/ libs/
 COPY services/vision/ services/vision/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    if [ "$WITH_CAPTURE" = "true" ]; then extra="--extra capture"; else extra=""; fi \
-    && uv sync --frozen --no-dev --no-editable --package vision $extra
-# The Agora Web SDK for the capture worker: the UMD bundle of the npm package the web app pins.
-RUN mkdir -p /opt/agora \
-    && if [ "$WITH_CAPTURE" = "true" ]; then \
-         python3 services/vision/docker/fetch_agora_sdk.py \
-           "$AGORA_SDK_VERSION" "$AGORA_SDK_SHA512" /opt/agora; \
-       fi
+    uv sync --frozen --no-dev --no-editable --package vision
 
 FROM ${PYTHON_IMAGE} AS runtime
-ARG WITH_CAPTURE=false
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH=/app/.venv/bin:$PATH \
-    MOWDECK_HTTP_PORT=8000 \
-    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+    MOWDECK_HTTP_PORT=8000
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent \
        --shell /usr/sbin/nologin app
@@ -62,12 +41,6 @@ COPY --from=build /app/.venv /app/.venv
 COPY LICENSE LICENSING.md /usr/share/doc/mowdeck/
 COPY LICENSES/ /usr/share/doc/mowdeck/LICENSES/
 LABEL org.opencontainers.image.licenses="AGPL-3.0-only AND Apache-2.0"
-COPY --from=build /opt/agora /opt/agora
-# Chromium headless shell and its system libraries (apt), only for the capture worker.
-RUN if [ "$WITH_CAPTURE" = "true" ]; then \
-      python -m playwright install --with-deps --only-shell chromium \
-      && rm -rf /var/lib/apt/lists/* /root/.cache; \
-    fi
 WORKDIR /app
 # The build's version and the address of its source code (AGPL-3.0 section 13, LICENSING.md):
 # set by the release build (MOWDECK_SOURCE_REF: the tag v<version>, or the commit of a test

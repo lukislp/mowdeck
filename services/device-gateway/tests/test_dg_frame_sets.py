@@ -29,8 +29,14 @@ from mowdeck_contracts.v1.subjects import photo_subject
 from mowdeck_control import Photo
 from mowdeck_service_kit.bus import InMemoryBus
 from mowdeck_service_kit.testing import lifespan_client
-from test_dg_capture import FakeSnapshotter, _cloud_mower
-from test_dg_relay_frames import RELAY_JPEG, FakeRelay, _app, _port_with_stream, _sim_without_photos
+from test_dg_relay_frames import (
+    RELAY_JPEG,
+    FakeRelay,
+    _app,
+    _cloud_mower,
+    _port_with_stream,
+    _sim_without_photos,
+)
 
 from device_gateway.adapters.control.snapshot import RelaySnapshotter
 from device_gateway.application.ports import (
@@ -189,29 +195,26 @@ async def test_dg_set_the_adapters_own_photo_is_a_set_of_one() -> None:
 
 async def test_dg_set_a_source_without_sets_gives_its_single_frame() -> None:
     port_reg, provider = _cloud_mower(_port_with_stream())
-    worker = FakeSnapshotter()
-    reply = await _ask(port_reg, provider, snapshotter=worker)
+    relay = FakeRelay()
+    reply = await _ask(port_reg, provider, relay_snapshotter=relay)
     assert reply.error is None
     assert len(reply.frames) == 1
-    assert len(worker.calls) == 1
+    assert len(relay.targets) == 1
 
 
-async def test_dg_set_an_unavailable_relay_hands_over_to_the_worker_and_a_refusal_is_final() -> (
-    None
-):
+async def test_dg_set_an_unavailable_relay_and_a_refusal_both_fail_the_set() -> None:
     port_reg, provider = _cloud_mower(_port_with_stream())
     relay = FakeSetRelay(fail=SnapshotUnavailable("the camera relay answered 503 frames-disabled"))
-    worker = FakeSnapshotter()
-    reply = await _ask(port_reg, provider, relay_snapshotter=relay, snapshotter=worker)
-    assert reply.error is None and len(reply.frames) == 1
-    assert len(worker.calls) == 1
+    reply = await _ask(port_reg, provider, relay_snapshotter=relay)
+    assert reply.error is not None and reply.error.code is PhotoErrorCode.FAILED
+    assert "frames-disabled" in reply.error.detail
+    assert len(relay.sets) == 1
 
     port_reg, provider = _cloud_mower(_port_with_stream())
     relay = FakeSetRelay(fail=SnapshotFailed("the camera relay answered 409 camera-budget"))
-    worker = FakeSnapshotter()
-    reply = await _ask(port_reg, provider, relay_snapshotter=relay, snapshotter=worker)
+    reply = await _ask(port_reg, provider, relay_snapshotter=relay)
     assert reply.error is not None and reply.error.code is PhotoErrorCode.FAILED
-    assert worker.calls == []
+    assert "camera-budget" in reply.error.detail
 
 
 async def test_dg_set_a_foreign_account_never_reaches_the_relay() -> None:

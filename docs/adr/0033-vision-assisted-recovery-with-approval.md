@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-10). Amended by [ADR 0035](0035-server-side-camera-frames-and-automatic-analysis.md): frames of a real camera through the capture worker, automatic analyses on errors.
+Accepted (2026-10-10). Amended by [ADR 0035](0035-server-side-camera-frames-and-automatic-analysis.md): frames of a real camera through the capture worker (since replaced by the camera relay's frame tap, [ADR 0045](0045-camera-relay.md); the worker is removed), automatic analyses on errors.
 
 ## Context
 
@@ -47,7 +47,7 @@ The LUBA 2 AWD X has a front left and a front right camera, and the camera panel
 
 ## Addendum: server-side camera frames and automatic analysis (2026-10-11)
 
-Real Mammotion mowers have no still image command (PyMammotion 0.10.9 has none, see [ADR 0035](0035-server-side-camera-frames-and-automatic-analysis.md)). The Device-Gateway now answers photo requests of camera-capable adapters with a frame from the capture worker (`vision-capture`, headless Chromium with the Agora Web SDK, optional), so Vision gets a picture without an open browser. Analyses can also start by themselves when a mower enters a recoverable error and a user opted in (`trigger = error`, notification `vision_auto_proposal`); the approval rules of this ADR apply unchanged.
+Real Mammotion mowers have no still image command (PyMammotion 0.10.9 has none, see [ADR 0035](0035-server-side-camera-frames-and-automatic-analysis.md)). The Device-Gateway now answers photo requests of camera-capable adapters with a frame from the capture worker (`vision-capture`, headless Chromium with the Agora Web SDK, optional; replaced by the camera relay's frame tap of [ADR 0045](0045-camera-relay.md) and removed in the first release after v0.20.0), so Vision gets a picture without an open browser. Analyses can also start by themselves when a mower enters a recoverable error and a user opted in (`trigger = error`, notification `vision_auto_proposal`); the approval rules of this ADR apply unchanged.
 
 ## Addendum: return to dock and the map image (2026-10-18)
 
