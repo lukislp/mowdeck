@@ -1,4 +1,5 @@
-<!-- The sections of the fleet module: map, sites, groups (a tab strip under the top bar). -->
+<!-- The sections of the fleet module: map, sites, groups, RTK base stations (a tab strip under the
+  top bar). -->
 <script lang="ts">
   import { Icon, type IconName } from '@mowdeck/ui';
 
@@ -6,10 +7,24 @@
 
   import { m } from '$lib/paraglide/messages';
 
-  const tabs: { href: string; label: () => string; icon: IconName; id: string }[] = [
+  const tabs: {
+    href: string;
+    label: () => string;
+    /** A shorter label for phones, where four tabs share 390 px. */
+    short?: () => string;
+    icon: IconName;
+    id: string;
+  }[] = [
     { id: 'map', href: '/fleet', label: () => m.fleet_tab_map(), icon: 'fleet' },
     { id: 'sites', href: '/fleet/sites', label: () => m.fleet_tab_sites(), icon: 'site' },
     { id: 'groups', href: '/fleet/groups', label: () => m.fleet_tab_groups(), icon: 'group' },
+    {
+      id: 'base-stations',
+      href: '/fleet/base-stations',
+      label: () => m.fleet_tab_base_stations(),
+      short: () => m.fleet_tab_base_stations_short(),
+      icon: 'signal',
+    },
   ];
 </script>
 
@@ -18,10 +33,16 @@
     <a
       href={tab.href}
       aria-current={page.url.pathname === tab.href ? 'page' : undefined}
+      aria-label={tab.short ? tab.label() : undefined}
       data-testid="fleet-tab-{tab.id}"
     >
       <Icon name={tab.icon} size={18} />
-      <span>{tab.label()}</span>
+      {#if tab.short}
+        <span class="long" aria-hidden="true">{tab.label()}</span>
+        <span class="short" aria-hidden="true">{tab.short()}</span>
+      {:else}
+        <span>{tab.label()}</span>
+      {/if}
     </a>
   {/each}
 </nav>
@@ -38,6 +59,8 @@
   a {
     position: relative;
     display: flex;
+    min-width: 0;
+    overflow: hidden;
     align-items: center;
     justify-content: center;
     gap: var(--md-space-2);
@@ -71,6 +94,38 @@
   a:focus-visible {
     outline: 2px solid var(--md-color-focus);
     outline-offset: -2px;
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .long {
+    display: none;
+  }
+
+  /* Phones: icon over label, so four tabs fit without the page scrolling sideways. */
+  @media (max-width: 639px) {
+    a {
+      flex-direction: column;
+      gap: var(--md-space-0_5);
+      padding: var(--md-space-1) var(--md-space-1);
+      font-size: var(--md-font-size-11);
+      letter-spacing: 0.02em;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .long {
+      display: inline;
+    }
+
+    .short {
+      display: none;
+    }
   }
 
   @media (min-width: 1024px) {
