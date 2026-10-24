@@ -45,7 +45,8 @@ commands.onFinal((command) => {
   if (quietLightResult(command, realtime.drive?.mowerId ?? null)) return;
   if (quietSettingResult(command)) return;
   toasts.push(
-    command.status === 'executed' ? 'ok' : 'error',
+    // `accepted` is final only for kinds the mower does not confirm (it reached the mower).
+    command.status === 'executed' || command.status === 'accepted' ? 'ok' : 'error',
     m.command_toast({ command: commandLabel(command.kind), result: outcomeLabel(command.status) }),
     command.reason ?? undefined,
   );

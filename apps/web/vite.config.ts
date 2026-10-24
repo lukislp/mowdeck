@@ -76,6 +76,7 @@ export default defineConfig({
         'src/lib/mower/device-settings.svelte.ts',
         'src/lib/drive/pilot.ts',
         'src/lib/drive/layout.ts',
+        'src/lib/mower/maintenance.ts',
         'src/lib/health/series.ts',
         'src/lib/plan/usage.ts',
         'src/lib/plan/problems.ts',
