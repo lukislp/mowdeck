@@ -2,7 +2,8 @@
  * API tokens on a phone (390 x 844, touch): with several revoked tokens on the account, creating
  * a token from the bottom of the form brings its one-time secret into view without scrolling
  * (clear of the sticky section strip) and focuses it; copy puts the secret on the clipboard; the
- * revoked tokens sit folded in a closed "Widerrufene Tokens (N)" disclosure under the active ones.
+ * revoked tokens sit folded in a closed "Widerrufene Tokens (N)" disclosure under the active ones,
+ * each with a remove button of full touch size and none to revoke.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
@@ -91,7 +92,13 @@ test('api tokens on a phone: the new secret is in view at once, revoked ones fol
   );
   await folded.locator('summary').click();
   await expect(folded.getByTestId('token-revoked-row')).toHaveCount(4);
-  await expect(folded.getByRole('button')).toHaveCount(0);
+  // No revoke there, only removal: one tap target per row and one for all of them.
+  await expect(folded.getByRole('button', { name: 'Widerrufen', exact: true })).toHaveCount(0);
+  await expect(folded.getByTestId('token-purge')).toHaveCount(4);
+  const remove = await folded.getByTestId('token-purge').first().boundingBox();
+  expect(remove!.width).toBeGreaterThanOrEqual(44);
+  expect(remove!.height).toBeGreaterThanOrEqual(44);
+  await expect(folded.getByTestId('token-purge-all')).toBeVisible();
 
   // Stays until dismissed; the focus returns to the form.
   await secret.getByTestId('token-secret-dismiss').click();
