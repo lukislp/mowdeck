@@ -47,6 +47,7 @@ from identity.domain.models import (
     AccountStatus,
     ApiToken,
     AppLoginCode,
+    AppLoginRequest,
     LoginAttempt,
     Membership,
     Session,
@@ -348,21 +349,44 @@ class SessionService:
 
     # --- native app hand-off (ADR 0050) -----------------------------------------------------------
 
-    async def issue_app_code(self, ctx: RequestContext, code_challenge: str) -> str:
+    async def start_app_login(self, code_challenge: str, ctx: RequestContext) -> AppLoginRequest:
+        """The native app's request to sign in through the system browser: the S256 hash of its
+        PKCE verifier is stored, the browser page gets only the request id. Rate limited like a
+        passkey challenge (it checks nothing)."""
+        self._limit_ip(ctx, self.challenge_limiter)
+        validate_code_challenge(code_challenge)
+        now = self.deps.clock()
+        request = AppLoginRequest(
+            id=uuid4(),
+            code_challenge=code_challenge,
+            created_at=now,
+            expires_at=now + self.deps.config.app_request_ttl,
+        )
+        async with self.deps.store.transaction() as tx:
+            await tx.app_login_requests.add(request)
+        return request
+
+    async def issue_app_code(self, ctx: RequestContext, request_id: UUID) -> str:
         """Hand the caller's fresh browser login to the native app.
 
         Login-method agnostic: whatever started the session in the system browser (password,
-        passkey, a redirect provider) ends here. The session must be younger than
-        ``app_handoff_login_age`` (a session left in the browser is never handed over silently);
-        it is ended in the same transaction, and the one-time code is bound to the app's PKCE
-        challenge.
+        passkey, a redirect provider) ends here. Only for a request the app started (single
+        use, ``app_request_ttl``); the session must be younger than ``app_handoff_login_age``
+        (a session left in the browser is never handed over silently); it is ended in the same
+        transaction, and the one-time code is bound to the request's PKCE challenge.
         """
-        validate_code_challenge(code_challenge)
         principal = self._user_principal(ctx)
+        now = self.deps.clock()
+        async with self.deps.store.transaction() as tx:
+            request = await tx.app_login_requests.get(id=request_id)
+            taken = await tx.app_login_requests.delete(id=request_id) if request else 0
+        if request is None or taken != 1 or now >= request.expires_at:
+            msg = "this sign-in request of the app is unknown or expired; start again in the app"
+            raise ForbiddenError(msg)
+        code_challenge = request.code_challenge
         if principal.session_id is None or principal.account_id is None:
             msg = "only a login session can be handed to the app"
             raise ForbiddenError(msg)
-        now = self.deps.clock()
         code = new_app_code()
         async with self.deps.uow() as work:
             tx = work.tx

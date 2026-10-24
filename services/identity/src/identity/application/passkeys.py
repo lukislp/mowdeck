@@ -25,6 +25,7 @@ from identity.application.authenticators import CHALLENGE_BYTES
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.application.ports import CeremonyRejected, Ge, KnownCredential, PasskeyCeremonies
+from identity.application.ratelimit import TokenBucketLimiter
 from identity.domain.credentials import validate_passkey_name
 from identity.domain.errors import (
     AuthenticationFailed,
@@ -58,9 +59,16 @@ class RegistrationStart:
 class PasskeyService:
     """Use cases around the passkeys of users."""
 
-    def __init__(self, deps: Deps, ceremonies: PasskeyCeremonies | None) -> None:
+    def __init__(
+        self,
+        deps: Deps,
+        ceremonies: PasskeyCeremonies | None,
+        ip_limiter: TokenBucketLimiter | None = None,
+    ) -> None:
         self.deps = deps
         self.ceremonies = ceremonies
+        self.ip_limiter = ip_limiter
+        """The login limit per client IP: the password check before a registration is one."""
 
     @property
     def enabled(self) -> bool:
@@ -96,6 +104,11 @@ class PasskeyService:
         """Check the password again, then hand out creation options for the caller."""
         rp, ceremonies = self._rp()
         principal = self._user(ctx)
+        if self.ip_limiter is not None:
+            wait = self.ip_limiter.take(ctx.ip or "unknown")
+            if wait > 0:
+                msg = "too many attempts from this address; try again later"
+                raise RateLimited(msg, int(wait) + 1)
         async with self.deps.store.transaction() as tx:
             found = await tx.users.get(id=principal.subject)
             known = await tx.passkeys.find(user_id=principal.subject)

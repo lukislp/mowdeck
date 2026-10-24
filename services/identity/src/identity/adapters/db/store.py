@@ -21,6 +21,7 @@ from identity.domain.models import (
     Account,
     ApiToken,
     AppLoginCode,
+    AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
     LoginAttempt,
@@ -168,6 +169,7 @@ class SqlTx:
     passkeys: SqlTable[Passkey]
     webauthn_challenges: SqlTable[WebAuthnChallenge]
     app_login_codes: SqlTable[AppLoginCode]
+    app_login_requests: SqlTable[AppLoginRequest]
 
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
@@ -187,6 +189,7 @@ class SqlTx:
             passkeys=SqlTable(conn, tables.passkeys, Passkey, "id"),
             webauthn_challenges=SqlTable(conn, tables.webauthn_challenges, WebAuthnChallenge, "id"),
             app_login_codes=SqlTable(conn, tables.app_login_codes, AppLoginCode, "id"),
+            app_login_requests=SqlTable(conn, tables.app_login_requests, AppLoginRequest, "id"),
         )
 
 

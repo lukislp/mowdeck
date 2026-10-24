@@ -592,10 +592,23 @@ class PasskeyLoginIn(In):
     account_id: UUID | None = Field(default=None, description="Account to act for (default: own)")
 
 
+class AppLoginStartIn(In):
+    """``POST /app-login/start``: the native app registers its PKCE challenge."""
+
+    code_challenge: CodeChallenge
+
+
+class AppLoginStartOut(BaseModel):
+    """The app's sign-in request: its id goes into the sign-in page's address."""
+
+    request_id: UUID
+    expires_in: int
+
+
 class AppCodeIn(In):
     """``POST /app-login/code``: hand the fresh browser login to the native app."""
 
-    code_challenge: CodeChallenge
+    request_id: UUID = Field(description="The app's sign-in request (from /app-login/start)")
 
 
 class AppCodeOut(BaseModel):

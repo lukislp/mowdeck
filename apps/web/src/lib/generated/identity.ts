@@ -467,8 +467,9 @@ export type paths = {
         /**
          * App Login Code
          * @description Native app hand-off (ADR 0050), browser side: exchange the caller's fresh login session
-         *     (any login method, at most a few minutes old) for a one-time code bound to the app's PKCE
-         *     challenge. The browser session ends; the page sends the code to the app's URL scheme.
+         *     (any login method, at most a few minutes old) for a one-time code bound to the app's
+         *     sign-in request and its PKCE challenge (403 for an unknown, used or expired request). The
+         *     browser session ends; the page sends the code to the app's URL scheme.
          */
         post: operations["app_login_code_api_v1_identity_app_login_code_post"];
         delete?: never;
@@ -492,6 +493,27 @@ export type paths = {
          *     normal session (the same tokens and cookie as ``POST /session``). The code is single use.
          */
         post: operations["app_login_session_api_v1_identity_app_login_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/app-login/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * App Login Start
+         * @description Native app hand-off (ADR 0050), first step in the app: register the S256 hash of the
+         *     PKCE verifier; the sign-in page in the system browser gets only the request id.
+         */
+        post: operations["app_login_start_api_v1_identity_app_login_start_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1006,10 +1028,11 @@ export type components = {
          */
         AppCodeIn: {
             /**
-             * Code Challenge
-             * @description PKCE S256 challenge of the app: BASE64URL(SHA256(code_verifier))
+             * Request Id
+             * Format: uuid
+             * @description The app's sign-in request (from /app-login/start)
              */
-            code_challenge: string;
+            request_id: string;
         };
         /**
          * AppCodeOut
@@ -1020,6 +1043,30 @@ export type components = {
             code: string;
             /** Expires In */
             expires_in: number;
+        };
+        /**
+         * AppLoginStartIn
+         * @description ``POST /app-login/start``: the native app registers its PKCE challenge.
+         */
+        AppLoginStartIn: {
+            /**
+             * Code Challenge
+             * @description PKCE S256 challenge of the app: BASE64URL(SHA256(code_verifier))
+             */
+            code_challenge: string;
+        };
+        /**
+         * AppLoginStartOut
+         * @description The app's sign-in request: its id goes into the sign-in page's address.
+         */
+        AppLoginStartOut: {
+            /** Expires In */
+            expires_in: number;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
         };
         /**
          * AppSessionIn
@@ -2850,6 +2897,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    app_login_start_api_v1_identity_app_login_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppLoginStartIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppLoginStartOut"];
                 };
             };
             /** @description Validation Error */

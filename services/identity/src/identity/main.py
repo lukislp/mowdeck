@@ -162,6 +162,7 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
             # Passkey ceremonies and app login codes nobody finished (ADR 0050).
             await tx.webauthn_challenges.delete(expires_at=Lt(now))
             await tx.app_login_codes.delete(expires_at=Lt(now))
+            await tx.app_login_requests.delete(expires_at=Lt(now))
 
     tasks = [
         asyncio.create_task(catalogue_loop(), name="catalogue"),

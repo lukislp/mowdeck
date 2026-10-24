@@ -52,7 +52,7 @@ class Services:
         self.tokens = ApiTokenService(self.deps)
         self.audit = AuditService(self.deps.store)
         self.platform = PlatformService(self.deps)
-        self.passkeys = PasskeyService(self.deps, self.ceremonies)
+        self.passkeys = PasskeyService(self.deps, self.ceremonies, limiter)
 
 
 def build_services(

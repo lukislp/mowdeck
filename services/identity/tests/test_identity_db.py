@@ -351,10 +351,14 @@ async def test_passkeys_and_app_handoff_on_postgres(monkeypatch: pytest.MonkeyPa
             logins.append(await h.client.post("/api/v1/identity/passkeys/session", json=payload))
         replay = await h.client.post("/api/v1/identity/passkeys/session", json=payload)
         verifier = "v" * 43
+        started = await h.client.post(
+            "/api/v1/identity/app-login/start",
+            json={"code_challenge": s256_challenge(verifier)},
+        )
         issued = await h.client.post(
             "/api/v1/identity/app-login/code",
             headers={"Authorization": f"Bearer {logins[1].json()['access_token']}"},
-            json={"code_challenge": s256_challenge(verifier)},
+            json={"request_id": started.json()["request_id"]},
         )
         app = await h.client.post(
             "/api/v1/identity/app-login/session",
@@ -363,7 +367,11 @@ async def test_passkeys_and_app_handoff_on_postgres(monkeypatch: pytest.MonkeyPa
         listed = await h.client.get("/api/v1/identity/me/passkeys", headers=lukas.headers)
         async with store.transaction() as tx:
             [stored] = await tx.passkeys.find(user_id=lukas.user_id)
-            leftovers = await tx.webauthn_challenges.count() + await tx.app_login_codes.count()
+            leftovers = (
+                await tx.webauthn_challenges.count()
+                + await tx.app_login_codes.count()
+                + await tx.app_login_requests.count()
+            )
     assert created.status_code == 201, created.text
     assert [r.status_code for r in logins] == [200, 200]
     assert replay.status_code == 401

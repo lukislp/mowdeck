@@ -27,7 +27,7 @@ def _user_fk(table: str) -> sa.ForeignKeyConstraint:
 
 
 def upgrade() -> None:
-    """Create the three tables."""
+    """Create the four tables."""
     op.create_table(
         "passkeys",
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -62,6 +62,15 @@ def upgrade() -> None:
     op.create_index("ix_webauthn_challenges_expires_at", "webauthn_challenges", ["expires_at"])
     op.create_index("ix_webauthn_challenges_user_id", "webauthn_challenges", ["user_id"])
     op.create_table(
+        "app_login_requests",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("code_challenge", sa.String(64), nullable=False),
+        sa.Column("created_at", TS, nullable=False),
+        sa.Column("expires_at", TS, nullable=False),
+        sa.PrimaryKeyConstraint("id", name="pk_app_login_requests"),
+    )
+    op.create_index("ix_app_login_requests_expires_at", "app_login_requests", ["expires_at"])
+    op.create_table(
         "app_login_codes",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("code_hash", sa.String(64), nullable=False),
@@ -87,5 +96,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Drop the tables (every registered passkey is lost; passwords stay)."""
-    for table in ("app_login_codes", "webauthn_challenges", "passkeys"):
+    for table in ("app_login_codes", "app_login_requests", "webauthn_challenges", "passkeys"):
         op.drop_table(table)

@@ -280,9 +280,10 @@ services:
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.average=60
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.burst=30
-      # A passkey challenge checks nothing and every sign-in page asks for one (the autofill
-      # offer): the looser session limit, the answer (/passkeys/session) has the login limit.
-      - traefik.http.routers.identity-passkey-challenge.rule=Path(`/api/v1/identity/passkeys/challenge`)
+      # A passkey challenge and the app's sign-in request check nothing, and every sign-in page
+      # asks for a challenge (the autofill offer): the looser session limit; the answers
+      # (/passkeys/session, /app-login/session) have the login limit.
+      - traefik.http.routers.identity-passkey-challenge.rule=Path(`/api/v1/identity/passkeys/challenge`) || Path(`/api/v1/identity/app-login/start`)
       - traefik.http.routers.identity-passkey-challenge.entrypoints=web
       - traefik.http.routers.identity-passkey-challenge.priority=101
       - traefik.http.routers.identity-passkey-challenge.middlewares=identity-session-ratelimit

@@ -145,10 +145,10 @@ export class SessionManager {
 
   /**
    * Native app hand-off, browser side (ADR 0050): exchange this fresh login for a one-time code
-   * bound to the app's PKCE challenge. Identity ends the browser session (and drops the cookie);
-   * so does this tab.
+   * bound to the app's sign-in request. Identity ends the browser session (and drops the
+   * cookie); so does this tab.
    */
-  async handOffToApp(codeChallenge: string): Promise<string> {
+  async handOffToApp(requestId: string): Promise<string> {
     const token = this.#token;
     const response = await this.#deps.fetch(`${IDENTITY}/app-login/code`, {
       method: 'POST',
@@ -157,7 +157,7 @@ export class SessionManager {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ code_challenge: codeChallenge }),
+      body: JSON.stringify({ request_id: requestId }),
     });
     if (!response.ok) throw await problemFromResponse(response);
     const { code } = (await response.json()) as { code: string };

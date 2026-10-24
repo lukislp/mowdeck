@@ -13,7 +13,12 @@
  */
 import { ApnsRegistration, type ApnsApi, type ApnsState } from './apns';
 import type { NativeBridge, NativePlatform } from './capacitor';
-import { handoffAvailable, signInThroughBrowser, type HandoffResult } from './handoff';
+import {
+  handoffAvailable,
+  signInThroughBrowser,
+  startAppLogin,
+  type HandoffResult,
+} from './handoff';
 import { pathFromDeepLink, pathFromNotificationAction } from './links';
 import { CHANNELS, InboxNotifier, toLocalNotification } from './local';
 import type { InboxItem } from '#lib/stores/inbox.svelte.js';
@@ -177,7 +182,7 @@ export class NativeShell {
   ): Promise<HandoffResult> {
     const bridge = this.#deps.bridge;
     if (!handoffAvailable(bridge)) return 'cancelled';
-    return signInThroughBrowser({ bridge, origin, redeem }, signal);
+    return signInThroughBrowser({ bridge, origin, start: startAppLogin, redeem }, signal);
   }
 
   /** Forget the server: the shell shows its first-launch screen again. */

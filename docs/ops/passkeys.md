@@ -25,7 +25,7 @@ Restart Identity after changing the settings (Compose: `docker compose up -d ide
 
 ## Gateway and rate limits
 
-Compose's Traefik and the Helm `-auth` Ingress put `POST /api/v1/identity/passkeys/session` and `POST /api/v1/identity/app-login/session` under the login rate limit (10 per minute, burst 20 per client address). `POST /api/v1/identity/passkeys/challenge` is asked for by every sign-in page (the autofill offer) and has the looser limit of refreshes (60 per minute, burst 30). Identity applies the same limits in-process.
+Compose's Traefik and the Helm `-auth` Ingress put `POST /api/v1/identity/passkeys/session` and `POST /api/v1/identity/app-login/session` under the login rate limit (10 per minute, burst 20 per client address). `POST /api/v1/identity/passkeys/challenge` (asked for by every sign-in page, for the autofill offer) and `POST /api/v1/identity/app-login/start` have the looser limit of refreshes (60 per minute, burst 30). Identity applies the same limits in-process.
 
 ## The apps
 
@@ -33,7 +33,7 @@ The iOS and Android apps sign in with a passkey through the system browser (Safa
 
 ## Database
 
-Migration `0003` of Identity adds `passkeys`, `webauthn_challenges` and `app_login_codes`; it runs with the usual `identity-migrate` job. Downgrading to `0002` deletes all passkeys (passwords stay).
+Migration `0003` of Identity adds `passkeys`, `webauthn_challenges`, `app_login_requests` and `app_login_codes`; it runs with the usual `identity-migrate` job. Downgrading to `0002` deletes all passkeys (passwords stay).
 
 ## Troubleshooting
 
@@ -42,4 +42,5 @@ Migration `0003` of Identity adds `passkeys`, `webauthn_challenges` and `app_log
 | No "Mit Passkey anmelden" button | `IDENTITY_PUBLIC_URL` empty or unusable (see the log), the page is not served over HTTPS, or the browser has no WebAuthn |
 | The browser says the passkey is not for this site, or creating fails | The address in the address bar differs from `IDENTITY_PUBLIC_URL` (host, port or scheme) |
 | "Dieser Passkey wurde nicht akzeptiert" | The passkey was removed, belongs to another installation, or its counter went backwards (the audit log has the reason under `session.login_failed`) |
-| In the app the browser opens but the app stays on the sign-in page | Android blocked the automatic jump: tap "App öffnen"; or more than a minute passed (the code expired), sign in again |
+| In the app the browser opens but the app stays on the sign-in page | Tap "App öffnen"; or more than a minute passed (the code expired), sign in again |
+| "Diese Anmeldeanfrage ist abgelaufen oder schon benutzt" in the browser | The browser page was opened more than 10 minutes ago, or from an old link: start again from the app |

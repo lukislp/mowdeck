@@ -16,6 +16,7 @@ from identity.domain.models import (
     Account,
     ApiToken,
     AppLoginCode,
+    AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
     LoginAttempt,
@@ -147,6 +148,7 @@ class MemoryTx:
     passkeys: MemoryTable[Passkey]
     webauthn_challenges: MemoryTable[WebAuthnChallenge]
     app_login_codes: MemoryTable[AppLoginCode]
+    app_login_requests: MemoryTable[AppLoginRequest]
 
 
 class MemoryStore:
@@ -171,6 +173,7 @@ class MemoryStore:
             passkeys=MemoryTable("id", [("credential_id",)]),
             webauthn_challenges=MemoryTable("id"),
             app_login_codes=MemoryTable("id", [("code_hash",)]),
+            app_login_requests=MemoryTable("id"),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

@@ -2288,7 +2288,7 @@
   "login_app_return": "App öffnen",
   "login_app_waiting": "Melde dich im geöffneten Browserfenster an.",
   "login_app_failed": "Die Anmeldung kam nicht in der App an. Bitte versuch es noch einmal.",
-  "login_app_stale": "Bitte melde dich erneut an, um in der App weiterzumachen.",
+  "login_app_stale": "Diese Anmeldeanfrage ist abgelaufen oder schon benutzt. Bitte starte erneut in der App.",
   "passkeys_title": "Passkeys",
   "passkeys_intro": "Anmelden ohne Passwort, mit Face ID, Touch ID, Windows Hello oder dem Handy. Dein Passwort bleibt als Rückfallebene.",
   "passkeys_empty": "Noch keine Passkeys.",
@@ -2313,5 +2313,7 @@
   "passkeys_cancelled": "Es wurde kein Passkey angelegt.",
   "users_passkeys": "Passkeys",
   "users_passkeys_title": "Passkeys von {name}",
-  "users_passkeys_hint": "Entferne einen verlorenen oder nicht mehr vertrauenswürdigen Passkey. Das Passwort bleibt."
+  "users_passkeys_hint": "Entferne einen verlorenen oder nicht mehr vertrauenswürdigen Passkey. Das Passwort bleibt.",
+  "login_app_confirm": "Angemeldet als {name}. In der MowDeck-App auf diesem Gerät weitermachen?",
+  "login_app_continue": "In der App weiter"
 }

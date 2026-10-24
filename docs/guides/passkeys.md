@@ -14,7 +14,7 @@ The list shows each passkey with its name, the provider or browser it was made w
 ## Sign in
 
 - **Browser:** on the sign-in page choose **Mit Passkey anmelden**, or tap the username field and pick your passkey from the suggestions. No username or password needed.
-- **App:** choose **Mit Passkey anmelden**. Safari (iPhone) or Chrome (Android) opens your MowDeck sign-in page; sign in with your passkey there. You are taken back to the app, signed in. If the browser stays open, tap **App öffnen**.
+- **App:** choose **Mit Passkey anmelden**. Safari (iPhone) or Chrome (Android) opens your MowDeck sign-in page; sign in with your passkey there and confirm **In der App weiter**. You are taken back to the app, signed in. If the browser stays open, tap **App öffnen**. Only confirm when you started the sign-in from the app yourself.
 
 ## Lost a device?
 

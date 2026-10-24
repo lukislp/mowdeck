@@ -6,12 +6,15 @@
  * opens the server's sign-in page in the system browser (iOS `ASWebAuthenticationSession`,
  * Android Custom Tab, through `MowDeckShell.openAuthSession`) and takes the login over:
  *
- *   1. App: a random verifier stays in this page's memory; its S256 hash (`app_challenge`) and a
- *      random `app_state` go into the URL `/login?app_challenge=...&app_state=...`.
- *   2. Browser: any login (passkey, password; later a redirect provider). The fresh browser
- *      session is exchanged for a one-time code bound to the challenge (`POST /app-login/code`,
- *      which ends the browser session), and the page navigates to
- *      `mowdeck://auth/callback?code=...&state=...`.
+ *   1. App: a random verifier stays in this page's memory; its S256 hash is registered with
+ *      Identity (`POST /app-login/start`), which answers with a short-lived, single-use request
+ *      id. Request id and a random `app_state` go into `/login?app_request=...&app_state=...`
+ *      (a link cannot bring its own challenge along).
+ *   2. Browser: any login (passkey, password; later a redirect provider), then the user
+ *      confirms "continue in the app". The fresh browser session is exchanged for a one-time
+ *      code bound to the request (`POST /app-login/code`, which ends the browser session), and
+ *      the page navigates to `mowdeck://auth/callback?code=...&state=...` (on Android as an
+ *      `intent:` URL naming the app's package, so no other app can catch it).
  *   3. App: iOS hands that URL back as the result of the session; Android delivers it as a deep
  *      link (`appUrlOpen`). The app checks the state and redeems code and verifier
  *      (`POST /app-login/session`) for its own session, the refresh cookie in the web view.
@@ -42,6 +45,8 @@ export interface HandoffDeps {
   bridge: NativeBridge;
   /** The server origin (the page's own origin inside the shell). */
   origin: string;
+  /** Register the PKCE challenge (`POST /app-login/start`); resolves to the request id. */
+  start: (challenge: string) => Promise<string>;
   /** Redeem code and verifier for the app's session (`POST /app-login/session`). */
   redeem: (code: string, verifier: string) => Promise<void>;
   random?: (length: number) => Uint8Array<ArrayBuffer>;
@@ -55,22 +60,51 @@ export function handoffAvailable(bridge: NativeBridge | null): bridge is NativeB
 }
 
 const VALUE = /^[A-Za-z0-9_-]{16,128}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** The package of the Android app: the callback intent may only open it. */
+export const ANDROID_PACKAGE = 'app.mowdeck.mobile';
 
 /** The app parameters of a sign-in page opened for the app; null for a normal sign-in. */
 export function appLoginRequest(
   search: Pick<URLSearchParams, 'get'>,
-): { challenge: string; state: string } | null {
-  const challenge = search.get('app_challenge');
+): { requestId: string; state: string } | null {
+  const requestId = search.get('app_request');
   const state = search.get('app_state');
-  if (!challenge || !state) return null;
-  if (!/^[A-Za-z0-9_-]{43}$/.test(challenge) || !VALUE.test(state)) return null;
-  return { challenge, state };
+  if (!requestId || !state) return null;
+  if (!UUID.test(requestId) || !VALUE.test(state)) return null;
+  return { requestId, state };
 }
 
-/** The deep link that returns the code to the app (fixed scheme: never an open redirect). */
-export function callbackUrl(code: string, state: string): string {
-  const query = new URLSearchParams({ code, state });
-  return `${AUTH_CALLBACK}?${query.toString()}`;
+/**
+ * The link that returns the result to the app (fixed scheme and package: never an open
+ * redirect). On Android an `intent:` URL that only the MowDeck app can receive; Chrome hands
+ * the app `mowdeck://auth/callback?...` as the data.
+ */
+export function callbackUrl(
+  params: { code: string; state: string } | { error: string; state: string },
+  userAgent = '',
+): string {
+  const query = new URLSearchParams(params).toString();
+  if (/Android/i.test(userAgent)) {
+    return `intent://auth/callback?${query}#Intent;scheme=mowdeck;package=${ANDROID_PACKAGE};end`;
+  }
+  return `${AUTH_CALLBACK}?${query}`;
+}
+
+/** Register the app's PKCE challenge (`POST /app-login/start`); resolves to the request id. */
+export async function startAppLogin(
+  challenge: string,
+  fetchFn: typeof fetch = (...args) => globalThis.fetch(...args),
+): Promise<string> {
+  const response = await fetchFn('/api/v1/identity/app-login/start', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code_challenge: challenge }),
+  });
+  if (!response.ok) throw new HandoffError('failed');
+  const { request_id: requestId } = (await response.json()) as { request_id: string };
+  return requestId;
 }
 
 function defaultRandom(length: number): Uint8Array<ArrayBuffer> {
@@ -102,7 +136,9 @@ export async function signInThroughBrowser(
   const random = deps.random ?? defaultRandom;
   const { verifier, challenge } = await pkcePair(random, deps.sha256);
   const state = toBase64url(random(16));
-  const url = `${deps.origin}/login?${new URLSearchParams({ app_challenge: challenge, app_state: state }).toString()}`;
+  const requestId = await deps.start(challenge);
+  const query = new URLSearchParams({ app_request: requestId, app_state: state });
+  const url = `${deps.origin}/login?${query.toString()}`;
   const app = deps.bridge.plugin('App');
   const shell = deps.bridge.plugin(SHELL);
 

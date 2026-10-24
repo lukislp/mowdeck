@@ -11,6 +11,8 @@ from identity.adapters.api.deps import Ctx, PublicCtx, ServicesDep
 from identity.adapters.api.schemas import (
     AppCodeIn,
     AppCodeOut,
+    AppLoginStartIn,
+    AppLoginStartOut,
     AppSessionIn,
     LoginIn,
     MeOut,
@@ -153,14 +155,27 @@ async def logout_all(services: ServicesDep, ctx: Ctx) -> None:
     await services.sessions.logout_all(ctx)
 
 
+@router.post("/app-login/start")
+async def app_login_start(
+    body: AppLoginStartIn, response: Response, services: ServicesDep, ctx: PublicCtx
+) -> AppLoginStartOut:
+    """Native app hand-off (ADR 0050), first step in the app: register the S256 hash of the
+    PKCE verifier; the sign-in page in the system browser gets only the request id."""
+    request = await services.sessions.start_app_login(body.code_challenge, ctx)
+    response.headers["Cache-Control"] = "no-store"
+    ttl = int(services.deps.config.app_request_ttl.total_seconds())
+    return AppLoginStartOut(request_id=request.id, expires_in=ttl)
+
+
 @router.post("/app-login/code")
 async def app_login_code(
     body: AppCodeIn, response: Response, services: ServicesDep, ctx: Ctx
 ) -> AppCodeOut:
     """Native app hand-off (ADR 0050), browser side: exchange the caller's fresh login session
-    (any login method, at most a few minutes old) for a one-time code bound to the app's PKCE
-    challenge. The browser session ends; the page sends the code to the app's URL scheme."""
-    code = await services.sessions.issue_app_code(ctx, body.code_challenge)
+    (any login method, at most a few minutes old) for a one-time code bound to the app's
+    sign-in request and its PKCE challenge (403 for an unknown, used or expired request). The
+    browser session ends; the page sends the code to the app's URL scheme."""
+    code = await services.sessions.issue_app_code(ctx, body.request_id)
     response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
     response.headers["Cache-Control"] = "no-store"
     ttl = int(services.deps.config.app_code_ttl.total_seconds())

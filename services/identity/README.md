@@ -29,6 +29,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | GET | `/api/v1/identity/login-methods` | `{password, passkey}`: the login methods the installation offers (passkeys need `MOWDECK_IDENTITY_PUBLIC_URL`) |
 | POST | `/api/v1/identity/passkeys/challenge` | Start a passwordless login: `{ceremony_id, public_key}` (request options, user verification required, no `allowCredentials`). Looser rate limit (every sign-in page asks, for the autofill) |
 | POST | `/api/v1/identity/passkeys/session` | `{ceremony_id, credential, account_id?}` (`PublicKeyCredential.toJSON()`): the same tokens and cookie as `POST /session`. 401 with one message for every failure, 429 when throttled |
+| POST | `/api/v1/identity/app-login/start` | Native app hand-off, first step in the app: `{code_challenge}` (PKCE S256) gives `{request_id, expires_in}` (single use, 10 minutes). Looser rate limit like the passkey challenge |
 | POST | `/api/v1/identity/app-login/session` | Native app hand-off, app side: `{code, code_verifier}` gives the app a session like `POST /session`; the code is single use |
 | GET | `/.well-known/jwks.json` and `/api/v1/identity/.well-known/jwks.json` | Public signing keys (`Cache-Control: max-age=300`). Services inside Compose use `http://identity:8000/.well-known/jwks.json` |
 | GET | `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` | Operations (kit) |
@@ -49,7 +50,7 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | POST | `/api/v1/identity/me/passkeys/options` | token only (users) | `{password}` (re-authentication, the username throttle applies): creation options and `ceremony_id` |
 | POST | `/api/v1/identity/me/passkeys` | token only (users) | `{ceremony_id, credential, name?}`: verifies and stores the passkey, 201; 409 for a known credential or more than 20 |
 | PATCH, DELETE | `/api/v1/identity/me/passkeys/{passkey_id}` | token only (users) | Rename `{name}`; remove (the password always stays) |
-| POST | `/api/v1/identity/app-login/code` | token only (users) | Native app hand-off, browser side: `{code_challenge}` (PKCE S256). Ends the caller's login session, which must be younger than 5 minutes (else 403), and returns a one-time code `{code, expires_in}` (60 s) |
+| POST | `/api/v1/identity/app-login/code` | token only (users) | Native app hand-off, browser side: `{request_id}` of the app's request (unknown, used or expired: 403). Ends the caller's login session, which must be younger than 5 minutes (else 403), and returns a one-time code `{code, expires_in}` (60 s) bound to the request's challenge |
 | GET | `/accounts/{account_id}` | `member` | |
 | PATCH | `/accounts/{account_id}` | `can_manage_users` | Name |
 | DELETE | `/accounts/{account_id}` | `can_manage_account` (owner) | `{password}`; 202, status `deleting` with `delete_after`; API tokens revoked, other members' sessions end, their tuples removed |
@@ -148,7 +149,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_PASSKEY_RP_ID` | empty | A parent domain of that host as the RP ID (`example.org`); empty: the host |
 | `MOWDECK_IDENTITY_PASSKEY_RP_NAME` | `MowDeck` | Name authenticators show next to the passkey |
 | `MOWDECK_IDENTITY_GITHUB_LOGIN` | `false` | Feature flag of the GitHub login stub (not implemented in Phase 1) |
-| `MOWDECK_IDENTITY_MAINTENANCE_SECONDS` | `60` | Key rotation, key reload, purge of login attempts older than 30 days and of expired passkey challenges and app login codes |
+| `MOWDECK_IDENTITY_MAINTENANCE_SECONDS` | `60` | Key rotation, key reload, purge of login attempts older than 30 days and of expired passkey challenges, app login requests and codes |
 | `MOWDECK_IDENTITY_RECONCILE_SECONDS` | `3600` | Full reconcile interval, 0 disables |
 
 ### Passwords
@@ -165,7 +166,7 @@ Argon2id via `argon2-cffi` 25.1.0. Default `rfc9106_low`: 64 MiB memory, 3 itera
 
 ### Native app hand-off
 
-The apps sign in through the system browser and take over the login: the app opens `/login?app_challenge=<S256 of a verifier>&app_state=<random>`, the user signs in there by any method, the page exchanges its fresh session at `POST /app-login/code` for a one-time code (the browser session ends, audit `app_login.code_issued`), navigates to `mowdeck://auth/callback?code=&state=`, and the app redeems code and verifier at `POST /app-login/session` (`session.login` with `method: app_handoff`). Codes are 256-bit, SHA-256 at rest in `app_login_codes`, valid 60 s, deleted on the first attempt. Login-method agnostic: a redirect authenticator only has to start a browser session; the page then hands it over the same way.
+The apps sign in through the system browser and take over the login: the app registers the S256 hash of a verifier (`POST /app-login/start`, table `app_login_requests`) and opens `/login?app_request=<id>&app_state=<random>`, the user signs in there by any method and confirms "continue in the app", the page exchanges its fresh session at `POST /app-login/code` for a one-time code (the browser session ends, audit `app_login.code_issued`), navigates to `mowdeck://auth/callback?code=&state=` (Android: an `intent:` URL for the package `app.mowdeck.mobile`), and the app redeems code and verifier at `POST /app-login/session` (`session.login` with `method: app_handoff`). Codes are 256-bit, SHA-256 at rest in `app_login_codes`, valid 60 s, deleted on the first attempt. Login-method agnostic: a redirect authenticator only has to start a browser session; the page then hands it over the same way.
 
 ## Signing keys and rotation
 
@@ -195,7 +196,7 @@ Sub-user creation checks the plan limit `max_users` (current: the account's memb
 
 ## Data model
 
-Tables (Alembic revisions `0002` and `0003`): `accounts`, `users`, `memberships` (owner and admin flags, status), `roles` (permission keys as JSON, kind), `role_assignments` (subject, role, level), `sessions` (hashed refresh tokens, family, rotation), `api_tokens` (hashed secret, grants as JSON), `signing_keys`, `audit_log` (append-only: a trigger rejects `UPDATE` and `DELETE`), `login_attempts`, `permission_catalogue`, `passkeys` (credential id, COSE public key, sign count, transports, AAGUID, name, backup flags, created, last used, user agent of the registration), `webauthn_challenges` (single use, 5 minutes), `app_login_codes` (hashed one-time codes of the app hand-off, 60 s); `support_grants` and `invitations` exist as schema only.
+Tables (Alembic revisions `0002` and `0003`): `accounts`, `users`, `memberships` (owner and admin flags, status), `roles` (permission keys as JSON, kind), `role_assignments` (subject, role, level), `sessions` (hashed refresh tokens, family, rotation), `api_tokens` (hashed secret, grants as JSON), `signing_keys`, `audit_log` (append-only: a trigger rejects `UPDATE` and `DELETE`), `login_attempts`, `permission_catalogue`, `passkeys` (credential id, COSE public key, sign count, transports, AAGUID, name, backup flags, created, last used, user agent of the registration), `webauthn_challenges` (single use, 5 minutes), `app_login_requests` (the app's sign-in requests with the PKCE challenge, 10 minutes) and `app_login_codes` (hashed one-time codes of the app hand-off, 60 s); `support_grants` and `invitations` exist as schema only.
 
 ## Layers
 

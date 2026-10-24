@@ -44,6 +44,8 @@ class IdentityConfig:
     """How long a registration or login ceremony may take (the challenge lives as long)."""
     app_code_ttl: timedelta = timedelta(seconds=60)
     """Lifetime of a one-time code that hands a browser login to the native app."""
+    app_request_ttl: timedelta = timedelta(minutes=10)
+    """How long the app's sign-in request (the system browser page) stays usable."""
     app_handoff_login_age: timedelta = timedelta(minutes=5)
     """Only a browser login session younger than this can be handed to the app."""
 

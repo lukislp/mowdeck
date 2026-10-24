@@ -41,6 +41,9 @@
 
   /** The browser was opened by the app for this login. */
   const appRequest = $derived(appLoginRequest(page.url.searchParams));
+  /** Signed in for the app: the user confirms before the login goes to the app. */
+  let confirming = $state(false);
+  let handing = $state(false);
   /** After the hand-off: the link back to the app. */
   let returnLink = $state<string | null>(null);
 
@@ -102,21 +105,44 @@
   /** After any successful login: into the app, or (opened by the app) back to the app. */
   async function finish(): Promise<void> {
     if (appRequest) {
-      try {
-        const code = await session.handOffToApp(appRequest.challenge);
-        returnLink = callbackUrl(code, appRequest.state);
-        window.location.href = returnLink;
-      } catch (error) {
-        const found = asProblem(error);
-        if (found.status === 403) notice = m.login_app_stale();
-        else problem = found;
-      }
+      confirming = true;
       return;
     }
     password = '';
     await navigatePath(session.me?.must_change_password ? '/settings?password=1#profile' : next, {
       replace: true,
     });
+  }
+
+  /** The user confirmed: the login goes to the app (a tap, which Android needs for the jump). */
+  async function handOver(): Promise<void> {
+    if (!appRequest) return;
+    handing = true;
+    problem = null;
+    notice = null;
+    try {
+      const code = await session.handOffToApp(appRequest.requestId);
+      returnLink = callbackUrl({ code, state: appRequest.state }, navigator.userAgent);
+      window.location.href = returnLink;
+    } catch (error) {
+      const found = asProblem(error);
+      confirming = false;
+      if (found.status === 403) notice = m.login_app_stale();
+      else problem = found;
+    } finally {
+      handing = false;
+    }
+  }
+
+  /** Not for the app after all: end this browser login and tell the app. */
+  async function cancelHandOver(): Promise<void> {
+    if (!appRequest) return;
+    await session.logout();
+    confirming = false;
+    window.location.href = callbackUrl(
+      { error: 'cancelled', state: appRequest.state },
+      navigator.userAgent,
+    );
   }
 
   async function submit(event: SubmitEvent): Promise<void> {
@@ -189,12 +215,29 @@
       <Button href={returnLink} variant="primary" full icon="phone" testid="login-app-return"
         >{m.login_app_return()}</Button
       >
+    {:else if confirming}
+      <div class="confirm" data-testid="login-app-confirm">
+        <p>
+          {m.login_app_confirm({ name: session.me?.display_name || session.me?.username || '' })}
+        </p>
+        <Button
+          variant="primary"
+          full
+          icon="phone"
+          pending={handing}
+          testid="login-app-continue"
+          onclick={handOver}>{m.login_app_continue()}</Button
+        >
+        <Button variant="ghost" full disabled={handing} onclick={cancelHandOver}
+          >{m.cancel()}</Button
+        >
+      </div>
     {/if}
   {/if}
   {#if session.ended === 'expired' && !problem && !appRequest}
     <ProblemNotice tone="info" title={m.login_session_ended()} />
   {/if}
-  {#if !returnLink}
+  {#if !returnLink && !confirming}
     {#if passkeyButton}
       <div class="passkey">
         <Button
@@ -315,6 +358,17 @@
   .divider::after {
     content: '';
     border-top: var(--md-hairline) solid var(--md-color-line);
+  }
+
+  .confirm {
+    display: grid;
+    gap: var(--md-space-3);
+  }
+
+  .confirm p {
+    margin: 0;
+    font-size: var(--md-font-size-16);
+    font-weight: var(--md-weight-semibold);
   }
 
   .app-note {

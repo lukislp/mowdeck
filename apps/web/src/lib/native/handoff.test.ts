@@ -10,10 +10,18 @@ import {
   handoffAvailable,
   pkcePair,
   signInThroughBrowser,
+  startAppLogin,
 } from './handoff';
 import { authCallback, pathFromDeepLink } from './links';
 
 const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+const REQUEST = '0b6f7a52-3c1e-4c5e-9a43-1f0f5d2e7c11';
+/** The app's sign-in request; remembers the challenge it registered. */
+const registered: string[] = [];
+const start = async (challenge: string) => {
+  registered.push(challenge);
+  return REQUEST;
+};
 
 /** A bridge with `MowDeckShell.openAuthSession` (or without it, for older app builds). */
 function fakeBridge(
@@ -50,19 +58,46 @@ function opened(options: object): URL {
 describe('app login hand-off: links and parameters', () => {
   it('reads the app parameters of the sign-in page and builds the callback', () => {
     const state = 'abcdefghijklmnopqrstuv';
+    const id = '0b6f7a52-3c1e-4c5e-9a43-1f0f5d2e7c11';
+    expect(appLoginRequest(new URLSearchParams({ app_request: id, app_state: state }))).toEqual({
+      requestId: id,
+      state,
+    });
+    expect(appLoginRequest(new URLSearchParams({ app_request: id }))).toBeNull();
+    // A link cannot bring its own PKCE challenge any more.
     expect(
       appLoginRequest(new URLSearchParams({ app_challenge: CHALLENGE, app_state: state })),
-    ).toEqual({ challenge: CHALLENGE, state });
-    expect(appLoginRequest(new URLSearchParams({ app_challenge: CHALLENGE }))).toBeNull();
-    expect(
-      appLoginRequest(new URLSearchParams({ app_challenge: 'short', app_state: state })),
     ).toBeNull();
     expect(
-      appLoginRequest(new URLSearchParams({ app_challenge: CHALLENGE, app_state: 'x<script>' })),
+      appLoginRequest(new URLSearchParams({ app_request: 'nope', app_state: state })),
     ).toBeNull();
-    expect(callbackUrl('mda_a+b', state)).toBe(
+    expect(
+      appLoginRequest(new URLSearchParams({ app_request: id, app_state: 'x<script>' })),
+    ).toBeNull();
+    expect(callbackUrl({ code: 'mda_a+b', state })).toBe(
       `mowdeck://auth/callback?code=mda_a%2Bb&state=${state}`,
     );
+    // Android: an intent only the MowDeck package can receive.
+    expect(
+      callbackUrl({ code: 'mda_x', state }, 'Mozilla/5.0 (Linux; Android 16) Chrome/141.0'),
+    ).toBe(
+      `intent://auth/callback?code=mda_x&state=${state}#Intent;scheme=mowdeck;package=app.mowdeck.mobile;end`,
+    );
+    expect(callbackUrl({ error: 'cancelled', state })).toBe(
+      `mowdeck://auth/callback?error=cancelled&state=${state}`,
+    );
+  });
+
+  it('registers the challenge with Identity', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ request_id: 'r1' })));
+    expect(await startAppLogin(CHALLENGE, fetch as unknown as typeof globalThis.fetch)).toBe('r1');
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/v1/identity/app-login/start');
+    expect(JSON.parse(String(init.body))).toEqual({ code_challenge: CHALLENGE });
+    const refused = vi.fn(async () => new Response('{}', { status: 429 }));
+    await expect(
+      startAppLogin(CHALLENGE, refused as unknown as typeof globalThis.fetch),
+    ).rejects.toEqual(new HandoffError('failed'));
   });
 
   it('parses auth callbacks and never routes them as pages', () => {
@@ -103,9 +138,10 @@ describe('app login hand-off: the flow', () => {
       page = opened(options);
       const state = page.searchParams.get('app_state') ?? '';
       expect((options as { callbackScheme: string }).callbackScheme).toBe('mowdeck');
-      return { url: callbackUrl('mda_code', state) };
+      return { url: callbackUrl({ code: 'mda_code', state }) };
     });
     const result = await signInThroughBrowser({
+      start,
       bridge,
       origin: 'https://mowdeck.example.org',
       redeem,
@@ -114,13 +150,15 @@ describe('app login hand-off: the flow', () => {
     expect(page!.origin + page!.pathname).toBe('https://mowdeck.example.org/login');
     const [code, verifier] = redeem.mock.calls[0] as unknown as [string, string];
     expect(code).toBe('mda_code');
-    // The challenge in the URL is the S256 hash of the verifier the app kept.
+    // The app registered the S256 hash of the verifier it kept; the URL has only the request.
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
     const expected = btoa(String.fromCharCode(...new Uint8Array(digest)))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');
-    expect(page!.searchParams.get('app_challenge')).toBe(expected);
+    expect(registered.at(-1)).toBe(expected);
+    expect(page!.searchParams.get('app_request')).toBe(REQUEST);
+    expect(page!.searchParams.get('app_challenge')).toBeNull();
     expect(page!.search).not.toContain(verifier);
     expect(listeners).toHaveLength(0);
   });
@@ -133,13 +171,14 @@ describe('app login hand-off: the flow', () => {
       return {};
     });
     const pending = signInThroughBrowser({
+      start,
       bridge: fake.bridge,
       origin: 'https://m.example',
       redeem,
     });
     await vi.waitFor(() => expect(state).not.toBe(''));
     fake.emit('mowdeck://mowers/1'); // other deep links are not the answer
-    fake.emit(callbackUrl('mda_x', state));
+    fake.emit(callbackUrl({ code: 'mda_x', state }));
     expect(await pending).toBe('signed-in');
     expect(redeem).toHaveBeenCalledWith('mda_x', expect.any(String));
   });
@@ -147,10 +186,10 @@ describe('app login hand-off: the flow', () => {
   it('refuses a callback with a foreign state', async () => {
     const redeem = vi.fn();
     const { bridge } = fakeBridge('ios', () => ({
-      url: callbackUrl('mda_evil', 'someone-elses-state'),
+      url: callbackUrl({ code: 'mda_evil', state: 'someone-elses-state' }),
     }));
     await expect(
-      signInThroughBrowser({ bridge, origin: 'https://m.example', redeem }),
+      signInThroughBrowser({ start, bridge, origin: 'https://m.example', redeem }),
     ).rejects.toEqual(new HandoffError('state'));
     expect(redeem).not.toHaveBeenCalled();
   });
@@ -160,13 +199,13 @@ describe('app login hand-off: the flow', () => {
     const closed = fakeBridge('ios', () => {
       throw Object.assign(new Error('The user cancelled'), { code: 'cancelled' });
     });
-    expect(await signInThroughBrowser({ bridge: closed.bridge, origin: 'https://m', redeem })).toBe(
-      'cancelled',
-    );
+    expect(
+      await signInThroughBrowser({ start, bridge: closed.bridge, origin: 'https://m', redeem }),
+    ).toBe('cancelled');
     const android = fakeBridge('android', () => ({}));
     const abort = new AbortController();
     const pending = signInThroughBrowser(
-      { bridge: android.bridge, origin: 'https://m', redeem },
+      { start, bridge: android.bridge, origin: 'https://m', redeem },
       abort.signal,
     );
     abort.abort();
@@ -176,16 +215,16 @@ describe('app login hand-off: the flow', () => {
       state = opened(options).searchParams.get('app_state') ?? '';
       return { url: `mowdeck://auth/callback?error=cancelled&state=${state}` };
     });
-    expect(await signInThroughBrowser({ bridge: said.bridge, origin: 'https://m', redeem })).toBe(
-      'cancelled',
-    );
+    expect(
+      await signInThroughBrowser({ start, bridge: said.bridge, origin: 'https://m', redeem }),
+    ).toBe('cancelled');
     expect(redeem).not.toHaveBeenCalled();
   });
 
   it('gives up after the timeout', async () => {
     const { bridge } = fakeBridge('android', () => ({}));
     await expect(
-      signInThroughBrowser({ bridge, origin: 'https://m', redeem: vi.fn(), timeoutMs: 20 }),
+      signInThroughBrowser({ start, bridge, origin: 'https://m', redeem: vi.fn(), timeoutMs: 20 }),
     ).rejects.toEqual(new HandoffError('timeout'));
   });
 });
@@ -210,12 +249,12 @@ describe('app login hand-off: the browser side of the session', () => {
       channel: null,
     });
     await session.login('lukas', 'pw');
-    const code = await session.handOffToApp(CHALLENGE);
+    const code = await session.handOffToApp(REQUEST);
     expect(code).toBe('mda_1');
     const handoff = calls.at(-1)!;
     expect(handoff.url).toBe('/api/v1/identity/app-login/code');
     expect((handoff.init?.headers as Record<string, string>).Authorization).toBe('Bearer acc');
-    expect(JSON.parse(String(handoff.init?.body))).toEqual({ code_challenge: CHALLENGE });
+    expect(JSON.parse(String(handoff.init?.body))).toEqual({ request_id: REQUEST });
     expect(session.status).toBe('anonymous');
     expect(session.token).toBeNull();
   });

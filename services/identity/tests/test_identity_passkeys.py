@@ -6,7 +6,7 @@ authenticator (``passkey_support``); the negative cases bend one thing at a time
 
 from datetime import timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from identity_support import API, PASSWORD, Account, Harness, bearer, harness, make_settings
@@ -466,12 +466,23 @@ async def test_admins_manage_the_passkeys_of_sub_users_only() -> None:
 # --- the native app hand-off (login-method agnostic) -------------------------------------------
 
 
-async def browser_code(h: Harness, access_token: str, challenge_value: str) -> Any:
-    """The system browser hands its fresh login to the app."""
+async def app_request(h: Harness, challenge_value: str) -> Any:
+    """The app registers its PKCE challenge."""
+    return await h.client.post(f"{API}/app-login/start", json={"code_challenge": challenge_value})
+
+
+async def browser_code(
+    h: Harness, access_token: str, challenge_value: str, request_id: str | None = None
+) -> Any:
+    """The app starts a request; the system browser hands its fresh login over for it."""
+    if request_id is None:
+        started = await app_request(h, challenge_value)
+        assert started.status_code == 200, started.text
+        request_id = started.json()["request_id"]
     return await h.client.post(
         f"{API}/app-login/code",
         headers=bearer(access_token),
-        json={"code_challenge": challenge_value},
+        json={"request_id": request_id},
     )
 
 
@@ -552,12 +563,33 @@ async def test_only_fresh_browser_logins_of_users_are_handed_over() -> None:
         anonymous = await h.client.post(
             f"{API}/app-login/code", json={"code_challenge": s256_challenge(VERIFIER)}
         )
-        bad = await browser_code(h, (await h.login("lukas"))["access_token"], "nope")
+        bad = await app_request(h, "nope")
+        fresh = (await h.login("lukas"))["access_token"]
+        invented = await browser_code(h, fresh, "", request_id=str(uuid4()))
+        started = (await app_request(h, s256_challenge(VERIFIER))).json()
+        first = await browser_code(h, fresh, "", request_id=started["request_id"])
+        again = await browser_code(
+            h, (await h.login("lukas"))["access_token"], "", request_id=started["request_id"]
+        )
+        late_request = (await app_request(h, s256_challenge(VERIFIER))).json()["request_id"]
+        async with h.store.transaction() as tx:  # the app started it eleven minutes ago
+            request = await tx.app_login_requests.get(id=UUID(late_request))
+            assert request is not None
+            request.expires_at -= timedelta(minutes=11)
+            await tx.app_login_requests.update(request)
+        late = await browser_code(
+            h, (await h.login("lukas"))["access_token"], "", request_id=late_request
+        )
         audit = await h.audit(lukas)
     assert stale.status_code == 403
     assert by_token.status_code == 403
     assert anonymous.status_code == 401
     assert bad.status_code == 422
+    assert started["expires_in"] == 600
+    assert invented.status_code == 403  # only requests the app started
+    assert first.status_code == 200
+    assert again.status_code == 403  # single use
+    assert late.status_code == 403
     denied = [e for e in audit if e["action"] == "app_login.denied"]
     assert denied and denied[0]["details"]["reason"] == "login not fresh"
 
@@ -615,3 +647,7 @@ async def test_expired_ceremonies_and_codes_are_purged() -> None:
             now = h.clock()
             assert await tx.webauthn_challenges.delete(expires_at=Lt(now)) == 1
             assert await tx.app_login_codes.delete(expires_at=Lt(now)) == 1
+        await app_request(h, s256_challenge(VERIFIER))
+        h.clock.advance(timedelta(minutes=11))
+        async with h.store.transaction() as tx:
+            assert await tx.app_login_requests.delete(expires_at=Lt(h.clock())) == 1

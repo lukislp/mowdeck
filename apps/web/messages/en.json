@@ -2288,7 +2288,7 @@
   "login_app_return": "Open the app",
   "login_app_waiting": "Sign in in the browser window that opened.",
   "login_app_failed": "The sign-in did not reach the app. Please try again.",
-  "login_app_stale": "Please sign in again to continue in the app.",
+  "login_app_stale": "This sign-in request has expired or was used. Please start again in the app.",
   "passkeys_title": "Passkeys",
   "passkeys_intro": "Sign in without a password, with Face ID, Touch ID, Windows Hello or your phone. Your password stays as a fallback.",
   "passkeys_empty": "No passkeys yet.",
@@ -2313,5 +2313,7 @@
   "passkeys_cancelled": "No passkey was created.",
   "users_passkeys": "Passkeys",
   "users_passkeys_title": "Passkeys of {name}",
-  "users_passkeys_hint": "Remove a lost or no longer trusted passkey. The password of the user stays."
+  "users_passkeys_hint": "Remove a lost or no longer trusted passkey. The password of the user stays.",
+  "login_app_confirm": "Signed in as {name}. Continue in the MowDeck app on this device?",
+  "login_app_continue": "Continue in the app"
 }

@@ -276,15 +276,15 @@
         "additionalProperties": false,
         "description": "``POST /app-login/code``: hand the fresh browser login to the native app.",
         "properties": {
-          "code_challenge": {
-            "description": "PKCE S256 challenge of the app: BASE64URL(SHA256(code_verifier))",
-            "pattern": "^[A-Za-z0-9_-]{43}$",
-            "title": "Code Challenge",
+          "request_id": {
+            "description": "The app's sign-in request (from /app-login/start)",
+            "format": "uuid",
+            "title": "Request Id",
             "type": "string"
           }
         },
         "required": [
-          "code_challenge"
+          "request_id"
         ],
         "title": "AppCodeIn",
         "type": "object"
@@ -306,6 +306,43 @@
           "expires_in"
         ],
         "title": "AppCodeOut",
+        "type": "object"
+      },
+      "AppLoginStartIn": {
+        "additionalProperties": false,
+        "description": "``POST /app-login/start``: the native app registers its PKCE challenge.",
+        "properties": {
+          "code_challenge": {
+            "description": "PKCE S256 challenge of the app: BASE64URL(SHA256(code_verifier))",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "title": "Code Challenge",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code_challenge"
+        ],
+        "title": "AppLoginStartIn",
+        "type": "object"
+      },
+      "AppLoginStartOut": {
+        "description": "The app's sign-in request: its id goes into the sign-in page's address.",
+        "properties": {
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "expires_in"
+        ],
+        "title": "AppLoginStartOut",
         "type": "object"
       },
       "AppSessionIn": {
@@ -3717,7 +3754,7 @@
     },
     "/api/v1/identity/app-login/code": {
       "post": {
-        "description": "Native app hand-off (ADR 0050), browser side: exchange the caller's fresh login session\n(any login method, at most a few minutes old) for a one-time code bound to the app's PKCE\nchallenge. The browser session ends; the page sends the code to the app's URL scheme.",
+        "description": "Native app hand-off (ADR 0050), browser side: exchange the caller's fresh login session\n(any login method, at most a few minutes old) for a one-time code bound to the app's\nsign-in request and its PKCE challenge (403 for an unknown, used or expired request). The\nbrowser session ends; the page sends the code to the app's URL scheme.",
         "operationId": "app_login_code_api_v1_identity_app_login_code_post",
         "requestBody": {
           "content": {
@@ -3814,6 +3851,48 @@
           }
         },
         "summary": "App Login Session",
+        "tags": [
+          "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/app-login/start": {
+      "post": {
+        "description": "Native app hand-off (ADR 0050), first step in the app: register the S256 hash of the\nPKCE verifier; the sign-in page in the system browser gets only the request id.",
+        "operationId": "app_login_start_api_v1_identity_app_login_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppLoginStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppLoginStartOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "App Login Start",
         "tags": [
           "identity: sessions"
         ]

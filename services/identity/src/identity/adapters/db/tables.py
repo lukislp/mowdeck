@@ -249,6 +249,15 @@ webauthn_challenges = Table(
     Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True),
 )
 
+app_login_requests = Table(
+    "app_login_requests",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("code_challenge", String(64), nullable=False),
+    Column("created_at", TS, nullable=False),
+    Column("expires_at", TS, nullable=False, index=True),
+)
+
 app_login_codes = Table(
     "app_login_codes",
     metadata,

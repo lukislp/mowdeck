@@ -393,6 +393,21 @@ class WebAuthnChallenge:
 
 
 @dataclass(slots=True)
+class AppLoginRequest:
+    """The native app's request to sign in through the system browser (single use).
+
+    The app registers the S256 hash of its PKCE verifier first and opens the sign-in page with
+    only this request's id; the page can hand a login over only for a request the app started
+    a few minutes ago, never for a challenge a link brought along.
+    """
+
+    id: UUID
+    code_challenge: str
+    created_at: datetime
+    expires_at: datetime
+
+
+@dataclass(slots=True)
 class AppLoginCode:
     """A one-time code that hands a fresh login from the system browser to the native app.
 

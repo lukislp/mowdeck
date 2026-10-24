@@ -20,6 +20,7 @@ from identity.domain.models import (
     Account,
     ApiToken,
     AppLoginCode,
+    AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
     LoginAttempt,
@@ -180,6 +181,11 @@ class Tx(Protocol):
     @property
     def app_login_codes(self) -> Table[AppLoginCode]:
         """The app login codes table."""
+        ...
+
+    @property
+    def app_login_requests(self) -> Table[AppLoginRequest]:
+        """The app login requests table."""
         ...
 
 

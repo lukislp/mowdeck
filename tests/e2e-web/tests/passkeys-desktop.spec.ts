@@ -5,9 +5,10 @@
  * 1. Settings: add a passkey (password again), it is listed with its name.
  * 2. Log out, "Mit Passkey anmelden" signs in without username or password; so does the
  *    passkey offered in the username field's autofill (conditional UI).
- * 3. The sign-in page opened for the app (`?app_challenge=...&app_state=...`) hands the passkey
- *    login over as a one-time code in `mowdeck://auth/callback`, which the "app" (here the test
- *    with the PKCE verifier) redeems for a session; the browser session ends.
+ * 3. The "app" (here the test with the PKCE verifier) registers its challenge; the sign-in page
+ *    opened with the request id (`?app_request=...&app_state=...`) hands the passkey login over,
+ *    after the user confirms, as a one-time code in `mowdeck://auth/callback`, which the app
+ *    redeems for a session; the browser session ends.
  * 4. Remove the passkey; a passkey login with it is refused.
  *
  * Every login counts against the per-address login limit (10 per minute, burst 20) that the
@@ -93,10 +94,18 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
   const verifier = b64url(randomBytes(32));
   const challenge = b64url(createHash('sha256').update(verifier).digest());
   const state = b64url(randomBytes(16));
-  await page.goto(`/login?app_challenge=${challenge}&app_state=${state}`);
+  // The "app" registers its challenge; the page gets only the request id.
+  const started = await request.post('/api/v1/identity/app-login/start', {
+    data: { code_challenge: challenge },
+  });
+  expect(started.status(), await started.text()).toBe(200);
+  const requestId = ((await started.json()) as { request_id: string }).request_id;
+  await page.goto(`/login?app_request=${requestId}&app_state=${state}`);
   await expect(page.getByTestId('login-app-notice')).toBeVisible();
   await authenticator.presence(true);
   await page.getByTestId('login-passkey').click();
+  // Signed in for the app: the user confirms before the login goes there.
+  await page.getByTestId('login-app-continue').click();
   const back = page.getByTestId('login-app-return');
   await expect(back).toBeVisible();
   const link = new URL((await back.getAttribute('href'))!);
