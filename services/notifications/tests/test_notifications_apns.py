@@ -476,6 +476,40 @@ async def test_notifications_apns_api_same_token_moves_to_the_new_owner() -> Non
     assert device.user_id == other.user_id and device.account_id == other.account_id
 
 
+async def test_notifications_apns_api_new_token_of_an_installation_replaces_the_old() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        await h.add_mower(owner)
+        install, ipad = str(uuid4()), str(uuid4())
+
+        async def post(token: str, installation: str | None) -> httpx.Response:
+            body: dict[str, Any] = {"token": token, "device_name": "MowDeck iOS"}
+            if installation is not None:
+                body["installation_id"] = installation
+            h.clock.advance(1)  # oldest first, not by id
+            return await h.client.post(f"{API}/me/push/apns", json=body, headers=owner.headers)
+
+        first = await post(TOKEN, install)
+        reinstalled = await post("b2" * 32, install)
+        same = await post("b2" * 32, install)
+        tablet = await post("c3" * 32, ipad)
+        legacy = await post("d4" * 32, None)
+        invalid = await post("e5" * 32, "not-a-uuid")
+        listed = (await h.client.get(f"{API}/me/push/apns", headers=owner.headers)).json()
+    assert (first.status_code, reinstalled.status_code, same.status_code) == (201, 201, 201)
+    assert reinstalled.json()["id"] == first.json()["id"] == same.json()["id"]
+    assert reinstalled.json()["token_suffix"] == ("b2" * 32)[-8:]
+    assert "installation_id" not in first.json()
+    assert invalid.status_code == 422
+    assert [d["id"] for d in listed["items"]] == [
+        first.json()["id"],
+        tablet.json()["id"],
+        legacy.json()["id"],
+    ]
+    tokens = {d.token: d.installation_id for d in h.store.data.apns.values()}
+    assert tokens == {"b2" * 32: UUID(install), "c3" * 32: UUID(ipad), "d4" * 32: None}
+
+
 async def test_notifications_apns_api_validation() -> None:
     async with harness() as h:
         owner = await h.owner()

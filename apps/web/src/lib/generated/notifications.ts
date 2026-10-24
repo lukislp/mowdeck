@@ -96,7 +96,8 @@ export type paths = {
         /**
          * Add Apns Device
          * @description Register the iOS app's APNs device token for the caller (plan feature
-         *     ``notifications.push``); the same token again replaces the earlier owner and name.
+         *     ``notifications.push``); the same token again replaces the earlier owner and name, and a
+         *     new token of a known ``installation_id`` replaces that installation's earlier token.
          */
         post: operations["add_apns_device_api_v1_notifications_me_push_apns_post"];
         delete?: never;
@@ -279,6 +280,11 @@ export type components = {
              * @example Lukas' iPhone
              */
             device_name?: string | null;
+            /**
+             * Installation Id
+             * @description Stable id of the app installation (a UUID the iOS shell keeps in the Keychain). A new token of the same installation replaces the earlier one, so a device never holds two registrations. Without it (older app builds) each token is its own device.
+             */
+            installation_id?: string | null;
             /**
              * Token
              * @description Device token in hexadecimal (case-insensitive, stored in lower case).

@@ -211,7 +211,13 @@ describe('InboxNotifier', () => {
 
 // --- APNs ---------------------------------------------------------------------------------
 
-function apnsSetup(receive: string, requested = receive) {
+const INSTALLATION = '6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b';
+
+function apnsSetup(
+  receive: string,
+  requested = receive,
+  installationId?: () => Promise<string | null>,
+) {
   const cap = new FakeCapacitor('ios', ['PushNotifications']);
   cap.handlers.set('PushNotifications', (method) => {
     if (method === 'checkPermissions') return { receive };
@@ -230,6 +236,7 @@ function apnsSetup(receive: string, requested = receive) {
     api,
     storage,
     deviceName: 'MowDeck iOS',
+    installationId,
     onChange: (state) => states.push(state),
   });
   return { cap, api, storage, states, registration };
@@ -243,10 +250,40 @@ describe('ApnsRegistration', () => {
     expect(cap.called('PushNotifications', 'register')).toHaveLength(1);
     cap.emit('PushNotifications', 'registration', { value: 'ABCDEF0123' });
     await flush();
-    expect(api.add).toHaveBeenCalledWith('ABCDEF0123', 'MowDeck iOS');
+    expect(api.add).toHaveBeenCalledWith('ABCDEF0123', 'MowDeck iOS', null);
     expect(registration.deviceId()).toBe('device-1');
     expect(registration.state).toBe('on');
     expect(states).toEqual(['pending', 'on']);
+  });
+
+  it('sends the installation id so a new token replaces the old one', async () => {
+    const id = vi.fn().mockResolvedValue(INSTALLATION.toUpperCase());
+    const { cap, api, registration } = apnsSetup('granted', 'granted', id);
+    await registration.enable();
+    cap.emit('PushNotifications', 'registration', { value: 'AA' });
+    await flush();
+    cap.emit('PushNotifications', 'registration', { value: 'BB' });
+    await flush();
+    expect(api.add.mock.calls).toEqual([
+      ['AA', 'MowDeck iOS', INSTALLATION],
+      ['BB', 'MowDeck iOS', INSTALLATION],
+    ]);
+    expect(registration.state).toBe('on');
+  });
+
+  it('registers without an installation id when the shell has none or a bad one', async () => {
+    for (const id of [
+      () => Promise.reject(new Error('UNIMPLEMENTED')), // shell build before the method
+      () => Promise.resolve('not-a-uuid'),
+      () => Promise.resolve(null),
+    ]) {
+      const { cap, api, registration } = apnsSetup('granted', 'granted', id);
+      await registration.enable();
+      cap.emit('PushNotifications', 'registration', { value: 'AA' });
+      await flush();
+      expect(api.add).toHaveBeenCalledWith('AA', 'MowDeck iOS', null);
+      expect(registration.state).toBe('on');
+    }
   });
 
   it('does not ask again when permission was granted and listens once', async () => {
@@ -305,7 +342,9 @@ function shellSetup(platform: 'ios' | 'android', options: { ntfy?: boolean } = {
     method === 'checkPermissions' ? { receive: 'granted' } : undefined,
   );
   cap.handlers.set('App', () => ({ url: 'mowdeck://mowers/launch' }));
-  cap.handlers.set('MowDeckShell', () => ({ url: 'https://mowdeck.lan' }));
+  cap.handlers.set('MowDeckShell', (method) =>
+    method === 'getInstallationId' ? { id: INSTALLATION } : { url: 'https://mowdeck.lan' },
+  );
   const api = {
     add: vi.fn().mockResolvedValue({ id: 'device-1' }),
     remove: vi.fn().mockResolvedValue(undefined),
@@ -365,7 +404,7 @@ describe('NativeShell', () => {
   });
 
   it('iOS: registers APNs and notifies locally only while APNs is not on', async () => {
-    const { cap, shell } = shellSetup('ios');
+    const { cap, api, shell } = shellSetup('ios');
     await shell.signedIn();
     await shell.signedIn();
     expect(shell.apnsAvailable).toBe(true);
@@ -378,8 +417,23 @@ describe('NativeShell', () => {
     cap.emit('PushNotifications', 'registration', { value: 'AA' });
     await flush();
     expect(shell.apns).toBe('on');
+    expect(api.add).toHaveBeenCalledWith('AA', 'MowDeck iOS', INSTALLATION);
+    expect(cap.called('MowDeckShell', 'getInstallationId')).toHaveLength(1);
     await shell.inboxChanged([item('c'), item('b'), item('a')], 3);
     expect(cap.called('LocalNotifications', 'schedule')).toHaveLength(1);
+  });
+
+  it('iOS: an older shell without getInstallationId still registers', async () => {
+    const { cap, api, shell } = shellSetup('ios');
+    cap.handlers.set('MowDeckShell', (method) => {
+      if (method === 'getInstallationId') throw new Error('UNIMPLEMENTED');
+      return { url: 'https://mowdeck.lan' };
+    });
+    await shell.signedIn();
+    cap.emit('PushNotifications', 'registration', { value: 'AA' });
+    await flush();
+    expect(api.add).toHaveBeenCalledWith('AA', 'MowDeck iOS', null);
+    expect(shell.apns).toBe('on');
   });
 
   it('Android: channels, local notifications unless ntfy delivers', async () => {
