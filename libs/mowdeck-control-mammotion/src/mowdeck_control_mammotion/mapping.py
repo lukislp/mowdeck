@@ -18,7 +18,7 @@ import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Final
+from typing import Any, Final, Literal, NamedTuple
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
@@ -641,18 +641,71 @@ def blade_height_of(device: MowerDevice) -> int | None:
 MAX_PLAUSIBLE_SPEED_MPS: Final = 5.0
 
 
+def reported_speed_of(device: MowerDevice) -> float | None:
+    """The speed the mower reports while it works: ``report_data.work.man_run_speed``
+    (centimetres per second, divided by 100), what the app and Mammotion-HA show. None while it
+    is 0 (idle, docked) or implausible."""
+    reported = _float(device.report_data.work.man_run_speed) / 100
+    return float(reported) if 0 < reported <= MAX_PLAUSIBLE_SPEED_MPS else None
+
+
 def speed_of(device: MowerDevice) -> float | None:
     """The working speed in m/s, as the Mammotion app and Mammotion-HA show it.
 
-    Preferred: the reported ``report_data.work.man_run_speed`` (centimetres per second, so
-    divided by 100). Fallback while it is 0 or implausible: the configured
-    ``mower_state.travel_speed``. None when neither lies in ``(0, 5]`` m/s.
+    Preferred: the reported ``report_data.work.man_run_speed`` (:func:`reported_speed_of`).
+    Fallback while it is 0 or implausible: the configured ``mower_state.travel_speed``. None
+    when neither lies in ``(0, 5]`` m/s.
     """
-    reported = _float(device.report_data.work.man_run_speed) / 100
-    if 0 < reported <= MAX_PLAUSIBLE_SPEED_MPS:
-        return float(reported)
+    reported = reported_speed_of(device)
+    if reported is not None:
+        return reported
     speed = _float(device.mower_state.travel_speed)
     return speed if 0 < speed <= MAX_PLAUSIBLE_SPEED_MPS else None
+
+
+SpeedSource = Literal["setpoint", "device", "default"]
+
+
+class JobSpeed(NamedTuple):
+    """The speed the next area start sends in its route settings and where it comes from:
+    ``setpoint`` (an explicit ``SetSpeed`` the mower has not confirmed yet), ``device`` (the
+    mower's own setting, :func:`configured_speed_of`) or ``default`` (the mower reported none,
+    so :data:`~mowdeck_control_mammotion.base.DEFAULT_SPEED_MPS`)."""
+
+    mps: float
+    source: SpeedSource
+
+
+_SPEED_TOLERANCE_MPS: Final = 0.005
+
+
+def configured_speed_of(
+    device: MowerDevice, speed_range: tuple[float, float] | None = None
+) -> float | None:
+    """The mower's own speed setting for its next job, None when it reported none.
+
+    Preferred: ``mower_state.travel_speed``, the answer to ``get_speed``
+    (``MctlDriver.bidire_speed_read_set``, ``DrvSrSpeed``), the value ``set_speed`` and so
+    ``SetSpeed`` change. Fallback: ``work.speed``, the speed in the route settings of the
+    current or paused job as the mower echoed them (``bidire_reqconver_path``, PyMammotion's
+    ``CurrentTaskSettings``; reset when the job ends). PyMammotion starts both at 0, so 0 means
+    "not reported". A value outside ``speed_range`` (the model's mowing speed range) is no
+    mowing speed and is skipped (``travel_speed`` may be the faster travel speed)."""
+    for value in (device.mower_state.travel_speed, device.work.speed):
+        speed = _float(value)
+        if not 0 < speed <= MAX_PLAUSIBLE_SPEED_MPS:
+            continue
+        if speed_range is not None and not (
+            speed_range[0] - _SPEED_TOLERANCE_MPS <= speed <= speed_range[1] + _SPEED_TOLERANCE_MPS
+        ):
+            continue
+        return float(speed)
+    return None
+
+
+def same_speed(a: float, b: float) -> bool:
+    """Whether two speeds are the same setting (the protobuf float rounds)."""
+    return math.isclose(a, b, abs_tol=_SPEED_TOLERANCE_MPS)
 
 
 def state_of(
@@ -668,7 +721,7 @@ def state_of(
     link: str | None = None,
     model: str = "",
     light_reported: bool = False,
-    speed_setpoint_mps: float | None = None,
+    job_speed: JobSpeed | None = None,
     links: Mapping[str, LinkStatus] | None = None,
     firmware_info: FirmwareInfo | None = None,
     fault_since: datetime | None = None,
@@ -682,9 +735,11 @@ def state_of(
     ``base_station`` is the linked RTK base station (:func:`base_station_of`, ADR 0047).
 
     ``light_reported``: the mower answered a headlamp read (see :func:`light_on_of`).
-    ``speed_setpoint_mps``: the speed the next job will use (the adapter's last ``SetSpeed`` or
-    its default); reported as ``speed_mps`` while the mower reports no speed (idle, docked),
-    with ``raw["speed_source"]`` ``setpoint`` instead of ``reported``. ``links`` and
+    ``speed_mps`` is the speed the mower reports while it works (``raw["speed_source"]``
+    ``reported``); while it reports none (idle, docked) it is ``job_speed``, the speed the next
+    area start will send, with its source (``setpoint``, ``device`` or ``default``, see
+    :class:`JobSpeed`); without ``job_speed`` the configured ``mower_state.travel_speed``
+    (``device``). ``links`` and
     ``firmware_info`` are the connection's additional links and firmware state (ADR 0038).
     ``settings`` and ``rain_detected`` are the mower's own settings and its rain sensor (ADR 0046,
     :mod:`mowdeck_control_mammotion.settings`).
@@ -707,12 +762,16 @@ def state_of(
     code, message = error_of(device, activity, fault)
     battery = _int(device.report_data.dev.battery_val)
     raw = raw_of(device, device_name, link=link, model=model)
-    speed = speed_of(device)
+    speed = reported_speed_of(device)
     if speed is not None:
         raw["speed_source"] = "reported"
-    elif speed_setpoint_mps is not None and 0 < speed_setpoint_mps <= MAX_PLAUSIBLE_SPEED_MPS:
-        speed = float(speed_setpoint_mps)
-        raw["speed_source"] = "setpoint"
+    elif job_speed is not None and 0 < job_speed.mps <= MAX_PLAUSIBLE_SPEED_MPS:
+        speed = float(job_speed.mps)
+        raw["speed_source"] = job_speed.source
+    else:
+        speed = configured_speed_of(device)
+        if speed is not None:
+            raw["speed_source"] = "device"
     light_on = light_on_of(device, reported=light_reported)
     if light_on is not None:
         lamp = device.mower_state.lamp_info
