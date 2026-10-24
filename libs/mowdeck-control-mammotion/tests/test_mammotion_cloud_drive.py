@@ -363,6 +363,7 @@ async def test_mammotion_cloud_vendor_ends_surface_on_the_next_frame(
     conn, port = await _connected()
     try:
         session = await conn.start_drive_session()
+        assert isinstance(session, CloudDriveSession)
         await session.update(0.3, 0.0, False)
         await _wait(lambda: port.remote.frames)
         port.sent.clear()
@@ -381,6 +382,7 @@ async def test_mammotion_cloud_fence_warning_ends_and_a_new_session_acknowledges
     conn, port = await _connected()
     try:
         session = await conn.start_drive_session()
+        assert isinstance(session, CloudDriveSession)
         await session.update(0.5, 0.0, False)
         await _wait(lambda: port.remote.frames)
         await port.remote.approach_fence()
