@@ -36,6 +36,24 @@ export const FINAL_OUTCOMES: ReadonlySet<CommandOutcome> = new Set([
   'expired',
 ]);
 
+/**
+ * Kinds whose `accepted` result is final (ADR 0048): the mower does not confirm a restart, a dock
+ * relocation or leaving the dock, and a map sync or RTK resync that timed out stays `accepted`.
+ * The command reached the mower; waiting longer would only end in `expired`.
+ */
+export const ACCEPTED_IS_FINAL: ReadonlySet<CommandKind> = new Set([
+  'restart_mower',
+  'sync_map',
+  'relocate_dock',
+  'leave_dock',
+  'resync_rtk',
+]);
+
+/** Whether a command of `kind` with `status` will not change any more. */
+export function isFinal(kind: CommandKind, status: CommandOutcome): boolean {
+  return FINAL_OUTCOMES.has(status) || (status === 'accepted' && ACCEPTED_IS_FINAL.has(kind));
+}
+
 export interface TrackedCommand {
   id: string;
   mowerId: string;
@@ -83,7 +101,7 @@ export class CommandStore {
   /** True while a command of `kind` for the mower is not final (double tap guard). */
   pending(mowerId: string, kind: CommandKind): boolean {
     for (const item of this.#items.values()) {
-      if (item.mowerId === mowerId && item.kind === kind && !FINAL_OUTCOMES.has(item.status)) {
+      if (item.mowerId === mowerId && item.kind === kind && !isFinal(item.kind, item.status)) {
         return true;
       }
     }
@@ -131,15 +149,15 @@ export class CommandStore {
       this.#early.set(commandId, { status: outcome, reason });
       return;
     }
-    if (FINAL_OUTCOMES.has(current.status)) return;
+    if (isFinal(current.kind, current.status)) return;
     const next = { ...current, status: outcome, reason };
     this.#items.set(commandId, next);
-    if (FINAL_OUTCOMES.has(outcome)) for (const listener of this.#listeners) listener(next);
+    if (isFinal(next.kind, outcome)) for (const listener of this.#listeners) listener(next);
   }
 
   async #poll(commandId: string): Promise<void> {
     const current = this.#items.get(commandId);
-    if (!current || FINAL_OUTCOMES.has(current.status)) return;
+    if (!current || isFinal(current.kind, current.status)) return;
     if (this.#now() > current.expiresAt + POLL_INTERVAL_MS) {
       this.resolve(commandId, 'expired');
       return;
@@ -151,7 +169,7 @@ export class CommandStore {
       // try again on the next tick
     }
     const after = this.#items.get(commandId);
-    if (after && !FINAL_OUTCOMES.has(after.status)) {
+    if (after && !isFinal(after.kind, after.status)) {
       setTimeout(() => void this.#poll(commandId), POLL_INTERVAL_MS);
     }
   }
