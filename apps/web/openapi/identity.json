@@ -247,6 +247,31 @@
         "title": "ApiTokenOut",
         "type": "object"
       },
+      "ApiTokensPurgedOut": {
+        "description": "Revoked API tokens deleted for good.",
+        "properties": {
+          "deleted": {
+            "description": "How many revoked tokens were deleted",
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "ids": {
+            "description": "Ids of the deleted tokens",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "deleted",
+          "ids"
+        ],
+        "title": "ApiTokensPurgedOut",
+        "type": "object"
+      },
       "AssignmentIn": {
         "additionalProperties": false,
         "description": "A role at a level (inside ``POST /users``).",
@@ -2100,9 +2125,53 @@
         ]
       }
     },
+    "/api/v1/identity/accounts/{account_id}/api-tokens/purge-revoked": {
+      "post": {
+        "description": "Delete every revoked API token of the account for good; active tokens stay. Each one is\naudited (``api_token.purged``); the audit history of the tokens stays.",
+        "operationId": "purge_revoked_tokens_api_v1_identity_accounts__account_id__api_tokens_purge_revoked_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiTokensPurgedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purge Revoked Tokens",
+        "tags": [
+          "identity: accounts"
+        ]
+      }
+    },
     "/api/v1/identity/accounts/{account_id}/api-tokens/{token_id}": {
       "delete": {
-        "description": "Revoke an API token.",
+        "description": "Revoke an API token; with ``purge=true`` delete an already revoked one for good.",
         "operationId": "revoke_token_api_v1_identity_accounts__account_id__api_tokens__token_id__delete",
         "parameters": [
           {
@@ -2123,6 +2192,18 @@
               "format": "uuid",
               "title": "Token Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Delete the revoked token for good instead of revoking it; 409 while the token is not revoked",
+            "in": "query",
+            "name": "purge",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Delete the revoked token for good instead of revoking it; 409 while the token is not revoked",
+              "title": "Purge",
+              "type": "boolean"
             }
           }
         ],

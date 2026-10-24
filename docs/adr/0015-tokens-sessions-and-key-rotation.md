@@ -38,3 +38,12 @@ The full design is in [Design: identity and authorization](../dev/design-identit
 - New rights reach the token-level pre-filter with the next access token; the web app refreshes after changing roles.
 - Operators must keep the key-encryption key safe and backed up: without it Identity cannot sign, and all sessions must start over after a new key is created.
 - Multi-account switching (`/session/switch-account`), passkeys, OIDC and GitHub login (the `RedirectAuthenticator` interface exists, the GitHub stub is behind a disabled flag) are later work.
+
+## Addendum: deleting revoked API tokens (2026-10-24)
+
+Revoking kept the row, and nothing ever removed it: an account that rotates its Home Assistant token collected dead entries, which the owner had to delete in the database by hand.
+
+- **Lifecycle.** Active, then revoked (by the owner, by disabling or removing the creator, by an account deletion request), then optionally deleted. Deleting is allowed only for revoked tokens; an active token must be revoked first, so the `identity.api_token.revoked` event that services rely on always goes out first.
+- **API.** `DELETE /accounts/{id}/api-tokens/{token_id}?purge=true` deletes one revoked token (204; 409 while it is not revoked; 404 for unknown and foreign tokens). `POST /accounts/{id}/api-tokens/purge-revoked` deletes all revoked tokens of the account and answers `{deleted, ids}`. Both need `can_manage_users`, like revoking. The query flag keeps one resource with one verb instead of a second path per token; the bulk call is an action on the collection like `/reconcile`.
+- **History.** Each deleted token is audited as `api_token.purged` (name, prefix, revocation time and reason, `bulk`; never the secret or its hash). No table has a foreign key to `api_tokens`; `audit_log` refers to the token by id as text and is append-only, so the earlier rows of the token stay. The token's subject is reconciled in the same unit of work, so no OpenFGA tuple can outlive the row (the account reconcile would no longer see it).
+- **No retention.** Revoked tokens are not deleted automatically; deleting stays a manual decision of the owner.

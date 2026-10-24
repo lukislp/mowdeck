@@ -486,6 +486,13 @@ class ApiTokenOut(BaseModel):
         )
 
 
+class ApiTokensPurgedOut(BaseModel):
+    """Revoked API tokens deleted for good."""
+
+    deleted: int = Field(description="How many revoked tokens were deleted")
+    ids: list[UUID] = Field(description="Ids of the deleted tokens")
+
+
 class AuditOut(BaseModel):
     """An audit entry."""
 
