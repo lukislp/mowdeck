@@ -59,6 +59,8 @@ export default defineConfig({
         'src/lib/api/problem.ts',
         'src/lib/mower/commands.ts',
         'src/lib/mower/route.ts',
+        'src/lib/mower/job.ts',
+        'src/lib/mower/reception.ts',
         'src/lib/config.ts',
         'src/lib/push/device.ts',
         'src/lib/push/payload.ts',
