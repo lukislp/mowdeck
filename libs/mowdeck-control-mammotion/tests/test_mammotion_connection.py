@@ -52,6 +52,7 @@ from mowdeck_control_mammotion.options import (
 )
 from mowdeck_control_mammotion.port import (
     CommandTimeoutError,
+    GenerateRouteInformation,
     NoTransportAvailableError,
     Priority,
     TransportError,
@@ -497,8 +498,10 @@ async def test_mammotion_start_mow_sequence_in_mammotion_ha_order() -> None:
     )
     assert outcome.status is CommandStatus.EXECUTED
     assert outcome.reason == "mower is mowing"
-    assert port.names() == ["generate_route_information", "start_job"]
-    plan, start = port.sent
+    # the mower's speed setting first (no SetSpeed: the route uses the mower's own speed)
+    assert port.names() == ["get_speed", "generate_route_information", "start_job"]
+    read, plan, start = port.sent
+    assert read.priority is Priority.USER
     assert plan.expected_field == "bidire_reqconver_path"
     assert plan.via == "send_and_wait"  # the idempotent route request may be re-sent
     assert start.via == "send"  # start_job once, no reply awaited, never re-sent
@@ -527,7 +530,7 @@ async def test_mammotion_start_mow_sends_the_job_options() -> None:
     }
     outcome = await conn.execute(StartMow(area_ids=[FRONT], pattern=pattern))
     assert outcome.status is CommandStatus.EXECUTED
-    route = port.sent[0].kwargs["generate_route_information"]
+    route = _route_of(port)
     assert route.ultra_wave == 11
     assert route.obstacle_laps == 0
     raw = route.path_order.encode("latin-1")
@@ -725,8 +728,8 @@ async def test_mammotion_start_mow_unconfirmed_is_accepted_and_sent_once() -> No
     outcome = await conn.execute(StartMow(area_ids=[FRONT]))
     assert outcome.status is CommandStatus.ACCEPTED
     assert outcome.reason == "command sent; the mower did not report mowing within 2 s"
-    assert port.names() == ["generate_route_information", "start_job"]
-    assert [c.via for c in port.sent] == ["send_and_wait", "send"]
+    assert port.names() == ["get_speed", "generate_route_information", "start_job"]
+    assert [c.via for c in port.sent] == ["send_and_wait", "send_and_wait", "send"]
 
 
 async def test_mammotion_start_mow_dispatch_sends_and_confirm_only_waits() -> None:
@@ -737,7 +740,7 @@ async def test_mammotion_start_mow_dispatch_sends_and_confirm_only_waits() -> No
     dispatch = await conn.dispatch(StartMow(area_ids=[FRONT]))
     assert dispatch.confirm is not None and dispatch.outcome is None
     assert dispatch.sent.startswith("start_job sent")
-    assert port.names() == ["generate_route_information", "start_job"]
+    assert port.names() == ["get_speed", "generate_route_information", "start_job"]
     waiting = asyncio.create_task(dispatch.settle())
     await asyncio.sleep(0.05)
     assert not waiting.done()
@@ -950,6 +953,7 @@ async def test_mammotion_ble_requests_only_the_dock_buffer_and_the_light() -> No
     assert [(c.name, c.kwargs) for c in port.sent if not is_setting_read(c.name, c.kwargs)] == [
         ("read_write_device", DOCK_ARGS),
         (LIGHT_READ_COMMAND, {"ids": 1126}),
+        ("get_speed", {}),  # the speed setting an area start uses
     ]
     await conn.disconnect()
 
@@ -969,9 +973,10 @@ async def test_mammotion_cloud_requests_the_dock_buffer_with_the_device_informat
         "get_device_product_model",
         "read_write_device",
         LIGHT_READ_COMMAND,
+        "get_speed",
     ]
-    assert requests[-2].kwargs == DOCK_ARGS
-    assert requests[-2].priority is Priority.BACKGROUND
+    assert requests[-3].kwargs == DOCK_ARGS
+    assert {c.priority for c in requests} == {Priority.BACKGROUND}
     # the fake mower answered with the buffer: dock and origin known, no retry
     assert _dock_reads(port) == 1
     mower_map = await conn.get_map()
@@ -1104,23 +1109,154 @@ async def test_mammotion_current_map_rebuilds_without_a_sync() -> None:
     assert conn.current_map() == rebuilt  # disconnected: the last map, no device access
 
 
-async def test_mammotion_docked_speed_falls_back_to_the_setpoint() -> None:
-    device = sample_device()
-    device.report_data.work.man_run_speed = 0  # docked: the mower reports no speed
-    device.mower_state.travel_speed = 0
-    port = FakeMammotionPort(device=device)
+def _route_of(port: FakeMammotionPort) -> GenerateRouteInformation:
+    """The route settings of the last area start."""
+    sent = [c for c in port.sent if c.name == "generate_route_information"]
+    route: GenerateRouteInformation = sent[-1].kwargs["generate_route_information"]
+    return route
+
+
+async def test_mammotion_idle_speed_is_the_mowers_own_setting() -> None:
+    port = FakeMammotionPort()  # docked; PyMammotion has not read the speed setting yet
+    port.speed_answer = 0.45  # set in the vendor app
     conn, _ = cloud(port)
     await conn.connect()
+    await asyncio.sleep(0.1)  # the connect-time reads (get_speed among them)
     state = await conn.get_state()
-    assert state.speed_mps == pytest.approx(mammotion_base.DEFAULT_SPEED_MPS)
-    assert state.raw["speed_source"] == "setpoint"
-    await conn.execute(SetSpeed(mps=0.5))
+    assert state.speed_mps == pytest.approx(0.45)
+    assert state.raw["speed_source"] == "device"
+    await conn.execute(SetSpeed(mps=0.5))  # the fake mower does not echo the write
     state = await conn.get_state()
     assert state.speed_mps == pytest.approx(0.5)
     assert state.raw["speed_source"] == "setpoint"
+    await port.deliver_speed(0.5)  # the mower confirms it: its setting is the truth again
+    state = await conn.get_state()
+    assert state.speed_mps == pytest.approx(0.5)
+    assert state.raw["speed_source"] == "device"
     port.set_mode(WorkMode.MODE_WORKING)
-    device.report_data.work.man_run_speed = 40  # mowing: 0.4 m/s reported
+    port.device().report_data.work.man_run_speed = 40  # mowing: 0.4 m/s reported
+    await port.emit()
     state = await conn.get_state()
     assert state.speed_mps == pytest.approx(0.4)
     assert state.raw["speed_source"] == "reported"
+    await conn.disconnect()
+
+
+async def test_mammotion_start_uses_the_mowers_speed_without_a_set_speed() -> None:
+    conn, port = cloud()  # the fake mower is set to 0.4 m/s, the adapter default is 0.3
+    await conn.connect()
+    await asyncio.sleep(0.1)
+    outcome = await conn.execute(StartMow(area_ids=[FRONT]))
+    assert outcome.status is CommandStatus.EXECUTED
+    route = _route_of(port)
+    assert route.speed == pytest.approx(0.4)
+    assert route.blade_height == 55  # the reported knife height
+    await conn.disconnect()
+
+
+async def test_mammotion_start_right_after_connect_reads_the_speed_first() -> None:
+    conn, port = cloud()
+    conn._device_info_retry_s = 60.0
+    port.speed_answer = 0.5
+    await conn.connect()  # no wait: the start may come before the connect-time read answered
+    port.device().mower_state.travel_speed = 0.0
+    await conn.execute(StartMow(area_ids=[FRONT]))
+    assert _route_of(port).speed == pytest.approx(0.5)
+    reads = [c for c in port.sent if c.name == "get_speed"]
+    assert reads and reads[-1].priority in {Priority.USER, Priority.BACKGROUND}
+    await conn.disconnect()
+
+
+async def test_mammotion_start_after_a_gateway_restart_keeps_the_mowers_speed() -> None:
+    """Regression: after a restart a start without SetSpeed sent the default 0.3 m/s."""
+    conn, port = cloud()
+    await conn.connect()
+    await conn.execute(SetSpeed(mps=0.55))  # held by the mower from now on
+    await conn.execute(SetBladeHeight(mm=40))
+    await conn.disconnect()
+    restarted = port.after_restart()  # new gateway process: empty PyMammotion cache
+    conn2, _ = cloud(restarted)
+    await conn2.connect()
+    await asyncio.sleep(0.1)
+    state = await conn2.get_state()
+    assert state.speed_mps == pytest.approx(0.55)
+    assert state.raw["speed_source"] == "device"
+    assert state.blade_height_mm == 40
+    await conn2.execute(StartMow(area_ids=[FRONT]))
+    route = _route_of(restarted)
+    assert route.speed == pytest.approx(0.55)
+    assert route.blade_height == 40
+    await conn2.disconnect()
+
+
+async def test_mammotion_start_picks_up_a_speed_changed_in_the_vendor_app() -> None:
+    conn, port = cloud()
+    await conn.connect()
+    await asyncio.sleep(0.1)
+    await conn.execute(SetSpeed(mps=0.5))
+    await conn.execute(StartMow(area_ids=[FRONT]))
+    assert _route_of(port).speed == pytest.approx(0.5)  # the explicit setpoint
+    port.set_mode(WorkMode.MODE_READY)  # the job is over
+    port.speed_answer = 0.35  # changed in the vendor app afterwards
+    await conn.execute(StartMow(area_ids=[FRONT]))
+    assert _route_of(port).speed == pytest.approx(0.35)  # read again before the start
+    await conn.disconnect()
+
+
+async def test_mammotion_start_without_any_speed_report_uses_the_flagged_default(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    port = FakeMammotionPort()
+    port.speed_answer = None  # the mower never answers get_speed
+    conn, _ = cloud(port)
+    await conn.connect()
+    await asyncio.sleep(0.1)
+    state = await conn.get_state()
+    assert state.speed_mps == pytest.approx(mammotion_base.DEFAULT_SPEED_MPS)
+    assert state.raw["speed_source"] == "default"
+    with caplog.at_level("WARNING", logger="mowdeck_control_mammotion"):
+        await conn.execute(StartMow(area_ids=[FRONT]))
+    assert _route_of(port).speed == pytest.approx(mammotion_base.DEFAULT_SPEED_MPS)
+    assert "reports no speed setting" in caplog.text
+    reads = sum(1 for c in port.sent if c.name == "get_speed")
+    port.set_mode(WorkMode.MODE_READY)
+    await conn.execute(StartMow(area_ids=[FRONT]))
+    assert sum(1 for c in port.sent if c.name == "get_speed") == reads  # not asked again
+    await conn.disconnect()
+
+
+async def test_mammotion_a_travel_speed_above_the_mowing_range_is_not_a_job_speed() -> None:
+    port = FakeMammotionPort()
+    port.speed_answer = 0.8  # the LUBA 2 AWD 5000X mows at 0.2 to 0.6 m/s
+    conn, _ = cloud(port)
+    await conn.connect()
+    await asyncio.sleep(0.1)
+    state = await conn.get_state()
+    assert state.raw["speed_source"] == "default"
+    assert state.drive_speed_mps == pytest.approx(0.8)
+    await conn.execute(StartMow(area_ids=[FRONT]))
+    assert _route_of(port).speed == pytest.approx(mammotion_base.DEFAULT_SPEED_MPS)
+    await conn.disconnect()
+
+
+async def test_mammotion_blade_height_follows_the_mower_after_a_set_blade_height() -> None:
+    conn, port = cloud()
+    port.blade_follows_writes = False  # the report keeps the old height for now
+    await conn.connect()
+    await asyncio.sleep(0.1)
+    await conn.execute(SetBladeHeight(mm=40))
+    await conn.execute(StartMow(area_ids=[FRONT]))
+    assert _route_of(port).blade_height == 40  # the explicit setpoint, not the stale report
+    port.set_mode(WorkMode.MODE_READY)
+    port.device().report_data.work.knife_height = 50  # changed in the vendor app
+    await port.emit()
+    await conn.execute(StartMow(area_ids=[FRONT]))
+    assert _route_of(port).blade_height == 50  # the mower's value, not the old setpoint
+    port.set_mode(WorkMode.MODE_READY)
+    port.blade_follows_writes = True
+    await conn.execute(SetBladeHeight(mm=45))  # the report shows it: confirmed
+    port.device().report_data.work.knife_height = 48  # then changed in the vendor app
+    await port.emit()
+    await conn.execute(StartMow(area_ids=[FRONT]))
+    assert _route_of(port).blade_height == 48
     await conn.disconnect()
