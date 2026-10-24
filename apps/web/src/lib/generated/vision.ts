@@ -809,6 +809,8 @@ export type components = {
              * @description While `proposed`: the options to choose from, the default first.
              */
             options?: components["schemas"]["OptionOut"][];
+            /** @description The mower's camera delivered no photo, and why: `weak_wifi` or `weak_mobile` (with `signal_dbm`), `offline` or `no_frame`. With state `failed` and trigger `error` the automatic analysis could not run; otherwise the model saw only the map and uploaded images. */
+            photo_problem?: components["schemas"]["VisionPhotoProblem"] | null;
             /** Provider Family */
             provider_family: string | null;
             /** Provider Model */
@@ -823,6 +825,11 @@ export type components = {
             round: number;
             /** Rounds Left */
             rounds_left: number;
+            /**
+             * Signal Dbm
+             * @description With a weak signal: the mower's signal in dBm.
+             */
+            signal_dbm?: number | null;
             /** Started At */
             started_at: string | null;
             state: components["schemas"]["ProposalState"];
@@ -1082,6 +1089,13 @@ export type components = {
             /** Error Type */
             type: string;
         };
+        /**
+         * VisionPhotoProblem
+         * @description Why an analysis got no camera photo from the mower (the most likely cause, judged from
+         *     the mower's state at the time and the gateway's answer).
+         * @enum {string}
+         */
+        VisionPhotoProblem: "weak_wifi" | "weak_mobile" | "offline" | "no_frame";
         /**
          * VisionTask
          * @description What AI assist is asked to do.

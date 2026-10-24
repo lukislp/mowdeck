@@ -75,6 +75,21 @@ class VisionTrigger(StrEnum):
     analyses (ADR 0035). The proposal still waits for a human approval."""
 
 
+class VisionPhotoProblem(StrEnum):
+    """Why an analysis got no camera photo from the mower (the most likely cause, judged from
+    the mower's state at the time and the gateway's answer)."""
+
+    WEAK_WIFI = "weak_wifi"
+    """The mower is on Wi-Fi with a weak signal (``signal_dbm``): the camera stream did not
+    get through."""
+    WEAK_MOBILE = "weak_mobile"
+    """The mower is on the mobile network with a weak signal (``signal_dbm``)."""
+    OFFLINE = "offline"
+    """The mower is offline or its gateway holds no connection to it."""
+    NO_FRAME = "no_frame"
+    """The camera delivered no frame in time although the connection looked fine."""
+
+
 class VisionProposalState(StrEnum):
     """Lifecycle of an AI assist proposal (one round)."""
 
@@ -307,6 +322,18 @@ class VisionProposalUpdated(ContractModel):
     link: str = Field(max_length=300, description="App path of the proposal.")
     trigger: VisionTrigger = VisionTrigger.MANUAL
     error_code: str | None = Field(default=None, max_length=64)
+    photo_problem: VisionPhotoProblem | None = Field(
+        default=None,
+        description="The analysis got no camera photo, and why. With state `failed` and trigger "
+        "`error`: the automatic analysis could not run (after its retries); start it by hand "
+        "once the connection is better.",
+    )
+    signal_dbm: int | None = Field(
+        default=None,
+        ge=-150,
+        le=-1,
+        description="With `photo_problem` `weak_wifi` or `weak_mobile`: the signal in dBm.",
+    )
     updated_at: UtcDateTime
 
 

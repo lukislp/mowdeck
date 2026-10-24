@@ -22,7 +22,10 @@
  * below the 60 % threshold) the sheet offers two options, the dock fallback preselected and the
  * model's resume marked "Unsicher · 55 %" with the sentence "Die KI empfiehlt „Mähauftrag
  * fortsetzen“, aber nur mit 55 % Sicherheit" (never "kein Manöver empfohlen"); the owner picks
- * the resume, approves, and the maneuver plus `resume_mow` run like any resume.
+ * the resume, approves, and the maneuver plus `resume_mow` run like any resume. (f) No photo: an
+ * automatic analysis that got no camera photo (weak Wi-Fi, -79 dBm; the stack cannot weaken a
+ * link, so the proposal is answered by a route) opens from the notification's link with the
+ * reason and offers to start the analysis by hand, which then runs like any request.
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
@@ -38,6 +41,7 @@ import {
   watchCsp,
   type Actor,
 } from './support';
+import { routeNoPhoto } from './vision-no-photo';
 
 async function createStuckMower(
   request: APIRequestContext,
@@ -385,6 +389,47 @@ test('vision: an unsure resume is offered next to the dock fallback and the owne
   await expect(sheet.getByTestId('assist-outcome')).toContainText('Der Mähauftrag läuft weiter.');
   await expect(page.getByTestId('mower-state')).toContainText('Mäht', { timeout: 30_000 });
   await sheet.getByTestId('assist-done').click();
+  csp.assertNone();
+});
+
+test('vision: an automatic analysis without photo says why and starts again by hand', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const csp = watchCsp(page);
+  const owner = await registerByApi(request, actor('vision-nophoto'));
+  const auth = { Authorization: `Bearer ${owner.token}` };
+  const saved = await request.put('/api/v1/vision/me/provider', {
+    headers: auth,
+    data: { model: 'fake/recover' },
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+  const mowerId = await createStuckMower(request, owner, `Luba no photo ${RUN}`);
+  await waitForMap(request, owner, mowerId);
+  await commandByApi(request, owner, mowerId, { kind: 'start_mow', area_ids: ['front'] });
+  await loginByUi(page, owner);
+  // The notification's link to the failed automatic analysis (weak Wi-Fi, -79 dBm).
+  const proposalId = '6f1e2d3c-4b5a-4968-8776-655443322110';
+  await routeNoPhoto(page, mowerId, proposalId);
+  await page.goto(`/mowers/${mowerId}?assist=${proposalId}`);
+  const sheet = page.getByRole('dialog', { name: 'KI-Hilfe' });
+  const note = sheet.getByTestId('assist-photo-problem');
+  await expect(note).toContainText('Kein Kamerabild', { timeout: 30_000 });
+  await expect(note).toContainText('Das WLAN des Mähers war zu schwach (-79 dBm)');
+  await expect(note).toContainText('Starte die KI-Hilfe von Hand');
+  await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'failed');
+
+  // By hand once the mower reports the error: a fresh request with the mower's photo.
+  await expect(page.getByTestId('mower-state')).toContainText('Fehler', { timeout: 60_000 });
+  await sheet.getByTestId('assist-start-by-hand').click();
+  await expect(sheet.getByTestId('assist-start')).toBeVisible();
+  await sheet.getByTestId('assist-start').click();
+  await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'proposed', {
+    timeout: 30_000,
+  });
+  await expect(sheet.getByTestId('assist-photo-problem')).toHaveCount(0);
+  await sheet.getByTestId('assist-reject').click();
   csp.assertNone();
 });
 

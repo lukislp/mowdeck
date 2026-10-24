@@ -44,8 +44,20 @@ approval the optional drive steps run like a ``drive``, then ``resume_mow`` cont
 
 Automatic analyses (ADR 0035, :meth:`VisionService.request_auto`, started by
 :class:`~vision.application.auto.AutoAnalysis`): the same round as a manual request, on behalf
-of the user who opted in, always with the gateway's photo (none: no analysis), recorded with
-``trigger = error`` and the error code; the approval stays with a human.
+of the user who opted in, always with the gateway's photo, recorded with ``trigger = error`` and
+the error code; the approval stays with a human. The photo is asked for up to
+``auto_photo_attempts`` times, ``auto_photo_retry_seconds`` apart, within
+``auto_photo_window_seconds``, and only while the mower still reports the error; a single camera
+of a stereo pair is asked for again while attempts are left (the pair is preferred). Without any
+photo no model is asked: a ``failed`` proposal records why (``photo_problem`` in the context:
+weak Wi-Fi or mobile signal with its dBm, offline, or no frame; :mod:`vision.domain.photo`) and
+is announced, so the owner learns that the analysis could not run and can start it by hand.
+
+Photo problems of manual requests: without uploaded frames the gateway's photo is used as
+before; when it fails the analysis goes on with the map, and the context and the proposal say
+why there is no photo. A single uploaded camera frame (the camera panel showed one camera) is
+replaced by the gateway's stereo pair when the requester keeps ``stereo_frames`` and the gateway
+delivers one within ``stereo_upgrade_seconds``, so every analysis prefers stereo plus the map.
 """
 
 import asyncio
@@ -61,9 +73,11 @@ from mowdeck_contracts.v1 import (
     FEATURE_AI_RECOVER,
     CommandRequest,
     IssueCommandRequest,
+    MowerActivity,
     Principal,
     PrincipalRef,
     SetLight,
+    VisionPhotoProblem,
     VisionProposalCreated,
     VisionProposalState,
     VisionProposalUpdated,
@@ -110,6 +124,7 @@ from vision.domain.models import (
     ProviderRequest,
     StoredImage,
 )
+from vision.domain.photo import PhotoDiagnosis, diagnose
 from vision.domain.rules import (
     Geofence,
     PathCheck,
@@ -166,6 +181,15 @@ class AssistConfig:
     geofence_margin_m: float = 2.0
     """Margin around the mapped areas for the path check of a low-confidence recommendation
     (the executor's geofence margin)."""
+    auto_photo_attempts: int = 3
+    """Photo requests of an automatic analysis before it gives up (at least 1)."""
+    auto_photo_retry_seconds: float = 15.0
+    """Pause between two photo requests of an automatic analysis."""
+    auto_photo_window_seconds: float = 150.0
+    """No further photo request of an automatic analysis starts after this long."""
+    stereo_upgrade_seconds: float = 8.0
+    """How long a manual request with a single camera frame waits for the gateway's stereo pair
+    (0: never asks)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,13 +307,23 @@ class VisionService:
 
     async def request_auto(self, principal: Principal, mower_id: UUID, error_code: str) -> Proposal:
         """An automatic analysis on ``principal``'s behalf after the mower entered a recoverable
-        error (``can_drive`` checked by the caller). Raises like :meth:`request` and
-        :class:`~vision.domain.errors.PhotoUnavailable` when the gateway delivers no photo."""
+        error (``can_drive`` checked by the caller). Raises like :meth:`request`; the provider
+        and the quota are checked before the photo is waited for. Without a photo after the
+        retries (see the module docstring) it records a ``failed`` proposal with the reason
+        and raises :class:`~vision.domain.errors.PhotoUnavailable` carrying it."""
         account = _account(principal)
         await require_feature(self.entitlements, account, FEATURE_AI_RECOVER)
         open_proposal = await self.store.open_proposal(mower_id)
         if open_proposal is not None:
             raise ConflictError(f"a proposal for this mower is {open_proposal.state}")
+        provider = await self.providers.resolve(principal)
+        await self._check_quota(principal.subject, account, provider)
+        photos, problem, attempts = await self._auto_photos(
+            principal, mower_id, account, error_code
+        )
+        if not photos:
+            failed = await self._no_photo(principal, mower_id, error_code, problem, attempts)
+            raise PhotoUnavailable(failed.detail or "no photo", proposal=failed)
         return await self._start_round(
             principal,
             mower_id,
@@ -300,7 +334,108 @@ class VisionService:
             parent=None,
             trigger=VisionTrigger.ERROR,
             error_code=error_code,
+            gateway_photos=photos,
         )
+
+    async def _auto_photos(
+        self, principal: Principal, mower_id: UUID, account: UUID, error_code: str
+    ) -> tuple[list[Image], str | None, int]:
+        """The gateway's photo for an automatic analysis: up to ``auto_photo_attempts``
+        requests within ``auto_photo_window_seconds``, ``auto_photo_retry_seconds`` apart,
+        while the mower still reports an error; a lone camera of a stereo pair is asked for
+        again while attempts are left (with ``stereo_frames``). Returns the best images, the
+        last problem and the number of requests."""
+        config = self.config
+        started = self.view.monotonic()
+        wants_pair = (await self.providers.preferences(principal)).stereo_frames
+        best: list[Image] = []
+        problem: str | None = None
+        attempts = 0
+        while True:
+            attempts += 1
+            capture = await self.photos.capture(mower_id, account)
+            if capture.images:
+                if len(capture.images) >= len(best):
+                    best = capture.images
+                lone_side = len(best) == 1 and best[0].side is not None
+                if not (wants_pair and lone_side):
+                    break
+                problem = "only one camera of the stereo pair"
+            else:
+                problem = capture.problem or "no photo"
+            elapsed = self.view.monotonic() - started
+            if (
+                attempts >= max(1, config.auto_photo_attempts)
+                or elapsed + config.auto_photo_retry_seconds > config.auto_photo_window_seconds
+                or not self._still_in_error(mower_id, account)
+            ):
+                break
+            _log.info(
+                "automatic analysis: photo again",
+                mower_id=str(mower_id),
+                error_code=error_code,
+                attempt=attempts,
+                problem=problem,
+                retry_in_s=config.auto_photo_retry_seconds,
+            )
+            await asyncio.sleep(config.auto_photo_retry_seconds)
+        return best, None if best else problem, attempts
+
+    def _still_in_error(self, mower_id: UUID, account: UUID) -> bool:
+        """The mower still reports an error (no state known: assume it does)."""
+        observed = self.view.state(mower_id)
+        if observed is None or observed.state.account_id != account:
+            return True
+        return observed.state.activity is MowerActivity.ERROR
+
+    async def _no_photo(
+        self,
+        principal: Principal,
+        mower_id: UUID,
+        error_code: str,
+        problem: str | None,
+        attempts: int,
+    ) -> Proposal:
+        """Record a ``failed`` automatic proposal that says why there is no photo, and
+        announce it (``vision.proposal.updated``: Notifications tells the owner)."""
+        account = _account(principal)
+        observed = self.view.state(mower_id)
+        state = observed.state if observed and observed.state.account_id == account else None
+        diagnosis = diagnose(state, problem)
+        context = self._context(mower_id, account, VisionTask.RECOVER, 0, []).model_copy(
+            update={"photo_problem": diagnosis.problem, "signal_dbm": diagnosis.signal_dbm}
+        )
+        now = self.clock()
+        proposal = Proposal(
+            id=uuid4(),
+            chain_id=uuid4(),
+            round=1,
+            account_id=account,
+            mower_id=mower_id,
+            task=VisionTask.RECOVER,
+            state=ProposalState.FAILED,
+            requested_by=principal.ref(),
+            created_at=now,
+            updated_at=now,
+            context=context.model_dump(mode="json"),
+            trigger=VisionTrigger.ERROR,
+            trigger_error_code=error_code,
+            detail=diagnosis.text(attempts),
+            action=ProposalAction.NONE,
+        )
+        await self.store.add_proposal(proposal, [])
+        _log.warning(
+            "automatic analysis without photo",
+            proposal_id=str(proposal.id),
+            mower_id=str(mower_id),
+            error_code=error_code,
+            problem=diagnosis.problem.value,
+            signal_dbm=diagnosis.signal_dbm,
+            gateway=problem,
+            attempts=attempts,
+        )
+        await self._announce(proposal.id)
+        return proposal
 
     def spawn(self, coro: Coroutine[Any, Any, None], name: str) -> None:
         """Run ``coro`` as a tracked background task (awaited by :meth:`idle`)."""
@@ -328,14 +463,22 @@ class VisionService:
         history: list[Proposal] | None = None,
         trigger: VisionTrigger = VisionTrigger.MANUAL,
         error_code: str | None = None,
+        gateway_photos: list[Image] | None = None,
     ) -> Proposal:
         account = _account(principal)
         provider = await self.providers.resolve(principal)
         await self._check_quota(principal.subject, account, provider)
         light_used = restore_light = False
+        photo_problem: str | None = None
         images, stereo = await self._stereo(principal, mower_id, images)
+        if images and not stereo:
+            images, stereo = await self._stereo_upgrade(principal, mower_id, account, images)
         if not images:
-            photos = await self.photos.photos(mower_id, account)
+            if gateway_photos is not None:
+                photos = gateway_photos
+            else:
+                capture = await self.photos.capture(mower_id, account)
+                photos, photo_problem = capture.images, capture.problem
             if not photos and trigger is VisionTrigger.ERROR:
                 raise PhotoUnavailable("the mower delivered no photo")
             if photos and self._light_helps(mower_id, account, photos):
@@ -343,6 +486,7 @@ class VisionService:
                 if lit:
                     photos, light_used = lit, True
             images, stereo = await self._stereo(principal, mower_id, photos)
+        diagnosis = self._diagnosis(mower_id, account, photo_problem) if not images else None
         now = self.clock()
         map_image = self._map_image(mower_id, account)
         if map_image is not None:
@@ -356,6 +500,17 @@ class VisionService:
             stereo,
             map_image=map_image is not None,
         )
+        if diagnosis is not None:
+            context = context.model_copy(
+                update={"photo_problem": diagnosis.problem, "signal_dbm": diagnosis.signal_dbm}
+            )
+            _log.info(
+                "analysis without a camera photo",
+                mower_id=str(mower_id),
+                problem=diagnosis.problem.value,
+                signal_dbm=diagnosis.signal_dbm,
+                gateway=photo_problem,
+            )
         proposal = Proposal(
             id=uuid4(),
             chain_id=chain_id,
@@ -409,7 +564,40 @@ class VisionService:
         )
         return proposal
 
+    def _diagnosis(self, mower_id: UUID, account: UUID, problem: str | None) -> PhotoDiagnosis:
+        observed = self.view.state(mower_id)
+        state = observed.state if observed and observed.state.account_id == account else None
+        return diagnose(state, problem)
+
     # --- stereo frames --------------------------------------------------------------------
+
+    async def _stereo_upgrade(
+        self, principal: Principal, mower_id: UUID, account: UUID, images: list[Image]
+    ) -> tuple[list[Image], bool]:
+        """A single uploaded camera frame (the camera panel showed one camera) becomes the
+        gateway's stereo pair of the same moment when the requester keeps ``stereo_frames``
+        and the gateway delivers one within ``stereo_upgrade_seconds``; else the upload stays.
+        Several uploads, a pair or a phone photo without a camera are kept as they are."""
+        seconds = self.config.stereo_upgrade_seconds
+        single_camera = len(images) == 1 and images[0].camera is not None
+        if seconds <= 0 or not single_camera:
+            return images, False
+        if not (await self.providers.preferences(principal)).stereo_frames:
+            return images, False
+        capture = await self.photos.capture(mower_id, account, timeout_seconds=seconds)
+        pair = stereo_pair(capture.images, self.config.stereo_max_skew_ms)
+        if not pair:
+            _log.info(
+                "single camera frame kept, no stereo pair from the gateway",
+                mower_id=str(mower_id),
+                problem=capture.problem,
+                images=len(capture.images),
+            )
+            return images, False
+        _log.info(
+            "single camera frame replaced by the gateway's stereo pair", mower_id=str(mower_id)
+        )
+        return pair, True
 
     async def _stereo(
         self, principal: Principal, mower_id: UUID, images: list[Image]
@@ -820,6 +1008,8 @@ class VisionService:
                     else "return_to_dock"
                 )
             steps = len(proposal.assessment.proposal) if proposal.assessment and drive else 0
+            photo_problem = proposal.context.get("photo_problem")
+            signal_dbm = proposal.context.get("signal_dbm")
             await self.events.proposal_updated(
                 VisionProposalUpdated(
                     proposal_id=proposal.id,
@@ -840,6 +1030,8 @@ class VisionService:
                     link=f"/mowers/{proposal.mower_id}?assist={proposal.id}",
                     trigger=proposal.trigger,
                     error_code=proposal.trigger_error_code,
+                    photo_problem=VisionPhotoProblem(photo_problem) if photo_problem else None,
+                    signal_dbm=signal_dbm if isinstance(signal_dbm, int) else None,
                     updated_at=proposal.updated_at,
                 )
             )
