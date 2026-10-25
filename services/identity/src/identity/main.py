@@ -68,6 +68,7 @@ def build_app(
     background_tasks: bool = True,
     entitlements: Entitlements | None = None,
     github_transport: httpx.AsyncBaseTransport | None = None,
+    apple_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL, OpenFGA and Argon2id."""
     runtime = Runtime(
@@ -80,6 +81,7 @@ def build_app(
         clock=clock or utc_now,
         entitlements=entitlements,
         github_transport=github_transport,
+        apple_transport=apple_transport,
     )
     keys = runtime.keys
     verifier = JwtVerifier(

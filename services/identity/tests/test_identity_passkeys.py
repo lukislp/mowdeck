@@ -121,7 +121,7 @@ async def test_passkeys_are_off_without_a_public_url() -> None:
             f"{API}/me/passkeys/options", headers=lukas.headers, json={"password": PASSWORD}
         )
         listed = await h.client.get(f"{API}/me/passkeys", headers=lukas.headers)
-    assert methods.json() == {"password": True, "passkey": False, "github": False}
+    assert methods.json() == {"password": True, "passkey": False, "github": False, "apple": False}
     assert login.status_code == 403
     assert add.status_code == 403
     assert listed.json() == []
@@ -151,7 +151,7 @@ async def test_register_list_and_log_in_without_a_password() -> None:
         listed = await h.client.get(f"{API}/me/passkeys", headers=lukas.headers)
         audit = await h.audit(lukas)
         methods = await h.client.get(f"{API}/login-methods")
-    assert methods.json() == {"password": True, "passkey": True, "github": False}
+    assert methods.json() == {"password": True, "passkey": True, "github": False, "apple": False}
     assert options["public_key"]["rpId"] == "mowdeck.example.org"
     assert options["public_key"]["userVerification"] == "required"
     assert options["public_key"].get("allowCredentials", []) == []

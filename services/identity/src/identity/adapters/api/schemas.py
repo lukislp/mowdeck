@@ -577,6 +577,11 @@ class LoginMethodsOut(BaseModel):
         description="Sign in with GitHub is configured (only this flag; the GitHub settings "
         "are never published)",
     )
+    apple: bool = Field(
+        default=False,
+        description="Sign in with Apple is configured (only this flag; the Apple settings "
+        "are never published)",
+    )
 
 
 class PasskeyOptionsOut(BaseModel):

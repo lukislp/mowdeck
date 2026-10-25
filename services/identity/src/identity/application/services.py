@@ -11,6 +11,7 @@ from identity.application.api_tokens import ApiTokenService
 from identity.application.audit import AuditService
 from identity.application.authenticators import (
     ApiTokenAuthenticator,
+    AppleAuthenticator,
     AuthenticatorRegistry,
     GitHubAuthenticator,
     OAuthAuthenticator,
@@ -92,7 +93,9 @@ def build_services(
             )
         )
     for client, redirect_uri in oauth:
-        kind = GitHubAuthenticator if client.provider == "github" else OAuthAuthenticator
+        kind = {"github": GitHubAuthenticator, "apple": AppleAuthenticator}.get(
+            client.provider, OAuthAuthenticator
+        )
         registry.register(kind(client, deps.store, deps.clock, redirect_uri=redirect_uri))
     return Services(
         deps,

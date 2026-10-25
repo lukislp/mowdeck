@@ -16,5 +16,5 @@ Build a small Identity service in FastAPI. Reasons: (1) sub-users can exist with
 
 - Full control over the account and sub-user model and the token content.
 - We own the security of the login path: rate limits, Argon2id parameters, session handling and reviews against OWASP ASVS are our responsibility.
-- Federation (OIDC providers) is added as plug-ins later instead of being available on day one. Passkeys came with [ADR 0050](0050-passkeys-and-app-login-hand-off.md), GitHub with [ADR 0051](0051-sign-in-with-github.md).
+- Federation (OIDC providers) is added as plug-ins later instead of being available on day one. Passkeys came with [ADR 0050](0050-passkeys-and-app-login-hand-off.md), GitHub with [ADR 0051](0051-sign-in-with-github.md), Apple with [ADR 0052](0052-sign-in-with-apple.md).
 - Alternatives considered: Keycloak (heavy, JVM, e-mail centric), Zitadel (good fit but a large external dependency and a different tenancy model).

@@ -15,9 +15,9 @@ vi.mock('$app/state', () => ({
   page: { url: new URL('https://mowdeck.test/settings#profile'), state: {} },
 }));
 vi.mock('$app/navigation', () => ({ replaceState: vi.fn() }));
-vi.mock('#lib/auth/github.js', async (original) => ({
-  ...(await original<typeof import('#lib/auth/github.js')>()),
-  githubEnabled: async () => true,
+vi.mock('#lib/auth/oauth.js', async (original) => ({
+  ...(await original<typeof import('#lib/auth/oauth.js')>()),
+  providerEnabled: async () => true,
 }));
 
 import { setLocale } from '#lib/paraglide/runtime.js';

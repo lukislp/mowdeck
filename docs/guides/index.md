@@ -3,3 +3,4 @@
 - [ESP32 bridge: purchase and setup](esp32-bridge-purchase-and-setup.md): what to buy, how to flash the ESPHome Bluetooth Proxy, and how to mount it on the mower.
 - [Signing in with a passkey](passkeys.md): add a passkey in the browser and sign in without a password, in the browser and in the apps.
 - [Signing in with GitHub](github-login.md): link your GitHub account in the settings and sign in with it; unlink at any time.
+- [Signing in with Apple](apple-login.md): the same with your Apple ID.

@@ -44,7 +44,10 @@ async def login_methods(services: ServicesDep) -> LoginMethodsOut:
     """Which login methods the installation offers (public; the login page asks)."""
     names = services.authenticators.names
     return LoginMethodsOut(
-        password="password" in names, passkey="passkey" in names, github="github" in names
+        password="password" in names,
+        passkey="passkey" in names,
+        github="github" in names,
+        apple="apple" in names,
     )
 
 

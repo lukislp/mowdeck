@@ -23,6 +23,7 @@ from mowdeck_service_kit.entitlements import Entitlements, EntitlementsClient, c
 from prometheus_client import CollectorRegistry
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from identity.adapters.apple import AppleOAuthClient
 from identity.adapters.bus.publisher import BusEventPublisher
 from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
 from identity.adapters.db.store import SqlStore
@@ -63,6 +64,8 @@ class Runtime:
     entitlements: Entitlements | None = None
     github_transport: httpx.AsyncBaseTransport | None = None
     """Tests: a fake GitHub (``httpx.MockTransport``) behind the configured endpoints."""
+    apple_transport: httpx.AsyncBaseTransport | None = None
+    """Tests: a fake Apple (``httpx.MockTransport``) behind the configured endpoints."""
     engine: AsyncEngine | None = field(default=None, init=False)
     connection: FgaConnection | None = field(default=None, init=False)
     keys: KeyManager = field(init=False)
@@ -135,19 +138,43 @@ class Runtime:
         return self.services
 
     def oauth_clients(self) -> list[tuple[OAuthClient, str]]:
-        """The configured login providers with their callback URLs (ADR 0051)."""
+        """The configured login providers with their callback URLs (ADR 0051, 0052)."""
+        clients: list[tuple[OAuthClient, str]] = []
         github = self.settings.github_login()
-        if github is None:
-            return []
-        client = GitHubOAuthClient(
-            client_id=github.client_id,
-            client_secret=github.client_secret,
-            authorize_url=github.authorize_url,
-            token_url=github.token_url,
-            api_url=github.api_url,
-            transport=self.github_transport,
-        )
-        return [(client, github.redirect_uri)]
+        if github is not None:
+            clients.append(
+                (
+                    GitHubOAuthClient(
+                        client_id=github.client_id,
+                        client_secret=github.client_secret,
+                        authorize_url=github.authorize_url,
+                        token_url=github.token_url,
+                        api_url=github.api_url,
+                        transport=self.github_transport,
+                    ),
+                    github.redirect_uri,
+                )
+            )
+        apple = self.settings.apple_login()
+        if apple is not None:
+            clients.append(
+                (
+                    AppleOAuthClient(
+                        services_id=apple.services_id,
+                        team_id=apple.team_id,
+                        key_id=apple.key_id,
+                        private_key=apple.private_key,
+                        authorize_url=apple.authorize_url,
+                        token_url=apple.token_url,
+                        keys_url=apple.keys_url,
+                        issuer=apple.issuer,
+                        pkce=apple.pkce,
+                        transport=self.apple_transport,
+                    ),
+                    apple.redirect_uri,
+                )
+            )
+        return clients
 
     async def close(self) -> None:
         """Close OpenFGA and the database."""

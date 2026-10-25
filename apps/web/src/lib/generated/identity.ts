@@ -1342,6 +1342,12 @@ export type components = {
          */
         LoginMethodsOut: {
             /**
+             * Apple
+             * @description Sign in with Apple is configured (only this flag; the Apple settings are never published)
+             * @default false
+             */
+            apple: boolean;
+            /**
              * Github
              * @description Sign in with GitHub is configured (only this flag; the GitHub settings are never published)
              * @default false

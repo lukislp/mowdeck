@@ -37,7 +37,7 @@ The full design is in [Design: identity and authorization](../dev/design-identit
 - A disabled user or a removed grant loses object rights at once (tuples are removed, and `identity.grants.changed` clears the services' decision caches), but a token-level check such as `require_permission` can accept the old access token until it expires (at most 10 minutes). Revocation lists are deliberately not used.
 - New rights reach the token-level pre-filter with the next access token; the web app refreshes after changing roles.
 - Operators must keep the key-encryption key safe and backed up: without it Identity cannot sign, and all sessions must start over after a new key is created.
-- Multi-account switching (`/session/switch-account`) and OIDC login are later work. Passkeys came with [ADR 0050](0050-passkeys-and-app-login-hand-off.md), GitHub login (the first `RedirectAuthenticator`) with [ADR 0051](0051-sign-in-with-github.md).
+- Multi-account switching (`/session/switch-account`) and OIDC login are later work. Passkeys came with [ADR 0050](0050-passkeys-and-app-login-hand-off.md), GitHub login (the first `RedirectAuthenticator`) with [ADR 0051](0051-sign-in-with-github.md), Apple login with [ADR 0052](0052-sign-in-with-apple.md).
 
 ## Addendum: deleting revoked API tokens (2026-10-24)
 
