@@ -41,7 +41,7 @@ Forces specific to Apple:
 
 **Dependency.** PyJWT, already in `uv.lock` through `mowdeck-auth` (with `cryptography`, already an Identity dependency), is declared by Identity too (`pyjwt[crypto]>=2.10.1`, the same specifier as `mowdeck-auth`). No new package enters the lock file; `jwt.encode` signs the client secret, `jwt.decode` validates the ID token with an algorithm allow-list.
 
-**Web.** The GitHub panel becomes `ExternalLinkPanel` (provider key, texts and logo as parameters) with `GitHubPanel` and `ApplePanel` as thin wrappers; `auth/oauth.ts` holds the provider-independent round trip with `github.ts` and `apple.ts` binding it. The linked account shows "Verknüpft mit Apple" (there is no e-mail to show). The sign-in page offers one button per configured provider.
+**Web.** The GitHub panel becomes `ExternalLinkPanel` (provider key, texts and logo as parameters) with `GitHubPanel` and `ApplePanel` as thin wrappers; `auth/oauth.ts` holds the provider-independent round trip with `github.ts` and `apple.ts` binding it. The linked account shows "Verknüpft mit Apple" (there is no e-mail to show). The sign-in page offers one button per configured provider. Later the two panels became one "Linked accounts" section (`LoginLinksPanel`, the providers listed in `linked-providers.ts`): linked providers as a list, offered but unlinked providers as buttons side by side; a further provider is one more list entry.
 
 Options considered:
 

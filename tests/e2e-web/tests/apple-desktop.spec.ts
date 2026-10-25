@@ -54,8 +54,10 @@ test('Apple: link, sign in with Apple, unlink, refused afterwards', async ({ pag
   // 1. Link in the settings.
   await loginByUi(page, owner);
   await page.goto('/settings#profile');
-  const panel = page.getByTestId('apple-panel');
-  await expect(panel.getByTestId('apple-not-linked')).toBeVisible();
+  const panel = page.getByTestId('login-links-panel');
+  // Not linked yet: no account in the list, a connect button in the row.
+  await expect(panel.getByTestId('apple-linked')).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: /^Mit Apple verknüpfen$/ })).toBeVisible();
   await panel.getByTestId('apple-link').click();
   await panel.locator('#apple-password').fill(owner.password);
   await panel.getByTestId('apple-link-continue').click();
@@ -63,7 +65,8 @@ test('Apple: link, sign in with Apple, unlink, refused afterwards', async ({ pag
   await page.waitForURL(/\/settings/);
   const linked = page.getByTestId('apple-linked');
   // A neutral label: Apple tells MowDeck nothing else (no scope, no e-mail address).
-  await expect(linked).toContainText('Verknüpft mit Apple');
+  await expect(linked).toContainText('Apple');
+  await expect(linked).toContainText('Verknüpft');
   await expect(linked).not.toContainText(sub);
   expect(new URL(page.url()).searchParams.get('linked')).toBeNull();
 
@@ -79,7 +82,8 @@ test('Apple: link, sign in with Apple, unlink, refused afterwards', async ({ pag
   // MowDeck keeps no Apple token, so the authorization at Apple is the user's to remove.
   await expect(page.getByTestId('apple-unlink-revoke-hint')).toBeVisible();
   await page.getByTestId('apple-unlink-confirm').click();
-  await expect(page.getByTestId('apple-not-linked')).toBeVisible();
+  await expect(page.getByTestId('apple-linked')).toHaveCount(0);
+  await expect(page.getByTestId('apple-link')).toBeVisible();
   await expect(page.getByTestId('apple-revoke-hint')).toBeVisible();
   await logout(page);
   await page.getByTestId('login-apple').click();
