@@ -2337,6 +2337,8 @@
   "github_unlink": "Verknüpfung lösen",
   "github_unlink_confirm": "Verknüpfung mit GitHub lösen? Die Anmeldung mit deinem Passwort funktioniert weiter.",
   "github_unlinked": "Verknüpfung mit GitHub gelöst",
+  "github_revoke_hint": "Die Freigabe bei GitHub kannst du unter {place} entfernen.",
+  "github_revoke_place": "Einstellungen → Applications",
   "github_in_app_hint": "GitHub verknüpfst du im Browser: MowDeck in Safari oder Chrome öffnen, anmelden und hier verknüpfen. Die App kann dich danach mit GitHub anmelden.",
   "github_link_cancelled": "Die Verknüpfung wurde bei GitHub abgebrochen.",
   "github_link_expired": "Die Verknüpfung ist abgelaufen. Bitte starte sie noch einmal.",

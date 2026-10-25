@@ -88,7 +88,8 @@ See the user guide [Signing in with GitHub](../guides/github-login.md).
 
 - Scope `read:user` only; MowDeck reads GitHub's numeric user id (the link) and the login name (display). E-mail addresses are never requested.
 - Authorization code flow with PKCE S256; the single-use `state` is bound to the browser by an `HttpOnly` cookie holding the PKCE verifier (only its hash is stored); round trips expire after 10 minutes.
-- The GitHub access token is used for one request and revoked at once; MowDeck stores no GitHub token.
+- The GitHub access token is used for one request (`GET /user`) and dropped; MowDeck never stores or logs it. It is not revoked: revoking an OAuth App's last token deletes the user's authorization, and GitHub would then show its consent page and e-mail "a third-party OAuth application was authorized" at every sign-in ([ADR 0051, amendment 2026-10-25](../adr/0051-sign-in-with-github.md#amendment-2026-10-25-keep-the-github-authorization-no-token-revocation)). GitHub revokes OAuth tokens unused for a year.
+- Unlinking in MowDeck does not remove the authorization on GitHub's side (MowDeck holds no token to do it with); the settings panel points the user to <https://github.com/settings/applications>.
 - A GitHub account belongs to at most one MowDeck user and a user has at most one GitHub account. Linking needs the current password (the login limits apply).
 - Rate limits: the callback and the link start are under the login limit (Traefik `identity-auth`, Helm `-auth` Ingress, and in-process); `POST /api/v1/identity/oauth/github/start` has the looser limit of the passkey challenge.
 - Audit log: `external_identity.linked`, `external_identity.unlinked`, `external_identity.link_failed`, `external_identity.reauth_failed`, `session.login` / `session.login_failed` with `method: github`.

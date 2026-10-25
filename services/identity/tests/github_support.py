@@ -8,12 +8,12 @@ an ``httpx.MockTransport``, strict like the real one.
   URI) and the PKCE verifier against the challenge, and answers errors with status 200 and an
   ``error`` field, as GitHub does.
 * ``GET /user`` answers for the token's account (with an e-mail address, which MowDeck must
-  ignore); ``DELETE /applications/{client_id}/token`` revokes the token.
+  ignore). Every other request, a token revocation included, is a 404 and stays in
+  ``requests``: MowDeck keeps the user's authorization (ADR 0051, amendment 2026-10-25).
 """
 
 import base64
 import hashlib
-import json
 import secrets
 from dataclasses import dataclass, field
 from typing import Any
@@ -64,7 +64,6 @@ class FakeGitHub:
 
     codes: dict[str, dict[str, Any]] = field(default_factory=dict)
     tokens: dict[str, GitHubAccount] = field(default_factory=dict)
-    revoked: list[str] = field(default_factory=list)
     requests: list[str] = field(default_factory=list)
     fail: set[str] = field(default_factory=set)
     user_body: dict[str, Any] | None = None
@@ -106,11 +105,6 @@ class FakeGitHub:
             return self._token(request)
         if request.method == "GET" and url == f"{API_URL}/user":
             return self._user(request)
-        if request.method == "DELETE" and url == f"{API_URL}/applications/{CLIENT_ID}/token":
-            token = json.loads(request.content)["access_token"]
-            self.revoked.append(token)
-            self.tokens.pop(token, None)
-            return httpx.Response(204)
         return httpx.Response(404, json={"message": "Not Found"})
 
     def _token(self, request: httpx.Request) -> httpx.Response:

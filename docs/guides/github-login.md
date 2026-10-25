@@ -7,7 +7,7 @@ You can sign in to MowDeck with your GitHub account once you have linked it to y
 1. Open MowDeck in your browser (Safari, Chrome, Edge or Firefox) and sign in with your password.
 2. Go to **Einstellungen**, section **Konto**, panel **GitHub**, and choose **Mit GitHub verknüpfen**.
 3. Enter your current password and choose **Weiter zu GitHub**.
-4. GitHub asks whether MowDeck may read your public profile; choose **Authorize**. You come back to the settings, which now show "Verknüpft mit GitHub als <your GitHub name>".
+4. GitHub asks whether MowDeck may read your public profile; choose **Authorize**. You come back to the settings, which now show "Verknüpft mit GitHub als <your GitHub name>". GitHub asks this once (and e-mails you that MowDeck was authorized); later sign-ins go straight through.
 
 MowDeck stores only your GitHub account's number and name. It never reads your e-mail address and never links accounts by it: a GitHub account signs in only to the MowDeck user who linked it. One GitHub account can be linked to one MowDeck user.
 
@@ -22,4 +22,4 @@ In the iPhone or Android app the panel tells you to link GitHub in the browser; 
 
 ## Unlink
 
-**Einstellungen**, **Konto**, **GitHub**, **Verknüpfung lösen**. GitHub then no longer signs you in; your password does. You can link again at any time. To also remove MowDeck's access on GitHub's side, revoke it under GitHub, **Settings**, **Applications**, **Authorized OAuth Apps**.
+**Einstellungen**, **Konto**, **GitHub**, **Verknüpfung lösen**. GitHub then no longer signs you in; your password does. You can link again at any time. MowDeck cannot remove the authorization on GitHub's side, so the panel reminds you: to remove it as well, open [github.com/settings/applications](https://github.com/settings/applications) (GitHub, **Settings**, **Applications**, **Authorized OAuth Apps**) and revoke MowDeck there. If you keep it, linking again later skips GitHub's consent page.

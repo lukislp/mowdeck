@@ -75,8 +75,15 @@ test('GitHub: link, sign in with GitHub, unlink, refused afterwards', async ({ p
   // 3. Unlink; GitHub no longer signs in, the password does.
   await page.goto('/settings#profile');
   await page.getByTestId('github-unlink').click();
+  // MowDeck keeps no GitHub token, so the authorization on GitHub's side is the user's to remove.
+  await expect(page.getByTestId('github-unlink-revoke-hint')).toBeVisible();
   await page.getByTestId('github-unlink-confirm').click();
   await expect(page.getByTestId('github-not-linked')).toBeVisible();
+  await expect(
+    page
+      .getByTestId('github-revoke-hint')
+      .getByRole('link', { name: 'Einstellungen → Applications' }),
+  ).toHaveAttribute('href', 'https://github.com/settings/applications');
   await logout(page);
   await page.getByTestId('login-github').click();
   await approveAtGitHub(page, githubId, githubLogin);

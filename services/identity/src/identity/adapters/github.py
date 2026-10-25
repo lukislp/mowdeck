@@ -9,8 +9,11 @@
 * Profile: ``GET https://api.github.com/user``; only ``id`` (the stable numeric account id, the
   subject) and ``login`` (shown to the user) are read. E-mail addresses are never requested
   (no ``user:email`` scope) nor used.
-* The access token is used for that one request and then revoked
-  (``DELETE /applications/{client_id}/token``, best effort); MowDeck never stores it.
+* The access token is used for that one request and then dropped; MowDeck never stores or
+  logs it. It is deliberately not revoked: revoking an OAuth App's last token deletes the user's
+  authorization, so GitHub would ask for consent and e-mail "a third-party OAuth application was
+  authorized" at every sign-in (ADR 0051, amendment 2026-10-25). GitHub revokes OAuth tokens
+  unused for a year; the user removes the authorization under github.com/settings/applications.
 
 The endpoints are configurable for GitHub Enterprise Server and for the test stack's fake.
 """
@@ -19,11 +22,8 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from mowdeck_service_kit import get_logger
 
 from identity.application.ports import ExternalProfile, ProviderRejected, ProviderUnavailable
-
-_log = get_logger("identity.github")
 
 SCOPE = "read:user"
 API_VERSION = "2022-11-28"
@@ -82,10 +82,7 @@ class GitHubOAuthClient:
         """Redeem the code and read the account's id and login."""
         async with self._client() as http:
             token = await self._token(http, code, code_verifier, redirect_uri)
-            try:
-                return await self._user(http, token)
-            finally:
-                await self._revoke(http, token)
+            return await self._user(http, token)
 
     async def _token(
         self, http: httpx.AsyncClient, code: str, verifier: str, redirect_uri: str
@@ -140,25 +137,6 @@ class GitHubOAuthClient:
         login = body.get("login")
         name = login[:MAX_LOGIN_LENGTH] if isinstance(login, str) and login else None
         return ExternalProfile(subject=str(account_id), display_name=name)
-
-    async def _revoke(self, http: httpx.AsyncClient, token: str) -> None:
-        """Revoke the access token: MowDeck needed it for one request only."""
-        try:
-            response = await http.request(
-                "DELETE",
-                f"{self.api_url}/applications/{self.client_id}/token",
-                json={"access_token": token},
-                auth=(self.client_id, self._secret),
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "X-GitHub-Api-Version": API_VERSION,
-                },
-            )
-        except httpx.HTTPError as exc:
-            _log.info("revoking the GitHub token failed", error=type(exc).__name__)
-            return
-        if response.status_code not in (204, 404):
-            _log.info("revoking the GitHub token failed", status=response.status_code)
 
 
 def _json(response: httpx.Response) -> Any:
