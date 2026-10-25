@@ -116,8 +116,9 @@ def _started_details(
 
 
 def compute_next(schedule: Schedule, after: datetime) -> datetime | None:
-    """The next occurrence of ``schedule`` strictly after ``after``."""
-    return next_after(schedule.recurrence, ZoneInfo(schedule.timezone), after)
+    """The next occurrence of ``schedule`` strictly after ``after`` (a day fires at most once,
+    also when its time exists twice on a fall-back day, see :mod:`scheduler.domain.recurrence`)."""
+    return next_after(schedule.recurrence, ZoneInfo(schedule.timezone), after, schedule.last_run_at)
 
 
 class Runner:

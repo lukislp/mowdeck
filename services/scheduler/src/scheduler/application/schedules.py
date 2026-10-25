@@ -240,7 +240,7 @@ class ScheduleService:
         """The next ``count`` firings and the rain decision for the first one."""
         found = await self._visible(principal, account_id, schedule_id, CAN_VIEW)
         now = self.clock()
-        times = upcoming(found.recurrence, ZoneInfo(found.timezone), now, count)
+        times = upcoming(found.recurrence, ZoneInfo(found.timezone), now, count, found.last_run_at)
         items = [
             PreviewItem(
                 at=t,
