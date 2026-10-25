@@ -1,5 +1,5 @@
 <!--
-  Sign-in: a passkey (ADR 0050), GitHub (ADR 0051) or username and password.
+  Sign-in: a passkey (ADR 0050), GitHub (ADR 0051), Apple (ADR 0052) or username and password.
 
   - Browser: "Sign in with a passkey" runs the WebAuthn login without a username; where the
     browser supports it, the passkeys are also offered in the username field's autofill
@@ -21,6 +21,7 @@
   import { page } from '$app/state';
 
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { appleEnabled, appleSignInResult, signInWithApple } from '#lib/auth/apple.js';
   import {
     githubEnabled,
     signInResult,
@@ -35,6 +36,7 @@
     conditionalMediationAvailable,
     webauthnSupported,
   } from '#lib/auth/webauthn.js';
+  import AppleMark from '#lib/components/AppleMark.svelte';
   import AuthFrame from '#lib/components/AuthFrame.svelte';
   import GitHubMark from '#lib/components/GitHubMark.svelte';
   import { loadConfig } from '#lib/config.js';
@@ -52,6 +54,7 @@
   let notice = $state<string | null>(null);
   let usedPasskey = $state(false);
   let githubBusy = $state(false);
+  let appleBusy = $state(false);
 
   /** The browser was opened by the app for this login. */
   const appRequest = $derived(appLoginRequest(page.url.searchParams));
@@ -77,9 +80,14 @@
   // GitHub (ADR 0051): on in the installation; in the app through the system browser.
   let githubOn = $state(false);
   const githubButton = $derived(githubOn && (!inApp || nativeShell.canSignInThroughBrowser));
-  /** Back from GitHub: signed in (the cookie is set) or why not. */
+  // Apple (ADR 0052): the same round trip.
+  let appleOn = $state(false);
+  const appleButton = $derived(appleOn && (!inApp || nativeShell.canSignInThroughBrowser));
+  /** Back from GitHub or Apple: signed in (the cookie is set) or why not. */
   const fromGitHub = signInResult(page.url.searchParams);
-  const backSignedIn = fromGitHub !== null && 'signedIn' in fromGitHub;
+  const fromApple = appleSignInResult(page.url.searchParams);
+  const fromProvider = fromGitHub ?? fromApple;
+  const backSignedIn = fromProvider !== null && 'signedIn' in fromProvider;
   let githubDone = false;
   const githubMessages: Record<SignInError, () => string> = {
     cancelled: m.login_github_cancelled,
@@ -88,7 +96,15 @@
     unavailable: m.login_github_unavailable,
     rate_limited: m.login_github_rate_limited,
   };
+  const appleMessages: Record<SignInError, () => string> = {
+    cancelled: m.login_apple_cancelled,
+    expired: m.login_apple_expired,
+    denied: m.login_apple_denied,
+    unavailable: m.login_apple_unavailable,
+    rate_limited: m.login_apple_rate_limited,
+  };
   if (fromGitHub && 'error' in fromGitHub) notice = githubMessages[fromGitHub.error]();
+  if (fromApple && 'error' in fromApple) notice = appleMessages[fromApple.error]();
 
   const next = $derived.by(() => {
     const target = page.url.searchParams.get('next') ?? '/mowers';
@@ -109,7 +125,7 @@
   });
 
   $effect(() => {
-    // Back from GitHub: the session comes from the cookie Identity set (restored on load).
+    // Back from GitHub or Apple: the session comes from the cookie Identity set (restored on load).
     if (!backSignedIn || githubDone) return;
     if (session.status === 'authenticated') {
       githubDone = true;
@@ -129,7 +145,8 @@
 
   onMount(() => {
     void githubEnabled().then((on) => (githubOn = on));
-    if (fromGitHub && 'error' in fromGitHub) {
+    void appleEnabled().then((on) => (appleOn = on));
+    if ((fromGitHub && 'error' in fromGitHub) || (fromApple && 'error' in fromApple)) {
       replaceState(withoutResult(page.url), page.state);
     }
     void passkeysEnabled().then(async (on) => {
@@ -276,6 +293,29 @@
     }
   }
 
+  /** Leave for Apple (keeps `next` and the app hand-off); in the app, the system browser. */
+  async function withApple(): Promise<void> {
+    conditional?.abort();
+    appleBusy = true;
+    problem = null;
+    notice = null;
+    usedPasskey = false;
+    try {
+      if (inApp) {
+        await throughBrowser();
+        appleBusy = false;
+      } else {
+        // The browser leaves for Apple: the button stays busy until it is gone.
+        await signInWithApple(page.url.searchParams);
+      }
+    } catch (error) {
+      appleBusy = false;
+      if (cancelled(error)) return;
+      if (error instanceof HandoffError) notice = m.login_app_failed();
+      else problem = asProblem(error);
+    }
+  }
+
   const message = $derived(
     problem === null
       ? null
@@ -322,7 +362,7 @@
     <ProblemNotice tone="info" title={m.login_session_ended()} />
   {/if}
   {#if !returnLink && !confirming}
-    {#if passkeyButton || githubButton}
+    {#if passkeyButton || githubButton || appleButton}
       <div class="passkey">
         {#if passkeyButton}
           <Button
@@ -330,7 +370,7 @@
             full
             icon="key"
             pending={passkeyBusy}
-            disabled={busy || githubBusy}
+            disabled={busy || githubBusy || appleBusy}
             testid="login-passkey"
             onclick={withPasskey}>{m.login_passkey()}</Button
           >
@@ -340,10 +380,20 @@
             variant={passkeyButton ? 'secondary' : 'primary'}
             full
             pending={githubBusy}
-            disabled={busy || passkeyBusy}
+            disabled={busy || passkeyBusy || appleBusy}
             testid="login-github"
             onclick={withGitHub}
             ><span class="provider"><GitHubMark />{m.login_github()}</span></Button
+          >
+        {/if}
+        {#if appleButton}
+          <Button
+            variant={passkeyButton || githubButton ? 'secondary' : 'primary'}
+            full
+            pending={appleBusy}
+            disabled={busy || passkeyBusy || githubBusy}
+            testid="login-apple"
+            onclick={withApple}><span class="provider"><AppleMark />{m.login_apple()}</span></Button
           >
         {/if}
         {#if waiting}
@@ -383,10 +433,10 @@
       {/if}
       <Button
         type="submit"
-        variant={passkeyButton || githubButton ? 'secondary' : 'primary'}
+        variant={passkeyButton || githubButton || appleButton ? 'secondary' : 'primary'}
         full
         pending={busy}
-        disabled={!username || !password || passkeyBusy || githubBusy}
+        disabled={!username || !password || passkeyBusy || githubBusy || appleBusy}
         testid="login-submit">{m.login_submit()}</Button
       >
     </form>
