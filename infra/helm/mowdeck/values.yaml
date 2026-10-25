@@ -471,6 +471,19 @@ services:
     extraEnv: {}
     extraVolumes: []
     extraVolumeMounts: []
+    # -- Sign in with GitHub (ADR 0051, docs/ops/github-login.md). Compose:
+    # IDENTITY_GITHUB_CLIENT_ID and IDENTITY_GITHUB_CLIENT_SECRET_FILE. Register a GitHub OAuth
+    # App with the callback URL <IDENTITY_PUBLIC_URL>/api/v1/identity/oauth/github/callback
+    # (IDENTITY_PUBLIC_URL defaults to https://<ingress.host>). The client secret lives in a
+    # Secret you create, mounted as a file; it never reaches the database or the web app:
+    #   kubectl create secret generic mowdeck-github --from-file=client-secret=./client-secret
+    github:
+      enabled: false
+      # -- Client ID of the OAuth App (required when enabled).
+      clientId: ""
+      # -- Name of the Secret with the client secret (required when enabled) and its key in it.
+      existingSecret: ""
+      secretKey: client-secret
   fleet:
     enabled: true
     replicas: 1

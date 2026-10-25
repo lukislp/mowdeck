@@ -90,6 +90,24 @@ kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION" \
   "$out/agora-bridge.yaml"
 echo "ok: the agora-bridge container renders only with an image of the operator's own"
 
+step "optional GitHub sign-in (ADR 0051)"
+expect_failure "services.identity.github.existingSecret is required" -f "$test_values" \
+  --set services.identity.github.enabled=true --set services.identity.github.clientId=Iv1.x
+expect_failure "services.identity.github.clientId is required" -f "$test_values" \
+  --set services.identity.github.enabled=true \
+  --set services.identity.github.existingSecret=mowdeck-github
+helm template mowdeck "$chart" --namespace mowdeck -f "$test_values" \
+  --set services.identity.github.enabled=true --set services.identity.github.clientId=Iv1.x \
+  --set services.identity.github.existingSecret=mowdeck-github > "$out/github.yaml"
+grep -q "MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE: /run/secrets/github/client-secret" \
+  "$out/github.yaml"
+grep -q "secretName: mowdeck-github" "$out/github.yaml"
+kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION" \
+  -schema-location default \
+  -schema-location "$CRDS_CATALOG/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+  "$out/github.yaml"
+echo "ok: the GitHub client secret is a file from the operator's own Secret"
+
 if [ -z "${SKIP_DRIFT:-}" ] && command -v uv > /dev/null 2>&1; then
   step "drift checks (tools/repo-checks/tests/test_helm.py)"
   (cd "$root" && uv run pytest tools/repo-checks/tests/test_helm.py -q -p no:cacheprovider)

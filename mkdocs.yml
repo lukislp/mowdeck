@@ -91,6 +91,7 @@ nav:
       - adr/0048-maintenance-commands.md
       - adr/0049-manual-driving-over-the-mammotion-cloud.md
       - adr/0050-passkeys-and-app-login-hand-off.md
+      - adr/0051-sign-in-with-github.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -111,6 +112,7 @@ nav:
       - ops/billing.md
       - ops/mobile-apps.md
       - ops/passkeys.md
+      - ops/github-login.md
       - ops/source-code.md
   - Spikes:
       - spikes/index.md
@@ -119,4 +121,5 @@ nav:
       - guides/index.md
       - guides/esp32-bridge-purchase-and-setup.md
       - guides/passkeys.md
+      - guides/github-login.md
   - Original plan (German): plan/project-plan.de.md

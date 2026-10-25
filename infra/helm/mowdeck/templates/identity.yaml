@@ -13,10 +13,27 @@ publishes /.well-known/jwks.json (Compose services identity and identity-migrate
   "MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE" $c.IDENTITY_REFRESH_COOKIE_SECURE
   "MOWDECK_IDENTITY_PUBLIC_URL" (default (include "mowdeck.publicOrigin" .) $c.IDENTITY_PUBLIC_URL)
   "MOWDECK_IDENTITY_PASSKEY_RP_ID" (default "" $c.IDENTITY_PASSKEY_RP_ID)) }}
+{{- /* Sign in with GitHub (ADR 0051): the settings are always rendered (empty means off), the
+client secret file only when enabled, from its own Secret. */ -}}
+{{- $v := .Values.services.identity }}
+{{- $github := $v.github }}
+{{- $_ := set $env "MOWDECK_IDENTITY_GITHUB_CLIENT_ID" "" }}
+{{- $_ := set $env "MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE" "" }}
+{{- $githubVolumes := list }}
+{{- $githubMounts := list }}
+{{- if and $v.enabled $github.enabled }}
+{{- $secret := required "services.identity.github.existingSecret is required when github.enabled (a Secret with the OAuth App's client secret)" $github.existingSecret }}
+{{- $clientId := required "services.identity.github.clientId is required when github.enabled" $github.clientId }}
+{{- $_ := set $env "MOWDECK_IDENTITY_GITHUB_CLIENT_ID" $clientId }}
+{{- $_ := set $env "MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE" (printf "/run/secrets/github/%s" $github.secretKey) }}
+{{- $githubVolumes = list (dict "name" "github-client-secret" "secret" (dict "secretName" $secret "defaultMode" 288 "items" (list (dict "key" $github.secretKey "path" $github.secretKey)))) }}
+{{- $githubMounts = list (dict "name" "github-client-secret" "mountPath" "/run/secrets/github" "readOnly" true) }}
+{{- end }}
 {{- include "mowdeck.migrationJob" (dict "ctx" . "component" "identity" "key" "identity" "image" "identity" "module" "identity.adapters.db.migrate" "weight" 1) }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "identity" "key" "identity" "image" "identity"
   "env" $env "db" "identity" "migrateModule" "identity.adapters.db.migrate" "authz" true
   "secretFiles" (list
     (dict "key" "database-url-identity" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
     (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE")
-    (dict "key" "identity-key-encryption-key" "file" "identity-key-encryption-key" "env" "MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY_FILE"))) }}
+    (dict "key" "identity-key-encryption-key" "file" "identity-key-encryption-key" "env" "MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY_FILE"))
+  "volumes" $githubVolumes "volumeMounts" $githubMounts) }}
