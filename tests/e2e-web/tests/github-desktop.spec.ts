@@ -9,8 +9,8 @@
  * 3. Settings: "Verknüpfung lösen"; log out, GitHub no longer signs in (the account is unknown,
  *    never registered); the password still works.
  *
- * Every GitHub callback and the password check count against the per-address login limit the
- * suite shares, so the test signs in no more often than it must and lets it refill at the end.
+ * Every GitHub callback and the password check count against the per-address login limit; the
+ * test stack loosens it (docker-compose.e2e.yml), so the test need not wait for it to refill.
  */
 import { expect, test, type Page } from '@playwright/test';
 
@@ -95,6 +95,4 @@ test('GitHub: link, sign in with GitHub, unlink, refused afterwards', async ({ p
   expect(new URL(page.url()).searchParams.get('sign_in_error')).toBeNull();
   await loginByUi(page, owner);
   csp.assertNone();
-  // The suite shares the per-address login limit: let it refill before the next test.
-  await page.waitForTimeout(30_000);
 });
