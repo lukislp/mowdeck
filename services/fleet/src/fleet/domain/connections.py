@@ -181,8 +181,10 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
         title="Mammotion cloud",
         description=(
             "Connects through the Mammotion cloud (MQTT) with a linked Mammotion account: link "
-            "the account once, then pick its mowers. Use a second account the mowers are shared "
-            "with: logging in with the main account logs the phone app out."
+            "the account once, then pick its mowers. Manual driving over the cloud (firmware "
+            "1.30.31.19 or newer, forwards and turns only) needs the account that owns the "
+            "mower; a shared account sees and runs everything else. The same account in the "
+            "phone app and in MowDeck at once can drop each other's live connection."
         ),
         linked_account=True,
         supports_links=frozenset({"ble_bridge"}),
@@ -246,7 +248,44 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
                 maximum=300,
                 default=60,
             ),
+            OptionSpec(
+                "cloud_drive",
+                "boolean",
+                "Manual driving over the cloud",
+                "Joystick, nudges, AI assist moves and spot runs over the Mammotion cloud when no "
+                "Bluetooth bridge is connected (forwards and turns only, about 0.3 s delay). Needs "
+                "the mower's owner account; off keeps driving to the bridge.",
+                default=True,
+            ),
+            OptionSpec(
+                "allow_manual_blades",
+                "boolean",
+                "Blades while driving manually",
+                "Off keeps the blades off while the mower is driven manually over the cloud.",
+                default=False,
+            ),
+            OptionSpec(
+                "manual_blade_height_mm",
+                "integer",
+                "Blade height for manual driving (mm)",
+                "",
+                advanced=True,
+                minimum=20,
+                maximum=100,
+                default=60,
+            ),
+            OptionSpec(
+                "manual_drive_speed_mps",
+                "number",
+                "Manual driving speed limit (m/s)",
+                "max_run_speed sent when a drive session opens; empty: the mower's own speed "
+                "setting, at most 1.0.",
+                advanced=True,
+                minimum=0.1,
+                maximum=1.0,
+            ),
             *_TIMEOUTS,
+            *DRIVE_CALIBRATION_OPTIONS,
         ),
     ),
     "ble_bridge": KindSchema(
@@ -254,7 +293,7 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
         title="BLE bridge (ESPHome)",
         description=(
             "Connects over Bluetooth through an ESPHome Bluetooth proxy near the mower; manual "
-            "driving works only over this link."
+            "driving over it can also reverse."
         ),
         groups={"credential": "Encryption key"},
         options=(
