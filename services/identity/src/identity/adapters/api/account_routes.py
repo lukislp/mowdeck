@@ -30,6 +30,7 @@ from identity.adapters.api.schemas import (
     ApiTokensPurgedOut,
     AuditOut,
     MemberOut,
+    PasskeyOut,
     PasswordSetIn,
     PermissionOut,
     ReconcileOut,
@@ -191,6 +192,27 @@ async def delete_user(
 ) -> None:
     """Delete a sub-user, or remove a person from the account."""
     await services.users.remove(account_id, user_id, ctx)
+
+
+@router.get("/users/{user_id}/passkeys")
+async def list_user_passkeys(
+    account_id: UUID, user_id: UUID, _: ManageUsers, services: ServicesDep
+) -> list[PasskeyOut]:
+    """Passkeys of a sub-user of this account (persons manage their own: 403)."""
+    return [PasskeyOut.of(p) for p in await services.passkeys.list_of_user(account_id, user_id)]
+
+
+@router.delete("/users/{user_id}/passkeys/{passkey_id}", status_code=204)
+async def remove_user_passkey(
+    account_id: UUID,
+    user_id: UUID,
+    passkey_id: UUID,
+    _: ManageUsers,
+    services: ServicesDep,
+    ctx: Ctx,
+) -> None:
+    """Remove a passkey of a sub-user of this account (its password stays)."""
+    await services.passkeys.remove_of_user(ctx, account_id, user_id, passkey_id)
 
 
 # --- roles and assignments ----------------------------------------------------------------------

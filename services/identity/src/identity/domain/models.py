@@ -3,10 +3,12 @@
 Field names equal the column names of the database tables, so the adapters map them 1:1.
 """
 
+import ipaddress
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 
@@ -330,3 +332,148 @@ class CatalogueEntry:
     users_only: bool = False
     """True for administrative keys API tokens may never hold."""
     retired: bool = False
+
+
+class CeremonyPurpose(StrEnum):
+    """What a WebAuthn challenge was handed out for."""
+
+    REGISTER = "register"
+    """Adding a passkey to a signed-in user."""
+    LOGIN = "login"
+    """A passwordless login (discoverable credential, no username)."""
+
+
+@dataclass(slots=True)
+class Passkey:
+    """A WebAuthn credential (passkey) of a user, a second way to log in next to the password.
+
+    ``credential_id`` and ``public_key`` are what the authenticator returned at registration
+    (the public key as COSE). ``sign_count`` follows the authenticator's counter; synced
+    passkeys usually keep it at 0.
+    """
+
+    id: UUID
+    user_id: UUID
+    credential_id: bytes = field(repr=False)
+    public_key: bytes = field(repr=False)
+    sign_count: int
+    name: str
+    created_at: datetime
+    transports: list[str] = field(default_factory=list)
+    aaguid: str | None = None
+    backup_eligible: bool = False
+    """The credential may be synced (multi-device passkey)."""
+    backed_up: bool = False
+    """The credential is currently synced (as of the last use)."""
+    last_used_at: datetime | None = None
+    created_user_agent: str | None = None
+    """User agent of the registration, a hint at the device in the list."""
+
+    def __post_init__(self) -> None:
+        self.credential_id = bytes(self.credential_id)
+        self.public_key = bytes(self.public_key)
+        self.transports = list(self.transports)
+
+
+@dataclass(slots=True)
+class WebAuthnChallenge:
+    """A challenge of one registration or login ceremony: single use, short-lived."""
+
+    id: UUID
+    purpose: CeremonyPurpose
+    challenge: bytes = field(repr=False)
+    created_at: datetime
+    expires_at: datetime
+    user_id: UUID | None = None
+    """Set for registrations: the user the passkey is added to."""
+
+    def __post_init__(self) -> None:
+        self.purpose = CeremonyPurpose(self.purpose)
+        self.challenge = bytes(self.challenge)
+
+
+@dataclass(slots=True)
+class AppLoginRequest:
+    """The native app's request to sign in through the system browser (single use).
+
+    The app registers the S256 hash of its PKCE verifier first and opens the sign-in page with
+    only this request's id; the page can hand a login over only for a request the app started
+    a few minutes ago, never for a challenge a link brought along.
+    """
+
+    id: UUID
+    code_challenge: str
+    created_at: datetime
+    expires_at: datetime
+
+
+@dataclass(slots=True)
+class AppLoginCode:
+    """A one-time code that hands a fresh login from the system browser to the native app.
+
+    The native app opens the system browser with the S256 hash of a verifier it keeps
+    (``code_challenge``, RFC 7636 style). After a login of any kind there (password, passkey,
+    later a redirect provider) the browser exchanges its fresh session for this code, which ends
+    the browser session; the app redeems code and verifier for its own session. Only the SHA-256
+    of the code is stored; it is short-lived and deleted when redeemed.
+    """
+
+    id: UUID
+    code_hash: str = field(repr=False)
+    code_challenge: str
+    user_id: UUID
+    account_id: UUID
+    created_at: datetime
+    expires_at: datetime
+    source_session: UUID | None = None
+    """The browser login session (``family_id``) that was handed over and ended."""
+
+
+@dataclass(frozen=True, slots=True)
+class RelyingParty:
+    """The WebAuthn relying party of this installation (from the public URL).
+
+    ``id`` is the RP ID (a host name, without scheme and port); ``origins`` are the exact origins
+    the browser may report in ``clientDataJSON``.
+    """
+
+    id: str
+    name: str
+    origins: tuple[str, ...]
+
+    @classmethod
+    def from_public_url(cls, url: str, *, rp_id: str = "", name: str = "MowDeck") -> "RelyingParty":
+        """The relying party of the installation reached at ``url`` (its public address).
+
+        The origin is the scheme, host and port of ``url``; the RP ID is the host, or ``rp_id``
+        when given (it must be the host or a parent domain of it, e.g. ``example.org`` for
+        ``https://mowdeck.example.org``). Browsers allow WebAuthn only in a secure context:
+        ``https``, or ``http`` on ``localhost``. IP addresses cannot be RP IDs.
+        Raises ``ValueError`` for anything else.
+        """
+        parts = urlsplit(url.strip())
+        host = (parts.hostname or "").lower()
+        if parts.scheme not in ("https", "http") or not host or parts.username or parts.password:
+            msg = f"public URL {url!r} is not an http(s) URL"
+            raise ValueError(msg)
+        if parts.scheme == "http" and host != "localhost" and not host.endswith(".localhost"):
+            msg = "passkeys need HTTPS (plain HTTP works only for localhost)"
+            raise ValueError(msg)
+        if _looks_like_ip(host):
+            msg = "passkeys need a host name, not an IP address"
+            raise ValueError(msg)
+        rp = (rp_id or host).strip().lower().rstrip(".")
+        if not rp or (host != rp and not host.endswith("." + rp)):
+            msg = f"RP ID {rp!r} must be the host {host!r} or a parent domain of it"
+            raise ValueError(msg)
+        port = f":{parts.port}" if parts.port else ""
+        origin = f"{parts.scheme}://{host}{port}"
+        return cls(id=rp, name=name.strip() or "MowDeck", origins=(origin,))
+
+
+def _looks_like_ip(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return False
+    return True

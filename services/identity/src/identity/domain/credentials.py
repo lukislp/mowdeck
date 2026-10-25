@@ -6,8 +6,12 @@
   passwords (OWASP ASVS style).
 * Refresh tokens ``mdr_<43 chars>`` and API tokens ``mdk_<token id hex>_<43 chars>`` carry 256
   random bits. Only their SHA-256 is stored; a slow hash is not needed for random secrets.
+* App login codes ``mda_<43 chars>`` (passkey login handed from the system browser to the native
+  app) carry 256 random bits as well and are bound to a PKCE ``S256`` code challenge.
+* Passkey names: 1 to 64 printable characters.
 """
 
+import base64
 import hashlib
 import hmac
 import re
@@ -23,7 +27,12 @@ MAX_PASSWORD_LENGTH = 256
 
 REFRESH_PREFIX = "mdr_"
 API_TOKEN_PREFIX = "mdk_"  # noqa: S105 - token prefix, not a secret
+APP_CODE_PREFIX = "mda_"
 _TOKEN_ID_HEX = re.compile(r"[0-9a-f]{32}")
+_BASE64URL_43 = re.compile(r"[A-Za-z0-9_-]{43}")
+_VERIFIER = re.compile(r"[A-Za-z0-9._~-]{43,128}")
+"""RFC 7636 section 4.1: 43 to 128 unreserved characters."""
+MAX_PASSKEY_NAME_LENGTH = 64
 
 COMMON_PASSWORDS = frozenset(
     {
@@ -132,3 +141,38 @@ def slugify(name: str, suffix: str) -> str:
     ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     base = re.sub(r"[^a-z0-9]+", "-", ascii_name.casefold()).strip("-")[:40] or "account"
     return f"{base}-{suffix}"
+
+
+def new_app_code() -> str:
+    """A new one-time app login code."""
+    return APP_CODE_PREFIX + secrets.token_urlsafe(32)
+
+
+def s256_challenge(verifier: str) -> str:
+    """``BASE64URL(SHA256(verifier))`` without padding (RFC 7636 ``S256``)."""
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def validate_code_challenge(challenge: str) -> str:
+    """The ``S256`` code challenge (43 base64url characters), or ``InvalidInput``."""
+    if not _BASE64URL_43.fullmatch(challenge):
+        msg = "code_challenge must be the base64url S256 hash of the verifier"
+        raise InvalidInput(msg)
+    return challenge
+
+
+def verifier_matches(challenge: str, verifier: str) -> bool:
+    """True if ``verifier`` is well formed and hashes to ``challenge`` (constant time)."""
+    if not _VERIFIER.fullmatch(verifier):
+        return False
+    return hmac.compare_digest(challenge, s256_challenge(verifier))
+
+
+def validate_passkey_name(name: str) -> str:
+    """A trimmed passkey name of 1 to 64 printable characters, or ``InvalidInput``."""
+    value = unicodedata.normalize("NFKC", name).strip()
+    if not value or len(value) > MAX_PASSKEY_NAME_LENGTH or not value.isprintable():
+        msg = f"passkey names have 1 to {MAX_PASSKEY_NAME_LENGTH} printable characters"
+        raise InvalidInput(msg)
+    return value

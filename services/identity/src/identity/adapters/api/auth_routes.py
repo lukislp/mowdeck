@@ -9,6 +9,11 @@ from pydantic import BaseModel, Field
 
 from identity.adapters.api.deps import Ctx, PublicCtx, ServicesDep
 from identity.adapters.api.schemas import (
+    AppCodeIn,
+    AppCodeOut,
+    AppLoginStartIn,
+    AppLoginStartOut,
+    AppSessionIn,
     LoginIn,
     MeOut,
     PasswordChangeIn,
@@ -43,14 +48,14 @@ RefreshTransport = Annotated[
 ]
 
 
-def _token_out(pair: TokenPair, transport: str | None) -> TokenOut:
+def token_out(pair: TokenPair, transport: str | None) -> TokenOut:
     out = TokenOut.of(pair)
     if (transport or "").strip().lower() == COOKIE_ONLY:
         return out.model_copy(update={"refresh_token": None})
     return out
 
 
-def _set_refresh_cookie(request: Request, response: Response, pair: TokenPair) -> None:
+def set_refresh_cookie(request: Request, response: Response, pair: TokenPair) -> None:
     if pair.refresh_token is None or pair.refresh_expires_at is None:
         return
     max_age = int((pair.refresh_expires_at - pair.access.issued_at).total_seconds())
@@ -106,9 +111,9 @@ async def login(
     """Log in with username and password: access token, refresh token (cookie, and the body
     unless ``X-Mowdeck-Refresh: cookie-only``)."""
     pair = await services.sessions.login(body.username, body.password, body.account_id, ctx)
-    _set_refresh_cookie(request, response, pair)
+    set_refresh_cookie(request, response, pair)
     response.headers["Cache-Control"] = "no-store"
-    return _token_out(pair, transport)
+    return token_out(pair, transport)
 
 
 @router.post("/session/refresh")
@@ -125,9 +130,9 @@ async def refresh(
     """Rotate the refresh token; a reused token ends the whole login session (except within
     the short grace after a lost response)."""
     pair = await services.sessions.refresh(_refresh_token(body, cookie, requested_with), ctx)
-    _set_refresh_cookie(request, response, pair)
+    set_refresh_cookie(request, response, pair)
     response.headers["Cache-Control"] = "no-store"
-    return _token_out(pair, transport)
+    return token_out(pair, transport)
 
 
 @router.post("/session/logout", status_code=204)
@@ -148,6 +153,50 @@ async def logout(
 async def logout_all(services: ServicesDep, ctx: Ctx) -> None:
     """End every session of the calling user."""
     await services.sessions.logout_all(ctx)
+
+
+@router.post("/app-login/start")
+async def app_login_start(
+    body: AppLoginStartIn, response: Response, services: ServicesDep, ctx: PublicCtx
+) -> AppLoginStartOut:
+    """Native app hand-off (ADR 0050), first step in the app: register the S256 hash of the
+    PKCE verifier; the sign-in page in the system browser gets only the request id."""
+    request = await services.sessions.start_app_login(body.code_challenge, ctx)
+    response.headers["Cache-Control"] = "no-store"
+    ttl = int(services.deps.config.app_request_ttl.total_seconds())
+    return AppLoginStartOut(request_id=request.id, expires_in=ttl)
+
+
+@router.post("/app-login/code")
+async def app_login_code(
+    body: AppCodeIn, response: Response, services: ServicesDep, ctx: Ctx
+) -> AppCodeOut:
+    """Native app hand-off (ADR 0050), browser side: exchange the caller's fresh login session
+    (any login method, at most a few minutes old) for a one-time code bound to the app's
+    sign-in request and its PKCE challenge (403 for an unknown, used or expired request). The
+    browser session ends; the page sends the code to the app's URL scheme."""
+    code = await services.sessions.issue_app_code(ctx, body.request_id)
+    response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
+    response.headers["Cache-Control"] = "no-store"
+    ttl = int(services.deps.config.app_code_ttl.total_seconds())
+    return AppCodeOut(code=code, expires_in=ttl)
+
+
+@router.post("/app-login/session")
+async def app_login_session(
+    body: AppSessionIn,
+    request: Request,
+    response: Response,
+    services: ServicesDep,
+    ctx: PublicCtx,
+    transport: RefreshTransport = None,
+) -> TokenOut:
+    """Native app hand-off, app side: the one-time code and the PKCE verifier give the app a
+    normal session (the same tokens and cookie as ``POST /session``). The code is single use."""
+    pair = await services.sessions.redeem_app_code(body.code, body.code_verifier, ctx)
+    set_refresh_cookie(request, response, pair)
+    response.headers["Cache-Control"] = "no-store"
+    return token_out(pair, transport)
 
 
 @router.post("/token")
