@@ -70,7 +70,7 @@ Object.assign(composeEnv, {
   MOWDECK_VERSION: project,
   GATEWAY_HTTP_PORT: `127.0.0.1:${port}`,
   // Passkeys (ADR 0050) are bound to the address the browser opens: http://localhost works
-  // without HTTPS.
+  // without HTTPS. Replaces stack.env's IDENTITY_PUBLIC_URL (the CI address, port 80).
   IDENTITY_PUBLIC_URL: baseURL,
   GATEWAY_HTTPS_PORT: `127.0.0.1:${port + 1}`,
   POSTGRES_PORT: String(port + 2),
