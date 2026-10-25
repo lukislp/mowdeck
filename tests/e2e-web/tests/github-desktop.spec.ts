@@ -4,7 +4,7 @@
  * authorization page at /fake-github and picks the GitHub account there, Identity redeems the
  * code with the PKCE verifier and reads the account inside the network.
  *
- * 1. Settings: "Mit GitHub verknüpfen" (password again), approve at GitHub, the account is listed.
+ * 1. Settings, "Verknüpfte Konten": "Mit GitHub verknüpfen" (password again), approve at GitHub, the account is listed.
  * 2. Log out, "Mit GitHub anmelden" signs in to the same user.
  * 3. Settings: "Verknüpfung lösen"; log out, GitHub no longer signs in (the account is unknown,
  *    never registered); the password still works.
@@ -59,8 +59,10 @@ test('GitHub: link, sign in with GitHub, unlink, refused afterwards', async ({ p
   // 1. Link in the settings.
   await loginByUi(page, owner);
   await page.goto('/settings#profile');
-  const panel = page.getByTestId('github-panel');
-  await expect(panel.getByTestId('github-not-linked')).toBeVisible();
+  const panel = page.getByTestId('login-links-panel');
+  // Not linked yet: no account in the list, a connect button in the row.
+  await expect(panel.getByTestId('github-linked')).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: /^Mit GitHub verknüpfen$/ })).toBeVisible();
   await panel.getByTestId('github-link').click();
   await panel.locator('#github-password').fill(owner.password);
   await panel.getByTestId('github-link-continue').click();
@@ -83,7 +85,8 @@ test('GitHub: link, sign in with GitHub, unlink, refused afterwards', async ({ p
   // MowDeck keeps no GitHub token, so the authorization on GitHub's side is the user's to remove.
   await expect(page.getByTestId('github-unlink-revoke-hint')).toBeVisible();
   await page.getByTestId('github-unlink-confirm').click();
-  await expect(page.getByTestId('github-not-linked')).toBeVisible();
+  await expect(page.getByTestId('github-linked')).toHaveCount(0);
+  await expect(page.getByTestId('github-link')).toBeVisible();
   await expect(
     page
       .getByTestId('github-revoke-hint')
