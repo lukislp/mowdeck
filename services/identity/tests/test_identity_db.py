@@ -16,9 +16,11 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import apple_support
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
@@ -463,3 +465,58 @@ async def test_migration_0004_down_keeps_passkeys(monkeypatch: pytest.MonkeyPatc
             assert {"external_identities", "oauth_states"} <= await table_names(engine)
         finally:
             await engine.dispose()
+
+
+@needs_db
+async def test_apple_and_github_links_coexist_on_postgres(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """ADR 0052: a user links both providers (one link per provider), an Apple account belongs
+    to one user, and a whole link and sign-in with Apple run on PostgreSQL."""
+    apple = apple_support.FakeApple()
+    settings = {
+        **GITHUB,
+        **apple_support.settings(apple_support.write_key(tmp_path, apple.client_key)),
+    }
+    sub = "001234.0a1b2c3d4e5f60718293a4b5c6d7e8f9.0420"
+    async with (
+        store_of("postgres", monkeypatch) as store,
+        harness(
+            store=store,
+            github_transport=FakeGitHub().transport,
+            apple_transport=apple.transport,
+            **settings,
+        ) as h,
+    ):
+        lukas = await h.register("lukas")
+        anna_id, _ = await h.subuser(lukas, "anna")
+        started = await h.client.post(
+            "/api/v1/identity/me/external-identities/apple/link",
+            headers=lukas.headers,
+            json={"password": PASSWORD},
+        )
+        linked = await h.client.get(
+            "/api/v1/identity/oauth/apple/callback",
+            params=apple.authorize(started.json()["authorize_url"], sub),
+        )
+        started = await h.client.post("/api/v1/identity/oauth/apple/start", json={})
+        login = await h.client.get(
+            "/api/v1/identity/oauth/apple/callback",
+            params=apple.authorize(started.json()["authorize_url"], sub),
+        )
+        async with store.transaction() as tx:
+            [link] = await tx.external_identities.find(user_id=lukas.user_id)
+            with pytest.raises(ConflictError):  # one user per Apple account
+                await tx.external_identities.add(
+                    ExternalIdentity(uuid4(), anna_id, "apple", sub, NOW)
+                )
+            # The same user may have an account at another provider besides.
+            await tx.external_identities.add(
+                ExternalIdentity(uuid4(), lukas.user_id, "github", "42", NOW)
+            )
+            providers = sorted(x.provider for x in await tx.external_identities.find())
+    assert linked.headers["location"] == "/settings?linked=apple#profile"
+    assert login.headers["location"] == "/login?signed_in_with=apple"
+    assert link.provider == "apple" and link.subject == sub and link.display_name == "Apple ID"
+    assert link.last_used_at is not None
+    assert providers == ["apple", "github"]

@@ -1314,6 +1314,7 @@ dependencies = [
     { name = "mowdeck-authz", extra = ["fastapi"] },
     { name = "mowdeck-contracts" },
     { name = "mowdeck-service-kit", extra = ["db"] },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "webauthn" },
 ]
 
@@ -1327,6 +1328,7 @@ requires-dist = [
     { name = "mowdeck-authz", extras = ["fastapi"], editable = "libs/mowdeck-authz" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-service-kit", extras = ["db"], editable = "libs/mowdeck-service-kit" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
     { name = "webauthn", specifier = ">=3.0.1" },
 ]
 

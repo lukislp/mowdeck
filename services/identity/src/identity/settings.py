@@ -5,6 +5,7 @@ The field docstrings are the configuration reference (README settings table). Op
 configured with the ``MOWDECK_OPENFGA_*`` variables of ``mowdeck-authz``.
 """
 
+import re
 from datetime import timedelta
 from typing import Literal
 
@@ -12,10 +13,14 @@ from mowdeck_auth import DEFAULT_AUDIENCE, DEFAULT_ISSUER
 from mowdeck_service_kit import ServiceSettings, get_logger
 from pydantic import Field, SecretStr
 
-from identity.application.context import GitHubLogin, IdentityConfig, RegistrationMode
+from identity.adapters.apple import load_signing_key
+from identity.application.context import AppleLogin, GitHubLogin, IdentityConfig, RegistrationMode
 from identity.domain.models import RelyingParty, oauth_callback_url
 
 _log = get_logger("identity.settings")
+
+_APPLE_SERVICES_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9.\-]{2,99}")
+_APPLE_TEN = re.compile(r"[A-Z0-9]{10}")
 
 
 class Settings(ServiceSettings):
@@ -130,6 +135,38 @@ class Settings(ServiceSettings):
     identity_github_api_url: str = "https://api.github.com"
     """GitHub's REST API (``https://<host>/api/v3`` for GitHub Enterprise Server)."""
 
+    identity_apple_services_id: str = Field(default="", max_length=100)
+    """Services ID of "Sign in with Apple" (ADR 0052), e.g. ``app.mowdeck.signin``. Empty: Apple
+    login is off. Needs the team id, key id, the private key file and
+    ``MOWDECK_IDENTITY_PUBLIC_URL`` (the callback is
+    ``<public URL>/api/v1/identity/oauth/apple/callback``)."""
+
+    identity_apple_team_id: str = Field(default="", max_length=20)
+    """Apple Developer Team ID (10 characters)."""
+
+    identity_apple_key_id: str = Field(default="", max_length=20)
+    """Key ID of the Sign in with Apple key (10 characters)."""
+
+    identity_apple_private_key_file: str = Field(default="", max_length=500)
+    """Path of the key's ``.p8`` file (a Docker or Kubernetes secret). Read at startup; the
+    key never reaches the database or the web app."""
+
+    identity_apple_authorize_url: str = "https://appleid.apple.com/auth/authorize"
+    """Apple's authorization page (another value only for the test stack's fake)."""
+
+    identity_apple_token_url: str = "https://appleid.apple.com/auth/token"  # noqa: S105
+    """Apple's token endpoint (another value only for the test stack's fake)."""
+
+    identity_apple_keys_url: str = "https://appleid.apple.com/auth/keys"
+    """Apple's public signing keys for ID tokens (another value only for the test stack's fake)."""
+
+    identity_apple_issuer: str = "https://appleid.apple.com"
+    """The issuer of Apple's ID tokens (another value only for the test stack's fake)."""
+
+    identity_apple_pkce: bool = True
+    """Send the PKCE challenge and verifier to Apple (ADR 0052). Apple's documentation does not
+    promise them; turn this off only if Apple refuses the requests because of them."""
+
     identity_maintenance_seconds: float = Field(default=60, ge=1)
     """Interval of the maintenance loop (key rotation, key reload, attempt purge)."""
 
@@ -200,6 +237,55 @@ class Settings(ServiceSettings):
             token_url=self.identity_github_token_url,
             api_url=self.identity_github_api_url,
             redirect_uri=callback,
+        )
+
+    def apple_login(self) -> AppleLogin | None:
+        """The Apple login settings, or None (off). Logged once at startup: on with the callback
+        URL to register at the Services ID, or why it is off; a wrong value (an unreadable or
+        wrong key included) never stops the service."""
+        services_id = self.identity_apple_services_id.strip()
+        team_id = self.identity_apple_team_id.strip()
+        key_id = self.identity_apple_key_id.strip()
+        key_file = self.identity_apple_private_key_file.strip()
+        if not (services_id or team_id or key_id or key_file):
+            return None
+        problem, callback, key = None, "", None
+        if not _APPLE_SERVICES_ID.fullmatch(services_id):
+            problem = "MOWDECK_IDENTITY_APPLE_SERVICES_ID is not set or not a Services ID"
+        elif not _APPLE_TEN.fullmatch(team_id):
+            problem = "MOWDECK_IDENTITY_APPLE_TEAM_ID is not set or not a 10 character Team ID"
+        elif not _APPLE_TEN.fullmatch(key_id):
+            problem = "MOWDECK_IDENTITY_APPLE_KEY_ID is not set or not a 10 character Key ID"
+        elif not key_file:
+            problem = "the key file (MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE) is not set"
+        if problem is None:
+            try:
+                with open(key_file, encoding="utf-8") as handle:
+                    key = load_signing_key(handle.read())
+            except OSError as exc:
+                problem = f"the key file cannot be read ({exc.strerror})"
+            except ValueError as exc:
+                problem = str(exc)
+        if problem is None:
+            try:
+                callback = oauth_callback_url(self.identity_public_url, "apple")
+            except ValueError as exc:
+                problem = str(exc)
+        if problem is not None or key is None:
+            _log.error("Apple login is off: the configuration is incomplete", reason=problem)
+            return None
+        _log.info("Apple login is on", callback_url=callback)
+        return AppleLogin(
+            services_id=services_id,
+            team_id=team_id,
+            key_id=key_id,
+            private_key=key,
+            redirect_uri=callback,
+            authorize_url=self.identity_apple_authorize_url,
+            token_url=self.identity_apple_token_url,
+            keys_url=self.identity_apple_keys_url,
+            issuer=self.identity_apple_issuer,
+            pkce=self.identity_apple_pkce,
         )
 
     @property

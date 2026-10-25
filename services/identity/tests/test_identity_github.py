@@ -160,7 +160,7 @@ async def test_github_is_off_unless_configured() -> None:
         cb = await callback(h, {"state": "x", "code": "y"})
         linking = await start_link(h, lukas)
         links = await h.client.get(f"{API}/me/external-identities", headers=lukas.headers)
-    assert methods == {"password": True, "passkey": False, "github": False}
+    assert methods == {"password": True, "passkey": False, "github": False, "apple": False}
     assert start.status_code == 404 and cb.status_code == 404 and linking.status_code == 404
     assert links.json() == []
 

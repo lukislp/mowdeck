@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import StrEnum
 
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 from mowdeck_contracts.v1 import Principal
 
 from identity.domain.models import AuditEntry, RelyingParty
@@ -61,6 +62,23 @@ class GitHubLogin:
     api_url: str
     redirect_uri: str
     """``<public URL>/api/v1/identity/oauth/github/callback``, registered in the OAuth App."""
+
+
+@dataclass(frozen=True, slots=True)
+class AppleLogin:
+    """Settings of "Sign in with Apple" (ADR 0052); only server side, never shown anywhere."""
+
+    services_id: str
+    team_id: str
+    key_id: str
+    private_key: EllipticCurvePrivateKey = field(repr=False)
+    redirect_uri: str
+    """``<public URL>/api/v1/identity/oauth/apple/callback``, registered at the Services ID."""
+    authorize_url: str
+    token_url: str
+    keys_url: str
+    issuer: str
+    pkce: bool
 
 
 @dataclass(frozen=True, slots=True)

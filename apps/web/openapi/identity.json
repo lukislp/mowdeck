@@ -728,6 +728,12 @@
       "LoginMethodsOut": {
         "description": "Login methods this installation offers (the login page shows what is on).",
         "properties": {
+          "apple": {
+            "default": false,
+            "description": "Sign in with Apple is configured (only this flag; the Apple settings are never published)",
+            "title": "Apple",
+            "type": "boolean"
+          },
           "github": {
             "default": false,
             "description": "Sign in with GitHub is configured (only this flag; the GitHub settings are never published)",

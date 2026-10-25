@@ -6,7 +6,8 @@
 * :class:`RedirectAuthenticator`: a browser round trip to a provider. :class:`OAuthAuthenticator`
   implements it for any OAuth 2 provider (authorization code flow with PKCE S256, single-use
   state bound to the browser) on top of an ``OAuthClient`` port; GitHub is the first one
-  (:class:`GitHubAuthenticator`, ADR 0051), a generic OIDC client can follow with the same class.
+  (:class:`GitHubAuthenticator`, ADR 0051), Apple the second (:class:`AppleAuthenticator`,
+  ADR 0052, with an ID token); a generic OIDC client can follow with the same class.
 
 The :class:`AuthenticatorRegistry` holds the enabled plug-ins by name; the API looks them up,
 so a new method is a new class plus one registration.
@@ -55,6 +56,9 @@ from identity.domain.models import (
 )
 
 _log = get_logger("identity.authenticators")
+
+CANCEL_ERRORS = ("access_denied", "user_cancelled_authorize")
+"""Callback errors that mean the user declined (OAuth 2; Apple's own code for "Cancel")."""
 
 CHALLENGE_BYTES = 32
 """Random bytes of a WebAuthn challenge (the spec asks for at least 16)."""
@@ -417,7 +421,7 @@ class OAuthAuthenticator:
         if not browser_binding or not verifier_matches(record.code_challenge, browser_binding):
             return self._failed(record, RedirectFailure.EXPIRED, "other browser (no verifier)")
         error = params.get("error", "")[:100]
-        if error == "access_denied":
+        if error in CANCEL_ERRORS:
             return self._failed(record, RedirectFailure.CANCELLED, "declined at the provider")
         if error:
             _log.warning(
@@ -503,6 +507,25 @@ class GitHubAuthenticator(OAuthAuthenticator):
     ) -> None:
         if client.provider != "github":
             msg = f"not a GitHub client: {client.provider!r}"
+            raise ValueError(msg)
+        super().__init__(client, store, clock, redirect_uri=redirect_uri, ttl=ttl)
+
+
+class AppleAuthenticator(OAuthAuthenticator):
+    """Sign in with Apple (ADR 0052): the OAuth flow above with the Apple client
+    (``adapters/apple.py``, no scope, ID token validated); the account is Apple's ``sub``."""
+
+    def __init__(
+        self,
+        client: OAuthClient,
+        store: Store,
+        clock: Clock,
+        *,
+        redirect_uri: str,
+        ttl: timedelta = timedelta(minutes=10),
+    ) -> None:
+        if client.provider != "apple":
+            msg = f"not an Apple client: {client.provider!r}"
             raise ValueError(msg)
         super().__init__(client, store, clock, redirect_uri=redirect_uri, ttl=ttl)
 

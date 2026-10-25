@@ -20,6 +20,7 @@ dependencies = [
   "argon2-cffi>=25.1.0",
   "cryptography>=44.0.0",
   "httpx>=0.28.1",
+  "pyjwt[crypto]>=2.10.1",
   "webauthn>=3.0.1",
 ]
 

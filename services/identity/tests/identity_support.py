@@ -221,10 +221,12 @@ async def harness(
     authz: InMemoryAuthorizer | None = None,
     entitlements: Any = None,
     github_transport: httpx.AsyncBaseTransport | None = None,
+    apple_transport: httpx.AsyncBaseTransport | None = None,
     **overrides: Any,
 ) -> AsyncIterator[Harness]:
     """The app with fakes, inside its lifespan. ``backend`` replaces the tuple backend;
-    ``github_transport`` answers for GitHub (``github_support.FakeGitHub``)."""
+    ``github_transport`` answers for GitHub (``github_support.FakeGitHub``), ``apple_transport``
+    for Apple (``apple_support.FakeApple``)."""
     memory = store or MemoryStore()
     authz = authz or InMemoryAuthorizer()
     bus = InMemoryBus()
@@ -242,6 +244,7 @@ async def harness(
         background_tasks=False,
         entitlements=entitlements,
         github_transport=github_transport,
+        apple_transport=apple_transport,
     )
     async with lifespan_client(app) as client:
         await app.state.identity.deps.catalogue.refresh(fetch_modules=True)
