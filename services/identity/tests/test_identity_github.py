@@ -386,10 +386,13 @@ async def test_pkce_the_provider_checks_the_verifier_of_this_round_trip() -> Non
         started = await start_login(h)
         url = started.json()["authorize_url"]
         query = gh.authorize(url, OCTO)
-        # The challenge GitHub got is the S256 of the verifier in the browser's cookie.
+        # GitHub got the stored challenge; the verifier stays in the browser's cookie (the fake
+        # checks S256(verifier) against it at the token endpoint in every successful login).
         challenge = parse_qs(urlsplit(url).query)["code_challenge"][0]
-        verifier = h.client.cookies.get("mowdeck_oauth", path="/api/v1/identity/oauth/")
-        assert verifier is not None and s256_challenge(verifier) == challenge
+        async with h.store.transaction() as tx:
+            [stored] = await tx.oauth_states.find()
+        assert stored.code_challenge == challenge
+        assert h.client.cookies.get("mowdeck_oauth", path="/api/v1/identity/oauth/")
         # A code issued for another challenge does not pass GitHub's PKCE check.
         gh.codes[query["code"]]["challenge"] = s256_challenge(VERIFIER)
         refused = await callback(h, query)
