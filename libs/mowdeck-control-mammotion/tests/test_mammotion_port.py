@@ -1,5 +1,6 @@
 """The real PyMammotion port and the ESPHome proxy wiring, with the network calls replaced."""
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -713,3 +714,149 @@ async def test_mammotion_firmware_update_refused_on_an_error_code() -> None:
     await p.open()
     with pytest.raises(FirmwareRefused, match="code 500"):
         await p.start_firmware_update("1.30.31.19")
+
+
+# --- cloud remote drive (ADR 0049) ------------------------------------------------------------
+
+
+class _DriveCommands:
+    """The two builders PyMammotion's remote-drive session uses (wire bytes stand-ins)."""
+
+    def session_ctrl(self, **kwargs: Any) -> bytes:
+        return json.dumps({"frame": [kwargs["linear_speed"], kwargs["angular_speed"]]}).encode()
+
+    def session_exit_notify(self, token: str) -> bytes:
+        return json.dumps({"exit": bool(token)}).encode()
+
+
+class _Broker:
+    def subscribe_unsolicited(self, handler: Callable[[object], Awaitable[None]]) -> _Subscription:
+        return _Subscription()
+
+
+class _Tokens:
+    def __init__(self, code: int = 0, device_result: int = 0) -> None:
+        self.code = code
+        self.device_result = device_result
+
+    async def request(self) -> Any:
+        from mowdeck_control_mammotion.port import FpvControl, VendorResponse
+
+        data = FpvControl(
+            device_result=self.device_result,
+            token="t0ken" if self.device_result == 0 else None,
+            expire_in=300,
+            timeout_exit=180,
+            latency_threshold=2000,
+        )
+        return VendorResponse(code=self.code, msg="", data=data if self.code == 0 else None)
+
+    async def refresh(self, token: str) -> Any:
+        return await self.request()
+
+
+class _DriveClient(_Client):
+    """A client whose ``remote_drive_session`` is PyMammotion's real session class on a
+    stand-in handle, token source and cloud send (frames are recorded)."""
+
+    def __init__(self, tokens: _Tokens) -> None:
+        super().__init__()
+        handle = self.handles[0]
+        handle.commands = _DriveCommands()  # type: ignore[attr-defined]
+        handle.broker = _Broker()  # type: ignore[attr-defined]
+        handle.usable_cloud_transport = lambda **_: None  # type: ignore[attr-defined]
+        handle.supports_wifi_movement = lambda: True  # type: ignore[attr-defined]
+        self.frames: list[Any] = []
+
+        async def send(payload: bytes, *, timeout: float) -> None:  # noqa: ASYNC109 - DriveSend
+            self.frames.append(json.loads(payload))
+
+        self.session = port.RemoteDriveSession(handle, tokens=tokens, send=send)  # type: ignore[arg-type]
+
+    def remote_drive_session(self, name: str, account_id: str | None = None) -> Any:
+        self.calls.append(("remote_drive_session", name))
+        return self.session
+
+
+async def test_mammotion_port_remote_drive_wraps_the_vendor_session() -> None:
+    client = _DriveClient(_Tokens())
+    p = _port(client)
+    assert not p.remote_drive_supported()  # closed
+    await p.open()
+    assert p.remote_drive_supported()
+    link = p.remote_drive()
+    seen: list[port.RemoteDriveInfo] = []
+
+    async def listener(info: port.RemoteDriveInfo) -> None:
+        seen.append(info)
+
+    unsubscribe = link.subscribe(listener)
+    assert link.phase == "idle" and client.session.require_video is False
+    assert await link.start() and link.phase == "safety_notice"
+    await link.confirm()
+    assert link.phase == "active" and not link.fence_paused
+    await link.drive(150, 0)
+    assert client.frames[-1] == {"frame": [150, 0]}
+    await link.drive(-200, 10)  # the vendor never reverses over the cloud
+    await link.stop()
+    assert client.frames[-2:] == [{"frame": [0, 0]}, {"exit": True}]  # forced zero, release
+    assert link.phase == "idle"
+    unsubscribe()
+    assert seen == []
+    await p.close()
+
+
+async def test_mammotion_port_remote_drive_reports_the_shared_account_code() -> None:
+    client = _DriveClient(_Tokens(code=50803))
+    p = _port(client)
+    await p.open()
+    link = p.remote_drive()
+    seen: list[port.RemoteDriveInfo] = []
+
+    async def listener(info: port.RemoteDriveInfo) -> None:
+        seen.append(info)
+
+    link.subscribe(listener)
+    assert await link.start() is False
+    assert seen == [port.RemoteDriveInfo("token_unavailable", "50803")]
+    assert client.frames == []  # nothing was sent without a token
+    await p.close()
+
+
+async def test_mammotion_port_vendor_session_repeats_the_last_speed_until_a_zero() -> None:
+    """The reason for the adapter's watchdog: after an ack PyMammotion queues the last non-zero
+    frame again (every 150 ms) by itself; only an explicit zero frame ends that."""
+    client = _DriveClient(_Tokens())
+    p = _port(client)
+    await p.open()
+    link = p.remote_drive()
+    await link.start()
+    await link.confirm()
+    await link.drive(150, 0)
+    session = client.session
+    sent = len(client.frames)
+    ack = SimpleNamespace(
+        ctrl_seq=0,
+        app_send_ts_ms=0,
+        vehicle_send_ts_ms=1,
+        result=0,
+        localization_valid=True,
+        fence_exceed_distance=0.0,
+        measured_delay_ms=200,
+        preempt_account=0,
+    )
+    session._on_ack(ack)  # type: ignore[arg-type]
+    for _ in range(100):
+        if len(client.frames) > sent:
+            break
+        await asyncio.sleep(0.01)
+    assert client.frames[-1] == {"frame": [150, 0]}  # repeated without new input
+    await link.drive(0, 0)
+    await link.stop()
+    await p.close()
+
+
+def test_mammotion_port_remote_drive_needs_an_open_port() -> None:
+    p = _port(_DriveClient(_Tokens()))
+    with pytest.raises(PortClosedError):
+        p.remote_drive()

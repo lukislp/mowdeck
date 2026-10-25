@@ -72,6 +72,20 @@ _BUSY_ACTIVITIES: Final = frozenset(
 )
 
 
+def reverse_problem(steps: Sequence[ProposedStep], *, reverse: bool) -> str | None:
+    """Why ``steps`` cannot be driven on a link without reverse (None: they can). A backwards
+    step is never dropped or cut to zero: the maneuver would be another one than proposed."""
+    if reverse:
+        return None
+    for index, step in enumerate(steps, 1):
+        if step.linear < 0:
+            return (
+                f"step {index} drives backwards, but the mower's drive link cannot reverse "
+                "(Mammotion cloud driving)"
+            )
+    return None
+
+
 def evaluate(
     answer: AssessmentOut,
     *,
@@ -79,9 +93,10 @@ def evaluate(
     dock: DockRoute | None = None,
     job: JobContext | None = None,
     task: VisionTask = VisionTask.RECOVER,
+    reverse: bool = True,
 ) -> tuple[ProposalState, str | None]:
     """``proposed`` or ``rejected_by_ai`` with the reason (the model's answer, checked against
-    the dock route and the job)."""
+    the dock route, the job and whether the drive link can reverse)."""
     if answer.risk:
         flags = ", ".join(sorted(r.value for r in answer.risk))
         return ProposalState.REJECTED_BY_AI, f"risk: {flags}"
@@ -101,10 +116,16 @@ def evaluate(
         if job is None or not job.resumable:
             why = job.resume_note if job is not None else "no mowing job of the mower is known"
             return ProposalState.REJECTED_BY_AI, f"resume is not applicable: {why}"[:500]
+        backwards = reverse_problem(answer.proposal, reverse=reverse)
+        if backwards is not None:
+            return ProposalState.REJECTED_BY_AI, backwards
         return ProposalState.PROPOSED, None
     if answer.action is ProposalAction.NONE or not answer.proposal:
         reasons = "; ".join(answer.abort_reasons) or "the model proposed no safe maneuver"
         return ProposalState.REJECTED_BY_AI, reasons[:500]
+    backwards = reverse_problem(answer.proposal, reverse=reverse)
+    if backwards is not None:
+        return ProposalState.REJECTED_BY_AI, backwards
     return ProposalState.PROPOSED, None
 
 
@@ -169,12 +190,15 @@ def low_confidence_problem(
     job: JobContext | None,
     task: VisionTask,
     path_check: PathCheck | None,
+    reverse: bool = True,
 ) -> str | None:
     """Why the model's low-confidence recommendation may not be offered (None: it may): the
     same checks as any proposal (:func:`evaluate` without the threshold), and its drive steps
     must pass ``path_check``. Without a check the steps are refused: a path that cannot be
     checked is never offered below the threshold."""
-    state, why = evaluate(answer, min_confidence=0.0, dock=dock, job=job, task=task)
+    state, why = evaluate(
+        answer, min_confidence=0.0, dock=dock, job=job, task=task, reverse=reverse
+    )
     if state is not ProposalState.PROPOSED:
         return why or "the recommendation is not applicable"
     if answer.action is ProposalAction.RETURN_TO_DOCK or not answer.proposal:
@@ -193,13 +217,16 @@ def decide(
     job: JobContext | None = None,
     task: VisionTask = VisionTask.RECOVER,
     path_check: PathCheck | None = None,
+    reverse: bool = True,
 ) -> Decision:
     """The model's answer through :func:`evaluate`, then the dock fallback (not offered again
     when ``allow_fallback`` is false: an earlier round already tried it without success).
 
     Below the threshold a recommendation that passes :func:`low_confidence_problem` is offered
     marked ``low_confidence``: next to the fallback (which stays the default option) or alone.
-    A risk flag still refuses everything; above the threshold nothing changes."""
+    A risk flag still refuses everything; above the threshold nothing changes. Without
+    ``reverse`` (the drive link cannot drive backwards) a plan with a backwards step is not
+    offered (:func:`reverse_problem`)."""
     if not answer.risk and answer.confidence < min_confidence and recommends(answer):
         return _decide_low_confidence(
             answer,
@@ -209,8 +236,11 @@ def decide(
             job=job,
             task=task,
             path_check=path_check,
+            reverse=reverse,
         )
-    state, detail = evaluate(answer, min_confidence=min_confidence, dock=dock, job=job, task=task)
+    state, detail = evaluate(
+        answer, min_confidence=min_confidence, dock=dock, job=job, task=task, reverse=reverse
+    )
     if state is ProposalState.PROPOSED:
         return Decision(state, None, _executed_action(answer))
     if allow_fallback and dock_fallback_applies(answer, dock):
@@ -234,10 +264,13 @@ def _decide_low_confidence(
     job: JobContext | None,
     task: VisionTask,
     path_check: PathCheck | None,
+    reverse: bool = True,
 ) -> Decision:
     below = f"confidence {answer.confidence:.2f} below {min_confidence:.2f}"
     action = _executed_action(answer)
-    problem = low_confidence_problem(answer, dock=dock, job=job, task=task, path_check=path_check)
+    problem = low_confidence_problem(
+        answer, dock=dock, job=job, task=task, path_check=path_check, reverse=reverse
+    )
     fallback = allow_fallback and dock_fallback_applies(answer, dock)
     if problem is None and (action is ProposalAction.RETURN_TO_DOCK or not fallback):
         text = f"The model recommends {action.value} with low confidence ({below})."

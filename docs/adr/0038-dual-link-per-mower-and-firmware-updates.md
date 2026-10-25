@@ -58,3 +58,7 @@ Easier: one registration per mower with the camera and the joystick; firmware up
 **Why.** The first owner run refused "Update installieren" with "must be charging" although the mower stood in its dock: a mower stops charging once its battery is full, so a docked, full mower reports `charging` false and could never be updated. What the rule wants to guarantee is enough energy for the 10 to 20 minutes of the update and a mower that does not drive away; the dock plus a battery floor say that directly. The floor rises to 70 % because the mower no longer has to be on charge while it installs.
 
 The controller (`safety.firmware_update_problem`), the adapters and the simulator (which call it), the contract's `FirmwareUpdate` description and the web panel's hints follow the same rule.
+
+## Amendment (2026-10-24): the cloud as the second drive link
+
+[ADR 0049](0049-manual-driving-over-the-mammotion-cloud.md) adds the vendor's cloud remote drive. The role `drive` keeps the bridge first: a session opens over Bluetooth while the bridge's proxy link is up, and over the cloud only while it is down (and the mower offers cloud driving). A Bluetooth session still never falls back to the cloud mid-session; "manual driving needs the bridge" no longer holds, and `capabilities.manual_drive` follows the bridge or the cloud (`drive_reverse` the bridge only).

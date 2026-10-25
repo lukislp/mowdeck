@@ -10,8 +10,8 @@ This package is GPL-3.0 because it imports PyMammotion (GPL-3.0), see ADR 0011. 
 * a ``cloud`` registration with a ``ble_bridge`` link (ADR 0038) gets a
   :class:`MammotionDualConnection`: the cloud plus the bridge for manual driving.
 
-``wifi`` is not implemented: Mammotion restores control over Wi-Fi only from firmware
-1.30.31.19 (spike 0001, section 3.1).
+``wifi`` is not registered: driving over Wi-Fi and 4G (firmware 1.30.31.19 or newer) is the
+cloud connection's remote drive, :class:`CloudDriveSession` (ADR 0049).
 """
 
 from mowdeck_control_mammotion.base import MammotionBase
@@ -21,6 +21,7 @@ from mowdeck_control_mammotion.ble import (
     create_ble_bridge_connection,
 )
 from mowdeck_control_mammotion.cloud import MammotionCloudConnection, create_cloud_connection
+from mowdeck_control_mammotion.cloud_drive import CloudDriveSession
 from mowdeck_control_mammotion.drive import BleDriveSession
 from mowdeck_control_mammotion.dual import BridgeWatcher, MammotionDualConnection
 from mowdeck_control_mammotion.options import BleProxyOptions, CloudOptions, OptionsError
@@ -37,6 +38,7 @@ __all__ = [
     "BleProxyPort",
     "BridgeWatcher",
     "ClientPort",
+    "CloudDriveSession",
     "CloudOptions",
     "MammotionBase",
     "MammotionBleProxyConnection",

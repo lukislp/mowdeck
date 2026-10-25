@@ -24,6 +24,15 @@ services:
       - traefik.http.services.e2e-marker.loadbalancer.server.port=80
     networks: [mowdeck]
 
+  # The whole Playwright suite registers and logs in its users from one address, which runs into
+  # the per-address limit of Identity's login and registration routes (10 per minute, burst 20)
+  # once the suite grows. Test stacks only: a looser limit of the same middleware, so the
+  # specs never fail with 429 for each other. Production keeps docker-compose.yml's values.
+  identity:
+    labels:
+      - traefik.http.middlewares.identity-ratelimit.ratelimit.average=300
+      - traefik.http.middlewares.identity-ratelimit.ratelimit.burst=100
+
   # The camera relay and its media server run in every test stack (they are the "relay"
   # profile otherwise), with the test hooks of the relay (POST /internal/v1/test/freeze pauses
   # the fake source), so the suites can play the simulator's cameras through the relay.
