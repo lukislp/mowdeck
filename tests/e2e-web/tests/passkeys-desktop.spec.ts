@@ -3,13 +3,13 @@
  * platform authenticator with resident keys and user verification, presence simulated):
  *
  * 1. Settings: add a passkey (password again), it is listed with its name.
- * 2. Log out, "Mit Passkey anmelden" signs in without username or password; so does the
- *    passkey offered in the username field's autofill (conditional UI).
+ * 2. Log out, "Mit Passkey anmelden" signs in without username or password.
  * 3. The "app" (here the test with the PKCE verifier) registers its challenge; the sign-in page
  *    opened with the request id (`?app_request=...&app_state=...`) hands the passkey login over,
  *    after the user confirms, as a one-time code in `mowdeck://auth/callback`, which the app
  *    redeems for a session; the browser session ends.
- * 4. Remove the passkey; a passkey login with it is refused.
+ * 4. The passkey offered in the username field's autofill (conditional UI) signs in; remove
+ *    the passkey, a passkey login with it is refused.
  *
  * Every login counts against the per-address login limit (10 per minute, burst 20) that the
  * whole suite shares, so the test signs in no more often than it must.
@@ -18,7 +18,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { actor, loginByUi, registerByApi, watchCsp } from './support';
+import { actor, loginByUi, watchCsp } from './support';
 
 async function virtualAuthenticator(page: Page) {
   const cdp = await page.context().newCDPSession(page);
@@ -59,7 +59,12 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
 }) => {
   const csp = watchCsp(page);
   const authenticator = await virtualAuthenticator(page);
-  const owner = await registerByApi(request, actor('passkey'));
+  // Registered without the API login of registerByApi: every login counts (see below).
+  const owner = actor('passkey');
+  const registered = await request.post('/api/v1/identity/register', {
+    data: { username: owner.username, password: owner.password, account_name: 'Passkey home' },
+  });
+  expect(registered.status(), await registered.text()).toBe(201);
 
   const methods = await request.get('/api/v1/identity/login-methods');
   expect(await methods.json()).toEqual({ password: true, passkey: true });
@@ -83,9 +88,6 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
   await logout(page);
   await authenticator.presence(true);
   await page.getByTestId('login-passkey').click();
-  await page.waitForURL(/\/mowers/);
-  // The autofill (conditional UI): the virtual authenticator picks the passkey by itself.
-  await logout(page);
   await page.waitForURL(/\/mowers/);
 
   // 3. The sign-in page opened for the app hands the login over.
@@ -124,9 +126,10 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
   });
   expect(app.status(), await app.text()).toBe(200);
 
-  // 4. Remove the passkey: it no longer signs in, the password does.
-  await authenticator.presence(false);
-  await loginByUi(page, owner);
+  // 4. The autofill (conditional UI) signs in: the virtual authenticator picks the passkey by
+  // itself. Then remove the passkey: it no longer signs in.
+  await page.goto('/login');
+  await page.waitForURL(/\/mowers/);
   await page.goto('/settings#profile');
   await page.getByTestId('passkey-remove-E2E Laptop').click();
   await page.getByTestId('passkey-remove-confirm').click();
@@ -138,4 +141,7 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
     page.getByText('Dieser Passkey wurde nicht akzeptiert.', { exact: false }),
   ).toBeVisible();
   csp.assertNone();
+  // The whole suite shares the per-address login limit (10 per minute, burst 20) and this test
+  // used 7 of it within seconds: let it refill before the next test registers and logs in.
+  await page.waitForTimeout(45_000);
 });
