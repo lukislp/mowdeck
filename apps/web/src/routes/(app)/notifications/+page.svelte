@@ -8,6 +8,7 @@
   import { formatAge, problemMessage } from '#lib/i18n.js';
   import { clock } from '#lib/clock.svelte.js';
   import { navigatePath } from '#lib/navigate.js';
+  import { dayKey, relativeDay } from '#lib/notifications/days.js';
   import { alarmPosition, isAlarm } from '#lib/notifications/kinds.js';
   import { inbox } from '#lib/notifications/runtime.js';
   import { m } from '#lib/paraglide/messages.js';
@@ -35,18 +36,11 @@
     };
   });
 
-  function dayKey(at: string): string {
-    const date = new Date(at);
-    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-  }
-
   function dayLabel(at: string): string {
-    const date = new Date(at);
-    const today = new Date(clock.now);
-    const yesterday = new Date(clock.now - 86_400_000);
-    if (dayKey(at) === dayKey(today.toISOString())) return m.notif_today();
-    if (dayKey(at) === dayKey(yesterday.toISOString())) return m.notif_yesterday();
-    return new Intl.DateTimeFormat(getLocale(), { dateStyle: 'full' }).format(date);
+    const relative = relativeDay(at, clock.now);
+    if (relative === 'today') return m.notif_today();
+    if (relative === 'yesterday') return m.notif_yesterday();
+    return new Intl.DateTimeFormat(getLocale(), { dateStyle: 'full' }).format(new Date(at));
   }
 
   function time(at: string): string {
