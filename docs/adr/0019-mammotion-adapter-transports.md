@@ -36,3 +36,7 @@ Alternatives considered:
 - Until the secret store exists, connection options with plain secrets travel over the internal bus to the Device-Gateway; deployments should prefer `credential_ref`.
 - Every cloud mower holds its own PyMammotion client and login; sharing one client per account is a later optimisation.
 - The owner's spike run (step 1 to 4 with the script) confirms or corrects the unverified mappings: work modes and RTK fields of the LUBA 2 AWD X, the map reference with network RTK, the dock convention, the StartMow pattern mapping and the emergency stop sequence.
+
+## Amendment (2026-10-24): manual driving over the cloud
+
+Point 3 is superseded by [ADR 0049](0049-manual-driving-over-the-mammotion-cloud.md): `RemoteDriveSession` was verified on the owner's LUBA 2 AWD X (firmware 1.30.31.19), and the cloud connection offers manual driving (forwards and turns, no reverse) when the mower supports it, with the owner account.

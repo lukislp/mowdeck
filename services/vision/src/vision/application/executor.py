@@ -99,6 +99,7 @@ from vision.domain.rules import (
     Geofence,
     frames_for,
     resume_gate,
+    reverse_problem,
     start_problem,
     state_abort_reason,
     total_seconds,
@@ -233,6 +234,9 @@ class Executor:
             if isinstance(prepared, RunOutcome):
                 return prepared
             run = prepared
+            backwards = self._reverse_problem(proposal, steps)
+            if backwards is not None:
+                return RunOutcome(ProposalState.ABORTED, f"{backwards}; nothing was driven")
             start_pose = pose_of(run.initial, run.mower_map)
             reply = await self._start_session(run, steps)
             if isinstance(reply, RunOutcome):
@@ -260,6 +264,14 @@ class Executor:
             return await self._verify(run, steps, start_pose)
         finally:
             watch.close()
+
+    def _reverse_problem(self, proposal: Proposal, steps: list[ProposedStep]) -> str | None:
+        """A backwards step on a drive link that cannot reverse now (the Mammotion cloud,
+        ADR 0049): the run is refused before it moves, never driven with the step dropped."""
+        caps = self.view.capabilities(proposal.mower_id)
+        if caps is None or caps[0] != proposal.account_id:
+            return None  # unknown: the controller refuses a backwards frame by itself
+        return reverse_problem(steps, reverse=caps[1].drive_reverse)
 
     # --- return to dock -------------------------------------------------------------------
 

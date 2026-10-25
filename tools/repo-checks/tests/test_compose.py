@@ -35,14 +35,25 @@ _ComposeLoader.add_constructor("!reset", _reset)
 
 
 def test_e2e_override_adds_the_marker_and_the_relay_with_test_hooks(repo_root: Path) -> None:
-    """The e2e override adds the marker the suites check and enables the camera relay with its
-    test hooks; it changes no other service of the stack."""
+    """The e2e override adds the marker the suites check, enables the camera relay with its
+    test hooks and loosens Identity's login and registration rate limit (the whole suite runs
+    from one address); it changes no other service of the stack."""
     compose_dir = _compose_dir(repo_root)
     base = yaml.safe_load((compose_dir / "docker-compose.yml").read_text("utf-8"))
     text = (compose_dir / "docker-compose.e2e.yml").read_text("utf-8")
     override = yaml.load(text, Loader=_ComposeLoader)  # noqa: S506 - a SafeLoader subclass
     assert set(override) == {"services"}
-    assert set(override["services"]) == {"e2e-marker", "camera-relay", "mediamtx"}
+    assert set(override["services"]) == {"e2e-marker", "camera-relay", "mediamtx", "identity"}
+    assert override["services"]["identity"] == {
+        "labels": [
+            "traefik.http.middlewares.identity-ratelimit.ratelimit.average=300",
+            "traefik.http.middlewares.identity-ratelimit.ratelimit.burst=100",
+        ]
+    }
+    # The regular stack keeps its production limit.
+    identity_labels = base["services"]["identity"]["labels"]
+    assert "traefik.http.middlewares.identity-ratelimit.ratelimit.average=10" in identity_labels
+    assert "traefik.http.middlewares.identity-ratelimit.ratelimit.burst=20" in identity_labels
     relay, mediamtx = override["services"]["camera-relay"], override["services"]["mediamtx"]
     assert relay == {
         "profiles": {"!reset": []},

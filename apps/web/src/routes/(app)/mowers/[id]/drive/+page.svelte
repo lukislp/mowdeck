@@ -212,9 +212,12 @@
   // The drive link can drive backwards (ADR 0043); otherwise the pilot cuts every backwards
   // deflection and the pad's lower half is marked off.
   const reverseCapable = $derived(caps?.drive_reverse === true);
-  // A mower with a Bluetooth bridge drives over it: while the bridge is down the cloud link
-  // keeps the state coming, but a session would be refused (ADR 0038).
-  const bridgeDown = $derived(ms?.links?.ble_bridge?.connected === false);
+  // A mower with a Bluetooth bridge drives over it. While the bridge is down a session goes
+  // over the Mammotion cloud when the mower offers that (`manual_drive` stays true, without
+  // reverse, ADR 0049); otherwise it would be refused (ADR 0038).
+  const bridgeDown = $derived(
+    ms?.links?.ble_bridge?.connected === false && caps?.manual_drive !== true,
+  );
   const blocker = $derived.by((): string | null => {
     if (canDrive === false) return m.drive_no_permission();
     if (caps && !caps.manual_drive && !bridgeDown) return m.drive_unsupported();

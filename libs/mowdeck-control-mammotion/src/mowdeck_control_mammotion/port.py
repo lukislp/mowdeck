@@ -60,6 +60,12 @@ PyMammotion API names used (file references are relative to the installed packag
   ``set_car_manual_light`` and ``get_car_light`` (``mammotion/commands/messages/media.py``, the
   camera's headlamp; the answer ``get_lamp_rsp`` lands in ``mower_state.lamp_info``,
   ``data.model.device_info.LampInfo``).
+* Cloud remote drive (ADR 0049): ``MammotionClient.remote_drive_session(device_name,
+  account_id)`` (``device/remote_drive.py``, ``RemoteDriveSession``: ``start``, ``confirm``,
+  ``drive``, ``stop``, ``acknowledge_fence_warning``, ``subscribe``, ``phase``,
+  ``fence_paused``, ``grant``; events ``RemoteDriveEvent`` with ``RemoteDriveEventKind``) and
+  ``DeviceHandle.supports_wifi_movement`` (the app's gate, function code ``002.002``), wrapped
+  by :class:`ClientRemoteDrive` as a :class:`RemoteDriveLink`.
 """
 
 import asyncio
@@ -115,12 +121,15 @@ from pymammotion.data.model.mowing_modes import (
 )
 from pymammotion.data.model.report_info import LocationData
 from pymammotion.device.handle import DeviceHandle
+from pymammotion.device.remote_drive import RemoteDriveEvent, RemoteDriveSession
 from pymammotion.http.model.camera_stream import (
     Camera,
     StreamSubscriptionResponse,
     VideoResourceResponse,
 )
+from pymammotion.http.model.fpv_control import FpvControl
 from pymammotion.http.model.http import CheckDeviceVersion, ProductVersionInfo
+from pymammotion.http.model.http import Response as VendorResponse
 from pymammotion.messaging.command_queue import Priority
 from pymammotion.messaging.mow_path_saga import MowPathSaga
 from pymammotion.proto import DrvUpgradeReport, MulSex, RptAct, RptInfoType, SystemUpdateBufMsg
@@ -154,6 +163,7 @@ __all__ = [
     "Camera",
     "CheckDeviceVersion",
     "ClientPort",
+    "ClientRemoteDrive",
     "CommDataCouple",
     "CommandTimeoutError",
     "CoordinateConverter",
@@ -164,6 +174,7 @@ __all__ = [
     "Dock",
     "DrvUpgradeReport",
     "FirmwareRefused",
+    "FpvControl",
     "FrameList",
     "GenerateRouteInformation",
     "HashList",
@@ -193,6 +204,10 @@ __all__ = [
     "ProductVersionInfo",
     "RTKBaseStationDevice",
     "RTKStatus",
+    "RemoteDriveInfo",
+    "RemoteDriveLink",
+    "RemoteDriveListener",
+    "RemoteDriveSession",
     "RootHashList",
     "StateListener",
     "StreamSubscriptionResponse",
@@ -200,6 +215,7 @@ __all__ = [
     "TrackedMowPathSaga",
     "TransportError",
     "TransportType",
+    "VendorResponse",
     "VideoResourceResponse",
     "WorkMode",
     "build_route_information",
@@ -320,6 +336,95 @@ def vendor_call_succeeded(code: object) -> bool:
 
 class FirmwareRefused(Exception):  # noqa: N818 - reads like the other outcomes
     """The vendor's firmware service refused the request (the message is safe to show)."""
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteDriveInfo:
+    """One event of a cloud remote-drive session in MowDeck's terms (PyMammotion's
+    ``RemoteDriveEvent``): ``kind`` is the ``RemoteDriveEventKind`` value (``token_unavailable``,
+    ``occupied_by_other``, ``approach_fence``, ``idle_timeout``, ...), ``detail`` the server or
+    device code PyMammotion passes along (``50803`` for a refused token, a masked account)."""
+
+    kind: str
+    detail: str | None = None
+
+
+RemoteDriveListener = Callable[[RemoteDriveInfo], Awaitable[None]]
+
+
+@runtime_checkable
+class RemoteDriveLink(Protocol):
+    """The vendor's cloud remote-drive session of one mower (ADR 0049).
+
+    ``start`` requests the control token (False: refused, an event says why), ``confirm``
+    leaves the safety notice, ``drive`` feeds wire units (negative linear speeds are sent as 0:
+    no reverse over the cloud), ``stop`` halts the mower when active and releases the token
+    (never raises, idempotent). PyMammotion repeats the last non-zero frame after every ack
+    until a zero frame arrives, so the caller must send ``drive(0, 0)`` itself when its input
+    stops.
+    """
+
+    @property
+    def phase(self) -> str:
+        """``idle``, ``requesting_token``, ``safety_notice``, ``active`` or ``exiting``."""
+        ...
+
+    @property
+    def fence_paused(self) -> bool:
+        """True while input is dropped after an approach-fence stop."""
+        ...
+
+    def subscribe(self, listener: RemoteDriveListener) -> Callable[[], None]:
+        """Call ``listener`` with every session event; returns the unsubscribe function."""
+        ...
+
+    async def start(self) -> bool: ...
+
+    async def confirm(self) -> None: ...
+
+    async def drive(self, linear: int, angular: int) -> None: ...
+
+    def acknowledge_fence_warning(self) -> None: ...
+
+    async def stop(self) -> None: ...
+
+
+class ClientRemoteDrive:
+    """:class:`RemoteDriveLink` on PyMammotion's ``RemoteDriveSession`` (``require_video``
+    off: MowDeck drives without the vendor's video gate)."""
+
+    def __init__(self, session: RemoteDriveSession) -> None:
+        self._session = session
+        session.require_video = False
+
+    @property
+    def phase(self) -> str:
+        return str(self._session.phase.value)
+
+    @property
+    def fence_paused(self) -> bool:
+        return bool(self._session.fence_paused)
+
+    def subscribe(self, listener: RemoteDriveListener) -> Callable[[], None]:
+        async def on_event(event: RemoteDriveEvent) -> None:
+            await listener(RemoteDriveInfo(str(event.kind.value), event.detail))
+
+        return self._session.subscribe(on_event).cancel
+
+    async def start(self) -> bool:
+        return await self._session.start()
+
+    async def confirm(self) -> None:
+        await self._session.confirm()
+
+    async def drive(self, linear: int, angular: int) -> None:
+        await self._session.drive(linear, angular)
+
+    def acknowledge_fence_warning(self) -> None:
+        self._session.acknowledge_fence_warning()
+
+    async def stop(self) -> None:
+        await self._session.stop()
 
 
 @runtime_checkable
@@ -554,6 +659,18 @@ class MammotionPort(Protocol):
     async def detach_bridge(self) -> None:
         """Remove the BLE transport again (no role needs it, or the bridge is gone); everything
         goes over the cloud."""
+        ...
+
+    def remote_drive_supported(self) -> bool:
+        """Whether the mower accepts the vendor's cloud remote drive (ADR 0049): PyMammotion's
+        ``supports_wifi_movement`` (firmware threshold or function code ``002.002``). False
+        without a cloud session."""
+        ...
+
+    def remote_drive(self) -> RemoteDriveLink:
+        """The mower's cloud remote-drive session (one per mower, reused). Raises
+        :class:`PortClosedError` without an open client and ``NoTransportAvailableError``
+        without a cloud transport."""
         ...
 
     async def check_firmware(self) -> CheckDeviceVersion | None:
@@ -1017,6 +1134,24 @@ class ClientPort:
         response = await http.get_video_resource(handle.iot_id)
         data = getattr(response, "data", None)
         return data if isinstance(data, VideoResourceResponse) else None
+
+    # --- cloud remote drive (ADR 0049) -----------------------------------------------------
+
+    def remote_drive_supported(self) -> bool:
+        handle = self._handle
+        if handle is None or self._client is None:
+            return False
+        try:
+            return bool(handle.supports_wifi_movement())
+        except Exception:  # an incomplete device record: no cloud driving
+            _log.debug("supports_wifi_movement of %s failed", handle.device_name, exc_info=True)
+            return False
+
+    def remote_drive(self) -> RemoteDriveLink:
+        client = self._require_client()
+        handle = self._require_handle()
+        account_id = getattr(handle, "account_id", None)
+        return ClientRemoteDrive(client.remote_drive_session(handle.device_name, account_id))
 
     # --- dual link (ADR 0038) -------------------------------------------------------------
 

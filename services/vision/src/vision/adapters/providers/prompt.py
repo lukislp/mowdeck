@@ -69,6 +69,8 @@ clearly show that the mower is wedged and must first be freed by a short drive.
 The mower: a robotic lawn mower about 0.7 m long and 0.6 m wide that drives like a tank. \
 `linear` goes from -1 (full speed backward) to 1 (full speed forward), `angular` from -1 (turn \
 right) to 1 (turn left); both can be combined. `motion` in the context says how fast that is. \
+When `motion.reverse` is false the mower cannot drive backwards right now: never use a \
+negative `linear` then (turn in place and drive forwards instead), or nothing is executed. \
 The blades are always off during your maneuver and you cannot turn them on.
 Sensors: bumper and lift/tilt sensors stop the mower by themselves; RTK positioning. \
 `mower.sensor_stop` true (lifted, tilted, a safety stop) means nothing may move the mower: \
