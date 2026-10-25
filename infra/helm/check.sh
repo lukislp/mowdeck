@@ -108,6 +108,34 @@ kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION" \
   "$out/github.yaml"
 echo "ok: the GitHub client secret is a file from the operator's own Secret"
 
+step "optional Apple sign-in (ADR 0052)"
+expect_failure "services.identity.apple.existingSecret is required" -f "$test_values" \
+  --set services.identity.apple.enabled=true --set services.identity.apple.servicesId=app.mowdeck.signin \
+  --set services.identity.apple.teamId=ABCDE12345 --set services.identity.apple.keyId=KEY1234567
+expect_failure "services.identity.apple.teamId is required" -f "$test_values" \
+  --set services.identity.apple.enabled=true --set services.identity.apple.servicesId=app.mowdeck.signin \
+  --set services.identity.apple.keyId=KEY1234567 --set services.identity.apple.existingSecret=mowdeck-apple
+helm template mowdeck "$chart" --namespace mowdeck -f "$test_values" \
+  --set services.identity.apple.enabled=true --set services.identity.apple.servicesId=app.mowdeck.signin \
+  --set services.identity.apple.teamId=ABCDE12345 --set services.identity.apple.keyId=KEY1234567 \
+  --set services.identity.apple.existingSecret=mowdeck-apple > "$out/apple.yaml"
+grep -q "MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE: /run/secrets/apple/sign-in-key.p8" "$out/apple.yaml"
+grep -q "secretName: mowdeck-apple" "$out/apple.yaml"
+# GitHub and Apple together: both secrets are mounted.
+helm template mowdeck "$chart" --namespace mowdeck -f "$test_values" \
+  --set services.identity.github.enabled=true --set services.identity.github.clientId=Iv1.x \
+  --set services.identity.github.existingSecret=mowdeck-github \
+  --set services.identity.apple.enabled=true --set services.identity.apple.servicesId=app.mowdeck.signin \
+  --set services.identity.apple.teamId=ABCDE12345 --set services.identity.apple.keyId=KEY1234567 \
+  --set services.identity.apple.existingSecret=mowdeck-apple > "$out/providers.yaml"
+grep -q "secretName: mowdeck-github" "$out/providers.yaml"
+grep -q "secretName: mowdeck-apple" "$out/providers.yaml"
+kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION" \
+  -schema-location default \
+  -schema-location "$CRDS_CATALOG/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+  "$out/apple.yaml" "$out/providers.yaml"
+echo "ok: the Apple key is a file from the operator's own Secret"
+
 if [ -z "${SKIP_DRIFT:-}" ] && command -v uv > /dev/null 2>&1; then
   step "drift checks (tools/repo-checks/tests/test_helm.py)"
   (cd "$root" && uv run pytest tools/repo-checks/tests/test_helm.py -q -p no:cacheprovider)

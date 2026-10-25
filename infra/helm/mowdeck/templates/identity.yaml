@@ -29,6 +29,24 @@ client secret file only when enabled, from its own Secret. */ -}}
 {{- $githubVolumes = list (dict "name" "github-client-secret" "secret" (dict "secretName" $secret "defaultMode" 288 "items" (list (dict "key" $github.secretKey "path" $github.secretKey)))) }}
 {{- $githubMounts = list (dict "name" "github-client-secret" "mountPath" "/run/secrets/github" "readOnly" true) }}
 {{- end }}
+{{- /* Sign in with Apple (ADR 0052): the same, with the key (.p8) as the secret file. */ -}}
+{{- $apple := $v.apple }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_SERVICES_ID" "" }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_TEAM_ID" "" }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_KEY_ID" "" }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE" "" }}
+{{- if and $v.enabled $apple.enabled }}
+{{- $appleSecret := required "services.identity.apple.existingSecret is required when apple.enabled (a Secret with the Sign in with Apple key, the .p8 file)" $apple.existingSecret }}
+{{- $servicesId := required "services.identity.apple.servicesId is required when apple.enabled" $apple.servicesId }}
+{{- $teamId := required "services.identity.apple.teamId is required when apple.enabled" $apple.teamId }}
+{{- $keyId := required "services.identity.apple.keyId is required when apple.enabled" $apple.keyId }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_SERVICES_ID" $servicesId }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_TEAM_ID" $teamId }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_KEY_ID" $keyId }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE" (printf "/run/secrets/apple/%s" $apple.secretKey) }}
+{{- $githubVolumes = append $githubVolumes (dict "name" "apple-sign-in-key" "secret" (dict "secretName" $appleSecret "defaultMode" 288 "items" (list (dict "key" $apple.secretKey "path" $apple.secretKey)))) }}
+{{- $githubMounts = append $githubMounts (dict "name" "apple-sign-in-key" "mountPath" "/run/secrets/apple" "readOnly" true) }}
+{{- end }}
 {{- include "mowdeck.migrationJob" (dict "ctx" . "component" "identity" "key" "identity" "image" "identity" "module" "identity.adapters.db.migrate" "weight" 1) }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "identity" "key" "identity" "image" "identity"
   "env" $env "db" "identity" "migrateModule" "identity.adapters.db.migrate" "authz" true

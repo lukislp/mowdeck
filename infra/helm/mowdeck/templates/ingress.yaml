@@ -35,6 +35,9 @@ Stripe webhook of Billing when it is enabled), so a rate limit can be attached t
 start of a sign-in stays on the main Ingress like the passkey challenge. */ -}}
 {{- $auth = append $auth (dict "path" "/api/v1/identity/oauth/github/callback" "type" "Exact" "component" "identity" "port" 8000) }}
 {{- $auth = append $auth (dict "path" "/api/v1/identity/me/external-identities/github/link" "type" "Exact" "component" "identity" "port" 8000) }}
+{{- /* Apple (ADR 0052): the same two paths. */ -}}
+{{- $auth = append $auth (dict "path" "/api/v1/identity/oauth/apple/callback" "type" "Exact" "component" "identity" "port" 8000) }}
+{{- $auth = append $auth (dict "path" "/api/v1/identity/me/external-identities/apple/link" "type" "Exact" "component" "identity" "port" 8000) }}
 {{- if .Values.services.billing.enabled }}
 {{- /* Stripe webhooks carry no token: rate limited like the login routes. */ -}}
 {{- $auth = append $auth (dict "path" "/api/v1/billing/webhooks/stripe" "type" "Exact" "component" "billing" "port" 8000) }}

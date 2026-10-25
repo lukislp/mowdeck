@@ -41,7 +41,12 @@ test('GitHub: link, sign in with GitHub, unlink, refused afterwards', async ({ p
   const csp = watchCsp(page);
   const methods = await request.get('/api/v1/identity/login-methods');
   // Only a flag: nothing of the GitHub settings is published.
-  expect(await methods.json()).toEqual({ password: true, passkey: true, github: true });
+  expect(await methods.json()).toEqual({
+    password: true,
+    passkey: true,
+    github: true,
+    apple: true,
+  });
   const owner = actor('github');
   const registered = await request.post('/api/v1/identity/register', {
     data: { username: owner.username, password: owner.password, account_name: 'GitHub home' },

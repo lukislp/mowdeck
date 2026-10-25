@@ -261,8 +261,18 @@ services:
       # IDENTITY_PUBLIC_URL (the callback URL is built from it). Never in the database or the UI.
       MOWDECK_IDENTITY_GITHUB_CLIENT_ID: ${IDENTITY_GITHUB_CLIENT_ID:-}
       MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE: ${IDENTITY_GITHUB_CLIENT_SECRET_FILE:-}
+      # Sign in with Apple (ADR 0052), off while the Services ID is empty. The key (.p8) is a
+      # file in infra/compose/secrets/apple/ (git-ignored, mounted below), e.g.
+      # IDENTITY_APPLE_PRIVATE_KEY_FILE=/run/secrets/apple/sign_in_key.p8; needs
+      # IDENTITY_PUBLIC_URL (the return URL is built from it). Never in the database or the UI.
+      MOWDECK_IDENTITY_APPLE_SERVICES_ID: ${IDENTITY_APPLE_SERVICES_ID:-}
+      MOWDECK_IDENTITY_APPLE_TEAM_ID: ${IDENTITY_APPLE_TEAM_ID:-}
+      MOWDECK_IDENTITY_APPLE_KEY_ID: ${IDENTITY_APPLE_KEY_ID:-}
+      MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE: ${IDENTITY_APPLE_PRIVATE_KEY_FILE:-}
+      MOWDECK_IDENTITY_APPLE_PKCE: ${IDENTITY_APPLE_PKCE:-true}
     volumes:
       - ./secrets/github:/run/secrets/github:ro
+      - ./secrets/apple:/run/secrets/apple:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.identity.rule=PathPrefix(`/api/v1/identity`)
@@ -270,8 +280,9 @@ services:
       - traefik.http.routers.identity.service=identity
       # Login (password, passkey, the app's hand-off code), registration and token exchange:
       # rate limited per client IP.
-      # GitHub (ADR 0051): the callback finishes a login, the link start checks the password.
-      - traefik.http.routers.identity-auth.rule=Path(`/api/v1/identity/session`) || Path(`/api/v1/identity/register`) || Path(`/api/v1/identity/token`) || Path(`/api/v1/identity/passkeys/session`) || Path(`/api/v1/identity/app-login/session`) || Path(`/api/v1/identity/oauth/github/callback`) || Path(`/api/v1/identity/me/external-identities/github/link`)
+      # GitHub (ADR 0051) and Apple (ADR 0052): the callback finishes a login, the link start
+      # checks the password.
+      - traefik.http.routers.identity-auth.rule=Path(`/api/v1/identity/session`) || Path(`/api/v1/identity/register`) || Path(`/api/v1/identity/token`) || Path(`/api/v1/identity/passkeys/session`) || Path(`/api/v1/identity/app-login/session`) || Path(`/api/v1/identity/oauth/github/callback`) || Path(`/api/v1/identity/me/external-identities/github/link`) || Path(`/api/v1/identity/oauth/apple/callback`) || Path(`/api/v1/identity/me/external-identities/apple/link`)
       - traefik.http.routers.identity-auth.entrypoints=web
       - traefik.http.routers.identity-auth.priority=100
       - traefik.http.routers.identity-auth.middlewares=identity-ratelimit
@@ -292,8 +303,9 @@ services:
       # A passkey challenge and the app's sign-in request check nothing, and every sign-in page
       # asks for a challenge (the autofill offer): the looser session limit; the answers
       # (/passkeys/session, /app-login/session) have the login limit. So does the start of a
-      # GitHub sign-in (it only hands out GitHub's address); its callback has the login limit.
-      - traefik.http.routers.identity-passkey-challenge.rule=Path(`/api/v1/identity/passkeys/challenge`) || Path(`/api/v1/identity/app-login/start`) || Path(`/api/v1/identity/oauth/github/start`)
+      # GitHub or Apple sign-in (it only hands out the provider's address); the callbacks have
+      # the login limit.
+      - traefik.http.routers.identity-passkey-challenge.rule=Path(`/api/v1/identity/passkeys/challenge`) || Path(`/api/v1/identity/app-login/start`) || Path(`/api/v1/identity/oauth/github/start`) || Path(`/api/v1/identity/oauth/apple/start`)
       - traefik.http.routers.identity-passkey-challenge.entrypoints=web
       - traefik.http.routers.identity-passkey-challenge.priority=101
       - traefik.http.routers.identity-passkey-challenge.middlewares=identity-session-ratelimit

@@ -484,6 +484,24 @@ services:
       # -- Name of the Secret with the client secret (required when enabled) and its key in it.
       existingSecret: ""
       secretKey: client-secret
+    # -- Sign in with Apple (ADR 0052, docs/ops/apple-login.md). Compose: IDENTITY_APPLE_SERVICES_ID,
+    # _TEAM_ID, _KEY_ID and IDENTITY_APPLE_PRIVATE_KEY_FILE. Needs an Apple Developer account of
+    # your own: a Services ID with the return URL
+    # <IDENTITY_PUBLIC_URL>/api/v1/identity/oauth/apple/callback (IDENTITY_PUBLIC_URL defaults to
+    # https://<ingress.host>) and a Sign in with Apple key. The key (.p8) lives in a Secret you
+    # create, mounted as a file; it never reaches the database or the web app:
+    #   kubectl create secret generic mowdeck-apple --from-file=sign-in-key.p8=./AuthKey_XXXXXXXXXX.p8
+    apple:
+      enabled: false
+      # -- Services ID (required when enabled), e.g. app.mowdeck.signin.
+      servicesId: ""
+      # -- Apple Developer Team ID (10 characters, required when enabled).
+      teamId: ""
+      # -- Key ID of the Sign in with Apple key (10 characters, required when enabled).
+      keyId: ""
+      # -- Name of the Secret with the key file (required when enabled) and its key in it.
+      existingSecret: ""
+      secretKey: sign-in-key.p8
   fleet:
     enabled: true
     replicas: 1

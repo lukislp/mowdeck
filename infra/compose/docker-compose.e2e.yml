@@ -48,8 +48,21 @@ services:
       MOWDECK_IDENTITY_GITHUB_AUTHORIZE_URL: ${IDENTITY_PUBLIC_URL:-http://localhost}/fake-github/login/oauth/authorize
       MOWDECK_IDENTITY_GITHUB_TOKEN_URL: http://fake-github:8000/fake-github/login/oauth/access_token
       MOWDECK_IDENTITY_GITHUB_API_URL: http://fake-github:8000/fake-github/api
+      # Sign in with Apple (ADR 0052) against the fake Apple below, which generates the key
+      # (.p8) into a volume; the same environment variable names as in production.
+      MOWDECK_IDENTITY_APPLE_SERVICES_ID: app.mowdeck.e2e
+      MOWDECK_IDENTITY_APPLE_TEAM_ID: E2ETEAM123
+      MOWDECK_IDENTITY_APPLE_KEY_ID: E2EKEY1234
+      MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE: /run/secrets/apple-e2e/sign_in_key.p8
+      MOWDECK_IDENTITY_APPLE_AUTHORIZE_URL: ${IDENTITY_PUBLIC_URL:-http://localhost}/fake-apple/auth/authorize
+      MOWDECK_IDENTITY_APPLE_TOKEN_URL: http://fake-apple:8000/fake-apple/auth/token
+      MOWDECK_IDENTITY_APPLE_KEYS_URL: http://fake-apple:8000/fake-apple/auth/keys
     volumes:
       - ../../tests/e2e-web/fake-github:/run/secrets/github-e2e:ro
+      - fake-apple-keys:/run/secrets/apple-e2e:ro
+    depends_on:
+      fake-apple:
+        condition: service_healthy
 
   # A fake GitHub (OAuth App endpoints and GET /user; tests/e2e-web/fake-github/fake_github.py,
   # standard library only) in the identity image, which the stack builds anyway.
@@ -75,6 +88,36 @@ services:
       - traefik.http.services.fake-github.loadbalancer.server.port=8000
     networks: [mowdeck]
 
+  # A fake Apple (Sign in with Apple endpoints; tests/e2e-web/fake-apple/fake_apple.py, PyJWT and
+  # cryptography from the identity image). It generates the key pair of the stack at startup
+  # into the fake-apple-keys volume (root, so it may write there; Identity mounts it read-only)
+  # and is healthy once the .p8 exists, which Identity waits for.
+  fake-apple:
+    image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/identity:${MOWDECK_VERSION:-dev}
+    pull_policy: never
+    user: "0:0"
+    command: ["python", "/fake/fake_apple.py"]
+    read_only: true
+    environment:
+      FAKE_APPLE_SERVICES_ID: app.mowdeck.e2e
+      FAKE_APPLE_TEAM_ID: E2ETEAM123
+      FAKE_APPLE_KEY_ID: E2EKEY1234
+      FAKE_APPLE_KEY_DIR: /keys
+    volumes:
+      - ../../tests/e2e-web/fake-apple:/fake:ro
+      - fake-apple-keys:/keys
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/fake-apple/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.fake-apple.rule=PathPrefix(`/fake-apple`)
+      - traefik.http.routers.fake-apple.entrypoints=web
+      - traefik.http.services.fake-apple.loadbalancer.server.port=8000
+    networks: [mowdeck]
+
   # The camera relay and its media server run in every test stack (they are the "relay"
   # profile otherwise), with the test hooks of the relay (POST /internal/v1/test/freeze pauses
   # the fake source), so the suites can play the simulator's cameras through the relay.
@@ -85,3 +128,7 @@ services:
 
   mediamtx:
     profiles: !reset []
+
+volumes:
+  # The key pair the fake Apple generates for this stack (see fake-apple).
+  fake-apple-keys:
