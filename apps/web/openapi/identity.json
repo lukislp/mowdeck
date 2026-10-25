@@ -538,6 +538,69 @@
         "title": "EventDef",
         "type": "object"
       },
+      "ExternalIdentityOut": {
+        "description": "A linked account of a login provider (never the provider's settings).",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The account's name at the provider (login)",
+            "title": "Display Name"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "linked_at": {
+            "format": "date-time",
+            "title": "Linked At",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "display_name",
+          "linked_at",
+          "last_used_at"
+        ],
+        "title": "ExternalIdentityOut",
+        "type": "object"
+      },
+      "ExternalLinkIn": {
+        "additionalProperties": false,
+        "description": "``POST /me/external-identities/{provider}/link``: the current password again.",
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "ExternalLinkIn",
+        "type": "object"
+      },
       "FeatureDef": {
         "description": "A plan feature a module offers, e.g. ``reports``.",
         "properties": {
@@ -665,6 +728,12 @@
       "LoginMethodsOut": {
         "description": "Login methods this installation offers (the login page shows what is on).",
         "properties": {
+          "github": {
+            "default": false,
+            "description": "Sign in with GitHub is configured (only this flag; the GitHub settings are never published)",
+            "title": "Github",
+            "type": "boolean"
+          },
           "passkey": {
             "description": "Passkeys are configured (MOWDECK_IDENTITY_PUBLIC_URL)",
             "title": "Passkey",
@@ -1005,6 +1074,47 @@
           "version"
         ],
         "title": "ModuleDescriptor",
+        "type": "object"
+      },
+      "OAuthStartIn": {
+        "additionalProperties": false,
+        "description": "``POST /oauth/{provider}/start``: the sign-in page's query to come back to.",
+        "properties": {
+          "return_query": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Query of /login to return to; only next (a local path), app_request and app_state are kept",
+            "title": "Return Query"
+          }
+        },
+        "title": "OAuthStartIn",
+        "type": "object"
+      },
+      "OAuthStartOut": {
+        "description": "Where to send the browser for the provider's sign-in (the browser keeps a cookie that\nbinds the round trip to it).",
+        "properties": {
+          "authorize_url": {
+            "title": "Authorize Url",
+            "type": "string"
+          },
+          "expires_in": {
+            "description": "Seconds the round trip stays usable",
+            "title": "Expires In",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "authorize_url",
+          "expires_in"
+        ],
+        "title": "OAuthStartOut",
         "type": "object"
       },
       "PasskeyLoginIn": {
@@ -3942,6 +4052,121 @@
         ]
       }
     },
+    "/api/v1/identity/me/external-identities": {
+      "get": {
+        "description": "The caller's linked accounts of login providers.",
+        "operationId": "my_external_identities_api_v1_identity_me_external_identities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExternalIdentityOut"
+                  },
+                  "title": "Response My External Identities Api V1 Identity Me External Identities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My External Identities",
+        "tags": [
+          "identity: login providers"
+        ]
+      }
+    },
+    "/api/v1/identity/me/external-identities/{provider}": {
+      "delete": {
+        "description": "Remove the caller's link to a login provider (always allowed; the password stays).",
+        "operationId": "unlink_external_identity_api_v1_identity_me_external_identities__provider__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink External Identity",
+        "tags": [
+          "identity: login providers"
+        ]
+      }
+    },
+    "/api/v1/identity/me/external-identities/{provider}/link": {
+      "post": {
+        "description": "Start linking an account of a login provider to the caller: the current password again\n(the login limits apply), then the provider's authorization URL and the binding cookie.\n409 when an account of this provider is already linked.",
+        "operationId": "link_external_identity_api_v1_identity_me_external_identities__provider__link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalLinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthStartOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Link External Identity",
+        "tags": [
+          "identity: login providers"
+        ]
+      }
+    },
     "/api/v1/identity/me/passkeys": {
       "get": {
         "description": "The caller's passkeys, newest first.",
@@ -4239,6 +4464,118 @@
         "summary": "My Platform",
         "tags": [
           "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/oauth/{provider}/callback": {
+      "get": {
+        "description": "The provider sends the browser back here: finish the sign-in (refresh cookie as after a\npassword login) or the link, then redirect to the web app (303).",
+        "operationId": "oauth_callback_api_v1_identity_oauth__provider__callback_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "mowdeck_oauth",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mowdeck Oauth"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Oauth Callback",
+        "tags": [
+          "identity: login providers"
+        ]
+      }
+    },
+    "/api/v1/identity/oauth/{provider}/start": {
+      "post": {
+        "description": "Start signing in with a login provider (404 when it is not enabled): its authorization\nURL, and a cookie that binds the round trip to this browser.",
+        "operationId": "oauth_start_api_v1_identity_oauth__provider__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OAuthStartIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthStartOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Oauth Start",
+        "tags": [
+          "identity: login providers"
         ]
       }
     },

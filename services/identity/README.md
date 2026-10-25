@@ -26,11 +26,13 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | POST | `/api/v1/identity/session/refresh` | `{refresh_token}` or the cookie plus `X-Requested-With`: rotates; a reused token ends the whole session, except within the reuse grace (below). Accepts `X-Mowdeck-Refresh: cookie-only` like the login |
 | POST | `/api/v1/identity/session/logout` | Ends the session of the refresh token, 204 |
 | POST | `/api/v1/identity/token` | `{grant_type: "api_token", token}`: API token exchange, access token with `kind=api_token` |
-| GET | `/api/v1/identity/login-methods` | `{password, passkey}`: the login methods the installation offers (passkeys need `MOWDECK_IDENTITY_PUBLIC_URL`) |
+| GET | `/api/v1/identity/login-methods` | `{password, passkey, github}`: the login methods the installation offers (passkeys need `MOWDECK_IDENTITY_PUBLIC_URL`; GitHub also the client id and secret). Only booleans: no provider setting is ever published |
 | POST | `/api/v1/identity/passkeys/challenge` | Start a passwordless login: `{ceremony_id, public_key}` (request options, user verification required, no `allowCredentials`). Looser rate limit (every sign-in page asks, for the autofill) |
 | POST | `/api/v1/identity/passkeys/session` | `{ceremony_id, credential, account_id?}` (`PublicKeyCredential.toJSON()`): the same tokens and cookie as `POST /session`. 401 with one message for every failure, 429 when throttled |
 | POST | `/api/v1/identity/app-login/start` | Native app hand-off, first step in the app: `{code_challenge}` (PKCE S256) gives `{request_id, expires_in}` (single use, 10 minutes). Looser rate limit like the passkey challenge |
 | POST | `/api/v1/identity/app-login/session` | Native app hand-off, app side: `{code, code_verifier}` gives the app a session like `POST /session`; the code is single use |
+| POST | `/api/v1/identity/oauth/github/start` | Sign in with GitHub: `{return_query?}` (the sign-in page's query; only `next`, `app_request`, `app_state` are kept) gives `{authorize_url, expires_in}` and sets the HttpOnly binding cookie `mowdeck_oauth` (`SameSite=Lax`, path `/api/v1/identity/oauth/`). 404 when GitHub is off. Looser rate limit like the passkey challenge |
+| GET | `/api/v1/identity/oauth/github/callback` | GitHub sends the browser back here (the callback URL registered in the OAuth App). 303 to `/login?…&signed_in_with=github` with the refresh cookie (a session as after `POST /session`), or `…&sign_in_error=<code>&provider=github`; for a link to `/settings?linked=github#profile` or `?link_error=<code>&provider=github#profile`. Login rate limit |
 | GET | `/.well-known/jwks.json` and `/api/v1/identity/.well-known/jwks.json` | Public signing keys (`Cache-Control: max-age=300`). Services inside Compose use `http://identity:8000/.well-known/jwks.json` |
 | GET | `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` | Operations (kit) |
 
@@ -50,6 +52,9 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | POST | `/api/v1/identity/me/passkeys/options` | token only (users) | `{password}` (re-authentication, the username throttle applies): creation options and `ceremony_id` |
 | POST | `/api/v1/identity/me/passkeys` | token only (users) | `{ceremony_id, credential, name?}`: verifies and stores the passkey, 201; 409 for a known credential or more than 20 |
 | PATCH, DELETE | `/api/v1/identity/me/passkeys/{passkey_id}` | token only (users) | Rename `{name}`; remove (the password always stays) |
+| GET | `/api/v1/identity/me/external-identities` | token only (users) | The caller's linked GitHub account: `[{provider, display_name, linked_at, last_used_at}]` |
+| POST | `/api/v1/identity/me/external-identities/github/link` | token only (users) | `{password}` (re-authentication, the login limits apply): `{authorize_url, expires_in}` and the binding cookie; 409 when a GitHub account is already linked |
+| DELETE | `/api/v1/identity/me/external-identities/{provider}` | token only (users) | Unlink (always allowed, also with GitHub turned off; the password stays), 204; 404 when nothing is linked |
 | POST | `/api/v1/identity/app-login/code` | token only (users) | Native app hand-off, browser side: `{request_id}` of the app's request (unknown, used or expired: 403). Ends the caller's login session, which must be younger than 5 minutes (else 403), and returns a one-time code `{code, expires_in}` (60 s) bound to the request's challenge |
 | GET | `/accounts/{account_id}` | `member` | |
 | PATCH | `/accounts/{account_id}` | `can_manage_users` | Name |
@@ -148,8 +153,10 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_PUBLIC_URL` | empty | The address users open MowDeck at (`https://mowdeck.example.org`). Passkeys are bound to it: its host is the RP ID, its origin the only accepted one. HTTPS (plain HTTP only for `localhost`), a host name (no IP). Empty or unusable (logged): passkeys off |
 | `MOWDECK_IDENTITY_PASSKEY_RP_ID` | empty | A parent domain of that host as the RP ID (`example.org`); empty: the host |
 | `MOWDECK_IDENTITY_PASSKEY_RP_NAME` | `MowDeck` | Name authenticators show next to the passkey |
-| `MOWDECK_IDENTITY_GITHUB_LOGIN` | `false` | Feature flag of the GitHub login stub (not implemented in Phase 1) |
-| `MOWDECK_IDENTITY_MAINTENANCE_SECONDS` | `60` | Key rotation, key reload, purge of login attempts older than 30 days and of expired passkey challenges, app login requests and codes |
+| `MOWDECK_IDENTITY_GITHUB_CLIENT_ID` | empty | Client ID of the GitHub OAuth App; empty: GitHub login off |
+| `MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET` | empty | Its client secret; give it as `MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE`. GitHub is on only with id, secret and a usable `MOWDECK_IDENTITY_PUBLIC_URL` (the callback is `<public URL>/api/v1/identity/oauth/github/callback`); the startup log says `GitHub login is on` with that URL, or why it is off |
+| `MOWDECK_IDENTITY_GITHUB_AUTHORIZE_URL`, `_TOKEN_URL`, `_API_URL` | github.com | GitHub's endpoints; other values only for GitHub Enterprise Server (`https://<host>/api/v3`) or the test stack's fake |
+| `MOWDECK_IDENTITY_MAINTENANCE_SECONDS` | `60` | Key rotation, key reload, purge of login attempts older than 30 days and of expired passkey challenges, app login requests and codes, and GitHub round trips |
 | `MOWDECK_IDENTITY_RECONCILE_SECONDS` | `3600` | Full reconcile interval, 0 disables |
 
 ### Passwords
@@ -158,7 +165,7 @@ Argon2id via `argon2-cffi` 25.1.0. Default `rfc9106_low`: 64 MiB memory, 3 itera
 
 ## Authentication plug-ins
 
-`identity.application.authenticators`: `CredentialAuthenticator` (`PasswordAuthenticator` for `POST /session`, `ApiTokenAuthenticator` for `POST /token`, `PasskeyAuthenticator` for `POST /passkeys/session`, which is also a `ChallengeAuthenticator`: it hands out a single-use challenge first) and `RedirectAuthenticator` (interface for OAuth/OIDC; `GitHubAuthenticator` is a stub that raises `NotImplementedError` and is registered only with `MOWDECK_IDENTITY_GITHUB_LOGIN=true`). The `AuthenticatorRegistry` holds the enabled ones by name.
+`identity.application.authenticators`: `CredentialAuthenticator` (`PasswordAuthenticator` for `POST /session`, `ApiTokenAuthenticator` for `POST /token`, `PasskeyAuthenticator` for `POST /passkeys/session`, which is also a `ChallengeAuthenticator`: it hands out a single-use challenge first) and `RedirectAuthenticator` (a browser round trip to a provider: `OAuthAuthenticator` for any OAuth 2 provider on the port `OAuthClient`, `GitHubAuthenticator` with the GitHub client of `adapters/github.py`, registered when GitHub is configured; a later OIDC provider is another `OAuthClient`). The `AuthenticatorRegistry` holds the enabled ones by name. Re-authentication before a change of the own login methods (adding a passkey, linking GitHub) is `application/reauth.py`.
 
 ### Passkeys
 
@@ -167,6 +174,10 @@ Argon2id via `argon2-cffi` 25.1.0. Default `rfc9106_low`: 64 MiB memory, 3 itera
 ### Native app hand-off
 
 The apps sign in through the system browser and take over the login: the app registers the S256 hash of a verifier (`POST /app-login/start`, table `app_login_requests`) and opens `/login?app_request=<id>&app_state=<random>`, the user signs in there by any method and confirms "continue in the app", the page exchanges its fresh session at `POST /app-login/code` for a one-time code (the browser session ends, audit `app_login.code_issued`), navigates to `mowdeck://auth/callback?code=&state=` (Android: an `intent:` URL for the package `app.mowdeck.mobile`), and the app redeems code and verifier at `POST /app-login/session` (`session.login` with `method: app_handoff`). Codes are 256-bit, SHA-256 at rest in `app_login_codes`, valid 60 s, deleted on the first attempt. Login-method agnostic: a redirect authenticator only has to start a browser session; the page then hands it over the same way.
+
+### Sign in with GitHub
+
+[ADR 0051](../../docs/adr/0051-sign-in-with-github.md), operations in [docs/ops/github-login.md](../../docs/ops/github-login.md). Authorization code flow with PKCE S256 and scope `read:user`. A round trip is a single-use row in `oauth_states` (SHA-256 of the random `state`, S256 hash of the PKCE verifier, purpose `login` or `link`, the user of a link, the sign-in page's query), valid 10 minutes; the verifier itself is the HttpOnly cookie `mowdeck_oauth`, so only the browser that started it can finish it. The callback consumes the row, redeems the code with the verifier, reads GitHub's numeric user id and login from `GET /user` and revokes the GitHub token at once. Only accounts in `external_identities` (unique per GitHub account and per user) sign in, into the same session as a password login (`session.login` with `method: github`); there is no e-mail matching and no registration through GitHub. Linking needs the password again (`external_identity.reauth_failed` on a wrong one); unlinking is always allowed. Failures are audited (`session.login_failed`, `method: github`; `external_identity.link_failed`) without `login_attempts` rows. Audit: `external_identity.linked`, `external_identity.unlinked`. The app signs in with GitHub through the hand-off below, unchanged.
 
 ## Signing keys and rotation
 
@@ -196,7 +207,7 @@ Sub-user creation checks the plan limit `max_users` (current: the account's memb
 
 ## Data model
 
-Tables (Alembic revisions `0002` and `0003`): `accounts`, `users`, `memberships` (owner and admin flags, status), `roles` (permission keys as JSON, kind), `role_assignments` (subject, role, level), `sessions` (hashed refresh tokens, family, rotation), `api_tokens` (hashed secret, grants as JSON), `signing_keys`, `audit_log` (append-only: a trigger rejects `UPDATE` and `DELETE`), `login_attempts`, `permission_catalogue`, `passkeys` (credential id, COSE public key, sign count, transports, AAGUID, name, backup flags, created, last used, user agent of the registration), `webauthn_challenges` (single use, 5 minutes), `app_login_requests` (the app's sign-in requests with the PKCE challenge, 10 minutes) and `app_login_codes` (hashed one-time codes of the app hand-off, 60 s); `support_grants` and `invitations` exist as schema only.
+Tables (Alembic revisions `0002` to `0004`): `accounts`, `users`, `memberships` (owner and admin flags, status), `roles` (permission keys as JSON, kind), `role_assignments` (subject, role, level), `sessions` (hashed refresh tokens, family, rotation), `api_tokens` (hashed secret, grants as JSON), `signing_keys`, `audit_log` (append-only: a trigger rejects `UPDATE` and `DELETE`), `login_attempts`, `permission_catalogue`, `passkeys` (credential id, COSE public key, sign count, transports, AAGUID, name, backup flags, created, last used, user agent of the registration), `webauthn_challenges` (single use, 5 minutes), `app_login_requests` (the app's sign-in requests with the PKCE challenge, 10 minutes) and `app_login_codes` (hashed one-time codes of the app hand-off, 60 s), `external_identities` (GitHub accounts linked to users: provider, GitHub's user id, login, linked, last used) and `oauth_states` (single-use round trips to GitHub, 10 minutes); `support_grants` and `invitations` exist as schema only.
 
 ## Layers
 

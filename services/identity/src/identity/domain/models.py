@@ -429,6 +429,60 @@ class AppLoginCode:
     """The browser login session (``family_id``) that was handed over and ended."""
 
 
+class RedirectPurpose(StrEnum):
+    """What a browser round trip to an external provider (OAuth 2) was started for."""
+
+    LOGIN = "login"
+    """Sign in as the MowDeck user the provider account is linked to."""
+    LINK = "link"
+    """Link the provider account to the signed-in user who started the round trip."""
+
+
+@dataclass(slots=True)
+class ExternalIdentity:
+    """An account at an external login provider (GitHub) linked to a user (ADR 0051).
+
+    ``subject`` is the provider's stable id of the account (GitHub's numeric user id), never an
+    e-mail address or a login name, which can change and be taken over. ``display_name`` (the
+    GitHub login) is shown to the user only. A provider account belongs to at most one user, and
+    a user has at most one account per provider.
+    """
+
+    id: UUID
+    user_id: UUID
+    provider: str
+    subject: str
+    linked_at: datetime
+    display_name: str | None = None
+    last_used_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class OAuthState:
+    """One browser round trip to an external provider: single use, short-lived.
+
+    The ``state`` sent to the provider is a random value of which only the SHA-256 is stored
+    (``state_hash``). The PKCE verifier stays in the browser (an HttpOnly cookie) and only its
+    S256 hash is stored here (``code_challenge``), so the callback works only in the browser that
+    started the round trip, and a database copy alone cannot finish it.
+    """
+
+    id: UUID
+    state_hash: str = field(repr=False)
+    provider: str
+    purpose: RedirectPurpose
+    code_challenge: str
+    created_at: datetime
+    expires_at: datetime
+    user_id: UUID | None = None
+    """Set for :attr:`RedirectPurpose.LINK`: the user the provider account is linked to."""
+    return_query: str | None = None
+    """Query of the sign-in page to return to (``next``, the app hand-off), login only."""
+
+    def __post_init__(self) -> None:
+        self.purpose = RedirectPurpose(self.purpose)
+
+
 @dataclass(frozen=True, slots=True)
 class RelyingParty:
     """The WebAuthn relying party of this installation (from the public URL).
@@ -469,6 +523,33 @@ class RelyingParty:
         port = f":{parts.port}" if parts.port else ""
         origin = f"{parts.scheme}://{host}{port}"
         return cls(id=rp, name=name.strip() or "MowDeck", origins=(origin,))
+
+
+OAUTH_CALLBACK_PATH = "/api/v1/identity/oauth/{provider}/callback"
+"""Where a login provider sends the browser back (``provider``: ``github``)."""
+
+
+def oauth_callback_url(public_url: str, provider: str) -> str:
+    """The absolute callback URL of ``provider`` at the installation's public address.
+
+    The provider sends the authorization code there, so it must be HTTPS (plain HTTP only for
+    ``localhost`` and loopback addresses, as GitHub allows). Raises ``ValueError`` otherwise.
+    """
+    parts = urlsplit(public_url.strip())
+    host = (parts.hostname or "").lower()
+    if not public_url.strip():
+        msg = "MOWDECK_IDENTITY_PUBLIC_URL is not set (the callback URL is built from it)"
+        raise ValueError(msg)
+    if parts.scheme not in ("https", "http") or not host or parts.username or parts.password:
+        msg = f"public URL {public_url!r} is not an http(s) URL"
+        raise ValueError(msg)
+    loopback = host == "localhost" or host.endswith(".localhost") or host in ("127.0.0.1", "::1")
+    if parts.scheme == "http" and not loopback:
+        msg = "a login provider needs HTTPS (plain HTTP works only for localhost)"
+        raise ValueError(msg)
+    netloc = f"[{host}]" if ":" in host else host
+    port = f":{parts.port}" if parts.port else ""
+    return f"{parts.scheme}://{netloc}{port}{OAUTH_CALLBACK_PATH.format(provider=provider)}"
 
 
 def _looks_like_ip(host: str) -> bool:

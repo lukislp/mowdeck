@@ -15,6 +15,7 @@ from identity.domain.models import (
     ApiToken,
     AuditEntry,
     CatalogueEntry,
+    ExternalIdentity,
     Level,
     LevelType,
     Passkey,
@@ -571,6 +572,11 @@ class LoginMethodsOut(BaseModel):
 
     password: bool = True
     passkey: bool = Field(description="Passkeys are configured (MOWDECK_IDENTITY_PUBLIC_URL)")
+    github: bool = Field(
+        default=False,
+        description="Sign in with GitHub is configured (only this flag; the GitHub settings "
+        "are never published)",
+    )
 
 
 class PasskeyOptionsOut(BaseModel):
@@ -671,4 +677,48 @@ class PasskeyOut(BaseModel):
             aaguid=p.aaguid,
             transports=p.transports,
             user_agent=p.created_user_agent,
+        )
+
+
+class OAuthStartIn(In):
+    """``POST /oauth/{provider}/start``: the sign-in page's query to come back to."""
+
+    return_query: str | None = Field(
+        default=None,
+        max_length=1024,
+        description="Query of /login to return to; only next (a local path), app_request and "
+        "app_state are kept",
+    )
+
+
+class OAuthStartOut(BaseModel):
+    """Where to send the browser for the provider's sign-in (the browser keeps a cookie that
+    binds the round trip to it)."""
+
+    authorize_url: str
+    expires_in: int = Field(description="Seconds the round trip stays usable")
+
+
+class ExternalLinkIn(In):
+    """``POST /me/external-identities/{provider}/link``: the current password again."""
+
+    password: Password
+
+
+class ExternalIdentityOut(BaseModel):
+    """A linked account of a login provider (never the provider's settings)."""
+
+    provider: str
+    display_name: str | None = Field(description="The account's name at the provider (login)")
+    linked_at: datetime
+    last_used_at: datetime | None
+
+    @classmethod
+    def of(cls, link: ExternalIdentity) -> "ExternalIdentityOut":
+        """From the entity."""
+        return cls(
+            provider=link.provider,
+            display_name=link.display_name,
+            linked_at=link.linked_at,
+            last_used_at=link.last_used_at,
         )

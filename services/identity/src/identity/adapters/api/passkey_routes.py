@@ -43,7 +43,9 @@ def _no_store(response: Response) -> None:
 async def login_methods(services: ServicesDep) -> LoginMethodsOut:
     """Which login methods the installation offers (public; the login page asks)."""
     names = services.authenticators.names
-    return LoginMethodsOut(password="password" in names, passkey="passkey" in names)
+    return LoginMethodsOut(
+        password="password" in names, passkey="passkey" in names, github="github" in names
+    )
 
 
 @router.post("/passkeys/challenge")

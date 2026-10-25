@@ -23,8 +23,10 @@ from identity.domain.models import (
     AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
+    ExternalIdentity,
     LoginAttempt,
     Membership,
+    OAuthState,
     Passkey,
     RelyingParty,
     Role,
@@ -188,6 +190,16 @@ class Tx(Protocol):
         """The app login requests table."""
         ...
 
+    @property
+    def external_identities(self) -> Table[ExternalIdentity]:
+        """The external identities table (linked GitHub accounts)."""
+        ...
+
+    @property
+    def oauth_states(self) -> Table[OAuthState]:
+        """The OAuth round trips table (state and PKCE challenge)."""
+        ...
+
 
 class Store(Protocol):
     """Opens transactions. Leaving the context commits; an exception rolls back."""
@@ -349,5 +361,57 @@ class PasskeyCeremonies(Protocol):
 
         The signature counter is returned, not judged: the caller compares it with the stored
         one (clone detection is a policy of the relying party).
+        """
+        ...
+
+
+class ProviderRejected(Exception):  # noqa: N818 - reads like what happened
+    """The login provider refused the authorization code or answered nonsense (a bad or reused
+    code, a wrong PKCE verifier, an account without an id). ``reason`` is internal."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class ProviderUnavailable(Exception):  # noqa: N818 - reads like what happened
+    """The login provider could not be reached or failed (network, 5xx). ``reason`` is
+    internal."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalProfile:
+    """Who signed in at the provider: its stable account id and a name to show.
+
+    Deliberately nothing else: MowDeck never matches or links accounts by e-mail address.
+    """
+
+    subject: str
+    display_name: str | None = None
+
+
+class OAuthClient(Protocol):
+    """The endpoints of one OAuth 2 provider (authorization code flow with PKCE S256).
+
+    The redirect authenticator keeps state, PKCE and the browser binding; the client only builds
+    the authorization URL and turns a code into the provider's profile of the signed-in account.
+    A later OIDC client implements the same port (discovery, ID token).
+    """
+
+    provider: str
+    """The provider key (``github``), also the path segment of the callback."""
+
+    def authorization_url(self, *, state: str, code_challenge: str, redirect_uri: str) -> str:
+        """The provider page the browser is sent to."""
+        ...
+
+    async def profile(self, *, code: str, code_verifier: str, redirect_uri: str) -> ExternalProfile:
+        """Redeem ``code`` (with the PKCE verifier) and read the account it belongs to.
+
+        Raises :class:`ProviderRejected` or :class:`ProviderUnavailable`.
         """
         ...

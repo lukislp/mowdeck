@@ -14,6 +14,7 @@ import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import httpx
 from fastapi import FastAPI
 from mowdeck_auth import JwtPrincipalResolver, JwtVerifier
 from mowdeck_authz import Authorizer, TupleBackend
@@ -66,6 +67,7 @@ def build_app(
     principal_resolver: PrincipalResolver | None = None,
     background_tasks: bool = True,
     entitlements: Entitlements | None = None,
+    github_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL, OpenFGA and Argon2id."""
     runtime = Runtime(
@@ -77,6 +79,7 @@ def build_app(
         hasher=hasher,
         clock=clock or utc_now,
         entitlements=entitlements,
+        github_transport=github_transport,
     )
     keys = runtime.keys
     verifier = JwtVerifier(
@@ -163,6 +166,8 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
             await tx.webauthn_challenges.delete(expires_at=Lt(now))
             await tx.app_login_codes.delete(expires_at=Lt(now))
             await tx.app_login_requests.delete(expires_at=Lt(now))
+            # Provider round trips (ADR 0051) nobody came back from.
+            await tx.oauth_states.delete(expires_at=Lt(now))
 
     tasks = [
         asyncio.create_task(catalogue_loop(), name="catalogue"),

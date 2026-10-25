@@ -19,8 +19,10 @@ from identity.domain.models import (
     AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
+    ExternalIdentity,
     LoginAttempt,
     Membership,
+    OAuthState,
     Passkey,
     Role,
     RoleAssignment,
@@ -149,6 +151,8 @@ class MemoryTx:
     webauthn_challenges: MemoryTable[WebAuthnChallenge]
     app_login_codes: MemoryTable[AppLoginCode]
     app_login_requests: MemoryTable[AppLoginRequest]
+    external_identities: MemoryTable[ExternalIdentity]
+    oauth_states: MemoryTable[OAuthState]
 
 
 class MemoryStore:
@@ -174,6 +178,10 @@ class MemoryStore:
             webauthn_challenges=MemoryTable("id"),
             app_login_codes=MemoryTable("id", [("code_hash",)]),
             app_login_requests=MemoryTable("id"),
+            external_identities=MemoryTable(
+                "id", [("provider", "subject"), ("user_id", "provider")]
+            ),
+            oauth_states=MemoryTable("id", [("state_hash",)]),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

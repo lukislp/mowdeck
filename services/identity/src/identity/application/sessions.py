@@ -12,6 +12,9 @@
   method, the browser ends up with a fresh session and exchanges it (``issue_app_code``) for a
   one-time code bound to the app's PKCE challenge; ``redeem_app_code`` turns code and verifier
   into the app's own session.
+* Redirect logins (ADR 0051): ``start_redirect_login`` sends the browser to a provider (GitHub)
+  and ``login_redirect`` starts the same session as a password login for the user the provider
+  account is explicitly linked to.
 """
 
 from dataclasses import dataclass, field
@@ -27,12 +30,16 @@ from identity.application.authenticators import (
     AuthResult,
     Challenge,
     ChallengeAuthenticator,
+    RedirectAuthenticator,
+    RedirectCallback,
+    RedirectStart,
 )
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.application.ports import Ge, Tx
 from identity.application.ratelimit import TokenBucketLimiter
 from identity.domain.credentials import (
+    clean_return_query,
     new_app_code,
     new_refresh_token,
     normalize_username,
@@ -50,6 +57,7 @@ from identity.domain.models import (
     AppLoginRequest,
     LoginAttempt,
     Membership,
+    RedirectPurpose,
     Session,
     Status,
     User,
@@ -124,6 +132,10 @@ class SessionService:
         if plans is None:
             return principal
         return principal.model_copy(update={"plan": await plans.plan_of(acct.id)})
+
+    def limit_login(self, ctx: RequestContext) -> None:
+        """Take one login from the address's allowance (``RateLimited`` when used up)."""
+        self._limit_ip(ctx)
 
     def _limit_ip(self, ctx: RequestContext, limiter: TokenBucketLimiter | None = None) -> None:
         wait = (limiter or self.ip_limiter).take(ctx.ip or "unknown")
@@ -347,6 +359,51 @@ class SessionService:
             await self._record_passkey_failure(ctx, failed)
             raise
 
+    # --- redirect logins (ADR 0051) ---------------------------------------------------------------
+
+    def redirector(self, name: str) -> RedirectAuthenticator:
+        """The enabled redirect authenticator ``name`` (404 otherwise)."""
+        authenticator = self.authenticators.redirector(name)
+        if authenticator is None:
+            msg = "this login provider is not enabled on this installation"
+            raise NotFoundError(msg)
+        return authenticator
+
+    async def start_redirect_login(
+        self, name: str, return_query: str | None, ctx: RequestContext
+    ) -> RedirectStart:
+        """Send the browser to the provider to sign in. Checks nothing, so it has the looser
+        limit of a passkey challenge; the callback has the login limit. ``return_query`` (the
+        sign-in page's query: ``next``, the app hand-off) is kept for the way back."""
+        self._limit_ip(ctx, self.challenge_limiter)
+        authenticator = self.redirector(name)
+        return await authenticator.start(
+            RedirectPurpose.LOGIN, return_query=clean_return_query(return_query)
+        )
+
+    async def login_redirect(self, callback: RedirectCallback, ctx: RequestContext) -> TokenPair:
+        """The login half of a provider's callback: the same session as a password login for
+        the linked user. Failures are audited (``session.login_failed`` with the provider as
+        ``method``) and raise ``AuthenticationFailed``; like passkey failures they write no
+        ``login_attempts`` row (nothing to guess, and the password login must not be locked)."""
+        method = callback.provider
+        details: dict[str, object] = {}
+        if callback.identity_id is not None:
+            details["external_identity"] = str(callback.identity_id)
+        if callback.profile is not None:
+            details["provider_subject"] = callback.profile.subject
+        if not callback.ok or callback.user_id is None:
+            reason = callback.reason or "failed"
+            await self._record_method_failure(ctx, method, callback.user_id, reason, details)
+            raise AuthenticationFailed(reason)
+        try:
+            return await self._start_session(
+                callback.user_id, None, ctx, method=method, details=details
+            )
+        except AuthenticationFailed as exc:
+            await self._record_method_failure(ctx, method, callback.user_id, exc.reason, details)
+            raise
+
     # --- native app hand-off (ADR 0050) -----------------------------------------------------------
 
     async def start_app_login(self, code_challenge: str, ctx: RequestContext) -> AppLoginRequest:
@@ -479,14 +536,29 @@ class SessionService:
     async def _record_passkey_failure(self, ctx: RequestContext, result: AuthResult) -> None:
         """Audit a failed passkey login. No ``login_attempts`` row: a passkey has no secret to
         guess, and failures must not lock the user's password login (the IP limit applies)."""
-        now = self.deps.clock()
-        details: dict[str, object] = {"method": "passkey", "reason": result.reason or "failed"}
+        details: dict[str, object] = {}
         if result.credential_ref:
             details["passkey"] = result.credential_ref
+        await self._record_method_failure(
+            ctx, "passkey", result.subject_id, result.reason or "failed", details
+        )
+
+    async def _record_method_failure(
+        self,
+        ctx: RequestContext,
+        method: str,
+        subject_id: UUID | None,
+        reason: str,
+        extra: dict[str, object],
+    ) -> None:
+        """Audit a failed login of a method without a guessable secret (passkey, provider):
+        ``session.login_failed`` in every account of a known user, no ``login_attempts``."""
+        now = self.deps.clock()
+        details: dict[str, object] = {"method": method, "reason": reason, **extra}
         async with self.deps.store.transaction() as tx:
             accounts: list[UUID | None] = [None]
-            if result.subject_id is not None:
-                memberships = await tx.memberships.find(user_id=result.subject_id)
+            if subject_id is not None:
+                memberships = await tx.memberships.find(user_id=subject_id)
                 accounts = [m.account_id for m in memberships] or [None]
             for account in accounts:
                 entry = ctx.audit_entry(
@@ -495,8 +567,8 @@ class SessionService:
                     outcome="failure",
                     account_id=account,
                     details=details,
-                    target_type="user" if result.subject_id else None,
-                    target_id=str(result.subject_id) if result.subject_id else None,
+                    target_type="user" if subject_id else None,
+                    target_id=str(subject_id) if subject_id else None,
                 )
                 await tx.audit.add(entry)
 
