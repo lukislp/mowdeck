@@ -59,15 +59,15 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
 }) => {
   const csp = watchCsp(page);
   const authenticator = await virtualAuthenticator(page);
+  // The stack has passkeys on (IDENTITY_PUBLIC_URL in stack.env / scripts/stack.mjs).
+  const methods = await request.get('/api/v1/identity/login-methods');
+  expect(await methods.json()).toEqual({ password: true, passkey: true });
   // Registered without the API login of registerByApi: every login counts (see below).
   const owner = actor('passkey');
   const registered = await request.post('/api/v1/identity/register', {
     data: { username: owner.username, password: owner.password, account_name: 'Passkey home' },
   });
   expect(registered.status(), await registered.text()).toBe(201);
-
-  const methods = await request.get('/api/v1/identity/login-methods');
-  expect(await methods.json()).toEqual({ password: true, passkey: true });
 
   // 1. Add a passkey in the settings.
   await loginByUi(page, owner);
