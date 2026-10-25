@@ -1,10 +1,12 @@
+import AuthenticationServices
 import Capacitor
 import Security
 import UIKit
 
-/// `MowDeckShell`: stores the server origin and restarts the bridge with it, and hands out the
-/// installation id for the APNs registration (see apps/mobile/src/shell.ts for the JavaScript
-/// side).
+/// `MowDeckShell`: stores the server origin and restarts the bridge with it, hands out the
+/// installation id for the APNs registration, and runs a sign-in of the server in the system
+/// browser (`openAuthSession`, passkeys; ADR 0050). The JavaScript side is
+/// apps/web/src/lib/native/ (shell.svelte.ts, handoff.ts).
 @objc(MowDeckShellPlugin)
 public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "MowDeckShellPlugin"
@@ -14,8 +16,12 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setServerUrl", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "resetServerUrl", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "reload", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getInstallationId", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getInstallationId", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openAuthSession", returnType: CAPPluginReturnPromise)
     ]
+
+    /// The running sign-in session (kept alive until it completes).
+    private var authSession: ASWebAuthenticationSession?
 
     @objc func getServerUrl(_ call: CAPPluginCall) {
         call.resolve(["url": ShellSettings.serverURL as Any])
@@ -51,6 +57,59 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// Open `url` (a page of the configured server) in an `ASWebAuthenticationSession` and
+    /// resolve with the `mowdeck://` callback URL the page navigates to. The system browser has
+    /// the user's passkeys for any origin, which the web view has not without Associated
+    /// Domains. Ephemeral: no cookies shared with Safari, nothing left behind. Rejects with the
+    /// code `cancelled` when the user closes the sheet.
+    @objc func openAuthSession(_ call: CAPPluginCall) {
+        guard let raw = call.getString("url"),
+              let url = URL(string: raw),
+              let server = ShellSettings.serverURL,
+              MowDeckShellPlugin.sameOrigin(raw, server)
+        else {
+            call.reject("expected a page of the MowDeck server")
+            return
+        }
+        let scheme = call.getString("callbackScheme") ?? "mowdeck"
+        guard scheme == "mowdeck" else {
+            call.reject("unsupported callback scheme")
+            return
+        }
+        DispatchQueue.main.async {
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: scheme) {
+                [weak self] callback, error in
+                self?.authSession = nil
+                if let callback {
+                    call.resolve(["url": callback.absoluteString])
+                } else if let error = error as? ASWebAuthenticationSessionError,
+                          error.code == .canceledLogin {
+                    call.reject("the sign-in was cancelled", "cancelled")
+                } else {
+                    call.reject("the sign-in failed", "failed", error)
+                }
+            }
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = true
+            self.authSession = session
+            if !session.start() {
+                self.authSession = nil
+                call.reject("the sign-in could not start", "failed")
+            }
+        }
+    }
+
+    /// True when `raw` is an http(s) URL on the origin of `server`.
+    static func sameOrigin(_ raw: String, _ server: String) -> Bool {
+        guard let parts = URLComponents(string: raw),
+              let scheme = parts.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              let host = parts.host, !host.isEmpty,
+              parts.user == nil, parts.password == nil
+        else { return false }
+        let port = parts.port.map { ":\($0)" } ?? ""
+        return "\(scheme)://\(host.lowercased())\(port)" == server
+    }
+
     /// `scheme://host[:port]` of an http(s) URL without path, query or credentials.
     static func origin(of raw: String) -> String? {
         guard let parts = URLComponents(string: raw),
@@ -70,6 +129,12 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let window = self.bridge?.viewController?.view.window else { return }
             window.rootViewController = MainViewController()
         }
+    }
+}
+
+extension MowDeckShellPlugin: ASWebAuthenticationPresentationContextProviding {
+    public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        bridge?.viewController?.view.window ?? ASPresentationAnchor()
     }
 }
 
