@@ -52,6 +52,7 @@ class SettingGroup(StrEnum):
     BATTERY = "battery"
     LIGHTS = "lights"
     DRIVING = "driving"
+    MOWING = "mowing"
     SAFETY = "safety"
     VOICE = "voice"
     SCHEDULE = "schedule"
@@ -160,6 +161,7 @@ SETTING_KEYS: Final[dict[str, str]] = {
     "side_led": "The side lights of the body.",
     "turn_style": "How the mower turns at lane ends in its own jobs (ADR 0043).",
     "traversal_mode": "How the mower drives between areas and back to the dock.",
+    "blade_speed": "Speed of the blade motor while mowing (slow, normal or fast).",
     "wildlife_safety": "What the mower does when it detects an animal.",
     "voice_enabled": "Spoken announcements of the mower.",
     "voice_volume": "Volume of the spoken announcements (percent).",

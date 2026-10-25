@@ -18,6 +18,7 @@ export const GROUP_ORDER: readonly SettingGroup[] = [
   'battery',
   'lights',
   'driving',
+  'mowing',
   'safety',
   'voice',
   'schedule',

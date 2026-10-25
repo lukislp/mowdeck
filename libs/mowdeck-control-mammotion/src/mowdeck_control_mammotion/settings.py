@@ -18,12 +18,18 @@ command, argument and reply field is the one Mammotion-HA uses (``coordinator.py
                             ``mower_state.side_led.enable`` is 0 (Mammotion-HA's reading)
 ``night_light``             ``set_car_light(on_off=on)``; read ``get_car_light(ids=1123)``,
                             answer ``get_lamp_rsp`` (``lamp_info.night_light``); models with
-                            the fill light only
+                            the fill light only (``DeviceType.is_support_fill_light``), not the
+                            Yuka MV (Mammotion-HA hides it there, as the app does)
 ``wildlife_safety``         ``set_animal_protection_mode(mode)`` (0 ``off``, 1
                             ``stop_mowing``, 2 ``low_speed_mowing``); read
                             ``read_animal_protection_mode`` and ``..._status``, answer
                             ``nav_sys_param_cmd``; ``off`` while the status is 0; gated by
                             ``DeviceType.supports_wildlife_safety`` (model and firmware)
+``blade_speed``             ``set_cutter_mode(cutter_mode)`` (0 ``normal``, 1 ``slow``, 2
+                            ``fast``); read ``get_cutter_mode``, answer ``current_cutter_mode``
+                            (``mower_state.cutter_mode``); models of
+                            ``DeviceType.is_support_blade_speed`` (LUBA 2 AWD X and other
+                            LUBA variants, every Yuka but the original one)
 ``recharge_level``,         ``set_recharge_level(level)`` (15 to 30 %, or -1 for smart) and
 ``smart_recharge_level``    ``read_recharge_level``, answer ``nav_sys_param_cmd``
                             (``mower_state.recharge_level``, 0 until read); leaving smart writes
@@ -41,13 +47,22 @@ command, argument and reply field is the one Mammotion-HA uses (``coordinator.py
                             ``todev_unable_time_set`` (``device.non_work_hours``)
 ==========================  =================================================================
 
-Only the LUBA 2 family declares settings (``DeviceType.is_luba_pro`` and not a Yuka): the
-reply routing above (``nav_sys_param_cmd`` for the read/write parameters) is the one of these
-models, and the owner's LUBA 2 AWD X is the one MowDeck is tested against. Left out on purpose:
-the rain delay and rain protection modes (X5 series only), the charge limit and smart charging
-(a read-modify-write of the off-peak charging window that resets it when sent unread),
-``auto_change_direction`` (a start option of other models, excluded for the LUBA 2), and every
-Yuka and Spino setting. None of these settings moves the mower.
+Every mower of ``DeviceType.is_luba_pro`` declares settings: the LUBA 2 family and, since
+2026-10-25, the Yuka family (YUKA, YUKA mini, YUKA mini 2, YUKA VP, YUKA MV, YUKA ML, Ezy and
+YUKA HS models, ``DeviceType.is_yuka``). PyMammotion routes the read/write parameters of every
+``is_luba_pro`` model over ``nav_sys_param_cmd`` (``MammotionCommand.read_write_device``, the same
+check Mammotion-HA's ``_rw_expected_field`` makes), the Yuka included, and Mammotion-HA creates
+these entities for the Yuka with the gates above. The owner's LUBA 2 AWD X is the mower MowDeck
+is tested against; the Yuka settings follow PyMammotion 0.10.9 and are not verified on a Yuka.
+
+Left out on purpose: the rain delay and rain protection modes (X5 series only), the charge
+limit and smart charging (a read-modify-write of the off-peak charging window that resets it
+when sent unread), ``auto_change_direction`` (a start option of other models, excluded for the
+LUBA 2), every Spino setting (pool cleaners
+are no ``is_luba_pro`` model), and the Yuka's grass collector: the manual sweep and dump are
+actions that move the collector, and the dump interval and the mow, dump and edge switches are
+job options (Mammotion-HA's ``operation_settings``), not settings of the mower. None of these
+settings moves the mower.
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -72,11 +87,13 @@ from mowdeck_control_mammotion.port import (
 )
 
 RW_REPLY: Final = "nav_sys_param_cmd"
-"""Answer of the read/write parameters and the battery levels on the LUBA 2 family."""
+"""Answer of the read/write parameters and the battery levels on every ``is_luba_pro`` model
+(the LUBA 2 and the Yuka family)."""
 SIDELIGHT_REPLY: Final = "todev_time_ctrl_light"
 LAMP_REPLY: Final = "get_lamp_rsp"
 AUDIO_REPLY: Final = "audio_cfg"
 NON_WORK_REPLY: Final = "todev_unable_time_set"
+CUTTER_REPLY: Final = "current_cutter_mode"
 NIGHT_LIGHT_IDS: Final = 1123
 VOICE_ON_VOLUME: Final = 50
 """The volume ``voice_enabled`` switches to, as Mammotion-HA does."""
@@ -85,6 +102,8 @@ TURN_OPTIONS: Final = ("in_place", "multi_point")
 TRAVERSAL_OPTIONS: Final = ("direct", "follow_perimeter")
 WILDLIFE_OPTIONS: Final = ("off", "stop_mowing", "low_speed_mowing")
 VOICE_GENDERS: Final = ("man", "woman")
+BLADE_SPEEDS: Final[Mapping[str, int]] = {"slow": 1, "normal": 0, "fast": 2}
+"""``blade_speed`` options and PyMammotion's ``CuttingSpeedMode`` values, slowest first."""
 
 Request = tuple[str, str, dict[str, Any]]
 """A read: ``(command, reply field, arguments)`` for :meth:`MammotionPort.send_and_wait`."""
@@ -159,6 +178,19 @@ def _window_write(value: SettingValue, _device: MowerDevice) -> Sequence[Write]:
     ]
 
 
+def _blade_speed(device: MowerDevice) -> SettingValue | type[_Unknown]:
+    mode = _int(device.mower_state.cutter_mode)
+    return next((name for name, value in BLADE_SPEEDS.items() if value == mode), _Unknown)
+
+
+def _night_light(name: str, _firmware: str) -> bool:
+    return DeviceType.is_support_fill_light(name) and not DeviceType.value_of_str(name).is_yuka_mv()
+
+
+def _blade_speed_supported(name: str, _firmware: str) -> bool:
+    return DeviceType.is_support_blade_speed(name)
+
+
 def _wildlife(device: MowerDevice) -> SettingValue | type[_Unknown]:
     protection = device.mower_state.animal_protection
     if _int(protection.status) == 0:
@@ -216,6 +248,13 @@ SETTINGS: Final[tuple[_Setting, ...]] = (
         value=lambda d: _option(TRAVERSAL_OPTIONS, d.mower_state.traversal_mode),
     ),
     _Setting(
+        spec=_enum_spec("blade_speed", SettingGroup.MOWING, tuple(BLADE_SPEEDS)),
+        read=[("get_cutter_mode", CUTTER_REPLY, {})],
+        write=lambda v, _d: [("set_cutter_mode", {"cutter_mode": BLADE_SPEEDS[str(v)]})],
+        value=_blade_speed,
+        supported=_blade_speed_supported,
+    ),
+    _Setting(
         spec=_bool_spec("side_led", SettingGroup.LIGHTS),
         read=[("read_and_set_sidelight", SIDELIGHT_REPLY, {"is_sidelight": False, "operate": 1})],
         write=lambda v, _d: [("read_and_set_sidelight", {"is_sidelight": _bool(v), "operate": 0})],
@@ -226,7 +265,7 @@ SETTINGS: Final[tuple[_Setting, ...]] = (
         read=[("get_car_light", LAMP_REPLY, {"ids": NIGHT_LIGHT_IDS})],
         write=lambda v, _d: [("set_car_light", {"on_off": _bool(v)})],
         value=lambda d: bool(d.mower_state.lamp_info.night_light),
-        supported=lambda name, _fw: DeviceType.is_support_fill_light(name),
+        supported=_night_light,
     ),
     _Setting(
         spec=_enum_spec("wildlife_safety", SettingGroup.SAFETY, WILDLIFE_OPTIONS),
@@ -323,8 +362,9 @@ BY_KEY: Final[Mapping[str, _Setting]] = {s.spec.key: s for s in SETTINGS}
 
 
 def family_has_settings(device_name: str, product_key: str = "") -> bool:
-    """True for the LUBA 2 family (see the module docstring)."""
-    return DeviceType.is_luba_pro(device_name, product_key) and not DeviceType.is_yuka(device_name)
+    """True for the LUBA 2 and the Yuka family (``DeviceType.is_luba_pro``, see the module
+    docstring)."""
+    return DeviceType.is_luba_pro(device_name, product_key)
 
 
 def settings_of(device_name: str, firmware: str, product_key: str = "") -> list[SettingSpec]:
@@ -379,7 +419,7 @@ sensor stops the mower from starting. Mammotion-HA's ``rain_detected`` binary se
 
 
 def rain_detected_of(device: MowerDevice, *, has_report: bool = True) -> bool | None:
-    """``MowerState.rain_detected`` for the LUBA 2 family: True while the self-check reports
+    """``MowerState.rain_detected``: True while the self-check reports
     rain (:data:`RAIN_SELF_CHECK`); None without a report. The mower reports it only while the
     setting ``rain_detection`` is on (the sensor then blocks a start), so with the setting off
     rain reads as False."""

@@ -1092,6 +1092,10 @@ class FakeMammotionPort:
             if follow:
                 state.lamp_info.night_light = bool(kwargs["on_off"])
             return True
+        if command == "set_cutter_mode":
+            if follow:
+                state.cutter_mode = int(kwargs["cutter_mode"])
+            return True
         if command == "set_animal_protection_mode":
             if follow:
                 state.animal_protection.mode = int(kwargs["mode"])
@@ -1172,6 +1176,7 @@ SETTING_READ_COMMANDS: Final = frozenset(
         "get_car_audio_cfg",
         "read_job_do_not_disturb",
         "read_and_set_sidelight",
+        "get_cutter_mode",
     }
 )
 """Commands of the setting reads (ADR 0046); `read_write_device` and `get_car_light` also
