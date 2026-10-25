@@ -87,10 +87,14 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, json.dumps(payload).encode(), "application/json")
 
     def _redirect(self, url: str) -> None:
-        self.send_response(302)
-        self.send_header("Location", url)
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+        """Back to the callback through a page (no request data in a response header)."""
+        target = html.escape(url, quote=True)
+        page = (
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            f'<meta http-equiv="refresh" content="0;url={target}">'
+            f'<title>Redirecting</title></head><body><a href="{target}">Continue</a></body></html>'
+        )
+        self._send(200, page.encode(), "text/html; charset=utf-8")
 
     def _form(self) -> dict[str, list[str]]:
         length = int(self.headers.get("Content-Length") or 0)

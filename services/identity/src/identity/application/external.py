@@ -146,7 +146,7 @@ class ExternalIdentityService:
         self,
         provider: str,
         params: dict[str, str],
-        browser_secret: str | None,
+        browser_binding: str | None,
         ctx: RequestContext,
     ) -> RedirectOutcome:
         """The provider sent the browser back: finish the login or the link it was started for.
@@ -160,7 +160,7 @@ class ExternalIdentityService:
             self.sessions.limit_login(ctx)
         except RateLimited:
             return RedirectOutcome(provider, RedirectPurpose.LOGIN, failure=RATE_LIMITED)
-        callback = await redirector.callback(params, browser_secret)
+        callback = await redirector.callback(params, browser_binding)
         if callback.purpose is RedirectPurpose.LINK:
             return await self._finish_link(callback, ctx)
         try:

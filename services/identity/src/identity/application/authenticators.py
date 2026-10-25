@@ -105,12 +105,12 @@ class ChallengeAuthenticator(CredentialAuthenticator, Protocol):
 class RedirectStart:
     """Where to send the browser, and the secret it keeps until the provider sends it back.
 
-    ``browser_secret`` (the PKCE verifier) goes into an HttpOnly cookie; only its hash is
+    ``browser_binding`` (the PKCE verifier) goes into an HttpOnly cookie; only its hash is
     stored, so the round trip can be finished only in the browser that started it.
     """
 
     url: str
-    browser_secret: str = field(repr=False)
+    browser_binding: str = field(repr=False)
     expires_in: int
 
 
@@ -167,7 +167,7 @@ class RedirectAuthenticator(Protocol):
         ...
 
     async def callback(
-        self, params: Mapping[str, str], browser_secret: str | None
+        self, params: Mapping[str, str], browser_binding: str | None
     ) -> RedirectCallback:
         """Finish the round trip from the provider's callback parameters; never raises for
         anything the browser or the provider sent."""
@@ -397,7 +397,7 @@ class OAuthAuthenticator:
         return RedirectStart(url, verifier, int(self.ttl.total_seconds()))
 
     async def callback(
-        self, params: Mapping[str, str], browser_secret: str | None
+        self, params: Mapping[str, str], browser_binding: str | None
     ) -> RedirectCallback:
         """``{state, code}`` or ``{state, error}`` from the provider; the browser's secret."""
         state = params.get("state", "")
@@ -414,7 +414,7 @@ class OAuthAuthenticator:
             )
         if now >= record.expires_at:
             return self._failed(record, RedirectFailure.EXPIRED, "expired state")
-        if not browser_secret or not verifier_matches(record.code_challenge, browser_secret):
+        if not browser_binding or not verifier_matches(record.code_challenge, browser_binding):
             return self._failed(record, RedirectFailure.EXPIRED, "other browser (no verifier)")
         error = params.get("error", "")[:100]
         if error == "access_denied":
@@ -429,7 +429,7 @@ class OAuthAuthenticator:
             return self._failed(record, RedirectFailure.DENIED, "no code")
         try:
             profile = await self.client.profile(
-                code=code, code_verifier=browser_secret, redirect_uri=self.redirect_uri
+                code=code, code_verifier=browser_binding, redirect_uri=self.redirect_uri
             )
         except ProviderRejected as exc:
             return self._failed(record, RedirectFailure.DENIED, f"code refused: {exc.reason}")

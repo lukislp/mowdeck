@@ -49,7 +49,7 @@ def _bind_browser(request: Request, response: Response, start: RedirectStart) ->
     top-level redirect back (a ``Strict`` cookie would not)."""
     response.set_cookie(
         OAUTH_COOKIE,
-        start.browser_secret,
+        start.browser_binding,
         max_age=start.expires_in,
         path=OAUTH_COOKIE_PATH,
         secure=getattr(request.app.state, "refresh_cookie_secure", True),
