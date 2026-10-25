@@ -788,7 +788,7 @@ class VisionService:
             now=self.clock(),
             last_drive=last_drive,
             previous_rounds=previous,
-            motion=self.config.motion,
+            motion=self._motion(mower_id, account_id),
             images=images,
             radius_m=self.config.context_radius_m,
             stereo=stereo,
@@ -797,6 +797,15 @@ class VisionService:
             mow_path=mow_path,
             last_start=self.view.last_start(mower_id) if state is not None else None,
         )
+
+    def _motion(self, mower_id: UUID, account_id: UUID) -> Motion:
+        """The configured motion plus whether the drive link can reverse now
+        (``capabilities.drive_reverse``; unknown capabilities keep the configured value, the
+        executor checks again before it drives)."""
+        caps = self.view.capabilities(mower_id)
+        if caps is None or caps[0] != account_id or not caps[1].manual_drive:
+            return self.config.motion
+        return self.config.motion.model_copy(update={"reverse": caps[1].drive_reverse})
 
     def _path_check(self, proposal: Proposal) -> PathCheck:
         """The path check of a low-confidence recommendation on the newest state and map (the
@@ -861,6 +870,7 @@ class VisionService:
             job=context.job,
             task=proposal.task,
             path_check=self._path_check(proposal),
+            reverse=context.motion.reverse,
         )
         state, detail = decision.state, decision.detail
         drive = decision.action in (ProposalAction.DRIVE, ProposalAction.RESUME)

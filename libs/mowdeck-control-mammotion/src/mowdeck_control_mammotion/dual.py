@@ -34,12 +34,21 @@ bridge's firmware (``esphome_version``, ``project_version``, ``outdated``) and t
 at the bridge; every link change publishes a state.
 
 What stays the cloud's: ``is_connected`` (a lost bridge does not end the connection, a dead
-cloud login does), the camera, the firmware service. What needs the bridge: manual driving
-(``capabilities.manual_drive`` follows the proxy link;
-:meth:`MammotionDualConnection.start_drive_session` connects Bluetooth on demand and raises
-``NotConnected`` without the bridge or when Bluetooth does not come up, so a spot run or a
-calibration ends ``link_lost``; an open session ends when Bluetooth drops: a frame never falls
-back to the cloud). A bridge scan
+cloud login does), the camera, the firmware service.
+
+Which link drives (ADR 0049, amending ADR 0038): the bridge when its proxy link is up, else the
+vendor's cloud remote drive when the mower offers it
+(:meth:`~mowdeck_control_mammotion.cloud.MammotionCloudConnection.cloud_drive_available`). The
+choice is made when a drive session opens and never changes while it runs:
+:meth:`MammotionDualConnection.start_drive_session` connects Bluetooth on demand while the proxy is
+up and raises ``NotConnected`` when Bluetooth does not come up (no fallback then: the
+capabilities promised reverse); with the proxy down it opens a cloud session, or raises
+``NotConnected`` (bridge not connected) when the cloud cannot drive either, so a spot run or a
+calibration ends ``link_lost``. An open Bluetooth session ends when Bluetooth drops: its frames
+never fall back to the cloud; the next session may then use the cloud. The capabilities follow
+the link a new session would use: ``manual_drive`` (bridge or cloud), ``drive_reverse`` (bridge
+only) and ``manual_drive_blades`` (the bridge link's ``allow_manual_blades``, else the cloud
+connection's). A bridge scan
 (:meth:`MammotionDualConnection.scan_bridge`) for the bridge this connection holds is answered
 from the live scanner, so a "re-check" never opens a second API client to the proxy.
 """
@@ -63,7 +72,12 @@ from mowdeck_contracts.v1 import (
 from mowdeck_control import ConnectionConfig, DriveSession, NotConnected
 
 from mowdeck_control_mammotion import mapping
-from mowdeck_control_mammotion.cloud import BridgeScanner, MammotionCloudConnection
+from mowdeck_control_mammotion.base import MIN_DRIVE_POLL_S
+from mowdeck_control_mammotion.cloud import (
+    CLOUD_MIN_DRIVE_POLL_S,
+    BridgeScanner,
+    MammotionCloudConnection,
+)
 from mowdeck_control_mammotion.drive import BleDriveSession, manual_run_speed
 from mowdeck_control_mammotion.esphome import ProxyLink, open_proxy, proxy_info_of, scan_reply_from
 from mowdeck_control_mammotion.options import BleProxyOptions, OptionsError
@@ -316,7 +330,7 @@ class MammotionDualConnection(MammotionCloudConnection):
             sleep=sleep,
             poll_s=poll_s,
         )
-        port.route_bridge(self._drive_active)
+        port.route_bridge(self._ble_drive_active)
 
     @property
     def watcher(self) -> BridgeWatcher:
@@ -329,7 +343,7 @@ class MammotionDualConnection(MammotionCloudConnection):
         """The roles that need Bluetooth through the bridge right now: ``drive`` (a drive
         session is open or being opened) and ``fast_position`` (mowing or returning)."""
         roles: set[str] = set()
-        if self._drive_requested or self._drive_active():
+        if self._drive_requested or self._ble_drive_active():
             roles.add("drive")
         state = self._last_state
         if (
@@ -356,6 +370,7 @@ class MammotionDualConnection(MammotionCloudConnection):
         try:
             if session is not None:
                 await session.close()
+            await self._close_cloud_session()
         finally:
             await self._watcher.stop()
 
@@ -374,13 +389,26 @@ class MammotionDualConnection(MammotionCloudConnection):
         return self._connected and self._watcher.connected
 
     def _manual_drive_offered(self) -> bool:
-        return self._connected and self._watcher.proxy_up
+        if not self._connected:
+            return False
+        return self._watcher.proxy_up or self.cloud_drive_available()
 
     def _manual_blades_allowed(self) -> bool:
-        return self.link_options.allow_manual_blades
+        if self._watcher.proxy_up:
+            return self.link_options.allow_manual_blades
+        return self.options.allow_manual_blades
+
+    def _drive_reverse_offered(self) -> bool:
+        return self._watcher.proxy_up
+
+    def _min_drive_poll_s(self) -> float:
+        return MIN_DRIVE_POLL_S if self._watcher.proxy_up else CLOUD_MIN_DRIVE_POLL_S
+
+    def _ble_drive_active(self) -> bool:
+        return self._session is not None and self._session.is_open
 
     def _drive_active(self) -> bool:
-        return self._session is not None and self._session.is_open
+        return self._ble_drive_active() or super()._drive_active()
 
     def _mode(self) -> str:
         mode = super()._mode()
@@ -411,8 +439,14 @@ class MammotionDualConnection(MammotionCloudConnection):
     async def start_drive_session(self) -> DriveSession:
         self._require_connected()
         if not self._watcher.proxy_up:
-            raise NotConnected(BRIDGE_NOT_CONNECTED)
+            if not (self.options.cloud_drive and self.cloud_drive_available()):
+                raise NotConnected(BRIDGE_NOT_CONNECTED)
+            if self._session is not None:
+                session, self._session = self._session, None
+                await session.close()
+            return await self._start_cloud_drive()
         self._require_no_sensor_stop()
+        await self._close_cloud_session()
         if self._session is not None and self._session.is_open:
             await self._session.close()
         self._drive_requested = True
@@ -423,6 +457,9 @@ class MammotionDualConnection(MammotionCloudConnection):
                 self._port,
                 blades_allowed=self.link_options.allow_manual_blades,
                 blade_height_mm=self.link_options.manual_blade_height_mm,
+                blades_on_height_mm=mapping.manual_blades_on_height(
+                    self._port.device_name, self.link_options.manual_blade_height_mm
+                ),
                 sensor_stop=self._sensor_stop_reason,
                 link_up=self.ble_connected,
                 max_run_speed_mps=manual_run_speed(
@@ -443,12 +480,6 @@ class MammotionDualConnection(MammotionCloudConnection):
             if loop.time() >= deadline or not self._watcher.proxy_up:
                 raise NotConnected(BLE_NOT_UP)
             await asyncio.sleep(0.05)
-
-    def _sensor_stop_reason(self) -> str | None:
-        state = self._snapshot()
-        if state.activity is MowerActivity.ERROR:
-            return f"the mower reports an error ({state.error_code})"
-        return None
 
     # --- bridge scan ------------------------------------------------------------------------
 
