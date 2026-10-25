@@ -8,7 +8,10 @@ Occurrences are computed per local calendar date and only then converted to UTC 
   Europe/Berlin) uses the offset before the change, so it fires one hour later in wall-clock
   time (03:30 CEST), on the same day;
 * a time that exists twice (fall back, 02:30 on the last Sunday of October) fires once, at the
-  first occurrence (02:30 CEST).
+  first occurrence (02:30 CEST). Only when the first occurrence has already passed without the
+  schedule firing since (it was created or changed in between, typically during the repeated
+  hour itself) does that day fall back to the second occurrence (02:30 CET), so "today at
+  02:30" set at 02:20 CET still means today, and a day never fires twice.
 
 "Every N days" counts calendar days in the local zone, so the wall-clock time stays the same
 across DST changes (the interval in hours is 23 or 25 on those days). See ADR 0024.
@@ -51,29 +54,64 @@ def local_to_utc(day: date, at: time, zone: ZoneInfo) -> datetime:
     return datetime.combine(day, at.replace(tzinfo=None, fold=0), tzinfo=zone).astimezone(UTC)
 
 
-def occurrences(rule: Recurrence, zone: ZoneInfo, after: datetime) -> Iterator[datetime]:
-    """UTC instants of the rule strictly after ``after``, in order (lazy, may be endless)."""
+def second_occurrence(day: date, at: time, zone: ZoneInfo) -> datetime | None:
+    """The later UTC instant of wall-clock ``at`` on ``day`` when it exists twice (``fold=1``
+    in the repeated hour of a fall-back change), else None."""
+    first = local_to_utc(day, at, zone)
+    second = datetime.combine(day, at.replace(tzinfo=None, fold=1), tzinfo=zone).astimezone(UTC)
+    return second if second > first else None
+
+
+def _instant(
+    day: date, at: time, zone: ZoneInfo, after: datetime, last_fired: datetime | None
+) -> datetime:
+    """The instant ``day`` fires at: the first occurrence, or the second one of an ambiguous
+    time when the first is not after ``after`` and the schedule has not fired since it."""
+    first = local_to_utc(day, at, zone)
+    if first > after:
+        return first
+    second = second_occurrence(day, at, zone)
+    if second is not None and (last_fired is None or last_fired < first):
+        return second
+    return first
+
+
+def occurrences(
+    rule: Recurrence, zone: ZoneInfo, after: datetime, last_fired: datetime | None = None
+) -> Iterator[datetime]:
+    """UTC instants of the rule strictly after ``after``, in order (lazy, may be endless).
+
+    ``last_fired`` is when the schedule last fired (``Schedule.last_run_at``); it keeps a day
+    whose time exists twice from firing at both occurrences (see the module docstring)."""
     day = after.astimezone(zone).date() - timedelta(days=1)  # a DST gap can move into "after"
     last = day + timedelta(days=MAX_SEARCH_DAYS)
     previous: datetime | None = None
     while day <= last:
         if rule.matches(day):
-            instant = local_to_utc(day, rule.at, zone)
+            instant = _instant(day, rule.at, zone, after, last_fired)
             if instant > after and (previous is None or instant > previous):
                 previous = instant
                 yield instant
         day += timedelta(days=1)
 
 
-def next_after(rule: Recurrence, zone: ZoneInfo, after: datetime) -> datetime | None:
+def next_after(
+    rule: Recurrence, zone: ZoneInfo, after: datetime, last_fired: datetime | None = None
+) -> datetime | None:
     """The first occurrence strictly after ``after``, or None when the rule never fires."""
-    return next(occurrences(rule, zone, after), None)
+    return next(occurrences(rule, zone, after, last_fired), None)
 
 
-def upcoming(rule: Recurrence, zone: ZoneInfo, after: datetime, count: int) -> list[datetime]:
+def upcoming(
+    rule: Recurrence,
+    zone: ZoneInfo,
+    after: datetime,
+    count: int,
+    last_fired: datetime | None = None,
+) -> list[datetime]:
     """The next ``count`` occurrences after ``after``."""
     found: list[datetime] = []
-    for instant in occurrences(rule, zone, after):
+    for instant in occurrences(rule, zone, after, last_fired):
         found.append(instant)
         if len(found) >= count:
             break

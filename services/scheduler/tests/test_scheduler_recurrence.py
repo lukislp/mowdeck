@@ -60,7 +60,7 @@ def test_scheduler_autumn_overlap_fires_once_at_the_first_occurrence() -> None:
     first = next_after(rule, BERLIN, utc(2026, 10, 24, 12))
     assert first == utc(2026, 10, 25, 0, 30)  # 02:30 CEST
     assert first is not None
-    second = next_after(rule, BERLIN, first)
+    second = next_after(rule, BERLIN, first, last_fired=first)
     assert second is not None and second.date() == date(2026, 11, 1)  # not 01:30 UTC again
 
 
