@@ -485,7 +485,8 @@ services:
       existingSecret: ""
       secretKey: client-secret
     # -- Sign in with Apple (ADR 0052, docs/ops/apple-login.md). Compose: IDENTITY_APPLE_SERVICES_ID,
-    # _TEAM_ID, _KEY_ID and IDENTITY_APPLE_PRIVATE_KEY_FILE. Needs an Apple Developer account of
+    # IDENTITY_APPLE_TEAM_ID, IDENTITY_APPLE_KEY_ID, IDENTITY_APPLE_PRIVATE_KEY_FILE and
+    # IDENTITY_APPLE_PKCE (the pkce value). Needs an Apple Developer account of
     # your own: a Services ID with the return URL
     # <IDENTITY_PUBLIC_URL>/api/v1/identity/oauth/apple/callback (IDENTITY_PUBLIC_URL defaults to
     # https://<ingress.host>) and a Sign in with Apple key. The key (.p8) lives in a Secret you
@@ -502,6 +503,8 @@ services:
       # -- Name of the Secret with the key file (required when enabled) and its key in it.
       existingSecret: ""
       secretKey: sign-in-key.p8
+      # -- Send the PKCE challenge to Apple (its support is unconfirmed); false only if Apple refuses the request because of it.
+      pkce: true
   fleet:
     enabled: true
     replicas: 1

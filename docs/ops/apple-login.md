@@ -118,4 +118,4 @@ See the user guide [Signing in with Apple](../guides/apple-login.md).
 | "Anmeldung mit Apple nicht möglich" | The Apple account is not linked, the user is disabled, or the ID token was refused (`session.login_failed` in the audit log has the reason) |
 | "Die Anmeldung mit Apple ist abgelaufen" | More than 10 minutes at Apple, cookies blocked, or another tab started a sign-in meanwhile |
 | "Diese Apple-ID ist schon mit einem anderen MowDeck-Benutzer verknüpft" | That user must unlink it first |
-| Apple refuses with an error that mentions `code_challenge` or `code_verifier` | Set `IDENTITY_APPLE_PKCE=false` (Helm: `services.identity.extraEnv.MOWDECK_IDENTITY_APPLE_PKCE: "false"`) and report it |
+| Apple refuses with an error that mentions `code_challenge` or `code_verifier` | Set `IDENTITY_APPLE_PKCE=false` (Helm: `services.identity.apple.pkce: false`) and report it |

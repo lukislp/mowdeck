@@ -35,6 +35,7 @@ client secret file only when enabled, from its own Secret. */ -}}
 {{- $_ := set $env "MOWDECK_IDENTITY_APPLE_TEAM_ID" "" }}
 {{- $_ := set $env "MOWDECK_IDENTITY_APPLE_KEY_ID" "" }}
 {{- $_ := set $env "MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE" "" }}
+{{- $_ := set $env "MOWDECK_IDENTITY_APPLE_PKCE" (ternary "true" "false" (ne (toString $apple.pkce) "false")) }}
 {{- if and $v.enabled $apple.enabled }}
 {{- $appleSecret := required "services.identity.apple.existingSecret is required when apple.enabled (a Secret with the Sign in with Apple key, the .p8 file)" $apple.existingSecret }}
 {{- $servicesId := required "services.identity.apple.servicesId is required when apple.enabled" $apple.servicesId }}
