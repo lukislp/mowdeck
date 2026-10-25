@@ -11,7 +11,9 @@ page at the stack's own address; Identity calls the token and API endpoints insi
 * ``POST /fake-github/login/oauth/access_token``: client id and secret, single-use code bound to
   the callback, PKCE verifier; errors with status 200 and an ``error`` field, like GitHub.
 * ``GET  /fake-github/api/user``: the token's account (with an e-mail address MowDeck ignores).
-* ``DELETE /fake-github/api/applications/<client_id>/token``: revokes a token (basic auth).
+
+Anything else is a 404, token revocation included: MowDeck keeps the user's authorization at
+GitHub and never revokes the token it used for its one request (ADR 0051, amendment 2026-10-25).
 """
 
 import base64
@@ -127,19 +129,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"message": "Not Found"})
 
     def do_DELETE(self) -> None:
-        path, _ = self._path()
-        if path != f"{PREFIX}/api/applications/{CLIENT_ID}/token":
-            self._json(404, {"message": "Not Found"})
-            return
-        expected = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
-        if self.headers.get("Authorization") != f"Basic {expected}":
-            self._json(401, {"message": "Requires authentication"})
-            return
-        length = int(self.headers.get("Content-Length") or 0)
-        token = json.loads(self.rfile.read(length) or b"{}").get("access_token", "")
-        with _lock:
-            _tokens.pop(token, None)
-        self._send(204)
+        self._json(404, {"message": "Not Found"})
 
     def _authorize_page(self, query: dict[str, list[str]]) -> None:
         redirect_uri = _one(query, "redirect_uri")

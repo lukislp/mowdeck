@@ -9,8 +9,8 @@
  * 3. Settings: "Verknüpfung lösen"; log out, GitHub no longer signs in (the account is unknown,
  *    never registered); the password still works.
  *
- * Every GitHub callback and the password check count against the per-address login limit the
- * suite shares, so the test signs in no more often than it must and lets it refill at the end.
+ * Every GitHub callback and the password check count against the per-address login limit; the
+ * test stack loosens it (docker-compose.e2e.yml), so the test need not wait for it to refill.
  */
 import { expect, test, type Page } from '@playwright/test';
 
@@ -75,8 +75,15 @@ test('GitHub: link, sign in with GitHub, unlink, refused afterwards', async ({ p
   // 3. Unlink; GitHub no longer signs in, the password does.
   await page.goto('/settings#profile');
   await page.getByTestId('github-unlink').click();
+  // MowDeck keeps no GitHub token, so the authorization on GitHub's side is the user's to remove.
+  await expect(page.getByTestId('github-unlink-revoke-hint')).toBeVisible();
   await page.getByTestId('github-unlink-confirm').click();
   await expect(page.getByTestId('github-not-linked')).toBeVisible();
+  await expect(
+    page
+      .getByTestId('github-revoke-hint')
+      .getByRole('link', { name: 'Einstellungen → Applications' }),
+  ).toHaveAttribute('href', 'https://github.com/settings/applications');
   await logout(page);
   await page.getByTestId('login-github').click();
   await approveAtGitHub(page, githubId, githubLogin);
@@ -88,6 +95,4 @@ test('GitHub: link, sign in with GitHub, unlink, refused afterwards', async ({ p
   expect(new URL(page.url()).searchParams.get('sign_in_error')).toBeNull();
   await loginByUi(page, owner);
   csp.assertNone();
-  // The suite shares the per-address login limit: let it refill before the next test.
-  await page.waitForTimeout(30_000);
 });

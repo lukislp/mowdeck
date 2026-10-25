@@ -14,10 +14,12 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from github_support import (
+    API_URL,
     CALLBACK,
     CLIENT_ID,
     CLIENT_SECRET,
     SETTINGS,
+    TOKEN,
     FakeGitHub,
     GitHubAccount,
 )
@@ -209,8 +211,11 @@ async def test_link_then_sign_in_with_github_then_unlink() -> None:
         e for e in audit if e["action"] == "session.login" and e["details"]["method"] == "github"
     )
     assert login_entry["details"]["provider_subject"] == str(OCTO.id)
-    assert len(gh.revoked) == 3  # every GitHub token is revoked after its one request
-    assert not gh.tokens
+    # Each round trip (link, login, refused login) used its token for exactly one request and
+    # never revoked it: revoking the last token deletes the user's authorization at GitHub, which
+    # then asks for consent and e-mails "authorized" at every sign-in (ADR 0051 amendment).
+    assert gh.requests == [f"POST {TOKEN}", f"GET {API_URL}/user"] * 3
+    assert len(gh.tokens) == 3
     # Only the account's id and login were asked for: no e-mail endpoint, no other scope.
     assert not any("emails" in r for r in gh.requests)
 
@@ -450,19 +455,24 @@ async def test_the_github_client_reads_only_a_numeric_id_and_the_login() -> None
             transport=httpx.MockTransport(handler),
         )
 
-    def github(user: Any, token: dict[str, Any] | None = None, revoke: int = 204) -> Any:
+    seen: list[str] = []
+
+    def github(user: Any, token: dict[str, Any] | None = None) -> Any:
         def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(f"{request.method} {request.url.path}")
             if request.url.path == "/login/oauth/access_token":
                 return httpx.Response(200, json=token or {"access_token": "gho_x"})
-            if request.method == "DELETE":
-                return httpx.Response(revoke)
-            return httpx.Response(200, json=user)
+            if request.method == "GET" and request.url.path == "/user":
+                return httpx.Response(200, json=user)
+            return httpx.Response(404)
 
         return handler
 
     args = {"code": "c", "code_verifier": VERIFIER, "redirect_uri": CALLBACK}
-    profile = await client(github({"id": 7, "login": "x" * 300}, revoke=500)).profile(**args)
+    profile = await client(github({"id": 7, "login": "x" * 300})).profile(**args)
     assert profile.subject == "7" and profile.display_name == "x" * 255
+    # The token serves exactly one request and is not revoked (that would end the authorization).
+    assert seen == ["POST /login/oauth/access_token", "GET /user"]
     profile = await client(github({"id": 8})).profile(**args)
     assert profile.display_name is None
     for user in ({"id": True}, {"id": -1}, {"id": "7"}, {}, [1]):

@@ -2337,6 +2337,8 @@
   "github_unlink": "Unlink",
   "github_unlink_confirm": "Unlink GitHub? Signing in with your password keeps working.",
   "github_unlinked": "GitHub unlinked",
+  "github_revoke_hint": "You can remove the authorization on GitHub under {place}.",
+  "github_revoke_place": "Settings → Applications",
   "github_in_app_hint": "Link GitHub in a browser: open MowDeck in Safari or Chrome, sign in and link it here. The app can then sign you in with GitHub.",
   "github_link_cancelled": "Linking was cancelled at GitHub.",
   "github_link_expired": "Linking expired. Please start again.",

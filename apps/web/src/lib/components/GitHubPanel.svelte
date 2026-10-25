@@ -3,7 +3,9 @@
   then GitHub) or the linked account with "Unlink". Only an explicitly linked account can sign in
   with GitHub; the password always stays. Shown when the installation offers GitHub, or while a
   link exists (it can always be removed). Nothing of the installation's GitHub settings appears
-  here. Inside the iOS/Android app linking happens in the browser (the web view cannot finish the
+  here. MowDeck keeps no GitHub token, so unlinking cannot remove the authorization on GitHub's
+  side (ADR 0051, amendment 2026-10-25): the confirmation and the result point to GitHub's own
+  page for that. Inside the iOS/Android app linking happens in the browser (the web view cannot finish the
   round trip); unlinking works everywhere.
 -->
 <script lang="ts">
@@ -33,6 +35,11 @@
 
   type Link = components['schemas']['ExternalIdentityOut'];
 
+  /** Where a GitHub user removes an OAuth App's authorization (not the installation's settings). */
+  const GITHUB_APPLICATIONS = 'https://github.com/settings/applications';
+  const PLACE = '\u0000';
+  const revokeHint = $derived(m.github_revoke_hint({ place: PLACE }).split(PLACE));
+
   let enabled = $state(false);
   let links = $state<Link[] | null>(null);
   let loadProblem = $state<ApiProblem | null>(null);
@@ -45,6 +52,8 @@
   let notice = $state<string | null>(null);
   let confirming = $state(false);
   let working = $state(false);
+  /** Unlinked in this visit: the hint about GitHub's side stays after the toast. */
+  let unlinked = $state(false);
 
   const inApp = $derived(nativeShell.active);
 
@@ -82,6 +91,7 @@
     password = '';
     problem = null;
     notice = null;
+    unlinked = false;
   }
 
   async function startLink(event: SubmitEvent): Promise<void> {
@@ -114,6 +124,7 @@
       );
       toasts.push('ok', m.github_unlinked());
       confirming = false;
+      unlinked = true;
       await load();
     } catch (error) {
       const found = asProblem(error);
@@ -124,7 +135,15 @@
   }
 </script>
 
-{#if enabled || link}
+{#snippet revokeAtGitHub(testid: string)}
+  <p class="hint revoke" data-testid={testid}>
+    {revokeHint[0]}<a href={GITHUB_APPLICATIONS} target="_blank" rel="noopener noreferrer"
+      >{m.github_revoke_place()}</a
+    >{revokeHint[1]}
+  </p>
+{/snippet}
+
+{#if enabled || link || unlinked}
   <Panel label={m.github_title()} testid="github-panel">
     <p class="intro">{m.github_intro()}</p>
 
@@ -154,6 +173,7 @@
           {#if confirming}
             <span class="confirm" role="alert">
               <span>{m.github_unlink_confirm()}</span>
+              {@render revokeAtGitHub('github-unlink-revoke-hint')}
               <span class="row">
                 <Button
                   variant="danger"
@@ -177,6 +197,9 @@
       </div>
     {:else if links}
       <p class="empty" data-testid="github-not-linked">{m.github_not_linked()}</p>
+      {#if unlinked}
+        {@render revokeAtGitHub('github-revoke-hint')}
+      {/if}
     {/if}
 
     {#if notice}
@@ -343,6 +366,17 @@
   .add .hint,
   .add .row {
     margin-top: 0;
+  }
+
+  .confirm .revoke {
+    margin-top: 0;
+  }
+
+  .revoke a {
+    color: var(--md-color-ink);
+    font-weight: var(--md-weight-semibold);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   @media (min-width: 720px) {

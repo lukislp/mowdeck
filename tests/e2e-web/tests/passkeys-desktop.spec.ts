@@ -11,8 +11,8 @@
  * 4. The passkey offered in the username field's autofill (conditional UI) signs in; remove
  *    the passkey, a passkey login with it is refused.
  *
- * Every login counts against the per-address login limit (10 per minute, burst 20) that the
- * whole suite shares, so the test signs in no more often than it must.
+ * Every login counts against the per-address login limit; the test stack loosens it
+ * (docker-compose.e2e.yml), so the test need not wait for it to refill.
  */
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -142,7 +142,4 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
     page.getByText('Dieser Passkey wurde nicht akzeptiert.', { exact: false }),
   ).toBeVisible();
   csp.assertNone();
-  // The whole suite shares the per-address login limit (10 per minute, burst 20) and this test
-  // used 7 of it within seconds: let it refill before the next test registers and logs in.
-  await page.waitForTimeout(45_000);
 });

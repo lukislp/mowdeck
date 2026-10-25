@@ -26,8 +26,11 @@ services:
 
   # The whole Playwright suite registers and logs in its users from one address, which runs into
   # the per-address limit of Identity's login and registration routes (10 per minute, burst 20)
-  # once the suite grows. Test stacks only: a looser limit of the same middleware, so the
-  # specs never fail with 429 for each other. Production keeps docker-compose.yml's values.
+  # once the suite grows. Test stacks only: a looser limit of the same middleware and of
+  # Identity's own per-address limit behind it (the same 10 per minute, burst 20, applied
+  # in-process to logins, passkey and GitHub sign-ins, app hand-offs and token exchanges), so the
+  # specs never fail with 429 for each other and need not wait for it to refill. Production keeps
+  # the defaults of docker-compose.yml and Identity's settings.
   #
   # Sign in with GitHub (ADR 0051) against the fake GitHub below: the browser goes to its
   # authorization page through Traefik at the stack's own address, Identity calls its token and
@@ -38,6 +41,8 @@ services:
       - traefik.http.middlewares.identity-ratelimit.ratelimit.average=300
       - traefik.http.middlewares.identity-ratelimit.ratelimit.burst=100
     environment:
+      MOWDECK_IDENTITY_LOGIN_IP_PER_MINUTE: "300"
+      MOWDECK_IDENTITY_LOGIN_IP_BURST: "100"
       MOWDECK_IDENTITY_GITHUB_CLIENT_ID: e2e-github-client
       MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE: /run/secrets/github-e2e/client_secret
       MOWDECK_IDENTITY_GITHUB_AUTHORIZE_URL: ${IDENTITY_PUBLIC_URL:-http://localhost}/fake-github/login/oauth/authorize
