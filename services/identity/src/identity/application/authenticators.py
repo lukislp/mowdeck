@@ -3,8 +3,10 @@
 * :class:`CredentialAuthenticator`: credentials in the request (password, API token, passkey).
   :class:`ChallengeAuthenticator` is a credential authenticator that first hands out a
   challenge the credentials must answer (passkeys, ADR 0050).
-* :class:`RedirectAuthenticator`: a browser round trip to a provider (GitHub, OIDC). Phase 1
-  defines the interface and registers a GitHub stub behind a feature flag that is off.
+* :class:`RedirectAuthenticator`: a browser round trip to a provider. :class:`OAuthAuthenticator`
+  implements it for any OAuth 2 provider (authorization code flow with PKCE S256, single-use
+  state bound to the browser) on top of an ``OAuthClient`` port; GitHub is the first one
+  (:class:`GitHubAuthenticator`, ADR 0051), a generic OIDC client can follow with the same class.
 
 The :class:`AuthenticatorRegistry` holds the enabled plug-ins by name; the API looks them up,
 so a new method is a new class plus one registration.
@@ -13,26 +15,46 @@ so a new method is a new class plus one registration.
 import json
 import secrets
 from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID, uuid4
+
+from mowdeck_service_kit import get_logger
 
 from identity.application.ports import (
     CeremonyRejected,
     Clock,
+    ExternalProfile,
+    OAuthClient,
     PasskeyCeremonies,
     PasswordHasher,
+    ProviderRejected,
+    ProviderUnavailable,
     Store,
 )
-from identity.domain.credentials import normalize_username, parse_api_token, same_hash
+from identity.domain.credentials import (
+    new_oauth_state,
+    new_pkce_verifier,
+    normalize_username,
+    parse_api_token,
+    s256_challenge,
+    same_hash,
+    sha256_hex,
+    verifier_matches,
+)
 from identity.domain.models import (
     AccountStatus,
     CeremonyPurpose,
+    OAuthState,
+    RedirectPurpose,
     RelyingParty,
     Status,
     WebAuthnChallenge,
 )
+
+_log = get_logger("identity.authenticators")
 
 CHALLENGE_BYTES = 32
 """Random bytes of a WebAuthn challenge (the spec asks for at least 16)."""
@@ -79,18 +101,76 @@ class ChallengeAuthenticator(CredentialAuthenticator, Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class RedirectStart:
+    """Where to send the browser, and the secret it keeps until the provider sends it back.
+
+    ``browser_binding`` (the PKCE verifier) goes into an HttpOnly cookie; only its hash is
+    stored, so the round trip can be finished only in the browser that started it.
+    """
+
+    url: str
+    browser_binding: str = field(repr=False)
+    expires_in: int
+
+
+class RedirectFailure(StrEnum):
+    """Why a round trip ended without a result; the web app shows a message per code."""
+
+    CANCELLED = "cancelled"
+    """The user declined at the provider."""
+    EXPIRED = "expired"
+    """Unknown, used or expired state, or another browser: start again."""
+    DENIED = "denied"
+    """The provider account is not linked to an active user, or the code was refused."""
+    UNAVAILABLE = "unavailable"
+    """The provider failed or the installation's provider settings are wrong (see the log)."""
+
+
+@dataclass(frozen=True, slots=True)
+class RedirectCallback:
+    """What a provider's callback established.
+
+    ``user_id`` is the user who started a link, or the linked user of a successful login (and,
+    for a refused login of a known user, that user, for the audit log). ``reason`` is internal.
+    """
+
+    provider: str
+    purpose: RedirectPurpose | None = None
+    user_id: UUID | None = None
+    profile: ExternalProfile | None = None
+    return_query: str | None = None
+    identity_id: UUID | None = None
+    failure: RedirectFailure | None = None
+    reason: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        """The round trip succeeded."""
+        return self.failure is None
+
+
 @runtime_checkable
 class RedirectAuthenticator(Protocol):
-    """A login through a provider's web page (OAuth 2 / OIDC)."""
+    """A login (or the link of a provider account) through a provider's web page."""
 
     name: str
 
-    async def start(self, return_to: str) -> str:
-        """The provider URL to redirect the browser to."""
+    async def start(
+        self,
+        purpose: RedirectPurpose,
+        *,
+        user_id: UUID | None = None,
+        return_query: str | None = None,
+    ) -> RedirectStart:
+        """A new single-use round trip: the provider URL and the browser's secret."""
         ...
 
-    async def callback(self, params: Mapping[str, str]) -> AuthResult:
-        """Finish the login from the provider's callback parameters."""
+    async def callback(
+        self, params: Mapping[str, str], browser_binding: str | None
+    ) -> RedirectCallback:
+        """Finish the round trip from the provider's callback parameters; never raises for
+        anything the browser or the provider sent."""
         ...
 
 
@@ -255,18 +335,176 @@ class PasskeyAuthenticator:
         return AuthResult(True, found.id, self.name, credential_ref=ref)
 
 
-class GitHubAuthenticator:
-    """GitHub login (design section 3.3). Not implemented in Phase 1; off by default."""
+class OAuthAuthenticator:
+    """Login and account linking through an OAuth 2 provider (ADR 0051).
 
-    name = "github"
+    Authorization code flow with PKCE (S256). ``start`` stores a single-use round trip
+    (:class:`OAuthState`: the SHA-256 of the random ``state``, the S256 hash of the PKCE
+    verifier, the purpose and, for a link, the user) and hands the verifier to the browser as a
+    secret it keeps in a cookie. ``callback`` consumes the round trip whatever happens, requires
+    that same browser (the verifier must match), redeems the code with the verifier and reads
+    the provider's account id. A login then finds the user only through an explicit link
+    (``external_identities``: provider and the provider's stable account id); nothing is ever
+    matched by e-mail address, and an unknown account is refused, never registered.
+    """
 
-    async def start(self, return_to: str) -> str:
-        """Not available yet."""
-        raise NotImplementedError("GitHub login is planned for a later phase")
+    def __init__(
+        self,
+        client: OAuthClient,
+        store: Store,
+        clock: Clock,
+        *,
+        redirect_uri: str,
+        ttl: timedelta = timedelta(minutes=10),
+    ) -> None:
+        self.name = client.provider
+        self.client = client
+        self.store = store
+        self.clock = clock
+        self.redirect_uri = redirect_uri
+        self.ttl = ttl
 
-    async def callback(self, params: Mapping[str, str]) -> AuthResult:
-        """Not available yet."""
-        raise NotImplementedError("GitHub login is planned for a later phase")
+    async def start(
+        self,
+        purpose: RedirectPurpose,
+        *,
+        user_id: UUID | None = None,
+        return_query: str | None = None,
+    ) -> RedirectStart:
+        """A login (``return_query``: the sign-in page's query) or a link (``user_id``)."""
+        if (purpose is RedirectPurpose.LINK) != (user_id is not None):
+            msg = "a link needs the user, a login none"
+            raise ValueError(msg)
+        now = self.clock()
+        state, verifier = new_oauth_state(), new_pkce_verifier()
+        challenge = s256_challenge(verifier)
+        record = OAuthState(
+            id=uuid4(),
+            state_hash=sha256_hex(state),
+            provider=self.name,
+            purpose=purpose,
+            code_challenge=challenge,
+            created_at=now,
+            expires_at=now + self.ttl,
+            user_id=user_id,
+            return_query=return_query if purpose is RedirectPurpose.LOGIN else None,
+        )
+        async with self.store.transaction() as tx:
+            await tx.oauth_states.add(record)
+        url = self.client.authorization_url(
+            state=state, code_challenge=challenge, redirect_uri=self.redirect_uri
+        )
+        return RedirectStart(url, verifier, int(self.ttl.total_seconds()))
+
+    async def callback(
+        self, params: Mapping[str, str], browser_binding: str | None
+    ) -> RedirectCallback:
+        """``{state, code}`` or ``{state, error}`` from the provider; the browser's secret."""
+        state = params.get("state", "")
+        if not state or len(state) > 256:
+            return RedirectCallback(self.name, failure=RedirectFailure.EXPIRED, reason="no state")
+        now = self.clock()
+        async with self.store.transaction() as tx:
+            # Consumed whatever happens next: a round trip answers exactly one callback.
+            record = await tx.oauth_states.get(state_hash=sha256_hex(state), provider=self.name)
+            taken = await tx.oauth_states.delete(id=record.id) if record else 0
+        if record is None or taken != 1:
+            return RedirectCallback(
+                self.name, failure=RedirectFailure.EXPIRED, reason="unknown state"
+            )
+        if now >= record.expires_at:
+            return self._failed(record, RedirectFailure.EXPIRED, "expired state")
+        if not browser_binding or not verifier_matches(record.code_challenge, browser_binding):
+            return self._failed(record, RedirectFailure.EXPIRED, "other browser (no verifier)")
+        error = params.get("error", "")[:100]
+        if error == "access_denied":
+            return self._failed(record, RedirectFailure.CANCELLED, "declined at the provider")
+        if error:
+            _log.warning(
+                "the login provider answered with an error", provider=self.name, error=error
+            )
+            return self._failed(record, RedirectFailure.UNAVAILABLE, f"provider error {error}")
+        code = params.get("code", "")
+        if not code or len(code) > 512:
+            return self._failed(record, RedirectFailure.DENIED, "no code")
+        try:
+            profile = await self.client.profile(
+                code=code, code_verifier=browser_binding, redirect_uri=self.redirect_uri
+            )
+        except ProviderRejected as exc:
+            return self._failed(record, RedirectFailure.DENIED, f"code refused: {exc.reason}")
+        except ProviderUnavailable as exc:
+            _log.warning("the login provider failed", provider=self.name, reason=exc.reason)
+            return self._failed(record, RedirectFailure.UNAVAILABLE, f"unavailable: {exc.reason}")
+        if record.purpose is RedirectPurpose.LINK:
+            return RedirectCallback(
+                self.name, purpose=record.purpose, user_id=record.user_id, profile=profile
+            )
+        return await self._linked_user(record, profile, now)
+
+    def _failed(
+        self, record: OAuthState, failure: RedirectFailure, reason: str
+    ) -> RedirectCallback:
+        return RedirectCallback(
+            self.name,
+            purpose=record.purpose,
+            user_id=record.user_id,
+            return_query=record.return_query,
+            failure=failure,
+            reason=reason,
+        )
+
+    async def _linked_user(
+        self, record: OAuthState, profile: ExternalProfile, now: datetime
+    ) -> RedirectCallback:
+        """A login: the user the provider account is explicitly linked to, if active."""
+        async with self.store.transaction() as tx:
+            link = await tx.external_identities.get(provider=self.name, subject=profile.subject)
+            found = await tx.users.get(id=link.user_id) if link else None
+            if link is not None and found is not None and found.status is Status.ACTIVE:
+                link.last_used_at = now
+                if profile.display_name:
+                    link.display_name = profile.display_name
+                await tx.external_identities.update(link)
+        if link is None or found is None:
+            return RedirectCallback(
+                self.name,
+                purpose=record.purpose,
+                profile=profile,
+                return_query=record.return_query,
+                failure=RedirectFailure.DENIED,
+                reason="account not linked",
+            )
+        active = found.status is Status.ACTIVE
+        return RedirectCallback(
+            self.name,
+            purpose=record.purpose,
+            user_id=found.id,
+            profile=profile,
+            return_query=record.return_query,
+            identity_id=link.id,
+            failure=None if active else RedirectFailure.DENIED,
+            reason=None if active else "user disabled",
+        )
+
+
+class GitHubAuthenticator(OAuthAuthenticator):
+    """Sign in with GitHub (ADR 0051): the OAuth flow above with the GitHub client
+    (``adapters/github.py``, scope ``read:user``); the account is GitHub's numeric user id."""
+
+    def __init__(
+        self,
+        client: OAuthClient,
+        store: Store,
+        clock: Clock,
+        *,
+        redirect_uri: str,
+        ttl: timedelta = timedelta(minutes=10),
+    ) -> None:
+        if client.provider != "github":
+            msg = f"not a GitHub client: {client.provider!r}"
+            raise ValueError(msg)
+        super().__init__(client, store, clock, redirect_uri=redirect_uri, ttl=ttl)
 
 
 class AuthenticatorRegistry:
@@ -289,6 +527,10 @@ class AuthenticatorRegistry:
     def get(self, name: str) -> CredentialAuthenticator | None:
         """The credential authenticator ``name`` if enabled."""
         return self.credential.get(name)
+
+    def redirector(self, name: str) -> RedirectAuthenticator | None:
+        """The redirect authenticator ``name`` if enabled."""
+        return self.redirect.get(name)
 
     def challenger(self, name: str) -> ChallengeAuthenticator | None:
         """The challenge authenticator ``name`` if enabled."""

@@ -36,20 +36,38 @@ _ComposeLoader.add_constructor("!reset", _reset)
 
 def test_e2e_override_adds_the_marker_and_the_relay_with_test_hooks(repo_root: Path) -> None:
     """The e2e override adds the marker the suites check, enables the camera relay with its
-    test hooks and loosens Identity's login and registration rate limit (the whole suite runs
-    from one address); it changes no other service of the stack."""
+    test hooks, loosens Identity's login and registration rate limit (the whole suite runs
+    from one address) and points Identity's GitHub sign-in at a fake GitHub of its own; it
+    changes no other service of the stack."""
     compose_dir = _compose_dir(repo_root)
     base = yaml.safe_load((compose_dir / "docker-compose.yml").read_text("utf-8"))
     text = (compose_dir / "docker-compose.e2e.yml").read_text("utf-8")
     override = yaml.load(text, Loader=_ComposeLoader)  # noqa: S506 - a SafeLoader subclass
     assert set(override) == {"services"}
-    assert set(override["services"]) == {"e2e-marker", "camera-relay", "mediamtx", "identity"}
-    assert override["services"]["identity"] == {
-        "labels": [
-            "traefik.http.middlewares.identity-ratelimit.ratelimit.average=300",
-            "traefik.http.middlewares.identity-ratelimit.ratelimit.burst=100",
-        ]
+    assert set(override["services"]) == {
+        "e2e-marker",
+        "camera-relay",
+        "mediamtx",
+        "identity",
+        "fake-github",
     }
+    identity = override["services"]["identity"]
+    assert identity["labels"] == [
+        "traefik.http.middlewares.identity-ratelimit.ratelimit.average=300",
+        "traefik.http.middlewares.identity-ratelimit.ratelimit.burst=100",
+    ]
+    # GitHub sign-in (ADR 0051) only against the fake GitHub of the test stack.
+    assert set(identity) == {"labels", "environment", "volumes"}
+    assert identity["environment"]["MOWDECK_IDENTITY_GITHUB_TOKEN_URL"].startswith(
+        "http://fake-github:8000/"
+    )
+    assert identity["environment"]["MOWDECK_IDENTITY_GITHUB_API_URL"].startswith(
+        "http://fake-github:8000/"
+    )
+    assert "fake-github" not in base["services"]
+    base_env = base["services"]["identity"]["environment"]
+    assert base_env["MOWDECK_IDENTITY_GITHUB_CLIENT_ID"] == "${IDENTITY_GITHUB_CLIENT_ID:-}"
+    assert not any("_GITHUB_" in k and k.endswith("_URL") for k in base_env)
     # The regular stack keeps its production limit.
     identity_labels = base["services"]["identity"]["labels"]
     assert "traefik.http.middlewares.identity-ratelimit.ratelimit.average=10" in identity_labels

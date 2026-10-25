@@ -51,6 +51,19 @@ class IdentityConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class GitHubLogin:
+    """Settings of "Sign in with GitHub" (ADR 0051); only server side, never shown anywhere."""
+
+    client_id: str
+    client_secret: str = field(repr=False)
+    authorize_url: str
+    token_url: str
+    api_url: str
+    redirect_uri: str
+    """``<public URL>/api/v1/identity/oauth/github/callback``, registered in the OAuth App."""
+
+
+@dataclass(frozen=True, slots=True)
 class RequestContext:
     """Who acts (None before login), from which address, under which correlation id."""
 

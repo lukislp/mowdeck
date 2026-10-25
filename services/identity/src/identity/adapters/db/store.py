@@ -24,8 +24,10 @@ from identity.domain.models import (
     AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
+    ExternalIdentity,
     LoginAttempt,
     Membership,
+    OAuthState,
     Passkey,
     Role,
     RoleAssignment,
@@ -170,6 +172,8 @@ class SqlTx:
     webauthn_challenges: SqlTable[WebAuthnChallenge]
     app_login_codes: SqlTable[AppLoginCode]
     app_login_requests: SqlTable[AppLoginRequest]
+    external_identities: SqlTable[ExternalIdentity]
+    oauth_states: SqlTable[OAuthState]
 
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
@@ -190,6 +194,8 @@ class SqlTx:
             webauthn_challenges=SqlTable(conn, tables.webauthn_challenges, WebAuthnChallenge, "id"),
             app_login_codes=SqlTable(conn, tables.app_login_codes, AppLoginCode, "id"),
             app_login_requests=SqlTable(conn, tables.app_login_requests, AppLoginRequest, "id"),
+            external_identities=SqlTable(conn, tables.external_identities, ExternalIdentity, "id"),
+            oauth_states=SqlTable(conn, tables.oauth_states, OAuthState, "id"),
         )
 
 

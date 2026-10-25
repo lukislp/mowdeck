@@ -9,6 +9,9 @@
 * App login codes ``mda_<43 chars>`` (passkey login handed from the system browser to the native
   app) carry 256 random bits as well and are bound to a PKCE ``S256`` code challenge.
 * Passkey names: 1 to 64 printable characters.
+* OAuth round trips (ADR 0051): a random ``state`` (256 bits) and a PKCE verifier (384 bits);
+  the query of the sign-in page to return to keeps only ``next`` (a local path),
+  ``app_request`` and ``app_state`` (the app hand-off).
 """
 
 import base64
@@ -17,6 +20,7 @@ import hmac
 import re
 import secrets
 import unicodedata
+from urllib.parse import parse_qsl, urlencode
 from uuid import UUID
 
 from identity.domain.errors import InvalidInput
@@ -176,3 +180,51 @@ def validate_passkey_name(name: str) -> str:
         msg = f"passkey names have 1 to {MAX_PASSKEY_NAME_LENGTH} printable characters"
         raise InvalidInput(msg)
     return value
+
+
+MAX_RETURN_QUERY_LENGTH = 1024
+_APP_STATE = re.compile(r"[A-Za-z0-9_-]{1,128}")
+
+
+def new_oauth_state() -> str:
+    """A new ``state`` for an OAuth round trip (256 random bits)."""
+    return secrets.token_urlsafe(32)
+
+
+def new_pkce_verifier() -> str:
+    """A new PKCE code verifier (64 unreserved characters, 384 random bits; RFC 7636)."""
+    return secrets.token_urlsafe(48)
+
+
+def _local_path(value: str) -> bool:
+    r"""A path on this site: ``/x``, never ``//host`` or ``/\host`` (open redirects)."""
+    return (
+        value.startswith("/")
+        and not value.startswith(("//", "/\\"))
+        and "\\" not in value
+        and value.isprintable()
+        and len(value) <= 512
+    )
+
+
+def clean_return_query(raw: str | None) -> str | None:
+    """The query of the sign-in page to return to after a provider login, reduced to what that
+    page understands: ``next`` (a local path), ``app_request`` (a UUID) and ``app_state`` (the
+    app's random state). Anything else is dropped; None when nothing is left. The page itself
+    is fixed (``/login``), so a query can never send the browser to another site."""
+    if not raw:
+        return None
+    kept: list[tuple[str, str]] = []
+    for key, value in parse_qsl(raw.removeprefix("?")[:MAX_RETURN_QUERY_LENGTH]):
+        if any(k == key for k, _ in kept):
+            continue
+        if key == "next" and _local_path(value):
+            kept.append((key, value))
+        elif key == "app_request":
+            try:
+                kept.append((key, str(UUID(value))))
+            except ValueError:
+                continue
+        elif key == "app_state" and _APP_STATE.fullmatch(value):
+            kept.append((key, value))
+    return urlencode(kept) if kept else None

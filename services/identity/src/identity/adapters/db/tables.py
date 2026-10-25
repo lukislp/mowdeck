@@ -271,6 +271,34 @@ app_login_codes = Table(
     Column("source_session", Uuid),
 )
 
+external_identities = Table(
+    "external_identities",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("provider", String(32), nullable=False),
+    Column("subject", String(255), nullable=False),
+    Column("display_name", String(255)),
+    Column("linked_at", TS, nullable=False),
+    Column("last_used_at", TS),
+    UniqueConstraint("provider", "subject", name="uq_external_identities_provider_subject"),
+    UniqueConstraint("user_id", "provider", name="uq_external_identities_user_id_provider"),
+)
+
+oauth_states = Table(
+    "oauth_states",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("state_hash", String(64), nullable=False, unique=True),
+    Column("provider", String(32), nullable=False),
+    Column("purpose", String(16), nullable=False),
+    Column("code_challenge", String(64), nullable=False),
+    Column("created_at", TS, nullable=False),
+    Column("expires_at", TS, nullable=False, index=True),
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True),
+    Column("return_query", String(1024)),
+)
+
 # Schema only in Phase 1 (design section 5): support access and invitations.
 support_grants = Table(
     "support_grants",

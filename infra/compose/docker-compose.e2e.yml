@@ -28,10 +28,47 @@ services:
   # the per-address limit of Identity's login and registration routes (10 per minute, burst 20)
   # once the suite grows. Test stacks only: a looser limit of the same middleware, so the
   # specs never fail with 429 for each other. Production keeps docker-compose.yml's values.
+  #
+  # Sign in with GitHub (ADR 0051) against the fake GitHub below: the browser goes to its
+  # authorization page through Traefik at the stack's own address, Identity calls its token and
+  # API endpoints inside the network. The client secret is a test value from a file, as in
+  # production (tests/e2e-web/fake-github/client_secret).
   identity:
     labels:
       - traefik.http.middlewares.identity-ratelimit.ratelimit.average=300
       - traefik.http.middlewares.identity-ratelimit.ratelimit.burst=100
+    environment:
+      MOWDECK_IDENTITY_GITHUB_CLIENT_ID: e2e-github-client
+      MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE: /run/secrets/github-e2e/client_secret
+      MOWDECK_IDENTITY_GITHUB_AUTHORIZE_URL: ${IDENTITY_PUBLIC_URL:-http://localhost}/fake-github/login/oauth/authorize
+      MOWDECK_IDENTITY_GITHUB_TOKEN_URL: http://fake-github:8000/fake-github/login/oauth/access_token
+      MOWDECK_IDENTITY_GITHUB_API_URL: http://fake-github:8000/fake-github/api
+    volumes:
+      - ../../tests/e2e-web/fake-github:/run/secrets/github-e2e:ro
+
+  # A fake GitHub (OAuth App endpoints and GET /user; tests/e2e-web/fake-github/fake_github.py,
+  # standard library only) in the identity image, which the stack builds anyway.
+  fake-github:
+    image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/identity:${MOWDECK_VERSION:-dev}
+    pull_policy: never
+    command: ["python", "/fake/fake_github.py"]
+    read_only: true
+    environment:
+      FAKE_GITHUB_CLIENT_ID: e2e-github-client
+      FAKE_GITHUB_CLIENT_SECRET_FILE: /fake/client_secret
+    volumes:
+      - ../../tests/e2e-web/fake-github:/fake:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/fake-github/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.fake-github.rule=PathPrefix(`/fake-github`)
+      - traefik.http.routers.fake-github.entrypoints=web
+      - traefik.http.services.fake-github.loadbalancer.server.port=8000
+    networks: [mowdeck]
 
   # The camera relay and its media server run in every test stack (they are the "relay"
   # profile otherwise), with the test hooks of the relay (POST /internal/v1/test/freeze pauses

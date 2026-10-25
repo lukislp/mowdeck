@@ -12,8 +12,8 @@ from mowdeck_auth import DEFAULT_AUDIENCE, DEFAULT_ISSUER
 from mowdeck_service_kit import ServiceSettings, get_logger
 from pydantic import Field, SecretStr
 
-from identity.application.context import IdentityConfig, RegistrationMode
-from identity.domain.models import RelyingParty
+from identity.application.context import GitHubLogin, IdentityConfig, RegistrationMode
+from identity.domain.models import RelyingParty, oauth_callback_url
 
 _log = get_logger("identity.settings")
 
@@ -99,9 +99,6 @@ class Settings(ServiceSettings):
     identity_refresh_cookie_secure: bool = True
     """Send the refresh cookie only over HTTPS. Disable only for plain HTTP development."""
 
-    identity_github_login: bool = False
-    """Feature flag of the GitHub login (not implemented in Phase 1; must stay off)."""
-
     identity_public_url: str = ""
     """The address users open MowDeck at, e.g. ``https://mowdeck.example.org``. Passkeys are
     bound to it (WebAuthn relying party: its host is the RP ID, its origin the only accepted
@@ -114,6 +111,24 @@ class Settings(ServiceSettings):
 
     identity_passkey_rp_name: str = Field(default="MowDeck", max_length=64)
     """Name of the relying party that authenticators show next to the passkey."""
+
+    identity_github_client_id: str = Field(default="", max_length=100)
+    """Client ID of the GitHub OAuth App for "Sign in with GitHub" (ADR 0051). Empty: GitHub
+    login is off. Needs the client secret and ``MOWDECK_IDENTITY_PUBLIC_URL`` (the callback is
+    ``<public URL>/api/v1/identity/oauth/github/callback``)."""
+
+    identity_github_client_secret: SecretStr | None = None
+    """Client secret of that OAuth App; give it as ``MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE``
+    (a Docker or Kubernetes secret). Never in the database, never shown in the web app."""
+
+    identity_github_authorize_url: str = "https://github.com/login/oauth/authorize"
+    """GitHub's authorization page (another value only for GitHub Enterprise Server or tests)."""
+
+    identity_github_token_url: str = "https://github.com/login/oauth/access_token"  # noqa: S105
+    """GitHub's token endpoint (another value only for GitHub Enterprise Server or tests)."""
+
+    identity_github_api_url: str = "https://api.github.com"
+    """GitHub's REST API (``https://<host>/api/v3`` for GitHub Enterprise Server)."""
 
     identity_maintenance_seconds: float = Field(default=60, ge=1)
     """Interval of the maintenance loop (key rotation, key reload, attempt purge)."""
@@ -154,6 +169,38 @@ class Settings(ServiceSettings):
                 "passkeys are off: MOWDECK_IDENTITY_PUBLIC_URL is not usable", reason=str(exc)
             )
             return None
+
+    def github_login(self) -> GitHubLogin | None:
+        """The GitHub login settings, or None (off). Logged once at startup: on with the callback
+        URL to register, or why it is off; a wrong value never stops the service."""
+        client_id = self.identity_github_client_id.strip()
+        secret = self.identity_github_client_secret
+        secret_value = secret.get_secret_value().strip() if secret is not None else ""
+        if not client_id and not secret_value:
+            return None
+        problem = None
+        if not client_id:
+            problem = "MOWDECK_IDENTITY_GITHUB_CLIENT_ID is not set"
+        elif not secret_value:
+            problem = "the client secret (MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE) is not set"
+        callback = ""
+        if problem is None:
+            try:
+                callback = oauth_callback_url(self.identity_public_url, "github")
+            except ValueError as exc:
+                problem = str(exc)
+        if problem is not None:
+            _log.error("GitHub login is off: the configuration is incomplete", reason=problem)
+            return None
+        _log.info("GitHub login is on", callback_url=callback)
+        return GitHubLogin(
+            client_id=client_id,
+            client_secret=secret_value,
+            authorize_url=self.identity_github_authorize_url,
+            token_url=self.identity_github_token_url,
+            api_url=self.identity_github_api_url,
+            redirect_uri=callback,
+        )
 
     @property
     def module_urls(self) -> list[str]:

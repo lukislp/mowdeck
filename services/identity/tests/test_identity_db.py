@@ -23,6 +23,8 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from github_support import SETTINGS as GITHUB
+from github_support import FakeGitHub, GitHubAccount
 from identity_support import PASSWORD, harness
 from mowdeck_service_kit.db import async_database_url
 from passkey_support import SoftAuthenticator
@@ -41,7 +43,10 @@ from identity.domain.models import (
     Account,
     AccountStatus,
     AuditEntry,
+    ExternalIdentity,
     KeyStatus,
+    OAuthState,
+    RedirectPurpose,
     SigningKeyRecord,
     Status,
     User,
@@ -380,3 +385,81 @@ async def test_passkeys_and_app_handoff_on_postgres(monkeypatch: pytest.MonkeyPa
     assert stored.sign_count == 2 and stored.transports == ["internal", "hybrid"]
     assert listed.json()[0]["last_used_at"] is not None
     assert leftovers == 0
+
+
+@needs_db
+async def test_github_links_and_round_trips_on_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0051: the unique constraints, the cascade from users, a whole link and sign-in."""
+    gh = FakeGitHub()
+    async with (
+        store_of("postgres", monkeypatch) as store,
+        harness(store=store, github_transport=gh.transport, **GITHUB) as h,
+    ):
+        lukas = await h.register("lukas")
+        anna_id, _ = await h.subuser(lukas, "anna")
+        started = await h.client.post(
+            "/api/v1/identity/me/external-identities/github/link",
+            headers=lukas.headers,
+            json={"password": PASSWORD},
+        )
+        octo = GitHubAccount(id=583231, login="octocat")
+        linked = await h.client.get(
+            "/api/v1/identity/oauth/github/callback",
+            params=gh.authorize(started.json()["authorize_url"], octo),
+        )
+        started = await h.client.post("/api/v1/identity/oauth/github/start", json={})
+        login = await h.client.get(
+            "/api/v1/identity/oauth/github/callback",
+            params=gh.authorize(started.json()["authorize_url"], octo),
+        )
+        async with store.transaction() as tx:
+            [link] = await tx.external_identities.find(user_id=lukas.user_id)
+            with pytest.raises(ConflictError):  # one user per GitHub account
+                await tx.external_identities.add(
+                    ExternalIdentity(uuid4(), anna_id, "github", link.subject, NOW)
+                )
+            with pytest.raises(ConflictError):  # one GitHub account per user
+                await tx.external_identities.add(
+                    ExternalIdentity(uuid4(), lukas.user_id, "github", "42", NOW)
+                )
+            await tx.external_identities.add(ExternalIdentity(uuid4(), anna_id, "github", "7", NOW))
+            await tx.oauth_states.add(
+                OAuthState(
+                    uuid4(),
+                    "a" * 64,
+                    "github",
+                    RedirectPurpose.LINK,
+                    "c" * 43,
+                    NOW,
+                    NOW,
+                    user_id=anna_id,
+                )
+            )
+            leftovers = await tx.oauth_states.count()
+        removed = await h.client.delete(lukas.url(f"/users/{anna_id}"), headers=lukas.headers)
+        async with store.transaction() as tx:
+            remaining = [x.subject for x in await tx.external_identities.find()]
+            states = await tx.oauth_states.count()
+    assert linked.headers["location"] == "/settings?linked=github#profile"
+    assert login.headers["location"] == "/login?signed_in_with=github"
+    assert link.subject == "583231" and link.display_name == "octocat"
+    assert link.last_used_at is not None
+    assert leftovers == 1  # the finished round trips are gone
+    assert removed.status_code == 204
+    assert remaining == ["583231"] and states == 0
+
+
+@needs_db
+async def test_migration_0004_down_keeps_passkeys(monkeypatch: pytest.MonkeyPatch) -> None:
+    async with temporary_database() as url:
+        await migrate(url, monkeypatch)
+        await migrate(url, monkeypatch, "0003", down=True)
+        engine = create_async_engine(async_database_url(url))
+        try:
+            tables = await table_names(engine)
+            assert "passkeys" in tables
+            assert not {"external_identities", "oauth_states"} & tables
+            await migrate(url, monkeypatch)
+            assert {"external_identities", "oauth_states"} <= await table_names(engine)
+        finally:
+            await engine.dispose()

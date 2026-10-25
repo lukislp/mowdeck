@@ -59,9 +59,10 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
 }) => {
   const csp = watchCsp(page);
   const authenticator = await virtualAuthenticator(page);
-  // The stack has passkeys on (IDENTITY_PUBLIC_URL in stack.env / scripts/stack.mjs).
+  // The stack has passkeys on (IDENTITY_PUBLIC_URL in stack.env / scripts/stack.mjs), and
+  // GitHub against its fake GitHub (docker-compose.e2e.yml).
   const methods = await request.get('/api/v1/identity/login-methods');
-  expect(await methods.json()).toEqual({ password: true, passkey: true });
+  expect(await methods.json()).toEqual({ password: true, passkey: true, github: true });
   // Registered without the API login of registerByApi: every login counts (see below).
   const owner = actor('passkey');
   const registered = await request.post('/api/v1/identity/register', {

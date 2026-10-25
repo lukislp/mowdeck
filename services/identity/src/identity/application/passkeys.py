@@ -24,20 +24,18 @@ from mowdeck_contracts.v1 import Principal, PrincipalKind
 from identity.application.authenticators import CHALLENGE_BYTES
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
-from identity.application.ports import CeremonyRejected, Ge, KnownCredential, PasskeyCeremonies
+from identity.application.ports import CeremonyRejected, KnownCredential, PasskeyCeremonies
 from identity.application.ratelimit import TokenBucketLimiter
+from identity.application.reauth import Reauthenticator
 from identity.domain.credentials import validate_passkey_name
 from identity.domain.errors import (
-    AuthenticationFailed,
     ConflictError,
     ForbiddenError,
     InvalidInput,
     NotFoundError,
-    RateLimited,
 )
 from identity.domain.models import (
     CeremonyPurpose,
-    LoginAttempt,
     Passkey,
     RelyingParty,
     User,
@@ -67,8 +65,8 @@ class PasskeyService:
     ) -> None:
         self.deps = deps
         self.ceremonies = ceremonies
-        self.ip_limiter = ip_limiter
-        """The login limit per client IP: the password check before a registration is one."""
+        self.reauth = Reauthenticator(deps, ip_limiter)
+        """The password check before a registration (login limits of the user and address)."""
 
     @property
     def enabled(self) -> bool:
@@ -104,20 +102,9 @@ class PasskeyService:
         """Check the password again, then hand out creation options for the caller."""
         rp, ceremonies = self._rp()
         principal = self._user(ctx)
-        if self.ip_limiter is not None:
-            wait = self.ip_limiter.take(ctx.ip or "unknown")
-            if wait > 0:
-                msg = "too many attempts from this address; try again later"
-                raise RateLimited(msg, int(wait) + 1)
+        found = await self.reauth.check(ctx, principal, password, action="passkey")
         async with self.deps.store.transaction() as tx:
-            found = await tx.users.get(id=principal.subject)
             known = await tx.passkeys.find(user_id=principal.subject)
-        if found is None or found.password_hash is None:
-            raise AuthenticationFailed("no password set")
-        await self._check_throttle(found)
-        if not await self.deps.hasher.verify(found.password_hash, password):
-            await self._reauth_failed(ctx, found, principal)
-            raise AuthenticationFailed("wrong password for passkey registration")
         if len(known) >= MAX_PASSKEYS_PER_USER:
             msg = f"at most {MAX_PASSKEYS_PER_USER} passkeys per user"
             raise ConflictError(msg)
@@ -276,33 +263,4 @@ class PasskeyService:
                 account_id=account_id,
                 target=("user", user_id),
                 details={"passkey": str(passkey.id), "name": passkey.name, "by_admin": admin},
-            )
-
-    # --- helpers --------------------------------------------------------------------------------
-
-    async def _check_throttle(self, found: User) -> None:
-        """The username throttle of the password login applies to the re-authentication too."""
-        config = self.deps.config
-        since = self.deps.clock() - config.login_failure_window
-        async with self.deps.store.transaction() as tx:
-            failures = await tx.login_attempts.count(
-                username_norm=found.username_norm, success=False, at=Ge(since)
-            )
-        if failures >= config.login_max_failures:
-            msg = "too many failed attempts for this user; try again later"
-            raise RateLimited(msg, int(config.login_failure_window.total_seconds()))
-
-    async def _reauth_failed(self, ctx: RequestContext, found: User, principal: Principal) -> None:
-        """A wrong password before a registration counts like a failed login of the user."""
-        now = self.deps.clock()
-        async with self.deps.uow() as work:
-            await work.tx.login_attempts.add(
-                LoginAttempt(uuid4(), now, found.username_norm, False, ctx.ip, "passkey reauth")
-            )
-            await work.audit(
-                ctx,
-                "passkey.reauth_failed",
-                account_id=principal.account_id,
-                target=("user", found.id),
-                outcome="failure",
             )

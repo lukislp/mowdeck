@@ -255,6 +255,14 @@ services:
       # Passkeys (ADR 0050): the address users open MowDeck at; empty turns passkeys off.
       MOWDECK_IDENTITY_PUBLIC_URL: ${IDENTITY_PUBLIC_URL:-}
       MOWDECK_IDENTITY_PASSKEY_RP_ID: ${IDENTITY_PASSKEY_RP_ID:-}
+      # Sign in with GitHub (ADR 0051), off while the client id is empty. The client secret is a
+      # file in infra/compose/secrets/github/ (git-ignored, mounted below), e.g.
+      # IDENTITY_GITHUB_CLIENT_SECRET_FILE=/run/secrets/github/client_secret; needs
+      # IDENTITY_PUBLIC_URL (the callback URL is built from it). Never in the database or the UI.
+      MOWDECK_IDENTITY_GITHUB_CLIENT_ID: ${IDENTITY_GITHUB_CLIENT_ID:-}
+      MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE: ${IDENTITY_GITHUB_CLIENT_SECRET_FILE:-}
+    volumes:
+      - ./secrets/github:/run/secrets/github:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.identity.rule=PathPrefix(`/api/v1/identity`)
@@ -262,7 +270,8 @@ services:
       - traefik.http.routers.identity.service=identity
       # Login (password, passkey, the app's hand-off code), registration and token exchange:
       # rate limited per client IP.
-      - traefik.http.routers.identity-auth.rule=Path(`/api/v1/identity/session`) || Path(`/api/v1/identity/register`) || Path(`/api/v1/identity/token`) || Path(`/api/v1/identity/passkeys/session`) || Path(`/api/v1/identity/app-login/session`)
+      # GitHub (ADR 0051): the callback finishes a login, the link start checks the password.
+      - traefik.http.routers.identity-auth.rule=Path(`/api/v1/identity/session`) || Path(`/api/v1/identity/register`) || Path(`/api/v1/identity/token`) || Path(`/api/v1/identity/passkeys/session`) || Path(`/api/v1/identity/app-login/session`) || Path(`/api/v1/identity/oauth/github/callback`) || Path(`/api/v1/identity/me/external-identities/github/link`)
       - traefik.http.routers.identity-auth.entrypoints=web
       - traefik.http.routers.identity-auth.priority=100
       - traefik.http.routers.identity-auth.middlewares=identity-ratelimit
@@ -282,8 +291,9 @@ services:
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.burst=30
       # A passkey challenge and the app's sign-in request check nothing, and every sign-in page
       # asks for a challenge (the autofill offer): the looser session limit; the answers
-      # (/passkeys/session, /app-login/session) have the login limit.
-      - traefik.http.routers.identity-passkey-challenge.rule=Path(`/api/v1/identity/passkeys/challenge`) || Path(`/api/v1/identity/app-login/start`)
+      # (/passkeys/session, /app-login/session) have the login limit. So does the start of a
+      # GitHub sign-in (it only hands out GitHub's address); its callback has the login limit.
+      - traefik.http.routers.identity-passkey-challenge.rule=Path(`/api/v1/identity/passkeys/challenge`) || Path(`/api/v1/identity/app-login/start`) || Path(`/api/v1/identity/oauth/github/start`)
       - traefik.http.routers.identity-passkey-challenge.entrypoints=web
       - traefik.http.routers.identity-passkey-challenge.priority=101
       - traefik.http.routers.identity-passkey-challenge.middlewares=identity-session-ratelimit

@@ -1,5 +1,6 @@
 """All use cases of Identity, wired once (``main``) and shared by the API and the CLI."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -12,13 +13,15 @@ from identity.application.authenticators import (
     ApiTokenAuthenticator,
     AuthenticatorRegistry,
     GitHubAuthenticator,
+    OAuthAuthenticator,
     PasskeyAuthenticator,
     PasswordAuthenticator,
 )
 from identity.application.deps import Deps
+from identity.application.external import ExternalIdentityService
 from identity.application.passkeys import PasskeyService
 from identity.application.platform import PlatformService
-from identity.application.ports import PasskeyCeremonies
+from identity.application.ports import OAuthClient, PasskeyCeremonies
 from identity.application.ratelimit import TokenBucketLimiter
 from identity.application.roles import RoleService
 from identity.application.sessions import SessionService
@@ -40,6 +43,7 @@ class Services:
     audit: AuditService = field(init=False)
     platform: PlatformService = field(init=False)
     passkeys: PasskeyService = field(init=False)
+    external: ExternalIdentityService = field(init=False)
     ip_limiter: TokenBucketLimiter | None = None
     ceremonies: PasskeyCeremonies | None = None
 
@@ -53,6 +57,7 @@ class Services:
         self.audit = AuditService(self.deps.store)
         self.platform = PlatformService(self.deps)
         self.passkeys = PasskeyService(self.deps, self.ceremonies, limiter)
+        self.external = ExternalIdentityService(self.deps, self.sessions, limiter)
 
 
 def build_services(
@@ -62,10 +67,13 @@ def build_services(
     audience: str,
     ip_per_minute: float = 10,
     ip_burst: int = 20,
-    github_login: bool = False,
     ceremonies: PasskeyCeremonies | None = None,
+    oauth: Sequence[tuple[OAuthClient, str]] = (),
 ) -> Services:
-    """Wire the use cases: token issuer on the active key, authenticators, limiter."""
+    """Wire the use cases: token issuer on the active key, authenticators, limiter.
+
+    ``oauth``: the enabled login providers, each as its client and its callback URL.
+    """
     issuer = TokenIssuer(
         deps.keys.active_key,
         issuer=issuer_name,
@@ -83,8 +91,9 @@ def build_services(
                 deps.store, deps.clock, ceremonies, rp, deps.config.webauthn_timeout
             )
         )
-    if github_login:
-        registry.register(GitHubAuthenticator())
+    for client, redirect_uri in oauth:
+        kind = GitHubAuthenticator if client.provider == "github" else OAuthAuthenticator
+        registry.register(kind(client, deps.store, deps.clock, redirect_uri=redirect_uri))
     return Services(
         deps,
         issuer,

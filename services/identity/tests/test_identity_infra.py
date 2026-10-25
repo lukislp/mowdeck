@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from identity import cli
 from identity.adapters.bus.publisher import BusEventPublisher
 from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
+from identity.adapters.github import GitHubOAuthClient
 from identity.adapters.memory import MemoryStore
 from identity.adapters.modules import HttpModuleSource
 from identity.application.authenticators import AuthenticatorRegistry, GitHubAuthenticator
@@ -262,22 +263,22 @@ async def test_event_publisher_without_bus_and_with_a_failing_bus() -> None:
     assert bus.published[0].subject == "event.identity.user.created"
 
 
-def test_authenticator_registry_and_github_stub() -> None:
+def test_authenticator_registry() -> None:
     registry = AuthenticatorRegistry()
-    github = GitHubAuthenticator()
+    client = GitHubOAuthClient(client_id="id", client_secret="secret")  # noqa: S106 - test value
+    github = GitHubAuthenticator(
+        client, MemoryStore(), MutableClock(), redirect_uri="https://x.org/cb"
+    )
     registry.register(github)
     assert registry.names == ["github"]
     assert registry.get("github") is None  # not a credential authenticator
+    assert registry.redirector("github") is github
     with pytest.raises(TypeError):
         registry.register(object())
-    with pytest.raises(NotImplementedError):
-        asyncio.run(github.start("/"))
-    with pytest.raises(NotImplementedError):
-        asyncio.run(github.callback({}))
 
 
 async def test_disabled_password_login_and_account_choice() -> None:
-    async with harness(identity_github_login=True) as h:
+    async with harness() as h:
         lukas = await h.register("lukas")
         bob = await h.register("bob")
         async with h.store.transaction() as tx:
@@ -290,7 +291,7 @@ async def test_disabled_password_login_and_account_choice() -> None:
             f"{API}/session",
             json={"username": "bob", "password": PASSWORD, "account_id": str(uuid4())},
         )
-        assert "github" in h.app.state.identity.authenticators.names
+        assert "github" not in h.app.state.identity.authenticators.names
         h.app.state.identity.authenticators.credential.pop("password")
         h.app.state.identity.authenticators.credential.pop("api_token")
         disabled = await h.client.post(

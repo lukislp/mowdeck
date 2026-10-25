@@ -7,6 +7,7 @@ loads the keys and the catalogue and returns the wired use cases.
 
 from dataclasses import dataclass, field
 
+import httpx
 from mowdeck_authz import (
     Authorizer,
     AuthzSettings,
@@ -25,13 +26,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from identity.adapters.bus.publisher import BusEventPublisher
 from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
 from identity.adapters.db.store import SqlStore
+from identity.adapters.github import GitHubOAuthClient
 from identity.adapters.modules import HttpModuleSource
 from identity.adapters.webauthn import PyWebAuthnCeremonies
 from identity.application.access import AccessChecker
 from identity.application.catalogue import CatalogueService
 from identity.application.deps import Deps
 from identity.application.keys import KeyManager
-from identity.application.ports import Clock, ModuleSource, PasswordHasher, Store
+from identity.application.ports import Clock, ModuleSource, OAuthClient, PasswordHasher, Store
 from identity.application.services import Services, build_services
 from identity.application.sync import AuthzSync
 from identity.application.work import UnitOfWork
@@ -59,6 +61,8 @@ class Runtime:
     hasher: PasswordHasher | None = None
     clock: Clock = utc_now
     entitlements: Entitlements | None = None
+    github_transport: httpx.AsyncBaseTransport | None = None
+    """Tests: a fake GitHub (``httpx.MockTransport``) behind the configured endpoints."""
     engine: AsyncEngine | None = field(default=None, init=False)
     connection: FgaConnection | None = field(default=None, init=False)
     keys: KeyManager = field(init=False)
@@ -125,10 +129,25 @@ class Runtime:
             audience=self.settings.identity_audience,
             ip_per_minute=self.settings.identity_login_ip_per_minute,
             ip_burst=self.settings.identity_login_ip_burst,
-            github_login=self.settings.identity_github_login,
             ceremonies=PyWebAuthnCeremonies(),
+            oauth=self.oauth_clients(),
         )
         return self.services
+
+    def oauth_clients(self) -> list[tuple[OAuthClient, str]]:
+        """The configured login providers with their callback URLs (ADR 0051)."""
+        github = self.settings.github_login()
+        if github is None:
+            return []
+        client = GitHubOAuthClient(
+            client_id=github.client_id,
+            client_secret=github.client_secret,
+            authorize_url=github.authorize_url,
+            token_url=github.token_url,
+            api_url=github.api_url,
+            transport=self.github_transport,
+        )
+        return [(client, github.redirect_uri)]
 
     async def close(self) -> None:
         """Close OpenFGA and the database."""
