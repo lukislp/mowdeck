@@ -12,6 +12,7 @@ export type NativePlatform = 'ios' | 'android';
 
 interface PluginHeader {
   name: string;
+  methods?: readonly { name: string }[];
 }
 
 /** The part of the injected `window.Capacitor` the web app uses. */
@@ -38,6 +39,8 @@ export interface NativePlugin {
 export interface NativeBridge {
   platform: NativePlatform;
   has(plugin: string): boolean;
+  /** The shell's plugin has this method (newer app builds add methods). */
+  hasMethod(plugin: string, method: string): boolean;
   plugin(name: string): NativePlugin;
 }
 
@@ -52,6 +55,10 @@ export function nativeBridge(scope: unknown = globalThis): NativeBridge | null {
   return {
     platform,
     has: (name) => (cap.PluginHeaders ?? []).some((header) => header.name === name),
+    hasMethod: (name, method) =>
+      (cap.PluginHeaders ?? []).some(
+        (header) => header.name === name && (header.methods ?? []).some((m) => m.name === method),
+      ),
     plugin: (name) => ({
       call: <T>(method: string, options?: object) =>
         nativePromise(name, method, options ?? {}) as Promise<T>,

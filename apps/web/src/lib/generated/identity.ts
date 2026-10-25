@@ -395,6 +395,46 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/accounts/{account_id}/users/{user_id}/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List User Passkeys
+         * @description Passkeys of a sub-user of this account (persons manage their own: 403).
+         */
+        get: operations["list_user_passkeys_api_v1_identity_accounts__account_id__users__user_id__passkeys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/accounts/{account_id}/users/{user_id}/passkeys/{passkey_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove User Passkey
+         * @description Remove a passkey of a sub-user of this account (its password stays).
+         */
+        delete: operations["remove_user_passkey_api_v1_identity_accounts__account_id__users__user_id__passkeys__passkey_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/accounts/{account_id}/users/{user_id}/password": {
         parameters: {
             query?: never;
@@ -415,6 +455,91 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/app-login/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * App Login Code
+         * @description Native app hand-off (ADR 0050), browser side: exchange the caller's fresh login session
+         *     (any login method, at most a few minutes old) for a one-time code bound to the app's
+         *     sign-in request and its PKCE challenge (403 for an unknown, used or expired request). The
+         *     browser session ends; the page sends the code to the app's URL scheme.
+         */
+        post: operations["app_login_code_api_v1_identity_app_login_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/app-login/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * App Login Session
+         * @description Native app hand-off, app side: the one-time code and the PKCE verifier give the app a
+         *     normal session (the same tokens and cookie as ``POST /session``). The code is single use.
+         */
+        post: operations["app_login_session_api_v1_identity_app_login_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/app-login/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * App Login Start
+         * @description Native app hand-off (ADR 0050), first step in the app: register the S256 hash of the
+         *     PKCE verifier; the sign-in page in the system browser gets only the request id.
+         */
+        post: operations["app_login_start_api_v1_identity_app_login_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/login-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Login Methods
+         * @description Which login methods the installation offers (public; the login page asks).
+         */
+        get: operations["login_methods_api_v1_identity_login_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/me": {
         parameters: {
             query?: never;
@@ -429,6 +554,75 @@ export type paths = {
         get: operations["me_api_v1_identity_me_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Passkeys
+         * @description The caller's passkeys, newest first.
+         */
+        get: operations["my_passkeys_api_v1_identity_me_passkeys_get"];
+        put?: never;
+        /**
+         * Add Passkey
+         * @description Finish adding a passkey (audited as ``passkey.added``).
+         */
+        post: operations["add_passkey_api_v1_identity_me_passkeys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/passkeys/{passkey_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Passkey
+         * @description Remove one of the caller's passkeys; the password always stays.
+         */
+        delete: operations["remove_passkey_api_v1_identity_me_passkeys__passkey_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename Passkey
+         * @description Rename one of the caller's passkeys.
+         */
+        patch: operations["rename_passkey_api_v1_identity_me_passkeys__passkey_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/identity/me/passkeys/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Passkey Registration Options
+         * @description Start adding a passkey: the current password again, then options for
+         *     ``navigator.credentials.create()`` (discoverable, user verification required).
+         */
+        post: operations["passkey_registration_options_api_v1_identity_me_passkeys_options_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -492,6 +686,47 @@ export type paths = {
         get: operations["my_platform_api_v1_identity_me_platform_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/passkeys/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Passkey Challenge
+         * @description Start a passwordless login: options for ``navigator.credentials.get()`` with user
+         *     verification required and no ``allowCredentials`` (discoverable credentials).
+         */
+        post: operations["passkey_challenge_api_v1_identity_passkeys_challenge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/passkeys/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Passkey Login
+         * @description Finish a passwordless login: the same tokens and cookie as ``POST /session``.
+         */
+        post: operations["passkey_login_api_v1_identity_passkeys_session_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -788,6 +1023,62 @@ export type components = {
             ids: string[];
         };
         /**
+         * AppCodeIn
+         * @description ``POST /app-login/code``: hand the fresh browser login to the native app.
+         */
+        AppCodeIn: {
+            /**
+             * Request Id
+             * Format: uuid
+             * @description The app's sign-in request (from /app-login/start)
+             */
+            request_id: string;
+        };
+        /**
+         * AppCodeOut
+         * @description A one-time code for the native app (redeemed with the verifier, valid for seconds).
+         */
+        AppCodeOut: {
+            /** Code */
+            code: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
+         * AppLoginStartIn
+         * @description ``POST /app-login/start``: the native app registers its PKCE challenge.
+         */
+        AppLoginStartIn: {
+            /**
+             * Code Challenge
+             * @description PKCE S256 challenge of the app: BASE64URL(SHA256(code_verifier))
+             */
+            code_challenge: string;
+        };
+        /**
+         * AppLoginStartOut
+         * @description The app's sign-in request: its id goes into the sign-in page's address.
+         */
+        AppLoginStartOut: {
+            /** Expires In */
+            expires_in: number;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /**
+         * AppSessionIn
+         * @description ``POST /app-login/session``: the app redeems its code with the PKCE verifier.
+         */
+        AppSessionIn: {
+            /** Code */
+            code: string;
+            /** Code Verifier */
+            code_verifier: string;
+        };
+        /**
          * AssignmentIn
          * @description A role at a level (inside ``POST /users``).
          */
@@ -914,6 +1205,22 @@ export type components = {
             username: string;
         };
         /**
+         * LoginMethodsOut
+         * @description Login methods this installation offers (the login page shows what is on).
+         */
+        LoginMethodsOut: {
+            /**
+             * Passkey
+             * @description Passkeys are configured (MOWDECK_IDENTITY_PUBLIC_URL)
+             */
+            passkey: boolean;
+            /**
+             * Password
+             * @default true
+             */
+            password: boolean;
+        };
+        /**
          * MemberOut
          * @description A member of the account.
          */
@@ -1038,6 +1345,125 @@ export type components = {
             ui_areas?: components["schemas"]["UiAreaDef"][];
             /** Version */
             version: string;
+        };
+        /**
+         * PasskeyLoginIn
+         * @description ``POST /passkeys/session``: the answer to a login challenge.
+         */
+        PasskeyLoginIn: {
+            /**
+             * Account Id
+             * @description Account to act for (default: own)
+             */
+            account_id?: string | null;
+            /**
+             * Ceremony Id
+             * Format: uuid
+             */
+            ceremony_id: string;
+            /**
+             * Credential
+             * @description The PublicKeyCredential as JSON (PublicKeyCredential.toJSON(): id, rawId, type, response with base64url fields, clientExtensionResults)
+             */
+            credential: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * PasskeyOptionsOut
+         * @description Options of a WebAuthn ceremony and the id that answers them.
+         */
+        PasskeyOptionsOut: {
+            /**
+             * Ceremony Id
+             * Format: uuid
+             */
+            ceremony_id: string;
+            /**
+             * Public Key
+             * @description PublicKeyCredentialCreationOptions or ...RequestOptions as JSON (base64url binary fields), for PublicKeyCredential.parseCreationOptionsFromJSON / parseRequestOptionsFromJSON
+             */
+            public_key: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * PasskeyOut
+         * @description A passkey (never with its public key or credential id).
+         */
+        PasskeyOut: {
+            /**
+             * Aaguid
+             * @description Model of the authenticator, if it told
+             */
+            aaguid: string | null;
+            /**
+             * Backed Up
+             * @description Synced as of the last use
+             */
+            backed_up: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Synced
+             * @description A multi-device passkey that may be synced (backup eligible)
+             */
+            synced: boolean;
+            /** Transports */
+            transports: string[];
+            /**
+             * User Agent
+             * @description Browser of the registration (a device hint)
+             */
+            user_agent: string | null;
+        };
+        /**
+         * PasskeyPatch
+         * @description ``PATCH /me/passkeys/{id}``.
+         */
+        PasskeyPatch: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * PasskeyRegistrationIn
+         * @description ``POST /me/passkeys``: the new credential.
+         */
+        PasskeyRegistrationIn: {
+            /**
+             * Ceremony Id
+             * Format: uuid
+             */
+            ceremony_id: string;
+            /**
+             * Credential
+             * @description The PublicKeyCredential as JSON (PublicKeyCredential.toJSON(): id, rawId, type, response with base64url fields, clientExtensionResults)
+             */
+            credential: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name?: string | null;
+        };
+        /**
+         * PasskeyRegistrationOptionsIn
+         * @description ``POST /me/passkeys/options``: the current password (re-authentication).
+         */
+        PasskeyRegistrationOptionsIn: {
+            /** Password */
+            password: string;
         };
         /**
          * PasswordChangeIn
@@ -2318,6 +2744,69 @@ export interface operations {
             };
         };
     };
+    list_user_passkeys_api_v1_identity_accounts__account_id__users__user_id__passkeys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_user_passkey_api_v1_identity_accounts__account_id__users__user_id__passkeys__passkey_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+                passkey_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_password_api_v1_identity_accounts__account_id__users__user_id__password_post: {
         parameters: {
             query?: never;
@@ -2352,6 +2841,128 @@ export interface operations {
             };
         };
     };
+    app_login_code_api_v1_identity_app_login_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppCodeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppCodeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    app_login_session_api_v1_identity_app_login_session_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too. */
+                "X-Mowdeck-Refresh"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppSessionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    app_login_start_api_v1_identity_app_login_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppLoginStartIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppLoginStartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_methods_api_v1_identity_login_methods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginMethodsOut"];
+                };
+            };
+        };
+    };
     me_api_v1_identity_me_get: {
         parameters: {
             query?: never;
@@ -2368,6 +2979,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    my_passkeys_api_v1_identity_me_passkeys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOut"][];
+                };
+            };
+        };
+    };
+    add_passkey_api_v1_identity_me_passkeys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegistrationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_passkey_api_v1_identity_me_passkeys__passkey_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                passkey_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_passkey_api_v1_identity_me_passkeys__passkey_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                passkey_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    passkey_registration_options_api_v1_identity_me_passkeys_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegistrationOptionsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOptionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2452,6 +3213,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MePlatformOut"];
+                };
+            };
+        };
+    };
+    passkey_challenge_api_v1_identity_passkeys_challenge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOptionsOut"];
+                };
+            };
+        };
+    };
+    passkey_login_api_v1_identity_passkeys_session_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too. */
+                "X-Mowdeck-Refresh"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyLoginIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

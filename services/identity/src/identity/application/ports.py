@@ -6,7 +6,7 @@ transaction). Filters are keyword arguments: plain values compare for equality (
 implement it: PostgreSQL (``adapters.db``) and memory (``adapters.memory``, tests).
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,15 +19,20 @@ from pydantic import BaseModel
 from identity.domain.models import (
     Account,
     ApiToken,
+    AppLoginCode,
+    AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
     LoginAttempt,
     Membership,
+    Passkey,
+    RelyingParty,
     Role,
     RoleAssignment,
     Session,
     SigningKeyRecord,
     User,
+    WebAuthnChallenge,
 )
 
 
@@ -163,6 +168,26 @@ class Tx(Protocol):
         """The catalogue table."""
         ...
 
+    @property
+    def passkeys(self) -> Table[Passkey]:
+        """The passkeys table."""
+        ...
+
+    @property
+    def webauthn_challenges(self) -> Table[WebAuthnChallenge]:
+        """The WebAuthn challenges table."""
+        ...
+
+    @property
+    def app_login_codes(self) -> Table[AppLoginCode]:
+        """The app login codes table."""
+        ...
+
+    @property
+    def app_login_requests(self) -> Table[AppLoginRequest]:
+        """The app login requests table."""
+        ...
+
 
 class Store(Protocol):
     """Opens transactions. Leaving the context commits; an exception rolls back."""
@@ -225,4 +250,104 @@ class ModuleSource(Protocol):
 
     async def fetch(self) -> list[FetchedDescriptor]:
         """One entry per configured module URL."""
+        ...
+
+
+class CeremonyRejected(Exception):  # noqa: N818 - reads like what happened
+    """A WebAuthn response failed verification. ``reason`` is internal (logs, audit)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True, slots=True)
+class KnownCredential:
+    """A credential the user already has (excluded from a new registration)."""
+
+    credential_id: bytes
+    transports: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class NewCredential:
+    """A verified registration: what is stored as a :class:`Passkey`."""
+
+    credential_id: bytes
+    public_key: bytes
+    sign_count: int
+    transports: tuple[str, ...]
+    aaguid: str | None
+    backup_eligible: bool
+    backed_up: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AssertionClaim:
+    """What an authentication response claims before it is verified: which credential, and the
+    user handle the authenticator returned (always present for discoverable credentials)."""
+
+    credential_id: bytes
+    user_handle: bytes | None
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedAssertion:
+    """A verified authentication response."""
+
+    sign_count: int
+    backed_up: bool
+
+
+class PasskeyCeremonies(Protocol):
+    """The WebAuthn ceremonies (options and verification), implemented with a WebAuthn library.
+
+    Every option set requires user verification and discoverable credentials; verification
+    checks the challenge, the RP ID hash, the origin, user presence and user verification.
+    Raises :class:`CeremonyRejected` for anything malformed or wrong.
+    """
+
+    def registration_options(
+        self,
+        rp: RelyingParty,
+        *,
+        challenge: bytes,
+        user_handle: bytes,
+        user_name: str,
+        display_name: str,
+        exclude: Sequence[KnownCredential],
+        timeout_ms: int,
+    ) -> dict[str, Any]:
+        """``PublicKeyCredentialCreationOptions`` as JSON (WebAuthn level 3 encoding)."""
+        ...
+
+    def verify_registration(
+        self, rp: RelyingParty, *, credential: Mapping[str, Any], challenge: bytes
+    ) -> NewCredential:
+        """Verify a registration response (``PublicKeyCredential.toJSON()``)."""
+        ...
+
+    def authentication_options(
+        self, rp: RelyingParty, *, challenge: bytes, timeout_ms: int
+    ) -> dict[str, Any]:
+        """``PublicKeyCredentialRequestOptions`` as JSON, without ``allowCredentials``."""
+        ...
+
+    def read_assertion(self, credential: Mapping[str, Any]) -> AssertionClaim:
+        """Parse an authentication response far enough to find the credential."""
+        ...
+
+    def verify_assertion(
+        self,
+        rp: RelyingParty,
+        *,
+        credential: Mapping[str, Any],
+        challenge: bytes,
+        public_key: bytes,
+    ) -> VerifiedAssertion:
+        """Verify an authentication response against the stored public key.
+
+        The signature counter is returned, not judged: the caller compares it with the stored
+        one (clone detection is a policy of the relying party).
+        """
         ...

@@ -26,6 +26,7 @@ from identity.adapters.bus.publisher import BusEventPublisher
 from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
 from identity.adapters.db.store import SqlStore
 from identity.adapters.modules import HttpModuleSource
+from identity.adapters.webauthn import PyWebAuthnCeremonies
 from identity.application.access import AccessChecker
 from identity.application.catalogue import CatalogueService
 from identity.application.deps import Deps
@@ -125,6 +126,7 @@ class Runtime:
             ip_per_minute=self.settings.identity_login_ip_per_minute,
             ip_burst=self.settings.identity_login_ip_burst,
             github_login=self.settings.identity_github_login,
+            ceremonies=PyWebAuthnCeremonies(),
         )
         return self.services
 

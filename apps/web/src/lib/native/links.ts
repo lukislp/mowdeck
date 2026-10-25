@@ -11,6 +11,30 @@ import { FALLBACK_URL, safePath } from '#lib/push/payload.js';
 
 export const SCHEME = 'mowdeck:';
 
+/** Where the system browser returns a login to the app (ADR 0050); never a page of the app. */
+export const AUTH_CALLBACK = 'mowdeck://auth/callback';
+
+/** The parameters of an auth callback link; null for every other link. */
+export function authCallback(
+  link: string,
+): { code: string | null; state: string | null; error: string | null } | null {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    return null;
+  }
+  if (
+    url.protocol !== SCHEME ||
+    url.host !== 'auth' ||
+    url.pathname.replace(/\/$/, '') !== '/callback'
+  ) {
+    return null;
+  }
+  const query = url.searchParams;
+  return { code: query.get('code'), state: query.get('state'), error: query.get('error') };
+}
+
 /** The app path of a `mowdeck://` link; null for anything else. */
 export function pathFromDeepLink(link: string): string | null {
   let url: URL;
@@ -20,6 +44,9 @@ export function pathFromDeepLink(link: string): string | null {
     return null;
   }
   if (url.protocol !== SCHEME) return null;
+  // Login hand-offs are taken by the waiting sign-in, never routed (the code stays out of the
+  // history).
+  if (url.host === 'auth') return null;
   // mowdeck://mowers/1 parses with host "mowers" and path "/1"; mowdeck:///mowers/1 with an
   // empty host. Both mean /mowers/1.
   const path = `/${url.host}${url.pathname}`.replace(/\/{2,}/g, '/');

@@ -15,15 +15,19 @@ from identity.domain.errors import ConflictError
 from identity.domain.models import (
     Account,
     ApiToken,
+    AppLoginCode,
+    AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
     LoginAttempt,
     Membership,
+    Passkey,
     Role,
     RoleAssignment,
     Session,
     SigningKeyRecord,
     User,
+    WebAuthnChallenge,
 )
 
 
@@ -141,6 +145,10 @@ class MemoryTx:
     audit: MemoryTable[AuditEntry]
     login_attempts: MemoryTable[LoginAttempt]
     catalogue: MemoryTable[CatalogueEntry]
+    passkeys: MemoryTable[Passkey]
+    webauthn_challenges: MemoryTable[WebAuthnChallenge]
+    app_login_codes: MemoryTable[AppLoginCode]
+    app_login_requests: MemoryTable[AppLoginRequest]
 
 
 class MemoryStore:
@@ -162,6 +170,10 @@ class MemoryStore:
             audit=MemoryTable("id", id_factory=lambda: next(audit_ids)),
             login_attempts=MemoryTable("id"),
             catalogue=MemoryTable("key"),
+            passkeys=MemoryTable("id", [("credential_id",)]),
+            webauthn_challenges=MemoryTable("id"),
+            app_login_codes=MemoryTable("id", [("code_hash",)]),
+            app_login_requests=MemoryTable("id"),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0
