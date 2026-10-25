@@ -1435,6 +1435,7 @@ def capabilities_of(
     product_key: str,
     manual_drive: bool,
     manual_drive_blades: bool,
+    drive_reverse: bool | None = None,
     camera: bool = False,
     model: str = "",
     links_supported: Sequence[str] = (),
@@ -1457,9 +1458,10 @@ def capabilities_of(
     unset (the controller then rejects the commands): PyMammotion's own fallback for a Luba VP
     is the Yuka table, which is wrong for it. ``drive_speed``: the connection can send driver
     commands, so it declares the speed setting for manual driving
-    (:func:`drive_speed_setting_of`). ``drive_reverse`` follows ``manual_drive``: every drive
-    session of this adapter is a Bluetooth one (``send_movement``), which takes a negative
-    linear speed (ADR 0043). ``maintenance``: the connection can send the maintenance commands
+    (:func:`drive_speed_setting_of`). ``drive_reverse`` is the drive link's (ADR 0043, ADR
+    0049): a Bluetooth session (``send_movement``) takes a negative linear speed, the cloud
+    remote drive does not; None follows ``manual_drive`` (a Bluetooth link). ``maintenance``:
+    the connection can send the maintenance commands
     (:func:`maintenance_actions_of`, ADR 0048). ``firmware`` picks the obstacle detection
     modes of the job options (:func:`start_options_of`).
     """
@@ -1491,7 +1493,7 @@ def capabilities_of(
             if maintenance
             else frozenset()
         ),
-        drive_reverse=manual_drive,
+        drive_reverse=manual_drive and (manual_drive if drive_reverse is None else drive_reverse),
         drive_speed_setting=drive_speed_setting_of(device, product_key) if drive_speed else None,
         settings=list(settings),
         start_options=start_options_of(device_name, firmware, product_key),
@@ -1511,6 +1513,17 @@ _CAMERA_PLACEMENTS: Final[Mapping[int, CameraPlacement]] = {
     1: CameraPlacement.FRONT_RIGHT,
     2: CameraPlacement.REAR,
 }
+
+
+def manual_blades_on_height(device_name: str, configured_mm: int) -> int:
+    """``cut_knife_height`` of the ``operate_on_device`` that switches the blades on while
+    driving manually: 0 for the Yuka family (Yuka, Yuka mini, mini 2, ML), as PyMammotion's
+    ``async_start_stop_blades`` and Mammotion-HA send it, else ``configured_mm`` (the
+    connection's ``manual_blade_height_mm``). Switching off and the session's other
+    ``operate_on_device`` keep ``configured_mm``, as there."""
+    if DeviceType.is_yuka(device_name) or DeviceType.is_yuka_mini(device_name):
+        return 0
+    return configured_mm
 
 
 def has_camera(device_name: str, product_key: str = "") -> bool:
@@ -1637,6 +1650,15 @@ def map_revision(device: MowerDevice) -> str | None:
     if locations and locations[0].bol_hash:
         return str(locations[0].bol_hash)
     return None
+
+
+def has_vendor_map(device: MowerDevice) -> bool:
+    """True when the mower reports a map (``locations[0].bol_hash`` above 1, the vendor app's
+    gate for the cloud remote drive) or the adapter holds a complete one."""
+    locations = device.report_data.locations
+    if locations and (locations[0].bol_hash or 0) > 1:
+        return True
+    return map_complete(device)
 
 
 def map_of(device: MowerDevice) -> MowerMap:

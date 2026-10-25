@@ -121,6 +121,15 @@ class CloudOptions:
     """Ask the cloud for every camera of the mower (both front cameras of a LUBA 2 AWD X, the
     rear one of a Yuka) instead of the front left one only (``cameraStates`` of the stream
     token request); off when a mower misbehaves with more than one stream."""
+    cloud_drive: bool = True
+    """Manual driving over the vendor's cloud remote drive (ADR 0049) when the mower supports it
+    and no Bluetooth bridge carries the drive; off keeps driving to the bridge."""
+    allow_manual_blades: bool = False
+    """Blades while driving manually over the cloud (as the bridge link's option)."""
+    manual_blade_height_mm: int = 60
+    manual_drive_speed_mps: float | None = None
+    """``max_run_speed`` of a cloud drive session; None: the mower's own speed setting for manual
+    driving, capped at 1.0 m/s (``drive.manual_run_speed``)."""
 
     def __repr__(self) -> str:  # never print the password
         return (
@@ -149,6 +158,10 @@ class CloudOptions:
                     "refresh_seconds_active",
                     "report_stream_seconds",
                     "all_cameras",
+                    "cloud_drive",
+                    "allow_manual_blades",
+                    "manual_blade_height_mm",
+                    "manual_drive_speed_mps",
                     # Set by Fleet for mowers of a linked account (ADR 0034); informational.
                     "linked_account_id",
                 }
@@ -191,6 +204,14 @@ class CloudOptions:
             ),
             report_stream_seconds=_report_stream(options),
             all_cameras=_bool(options, "all_cameras", True),
+            cloud_drive=_bool(options, "cloud_drive", True),
+            allow_manual_blades=_bool(options, "allow_manual_blades", False),
+            manual_blade_height_mm=int(_number(options, "manual_blade_height_mm", 60, 20, 100)),
+            manual_drive_speed_mps=(
+                _number(options, "manual_drive_speed_mps", 1.0, 0.1, 1.0)
+                if options.get("manual_drive_speed_mps") is not None
+                else None
+            ),
         )
 
 

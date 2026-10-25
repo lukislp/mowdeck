@@ -190,3 +190,54 @@ async def test_control_spot_run_refused_with_the_link_reported_down_is_link_lost
     assert (report.state, report.reason) == ("aborted", REASON_LINK_LOST)
     assert "drive link down" in (report.detail or "")
     await h.close()
+
+
+# --- a drive link without reverse and one that repeats frames (ADR 0049) ---------------------
+
+
+async def test_control_backwards_frame_is_refused_without_drive_reverse() -> None:
+    from mowdeck_control.controller import NO_REVERSE_REASON
+
+    h = Harness(config=SimulationConfig(state_period_s=1.0, drive_reverse=False))
+    await h.start()
+    result = await h.send(ManualDrive(linear=-0.3, angular=0.0))
+    assert result.status is CommandStatus.REJECTED and result.reason == NO_REVERSE_REASON
+    assert (await h.send(ManualDrive(linear=0.3, angular=0.2))).status is CommandStatus.ACCEPTED
+    assert (await h.send(ManualDrive(linear=0.0, angular=-0.4))).status is CommandStatus.ACCEPTED
+    await h.controller.end_drive_session()
+    reverse = Harness(config=SimulationConfig(state_period_s=1.0, drive_reverse=True))
+    await reverse.start()
+    back = await reverse.send(ManualDrive(linear=-0.3, angular=0.0))
+    assert back.status is CommandStatus.ACCEPTED
+    await reverse.controller.end_drive_session()
+
+
+async def test_control_frame_deadline_session_learns_every_frame_ttl() -> None:
+    from mowdeck_control import FrameDeadlineCapable
+
+    h = Harness()
+    await h.start()
+    original = h.sim.start_drive_session
+    deadlines: list[float] = []
+
+    class _Deadline:
+        """The simulator's session plus the optional deadline hook."""
+
+        def __init__(self, inner: object) -> None:
+            self._inner = inner
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+        def expect_next_frame_within(self, ttl_s: float) -> None:
+            deadlines.append(ttl_s)
+
+    async def start_drive_session() -> object:
+        return _Deadline(await original())
+
+    h.sim.start_drive_session = start_drive_session  # type: ignore[method-assign,assignment]
+    assert isinstance(_Deadline(None), FrameDeadlineCapable)
+    assert (await h.send(ManualDrive(linear=0.4, angular=0.0, ttl_ms=500))).status == "accepted"
+    assert (await h.send(ManualDrive(linear=0.4, angular=0.0, ttl_ms=200))).status == "accepted"
+    assert deadlines == [0.5, 0.2]
+    await h.controller.end_drive_session()

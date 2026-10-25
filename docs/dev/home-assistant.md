@@ -59,7 +59,7 @@ ManualDrive's safety limits apply to a nudge unchanged:
 - It is refused while a start or a return waits for its confirmation, and while a spot run, a drive calibration or a firmware update runs.
 - A nudge for a mower that is mowing or returning is rejected (`pause or end the job before driving manually`). Pause the mower first.
 
-Reverse is offered only when `MowerCapabilities.drive_reverse` is true. Mammotion-HA allows no reverse over its cloud session either.
+Reverse is offered only when `MowerCapabilities.drive_reverse` is true. Mammotion-HA allows no reverse over its cloud session either, and neither does MowDeck's cloud drive ([ADR 0049](../adr/0049-manual-driving-over-the-mammotion-cloud.md)): a backwards nudge is rejected with "this drive link cannot drive backwards ...", so hide the back button while `drive_reverse` is false. Over the cloud the first nudge of a session also requests the vendor's control token (about a second); the dead-man time of the frame and the adapter's watchdog send the zero frame.
 
 ### Remote drive
 
@@ -72,4 +72,4 @@ Mammotion-HA's cloud remote drive works in four steps:
 
 In MowDeck the session is the drive session of the realtime socket: `drive_start`, then `drive_frame` messages, then `drive_stop` (ADR 0026). It needs `can_drive`, the plan feature `manual_drive` and `MowerCapabilities.manual_drive`. Starting it is the user's explicit action, so there is no separate confirm step. The emergency stop ends it at any time.
 
-For Mammotion mowers MowDeck drives over the Bluetooth bridge (ADR 0038), which can also reverse. The vendor's cloud remote-drive transport (PyMammotion's `RemoteDriveSession`, firmware 1.30.31.19 or newer) is not implemented in the adapter. Over the cloud alone, `manual_drive` is therefore false and the nudge and drive controls should stay hidden. Its fence acknowledgement has no counterpart, because MowDeck's manual driving does not use the vendor fence.
+For Mammotion mowers MowDeck drives over the Bluetooth bridge when it is connected (ADR 0038, with reverse), else over the vendor's cloud remote drive (PyMammotion's `RemoteDriveSession`, firmware 1.30.31.19 or newer, forwards and turns only, [ADR 0049](../adr/0049-manual-driving-over-the-mammotion-cloud.md)). `manual_drive` is true with either; `drive_reverse` only with the bridge. Cloud driving needs the Mammotion account that owns the mower: with a shared account every drive (joystick, nudge, AI assist, spot run) is refused with "cloud driving needs the mower's owner account ...". The vendor's fence warning (the mower 5 m or more beyond its map) ends the MowDeck session with that reason; starting a new session within 5 minutes is the acknowledgement, so no separate button is needed.

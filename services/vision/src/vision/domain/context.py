@@ -127,6 +127,11 @@ class Motion(BaseModel):
 
     linear_mps_at_1: float = Field(description="Speed in m/s at linear = 1.")
     turn_deg_per_s_at_1: float = Field(description="Turn rate in degrees/s at angular = 1.")
+    reverse: bool = Field(
+        default=True,
+        description="The drive link can drive backwards (a negative `linear`); false over the "
+        "Mammotion cloud.",
+    )
     max_steps: int = MAX_STEPS
     max_step_seconds: float = MAX_STEP_SECONDS
 

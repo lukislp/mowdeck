@@ -6,7 +6,8 @@ and a short approach computed from the scene context; ``fake/dock`` answers
 ``return_to_dock`` whenever the context's ``dock_route`` finds it applicable (else like
 ``fake/recover``); ``fake/resume`` answers ``resume`` whenever the context's ``job`` is
 resumable (with a stuck error first a short backward move and a turn towards the entry of the
-connection to the next area; else like ``fake/recover``); ``fake/decline`` recommends
+connection to the next area; else like ``fake/recover``); every answer drives forwards only when
+the context's ``motion.reverse`` is false; ``fake/decline`` recommends
 nothing, like a cautious model ("recovery not recommended", which lets the service's dock
 fallback step in); ``fake/people`` flags people, ``fake/low_confidence`` is unsure (its
 recovery maneuver at confidence 0.2), ``fake/unsure_resume`` answers like ``fake/resume`` but
@@ -39,6 +40,12 @@ RECOVER_STEPS = (
     ProposedStep(linear=0.6, angular=0.0, seconds=1.0),
 )
 """Back about 0.4 m, turn about 30 degrees left, forward about 0.3 m (at 0.5 m/s, 1 rad/s)."""
+FORWARD_RECOVER_STEPS = (
+    ProposedStep(linear=0.0, angular=0.5, seconds=2.0),
+    ProposedStep(linear=0.6, angular=0.0, seconds=1.0),
+)
+"""Without reverse (``motion.reverse`` false, the Mammotion cloud): turn about 60 degrees left
+in place, then forward about 0.3 m."""
 
 
 def _dock_applies(context: SceneContext) -> bool:
@@ -53,7 +60,8 @@ def _resume_answer(context: SceneContext) -> AssessmentOut:
     """Continue the paused job; a stuck mower first backs off and turns to the entry."""
     steps: list[ProposedStep] = []
     if context.mower is not None and context.mower.activity == "error":
-        steps.append(ProposedStep(linear=-0.8, angular=0.0, seconds=1.0))
+        if context.motion.reverse:
+            steps.append(ProposedStep(linear=-0.8, angular=0.0, seconds=1.0))
         link = context.job.connection_to_next if context.job else None
         if link is not None and abs(link.entry_bearing_deg) > 10:
             seconds = min(
@@ -132,7 +140,7 @@ class FakeVisionProvider:
             return AssessmentOut(
                 situation=Situation.STUCK_ON_OBSTACLE,
                 confidence=0.85,
-                proposal=list(RECOVER_STEPS),
+                proposal=list(RECOVER_STEPS if context.motion.reverse else FORWARD_RECOVER_STEPS),
                 rationale=(
                     "The mower is pressed against an obstacle. Back off, turn a little and "
                     "drive on."

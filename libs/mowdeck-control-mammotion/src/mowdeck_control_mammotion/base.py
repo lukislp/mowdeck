@@ -21,7 +21,8 @@ Commands (Mammotion-HA order for ``StartMow``, spike 0001 section 3.3):
 ``EmergencyStop``  ``Priority.EMERGENCY``: ``pause_execute_task`` (halts an autonomous job,
                    wheels and blades, in place), ``send_movement(0, 0)`` (halts manual
                    motion) and ``operate_on_device`` with blades off; every step is tried
-                   even when an earlier one fails
+                   even when an earlier one fails; an open cloud drive session is zeroed
+                   and released first (:meth:`MammotionBase._halt_drive`, ADR 0049)
 ``leave_dock``     not a command but :meth:`MammotionBase.leave_dock`
                    (:class:`~mowdeck_control.UndockCapable`, capability ``undock``, ADR 0041):
                    PyMammotion's ``leave_dock`` (``todev_one_touch_leave_pile``) sent once with
@@ -622,7 +623,8 @@ class MammotionBase:
         if interval_s is None:
             self._drive_poll_override = None
         else:
-            self._drive_poll_override = max(MIN_DRIVE_POLL_S, min(DRIVE_POLL_S, interval_s))
+            floor = self._min_drive_poll_s()
+            self._drive_poll_override = max(floor, min(max(DRIVE_POLL_S, floor), interval_s))
         self._refresh_wake.set()
 
     @property
@@ -1024,6 +1026,7 @@ class MammotionBase:
             product_key=self._port.product_key(),
             manual_drive=self._manual_drive_offered(),
             manual_drive_blades=self._manual_blades_allowed(),
+            drive_reverse=self._drive_reverse_offered(),
             camera=self._camera_offered(),
             model=self._port.model(),
             links_supported=self._links_supported(),
@@ -1304,6 +1307,20 @@ class MammotionBase:
 
     def _manual_blades_allowed(self) -> bool:
         return False
+
+    def _drive_reverse_offered(self) -> bool:
+        """Whether the link that would carry a drive session can reverse (only consulted while
+        ``manual_drive`` is offered): Bluetooth can, the cloud remote drive cannot (ADR 0049)."""
+        return True
+
+    def _min_drive_poll_s(self) -> float:
+        """Shortest drive interval a drive calibration may ask for on this link."""
+        return MIN_DRIVE_POLL_S
+
+    async def _halt_drive(self) -> None:
+        """Emergency stop: halt an open drive session of the adapter's own at once (the cloud
+        remote drive keeps repeating the last speed). Never raises."""
+        return None
 
     def _firmware_offered(self) -> bool:
         """Whether the vendor's firmware service is reachable (the cloud connections)."""
@@ -1937,6 +1954,10 @@ class MammotionBase:
                 self._speed_mps = None
 
     async def _emergency_stop(self) -> Outcome:
+        try:
+            await self._halt_drive()
+        except Exception:  # the stop below must go out whatever happened here
+            _log.exception("halting the drive session for the emergency stop failed")
         steps: list[tuple[str, dict[str, Any]]] = [
             ("pause_execute_task", {}),
             ("send_movement", {"linear_speed": 0, "angular_speed": 0}),
@@ -2030,6 +2051,15 @@ class MammotionBase:
     def _require_connected(self) -> None:
         if not self.is_connected:
             raise NotConnected("the mower is not connected")
+
+    def _sensor_stop_reason(self) -> str | None:
+        """Why an open drive session must stop now: a sensor stop (an error the adapter does
+        not mark ``drive_recoverable``). A stuck mower may be driven free (controller rule 8,
+        Vision recovery), so a recoverable error is no reason."""
+        state = self._snapshot()
+        if state.activity is MowerActivity.ERROR and not state.drive_recoverable:
+            return f"the mower reports an error ({state.error_code})"
+        return None
 
     def _require_no_sensor_stop(self) -> None:
         state = self._snapshot()

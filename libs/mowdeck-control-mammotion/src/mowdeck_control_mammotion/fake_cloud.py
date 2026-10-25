@@ -17,6 +17,11 @@ bridge scan (:func:`fake_scan_proxy`) answers any host with the account's online
 bytes ``auth_failed``); a mower registered with a ``ble_bridge`` link gets a dual connection
 whose bridge "connects" at once (:func:`fake_open_proxy`).
 
+Cloud driving (ADR 0049): every fake mower offers the cloud remote drive
+(:class:`~mowdeck_control_mammotion.fake.FakeRemoteDrive`). An account whose local part starts
+with :data:`FAKE_SHARED_PREFIX` (``shared-...@fake.mowdeck.test``) plays a shared account: the
+control token is refused with code 50803, as for the real vendor.
+
 RTK base station (ADR 0047): ``RTK-FAKE0001`` is listed with ``device_type`` ``rtk_base``; a mower
 registered with that base station linked (connection option ``base_station``) reports it over
 LoRa, answers ``basestation_info`` and gets a base station firmware offer
@@ -96,6 +101,8 @@ FAKE_DEVICES: Final = (
 )
 
 
+FAKE_SHARED_PREFIX: Final = "shared"
+"""Local part prefix of a fake account the mowers are only shared with (no cloud driving)."""
 FAKE_OTA_SECONDS: Final = 8.0
 """Real seconds a fake firmware update takes from the request to the new version."""
 FAKE_BRIDGE_NAME: Final = "mowdeck-bridge"
@@ -252,6 +259,9 @@ class PooledFakePort(FakeMammotionPort):
         self.firmware_check = firmware_offer(iot_id=(listed.iot_id if listed else None) or "")
         self.firmware_update_seconds = FAKE_OTA_SECONDS
         self.rssi = FAKE_MOWER_RSSI
+        self.cloud_drive = True
+        if options.account.strip().casefold().startswith(FAKE_SHARED_PREFIX):
+            self.remote.refuse = "50803"  # "No permission to operate the device"
 
     async def open(self) -> None:
         if self._lease is None:

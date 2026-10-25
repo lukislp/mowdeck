@@ -201,7 +201,9 @@ async def test_fleet_calibration_of_a_simulated_mower_lives_in_its_connection_op
     assert after.json()["connection_options"] == {"time_scale": 3}
 
 
-async def test_fleet_calibration_needs_a_place_to_live_and_drive_rights() -> None:
+async def test_fleet_calibration_lives_on_the_connection_and_needs_drive_rights() -> None:
+    """A cloud mower without a bridge stores its calibration in its connection options: the
+    cloud drives too (ADR 0049)."""
     async with harness(**_settings()) as h:
         await _gateway(h.bus)
         owner = await h.owner()
@@ -210,7 +212,7 @@ async def test_fleet_calibration_needs_a_place_to_live_and_drive_rights() -> Non
         stranger = await h.owner()
         cloud = await _cloud_mower(h, owner)
         simulated = (await h.register(owner))["id"]
-        no_place = await h.client.put(_url(cloud), headers=owner.headers, json=CALIBRATION)
+        on_cloud = await h.client.put(_url(cloud), headers=owner.headers, json=CALIBRATION)
         forbidden = await h.client.put(_url(simulated), headers=manager.headers, json=CALIBRATION)
         forbidden_delete = await h.client.delete(_url(simulated), headers=manager.headers)
         hidden = await h.client.put(_url(simulated), headers=stranger.headers, json=CALIBRATION)
@@ -220,15 +222,14 @@ async def test_fleet_calibration_needs_a_place_to_live_and_drive_rights() -> Non
         )
         allowed = await h.client.put(_url(simulated), headers=operator.headers, json=CALIBRATION)
         listed = await h.client.get(f"{API}/mowers", headers=owner.headers)
-    assert no_place.status_code == 409
-    assert no_place.json()["type"] == "urn:mowdeck:problem:drive-calibration-not-applicable"
+    assert on_cloud.status_code == 200, on_cloud.text
     assert forbidden.status_code == 403 and forbidden_delete.status_code == 403
     assert hidden.status_code == 404 and hidden_delete.status_code == 404
     assert bad.status_code == 422
     assert allowed.status_code == 200, allowed.text
     by_id = {m["id"]: m for m in listed.json()["items"]}
     assert by_id[simulated]["drive_calibration"]["full_speed_mps"] == 0.42
-    assert by_id[cloud]["drive_calibration"] is None
+    assert by_id[cloud]["drive_calibration"]["full_speed_mps"] == 0.42
 
 
 # --- the manual-drive speed limit of the bridge link -------------------------------------------

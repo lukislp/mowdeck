@@ -210,6 +210,25 @@ class DriveSession(Protocol):
         ...
 
 
+@runtime_checkable
+class FrameDeadlineCapable(Protocol):
+    """Optional extension of a :class:`DriveSession` whose link keeps moving the mower on its
+    own until it gets a zero frame (the Mammotion cloud remote drive repeats the last speed,
+    ADR 0049). After every accepted frame the controller tells the session how long that frame
+    may live (its ``ttl_ms``); the session then sends a zero frame itself when no newer frame
+    arrived in time. A second layer below the controller's dead-man timer, never instead of it.
+    """
+
+    def expect_next_frame_within(self, ttl_s: float) -> None:
+        """The last frame expires ``ttl_s`` seconds from now unless another one follows."""
+        ...
+
+
+def frame_deadline_of(session: object) -> FrameDeadlineCapable | None:
+    """``session`` as a :class:`FrameDeadlineCapable`, or None when it does not implement it."""
+    return session if isinstance(session, FrameDeadlineCapable) else None
+
+
 @dataclass(frozen=True, slots=True)
 class Photo:
     """A still image from (or of) the mower."""

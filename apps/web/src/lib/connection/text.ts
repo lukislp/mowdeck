@@ -49,6 +49,13 @@ const OPTIONS: Record<string, Record<string, OptionText>> = {
       label: m.conn_cloud_report_stream,
       help: m.conn_cloud_report_stream_help,
     },
+    cloud_drive: { label: m.conn_cloud_drive, help: m.conn_cloud_drive_help },
+    allow_manual_blades: { label: m.conn_ble_manual_blades, help: m.conn_ble_manual_blades_help },
+    manual_blade_height_mm: { label: m.conn_ble_manual_blade_height },
+    manual_drive_speed_mps: {
+      label: m.conn_ble_manual_drive_speed,
+      help: m.conn_ble_manual_drive_speed_help,
+    },
     ...TIMEOUTS,
   },
   ble_bridge: {
