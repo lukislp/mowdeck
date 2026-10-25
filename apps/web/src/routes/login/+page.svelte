@@ -1,11 +1,15 @@
 <!--
-  Sign-in: a passkey (ADR 0050) or username and password.
+  Sign-in: a passkey (ADR 0050), GitHub (ADR 0051) or username and password.
 
   - Browser: "Sign in with a passkey" runs the WebAuthn login without a username; where the
     browser supports it, the passkeys are also offered in the username field's autofill
     (conditional UI, started when the page opens).
   - iOS/Android app: the web view cannot reach the passkeys, so the button opens this page in the
     system browser and takes the login over (`#lib/native/handoff.ts`).
+  - "Sign in with GitHub" (only when the installation has it and the account is linked in the
+    settings) leaves for GitHub and comes back here with `?signed_in_with=github` and the session
+    cookie set (or `?sign_in_error=<code>`); the query (`next`, the app hand-off) survives it. In
+    the app the button runs the login in the system browser, like the passkey button.
   - This page opened by the app (`?app_challenge=...&app_state=...`): any login here is handed to
     the app as a one-time code and the browser returns to `mowdeck://auth/callback`.
 -->
@@ -13,9 +17,17 @@
   import { Button, Field, Icon, ProblemNotice } from '@mowdeck/ui';
   import { onMount } from 'svelte';
 
+  import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
 
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import {
+    githubEnabled,
+    signInResult,
+    signInWithGitHub,
+    withoutResult,
+    type SignInError,
+  } from '#lib/auth/github.js';
   import { passkeysEnabled, signInWithPasskey } from '#lib/auth/passkey.js';
   import { IDENTITY, session } from '#lib/auth/session.svelte.js';
   import {
@@ -24,6 +36,7 @@
     webauthnSupported,
   } from '#lib/auth/webauthn.js';
   import AuthFrame from '#lib/components/AuthFrame.svelte';
+  import GitHubMark from '#lib/components/GitHubMark.svelte';
   import { loadConfig } from '#lib/config.js';
   import { problemMessage } from '#lib/i18n.js';
   import { appLoginRequest, callbackUrl, HandoffError } from '#lib/native/handoff.js';
@@ -38,6 +51,7 @@
   let problem = $state<ApiProblem | null>(null);
   let notice = $state<string | null>(null);
   let usedPasskey = $state(false);
+  let githubBusy = $state(false);
 
   /** The browser was opened by the app for this login. */
   const appRequest = $derived(appLoginRequest(page.url.searchParams));
@@ -60,6 +74,22 @@
   let conditional: AbortController | null = null;
   let waiting = $state<AbortController | null>(null);
 
+  // GitHub (ADR 0051): on in the installation; in the app through the system browser.
+  let githubOn = $state(false);
+  const githubButton = $derived(githubOn && (!inApp || nativeShell.canSignInThroughBrowser));
+  /** Back from GitHub: signed in (the cookie is set) or why not. */
+  const fromGitHub = signInResult(page.url.searchParams);
+  const backSignedIn = fromGitHub !== null && 'signedIn' in fromGitHub;
+  let githubDone = false;
+  const githubMessages: Record<SignInError, () => string> = {
+    cancelled: m.login_github_cancelled,
+    expired: m.login_github_expired,
+    denied: m.login_github_denied,
+    unavailable: m.login_github_unavailable,
+    rate_limited: m.login_github_rate_limited,
+  };
+  if (fromGitHub && 'error' in fromGitHub) notice = githubMessages[fromGitHub.error]();
+
   const next = $derived.by(() => {
     const target = page.url.searchParams.get('next') ?? '/mowers';
     return target.startsWith('/') && !target.startsWith('//') ? target : '/mowers';
@@ -67,8 +97,27 @@
 
   $effect(() => {
     // A login for the app never continues into this browser's app.
-    if (session.status === 'authenticated' && !appRequest && !busy && !passkeyBusy) {
+    if (
+      session.status === 'authenticated' &&
+      !appRequest &&
+      !busy &&
+      !passkeyBusy &&
+      !backSignedIn
+    ) {
       void navigatePath(next, { replace: true });
+    }
+  });
+
+  $effect(() => {
+    // Back from GitHub: the session comes from the cookie Identity set (restored on load).
+    if (!backSignedIn || githubDone) return;
+    if (session.status === 'authenticated') {
+      githubDone = true;
+      replaceState(withoutResult(page.url), page.state);
+      void finish();
+    } else if (session.status === 'anonymous') {
+      githubDone = true;
+      notice = m.login_github_expired();
     }
   });
 
@@ -79,6 +128,10 @@
   });
 
   onMount(() => {
+    void githubEnabled().then((on) => (githubOn = on));
+    if (fromGitHub && 'error' in fromGitHub) {
+      replaceState(withoutResult(page.url), page.state);
+    }
     void passkeysEnabled().then(async (on) => {
       passkeysOn = on;
       if (on && !inApp && webauthnSupported(window) && (await conditionalMediationAvailable())) {
@@ -162,6 +215,22 @@
     }
   }
 
+  /** In the app: any login runs in the system browser and is handed back (ADR 0050). */
+  async function throughBrowser(): Promise<void> {
+    waiting = new AbortController();
+    try {
+      const result = await nativeShell.signInThroughBrowser(
+        window.location.origin,
+        (code, verifier) =>
+          session.signIn(`${IDENTITY}/app-login/session`, { code, code_verifier: verifier }),
+        waiting.signal,
+      );
+      if (result === 'signed-in') await finish();
+    } finally {
+      waiting = null;
+    }
+  }
+
   async function withPasskey(): Promise<void> {
     conditional?.abort();
     passkeyBusy = true;
@@ -170,14 +239,7 @@
     usedPasskey = true;
     try {
       if (inApp) {
-        waiting = new AbortController();
-        const result = await nativeShell.signInThroughBrowser(
-          window.location.origin,
-          (code, verifier) =>
-            session.signIn(`${IDENTITY}/app-login/session`, { code, code_verifier: verifier }),
-          waiting.signal,
-        );
-        if (result === 'signed-in') await finish();
+        await throughBrowser();
       } else {
         await signInWithPasskey(session);
         await finish();
@@ -188,7 +250,29 @@
       else problem = asProblem(error);
     } finally {
       passkeyBusy = false;
-      waiting = null;
+    }
+  }
+
+  /** Leave for GitHub (keeps `next` and the app hand-off); in the app, the system browser. */
+  async function withGitHub(): Promise<void> {
+    conditional?.abort();
+    githubBusy = true;
+    problem = null;
+    notice = null;
+    usedPasskey = false;
+    try {
+      if (inApp) {
+        await throughBrowser();
+        githubBusy = false;
+      } else {
+        // The browser leaves for GitHub: the button stays busy until it is gone.
+        await signInWithGitHub(page.url.searchParams);
+      }
+    } catch (error) {
+      githubBusy = false;
+      if (cancelled(error)) return;
+      if (error instanceof HandoffError) notice = m.login_app_failed();
+      else problem = asProblem(error);
     }
   }
 
@@ -238,17 +322,30 @@
     <ProblemNotice tone="info" title={m.login_session_ended()} />
   {/if}
   {#if !returnLink && !confirming}
-    {#if passkeyButton}
+    {#if passkeyButton || githubButton}
       <div class="passkey">
-        <Button
-          variant="primary"
-          full
-          icon="key"
-          pending={passkeyBusy}
-          disabled={busy}
-          testid="login-passkey"
-          onclick={withPasskey}>{m.login_passkey()}</Button
-        >
+        {#if passkeyButton}
+          <Button
+            variant="primary"
+            full
+            icon="key"
+            pending={passkeyBusy}
+            disabled={busy || githubBusy}
+            testid="login-passkey"
+            onclick={withPasskey}>{m.login_passkey()}</Button
+          >
+        {/if}
+        {#if githubButton}
+          <Button
+            variant={passkeyButton ? 'secondary' : 'primary'}
+            full
+            pending={githubBusy}
+            disabled={busy || passkeyBusy}
+            testid="login-github"
+            onclick={withGitHub}
+            ><span class="provider"><GitHubMark />{m.login_github()}</span></Button
+          >
+        {/if}
         {#if waiting}
           <p class="waiting" role="status">
             <span>{m.login_app_waiting()}</span>
@@ -286,10 +383,10 @@
       {/if}
       <Button
         type="submit"
-        variant={passkeyButton ? 'secondary' : 'primary'}
+        variant={passkeyButton || githubButton ? 'secondary' : 'primary'}
         full
         pending={busy}
-        disabled={!username || !password || passkeyBusy}
+        disabled={!username || !password || passkeyBusy || githubBusy}
         testid="login-submit">{m.login_submit()}</Button
       >
     </form>
@@ -316,6 +413,12 @@
   .passkey {
     display: grid;
     gap: var(--md-space-2);
+  }
+
+  .provider {
+    display: inline-flex;
+    gap: var(--md-space-2);
+    align-items: center;
   }
 
   .waiting {

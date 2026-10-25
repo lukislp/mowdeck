@@ -560,6 +560,68 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/me/external-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My External Identities
+         * @description The caller's linked accounts of login providers.
+         */
+        get: operations["my_external_identities_api_v1_identity_me_external_identities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/external-identities/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink External Identity
+         * @description Remove the caller's link to a login provider (always allowed; the password stays).
+         */
+        delete: operations["unlink_external_identity_api_v1_identity_me_external_identities__provider__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/external-identities/{provider}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link External Identity
+         * @description Start linking an account of a login provider to the caller: the current password again
+         *     (the login limits apply), then the provider's authorization URL and the binding cookie.
+         *     409 when an account of this provider is already linked.
+         */
+        post: operations["link_external_identity_api_v1_identity_me_external_identities__provider__link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/me/passkeys": {
         parameters: {
             query?: never;
@@ -686,6 +748,48 @@ export type paths = {
         get: operations["my_platform_api_v1_identity_me_platform_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/oauth/{provider}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Oauth Callback
+         * @description The provider sends the browser back here: finish the sign-in (refresh cookie as after a
+         *     password login) or the link, then redirect to the web app (303).
+         */
+        get: operations["oauth_callback_api_v1_identity_oauth__provider__callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/oauth/{provider}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Oauth Start
+         * @description Start signing in with a login provider (404 when it is not enabled): its authorization
+         *     URL, and a cookie that binds the round trip to this browser.
+         */
+        post: operations["oauth_start_api_v1_identity_oauth__provider__start_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1144,6 +1248,34 @@ export type components = {
             version: number;
         };
         /**
+         * ExternalIdentityOut
+         * @description A linked account of a login provider (never the provider's settings).
+         */
+        ExternalIdentityOut: {
+            /**
+             * Display Name
+             * @description The account's name at the provider (login)
+             */
+            display_name: string | null;
+            /** Last Used At */
+            last_used_at: string | null;
+            /**
+             * Linked At
+             * Format: date-time
+             */
+            linked_at: string;
+            /** Provider */
+            provider: string;
+        };
+        /**
+         * ExternalLinkIn
+         * @description ``POST /me/external-identities/{provider}/link``: the current password again.
+         */
+        ExternalLinkIn: {
+            /** Password */
+            password: string;
+        };
+        /**
          * FeatureDef
          * @description A plan feature a module offers, e.g. ``reports``.
          */
@@ -1209,6 +1341,12 @@ export type components = {
          * @description Login methods this installation offers (the login page shows what is on).
          */
         LoginMethodsOut: {
+            /**
+             * Github
+             * @description Sign in with GitHub is configured (only this flag; the GitHub settings are never published)
+             * @default false
+             */
+            github: boolean;
             /**
              * Passkey
              * @description Passkeys are configured (MOWDECK_IDENTITY_PUBLIC_URL)
@@ -1345,6 +1483,31 @@ export type components = {
             ui_areas?: components["schemas"]["UiAreaDef"][];
             /** Version */
             version: string;
+        };
+        /**
+         * OAuthStartIn
+         * @description ``POST /oauth/{provider}/start``: the sign-in page's query to come back to.
+         */
+        OAuthStartIn: {
+            /**
+             * Return Query
+             * @description Query of /login to return to; only next (a local path), app_request and app_state are kept
+             */
+            return_query?: string | null;
+        };
+        /**
+         * OAuthStartOut
+         * @description Where to send the browser for the provider's sign-in (the browser keeps a cookie that
+         *     binds the round trip to it).
+         */
+        OAuthStartOut: {
+            /** Authorize Url */
+            authorize_url: string;
+            /**
+             * Expires In
+             * @description Seconds the round trip stays usable
+             */
+            expires_in: number;
         };
         /**
          * PasskeyLoginIn
@@ -2983,6 +3146,90 @@ export interface operations {
             };
         };
     };
+    my_external_identities_api_v1_identity_me_external_identities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalIdentityOut"][];
+                };
+            };
+        };
+    };
+    unlink_external_identity_api_v1_identity_me_external_identities__provider__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_external_identity_api_v1_identity_me_external_identities__provider__link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalLinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthStartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     my_passkeys_api_v1_identity_me_passkeys_get: {
         parameters: {
             query?: never;
@@ -3213,6 +3460,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MePlatformOut"];
+                };
+            };
+        };
+    };
+    oauth_callback_api_v1_identity_oauth__provider__callback_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: {
+                mowdeck_oauth?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    oauth_start_api_v1_identity_oauth__provider__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OAuthStartIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthStartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -9,6 +9,7 @@
   import { session } from '#lib/auth/session.svelte.js';
   import { probeBilling, type BillingStatus } from '#lib/billing/billing.js';
   import BillingPanel from '#lib/components/BillingPanel.svelte';
+  import GitHubPanel from '#lib/components/GitHubPanel.svelte';
   import PasskeysPanel from '#lib/components/PasskeysPanel.svelte';
   import PlanPanel from '#lib/components/PlanPanel.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
@@ -246,6 +247,8 @@
 </Panel>
 
 <PasskeysPanel />
+
+<GitHubPanel />
 
 <Panel label={m.account_logout()}>
   <Button icon="logout" onclick={logout} testid="logout">{m.account_logout()}</Button>
