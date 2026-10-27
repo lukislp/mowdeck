@@ -87,7 +87,9 @@ test('tracking: start, positions arrive, share link works logged out, report, fa
   await page.keyboard.press('Escape');
   await page.getByTestId('tracking-stop').click();
   await page.getByTestId('tracking-stop-false-alarm').click();
-  await expect(page.getByTestId('tracking-idle')).toBeHidden({ timeout: 5_000 }).catch(() => {});
+  await expect(page.getByTestId('tracking-idle'))
+    .toBeHidden({ timeout: 5_000 })
+    .catch(() => {});
   const ended = await request.get(`/api/v1/telemetry/mowers/${mowerId}/tracking`, {
     headers: auth,
   });
