@@ -172,10 +172,19 @@ class _SqlTx:
                 set_={
                     "account_id": insert.excluded.account_id,
                     "updated_at": insert.excluded.updated_at,
+                    "name": insert.excluded.name,
+                    "serial": insert.excluded.serial,
                 },
             )
         else:
-            statement = insert.on_conflict_do_nothing(index_elements=["mower_id"])
+            directory = tables.mower_directory.c
+            statement = insert.on_conflict_do_update(
+                index_elements=["mower_id"],
+                set_={
+                    "name": sa.func.coalesce(directory.name, insert.excluded.name),
+                    "serial": sa.func.coalesce(directory.serial, insert.excluded.serial),
+                },
+            )
         await self._conn.execute(statement)
 
     async def drop_mower(self, mower_id: UUID) -> None:
@@ -189,6 +198,7 @@ class _SqlTx:
             tables.mower_health,
             tables.mower_health_daily,
             tables.blade_changes,
+            tables.tracking_sessions,
         ):
             await self._conn.execute(sa.delete(table).where(table.c.mower_id == mower_id))
 
@@ -274,6 +284,16 @@ class SqlStore:
         """``BEGIN`` ... ``COMMIT`` (``ROLLBACK`` on error)."""
         async with self.engine.begin() as conn:
             yield _SqlTx(conn)
+
+    async def directory_of(self, mower_id: UUID) -> DirectoryEntry | None:
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(tables.mower_directory).where(
+                    tables.mower_directory.c.mower_id == mower_id
+                )
+            )
+            row = result.first()
+        return DirectoryEntry(**row._mapping) if row else None
 
     async def latest_of(self, account_id: UUID, mower_id: UUID) -> LatestRow | None:
         async with self.engine.connect() as conn:

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``gateway.mower.<id>.tracking`` (internal, Telemetry to Device-Gateway).",
+  "properties": {
+    "account_id": {
+      "description": "The mower's account as Telemetry knows it.",
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "interval_seconds": {
+      "default": 10.0,
+      "description": "Ask the mower for a report this often.",
+      "maximum": 3600,
+      "minimum": 1,
+      "title": "Interval Seconds",
+      "type": "number"
+    },
+    "lease_seconds": {
+      "default": 60.0,
+      "description": "Keep the fast reports this long unless renewed; 0 releases the lease.",
+      "maximum": 3600,
+      "minimum": 0,
+      "title": "Lease Seconds",
+      "type": "number"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "mower_id",
+    "account_id"
+  ],
+  "title": "TrackingLeaseRequest",
+  "type": "object"
+}

@@ -8,6 +8,7 @@ from telemetry.application.ingest import Ingest
 from telemetry.application.ports import Clock, HealthEvents, Store
 from telemetry.application.queries import Queries
 from telemetry.application.retention import Retention
+from telemetry.application.tracking import Tracking
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +20,7 @@ class Services:
     health: Health
     retention: Retention
     config: TelemetryConfig
+    tracking: Tracking | None = None
 
 
 def build_services(

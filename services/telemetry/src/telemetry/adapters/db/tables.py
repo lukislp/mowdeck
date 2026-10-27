@@ -5,6 +5,7 @@ carries ``account_id``, taken from the message or the mower directory, never fro
 and every account-facing query filters by it.
 """
 
+import sqlalchemy as sa
 from sqlalchemy import (
     Boolean,
     Column,
@@ -12,8 +13,10 @@ from sqlalchemy import (
     DateTime,
     Double,
     Float,
+    ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     PrimaryKeyConstraint,
     SmallInteger,
@@ -42,6 +45,8 @@ mower_directory = Table(
     Column("mower_id", Uuid, primary_key=True),
     Column("account_id", Uuid, nullable=False),
     Column("updated_at", TS, nullable=False),
+    Column("name", String(100)),
+    Column("serial", String(100)),
     Index("ix_mower_directory_account", "account_id"),
 )
 
@@ -204,3 +209,73 @@ blade_changes = Table(
     Column("changed_by", Uuid),
 )
 Index("ix_blade_changes_mower_time", blade_changes.c.mower_id, blade_changes.c.changed_at.desc())
+
+
+tracking_sessions = Table(
+    "tracking_sessions",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("account_id", Uuid, nullable=False),
+    Column("mower_id", Uuid, nullable=False),
+    Column("trigger", String(40), nullable=False),
+    Column("started_at", TS, nullable=False),
+    Column("ends_at", TS, nullable=False),
+    Column("interval_seconds", Double, nullable=False),
+    Column("mower_name", String(100), nullable=False),
+    Column("mower_model", String(64)),
+    Column("mower_serial", String(100)),
+    Column("started_by", Uuid),
+    Column("ended_at", TS),
+    Column("end_reason", String(24)),
+    Column("last_lat", Double),
+    Column("last_lon", Double),
+    Column("last_fix_at", TS),
+    Column("stale_since", TS),
+    Column("stale_notified", Boolean, nullable=False, server_default="false"),
+    Column("notice_lat", Double),
+    Column("notice_lon", Double),
+    Column("notice_at", TS),
+    Column("points", Integer, nullable=False, server_default="0"),
+    Index("ix_tracking_sessions_mower_started", "mower_id", "started_at"),
+    Index("ix_tracking_sessions_account", "account_id"),
+    Index(
+        "uq_tracking_sessions_active",
+        "mower_id",
+        unique=True,
+        postgresql_where=sa.text("ended_at IS NULL"),
+    ),
+)
+
+tracking_links = Table(
+    "tracking_links",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column(
+        "session_id", Uuid, ForeignKey("tracking_sessions.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("account_id", Uuid, nullable=False),
+    Column("mower_id", Uuid, nullable=False),
+    Column("token_hash", String(64), nullable=False),
+    Column("created_at", TS, nullable=False),
+    Column("expires_at", TS, nullable=False),
+    Column("created_by", Uuid),
+    Column("revoked_at", TS),
+    Column("last_used_at", TS),
+    Column("uses", Integer, nullable=False, server_default="0"),
+    Index("uq_tracking_links_token_hash", "token_hash", unique=True),
+    Index("ix_tracking_links_session", "session_id"),
+)
+
+tracking_photos = Table(
+    "tracking_photos",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column(
+        "session_id", Uuid, ForeignKey("tracking_sessions.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("account_id", Uuid, nullable=False),
+    Column("taken_at", TS, nullable=False),
+    Column("media_type", String(16), nullable=False),
+    Column("data", LargeBinary, nullable=False),
+    Index("ix_tracking_photos_session", "session_id", "taken_at"),
+)

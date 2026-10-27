@@ -584,6 +584,25 @@ def report_rate_port_of(connection: object) -> ReportRateCapable | None:
 
 
 @runtime_checkable
+class TrackingRateCapable(Protocol):
+    """Optional capability of a :class:`MowerConnection` whose mower reports only when asked
+    (ADR 0053): while the theft tracking mode holds a lease, the adapter asks for a report every
+    ``interval_s`` seconds, whatever the mower's activity, and backs off when the mower stays
+    silent. A connection whose mower reports on its own (the simulator) needs no such port."""
+
+    def set_tracking_interval(self, interval_s: float | None) -> float | None:
+        """Ask for reports at most every ``interval_s`` seconds (the adapter clamps it to what
+        its link allows) and return the interval it applies; None restores the normal rhythm
+        and returns None."""
+        ...
+
+
+def tracking_rate_port_of(connection: object) -> TrackingRateCapable | None:
+    """``connection`` as a :class:`TrackingRateCapable`, or None when it does not implement it."""
+    return connection if isinstance(connection, TrackingRateCapable) else None
+
+
+@runtime_checkable
 class FirmwarePort(Protocol):
     """Optional capability of a :class:`MowerConnection`: the manufacturer's firmware service
     (ADR 0038), declared with ``MowerCapabilities.firmware_update``.

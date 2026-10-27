@@ -68,6 +68,8 @@ from mowdeck_contracts.v1 import (
     MowerState,
     MowPath,
     SpotMow,
+    TrackingLeaseCode,
+    TrackingLeaseReply,
     VisionDemand,
     utc_now,
 )
@@ -83,6 +85,7 @@ from mowdeck_control import (
     camera_session_of,
     firmware_port_of,
     release_camera_session_of,
+    tracking_rate_port_of,
 )
 from mowdeck_service_kit import get_logger
 from pydantic import BaseModel
@@ -231,6 +234,9 @@ class MowerSession:
         """Geometry key and progress of the last path snapshot of this connection."""
         self._path_published_at = 0.0
         self._path_lock = asyncio.Lock()
+        self._tracking_interval: float | None = None
+        """Interval of the theft tracking lease in force (ADR 0053); None: none."""
+        self._tracking_timer: asyncio.TimerHandle | None = None
 
     @property
     def mower_id(self) -> UUID:
@@ -457,6 +463,7 @@ class MowerSession:
             raise
         finally:
             self._controller = None
+            self._clear_tracking()
             self.connected_since = None
             if started:  # before the close, which may take a while: clients learn it at once
                 await self._publish_disconnected(controller.last_state or self.last_state)
@@ -584,6 +591,47 @@ class MowerSession:
             self.last_state = latest
         return info
 
+    def set_tracking(self, interval_s: float, lease_s: float) -> TrackingLeaseReply:
+        """Take (or renew) a theft tracking lease (``gateway.mower.<id>.tracking``, ADR 0053):
+        reports every ``interval_s`` seconds for ``lease_s`` seconds, then the normal rhythm
+        again unless renewed. ``lease_s`` 0 releases. A connection that reports on its own
+        (the simulator) needs no port: the state heartbeat follows the interval. While the
+        mower is not connected nothing is kept; the next renewal applies once it is."""
+        controller = self._controller
+        if controller is None:
+            self._clear_tracking()
+            return TrackingLeaseReply(
+                code=TrackingLeaseCode.NOT_CONNECTED, detail="the mower is not connected"
+            )
+        port = tracking_rate_port_of(controller.connection)
+        if lease_s <= 0:
+            self._clear_tracking()
+            return TrackingLeaseReply(code=TrackingLeaseCode.OK)
+        applied = port.set_tracking_interval(interval_s) if port is not None else interval_s
+        self._tracking_interval = applied if applied is not None else interval_s
+        if self._tracking_timer is not None:
+            self._tracking_timer.cancel()
+        self._tracking_timer = asyncio.get_running_loop().call_later(lease_s, self._clear_tracking)
+        return TrackingLeaseReply(
+            code=TrackingLeaseCode.OK,
+            interval_seconds=self._tracking_interval,
+            detail=None if port is not None else "the mower reports on its own",
+        )
+
+    def _clear_tracking(self) -> None:
+        """End the tracking lease: the connection returns to its normal rhythm."""
+        if self._tracking_timer is not None:
+            self._tracking_timer.cancel()
+            self._tracking_timer = None
+        was_tracking, self._tracking_interval = self._tracking_interval is not None, None
+        controller = self._controller
+        if controller is not None:
+            port = tracking_rate_port_of(controller.connection)
+            if port is not None:
+                port.set_tracking_interval(None)
+        if was_tracking:
+            _log.info("tracking lease ended", mower_id=str(self.mower_id))
+
     async def check_firmware(self, target: FirmwareTarget = "mower") -> FirmwareInfo | None:
         """Ask the manufacturer now (``gateway.mower.<id>.firmware.check``) and publish the
         state that carries the answer; ``target`` ``base_station`` asks for the linked RTK base
@@ -652,6 +700,8 @@ class MowerSession:
                     if controller.drive_session_active
                     else self._timing.heartbeat_seconds
                 )
+                if self._tracking_interval is not None:
+                    heartbeat = min(heartbeat, self._tracking_interval)
                 elapsed = loop.time() - published_at
                 # Wake at least every drive heartbeat to notice a drive session that opened.
                 timeout = max(0.0, min(heartbeat - elapsed, drive_heartbeat))

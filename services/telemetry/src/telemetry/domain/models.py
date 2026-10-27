@@ -84,6 +84,11 @@ class DirectoryEntry:
     mower_id: UUID
     account_id: UUID
     updated_at: datetime
+    name: str | None = None
+    """The name Fleet knows (shown in the theft tracking report and share page)."""
+    serial: str | None = None
+    """The manufacturer's device name when the connection options carry one (Mammotion
+    ``device_name``), the closest to a serial number MowDeck knows."""
 
 
 @dataclass(frozen=True, slots=True)

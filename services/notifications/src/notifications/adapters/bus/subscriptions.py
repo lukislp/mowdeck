@@ -18,6 +18,9 @@
 * ``event.telemetry.>`` (JetStream ``EVENTS``, durable ``notifications-telemetry``):
   ``telemetry.blade_hours.threshold`` becomes ``blade_maintenance``; other telemetry events are
   acknowledged and ignored.
+* ``event.tracking.>`` (JetStream ``EVENTS``, durable ``notifications-tracking``): the theft
+  tracking milestones of Telemetry (ADR 0053) become ``tracking_started``/``_moved``/``_stale``/
+  ``_ended``.
 * ``event.vision.>`` (JetStream ``EVENTS``, durable ``notifications-vision``):
   ``vision.proposal.created`` becomes ``vision_proposal`` for the users who may drive the mower;
   ``vision.proposal.updated`` of an automatic analysis without a camera photo becomes
@@ -44,6 +47,10 @@ from mowdeck_contracts.v1 import (
     MOWER_REMOVED,
     MOWER_UPDATED,
     TELEMETRY_BLADE_HOURS_THRESHOLD,
+    TRACKING_ENDED,
+    TRACKING_MOVED,
+    TRACKING_STALE,
+    TRACKING_STARTED,
     VISION_PROPOSAL_CREATED,
     VISION_PROPOSAL_UPDATED,
     BladeHoursThreshold,
@@ -53,6 +60,7 @@ from mowdeck_contracts.v1 import (
     MowerMapSnapshot,
     MowerRegistration,
     MowerState,
+    TrackingEvent,
     UserChanged,
     VisionProposalCreated,
     VisionProposalUpdated,
@@ -93,11 +101,14 @@ DEVICE_CONSUMER = "notifications-device"
 """Durable consumer (and queue group) of the device snapshots (maps)."""
 TELEMETRY_CONSUMER = "notifications-telemetry"
 """Durable consumer (and queue group) of Telemetry's events."""
+TRACKING_CONSUMER = "notifications-tracking"
+"""Durable consumer (and queue group) of Telemetry's theft tracking events."""
 VISION_CONSUMER = "notifications-vision"
 """Durable consumer (and queue group) of the Vision service's events."""
 
 _DIRECTORY_EVENTS = frozenset({MOWER_REGISTERED, MOWER_UPDATED, MOWER_REMOVED})
 _CONNECTION_EVENTS = frozenset({MOWER_CONNECTED, MOWER_DISCONNECTED})
+_TRACKING_EVENTS = frozenset({TRACKING_STARTED, TRACKING_MOVED, TRACKING_STALE, TRACKING_ENDED})
 _USER_REMOVED = frozenset({IDENTITY_USER_DISABLED, IDENTITY_USER_DELETED})
 
 
@@ -230,6 +241,28 @@ def telemetry_event_handler(watcher: Watcher) -> MessageHandler:
     return handle
 
 
+def tracking_event_handler(watcher: Watcher) -> MessageHandler:
+    """Theft tracking milestones from Telemetry (ADR 0053)."""
+
+    async def handle(message: BusMessage) -> None:
+        try:
+            event = message.model(EventEnvelope[dict[str, Any]])
+        except ValidationError as exc:
+            raise DropMessage("invalid event envelope") from exc
+        if event.type not in _TRACKING_EVENTS:
+            return
+        try:
+            payload = TrackingEvent.model_validate(event.payload)
+        except ValidationError as exc:
+            raise DropMessage(f"invalid {event.type} payload") from exc
+        try:
+            await watcher.on_tracking(event.type, payload)
+        except AccountMismatchError as exc:
+            raise DropMessage(exc.message) from exc
+
+    return handle
+
+
 def vision_event_handler(watcher: Watcher) -> MessageHandler:
     """Proposals of AI assist."""
 
@@ -324,6 +357,12 @@ async def subscribe_all(
             telemetry_event_handler(watcher),
             durable=TELEMETRY_CONSUMER,
             queue=TELEMETRY_CONSUMER,
+        ),
+        await bus.subscribe(
+            event_wildcard("tracking"),
+            tracking_event_handler(watcher),
+            durable=TRACKING_CONSUMER,
+            queue=TRACKING_CONSUMER,
         ),
         await bus.subscribe(
             event_wildcard("vision"),

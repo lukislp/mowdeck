@@ -42,6 +42,7 @@ from device_gateway.adapters.bus.subscriptions import (
     subscribe_photo_requests,
     subscribe_registry_events,
 )
+from device_gateway.adapters.bus.tracking import subscribe_tracking_leases
 from device_gateway.adapters.control.cloud_accounts import CloudBackend, cloud_backend
 from device_gateway.adapters.control.connections import RegistryConnectionProvider
 from device_gateway.adapters.control.snapshot import RelaySnapshotter
@@ -171,6 +172,9 @@ def build_app(
         app.state.firmware_checks = await subscribe_firmware_checks(
             active_bus, gateway, registry=app.state.metrics_registry
         )
+        app.state.tracking_leases = await subscribe_tracking_leases(
+            active_bus, gateway, registry=app.state.metrics_registry
+        )
         app.state.cloud_discovery = await subscribe_cloud_discovery(
             active_bus,
             CloudDiscoveryService(
@@ -207,7 +211,7 @@ def build_app(
         path_previews: Subscription | None = getattr(app.state, "path_previews", None)
         if path_previews is not None:
             await path_previews.unsubscribe()
-        for name in ("camera_releases", "bridge_scans", "firmware_checks"):
+        for name in ("camera_releases", "bridge_scans", "firmware_checks", "tracking_leases"):
             subscription: Subscription | None = getattr(app.state, name, None)
             if subscription is not None:
                 await subscription.unsubscribe()

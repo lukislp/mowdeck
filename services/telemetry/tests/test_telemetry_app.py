@@ -138,7 +138,7 @@ async def test_telemetry_retention_does_nothing_while_another_replica_holds_the_
 
 async def test_telemetry_background_tasks_run_retention_and_survive_failures() -> None:
     async with harness(background_tasks=True, telemetry_retention_interval_seconds=10) as h:
-        assert len(h.app.state.subscriptions) == 5
+        assert len(h.app.state.subscriptions) == 6
     calls = 0
 
     async def job() -> None:
@@ -157,7 +157,7 @@ async def test_telemetry_start_background_tasks_without_a_bus_only_runs_retentio
     app = build_app(make_settings(), store=MemoryStore(), authorizer=DenyAll())
     async with lifespan_client(app):
         tasks = start_background_tasks(app, make_settings(), app.state.telemetry, None)
-        assert len(tasks) == 1
+        assert len(tasks) == 3  # retention, tracking retention and the tracking tick
         for task in tasks:
             task.cancel()
     assert uuid4() and API

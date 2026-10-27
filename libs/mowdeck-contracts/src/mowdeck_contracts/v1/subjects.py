@@ -28,6 +28,8 @@ Subject scheme:
 ``gateway.mower.<id>.firmware.check`` core NATS request: ask the vendor for firmware updates
                                       (Device-Gateway)
 ``gateway.mower.<mower_id>.photo``    core NATS request: a still image of one mower (Vision)
+``gateway.mower.<id>.tracking``       core NATS request: a lease for fast position reports
+                                      (Telemetry to Device-Gateway, ADR 0053)
 ``gateway.cloud.discover``            core NATS request: devices of a vendor cloud account
 ``relay.camera.attach``               core NATS request: a lease on the camera relay (ADR 0045)
 ``relay.camera.renew``                core NATS request: a lease's heartbeat, a fresh ticket
@@ -307,6 +309,24 @@ def parse_firmware_check_subject(subject: str) -> UUID:
     return UUID(parts[2])
 
 
+def tracking_lease_subject(mower_id: UUID) -> str:
+    """Core NATS request subject of a tracking lease: ``gateway.mower.<id>.tracking``.
+
+    ``TrackingLeaseRequest`` in, ``TrackingLeaseReply`` out (ADR 0053); answered by the gateway
+    instance that holds the mower (other shards stay silent).
+    """
+    return f"{GATEWAY_PREFIX}.{mower_id}.tracking"
+
+
+def parse_tracking_lease_subject(subject: str) -> UUID:
+    """The mower id of a ``gateway.mower.<id>.tracking`` subject."""
+    parts = subject.split(".")
+    if len(parts) != 4 or ".".join(parts[:2]) != GATEWAY_PREFIX or parts[3] != "tracking":
+        msg = f"not a tracking lease subject: {subject!r}"
+        raise ValueError(msg)
+    return UUID(parts[2])
+
+
 def event_subject(domain: str, name: str) -> str:
     """Subject for a domain event: ``event.<domain>.<name>``.
 
@@ -347,6 +367,8 @@ ALL_BRIDGE_SCANS = f"{GATEWAY_PREFIX}.*.bridge.scan"
 """Wildcard the Device-Gateway subscribes to for bridge scan requests (core NATS)."""
 ALL_FIRMWARE_CHECKS = f"{GATEWAY_PREFIX}.*.firmware.check"
 """Wildcard the Device-Gateway subscribes to for firmware check requests (core NATS)."""
+ALL_TRACKING_LEASES = f"{GATEWAY_PREFIX}.*.tracking"
+"""Wildcard the Device-Gateway subscribes to for tracking lease requests (core NATS)."""
 ALL_CAMERA_RELAY_EVENTS = f"{CAMERA_PREFIX}.*.relay.*"
 """Wildcard for every camera relay event of any mower (stream ``CAMERA``)."""
 

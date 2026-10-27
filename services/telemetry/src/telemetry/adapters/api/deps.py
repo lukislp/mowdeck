@@ -16,6 +16,7 @@ from mowdeck_authz import ObjectRef, Relation, account, principal_subject
 from mowdeck_authz.fastapi import get_authorizer, path_object, require_or_not_found
 from mowdeck_contracts.v1 import Principal
 from mowdeck_service_kit.errors import (
+    Conflict,
     NotFound,
     ServiceError,
     ServiceUnavailable,
@@ -26,9 +27,14 @@ from mowdeck_service_kit.errors import (
 from telemetry.application.services import Services
 from telemetry.domain.errors import (
     InvalidQueryError,
+    LinkLimitError,
     NoSnapshotYetError,
     NoTelemetryYetError,
+    NoTrackingError,
+    RateLimitedError,
     TelemetryError,
+    TrackingStateError,
+    UnknownTrackedMowerError,
 )
 
 
@@ -60,6 +66,21 @@ class NoPathProblem(NotFound):
     title: ClassVar[str] = "No mow path"
 
 
+class NoTrackingProblem(NotFound):
+    """The mower has no (matching) theft tracking session or link."""
+
+    problem_type: ClassVar[str] = "no-tracking"
+    title: ClassVar[str] = "No tracking session"
+
+
+class TooManyRequests(ServiceError):  # noqa: N818 - HTTP status names read best
+    """The public tracking page was asked too often (429)."""
+
+    status: ClassVar[int] = 429
+    problem_type: ClassVar[str] = "too-many-requests"
+    title: ClassVar[str] = "Too many requests"
+
+
 def get_services(request: Request) -> Services:
     """The use cases created at startup (503 before startup finished)."""
     services: Services | None = getattr(request.app.state, "telemetry", None)
@@ -77,6 +98,10 @@ ViewMower = Annotated[Principal, Depends(require_or_not_found(Relation.CAN_VIEW,
 
 ManageMower = Annotated[Principal, Depends(require_or_not_found(Relation.CAN_MANAGE_MOWERS, MOWER))]
 """``can_manage_mowers`` on the mower in the path (403 when visible without it, else 404)."""
+
+
+ControlMower = Annotated[Principal, Depends(require_or_not_found(Relation.CAN_CONTROL, MOWER))]
+"""``can_control`` on the mower in the path (403 when visible without it, else 404)."""
 
 
 async def visible_mower_ids(
@@ -117,6 +142,19 @@ def to_service_error(exc: TelemetryError) -> ServiceError:
             return NoCapabilitiesProblem(exc.message)
         case InvalidQueryError():
             return ValidationFailed(exc.message)
+        case UnknownTrackedMowerError() | NoTrackingError():
+            return NoTrackingProblem(exc.message)
+        case TrackingStateError() | LinkLimitError():
+            return Conflict(exc.message)
+        case RateLimitedError():
+            return TooManyRequests(
+                exc.message,
+                headers={
+                    "Retry-After": str(exc.retry_after),
+                    "Cache-Control": "no-store",
+                    "X-Robots-Tag": "noindex, nofollow, noarchive",
+                },
+            )
         case _:
             return ServiceError(exc.message)
 

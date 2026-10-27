@@ -122,6 +122,10 @@ class Store(Protocol):
         """A write transaction (all or nothing)."""
         ...
 
+    async def directory_of(self, mower_id: UUID) -> DirectoryEntry | None:
+        """The directory entry of a mower (account, name, serial), None when unknown."""
+        ...
+
     async def latest_of(self, account_id: UUID, mower_id: UUID) -> LatestRow | None:
         """The latest row of one mower of an account."""
         ...

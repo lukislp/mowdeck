@@ -31,3 +31,27 @@ class NoSnapshotYetError(TelemetryError):
     def __init__(self, message: str, kind: str) -> None:
         super().__init__(message)
         self.kind = kind
+
+
+class UnknownTrackedMowerError(TelemetryError):
+    """The mower is not in the directory of the account (theft tracking)."""
+
+
+class NoTrackingError(TelemetryError):
+    """The mower has no (matching) theft tracking session."""
+
+
+class TrackingStateError(TelemetryError):
+    """The request does not fit the session's state (e.g. a link on a deleted session)."""
+
+
+class LinkLimitError(TelemetryError):
+    """A session already has the most active share links."""
+
+
+class RateLimitedError(TelemetryError):
+    """Too many requests to the public tracking page."""
+
+    def __init__(self, message: str, retry_after: int) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after

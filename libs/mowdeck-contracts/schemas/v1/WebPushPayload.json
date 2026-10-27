@@ -18,6 +18,10 @@
         "firmware_update_available",
         "firmware_update_finished",
         "firmware_update_failed",
+        "tracking_started",
+        "tracking_moved",
+        "tracking_stale",
+        "tracking_ended",
         "test"
       ],
       "title": "NotificationKind",

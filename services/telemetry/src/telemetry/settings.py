@@ -12,6 +12,7 @@ from mowdeck_service_kit import ServiceSettings
 from pydantic import Field
 
 from telemetry.application.context import TelemetryConfig
+from telemetry.application.tracking import TrackingConfig
 
 
 class Settings(ServiceSettings):
@@ -87,6 +88,69 @@ class Settings(ServiceSettings):
     telemetry_heatmap_join_metres: float = Field(default=10, gt=0, le=1000)
     """Coverage heatmap: ... and at most this many metres apart (both limits must hold; about
     0.6 m/s for 20 s with margin). Farther positions stay separate discs (RTK jumps)."""
+
+    tracking_interval_seconds: float = Field(default=10.0, ge=5, le=3600)
+    """Theft tracking (ADR 0053): position report interval asked from the gateway while a
+    session runs (the adapter never goes below 5 s)."""
+
+    tracking_max_hours: float = Field(default=24.0, gt=0, le=720)
+    """A tracking session ends by itself after this many hours (with a notification)."""
+
+    tracking_tick_seconds: float = Field(default=15.0, ge=1, le=300)
+    """How often active sessions are looked at (lease renewal, stale and move checks)."""
+
+    tracking_lease_seconds: float = Field(default=60.0, ge=5, le=3600)
+    """Length of the gateway lease; the gateway returns to its normal rhythm this long after the
+    last renewal. Keep it a few ticks long."""
+
+    tracking_stale_after_seconds: float = Field(default=120.0, ge=10)
+    """No report for this long marks the session stale and notifies once per outage."""
+
+    tracking_move_meters: float = Field(default=50.0, gt=0)
+    """A "moved" notification needs this distance from the previous notice ..."""
+
+    tracking_move_notice_seconds: float = Field(default=300.0, ge=0)
+    """... and this long since it."""
+
+    tracking_link_ttl_hours: float = Field(default=48.0, gt=0, le=720)
+    """Lifetime of a share link (and the longest one may ask for)."""
+
+    tracking_max_links: int = Field(default=10, ge=1, le=100)
+    """Active share links per session."""
+
+    tracking_retention_days: int = Field(default=30, ge=1, le=3650)
+    """Ended sessions with their links and photos are deleted after this many days."""
+
+    tracking_auto_start: bool = True
+    """Start a session on a theft alarm (lifted, left the dock, geofence exit)."""
+
+    tracking_photos: bool = True
+    """Take a camera photo at the start for the report."""
+
+    tracking_public_rate_per_minute: int = Field(default=60, ge=1)
+    """Requests per minute and client to the public share page."""
+
+    tracking_public_failures_per_minute: int = Field(default=20, ge=1)
+    """Unusable tokens per minute and client before the client is slowed down."""
+
+    def to_tracking_config(self) -> TrackingConfig:
+        """The tracking use case configuration."""
+        return TrackingConfig(
+            interval_seconds=self.tracking_interval_seconds,
+            max_duration=timedelta(hours=self.tracking_max_hours),
+            tick_seconds=self.tracking_tick_seconds,
+            lease_seconds=self.tracking_lease_seconds,
+            stale_after=timedelta(seconds=self.tracking_stale_after_seconds),
+            move_meters=self.tracking_move_meters,
+            move_notice_interval=timedelta(seconds=self.tracking_move_notice_seconds),
+            link_ttl=timedelta(hours=self.tracking_link_ttl_hours),
+            max_links=self.tracking_max_links,
+            retention=timedelta(days=self.tracking_retention_days),
+            auto_start=self.tracking_auto_start,
+            photos=self.tracking_photos,
+            public_rate_per_minute=self.tracking_public_rate_per_minute,
+            public_failures_per_minute=self.tracking_public_failures_per_minute,
+        )
 
     def to_config(self) -> TelemetryConfig:
         """The use case configuration."""
