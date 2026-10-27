@@ -1,4 +1,4 @@
-"""A fake aerial photo WMS for the Playwright suite (ADR 0053): GetMap in EPSG:3857.
+"""A fake aerial photo WMS for the Playwright suite (ADR 0054): GetMap in EPSG:3857.
 
 Test stacks only (infra/compose/docker-compose.e2e.yml runs it with the identity image; standard
 library only; no internet). It paints a synthetic garden at the places where the simulator's demo

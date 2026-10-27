@@ -93,7 +93,7 @@ nav:
       - adr/0050-passkeys-and-app-login-hand-off.md
       - adr/0051-sign-in-with-github.md
       - adr/0052-sign-in-with-apple.md
-      - adr/0053-aerial-photo-under-the-map.md
+      - adr/0054-aerial-photo-under-the-map.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md

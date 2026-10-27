@@ -1,6 +1,6 @@
 # Aerial photo under the map
 
-MowDeck can lay an aerial photo under the mower map, so areas, no-go zones, the mower's track and the heat layers (coverage, RTK, WLAN, mobile) are seen on the real garden. It is **off by default**: nothing is requested from any third party until you configure a source. Design and reasons: [ADR 0053](../adr/0053-aerial-photo-under-the-map.md).
+MowDeck can lay an aerial photo under the mower map, so areas, no-go zones, the mower's track and the heat layers (coverage, RTK, WLAN, mobile) are seen on the real garden. It is **off by default**: nothing is requested from any third party until you configure a source. Design and reasons: [ADR 0054](../adr/0054-aerial-photo-under-the-map.md).
 
 ## How it works
 

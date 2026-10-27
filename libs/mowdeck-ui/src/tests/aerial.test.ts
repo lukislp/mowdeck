@@ -68,7 +68,7 @@ describe('createAerialLayer', () => {
 describe('alignment of the map with the tiles', () => {
   it('puts a local point where Web Mercator tiles place its WGS84 position', () => {
     // 100 m east of the reference on a rotation-free map: the same longitude shift the server
-    // uses to bound the tiles (equirectangular around the origin, ADR 0053).
+    // uses to bound the tiles (equirectangular around the origin, ADR 0054).
     const projection = createProjection(REF, 'geo');
     const [lat, lon] = projection.fromLocal(100, 0);
     expect(lat).toBeCloseTo(REF.origin_lat, 9);

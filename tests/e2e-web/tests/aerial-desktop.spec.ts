@@ -1,5 +1,5 @@
 /**
- * The aerial photo under the mower map (ADR 0053), desktop and phone, against the stack's fake
+ * The aerial photo under the mower map (ADR 0054), desktop and phone, against the stack's fake
  * WMS (tests/e2e-web/fake-wms), which paints a synthetic garden at the simulator map's
  * coordinates: the lawn where the front area is, the flower bed where the no-go zone is.
  *

@@ -93,7 +93,7 @@ class Settings(ServiceSettings):
     telemetry_aerial_wms_url: str | None = Field(default=None, pattern=r"^https?://[^\s\"<>\\]+$")
     """Aerial photo under the map: base URL of a WMS (https) that can answer ``GetMap`` in
     EPSG:3857. Empty (the default) means no aerial layer and no request to any third party.
-    Bavaria: ``https://geoservices.bayern.de/od/wms/dop/v1/dop40`` (ADR 0053)."""
+    Bavaria: ``https://geoservices.bayern.de/od/wms/dop/v1/dop40`` (ADR 0054)."""
 
     telemetry_aerial_allow_http: bool = False
     """Accept ``http://`` source URLs. Only for the fake source of the test stack: real sources

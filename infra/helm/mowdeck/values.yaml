@@ -84,7 +84,7 @@ config:
   GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS: "75"
 
   # --- Telemetry ---
-  # Optional aerial photo under the map (ADR 0053): a WMS (EPSG:3857) or an XYZ template, fetched
+  # Optional aerial photo under the map (ADR 0054): a WMS (EPSG:3857) or an XYZ template, fetched
   # and cached by Telemetry. Empty: off. Bavaria: https://geoservices.bayern.de/od/wms/dop/v1/dop40
   # with layer by_dop40c.
   AERIAL_WMS_URL: ""

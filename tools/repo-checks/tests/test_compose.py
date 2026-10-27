@@ -75,7 +75,7 @@ def test_e2e_override_adds_the_marker_and_the_relay_with_test_hooks(repo_root: P
         )
     assert identity["depends_on"] == {"fake-apple": {"condition": "service_healthy"}}
     assert "fake-github" not in base["services"] and "fake-apple" not in base["services"]
-    # The aerial photo (ADR 0053) against a fake WMS: Telemetry only gets the source variables.
+    # The aerial photo (ADR 0054) against a fake WMS: Telemetry only gets the source variables.
     telemetry = override["services"]["telemetry"]
     assert set(telemetry) == {"environment", "depends_on"}
     assert (

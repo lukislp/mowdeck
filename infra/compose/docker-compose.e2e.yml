@@ -88,7 +88,7 @@ services:
       - traefik.http.services.fake-github.loadbalancer.server.port=8000
     networks: [mowdeck]
 
-  # The aerial photo under the map (ADR 0053) against a fake WMS that paints a synthetic garden at
+  # The aerial photo under the map (ADR 0054) against a fake WMS that paints a synthetic garden at
   # the simulator map's coordinates (tests/e2e-web/fake-wms/fake_wms.py, standard library only,
   # no internet). Telemetry asks it for tiles exactly as it asks the Bavarian service; Traefik
   # routes /fake-wms so a spec can read the request counters.
