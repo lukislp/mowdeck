@@ -13,7 +13,7 @@ token stay (``audit_log`` is append-only and refers to the token by id only, no 
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from mowdeck_authz import api_token
@@ -25,8 +25,27 @@ from identity.application.ports import In
 from identity.application.work import Work
 from identity.domain.credentials import new_api_token, sha256_hex
 from identity.domain.errors import ConflictError, ForbiddenError, InvalidInput, NotFoundError
-from identity.domain.models import ApiToken, TokenGrant
+from identity.domain.models import ApiToken, Level, LevelType, TokenGrant
 from identity.domain.permissions import validate_token_grant
+
+WIDGET_PREFIX = "iOS widgets: "
+"""Name prefix that marks an API token as an iOS widget credential (ADR 0059). The token shows
+up in the account's token list like any other, so an admin can see and revoke it."""
+
+WIDGET_KEYS: tuple[str, ...] = ("mower.view", "mower.control")
+"""The only keys a widget credential can hold, on the account level: see the mowers and start,
+pause and dock them. A key the creator does not hold is left out."""
+
+WIDGET_LIFETIME = timedelta(days=90)
+"""A widget credential expires after this long; the app replaces it well before."""
+
+MAX_WIDGET_CREDENTIALS = 10
+"""Active widget credentials one user can hold (one per iPhone or iPad)."""
+
+
+def is_widget_token(token: ApiToken) -> bool:
+    """True for tokens created by :meth:`ApiTokenService.create_widget_credential`."""
+    return token.name.startswith(WIDGET_PREFIX)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +159,136 @@ class ApiTokenService:
                     details={"name": token.name},
                 )
         return token
+
+    async def list_widget_credentials(self, account_id: UUID, user_id: UUID) -> list[ApiToken]:
+        """The caller's own widget credentials (active and revoked), newest first."""
+        found = await self.list_tokens(account_id)
+        return [t for t in found if is_widget_token(t) and t.created_by == user_id]
+
+    async def create_widget_credential(
+        self,
+        account_id: UUID,
+        device_name: str,
+        replaces: UUID | None,
+        ctx: RequestContext,
+    ) -> CreatedToken:
+        """Create the credential the iOS widgets use (ADR 0059): an API token with
+        ``mower.view`` and ``mower.control`` on the account (as far as the caller holds them),
+        valid for :data:`WIDGET_LIFETIME`, named ``iOS widgets: <device>``.
+
+        Any user can create one for themselves; it never exceeds the creator's rights and is
+        revoked with the creator. ``replaces`` (an earlier widget credential of the caller)
+        is revoked in the same transaction, which is how the app rotates the credential.
+        """
+        actor = ctx.principal
+        if actor is None or actor.kind not in (PrincipalKind.USER, PrincipalKind.SUBUSER):
+            msg = "only users can create widget credentials"
+            raise ForbiddenError(msg)
+        label = " ".join(device_name.split())[:80]
+        if not label:
+            msg = "the device needs a name"
+            raise InvalidInput(msg)
+        now = self.deps.clock()
+        token_id = uuid4()
+        secret_token, secret = new_api_token(token_id)
+        async with self.deps.uow() as work:
+            work.account_id = account_id
+            tx = work.tx
+            existing = [
+                t
+                for t in await tx.api_tokens.find(account_id=account_id)
+                if is_widget_token(t) and t.created_by == actor.subject
+            ]
+            if replaces is not None:
+                old = next((t for t in existing if t.id == replaces), None)
+                if old is None:
+                    msg = "widget credential not found"
+                    raise NotFoundError(msg)
+                await self._revoke_in(work, old, account_id, ctx)
+            active = [t for t in existing if t.is_usable(now) and t.id != replaces]
+            if len(active) >= MAX_WIDGET_CREDENTIALS:
+                msg = "too many active widget credentials, revoke one first"
+                raise ConflictError(msg)
+            catalogue = await self.deps.catalogue.current(tx)
+            level = Level(LevelType.ACCOUNT, account_id)
+            held: list[str] = []
+            for key in WIDGET_KEYS:
+                try:
+                    await self.deps.access.require_holds(
+                        tx, actor, account_id, [key], level, catalogue
+                    )
+                except ForbiddenError:
+                    continue
+                held.append(key)
+            if "mower.view" not in held:
+                msg = "widgets need the right to see all of the account's mowers"
+                raise ForbiddenError(msg)
+            grant = TokenGrant(level, tuple(validate_token_grant(held, level.type, catalogue)))
+            token = ApiToken(
+                id=token_id,
+                account_id=account_id,
+                name=f"{WIDGET_PREFIX}{label}",
+                prefix=secret_token[:12],
+                secret_hash=sha256_hex(secret),
+                created_by=actor.subject,
+                grants=[grant.to_json()],
+                created_at=now,
+                expires_at=now + WIDGET_LIFETIME,
+            )
+            await tx.api_tokens.add(token)
+            work.touch(api_token(token.id))
+            await work.audit(
+                ctx,
+                "api_token.widget_created",
+                account_id=account_id,
+                target=("api_token", token.id),
+                details={
+                    "name": token.name,
+                    "permissions": list(grant.permissions),
+                    "replaces": str(replaces) if replaces else None,
+                },
+            )
+        return CreatedToken(token, secret_token)
+
+    async def revoke_widget_credential(
+        self, account_id: UUID, token_id: UUID, ctx: RequestContext
+    ) -> ApiToken:
+        """Revoke one of the caller's own widget credentials (404 for any other token, also
+        for ordinary API tokens and other users' widget credentials)."""
+        actor = ctx.principal
+        if actor is None:
+            msg = "not authenticated"
+            raise ForbiddenError(msg)
+        async with self.deps.uow() as work:
+            work.account_id = account_id
+            token = await work.tx.api_tokens.get(id=token_id, account_id=account_id)
+            if token is None or not is_widget_token(token) or token.created_by != actor.subject:
+                msg = "widget credential not found"
+                raise NotFoundError(msg)
+            await self._revoke_in(work, token, account_id, ctx)
+        return token
+
+    async def _revoke_in(
+        self, work: Work, token: ApiToken, account_id: UUID, ctx: RequestContext
+    ) -> None:
+        """Revoke inside an open unit of work (idempotent)."""
+        if token.revoked_at is not None:
+            return
+        token.revoked_at, token.revoke_reason = self.deps.clock(), "revoked"
+        await work.tx.api_tokens.update(token)
+        work.touch(api_token(token.id))
+        work.emit(
+            IDENTITY_API_TOKEN_REVOKED,
+            account_id,
+            ApiTokenRevoked(token_id=token.id, account_id=account_id, reason="revoked"),
+        )
+        await work.audit(
+            ctx,
+            "api_token.revoked",
+            account_id=account_id,
+            target=("api_token", token.id),
+            details={"name": token.name},
+        )
 
     async def purge(self, account_id: UUID, token_id: UUID, ctx: RequestContext) -> ApiToken:
         """Delete a revoked token of the account for good (404 for other accounts' tokens,

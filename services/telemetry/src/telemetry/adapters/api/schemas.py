@@ -9,6 +9,7 @@ from mowdeck_contracts.v1 import GeoReference, MowerCapabilities, MowerMap, Mowe
 from pydantic import BaseModel, ConfigDict, Field
 
 from telemetry.application.queries import HeatmapResult
+from telemetry.application.widget import WidgetState
 from telemetry.domain.health import (
     BladeChange,
     DailyRow,
@@ -551,4 +552,59 @@ class MowerHeatmap(BaseModel):
             gaps=[HeatmapGapOut(polygon=g.polygon, area_m2=g.area_m2) for g in heatmap.gaps],
             samples=heatmap.samples,
             truncated=result.truncated,
+        )
+
+
+class WidgetJobOut(BaseModel):
+    """The running job as the iOS widgets and the Live Activity show it."""
+
+    progress_percent: int | None
+    area_id: str | None
+    area_name: str | None = Field(description="Name of the map area, when the map names it.")
+    elapsed_s: int | None
+    remaining_s: int | None
+    mowed_m2: float | None
+
+
+class WidgetStateOut(BaseModel):
+    """``GET /mowers/{id}/widget``: a compact state (ADR 0059)."""
+
+    mower_id: UUID
+    observed_at: datetime
+    stale: bool = Field(description="The mower is offline (see `MowerStateSnapshot.stale`).")
+    activity: str = Field(
+        description="`MowerActivity`; `offline` replaces the activity while the state is stale."
+    )
+    battery_percent: int
+    charging: bool
+    rain_detected: bool | None
+    error_code: str | None
+    error_message: str | None
+    job: WidgetJobOut | None
+
+    @classmethod
+    def of(cls, value: WidgetState) -> "WidgetStateOut":
+        """Build from the use case answer."""
+        return cls(
+            mower_id=value.mower_id,
+            observed_at=value.observed_at,
+            stale=value.stale,
+            activity=value.activity,
+            battery_percent=value.battery_percent,
+            charging=value.charging,
+            rain_detected=value.rain_detected,
+            error_code=value.error_code,
+            error_message=value.error_message,
+            job=(
+                WidgetJobOut(
+                    progress_percent=value.job.progress_percent,
+                    area_id=value.job.area_id,
+                    area_name=value.job.area_name,
+                    elapsed_s=value.job.elapsed_s,
+                    remaining_s=value.job.remaining_s,
+                    mowed_m2=value.job.mowed_m2,
+                )
+                if value.job is not None
+                else None
+            ),
         )

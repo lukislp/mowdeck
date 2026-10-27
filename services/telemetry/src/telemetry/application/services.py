@@ -8,6 +8,7 @@ from telemetry.application.ingest import Ingest
 from telemetry.application.ports import Clock, HealthEvents, Store
 from telemetry.application.queries import Queries
 from telemetry.application.retention import Retention
+from telemetry.application.widget import Widget
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +19,7 @@ class Services:
     queries: Queries
     health: Health
     retention: Retention
+    widget: Widget
     config: TelemetryConfig
 
 
@@ -31,5 +33,6 @@ def build_services(
         queries=queries,
         health=Health(store, config, clock, queries),
         retention=Retention(store, config, clock),
+        widget=Widget(store, queries.is_stale, clock),
         config=config,
     )

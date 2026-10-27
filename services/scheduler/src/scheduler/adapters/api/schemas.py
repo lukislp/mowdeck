@@ -7,7 +7,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import PrincipalRef, SchedulePattern, ScheduleRunOutcome
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from scheduler.application.schedules import Preview
+from scheduler.application.schedules import Preview, WidgetOverview, WidgetRun
 from scheduler.application.weather import WeatherAnswer
 from scheduler.domain.models import Schedule, ScheduleRun
 from scheduler.domain.rain import HourlyPoint, RainSettings
@@ -423,3 +423,107 @@ class DevWeatherIn(In):
     """``PUT /dev/weather``: the answer of the static weather provider."""
 
     mode: Literal["dry", "rain", "unknown"]
+
+
+class WidgetRunOut(BaseModel):
+    """One upcoming run in the widget overview."""
+
+    schedule_id: UUID
+    name: str
+    starts_at: datetime
+    duration_minutes: int
+
+
+class WidgetRain(BaseModel):
+    """Rain facts for the widgets (everything null when no forecast is available)."""
+
+    raining_now: bool | None = Field(
+        description="The forecast hour that contains `at` has measurable precipitation."
+    )
+    expected_mm_next_hours: float | None = Field(
+        description="Precipitation of the coming hours the rain pause looks at (its look-ahead)."
+    )
+    wet: bool = Field(description="The lawn is still wet from earlier rain.")
+    wet_until: datetime | None
+    pause_until: datetime | None = Field(description="When a rain pause ends, if one holds.")
+    recent_mm_6h: float | None
+
+
+class WidgetScheduleOut(BaseModel):
+    """``GET /mowers/{mower_id}/widget``: what the schedule and weather widgets of the iOS app
+    show for one mower (ADR 0059)."""
+
+    mower_id: UUID
+    at: datetime
+    runs: list[WidgetRunOut] = Field(description="The next runs, soonest first (at most 3).")
+    verdict: Literal["runs", "rain_pause", "unsure"] = Field(
+        description="`runs`: the next run would start; `rain_pause`: the rain pause holds it; "
+        "`unsure`: no forecast or no location, or the forecast is unknown."
+    )
+    rain: WidgetRain
+
+    @classmethod
+    def of(cls, mower_id: UUID, at: datetime, overview: WidgetOverview) -> "WidgetScheduleOut":
+        """From the use case answer."""
+        runs = [WidgetRunOut(**vars_of(r)) for r in overview.runs]
+        answer = overview.answer
+        if answer is None:
+            return cls(
+                mower_id=mower_id,
+                at=at,
+                runs=runs,
+                verdict="unsure",
+                rain=WidgetRain(
+                    raining_now=None,
+                    expected_mm_next_hours=None,
+                    wet=False,
+                    wet_until=None,
+                    pause_until=None,
+                    recent_mm_6h=None,
+                ),
+            )
+        decision = answer.decision
+        verdict: Literal["runs", "rain_pause", "unsure"]
+        match decision.verdict.value:
+            case "run":
+                verdict = "runs"
+            case "hold":
+                verdict = "rain_pause"
+            case _:
+                verdict = "unsure"
+        upcoming = [p for p in decision.points if decision.at is None or p.end > decision.at]
+        current = next((p for p in upcoming), None)
+        window = upcoming[: max(answer.settings.lookahead_hours, 1)]
+        known = [p.precipitation_mm for p in window if p.precipitation_mm is not None]
+        return cls(
+            mower_id=mower_id,
+            at=at,
+            runs=runs,
+            verdict=verdict,
+            rain=WidgetRain(
+                raining_now=(
+                    None
+                    if current is None or current.precipitation_mm is None
+                    else current.precipitation_mm >= RAINING_MM
+                ),
+                expected_mm_next_hours=round(sum(known), 2) if known else None,
+                wet=decision.wet,
+                wet_until=decision.wet_until,
+                pause_until=decision.pause_until,
+                recent_mm_6h=decision.recent_mm_6h,
+            ),
+        )
+
+
+RAINING_MM = 0.1
+"""Precipitation per hour from which the widget says it is raining."""
+
+
+def vars_of(run: WidgetRun) -> dict[str, Any]:
+    """The fields of a :class:`WidgetRun` as keyword arguments."""
+    return {
+        "schedule_id": run.schedule_id,
+        "name": run.name,
+        "starts_at": run.starts_at,
+        "duration_minutes": run.duration_minutes,
+    }

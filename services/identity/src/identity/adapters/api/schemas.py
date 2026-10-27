@@ -727,3 +727,51 @@ class ExternalIdentityOut(BaseModel):
             linked_at=link.linked_at,
             last_used_at=link.last_used_at,
         )
+
+
+class WidgetCredentialIn(In):
+    """``POST /me/widget-credentials``."""
+
+    device_name: str = Field(
+        min_length=1,
+        max_length=80,
+        examples=["Lukas' iPhone"],
+        description="Shown in the account's token list as `iOS widgets: <device_name>`.",
+    )
+    replaces: UUID | None = Field(
+        default=None,
+        description="An earlier widget credential of the caller on this device: revoked in the "
+        "same transaction (rotation).",
+    )
+
+
+class WidgetCredentialOut(BaseModel):
+    """A widget credential: an API token for the iOS widgets (never with its secret, except once
+    at creation)."""
+
+    id: UUID
+    name: str
+    permissions: list[str]
+    created_at: datetime
+    expires_at: datetime | None
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+    token: str | None = Field(
+        default=None,
+        description="The secret (`mdk_...`), returned only at creation. Exchange it at "
+        "`POST /token` for 10 minute access tokens.",
+    )
+
+    @classmethod
+    def of(cls, t: ApiToken, secret: str | None = None) -> "WidgetCredentialOut":
+        """From the entity."""
+        return cls(
+            id=t.id,
+            name=t.name,
+            permissions=t.permissions,
+            created_at=t.created_at,
+            expires_at=t.expires_at,
+            last_used_at=t.last_used_at,
+            revoked_at=t.revoked_at,
+            token=secret,
+        )

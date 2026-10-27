@@ -23,6 +23,7 @@ from scheduler.adapters.api.schemas import (
     ScheduleOut,
     SchedulePatch,
     WeatherOut,
+    WidgetScheduleOut,
 )
 from scheduler.adapters.weather.static import StaticWeatherProvider
 from scheduler.application.schedules import ScheduleInput
@@ -210,6 +211,23 @@ async def weather(
     return WeatherOut(
         mower_id=mower_id, at=services.schedules.clock(), decision=RainDecisionOut.of(answer)
     )
+
+
+@router.get("/mowers/{mower_id}/widget")
+async def widget(
+    mower_id: UUID,
+    principal: CurrentPrincipal,
+    _: ViewMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    response: Response,
+) -> WidgetScheduleOut:
+    """What the iOS schedule and weather widgets show for one mower (ADR 0059): the next runs
+    (at most 3), the verdict of the rain pause for now (`runs`, `rain_pause`, `unsure`) and a few
+    rain facts. `can_view` on the mower; schedules the caller may not see are left out."""
+    overview = await services.schedules.widget_overview(principal, account_id, mower_id)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return WidgetScheduleOut.of(mower_id, services.schedules.clock(), overview)
 
 
 @router.put("/dev/weather", include_in_schema=False)

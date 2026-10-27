@@ -24,6 +24,7 @@ from mowdeck_service_kit.errors import (
 )
 
 from telemetry.application.services import Services
+from telemetry.application.widget import BusyError
 from telemetry.domain.errors import (
     InvalidQueryError,
     NoSnapshotYetError,
@@ -117,6 +118,8 @@ def to_service_error(exc: TelemetryError) -> ServiceError:
             return NoCapabilitiesProblem(exc.message)
         case InvalidQueryError():
             return ValidationFailed(exc.message)
+        case BusyError():
+            return ServiceUnavailable(exc.message)
         case _:
             return ServiceError(exc.message)
 
