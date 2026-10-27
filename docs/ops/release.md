@@ -71,6 +71,34 @@ helm install mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version 0.1.0 -n mow
 helm show values oci://ghcr.io/lukislp/charts/mowdeck --version 0.1.0     # the commented values
 ```
 
+## Notes for the app ("Was ist neu")
+
+The web image carries `/whats-new.json`, the notes of the app's "Was ist neu" sheet and of
+Settings → Neuigkeiten (docs/dev/web-app.md). The release workflow's `licence-gate` and `images`
+jobs run `node apps/web/build-tools/whats-new.mjs --version <version> --out
+apps/web/static/whats-new.json` for the web image, from a checkout with all tags (no dependencies,
+the file is not committed). It lists, per release tag (newest 40, newest first), the user-facing
+commits: `feat`, `fix` and `perf`, without the scopes `ci`, `deps`, `deps-dev`, `build`, `release`
+and `docker` and without Dependabot bumps. Everything else (ci, build, chore, test, docs, style,
+refactor) never appears. A commit with no curated text shows its English subject.
+
+To give a change a German and English text and a "Jetzt ausprobieren" link, add one file
+`apps/web/whats-new/<pr>-<slug>.json` to the same pull request (the number is on the PR once it is
+opened; squash merge puts it at the end of the subject, which is how the script matches):
+
+```json
+{
+  "pr": 152,
+  "de": "Anmelden mit GitHub, sobald ein GitHub-Konto verknüpft ist.",
+  "en": "Sign in with GitHub once a GitHub account is linked.",
+  "href": "/settings#linked-accounts"
+}
+```
+
+`pr` may be a list when a feature and its follow-up fix should read as one note (shown once, in
+the newest release that contains one of them); `"hide": true` instead of the texts keeps a fix of
+an unreleased fix out. `href` is optional and must be a path of the app. A unit test validates
+every file, so a typo fails the pull request. Texts are short, in the user's words, one sentence.
 ## No caches in release jobs
 
 The release jobs build without any shared cache: no Buildx `type=gha` cache, no npm/pnpm or Gradle cache. A cache entry is written by whichever workflow run gets there first (a pull request, a test build by hand), so restoring one into a release build could put content into a published image that no reviewed commit produced (cache poisoning; CodeQL's `actions/cache-poisoning`). The price is a slower release run, mostly the arm64 half of the Python images under QEMU.

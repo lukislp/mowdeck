@@ -14,6 +14,8 @@
   import { m } from '#lib/paraglide/messages.js';
   import { accountPlan } from '#lib/plan/plan.svelte.js';
   import { builtIn, navModules, registry, visibleModules } from '#lib/shell/registry.svelte.js';
+  import { whatsNew } from '#lib/whats-new/whats-new.svelte.js';
+  import WhatsNewSheet from '#lib/whats-new/WhatsNewSheet.svelte';
 
   let { children }: { children: Snippet } = $props();
 
@@ -25,6 +27,7 @@
       void registry.load();
       void operatorAccess.load();
       void accountPlan.load();
+      void whatsNew.load();
       if (session.me?.must_change_password && page.url.pathname !== '/settings') {
         void goto('/settings?password=1#profile', { replace: true });
       }
@@ -100,6 +103,7 @@
     {/snippet}
     {@render children()}
   </AppShell>
+  <WhatsNewSheet />
 {:else}
   <div class="boot" role="status" aria-live="polite">
     <span class="mark">{m.brand_mark()}</span>
