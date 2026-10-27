@@ -4,6 +4,7 @@
  * job but should get fixed. Prints to stdout; usage: node scripts/flaky-summary.mjs <results.json>
  */
 import { readFileSync } from 'node:fs';
+import { markdownCell as cell } from './markdown-cell.mjs';
 
 const file = process.argv[2];
 if (!file) {
@@ -35,7 +36,6 @@ function walk(suite, trail) {
 }
 for (const suite of report.suites ?? []) walk(suite, []);
 
-const cell = (text) => String(text).replaceAll('|', '\|');
 const table = (rows) =>
   [
     '| Spec | Project | Attempts |',
