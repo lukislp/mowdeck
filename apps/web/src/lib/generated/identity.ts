@@ -54,7 +54,8 @@ export type paths = {
         post?: never;
         /**
          * Delete Account
-         * @description Request deletion (owner, password re-entry): locked for the grace period.
+         * @description Request deletion (owner): locked for the grace period. Needs the password in the body
+         *     or, without it, a recent step-up confirmation.
          */
         delete: operations["delete_account_api_v1_identity_accounts__account_id__delete"];
         options?: never;
@@ -81,7 +82,7 @@ export type paths = {
         put?: never;
         /**
          * Create Token
-         * @description Create an API token; the secret is in the response once.
+         * @description Create an API token; the secret is in the response once. Step-up.
          */
         post: operations["create_token_api_v1_identity_accounts__account_id__api_tokens_post"];
         delete?: never;
@@ -226,7 +227,7 @@ export type paths = {
         put?: never;
         /**
          * Assign Role
-         * @description Assign a role at a level; writes the expanded grant tuples.
+         * @description Assign a role at a level; writes the expanded grant tuples. Step-up.
          */
         post: operations["assign_role_api_v1_identity_accounts__account_id__role_assignments_post"];
         delete?: never;
@@ -247,7 +248,7 @@ export type paths = {
         post?: never;
         /**
          * Unassign Role
-         * @description Remove an assignment; the subject's tuples are reconciled.
+         * @description Remove an assignment; the subject's tuples are reconciled. Step-up.
          */
         delete: operations["unassign_role_api_v1_identity_accounts__account_id__role_assignments__assignment_id__delete"];
         options?: never;
@@ -298,7 +299,7 @@ export type paths = {
         head?: never;
         /**
          * Update Role
-         * @description Change a role; every holder is reconciled.
+         * @description Change a role; every holder is reconciled. Step-up.
          */
         patch: operations["update_role_api_v1_identity_accounts__account_id__roles__role_id__patch"];
         trace?: never;
@@ -318,7 +319,7 @@ export type paths = {
         put?: never;
         /**
          * Create User
-         * @description Create a sub-user, optionally with roles at levels (anti-escalation applies).
+         * @description Create a sub-user, optionally with roles at levels (anti-escalation applies). Step-up.
          */
         post: operations["create_user_api_v1_identity_accounts__account_id__users_post"];
         delete?: never;
@@ -343,7 +344,7 @@ export type paths = {
         post?: never;
         /**
          * Delete User
-         * @description Delete a sub-user, or remove a person from the account.
+         * @description Delete a sub-user, or remove a person from the account. Step-up.
          */
         delete: operations["delete_user_api_v1_identity_accounts__account_id__users__user_id__delete"];
         options?: never;
@@ -427,7 +428,7 @@ export type paths = {
         post?: never;
         /**
          * Remove User Passkey
-         * @description Remove a passkey of a sub-user of this account (its password stays).
+         * @description Remove a passkey of a sub-user of this account (its password stays). Step-up.
          */
         delete: operations["remove_user_passkey_api_v1_identity_accounts__account_id__users__user_id__passkeys__passkey_id__delete"];
         options?: never;
@@ -446,7 +447,7 @@ export type paths = {
         put?: never;
         /**
          * Set Password
-         * @description Set a temporary password of a sub-user (must be changed at the next login).
+         * @description Set a temporary password of a sub-user (must be changed at the next login). Step-up.
          */
         post: operations["set_password_api_v1_identity_accounts__account_id__users__user_id__password_post"];
         delete?: never;
@@ -592,7 +593,8 @@ export type paths = {
         post?: never;
         /**
          * Unlink External Identity
-         * @description Remove the caller's link to a login provider (always allowed; the password stays).
+         * @description Remove the caller's link to a login provider (the password stays). Step-up: a stolen
+         *     session must not be able to strip the owner's ways in unnoticed.
          */
         delete: operations["unlink_external_identity_api_v1_identity_me_external_identities__provider__delete"];
         options?: never;
@@ -612,7 +614,8 @@ export type paths = {
         /**
          * Link External Identity
          * @description Start linking an account of a login provider to the caller: the current password again
-         *     (the login limits apply), then the provider's authorization URL and the binding cookie.
+         *     (the login limits apply) or, without it, a recent step-up confirmation, then the provider's
+         *     authorization URL and the binding cookie.
          *     409 when an account of this provider is already linked.
          */
         post: operations["link_external_identity_api_v1_identity_me_external_identities__provider__link_post"];
@@ -658,7 +661,8 @@ export type paths = {
         post?: never;
         /**
          * Remove Passkey
-         * @description Remove one of the caller's passkeys; the password always stays.
+         * @description Remove one of the caller's passkeys; the password always stays. Needs a recent
+         *     confirmation (step-up).
          */
         delete: operations["remove_passkey_api_v1_identity_me_passkeys__passkey_id__delete"];
         options?: never;
@@ -748,6 +752,68 @@ export type paths = {
         get: operations["my_platform_api_v1_identity_me_platform_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/step-up/passkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step Up Passkey
+         * @description Confirm a critical action with one of the caller's passkeys: a new access token.
+         */
+        post: operations["step_up_passkey_api_v1_identity_me_step_up_passkey_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/step-up/passkey/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step Up Passkey Options
+         * @description Options for ``navigator.credentials.get()`` to confirm with a passkey (user verification
+         *     required).
+         */
+        post: operations["step_up_passkey_options_api_v1_identity_me_step_up_passkey_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/step-up/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step Up Password
+         * @description Confirm a critical action with the current password: a new access token with a fresh
+         *     ``auth_time``. The login limits apply; a wrong password is a failed login of the user.
+         */
+        post: operations["step_up_password_api_v1_identity_me_step_up_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1008,11 +1074,11 @@ export type components = {
     schemas: {
         /**
          * AccountDeleteIn
-         * @description ``DELETE /accounts/{id}``: the owner's password.
+         * @description ``DELETE /accounts/{id}``: the owner's password, or none after a step-up confirmation.
          */
         AccountDeleteIn: {
             /** Password */
-            password: string;
+            password?: string | null;
         };
         /**
          * AccountKind
@@ -1269,11 +1335,12 @@ export type components = {
         };
         /**
          * ExternalLinkIn
-         * @description ``POST /me/external-identities/{provider}/link``: the current password again.
+         * @description ``POST /me/external-identities/{provider}/link``: the current password again, or none
+         *     after a step-up confirmation.
          */
         ExternalLinkIn: {
             /** Password */
-            password: string;
+            password?: string | null;
         };
         /**
          * FeatureDef
@@ -1628,11 +1695,12 @@ export type components = {
         };
         /**
          * PasskeyRegistrationOptionsIn
-         * @description ``POST /me/passkeys/options``: the current password (re-authentication).
+         * @description ``POST /me/passkeys/options``: the current password (re-authentication), or none after a
+         *     step-up confirmation.
          */
         PasskeyRegistrationOptionsIn: {
             /** Password */
-            password: string;
+            password?: string | null;
         };
         /**
          * PasswordChangeIn
@@ -1910,6 +1978,32 @@ export type components = {
             permissions?: string[] | null;
         };
         /**
+         * StepUpPasskeyIn
+         * @description ``POST /me/step-up/passkey``: the answer to a challenge of the options endpoint.
+         */
+        StepUpPasskeyIn: {
+            /**
+             * Ceremony Id
+             * Format: uuid
+             */
+            ceremony_id: string;
+            /**
+             * Credential
+             * @description The PublicKeyCredential as JSON (PublicKeyCredential.toJSON(): id, rawId, type, response with base64url fields, clientExtensionResults)
+             */
+            credential: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * StepUpPasswordIn
+         * @description ``POST /me/step-up/password``: the caller's current password.
+         */
+        StepUpPasswordIn: {
+            /** Password */
+            password: string;
+        };
+        /**
          * SubUserIn
          * @description ``POST /users``: a sub-user with username and password (no e-mail needed).
          */
@@ -1962,6 +2056,11 @@ export type components = {
             access_token: string;
             /** Account Id */
             account_id: string | null;
+            /**
+             * Auth Time
+             * @description When the user last authenticated interactively (login or step-up); critical actions need this to be recent
+             */
+            auth_time?: string | null;
             /**
              * Expires At
              * Format: date-time
@@ -2133,9 +2232,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["AccountDeleteIn"];
+                "application/json": components["schemas"]["AccountDeleteIn"] | null;
             };
         };
         responses: {
@@ -3466,6 +3565,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MePlatformOut"];
+                };
+            };
+        };
+    };
+    step_up_passkey_api_v1_identity_me_step_up_passkey_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StepUpPasskeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    step_up_passkey_options_api_v1_identity_me_step_up_passkey_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOptionsOut"];
+                };
+            };
+        };
+    };
+    step_up_password_api_v1_identity_me_step_up_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StepUpPasswordIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -24,6 +24,13 @@ from mowdeck_auth.resolver import (
     principal_resolver_from_env,
 )
 from mowdeck_auth.settings import DEFAULT_AUDIENCE, DEFAULT_ISSUER, AuthSettings
+from mowdeck_auth.step_up import (
+    ReauthRequired,
+    StepUpUnavailable,
+    ensure_recent_auth,
+    require_recent_auth,
+    step_up_max_age,
+)
 from mowdeck_auth.verifier import JwtVerifier, TokenError, VerifiedToken
 
 __version__ = "0.1.0"
@@ -41,17 +48,22 @@ __all__ = [
     "JwtPrincipalResolver",
     "JwtVerifier",
     "KeySource",
+    "ReauthRequired",
     "SigningKey",
     "StaticKeySource",
+    "StepUpUnavailable",
     "TokenError",
     "TokenIssuer",
     "VerifiedToken",
     "bearer_token",
+    "ensure_recent_auth",
     "install_auth",
     "parse_jwks",
     "principal_claims",
     "principal_from_claims",
     "principal_resolver_from_env",
     "public_jwk",
+    "require_recent_auth",
+    "step_up_max_age",
     "thumbprint",
 ]

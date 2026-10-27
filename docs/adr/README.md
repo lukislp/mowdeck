@@ -56,3 +56,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0050](0050-passkeys-and-app-login-hand-off.md) | Passkeys and the app login hand-off | Accepted |
 | [0051](0051-sign-in-with-github.md) | Sign in with GitHub | Accepted |
 | [0052](0052-sign-in-with-apple.md) | Sign in with Apple | Accepted |
+| [0057](0057-step-up-reauthentication.md) | Step-up re-authentication for critical actions | Accepted |

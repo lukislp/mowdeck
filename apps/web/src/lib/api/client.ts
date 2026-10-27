@@ -9,6 +9,7 @@
 import createClient from 'openapi-fetch';
 
 import { session } from '#lib/auth/session.svelte.js';
+import { isReauthRequired, stepUp } from '#lib/auth/stepup.svelte.js';
 import type { paths as BillingPaths } from '#lib/generated/billing.js';
 import type { paths as EntitlementsPaths } from '#lib/generated/entitlements.js';
 import type { paths as FleetPaths } from '#lib/generated/fleet.js';
@@ -68,6 +69,7 @@ export function authFetch(
   tokens: TokenSource,
   base: typeof fetch = fetch,
   timeoutMs = REQUEST_TIMEOUT_MS,
+  reauth: () => Promise<string | null> = () => stepUp.request(),
 ): typeof fetch {
   return async (input, init) => {
     const request = new Request(input, init);
@@ -91,6 +93,13 @@ export function authFetch(
       const used = await tokens.validToken();
       const first = await send(used);
       if (first.status !== 401) return first;
+      // Step-up (ADR 0057): a critical action wants a recent passkey or password confirmation.
+      // The session is fine; the sheet asks, and the request is repeated with the new token.
+      // Dismissing the sheet leaves the 401 problem to the caller.
+      if (await isReauthRequired(first)) {
+        const confirmed = await reauth();
+        return confirmed ? send(confirmed) : first;
+      }
       const fresh = await tokens.validToken(true, used);
       if (!fresh) {
         tokens.expire();

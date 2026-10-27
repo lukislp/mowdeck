@@ -15,6 +15,7 @@ from mowdeck_service_kit.errors import Forbidden
 
 from identity.adapters.api.deps import (
     Ctx,
+    FreshAuth,
     ManageAccount,
     ManageUsers,
     Member,
@@ -69,10 +70,16 @@ async def rename_account(
 
 @router.delete("", status_code=202)
 async def delete_account(
-    account_id: UUID, body: AccountDeleteIn, _: ManageAccount, services: ServicesDep, ctx: Ctx
+    account_id: UUID,
+    _: ManageAccount,
+    services: ServicesDep,
+    ctx: Ctx,
+    body: AccountDeleteIn | None = None,
 ) -> AccountOut:
-    """Request deletion (owner, password re-entry): locked for the grace period."""
-    return AccountOut.of(await services.accounts.request_deletion(account_id, body.password, ctx))
+    """Request deletion (owner): locked for the grace period. Needs the password in the body
+    or, without it, a recent step-up confirmation."""
+    password = body.password if body else None
+    return AccountOut.of(await services.accounts.request_deletion(account_id, password, ctx))
 
 
 @router.post("/restore")
@@ -114,9 +121,14 @@ async def list_users(account_id: UUID, _: ManageUsers, services: ServicesDep) ->
 
 @router.post("/users", status_code=201)
 async def create_user(
-    account_id: UUID, body: SubUserIn, _: ManageUsers, services: ServicesDep, ctx: Ctx
+    account_id: UUID,
+    body: SubUserIn,
+    _: ManageUsers,
+    __: FreshAuth,
+    services: ServicesDep,
+    ctx: Ctx,
 ) -> MemberOut:
-    """Create a sub-user, optionally with roles at levels (anti-escalation applies)."""
+    """Create a sub-user, optionally with roles at levels (anti-escalation applies). Step-up."""
     view = await services.users.create_subuser(
         account_id,
         NewSubUser(
@@ -179,18 +191,19 @@ async def set_password(
     user_id: UUID,
     body: PasswordSetIn,
     _: ManageUsers,
+    __: FreshAuth,
     services: ServicesDep,
     ctx: Ctx,
 ) -> None:
-    """Set a temporary password of a sub-user (must be changed at the next login)."""
+    """Set a temporary password of a sub-user (must be changed at the next login). Step-up."""
     await services.users.set_password(account_id, user_id, body.password, ctx)
 
 
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(
-    account_id: UUID, user_id: UUID, _: ManageUsers, services: ServicesDep, ctx: Ctx
+    account_id: UUID, user_id: UUID, _: ManageUsers, __: FreshAuth, services: ServicesDep, ctx: Ctx
 ) -> None:
-    """Delete a sub-user, or remove a person from the account."""
+    """Delete a sub-user, or remove a person from the account. Step-up."""
     await services.users.remove(account_id, user_id, ctx)
 
 
@@ -208,10 +221,11 @@ async def remove_user_passkey(
     user_id: UUID,
     passkey_id: UUID,
     _: ManageUsers,
+    __: FreshAuth,
     services: ServicesDep,
     ctx: Ctx,
 ) -> None:
-    """Remove a passkey of a sub-user of this account (its password stays)."""
+    """Remove a passkey of a sub-user of this account (its password stays). Step-up."""
     await services.passkeys.remove_of_user(ctx, account_id, user_id, passkey_id)
 
 
@@ -242,10 +256,11 @@ async def update_role(
     role_id: UUID,
     body: RolePatch,
     _: ManageUsers,
+    __: FreshAuth,
     services: ServicesDep,
     ctx: Ctx,
 ) -> RoleOut:
-    """Change a role; every holder is reconciled."""
+    """Change a role; every holder is reconciled. Step-up."""
     role = await services.roles.update_role(
         account_id,
         role_id,
@@ -285,9 +300,14 @@ async def list_assignments(
 
 @router.post("/role-assignments", status_code=201)
 async def assign_role(
-    account_id: UUID, body: RoleAssignmentIn, _: ManageUsers, services: ServicesDep, ctx: Ctx
+    account_id: UUID,
+    body: RoleAssignmentIn,
+    _: ManageUsers,
+    __: FreshAuth,
+    services: ServicesDep,
+    ctx: Ctx,
 ) -> RoleAssignmentOut:
-    """Assign a role at a level; writes the expanded grant tuples."""
+    """Assign a role at a level; writes the expanded grant tuples. Step-up."""
     assignment = await services.roles.assign(
         account_id,
         SubjectType(body.subject_type),
@@ -300,9 +320,14 @@ async def assign_role(
 
 @router.delete("/role-assignments/{assignment_id}", status_code=204)
 async def unassign_role(
-    account_id: UUID, assignment_id: UUID, _: ManageUsers, services: ServicesDep, ctx: Ctx
+    account_id: UUID,
+    assignment_id: UUID,
+    _: ManageUsers,
+    __: FreshAuth,
+    services: ServicesDep,
+    ctx: Ctx,
 ) -> None:
-    """Remove an assignment; the subject's tuples are reconciled."""
+    """Remove an assignment; the subject's tuples are reconciled. Step-up."""
     await services.roles.unassign(account_id, assignment_id, ctx)
 
 
@@ -317,9 +342,14 @@ async def list_tokens(account_id: UUID, _: ManageUsers, services: ServicesDep) -
 
 @router.post("/api-tokens", status_code=201)
 async def create_token(
-    account_id: UUID, body: ApiTokenIn, _: ManageUsers, services: ServicesDep, ctx: Ctx
+    account_id: UUID,
+    body: ApiTokenIn,
+    _: ManageUsers,
+    __: FreshAuth,
+    services: ServicesDep,
+    ctx: Ctx,
 ) -> ApiTokenOut:
-    """Create an API token; the secret is in the response once."""
+    """Create an API token; the secret is in the response once. Step-up."""
     created = await services.tokens.create(
         account_id,
         body.name,

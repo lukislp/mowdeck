@@ -93,6 +93,7 @@ nav:
       - adr/0050-passkeys-and-app-login-hand-off.md
       - adr/0051-sign-in-with-github.md
       - adr/0052-sign-in-with-apple.md
+      - adr/0057-step-up-reauthentication.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -125,4 +126,5 @@ nav:
       - guides/passkeys.md
       - guides/github-login.md
       - guides/apple-login.md
+      - guides/step-up.md
   - Original plan (German): plan/project-plan.de.md
