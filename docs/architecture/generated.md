@@ -449,11 +449,11 @@ flowchart LR
     identity_identity__login_providers["identity: login providers<br/>5 operations"]
     identity_identity__passkeys["identity: passkeys<br/>8 operations"]
     identity_identity__platform["identity: platform<br/>1 operation"]
-    identity_identity__sessions["identity: sessions<br/>15 operations"]
+    identity_identity__sessions["identity: sessions<br/>18 operations"]
   end
   subgraph notifications["notifications"]
     direction TB
-    notifications_notifications["notifications<br/>18 operations"]
+    notifications_notifications["notifications<br/>22 operations"]
   end
   subgraph planner["planner"]
     direction TB
@@ -464,11 +464,11 @@ flowchart LR
   end
   subgraph scheduler["scheduler"]
     direction TB
-    scheduler_schedules["schedules<br/>10 operations"]
+    scheduler_schedules["schedules<br/>11 operations"]
   end
   subgraph telemetry["telemetry"]
     direction TB
-    telemetry_telemetry["telemetry<br/>17 operations"]
+    telemetry_telemetry["telemetry<br/>19 operations"]
   end
   subgraph vision["vision"]
     direction TB
@@ -494,17 +494,17 @@ flowchart LR
 | `identity` | `identity: login providers` | 5 | 5 |
 | `identity` | `identity: passkeys` | 8 | 6 |
 | `identity` | `identity: platform` | 1 | 1 |
-| `identity` | `identity: sessions` | 15 | 15 |
+| `identity` | `identity: sessions` | 18 | 17 |
 | `identity` | `operations` | 1 | 1 |
-| `notifications` | `notifications` | 18 | 13 |
+| `notifications` | `notifications` | 22 | 16 |
 | `notifications` | `operations` | 1 | 1 |
 | `planner` | `operations` | 1 | 1 |
 | `planner` | `planner` | 8 | 6 |
 | `realtime` | `operations` | 1 | 1 |
 | `scheduler` | `operations` | 1 | 1 |
-| `scheduler` | `schedules` | 10 | 7 |
+| `scheduler` | `schedules` | 11 | 8 |
 | `telemetry` | `operations` | 1 | 1 |
-| `telemetry` | `telemetry` | 17 | 17 |
+| `telemetry` | `telemetry` | 19 | 19 |
 | `vision` | `operations` | 1 | 1 |
 | `vision` | `vision` | 16 | 13 |
 
@@ -532,7 +532,7 @@ flowchart LR
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>12 migrations")]
     db_identity[("identity<br/>4 migrations")]
-    db_notifications[("notifications<br/>7 migrations")]
+    db_notifications[("notifications<br/>8 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>3 migrations")]
     db_telemetry[("telemetry<br/>10 migrations")]
