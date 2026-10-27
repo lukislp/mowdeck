@@ -221,6 +221,12 @@
             "title": "Created At",
             "type": "string"
           },
+          "has_image": {
+            "default": false,
+            "description": "A camera photo was taken for this error or theft event and is still kept (a day): `GET /api/v1/notifications/inbox/{id}/image` returns it.",
+            "title": "Has Image",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1040,6 +1046,47 @@
         ]
       }
     },
+    "/api/v1/notifications/inbox/{notification_id}/image": {
+      "get": {
+        "description": "The camera photo of one of the caller's error or theft notifications (404 when there is\nnone: not taken, expired after a day, or not the caller's notification).",
+        "operationId": "get_inbox_image_api_v1_notifications_inbox__notification_id__image_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Notification Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Inbox Image",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
     "/api/v1/notifications/inbox/{notification_id}/read": {
       "post": {
         "description": "Mark one of the caller's notifications read (idempotent; 404 for any other id).",
@@ -1315,6 +1362,78 @@
           }
         },
         "summary": "Put Preferences",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/push-images/{notification_id}": {
+      "get": {
+        "description": "The photo behind a push notification, for the iOS app's Notification Service Extension.\n\nNo login: the signed, short-lived URL in the push payload is the credential (it names one\nnotification and expires after ten minutes). Rate limited. The photo is also in the\ncaller's inbox for a day (`GET /inbox/{id}/image`).",
+        "operationId": "get_push_image_api_v1_notifications_push_images__notification_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Notification Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Expiry, Unix seconds.",
+            "in": "query",
+            "name": "e",
+            "required": true,
+            "schema": {
+              "description": "Expiry, Unix seconds.",
+              "minimum": 0,
+              "title": "E",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Signature.",
+            "in": "query",
+            "name": "s",
+            "required": true,
+            "schema": {
+              "description": "Signature.",
+              "maxLength": 64,
+              "minLength": 16,
+              "title": "S",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Bad link, or the photo is not ready yet (try again)."
+          },
+          "410": {
+            "description": "The link expired, or no photo was taken."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Push Image",
         "tags": [
           "notifications"
         ]

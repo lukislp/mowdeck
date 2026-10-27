@@ -333,6 +333,8 @@ flowchart LR
   q_camera_relay -->|"gateway.mower.*.camera.release<br/>gateway.mower.*.camera.session"| r_device_gateway
   q_fleet["fleet"]
   q_fleet -->|"gateway.cloud.discover<br/>gateway.mower.*.bridge.scan<br/>gateway.mower.*.camera.session<br/>+3 more"| r_device_gateway
+  q_notifications["notifications"]
+  q_notifications -->|"gateway.mower.*.photo"| r_device_gateway
   q_telemetry["telemetry"]
   q_telemetry -->|"gateway.mower.*.photo<br/>gateway.mower.*.tracking"| r_device_gateway
   q_vision["vision"]
@@ -411,7 +413,7 @@ flowchart LR
 | `gateway.mower.*.camera.session` | core | camera-relay, fleet | device-gateway |
 | `gateway.mower.*.firmware.check` | core | fleet | device-gateway |
 | `gateway.mower.*.path.preview` | core | fleet | device-gateway |
-| `gateway.mower.*.photo` | core | fleet, telemetry, vision | device-gateway |
+| `gateway.mower.*.photo` | core | fleet, notifications, telemetry, vision | device-gateway |
 | `gateway.mower.*.tracking` | core | telemetry | device-gateway |
 | `relay.camera.attach` | core | fleet | camera-relay |
 | `relay.camera.detach` | core | fleet | camera-relay |
@@ -457,7 +459,7 @@ flowchart LR
   end
   subgraph notifications["notifications"]
     direction TB
-    notifications_notifications["notifications<br/>16 operations"]
+    notifications_notifications["notifications<br/>18 operations"]
   end
   subgraph planner["planner"]
     direction TB
@@ -502,7 +504,7 @@ flowchart LR
 | `identity` | `identity: platform` | 1 | 1 |
 | `identity` | `identity: sessions` | 15 | 15 |
 | `identity` | `operations` | 1 | 1 |
-| `notifications` | `notifications` | 16 | 11 |
+| `notifications` | `notifications` | 18 | 13 |
 | `notifications` | `operations` | 1 | 1 |
 | `planner` | `operations` | 1 | 1 |
 | `planner` | `planner` | 8 | 6 |
@@ -540,7 +542,7 @@ flowchart LR
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>12 migrations")]
     db_identity[("identity<br/>4 migrations")]
-    db_notifications[("notifications<br/>6 migrations")]
+    db_notifications[("notifications<br/>7 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>3 migrations")]
     db_telemetry[("telemetry<br/>11 migrations")]

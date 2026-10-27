@@ -54,6 +54,10 @@ ALARM_KINDS: frozenset[NotificationKind] = frozenset(
 """The theft alarms: they bypass quiet hours, use ``alarm_cooldown_seconds`` and can be
 acknowledged (which silences repeats for the user)."""
 
+IMAGE_KINDS: frozenset[NotificationKind] = ALARM_KINDS | {NotificationKind.MOWER_STUCK}
+"""Kinds that get a camera photo: the theft alarms and every ``mower_stuck`` (an error or no
+movement: stuck, trapped, obstacle, outside the area, wheel slip all arrive as that kind). The
+routine kinds never do (ADR 0056)."""
 TRACKING_KINDS: frozenset[NotificationKind] = frozenset(
     {
         NotificationKind.TRACKING_STARTED,
@@ -62,7 +66,7 @@ TRACKING_KINDS: frozenset[NotificationKind] = frozenset(
         NotificationKind.TRACKING_ENDED,
     }
 )
-"""The theft tracking notices (ADR 0053). Telemetry rate limits them, so they have no cooldown
+"""The theft tracking notices (ADR 0058). Telemetry rate limits them, so they have no cooldown
 here. All but the end ignore quiet hours (:data:`QUIET_HOURS_EXEMPT`)."""
 
 QUIET_HOURS_EXEMPT: frozenset[NotificationKind] = ALARM_KINDS | (
@@ -396,6 +400,9 @@ class Message:
     """Groups repeated notifications (Web Push ``tag``/``Topic``)."""
     mower_id: UUID | None
     notification_id: UUID | None = None
+    image_id: UUID | None = None
+    """The camera photo taken for this occurrence (it may not exist yet, or ever); only the
+    push channels that can show an image use it, through a signed URL (ADR 0056)."""
 
     def to_json(self) -> dict[str, Any]:
         """JSON form for the outbox."""
@@ -408,6 +415,7 @@ class Message:
             "tag": self.tag,
             "mower_id": str(self.mower_id) if self.mower_id else None,
             "notification_id": str(self.notification_id) if self.notification_id else None,
+            "image_id": str(self.image_id) if self.image_id else None,
         }
 
     @classmethod
@@ -424,6 +432,7 @@ class Message:
             notification_id=(
                 UUID(data["notification_id"]) if data.get("notification_id") else None
             ),
+            image_id=UUID(data["image_id"]) if data.get("image_id") else None,
         )
 
 
@@ -494,6 +503,32 @@ class InboxItem:
     read_at: datetime | None = None
     acked_at: datetime | None = None
     """When the user acknowledged the notification (alarms)."""
+    image_id: UUID | None = None
+    """The camera photo reserved for this item (see :attr:`Message.image_id`)."""
+    has_image: bool = False
+    """Set by the store when reading: the photo exists (it may expire later)."""
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationImage:
+    """The camera photo of one error or theft event, kept for a short time.
+
+    One row per event (shared by all recipients); ``data`` is None when taking the photo failed
+    (the push image URL then answers 410 at once instead of letting the extension wait).
+    """
+
+    id: UUID
+    account_id: UUID
+    mower_id: UUID
+    created_at: datetime
+    expires_at: datetime
+    media_type: str | None = None
+    data: bytes | None = None
+
+    @property
+    def ready(self) -> bool:
+        """The photo exists."""
+        return self.data is not None
 
 
 @dataclass(frozen=True, slots=True)

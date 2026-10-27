@@ -29,6 +29,7 @@ from notifications.domain.models import (
     RULE_KINDS,
     ApnsDevice,
     InboxItem,
+    NotificationImage,
     NtfyTarget,
     Preferences,
     PushSubscription,
@@ -305,6 +306,17 @@ class UserNotifications:
         """The newest items and the number of unread items."""
         items = await self._store.inbox(user_id, account_id, limit, unread_only=unread_only)
         return items, await self._store.unread_count(user_id, account_id)
+
+    async def inbox_image(
+        self, user_id: UUID, account_id: UUID, item_id: UUID
+    ) -> NotificationImage:
+        """The camera photo of one of the user's own items (404 for anything else, a photo
+        that was not taken and one that expired)."""
+        image = await self._store.inbox_image(user_id, account_id, item_id, self._clock())
+        if image is None or not image.ready:
+            msg = "no image for this notification"
+            raise NotFoundError(msg)
+        return image
 
     async def mark_read(self, user_id: UUID, account_id: UUID, item_id: UUID) -> InboxItem:
         """Mark one of the user's items read (404 for anything else)."""

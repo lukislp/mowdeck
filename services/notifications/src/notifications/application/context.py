@@ -45,3 +45,15 @@ class NotificationsConfig:
     """How long acknowledging an alarm silences repeats of it for the user."""
     default_language: str = "de"
     """Language of a user who never saved preferences (the app's default language)."""
+    image_capture: bool = False
+    """Take a camera photo for error and theft events (needs a photo source)."""
+    image_retention: timedelta = timedelta(hours=24)
+    """How long a photo is kept (inbox and push URL)."""
+    image_keep: int = 200
+    """Photos kept at most (the oldest go first)."""
+    image_max_bytes: int = 512 * 1024
+    """Largest photo taken or stored."""
+    image_daily_limit: int = 6
+    """Photos per mower and rolling 24 hours (a budget of its own, on top of the cooldowns)."""
+    image_min_interval: timedelta = timedelta(seconds=60)
+    """Minimum time between two photos of one mower."""
