@@ -81,6 +81,7 @@ function item(id: string, extra: Partial<InboxItem> = {}): InboxItem {
     read_at: null,
     acked: false,
     acked_at: null,
+    has_image: false,
     ...extra,
   };
 }

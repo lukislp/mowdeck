@@ -27,7 +27,11 @@ Headers: ``apns-push-type: alert``, ``apns-priority`` 10 for every severity (vis
 ``Topic`` of the tag (one visible notification per kind and mower). Body: ``aps`` with the
 alert, the default sound, ``thread-id`` (the tag) and ``interruption-level``
 (``time-sensitive`` for critical, else ``active``), plus ``url``, ``kind``, ``mower_id`` and
-``notification_id`` for the app; at most 4096 bytes (a long body is shortened).
+``notification_id`` for the app; at most 4096 bytes (a long body is shortened). A message with a
+camera photo (error and theft events, ADR 0053) also gets ``mutable-content: 1`` and
+``image_url``, a signed URL of the owner's server valid for ten minutes; the app's Notification
+Service Extension downloads the photo from it, so the image never reaches Apple. Older app builds
+ignore both keys and show the text.
 
 Answers: 200 sent; 410 (``Unregistered``) and 400 ``BadDeviceToken`` or
 ``DeviceTokenNotForTopic`` gone (the device is deleted); 403 ``ExpiredProviderToken`` retry with
@@ -54,7 +58,14 @@ from mowdeck_service_kit import get_logger
 from notifications.adapters.channels import ChannelContext
 from notifications.adapters.channels.webpush import retry_after, topic_for
 from notifications.application.ports import Clock
-from notifications.domain.models import TTL_SECONDS, Delivery, DeliveryOutcome, DeliveryResult
+from notifications.domain.models import (
+    TTL_SECONDS,
+    Delivery,
+    DeliveryOutcome,
+    DeliveryResult,
+    Message,
+)
+from notifications.domain.push_image import ImageLinks
 
 HOSTS: dict[str, str] = {
     "development": "api.sandbox.push.apple.com",
@@ -138,7 +149,9 @@ class ApnsChannel:
         http_factory: Callable[[], httpx.AsyncClient] | None = None,
         timeout: float = 10.0,
         deadline: float | None = None,
+        image_links: ImageLinks | None = None,
     ) -> None:
+        self._image_links = image_links
         self._key = key
         self._key_id = key_id
         self._team_id = team_id
@@ -196,25 +209,41 @@ class ApnsChannel:
         """Drop the cached provider token (after ``ExpiredProviderToken``)."""
         self._token = None
 
+    def image_url(self, message: Message) -> str | None:
+        """The signed, short-lived URL of the event's photo (valid from now, so a retried
+        delivery gets a fresh one); None for a message without a photo or without a public
+        URL. The photo itself never goes to Apple."""
+        if self._image_links is None or message.image_id is None or message.notification_id is None:
+            return None
+        return self._image_links.url(message.notification_id, self._clock())
+
     def payload(self, delivery: Delivery) -> bytes:
         """The JSON body (at most :data:`MAX_PAYLOAD_BYTES`)."""
         message = delivery.message
         critical = message.severity is NotificationSeverity.CRITICAL
 
+        image_url = self.image_url(message)
+
         def encode(body: str) -> bytes:
+            aps: dict[str, Any] = {
+                "alert": {"title": message.title, "body": body},
+                "sound": "default",
+                "thread-id": message.tag,
+                "interruption-level": "time-sensitive" if critical else "active",
+            }
+            if image_url is not None:
+                # The app's Notification Service Extension downloads the photo from the owner's
+                # server and attaches it; builds without the extension ignore both keys.
+                aps["mutable-content"] = 1
             data: dict[str, Any] = {
-                "aps": {
-                    "alert": {"title": message.title, "body": body},
-                    "sound": "default",
-                    "thread-id": message.tag,
-                    "interruption-level": "time-sensitive" if critical else "active",
-                },
+                "aps": aps,
                 "url": message.url,
                 "kind": message.kind.value,
                 "mower_id": str(message.mower_id) if message.mower_id else None,
                 "notification_id": (
                     str(message.notification_id) if message.notification_id else None
                 ),
+                "image_url": image_url,
             }
             compact = {k: v for k, v in data.items() if v is not None}
             return json.dumps(compact, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -310,4 +339,5 @@ def create_apns_channel(context: ChannelContext) -> ApnsChannel | None:
             2 * settings.notifications_http_timeout_seconds,
             0.9 * settings.notifications_send_deadline_seconds,
         ),
+        image_links=context.image_links,
     )

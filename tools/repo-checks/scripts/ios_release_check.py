@@ -30,10 +30,13 @@ from typing import Any
 REPO = Path(__file__).resolve().parents[3]
 IOS = REPO / "apps" / "mobile" / "ios" / "App"
 BUNDLE_ID = "app.mowdeck.mobile"
+EXTENSION_BUNDLE_ID = f"{BUNDLE_ID}.NotificationService"
+EXTENSION_NAME = "NotificationService"
 DEV_ENTITLEMENTS = IOS / "App" / "App.entitlements"
 RELEASE_ENTITLEMENTS = (
     REPO / "apps" / "mobile" / "scripts" / "apple" / "entitlements" / "app-store.plist"
 )
+EXTENSION_POINT = "com.apple.usernotifications.service"
 IPAD_ORIENTATIONS = {
     "UIInterfaceOrientationPortrait",
     "UIInterfaceOrientationPortraitUpsideDown",
@@ -155,11 +158,52 @@ def check_entitlements(dev: dict[str, Any], release: dict[str, Any]) -> list[str
     return problems
 
 
+def check_extension_plist(info: dict[str, Any]) -> list[str]:
+    """Info.plist of the Notification Service Extension (camera photo in error and theft pushes,
+    ADR 0053): it must be a notification service and carry the app's version, or App Store Connect
+    rejects the upload."""
+    problems = []
+    extension = info.get("NSExtension")
+    extension = extension if isinstance(extension, dict) else {}
+    if extension.get("NSExtensionPointIdentifier") != EXTENSION_POINT:
+        problems.append(
+            f"NotificationService/Info.plist: NSExtensionPointIdentifier must be {EXTENSION_POINT}"
+        )
+    if extension.get("NSExtensionPrincipalClass") != "$(PRODUCT_MODULE_NAME).NotificationService":
+        problems.append(
+            "NotificationService/Info.plist: NSExtensionPrincipalClass must be "
+            "$(PRODUCT_MODULE_NAME).NotificationService"
+        )
+    if info.get("CFBundleVersion") != "$(CURRENT_PROJECT_VERSION)":
+        problems.append(
+            "NotificationService/Info.plist: CFBundleVersion must be $(CURRENT_PROJECT_VERSION)"
+        )
+    if info.get("CFBundleShortVersionString") != "$(MARKETING_VERSION)":
+        problems.append(
+            "NotificationService/Info.plist: "
+            "CFBundleShortVersionString must be $(MARKETING_VERSION)"
+        )
+    if info.get("ITSAppUsesNonExemptEncryption") is not False:
+        problems.append(
+            "NotificationService/Info.plist: ITSAppUsesNonExemptEncryption must be false"
+        )
+    return problems
+
+
 def check_project(pbxproj: str) -> list[str]:
-    """Build settings of the app target: iPhone and iPad, the bundle id, no Mac Catalyst."""
+    """Build settings of the app target: iPhone and iPad, the bundle id, no Mac Catalyst; the
+    Notification Service Extension target, embedded in the app."""
     problems = []
     if f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE_ID};" not in pbxproj:
         problems.append(f"App.xcodeproj: PRODUCT_BUNDLE_IDENTIFIER is not {BUNDLE_ID}")
+    if f"PRODUCT_BUNDLE_IDENTIFIER = {EXTENSION_BUNDLE_ID};" not in pbxproj:
+        problems.append(
+            f"App.xcodeproj: the extension's PRODUCT_BUNDLE_IDENTIFIER is not {EXTENSION_BUNDLE_ID}"
+        )
+    if "com.apple.product-type.app-extension" not in pbxproj:
+        problems.append("App.xcodeproj: the NotificationService app extension target is missing")
+    if "dstSubfolderSpec = 13;" not in pbxproj or "Embed Foundation Extensions" not in pbxproj:
+        problems.append("App.xcodeproj: the app does not embed the NotificationService extension")
     families = set(re.findall(r'TARGETED_DEVICE_FAMILY = "?([0-9,]+)"?;', pbxproj))
     if families != {"1,2"}:
         problems.append(
@@ -179,6 +223,11 @@ def check_source(ios: Path = IOS, release_entitlements: Path = RELEASE_ENTITLEME
         _load_plist(ios / "App" / "App.entitlements"), _load_plist(release_entitlements)
     )
     problems += check_project((ios / "App.xcodeproj" / "project.pbxproj").read_text("utf-8"))
+    extension = ios / EXTENSION_NAME
+    problems += check_extension_plist(_load_plist(extension / "Info.plist"))
+    for source in (extension / "NotificationService.swift",):
+        if not source.is_file():
+            problems.append(f"{source.name} is missing")
     if problems:
         raise CheckError("\n".join(problems))
 
@@ -198,6 +247,32 @@ def app_icon_names(info: dict[str, Any]) -> set[str]:
         if isinstance(name, str):
             names.add(name)
     return names
+
+
+def check_built_extension(appex: Path, version: str, build: str) -> list[str]:
+    """The built Notification Service Extension inside App.app/PlugIns."""
+    if not (appex / "Info.plist").is_file():
+        return [
+            f"PlugIns/{appex.name} is missing: the app was built without the notification extension"
+        ]
+    info = _load_plist(appex / "Info.plist")
+    problems = []
+    if info.get("CFBundleIdentifier") != EXTENSION_BUNDLE_ID:
+        problems.append(f"{appex.name}: CFBundleIdentifier is {info.get('CFBundleIdentifier')!r}")
+    if info.get("CFBundleShortVersionString") != version:
+        problems.append(
+            f"{appex.name}: CFBundleShortVersionString is "
+            f"{info.get('CFBundleShortVersionString')!r}"
+        )
+    if info.get("CFBundleVersion") != build:
+        problems.append(
+            f"{appex.name}: CFBundleVersion is {info.get('CFBundleVersion')!r}, expected {build!r}"
+        )
+    extension = info.get("NSExtension")
+    point = extension.get("NSExtensionPointIdentifier") if isinstance(extension, dict) else None
+    if point != EXTENSION_POINT:
+        problems.append(f"{appex.name}: NSExtensionPointIdentifier is {point!r}")
+    return problems
 
 
 def check_app(app: Path, version: str, build: str) -> None:
@@ -221,6 +296,7 @@ def check_app(app: Path, version: str, build: str) -> None:
             f"Assets.car {'present' if has_car else 'missing'}, "
             f"Info.plist keys {sorted(k for k in info if 'Icon' in k) or 'none'}"
         )
+    problems += check_built_extension(app / "PlugIns" / f"{EXTENSION_NAME}.appex", version, build)
     if not (app / "public" / "index.html").is_file():
         problems.append("the bundled pages are missing (public/index.html): cap sync did not run")
     for path in app.rglob("*"):

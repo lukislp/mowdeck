@@ -13,6 +13,7 @@ import datetime as dt
 import importlib.util
 import plistlib
 import re
+import shutil
 import struct
 import sys
 import zlib
@@ -191,11 +192,31 @@ def test_entitlements_must_mirror_the_development_build(check: ModuleType) -> No
 
 
 def test_project_settings(check: ModuleType) -> None:
-    good = f'PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE};\nTARGETED_DEVICE_FAMILY = "1,2";\n'
+    good = (
+        f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE};\n"
+        f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE}.NotificationService;\n"
+        'TARGETED_DEVICE_FAMILY = "1,2";\n'
+        'productType = "com.apple.product-type.app-extension";\n'
+        'dstSubfolderSpec = 13;\nname = "Embed Foundation Extensions";\n'
+    )
     assert check.check_project(good) == []
     bad = good.replace('"1,2"', "1") + "SUPPORTS_MACCATALYST = YES;\n"
     problems = check.check_project(bad)
     assert len(problems) == 2
+    # the notification extension must exist and be embedded
+    assert len(check.check_project(good.replace(".NotificationService;", ".Other;"))) == 1
+    assert len(check.check_project(good.replace("dstSubfolderSpec = 13;", ""))) == 1
+    assert len(check.check_project(good.replace("app-extension", "tool"))) == 1
+
+
+def test_extension_plist(check: ModuleType, repo_root: Path) -> None:
+    info = plistlib.loads(
+        (repo_root / "apps/mobile/ios/App/NotificationService/Info.plist").read_bytes()
+    )
+    assert check.check_extension_plist(info) == []
+    info["NSExtension"]["NSExtensionPointIdentifier"] = "com.apple.widget-extension"
+    del info["CFBundleVersion"]
+    assert len(check.check_extension_plist(info)) == 2
 
 
 def _built_app(tmp_path: Path, **info: Any) -> Path:
@@ -213,6 +234,21 @@ def _built_app(tmp_path: Path, **info: Any) -> Path:
     plist.update(info)
     plist = {key: value for key, value in plist.items() if value is not None}
     (app / "Info.plist").write_bytes(plistlib.dumps(plist, fmt=plistlib.FMT_BINARY))
+    appex = app / "PlugIns" / "NotificationService.appex"
+    appex.mkdir(parents=True)
+    (appex / "Info.plist").write_bytes(
+        plistlib.dumps(
+            {
+                "CFBundleIdentifier": f"{BUNDLE}.NotificationService",
+                "CFBundleShortVersionString": "0.3.12",
+                "CFBundleVersion": "312",
+                "NSExtension": {
+                    "NSExtensionPointIdentifier": "com.apple.usernotifications.service"
+                },
+            },
+            fmt=plistlib.FMT_BINARY,
+        )
+    )
     return app
 
 
@@ -232,6 +268,16 @@ def test_built_app_nested_icon_name_passes(check: ModuleType, tmp_path: Path) ->
         tmp_path, CFBundleIconName=None, CFBundleIcons=primary, **{"CFBundleIcons~ipad": primary}
     )
     check.check_app(app, "0.3.12", "312")
+
+
+def test_built_app_needs_the_notification_extension(check: ModuleType, tmp_path: Path) -> None:
+    app = _built_app(tmp_path)
+    shutil.rmtree(app / "PlugIns")
+    with pytest.raises(check.CheckError, match="built without the notification extension"):
+        check.check_app(app, "0.3.12", "312")
+    app = _built_app(tmp_path / "again")
+    with pytest.raises(check.CheckError, match=r"NotificationService\.appex: CFBundleVersion"):
+        check.check_app(app, "0.3.12", "999")
 
 
 def test_built_app_reports_what_it_found(check: ModuleType, tmp_path: Path) -> None:
@@ -398,3 +444,25 @@ def test_workflow_actions_pinned(repo_root: Path) -> None:
     for ref, comment in uses:
         assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), ref
         assert re.fullmatch(r" # v\d+(\.\d+)*", comment), ref
+
+
+def test_notification_extension_profile_is_wired(repo_root: Path) -> None:
+    # The Notification Service Extension is signed with its own profile (ADR 0053): the secret is
+    # required by keychain.sh, passed to both steps that use it, and used by release-ios.sh.
+    secret = "APPLE_PROFILE_IOS_NOTIFICATION_BASE64"  # noqa: S105 - a secret's name
+    workflow_text = (repo_root / ".github/workflows/apple-testflight.yml").read_text("utf-8")
+    assert workflow_text.count(f"{secret}: ${{{{ secrets.{secret} }}}}") == 2
+    keychain = (repo_root / "apps/mobile/scripts/apple/keychain.sh").read_text("utf-8")
+    assert f"{secret} ASC_API_KEY_P8_BASE64" in keychain
+    release = (repo_root / "apps/mobile/scripts/apple/release-ios.sh").read_text("utf-8")
+    assert "PlugIns/NotificationService.appex" in release
+    assert (
+        "app.mowdeck.mobile.NotificationService" in release
+        or "$BUNDLE_ID.NotificationService" in release
+    )
+    plist = plistlib.loads(
+        (
+            repo_root / "apps/mobile/scripts/apple/entitlements/notification-service.plist"
+        ).read_bytes()
+    )
+    assert plist == {}

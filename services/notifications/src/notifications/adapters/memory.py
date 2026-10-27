@@ -23,6 +23,7 @@ from notifications.domain.models import (
     Message,
     MowerWatch,
     NewDelivery,
+    NotificationImage,
     NtfyTarget,
     Preferences,
     PushSubscription,
@@ -62,6 +63,7 @@ class _Data:
     deliveries: dict[UUID, DeliveryRow] = field(default_factory=dict)
     geofences: dict[UUID, MowerFence] = field(default_factory=dict)
     silences: dict[tuple[UUID, UUID, str], datetime] = field(default_factory=dict)
+    images: dict[UUID, NotificationImage] = field(default_factory=dict)
 
 
 class _MemoryTx:
@@ -299,14 +301,54 @@ class MemoryStore:
                 del self.data.inbox[old.id]
             return True
 
+    def _view(self, item: InboxItem) -> InboxItem:
+        """The item as read: ``has_image`` says whether its photo exists."""
+        image = self.data.images.get(item.image_id) if item.image_id else None
+        return replace(item, has_image=image is not None and image.ready)
+
     def _mine(self, user_id: UUID, account_id: UUID) -> list[InboxItem]:
         found = [
-            i
+            self._view(i)
             for i in self.data.inbox.values()
             if i.user_id == user_id and i.account_id == account_id
         ]
         found.sort(key=lambda i: (i.created_at, str(i.id)), reverse=True)
         return found
+
+    # --- camera images (ADR 0053) --------------------------------------------------------
+
+    async def put_image(self, image: NotificationImage, keep: int) -> None:
+        self.data.images[image.id] = image
+        for old in [i for i in self.data.images.values() if i.expires_at <= image.created_at]:
+            del self.data.images[old.id]
+        newest = sorted(
+            self.data.images.values(), key=lambda i: (i.created_at, str(i.id)), reverse=True
+        )
+        for old in newest[keep:]:
+            del self.data.images[old.id]
+
+    def _live_image(self, item: InboxItem | None, now: datetime) -> NotificationImage | None:
+        image = self.data.images.get(item.image_id) if item and item.image_id else None
+        return image if image is not None and image.expires_at > now else None
+
+    async def notification_image(
+        self, notification_id: UUID, now: datetime
+    ) -> NotificationImage | None:
+        return self._live_image(self.data.inbox.get(notification_id), now)
+
+    async def inbox_image(
+        self, user_id: UUID, account_id: UUID, item_id: UUID, now: datetime
+    ) -> NotificationImage | None:
+        item = self.data.inbox.get(item_id)
+        if item is None or item.user_id != user_id or item.account_id != account_id:
+            return None
+        return self._live_image(item, now)
+
+    async def prune_images(self, now: datetime) -> int:
+        expired = [i.id for i in self.data.images.values() if i.expires_at <= now]
+        for image_id in expired:
+            del self.data.images[image_id]
+        return len(expired)
 
     async def inbox(
         self, user_id: UUID, account_id: UUID, limit: int, *, unread_only: bool
@@ -328,7 +370,7 @@ class MemoryStore:
         if item.read_at is None:
             item = replace(item, read_at=now)
             self.data.inbox[item_id] = item
-        return item
+        return self._view(item)
 
     async def acknowledge(
         self, user_id: UUID, account_id: UUID, item_id: UUID, now: datetime
@@ -337,7 +379,7 @@ class MemoryStore:
         if item is not None and item.acked_at is None:
             item = replace(item, acked_at=now)
             self.data.inbox[item_id] = item
-        return item
+        return self._view(item) if item is not None else None
 
     async def silence(self, user_id: UUID, account_id: UUID, key: str, until: datetime) -> None:
         current = self.data.silences.get((user_id, account_id, key))
