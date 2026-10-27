@@ -17,7 +17,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
+  // CI runs the suite in shards (ci.yml, job e2e-web-shard): each writes a blob report, which
+  // playwright.merge.config.ts turns into the one HTML/JUnit/JSON report.
+  reporter: process.env.CI ? [['list'], ['blob']] : [['list']],
   use: {
     baseURL,
     locale: 'de-DE',
