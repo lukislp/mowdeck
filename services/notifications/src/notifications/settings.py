@@ -60,6 +60,17 @@ class Settings(ServiceSettings):
     notifications_offline_check_seconds: float = Field(default=10, ge=1)
     """How often the offline timer runs."""
 
+    notifications_maintenance_grace_seconds: float = Field(default=120, ge=0)
+    """An offline noticed up to this long after the deploy maintenance window ended is still held
+    back; a mower still offline after that is reported then (ADR 0053)."""
+
+    notifications_maintenance_lead_seconds: float = Field(default=60, ge=0)
+    """An offline that began this much before the window opened still counts as inside it (the
+    last state arrived shortly before the restart)."""
+
+    notifications_maintenance_max_minutes: int = Field(default=60, ge=1, le=1440)
+    """Longest window ``maintenance open`` may ask for."""
+
     # --- theft alarm -----------------------------------------------------------------------
 
     notifications_alarm_cooldown_seconds: float = Field(default=600, ge=0)
@@ -250,6 +261,8 @@ class Settings(ServiceSettings):
                 offline_after_seconds=self.notifications_offline_after_seconds,
                 disconnect_grace_seconds=self.notifications_disconnect_grace_seconds,
                 cooldown_seconds=self.notifications_cooldown_seconds,
+                maintenance_grace_seconds=self.notifications_maintenance_grace_seconds,
+                maintenance_lead_seconds=self.notifications_maintenance_lead_seconds,
                 alarm_cooldown_seconds=self.notifications_alarm_cooldown_seconds,
                 lift_error_codes=self.lift_error_codes,
                 dock_command_window_seconds=self.notifications_dock_command_window_seconds,
