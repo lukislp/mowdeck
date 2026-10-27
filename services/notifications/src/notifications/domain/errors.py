@@ -19,6 +19,10 @@ class NotFoundError(NotificationsError):
     """The resource does not exist for this user (or belongs to someone else)."""
 
 
+class GoneError(NotificationsError):
+    """The resource existed but never will again (410): expired link, no photo was taken."""
+
+
 class InvalidInputError(NotificationsError):
     """The request is well formed but not acceptable (422)."""
 

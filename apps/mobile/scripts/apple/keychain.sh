@@ -14,6 +14,8 @@
 #   APPLE_DISTRIBUTION_P12_BASE64       "Apple Distribution" certificate + private key, .p12, base64
 #   APPLE_DISTRIBUTION_P12_PASSWORD
 #   APPLE_PROFILE_IOS_BASE64            App Store provisioning profile for app.mowdeck.mobile, base64
+#   APPLE_PROFILE_IOS_NOTIFICATION_BASE64  App Store profile for app.mowdeck.mobile.NotificationService (the
+#                                       Notification Service Extension that adds the camera photo, ADR 0056), base64
 #   ASC_API_KEY_P8_BASE64               App Store Connect API key (.p8), base64
 #   ASC_API_KEY_ID
 #   ASC_API_ISSUER_ID
@@ -31,7 +33,7 @@ set -euo pipefail
 # certificate; codesign needs the chain.
 WWDR_G3_SHA256=dcf21878c77f4198e4b4614f03d696d89c66c66008d4244e1b99161aac91601f
 
-REQUIRED="APPLE_TEAM_ID APPLE_DISTRIBUTION_P12_BASE64 APPLE_DISTRIBUTION_P12_PASSWORD APPLE_PROFILE_IOS_BASE64 ASC_API_KEY_P8_BASE64 ASC_API_KEY_ID ASC_API_ISSUER_ID"
+REQUIRED="APPLE_TEAM_ID APPLE_DISTRIBUTION_P12_BASE64 APPLE_DISTRIBUTION_P12_PASSWORD APPLE_PROFILE_IOS_BASE64 APPLE_PROFILE_IOS_NOTIFICATION_BASE64 ASC_API_KEY_P8_BASE64 ASC_API_KEY_ID ASC_API_ISSUER_ID"
 
 fail() {
     echo "::error::$*" >&2
@@ -109,6 +111,7 @@ setup() {
     echo "Distribution identity: $(printf '%s\n' "$line" | sed -E 's/^ *[0-9]+\) [0-9A-F]{40} "(.*)"$/\1/')"
 
     decode APPLE_PROFILE_IOS_BASE64 "$PROFILE_DIR/app.mobileprovision"
+    decode APPLE_PROFILE_IOS_NOTIFICATION_BASE64 "$PROFILE_DIR/notification-service.mobileprovision"
 
     export_env ASC_API_KEY_PATH "$SIGNING_DIR/private_keys/AuthKey_$ASC_API_KEY_ID.p8"
     decode ASC_API_KEY_P8_BASE64 "$ASC_API_KEY_PATH"

@@ -26,6 +26,7 @@ import httpx
 
 from notifications.adapters.channels.vapid import VapidKeys
 from notifications.application.ports import Clock, NotificationChannel
+from notifications.domain.push_image import ImageLinks
 from notifications.settings import Settings
 
 ENTRY_POINT_GROUP = "mowdeck.notification_channels"
@@ -43,6 +44,8 @@ class ChannelContext:
     clock: Clock
     vapid: VapidKeys | None
     """The VAPID key pair, None when Web Push is not configured."""
+    image_links: ImageLinks | None = None
+    """Signs the push image URLs (ADR 0056); None: pushes carry no image."""
 
 
 ChannelFactory = Callable[[ChannelContext], NotificationChannel | None]
