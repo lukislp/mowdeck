@@ -62,7 +62,7 @@ class Settings(ServiceSettings):
 
     notifications_maintenance_grace_seconds: float = Field(default=120, ge=0)
     """An offline noticed up to this long after the deploy maintenance window ended is still held
-    back; a mower still offline after that is reported then (ADR 0053)."""
+    back; a mower still offline after that is reported then (ADR 0055)."""
 
     notifications_maintenance_lead_seconds: float = Field(default=60, ge=0)
     """An offline that began this much before the window opened still counts as inside it (the

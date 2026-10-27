@@ -1,4 +1,4 @@
-"""The deploy maintenance window (ADR 0053): window arithmetic, the suppression of the offline /
+"""The deploy maintenance window (ADR 0055): window arithmetic, the suppression of the offline /
 online pair, the release when the mower stays offline, the CLI and the stores."""
 
 from datetime import datetime, timedelta

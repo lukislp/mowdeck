@@ -1,4 +1,4 @@
-"""Open, close and read the deploy maintenance window (ADR 0053).
+"""Open, close and read the deploy maintenance window (ADR 0055).
 
 The deploy opens the window before it restarts services and closes it after the health checks;
 it expires by itself, so a forgotten window cannot silence ``mower_offline`` for long. The rules

@@ -2,7 +2,7 @@
 
 The script runs against fake ``docker`` and ``git`` commands and a stub ``verify-release.sh``
 that log their calls, so the order of the steps, the fail-closed behaviour and the window around
-the restart are tested without a stack (ADR 0053).
+the restart are tested without a stack (ADR 0055).
 """
 
 import gzip

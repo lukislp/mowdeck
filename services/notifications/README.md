@@ -54,6 +54,10 @@ Texts are data: `src/notifications/messages/en.json` and `de.json` map message k
 
 One APNs registration per app installation (migration 0006): the iOS shell sends a stable `installation_id` (a UUID in its Keychain) with every token, and `apns_devices` is unique per `(user_id, installation_id)` besides per `token`. A device that gets a new token (reinstall, TestFlight over a development build, token rotation) therefore replaces its row instead of adding one, which earlier made every notification arrive twice: APNs keeps accepting an installation's old tokens for a while. Rows without an id (older app builds) keep one row per token; the cleanup on Apple's `Unregistered`/`BadDeviceToken` stays the second safety net.
 
+### Deploy maintenance window
+
+The deploy opens a window before it restarts services and closes it after the health checks ([ADR 0055](../../docs/adr/0055-deploy-maintenance-window.md), [operations](../../docs/ops/compose.md#deploying-with-the-maintenance-window)): `python -m notifications.cli maintenance open --minutes 15 | close | status` (table `maintenance_window`, expires by itself). A `mower_offline` whose offline began inside the window is not sent, so no `mower_online` follows either; a mower still offline `MAINTENANCE_GRACE_SECONDS` after the window ended is reported then. Theft alarms, errors and all other kinds are never held.
+
 ## Recipients and delivery
 
 1. The users of the mower's account whose preferences follow the mower (`all_mowers` or the mower in `mower_ids`) and enable the kind, plus every user of the account who registered a target (Web Push subscription, APNs device or ntfy target) but never saved preferences: they count with the defaults, that is every mower they can view, the default kinds (all rule kinds except `job_started`), the default channels, no quiet hours, UTC and `MOWDECK_NOTIFICATIONS_DEFAULT_LANGUAGE`. Saved preferences always win. A user with neither preferences nor a target gets nothing ([ADR 0022](../../docs/adr/0022-notifications-rules-and-delivery.md#amendment-2026-10-22-defaults-for-users-who-never-saved-preferences)).
@@ -158,6 +162,9 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `..._DISCONNECT_GRACE_SECONDS` | `30` | `mower.disconnected` becomes offline after this long without a reconnect |
 | `..._COOLDOWN_SECONDS` | `300` | One notification per kind and mower within this time |
 | `..._OFFLINE_CHECK_SECONDS` | `10` | Offline timer interval |
+| `..._MAINTENANCE_GRACE_SECONDS` | `120` | An offline noticed this long after the deploy maintenance window ended is still held back; still offline after that: `mower_offline` is sent |
+| `..._MAINTENANCE_LEAD_SECONDS` | `60` | An offline that began this much before the window opened still counts as inside it |
+| `..._MAINTENANCE_MAX_MINUTES` | `60` | Longest window `maintenance open` accepts |
 | `..._ALARM_COOLDOWN_SECONDS` | `600` | One theft alarm per kind and mower within this time |
 | `..._LIFT_ERROR_CODES` | `lifted,1004,1030,2502,2801,11131,11133` | Error codes that mean lifted (besides `raw.lifted = true`) |
 | `..._DOCK_COMMAND_WINDOW_SECONDS` | `600` | A command this long before a dock departure explains it; a manual drive frame this recent suspends the geofence |

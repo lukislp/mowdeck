@@ -1,4 +1,4 @@
-"""The deploy maintenance window (ADR 0053).
+"""The deploy maintenance window (ADR 0055).
 
 ``maintenance_window`` holds at most one row (``id = 1``): when the deploy opened the window,
 when it expires by itself and when it was closed. Notifications reads it to hold back the

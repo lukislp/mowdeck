@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Updates the Compose stack to a release: the documented procedure of docs/ops/compose.md in one
-# script, with the deploy maintenance window around the restart (ADR 0053).
+# script, with the deploy maintenance window around the restart (ADR 0055).
 #
 #   ./deploy.sh [--dry-run] [--window-minutes N] [--no-maintenance] <version>
 #

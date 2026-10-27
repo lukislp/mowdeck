@@ -8,7 +8,7 @@ lines for the service (keep the private key secret, for example in a secret file
     MOWDECK_NOTIFICATIONS_VAPID_PUBLIC_KEY=...
 
 ``python -m notifications.cli maintenance open --minutes 15`` opens the deploy maintenance window
-(ADR 0053), ``maintenance close`` closes it and ``maintenance status`` prints it. They use the
+(ADR 0055), ``maintenance close`` closes it and ``maintenance status`` prints it. They use the
 database of the service (``MOWDECK_DATABASE_URL``), so the deploy runs them in the notifications
 container (``docker compose exec -T notifications python -m notifications.cli maintenance open``).
 The output never contains a secret.
@@ -93,7 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("generate-vapid-keys", help="print a new VAPID key pair")
     maintenance = commands.add_parser(
-        "maintenance", help="the deploy maintenance window (ADR 0053)"
+        "maintenance", help="the deploy maintenance window (ADR 0055)"
     )
     actions = maintenance.add_subparsers(dest="action", required=True)
     opened = actions.add_parser("open", help="open the window (replaces an earlier one)")

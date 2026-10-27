@@ -97,7 +97,7 @@ class RuleConfig:
     """Consecutive states outside the fence before ``geofence_exit`` fires."""
     maintenance_grace_seconds: float = 120
     """An offline noticed up to this long after the deploy maintenance window ended is still
-    held back; a mower still offline after that is reported then (ADR 0053)."""
+    held back; a mower still offline after that is reported then (ADR 0055)."""
     maintenance_lead_seconds: float = 60
     """An offline whose start lies this much before the window opened still counts as inside
     (the last state arrived shortly before the restart)."""
@@ -105,7 +105,7 @@ class RuleConfig:
 
 @dataclass(frozen=True, slots=True)
 class MaintenanceWindow:
-    """The deploy maintenance window (one per installation, ADR 0053).
+    """The deploy maintenance window (one per installation, ADR 0055).
 
     Opened by the deploy before it restarts services and closed after the health checks; it
     expires by itself at ``expires_at``. While it holds, ``mower_offline`` (and with it the
