@@ -278,15 +278,15 @@ flowchart LR
   p_identity -->|"event.* (type chosen at runtime)<br/>event.identity.grants.changed"| s_EVENTS
   p_notifications -->|"event.* (type chosen at runtime)"| s_EVENTS
   p_scheduler -->|"event.* (type chosen at runtime)"| s_EVENTS
-  p_telemetry -->|"event.* (type chosen at runtime)"| s_EVENTS
+  p_telemetry -->|"event.* (type chosen at runtime)<br/>event.tracking.ended<br/>event.tracking.started"| s_EVENTS
   p_vision -->|"event.* (type chosen at runtime)"| s_EVENTS
   s_EVENTS -->|"event.identity.account.created"| c_billing
   s_EVENTS -->|"event.mower.>"| c_device_gateway
   s_EVENTS -->|"event.identity.account.created"| c_entitlements
   s_EVENTS -->|"event.identity.account.created"| c_fleet
-  s_EVENTS -->|"event.identity.><br/>event.mower.><br/>event.telemetry.><br/>+1 more"| c_notifications
+  s_EVENTS -->|"event.identity.><br/>event.mower.><br/>event.telemetry.><br/>+2 more"| c_notifications
   s_EVENTS -->|"event.identity.grants.changed<br/>event.notifications.><br/>event.vision.proposal.>"| c_realtime
-  s_EVENTS -->|"event.mower.>"| c_telemetry
+  s_EVENTS -->|"event.mower.><br/>event.notifications.>"| c_telemetry
   s_EVENTS -->|"event.identity.>"| c_vision
 ```
 
@@ -333,6 +333,8 @@ flowchart LR
   q_camera_relay -->|"gateway.mower.*.camera.release<br/>gateway.mower.*.camera.session"| r_device_gateway
   q_fleet["fleet"]
   q_fleet -->|"gateway.cloud.discover<br/>gateway.mower.*.bridge.scan<br/>gateway.mower.*.camera.session<br/>+3 more"| r_device_gateway
+  q_telemetry["telemetry"]
+  q_telemetry -->|"gateway.mower.*.photo<br/>gateway.mower.*.tracking"| r_device_gateway
   q_vision["vision"]
   q_vision -->|"gateway.mower.*.photo"| r_device_gateway
 ```
@@ -390,8 +392,11 @@ flowchart LR
 | `event.identity.account.created` | EVENTS | - | billing, entitlements, fleet |
 | `event.identity.grants.changed` | EVENTS | identity | realtime |
 | `event.mower.>` | EVENTS | - | device-gateway, notifications, telemetry |
-| `event.notifications.>` | EVENTS | - | realtime |
+| `event.notifications.>` | EVENTS | - | realtime, telemetry |
 | `event.telemetry.>` | EVENTS | - | notifications |
+| `event.tracking.>` | EVENTS | - | notifications |
+| `event.tracking.ended` | EVENTS | telemetry | - |
+| `event.tracking.started` | EVENTS | telemetry | - |
 | `event.vision.>` | EVENTS | - | notifications |
 | `event.vision.proposal.>` | EVENTS | - | realtime |
 | `fleet.commands.issue` | core | vision | fleet |
@@ -406,7 +411,8 @@ flowchart LR
 | `gateway.mower.*.camera.session` | core | camera-relay, fleet | device-gateway |
 | `gateway.mower.*.firmware.check` | core | fleet | device-gateway |
 | `gateway.mower.*.path.preview` | core | fleet | device-gateway |
-| `gateway.mower.*.photo` | core | fleet, vision | device-gateway |
+| `gateway.mower.*.photo` | core | fleet, telemetry, vision | device-gateway |
+| `gateway.mower.*.tracking` | core | telemetry | device-gateway |
 | `relay.camera.attach` | core | fleet | camera-relay |
 | `relay.camera.detach` | core | fleet | camera-relay |
 | `relay.camera.renew` | core | fleet | camera-relay |
@@ -466,7 +472,9 @@ flowchart LR
   end
   subgraph telemetry["telemetry"]
     direction TB
+    telemetry_public["public<br/>1 operation"]
     telemetry_telemetry["telemetry<br/>17 operations"]
+    telemetry_tracking["tracking<br/>11 operations"]
   end
   subgraph vision["vision"]
     direction TB
@@ -502,7 +510,9 @@ flowchart LR
 | `scheduler` | `operations` | 1 | 1 |
 | `scheduler` | `schedules` | 10 | 7 |
 | `telemetry` | `operations` | 1 | 1 |
+| `telemetry` | `public` | 1 | 1 |
 | `telemetry` | `telemetry` | 17 | 17 |
+| `telemetry` | `tracking` | 11 | 9 |
 | `vision` | `operations` | 1 | 1 |
 | `vision` | `vision` | 16 | 13 |
 
@@ -533,7 +543,7 @@ flowchart LR
     db_notifications[("notifications<br/>6 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>3 migrations")]
-    db_telemetry[("telemetry<br/>10 migrations")]
+    db_telemetry[("telemetry<br/>11 migrations")]
     db_vision[("vision<br/>7 migrations")]
   end
   billing -->|owns| db_billing
