@@ -21,7 +21,9 @@ function aerial(load: MapAerial['load'], extra: Partial<MapAerial> = {}): MapAer
 
 describe('createAerialLayer', () => {
   it('fills the tile route, loads through the callback and shows the blob', async () => {
-    const load = vi.fn(async () => new Blob(['x'], { type: 'image/jpeg' }));
+    const load = vi.fn(
+      async (_url: string, _signal: AbortSignal) => new Blob(['x'], { type: 'image/jpeg' }),
+    );
     URL.createObjectURL = vi.fn(() => 'blob:tile');
     URL.revokeObjectURL = vi.fn();
     const layer = createAerialLayer(L, aerial(load), () => load);
@@ -42,7 +44,7 @@ describe('createAerialLayer', () => {
   });
 
   it('reports a failing load to Leaflet instead of throwing', async () => {
-    const load = vi.fn(async () => {
+    const load = vi.fn(async (_url: string, _signal: AbortSignal): Promise<Blob> => {
       throw new Error('429');
     });
     const layer = createAerialLayer(L, aerial(load), () => load);
