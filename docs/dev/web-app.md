@@ -189,6 +189,32 @@ In the image, `nginx/40-mowdeck-runtime-config.sh` (an `/docker-entrypoint.d` ho
 
 **Privacy.** Tiles are off by default. With tiles, every map view tells the tile server which tiles are shown, which is the location of the garden, plus the viewer's IP address. The public OpenStreetMap servers have a usage policy that does not fit an app (https://operations.osmfoundation.org/policies/tiles/); use your own or a commercial provider and show the attribution it requires (`openstreetmap.org` URLs get "© OpenStreetMap contributors" automatically). An API key in the template is visible to every user.
 
+## What's new ("Was ist neu")
+
+After an update the first app open shows a compact sheet, "Was ist neu in vX.Y.Z", with the
+user-facing changes since the version this device last saw (several releases at once, at most six
+entries; the rest is one tap away). Settings → Neuigkeiten (before About) keeps the history of
+every release up to the running version. Code: `apps/web/src/lib/whats-new/`.
+
+- **Version.** `source.version` of `/config.json` (the value Settings → About shows). A
+  development or test build (no plain `X.Y.Z`) shows nothing. There is no dependence on the
+  service worker, so the native shells (which have none) behave like the browser.
+- **Notes.** `/whats-new.json`, written by `apps/web/build-tools/whats-new.mjs` in the release
+  workflow and shipped in the web image (docs/ops/release.md, "Notes for the app"). nginx serves
+  it with `no-cache` and a 404 when a build has none; the service worker does not precache it, so
+  it always comes from the same server as `/config.json`. Every entry has an English text (the
+  commit subject) and optionally a German text and an app path for "Jetzt ausprobieren"; the UI
+  shows German for German and falls back to the English subject.
+- **Last seen.** Per device in `localStorage` (`mowdeck.whats-new-seen`), written when the sheet
+  is closed, "Verstanden" or a link is used, or silently when a release has nothing user-facing.
+  Chosen over a server-side preference because it needs no endpoint, table or migration for a
+  hint, and seeing the sheet once per device after an update is the right behaviour anyway (each
+  device updates separately: a PWA at its own pace, the app shells when the store build lands). A
+  device that has never stored a version lists the newest entries (capped).
+- **Tests.** `src/lib/whats-new/whats-new.test.ts` (version comparison, aggregation of several
+  releases, de/en fallback, the store), `build-tools/whats-new.test.ts` (commit filtering,
+  curated entries, a git history) and `tests/e2e-web/tests/whats-new-desktop.spec.ts` (version bump
+  shows the sheet once; the build's version and notes are simulated with routes).
 ## Notifications and Web Push
 
 The module `notifications` (bell icon, `mower.view`; the Notifications service announces the `ui_area` `/notifications`) has two pages: the inbox `/notifications` and the settings `/notifications/settings`. Both talk to `/api/v1/notifications` with `notificationsApi` (types from `openapi/notifications.json`). Backend reference: `services/notifications/README.md`, [ADR 0022](../adr/0022-notifications-rules-and-delivery.md).
