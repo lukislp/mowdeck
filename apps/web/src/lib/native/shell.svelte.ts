@@ -5,8 +5,9 @@
  * checks of their own.
  *
  * Notifications per platform:
- * - iOS: APNs from the Notifications service (background and closed app); the inbox feeds local
- *   notifications only while APNs is not on for this device (no duplicates).
+ * - iOS: APNs from the Notifications service (background, closed and foreground app); the inbox
+ *   feeds local notifications only when APNs is denied or failed on this device (no duplicates,
+ *   not while the registration is still pending).
  * - Android: no Firebase, so no push from the server. The inbox feeds local notifications while
  *   the app runs; in the background ntfy (its own app) delivers. With an ntfy target set up the
  *   local notifications stay off (ntfy shows the same message).
@@ -205,7 +206,13 @@ export class NativeShell {
 
   #localWanted(): boolean {
     if (this.local !== true) return false;
-    if (this.platform === 'ios') return this.apns !== 'on';
+    // iOS: APNs shows the message (also in the foreground, presentationOptions). The inbox may
+    // load while the registration is still under way ('pending', 'idle'), so only a failed or
+    // refused APNs falls back to local notifications; otherwise an item the OS already showed
+    // would appear a second time when the app opens.
+    if (this.platform === 'ios') {
+      return !this.#registration || this.apns === 'denied' || this.apns === 'error';
+    }
     return !this.ntfy;
   }
 

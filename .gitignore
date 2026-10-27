@@ -20,6 +20,7 @@ coverage/
 playwright-report/
 test-results/
 apps/web/src/lib/paraglide/
+apps/web/static/whats-new.json
 
 # Env and secrets
 .env
@@ -52,3 +53,6 @@ apps/web/project.inlang/cache/
 # Helm: downloaded chart dependencies and packaged charts (Chart.lock pins the versions)
 infra/helm/mowdeck/charts/
 infra/helm/**/*.tgz
+blob-report/
+merged-report/
+all-blob-reports/

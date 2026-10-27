@@ -20,6 +20,9 @@ name: release
 #   * attaches the chart, the SBOMs and the APK to the release with SHA256SUMS, a Sigstore bundle
 #     (*.sigstore.json) per file and the build provenance (mowdeck-<version>.intoto.jsonl), and
 #     lists the image digests and the verification commands in the release notes (job publish).
+# The web image also carries /whats-new.json, the notes of the app's "Was ist neu" sheet: the feat/fix
+# commits between the tags, with the German and English texts of apps/web/whats-new/*.json
+# (docs/ops/release.md, "Notes for the app").
 # Nothing is published from a push whose commits are docs/ci/chore/test only. By hand the workflow
 # builds a test version (for example 0.1.0-rc.1) from any branch: images and chart, no tag, no
 # GitHub release, no :latest. Versions are set at build time (image labels, chart version and
@@ -291,9 +294,15 @@ jobs:
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
+      # The web image ships the notes of "Was ist neu": they are built from the release tags, so the
+      # web row checks out the full history (apps/web/build-tools/whats-new.mjs).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ matrix.kind == 'web' && 0 || 1 }}
+      - name: Notes for "Was ist neu" (web image)
+        if: matrix.kind == 'web'
+        run: node apps/web/build-tools/whats-new.mjs --version "$VERSION" --out apps/web/static/whats-new.json
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
@@ -400,9 +409,15 @@ jobs:
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
+      # The web image ships the notes of "Was ist neu": they are built from the release tags, so the
+      # web row checks out the full history (apps/web/build-tools/whats-new.mjs).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ matrix.kind == 'web' && 0 || 1 }}
+      - name: Notes for "Was ist neu" (web image)
+        if: matrix.kind == 'web'
+        run: node apps/web/build-tools/whats-new.mjs --version "$VERSION" --out apps/web/static/whats-new.json
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
