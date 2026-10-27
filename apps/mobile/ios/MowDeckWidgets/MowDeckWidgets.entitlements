@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The App Group the app and the widgets share (mower list, last snapshot; ADR 0059). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.mowdeck.mobile</string>
+	</array>
+	<!-- The Keychain group of the widget credential: the same entry in the app. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)app.mowdeck.mobile.shared</string>
+	</array>
+</dict>
+</plist>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Entitlements of the widget extension (app.mowdeck.mobile.Widgets) in the TestFlight build
+     (release-ios.sh): the App Group and the Keychain group it shares with the app (ADR 0059).
+     $(AppIdentifierPrefix) is the team id plus a dot; ios_signing.py expands it from the profile.
+     ios_signing.py adds the identity keys of its App Store profile and fails if the profile does
+     not grant one of these. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.mowdeck.mobile</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)app.mowdeck.mobile.shared</string>
+	</array>
+</dict>
+</plist>

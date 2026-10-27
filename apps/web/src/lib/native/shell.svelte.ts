@@ -21,6 +21,7 @@ import {
   type HandoffResult,
 } from './handoff';
 import { pathFromDeepLink, pathFromNotificationAction } from './links';
+import { WidgetsRegistration, type WidgetsApi, type WidgetsState } from './widgets';
 import { CHANNELS, InboxNotifier, toLocalNotification } from './local';
 import type { InboxItem } from '#lib/stores/inbox.svelte.js';
 
@@ -28,6 +29,8 @@ export interface NativeShellDeps {
   bridge: NativeBridge | null;
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
   apns: ApnsApi;
+  /** Widgets and the Live Activity (iOS shells of ADR 0059); without it they stay off. */
+  widgetsApi?: WidgetsApi;
   /** True when the user has an ntfy target (Android background channel). */
   ntfyConfigured: () => Promise<boolean>;
 }
@@ -37,6 +40,8 @@ type Display = 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale';
 export class NativeShell {
   /** APNs on this device (iOS). */
   apns = $state<ApnsState>('idle');
+  /** Widgets and the Live Activity on this device (iOS, ADR 0059). */
+  widgets = $state<WidgetsState>('unsupported');
   /** Local notifications allowed by the user (null: not asked yet). */
   local = $state<boolean | null>(null);
   /** The server origin the shell loads (from the shell's own plugin). */
@@ -47,6 +52,7 @@ export class NativeShell {
   readonly #deps: NativeShellDeps;
   readonly #notifier: InboxNotifier;
   readonly #registration: ApnsRegistration | null;
+  readonly #widgets: WidgetsRegistration | null;
   #signedIn = false;
 
   constructor(deps: NativeShellDeps) {
@@ -64,6 +70,19 @@ export class NativeShell {
             onChange: (state) => (this.apns = state),
           })
         : null;
+    this.#widgets =
+      bridge?.platform === 'ios' &&
+      deps.widgetsApi &&
+      bridge.hasMethod('MowDeckShell', 'configureWidgets')
+        ? new WidgetsRegistration({
+            shell: bridge.plugin('MowDeckShell'),
+            api: deps.widgetsApi,
+            serverUrl: () => this.server,
+            deviceName: 'MowDeck iOS',
+            onChange: (state) => (this.widgets = state),
+          })
+        : null;
+    if (this.#widgets) this.widgets = 'off';
   }
 
   get active(): boolean {
@@ -77,6 +96,11 @@ export class NativeShell {
   /** APNs is possible on this device (iOS shell with the push plugin). */
   get apnsAvailable(): boolean {
     return this.#registration !== null;
+  }
+
+  /** Widgets can be turned on here (iOS shell with the widget methods). */
+  get widgetsAvailable(): boolean {
+    return this.#widgets !== null;
   }
 
   #plugin(name: string) {
@@ -130,6 +154,7 @@ export class NativeShell {
     return () => {
       for (const off of offs) off();
       this.#registration?.stop();
+      this.#widgets?.stop();
     };
   }
 
@@ -143,6 +168,7 @@ export class NativeShell {
     // iOS: the APNs prompt also grants local notifications, so it goes first.
     if (this.#registration) await this.#registration.enable();
     await this.#prepareLocal();
+    await this.#widgets?.maintain();
   }
 
   /** Before logout: remove this device's APNs token from the server, clear the badge. */
@@ -150,6 +176,7 @@ export class NativeShell {
     if (!this.active) return;
     this.#signedIn = false;
     await this.#registration?.disable();
+    await this.#widgets?.disable().catch(() => undefined);
     await this.#plugin('Badge')
       ?.call('clear')
       .catch(() => undefined);
@@ -158,6 +185,16 @@ export class NativeShell {
   /** Ask for APNs again (the button on the settings page). */
   async enableApns(): Promise<void> {
     await this.#registration?.enable();
+  }
+
+  /** Turn the widgets and the Live Activity on (the button on the settings page). */
+  async enableWidgets(): Promise<void> {
+    await this.#widgets?.enable();
+  }
+
+  /** Turn them off: the credential is revoked and removed from this device. */
+  async disableWidgets(): Promise<void> {
+    await this.#widgets?.disable();
   }
 
   /** Re-read whether the user has an ntfy target (after it was saved or removed). */

@@ -153,9 +153,25 @@ def _allowed(declared: object, granted: object) -> bool:
     return declared == granted
 
 
+def _expand_prefix(value: Any, prefix: str) -> Any:
+    """``$(AppIdentifierPrefix)`` (team id and a dot, as Xcode expands it) in strings and lists."""
+    if isinstance(value, str):
+        return value.replace("$(AppIdentifierPrefix)", prefix)
+    if isinstance(value, list):
+        return [_expand_prefix(item, prefix) for item in value]
+    return value
+
+
 def build_entitlements(declared: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
-    """The declared entitlements plus the profile's identity keys; every declared key granted."""
+    """The declared entitlements plus the profile's identity keys; every declared key granted.
+
+    ``$(AppIdentifierPrefix)`` in a declared value becomes the profile's team id and a dot
+    (the keychain access group of the widget credential, ADR 0059).
+    """
     granted = _entitlements(profile)
+    teams = profile.get("TeamIdentifier") or []
+    prefix = f"{teams[0]}." if teams else ""
+    declared = {key: _expand_prefix(value, prefix) for key, value in declared.items()}
     missing = []
     for key, value in declared.items():
         if key not in granted:

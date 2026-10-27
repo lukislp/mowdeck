@@ -1,5 +1,6 @@
 import Capacitor
 import UIKit
+import WidgetKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -28,6 +29,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+
+    // MARK: - Silent pushes: reload the widgets (ADR 0059)
+
+    /// The Notifications service sends `content-available` pushes with `kind: widget-reload` when
+    /// a mower's state changes. iOS decides how often it wakes the app for them (a few per hour);
+    /// the widgets also refresh on their own schedule. Other background pushes do nothing here.
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        if userInfo["kind"] as? String == "widget-reload" {
+            WidgetCenter.shared.reloadAllTimelines()
+            completionHandler(.newData)
+        } else {
+            completionHandler(.noData)
+        }
     }
 
     // MARK: - mowdeck:// deep links (@capacitor/app "appUrlOpen")

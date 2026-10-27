@@ -79,6 +79,7 @@ def _profile(**overrides: Any) -> dict[str, Any]:
         "keychain-access-groups": [f"{TEAM}.*"],
         "aps-environment": "production",
         "com.apple.developer.usernotifications.time-sensitive": True,
+        "com.apple.security.application-groups": ["group.app.mowdeck.mobile"],
     }
     ents.update(overrides.pop("entitlements", {}))
     profile: dict[str, Any] = {
@@ -195,6 +196,8 @@ def test_project_settings(check: ModuleType) -> None:
     good = (
         f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE};\n"
         f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE}.NotificationService;\n"
+        f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE}.Widgets;\n"
+        "A /* MowDeckWidgets.appex in Embed Foundation Extensions */\n"
         'TARGETED_DEVICE_FAMILY = "1,2";\n'
         'productType = "com.apple.product-type.app-extension";\n'
         'dstSubfolderSpec = 13;\nname = "Embed Foundation Extensions";\n'
@@ -207,6 +210,9 @@ def test_project_settings(check: ModuleType) -> None:
     assert len(check.check_project(good.replace(".NotificationService;", ".Other;"))) == 1
     assert len(check.check_project(good.replace("dstSubfolderSpec = 13;", ""))) == 1
     assert len(check.check_project(good.replace("app-extension", "tool"))) == 1
+    # ... and so must the widget extension
+    assert len(check.check_project(good.replace(".Widgets;", ".Other;"))) == 1
+    assert len(check.check_project(good.replace("MowDeckWidgets.appex in", "X in"))) == 1
 
 
 def test_extension_plist(check: ModuleType, repo_root: Path) -> None:
@@ -217,6 +223,25 @@ def test_extension_plist(check: ModuleType, repo_root: Path) -> None:
     info["NSExtension"]["NSExtensionPointIdentifier"] = "com.apple.widget-extension"
     del info["CFBundleVersion"]
     assert len(check.check_extension_plist(info)) == 2
+
+
+def test_widgets_plist(check: ModuleType, repo_root: Path) -> None:
+    info = plistlib.loads((repo_root / "apps/mobile/ios/MowDeckWidgets/Info.plist").read_bytes())
+    assert check.check_widgets_plist(info) == []
+    info["NSExtension"]["NSExtensionPointIdentifier"] = "com.apple.usernotifications.service"
+    del info["CFBundleVersion"]
+    assert len(check.check_widgets_plist(info)) == 2
+
+
+def test_widget_entitlements_share_the_groups(check: ModuleType, repo_root: Path) -> None:
+    app = plistlib.loads((repo_root / "apps/mobile/ios/App/App/App.entitlements").read_bytes())
+    widgets = plistlib.loads(
+        (repo_root / "apps/mobile/scripts/apple/entitlements/widgets.plist").read_bytes()
+    )
+    assert check.check_widget_entitlements(app, widgets) == []
+    widgets["keychain-access-groups"] = ["$(AppIdentifierPrefix)other"]
+    del app["com.apple.security.application-groups"]
+    assert len(check.check_widget_entitlements(app, widgets)) == 2
 
 
 def _built_app(tmp_path: Path, **info: Any) -> Path:
@@ -249,6 +274,19 @@ def _built_app(tmp_path: Path, **info: Any) -> Path:
             fmt=plistlib.FMT_BINARY,
         )
     )
+    widgets = app / "PlugIns" / "MowDeckWidgets.appex"
+    widgets.mkdir(parents=True)
+    (widgets / "Info.plist").write_bytes(
+        plistlib.dumps(
+            {
+                "CFBundleIdentifier": f"{BUNDLE}.Widgets",
+                "CFBundleShortVersionString": "0.3.12",
+                "CFBundleVersion": "312",
+                "NSExtension": {"NSExtensionPointIdentifier": "com.apple.widgetkit-extension"},
+            },
+            fmt=plistlib.FMT_BINARY,
+        )
+    )
     return app
 
 
@@ -277,6 +315,16 @@ def test_built_app_needs_the_notification_extension(check: ModuleType, tmp_path:
         check.check_app(app, "0.3.12", "312")
     app = _built_app(tmp_path / "again")
     with pytest.raises(check.CheckError, match=r"NotificationService\.appex: CFBundleVersion"):
+        check.check_app(app, "0.3.12", "999")
+
+
+def test_built_app_needs_the_widget_extension(check: ModuleType, tmp_path: Path) -> None:
+    app = _built_app(tmp_path)
+    shutil.rmtree(app / "PlugIns" / "MowDeckWidgets.appex")
+    with pytest.raises(check.CheckError, match="built without the widget extension"):
+        check.check_app(app, "0.3.12", "312")
+    app = _built_app(tmp_path / "again")
+    with pytest.raises(check.CheckError, match=r"MowDeckWidgets\.appex: CFBundleVersion"):
         check.check_app(app, "0.3.12", "999")
 
 
@@ -356,7 +404,9 @@ def test_entitlements_merge(signing: ModuleType, repo_root: Path) -> None:
     assert result["application-identifier"] == f"{TEAM}.{BUNDLE}"
     assert result["get-task-allow"] is False
     assert result["beta-reports-active"] is True
-    assert "keychain-access-groups" not in result
+    # the Keychain group of the widget credential gets the profile's team id (ADR 0059)
+    assert result["keychain-access-groups"] == [f"{TEAM}.app.mowdeck.mobile.shared"]
+    assert result["com.apple.security.application-groups"] == ["group.app.mowdeck.mobile"]
 
 
 def test_entitlements_missing_capability(signing: ModuleType) -> None:
@@ -437,6 +487,19 @@ def test_workflow_signing_job(workflow: dict[Any, Any]) -> None:
     assert "keychain.sh cleanup" in steps[-1]["run"]
 
 
+def test_widgets_profile_is_wired(repo_root: Path) -> None:
+    # The widget extension is signed with its own profile (ADR 0059), like the notification one.
+    secret = "APPLE_PROFILE_IOS_WIDGETS_BASE64"  # noqa: S105 - a secret's name
+    workflow_text = (repo_root / ".github/workflows/apple-testflight.yml").read_text("utf-8")
+    assert workflow_text.count(f"{secret}: ${{{{ secrets.{secret} }}}}") == 2
+    keychain = (repo_root / "apps/mobile/scripts/apple/keychain.sh").read_text("utf-8")
+    assert f"{secret} ASC_API_KEY_P8_BASE64" in keychain
+    release = (repo_root / "apps/mobile/scripts/apple/release-ios.sh").read_text("utf-8")
+    assert "PlugIns/MowDeckWidgets.appex" in release
+    assert "$BUNDLE_ID.Widgets" in release
+    assert "widgets.plist" in release
+
+
 def test_workflow_actions_pinned(repo_root: Path) -> None:
     text = (repo_root / ".github/workflows/apple-testflight.yml").read_text("utf-8")
     uses = re.findall(r"uses: (\S+)(.*)", text)
@@ -453,7 +516,7 @@ def test_notification_extension_profile_is_wired(repo_root: Path) -> None:
     workflow_text = (repo_root / ".github/workflows/apple-testflight.yml").read_text("utf-8")
     assert workflow_text.count(f"{secret}: ${{{{ secrets.{secret} }}}}") == 2
     keychain = (repo_root / "apps/mobile/scripts/apple/keychain.sh").read_text("utf-8")
-    assert f"{secret} ASC_API_KEY_P8_BASE64" in keychain
+    assert f"{secret} APPLE_PROFILE_IOS_WIDGETS_BASE64" in keychain
     release = (repo_root / "apps/mobile/scripts/apple/release-ios.sh").read_text("utf-8")
     assert "PlugIns/NotificationService.appex" in release
     assert (
