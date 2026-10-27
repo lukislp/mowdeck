@@ -19,6 +19,7 @@ or nothing was due within ``MOWDECK_NOTIFICATIONS_STALL_SECONDS``).
 import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable, Mapping
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -50,6 +51,7 @@ from notifications.adapters.api.deps import install_error_mapping
 from notifications.adapters.api.routes import router
 from notifications.adapters.authz import AuthzViewChecker
 from notifications.adapters.bus.fleet import seed_directory
+from notifications.adapters.bus.photo import BusPhotoSource
 from notifications.adapters.bus.publisher import BusPublisher
 from notifications.adapters.bus.subscriptions import subscribe_all
 from notifications.adapters.channels import ChannelContext, ChannelRegistry
@@ -58,6 +60,7 @@ from notifications.adapters.db.store import SqlStore
 from notifications.adapters.metrics import DeliveryMetrics
 from notifications.application.ports import Clock, Store
 from notifications.application.services import Services, build_services
+from notifications.domain.push_image import ImageLinks
 from notifications.messages import load_catalog
 from notifications.module import DESCRIPTOR
 from notifications.settings import Settings
@@ -86,6 +89,15 @@ def resolve_vapid(settings: Settings) -> VapidKeys | None:
         )
         return keys
     return None
+
+
+def resolve_image_links(settings: Settings) -> ImageLinks | None:
+    """The signer of the push image URLs; None (pushes carry no image) when photos are off or
+    there is no public URL or no signing key (the APNs key or ``..._IMAGE_SECRET``)."""
+    base, secret = settings.image_base_url, settings.image_secret
+    if not settings.notifications_image_enabled or not base or secret is None:
+        return None
+    return ImageLinks(secret, base, timedelta(seconds=settings.notifications_image_url_ttl_seconds))
 
 
 def as_cache(authorizer: Authorizer) -> SupportsInvalidate | None:
@@ -168,8 +180,11 @@ def build_app(
     http = http_client or httpx.AsyncClient(follow_redirects=False)
     own_http = http_client is None
     own_registry = channels is None
+    image_links = resolve_image_links(settings)
     registry = channels or ChannelRegistry.build(
-        ChannelContext(settings=settings, http=http, clock=active_clock, vapid=vapid),
+        ChannelContext(
+            settings=settings, http=http, clock=active_clock, vapid=vapid, image_links=image_links
+        ),
         settings.channel_names,
     )
     tasks: list[asyncio.Task[Any]] = []
@@ -190,6 +205,16 @@ def build_app(
             config=settings.to_config(),
             clock=active_clock,
             observer=DeliveryMetrics(app.state.metrics_registry),
+            photos=(
+                BusPhotoSource(
+                    active_bus,
+                    timeout_seconds=settings.notifications_photo_timeout_seconds,
+                    max_bytes=settings.notifications_image_max_bytes,
+                )
+                if active_bus is not None and settings.notifications_image_enabled
+                else None
+            ),
+            image_links=image_links,
         )
         app.state.notifications = services
         app.state.directory_seeded = False
@@ -219,6 +244,7 @@ def build_app(
                 await task
         services: Services | None = getattr(app.state, "notifications", None)
         if services is not None:
+            await services.fanout.aclose()
             await services.outbox.aclose()
         for subscription in getattr(app.state, "subscriptions", []):
             await subscription.unsubscribe()
@@ -282,6 +308,9 @@ def start_background_tasks(
         deleted = await services.outbox.prune()
         if deleted:
             _log.info("finished deliveries pruned", count=deleted)
+        images = await services.fanout.prune_images()
+        if images:
+            _log.info("expired notification photos pruned", count=images)
 
     tasks: list[asyncio.Task[Any]] = [
         asyncio.create_task(

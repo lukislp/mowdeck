@@ -6,10 +6,19 @@ from uuid import UUID
 from notifications.application.context import NotificationsConfig
 from notifications.application.fanout import Fanout
 from notifications.application.outbox import DeliveryObserver, Outbox
-from notifications.application.ports import Channels, Clock, EventPublisher, Store, ViewChecker
+from notifications.application.ports import (
+    Channels,
+    Clock,
+    EventPublisher,
+    PhotoSource,
+    Store,
+    ViewChecker,
+)
+from notifications.application.push_image import PushImages
 from notifications.application.users import UserNotifications
 from notifications.application.watcher import Watcher
 from notifications.domain.messages import MessageCatalog
+from notifications.domain.push_image import ImageLinks
 
 
 class Accounts:
@@ -33,6 +42,8 @@ class Services:
     users: UserNotifications
     accounts: Accounts
     config: NotificationsConfig
+    push_images: PushImages | None = None
+    """Serves the push image URLs; None without a public URL and signing secret."""
 
 
 def build_services(
@@ -45,9 +56,12 @@ def build_services(
     config: NotificationsConfig,
     clock: Clock,
     observer: DeliveryObserver | None = None,
+    photos: PhotoSource | None = None,
+    image_links: ImageLinks | None = None,
 ) -> Services:
-    """Create the use cases over ``store``."""
-    fanout = Fanout(store, channels, views, publisher, catalog, config, clock)
+    """Create the use cases over ``store`` (``photos``: where error and theft events get their
+    camera photo from, None for none; ``image_links``: the signed push image URLs)."""
+    fanout = Fanout(store, channels, views, publisher, catalog, config, clock, photos)
     return Services(
         watcher=Watcher(store, fanout, config, clock),
         fanout=fanout,
@@ -55,4 +69,5 @@ def build_services(
         users=UserNotifications(store, fanout, channels, views, catalog, config, clock),
         accounts=Accounts(store),
         config=config,
+        push_images=PushImages(store, image_links, clock) if image_links is not None else None,
     )

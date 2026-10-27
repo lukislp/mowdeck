@@ -256,6 +256,11 @@ class InboxItemOut(BaseModel):
     read_at: datetime | None
     acked: bool = Field(default=False, description="Acknowledged by the user (alarms).")
     acked_at: datetime | None = None
+    has_image: bool = Field(
+        default=False,
+        description="A camera photo was taken for this error or theft event and is still kept "
+        "(a day): `GET /api/v1/notifications/inbox/{id}/image` returns it.",
+    )
 
     @classmethod
     def of(cls, item: InboxItem) -> "InboxItemOut":
@@ -274,6 +279,7 @@ class InboxItemOut(BaseModel):
             read_at=item.read_at,
             acked=item.acked_at is not None,
             acked_at=item.acked_at,
+            has_image=item.has_image,
         )
 
 

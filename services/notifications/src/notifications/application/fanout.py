@@ -15,11 +15,19 @@ Before the per-user fan-out every event is published once for its account as
 ``notifications.raised`` (rendered in English, independent of preferences, quiet hours and
 recipients), so API tokens such as Home Assistant's, which have no inbox, can receive the
 account's notifications over Realtime.
+
+Camera photo (ADR 0056): an event of an :data:`~notifications.domain.models.IMAGE_KINDS` kind
+reserves an image id before the fan-out; every recipient's inbox item and push message carry it.
+The photo is requested after the items are stored, in the background: the push never waits for
+the camera. The photo lands under the reserved id (or a failure marker); until then the push
+image URL answers 404 and the iOS extension polls. A budget of its own limits the photos per
+mower (minimum interval, photos per 24 hours) on top of the alarm cooldowns.
 """
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
@@ -32,15 +40,25 @@ from mowdeck_contracts.v1 import (
 from mowdeck_service_kit import get_logger
 
 from notifications.application.context import NotificationsConfig
-from notifications.application.ports import Channels, Clock, EventPublisher, Store, ViewChecker
+from notifications.application.ports import (
+    CapturedPhoto,
+    Channels,
+    Clock,
+    EventPublisher,
+    PhotoSource,
+    Store,
+    ViewChecker,
+)
 from notifications.domain.messages import MessageCatalog
 from notifications.domain.models import (
     ALARM_KINDS,
+    IMAGE_KINDS,
     SEVERITY,
     InboxItem,
     Message,
     NewDelivery,
     NotificationEvent,
+    NotificationImage,
     Preferences,
     TargetKind,
 )
@@ -82,6 +100,7 @@ class Fanout:
         catalog: MessageCatalog,
         config: NotificationsConfig,
         clock: Clock,
+        photos: PhotoSource | None = None,
     ) -> None:
         self._store = store
         self._channels = channels
@@ -90,6 +109,84 @@ class Fanout:
         self._catalog = catalog
         self._config = config
         self._clock = clock
+        self._photos = photos
+        self._captures: set[asyncio.Task[None]] = set()
+        self._photo_log: dict[UUID, list[datetime]] = {}
+        """Per mower: when photos were requested in the last 24 hours (the notifications
+        budget; per replica, reset by a restart)."""
+
+    async def drain(self) -> None:
+        """Wait for the photos being taken (tests, shutdown)."""
+        while self._captures:
+            await asyncio.gather(*list(self._captures), return_exceptions=True)
+
+    async def aclose(self) -> None:
+        """Cancel the photos being taken (shutdown); the pushes already left without them."""
+        for task in list(self._captures):
+            task.cancel()
+        await self.drain()
+
+    async def prune_images(self) -> int:
+        """Delete the photos past their retention."""
+        return await self._store.prune_images(self._clock())
+
+    def _reserve_photo(self, mower_id: UUID) -> bool:
+        """True (and counted) when the mower may have another photo now: not within
+        ``image_min_interval`` of the last one and under ``image_daily_limit`` per 24 hours."""
+        now = self._clock()
+        window = [t for t in self._photo_log.get(mower_id, []) if now - t < timedelta(hours=24)]
+        allowed = len(window) < self._config.image_daily_limit and (
+            not window or now - window[-1] >= self._config.image_min_interval
+        )
+        if allowed:
+            window.append(now)
+        if window:
+            self._photo_log[mower_id] = window
+        else:
+            self._photo_log.pop(mower_id, None)
+        return allowed
+
+    def _take_photo(self, image_id: UUID, mower_id: UUID, account_id: UUID) -> None:
+        """Start taking the photo in the background; the push does not wait for it."""
+        task = asyncio.create_task(
+            self._capture(image_id, mower_id, account_id), name=f"notification-photo-{image_id}"
+        )
+        self._captures.add(task)
+        task.add_done_callback(self._captures.discard)
+
+    async def _capture(self, image_id: UUID, mower_id: UUID, account_id: UUID) -> None:
+        """Take the photo and store it (or a failure marker, so the push image URL answers 410
+        at once instead of letting the iOS extension wait out its budget)."""
+        assert self._photos is not None  # noqa: S101 - only started with a photo source
+        photo: CapturedPhoto | None = None
+        try:
+            photo = await self._photos.capture(mower_id, account_id)
+        except Exception as exc:
+            _log.warning("photo for a notification failed", mower_id=str(mower_id), error=repr(exc))
+        if photo is not None and len(photo.data) > self._config.image_max_bytes:
+            _log.warning("photo for a notification too large", mower_id=str(mower_id))
+            photo = None
+        now = self._clock()
+        retention = self._config.image_retention if photo else timedelta(hours=1)
+        image = NotificationImage(
+            id=image_id,
+            account_id=account_id,
+            mower_id=mower_id,
+            created_at=now,
+            expires_at=now + retention,
+            media_type=photo.media_type if photo else None,
+            data=photo.data if photo else None,
+        )
+        try:
+            await self._store.put_image(image, self._config.image_keep)
+        except Exception as exc:
+            _log.warning("storing a notification photo failed", error=repr(exc))
+            return
+        _log.info(
+            "notification photo taken" if photo else "no photo for the notification",
+            mower_id=str(mower_id),
+            bytes=len(photo.data) if photo else 0,
+        )
 
     async def dispatch(self, events: Sequence[NotificationEvent]) -> int:
         """Fan every event out; returns the number of new inbox items."""
@@ -135,6 +232,14 @@ class Fanout:
                 self._clock(),
             )
         url = self.url_for(event.mower_id, event.link)
+        image_id: UUID | None = None
+        if (
+            event.kind in IMAGE_KINDS
+            and self._photos is not None
+            and self._config.image_capture
+            and self._reserve_photo(event.mower_id)
+        ):
+            image_id = uuid4()
         created = 0
         for preferences, ok in zip(candidates, allowed, strict=True):
             if not ok:
@@ -166,9 +271,12 @@ class Fanout:
                 dedupe_key=event.dedupe_key,
                 respect_quiet_hours=not alarm,
                 url=url,
+                image_id=image_id,
             )
             if notified is not None:
                 created += 1
+        if created and image_id is not None:
+            self._take_photo(image_id, event.mower_id, event.account_id)
         if created:
             _log.info(
                 "notification fanned out",
@@ -211,11 +319,13 @@ class Fanout:
         dedupe_key: str,
         respect_quiet_hours: bool = True,
         url: str | None = None,
+        image_id: UUID | None = None,
     ) -> Notified | None:
         """Store one rendered notification for one user and queue its deliveries.
 
-        ``url`` defaults to the mower page. Returns None when the user already has this
-        notification (same ``dedupe_key``).
+        ``url`` defaults to the mower page. ``image_id`` reserves the camera photo of the
+        event (it is stored under that id once taken). Returns None when the user already has
+        this notification (same ``dedupe_key``).
         """
         now = self._clock()
         title, body = self.render(preferences.language, title_key, body_key, params)
@@ -233,6 +343,7 @@ class Fanout:
             dedupe_key=dedupe_key,
             occurred_at=occurred_at,
             created_at=now,
+            image_id=image_id,
         )
         message = Message(
             kind=kind,
@@ -243,6 +354,7 @@ class Fanout:
             tag=f"{kind.value}:{mower_id}" if mower_id else kind.value,
             mower_id=mower_id,
             notification_id=item.id,
+            image_id=image_id,
         )
         quiet = respect_quiet_hours and in_quiet_hours(
             preferences.quiet_hours, preferences.timezone, now
