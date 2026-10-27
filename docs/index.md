@@ -8,6 +8,7 @@ MowDeck is a self-hosted control centre for robotic mowers: live status and map,
 
 - [Phases and gates](phases.md): roadmap and the Phase 1 acceptance criterion
 - [Architecture (arc42)](architecture/01-introduction-and-goals.md): goals, context, building blocks, runtime, deployment
+- [Generated architecture diagrams](architecture/generated.md): services, routes, NATS subjects, API surface and data ownership, derived from the code and never stale
 - [Architecture decisions](adr/README.md): ADRs
 - [Getting started](dev/getting-started.md) and the [service template](dev/service-template.md)
 - [Web app](dev/web-app.md): developer guide of the PWA and the design system

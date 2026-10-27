@@ -39,6 +39,7 @@ nav:
       - architecture/10-quality-requirements.md
       - architecture/11-risks-and-technical-debt.md
       - architecture/12-glossary.md
+      - architecture/generated.md
   - Decisions (ADR):
       - adr/README.md
       - adr/0001-openfga-for-authorization.md
