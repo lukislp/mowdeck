@@ -23,6 +23,7 @@ function item(id: string, read = false): InboxItem {
     read_at: read ? '2026-10-09T12:01:00Z' : null,
     acked: false,
     acked_at: null,
+    has_image: false,
   };
 }
 

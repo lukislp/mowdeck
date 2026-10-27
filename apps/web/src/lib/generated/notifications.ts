@@ -60,6 +60,27 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notifications/inbox/{notification_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Inbox Image
+         * @description The camera photo of one of the caller's error or theft notifications (404 when there is
+         *     none: not taken, expired after a day, or not the caller's notification).
+         */
+        get: operations["get_inbox_image_api_v1_notifications_inbox__notification_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications/inbox/{notification_id}/read": {
         parameters: {
             query?: never;
@@ -172,6 +193,30 @@ export type paths = {
          * @description Replace the caller's preferences; a mower the caller cannot view is 404.
          */
         put: operations["put_preferences_api_v1_notifications_preferences_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/push-images/{notification_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Push Image
+         * @description The photo behind a push notification, for the iOS app's Notification Service Extension.
+         *
+         *     No login: the signed, short-lived URL in the push payload is the credential (it names one
+         *     notification and expires after ten minutes). Rate limited. The photo is also in the
+         *     caller's inbox for a day (`GET /inbox/{id}/image`).
+         */
+        get: operations["get_push_image_api_v1_notifications_push_images__notification_id__get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -385,6 +430,12 @@ export type components = {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Has Image
+             * @description A camera photo was taken for this error or theft event and is still kept (a day): `GET /api/v1/notifications/inbox/{id}/image` returns it.
+             * @default false
+             */
+            has_image: boolean;
             /**
              * Id
              * Format: uuid
@@ -785,6 +836,38 @@ export interface operations {
             };
         };
     };
+    get_inbox_image_api_v1_notifications_inbox__notification_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     mark_read_api_v1_notifications_inbox__notification_id__read_post: {
         parameters: {
             query?: never;
@@ -1010,6 +1093,57 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PreferencesOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_push_image_api_v1_notifications_push_images__notification_id__get: {
+        parameters: {
+            query: {
+                /** @description Expiry, Unix seconds. */
+                e: number;
+                /** @description Signature. */
+                s: string;
+            };
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Bad link, or the photo is not ready yet (try again). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The link expired, or no photo was taken. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
