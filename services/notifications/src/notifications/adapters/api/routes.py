@@ -30,7 +30,7 @@ from notifications.adapters.api.schemas import (
     TestSent,
     VapidPublicKey,
 )
-from notifications.domain.models import Preferences
+from notifications.domain.models import NotificationImage, Preferences
 from notifications.module import PUSH_FEATURE
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -226,6 +226,67 @@ async def get_inbox(
         principal.subject, account_id, limit, unread_only=unread
     )
     return Inbox(items=[InboxItemOut.of(i) for i in items], unread=unread_count)
+
+
+_IMAGE_HEADERS = {
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Disposition": "inline",
+}
+
+
+def _image_response(image: NotificationImage) -> Response:
+    media_type = image.media_type if image.media_type in ("image/jpeg", "image/png") else None
+    assert image.data is not None  # noqa: S101 - callers hand out ready images only
+    return Response(
+        content=image.data,
+        media_type=media_type or "application/octet-stream",
+        headers=_IMAGE_HEADERS,
+    )
+
+
+@router.get(
+    "/inbox/{notification_id}/image",
+    responses={200: {"content": {"image/jpeg": {}, "image/png": {}}}},
+    response_class=Response,
+)
+async def get_inbox_image(
+    notification_id: UUID,
+    principal: NotificationUser,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> Response:
+    """The camera photo of one of the caller's error or theft notifications (404 when there is
+    none: not taken, expired after a day, or not the caller's notification)."""
+    image = await services.users.inbox_image(principal.subject, account_id, notification_id)
+    return _image_response(image)
+
+
+@router.get(
+    "/push-images/{notification_id}",
+    responses={
+        200: {"content": {"image/jpeg": {}, "image/png": {}}},
+        404: {"description": "Bad link, or the photo is not ready yet (try again)."},
+        410: {"description": "The link expired, or no photo was taken."},
+    },
+    response_class=Response,
+)
+async def get_push_image(
+    notification_id: UUID,
+    services: ServicesDep,
+    e: Annotated[int, Query(ge=0, description="Expiry, Unix seconds.")],
+    s: Annotated[str, Query(min_length=16, max_length=64, description="Signature.")],
+) -> Response:
+    """The photo behind a push notification, for the iOS app's Notification Service Extension.
+
+    No login: the signed, short-lived URL in the push payload is the credential (it names one
+    notification and expires after ten minutes). Rate limited. The photo is also in the
+    caller's inbox for a day (`GET /inbox/{id}/image`).
+    """
+    if services.push_images is None:
+        raise NotFound("push images are not configured")
+    image = await services.push_images.fetch(notification_id, e, s)
+    return _image_response(image)
 
 
 @router.post("/inbox/{notification_id}/read")

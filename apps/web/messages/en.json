@@ -971,6 +971,7 @@
   "notif_ack_failed": "Acknowledging failed",
   "notif_alarm": "Alarm",
   "notif_position": "Position {lat}, {lon}",
+  "notif_photo_alt": "Camera photo taken when the event happened",
   "notif_position_map": "Show on the map",
   "detail_alarm_position": "Reported position",
   "detail_alarm_position_body": "The alarm reported the mower at {lat}, {lon}.",

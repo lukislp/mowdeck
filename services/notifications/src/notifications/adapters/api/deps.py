@@ -24,6 +24,7 @@ from mowdeck_service_kit.errors import (
 
 from notifications.application.services import Services
 from notifications.domain.errors import (
+    GoneError,
     InvalidInputError,
     NotFoundError,
     NotificationsError,
@@ -38,6 +39,14 @@ class TooManyRequests(ServiceError):  # noqa: N818 - HTTP status names read best
     status: ClassVar[int] = 429
     problem_type: ClassVar[str] = "too-many-requests"
     title: ClassVar[str] = "Too many requests"
+
+
+class Gone(ServiceError):  # noqa: N818 - HTTP status names read best
+    """The resource is gone for good (410)."""
+
+    status: ClassVar[int] = 410
+    problem_type: ClassVar[str] = "gone"
+    title: ClassVar[str] = "Gone"
 
 
 def get_services(request: Request) -> Services:
@@ -81,6 +90,8 @@ def to_service_error(exc: NotificationsError) -> ServiceError:
     match exc:
         case NotFoundError():
             return NotFound(exc.message)
+        case GoneError():
+            return Gone(exc.message)
         case InvalidInputError():
             return ValidationFailed(exc.message)
         case RateLimitedError():

@@ -14,6 +14,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 
 from notifications.application.context import NotificationsConfig
 from notifications.domain.models import RuleConfig
+from notifications.domain.push_image import derive_secret
 
 
 def _split(value: str) -> tuple[str, ...]:
@@ -186,7 +187,46 @@ class Settings(ServiceSettings):
     notifications_fleet_retry_max_seconds: float = Field(default=30, ge=1)
     """Upper bound of the backoff between seeding attempts."""
 
+    # --- camera photo of error and theft events (ADR 0056) ----------------------------------
+
+    notifications_image_enabled: bool = True
+    """Take one camera photo per error or theft event (``mower_stuck``, ``mower_lifted``,
+    ``mower_left_dock_unexpectedly``, ``geofence_exit``) and attach it to the inbox item and the
+    iOS push. Off: no photo is ever requested."""
+
+    notifications_image_base_url: str | None = None
+    """Public origin the iOS app downloads the photo from (``https://mowdeck.example``); default
+    ``MOWDECK_NOTIFICATIONS_APP_URL``. Without either, pushes carry no image."""
+
+    notifications_image_secret: SecretStr | None = None
+    """Key that signs the push image URLs (at least 16 characters). Default: derived from the
+    APNs key, so nothing extra has to be configured; set it explicitly to rotate it on its own."""
+
+    notifications_image_url_ttl_seconds: int = Field(default=600, ge=60, le=3600)
+    """How long a push image URL stays valid (counted from the moment the push is sent)."""
+
+    notifications_image_retention_hours: int = Field(default=24, ge=1, le=168)
+    """How long a photo is kept on the server (inbox and push URL)."""
+
+    notifications_image_keep: int = Field(default=200, ge=1, le=5000)
+    """Photos kept at most; the oldest are deleted first."""
+
+    notifications_image_max_bytes: int = Field(default=512 * 1024, ge=1024, le=512 * 1024)
+    """Largest photo requested and stored."""
+
+    notifications_image_daily_limit: int = Field(default=6, ge=1, le=100)
+    """Photos per mower and 24 hours: the notifications' own budget for the camera and the
+    mobile data of the mower (the alarm cooldowns apply as well)."""
+
+    notifications_image_min_interval_seconds: float = Field(default=60, ge=0)
+    """Minimum time between two photos of one mower."""
+
+    notifications_photo_timeout_seconds: float = Field(default=20, gt=0, le=60)
+    """How long the photo request to the Device-Gateway may take; the push does not wait for it."""
+
     @field_validator(
+        "notifications_image_base_url",
+        "notifications_image_secret",
         "notifications_vapid_private_key",
         "notifications_vapid_public_key",
         "notifications_vapid_subject",
@@ -214,6 +254,21 @@ class Settings(ServiceSettings):
             )
             raise ValueError(msg)
         return self
+
+    @property
+    def image_base_url(self) -> str | None:
+        """The public origin of the push image URLs, None without one."""
+        return self.notifications_image_base_url or self.notifications_app_url
+
+    @property
+    def image_secret(self) -> bytes | None:
+        """The key of the push image URLs: the explicit secret, else derived from the APNs key,
+        None when neither exists (the push carries no image)."""
+        if self.notifications_image_secret is not None:
+            return derive_secret(self.notifications_image_secret.get_secret_value())
+        if self.apns_key is not None:
+            return derive_secret(self.apns_key.get_secret_value())
+        return None
 
     @property
     def channel_names(self) -> tuple[str, ...]:
@@ -271,4 +326,10 @@ class Settings(ServiceSettings):
             webpush_allowed_hosts=self.webpush_hosts,
             ack_silence=timedelta(seconds=self.notifications_ack_silence_seconds),
             default_language=self.notifications_default_language,
+            image_capture=self.notifications_image_enabled,
+            image_retention=timedelta(hours=self.notifications_image_retention_hours),
+            image_keep=self.notifications_image_keep,
+            image_max_bytes=self.notifications_image_max_bytes,
+            image_daily_limit=self.notifications_image_daily_limit,
+            image_min_interval=timedelta(seconds=self.notifications_image_min_interval_seconds),
         )
