@@ -22,7 +22,10 @@
     startLive();
     // No service worker inside the iOS/Android app shell (it loads each server release as is).
     void appUpdate.register(install.native);
-    if (session.status === 'unknown') void session.restore().catch(() => undefined);
+    // The public share page (/track) has no account: it never touches the session.
+    if (session.status === 'unknown' && !/^\/track\/?$/.test(location.pathname)) {
+      void session.restore().catch(() => undefined);
+    }
     // Inside the iOS/Android app shell: deep links and notification taps (inert in a browser).
     return nativeShell.start((path) => void navigatePath(path));
   });
