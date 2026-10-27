@@ -189,7 +189,11 @@ wiki = "wiki-sync build --docs docs --mkdocs mkdocs.yml --out build/wiki"
 # OpenAPI documents of the services for the web app's generated types (apps/web/openapi).
 openapi = "python tools/repo-checks/scripts/export_openapi.py"
 openapi-check = "python tools/repo-checks/scripts/export_openapi.py --check"
-compose-check = "docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env.example config -q"
+# Architecture diagrams (Mermaid) generated from the Compose file, the NATS subjects and the
+# OpenAPI documents: docs/architecture/generated.md.
+arch-diagrams = "python tools/repo-checks/scripts/arch_diagrams.py"
+arch-diagrams-check = "python tools/repo-checks/scripts/arch_diagrams.py --check"
+compose-check ="docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env.example config -q"
 # OpenFGA model tests with the pinned CLI image (same as the openfga-model CI job).
 fga-test = "docker run --rm -v ${POE_ROOT}/infra/openfga:/w -w /w openfga/cli:v0.8.1 model test --tests model.fga.yaml"
 # Regenerate the JSON form of the model packaged in mowdeck-authz (after editing model.fga).
