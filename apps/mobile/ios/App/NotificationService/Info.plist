@@ -22,7 +22,7 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<!-- Adds the camera photo of error and theft notifications (ADR 0053). -->
+	<!-- Adds the camera photo of error and theft notifications (ADR 0056). -->
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

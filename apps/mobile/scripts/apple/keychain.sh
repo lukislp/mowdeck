@@ -15,7 +15,7 @@
 #   APPLE_DISTRIBUTION_P12_PASSWORD
 #   APPLE_PROFILE_IOS_BASE64            App Store provisioning profile for app.mowdeck.mobile, base64
 #   APPLE_PROFILE_IOS_NOTIFICATION_BASE64  App Store profile for app.mowdeck.mobile.NotificationService (the
-#                                       Notification Service Extension that adds the camera photo, ADR 0053), base64
+#                                       Notification Service Extension that adds the camera photo, ADR 0056), base64
 #   ASC_API_KEY_P8_BASE64               App Store Connect API key (.p8), base64
 #   ASC_API_KEY_ID
 #   ASC_API_ISSUER_ID

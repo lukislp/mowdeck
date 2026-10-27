@@ -45,7 +45,7 @@ class ChannelContext:
     vapid: VapidKeys | None
     """The VAPID key pair, None when Web Push is not configured."""
     image_links: ImageLinks | None = None
-    """Signs the push image URLs (ADR 0053); None: pushes carry no image."""
+    """Signs the push image URLs (ADR 0056); None: pushes carry no image."""
 
 
 ChannelFactory = Callable[[ChannelContext], NotificationChannel | None]

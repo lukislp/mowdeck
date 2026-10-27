@@ -1,4 +1,4 @@
-"""Serving the push notification image to the iOS Notification Service Extension (ADR 0053).
+"""Serving the push notification image to the iOS Notification Service Extension (ADR 0056).
 
 The request carries no login, only the signed URL (:mod:`notifications.domain.push_image`), so
 every answer is decided here:

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Decisions of the notification image download, kept free of UserNotifications and networking
-/// so `swift test` can run them (ADR 0053). The extension target compiles this file directly.
+/// so `swift test` can run them (ADR 0056). The extension target compiles this file directly.
 enum PushImage {
     /// The extension may run for about 30 s; the photo is allowed this long, so a theft alarm
     /// is shown without it rather than late.

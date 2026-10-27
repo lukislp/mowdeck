@@ -187,7 +187,7 @@ class Settings(ServiceSettings):
     notifications_fleet_retry_max_seconds: float = Field(default=30, ge=1)
     """Upper bound of the backoff between seeding attempts."""
 
-    # --- camera photo of error and theft events (ADR 0053) ----------------------------------
+    # --- camera photo of error and theft events (ADR 0056) ----------------------------------
 
     notifications_image_enabled: bool = True
     """Take one camera photo per error or theft event (``mower_stuck``, ``mower_lifted``,

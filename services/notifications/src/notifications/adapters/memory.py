@@ -315,7 +315,7 @@ class MemoryStore:
         found.sort(key=lambda i: (i.created_at, str(i.id)), reverse=True)
         return found
 
-    # --- camera images (ADR 0053) --------------------------------------------------------
+    # --- camera images (ADR 0056) --------------------------------------------------------
 
     async def put_image(self, image: NotificationImage, keep: int) -> None:
         self.data.images[image.id] = image

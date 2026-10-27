@@ -447,7 +447,7 @@ def test_workflow_actions_pinned(repo_root: Path) -> None:
 
 
 def test_notification_extension_profile_is_wired(repo_root: Path) -> None:
-    # The Notification Service Extension is signed with its own profile (ADR 0053): the secret is
+    # The Notification Service Extension is signed with its own profile (ADR 0056): the secret is
     # required by keychain.sh, passed to both steps that use it, and used by release-ios.sh.
     secret = "APPLE_PROFILE_IOS_NOTIFICATION_BASE64"  # noqa: S105 - a secret's name
     workflow_text = (repo_root / ".github/workflows/apple-testflight.yml").read_text("utf-8")

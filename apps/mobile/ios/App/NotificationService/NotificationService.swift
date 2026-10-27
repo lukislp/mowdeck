@@ -1,7 +1,7 @@
 import Foundation
 import UserNotifications
 
-/// Adds the camera photo to a MowDeck error or theft notification (ADR 0053).
+/// Adds the camera photo to a MowDeck error or theft notification (ADR 0056).
 ///
 /// The push payload carries `mutable-content: 1` and `image_url`, a short-lived signed URL of the
 /// owner's own server; the photo is never sent through Apple. The server sends the push at once and

@@ -28,7 +28,7 @@ Headers: ``apns-push-type: alert``, ``apns-priority`` 10 for every severity (vis
 alert, the default sound, ``thread-id`` (the tag) and ``interruption-level``
 (``time-sensitive`` for critical, else ``active``), plus ``url``, ``kind``, ``mower_id`` and
 ``notification_id`` for the app; at most 4096 bytes (a long body is shortened). A message with a
-camera photo (error and theft events, ADR 0053) also gets ``mutable-content: 1`` and
+camera photo (error and theft events, ADR 0056) also gets ``mutable-content: 1`` and
 ``image_url``, a signed URL of the owner's server valid for ten minutes; the app's Notification
 Service Extension downloads the photo from it, so the image never reaches Apple. Older app builds
 ignore both keys and show the text.

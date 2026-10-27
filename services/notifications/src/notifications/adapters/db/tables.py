@@ -163,7 +163,7 @@ notification_images = Table(
     Column("expires_at", TS, nullable=False),
     Index("ix_notification_images_expires", "expires_at"),
 )
-"""The camera photo of an error or theft event (ADR 0053): one row per event, shared by the
+"""The camera photo of an error or theft event (ADR 0056): one row per event, shared by the
 inbox items that reference it (``inbox.image_id``). ``data`` is NULL for a failed capture."""
 Index("ix_inbox_user_time", inbox.c.user_id, inbox.c.account_id, inbox.c.created_at.desc())
 

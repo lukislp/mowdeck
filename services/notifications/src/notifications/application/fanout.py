@@ -16,7 +16,7 @@ Before the per-user fan-out every event is published once for its account as
 recipients), so API tokens such as Home Assistant's, which have no inbox, can receive the
 account's notifications over Realtime.
 
-Camera photo (ADR 0053): an event of an :data:`~notifications.domain.models.IMAGE_KINDS` kind
+Camera photo (ADR 0056): an event of an :data:`~notifications.domain.models.IMAGE_KINDS` kind
 reserves an image id before the fan-out; every recipient's inbox item and push message carry it.
 The photo is requested after the items are stored, in the background: the push never waits for
 the camera. The photo lands under the reserved id (or a failure marker); until then the push

@@ -56,4 +56,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0050](0050-passkeys-and-app-login-hand-off.md) | Passkeys and the app login hand-off | Accepted |
 | [0051](0051-sign-in-with-github.md) | Sign in with GitHub | Accepted |
 | [0052](0052-sign-in-with-apple.md) | Sign in with Apple | Accepted |
-| [0053](0053-camera-photo-in-push-notifications.md) | Camera photo in push notifications for errors and theft alarms | Accepted |
+| [0056](0056-camera-photo-in-push-notifications.md) | Camera photo in push notifications for errors and theft alarms | Accepted |

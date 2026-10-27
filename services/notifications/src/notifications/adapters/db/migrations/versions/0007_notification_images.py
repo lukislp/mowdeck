@@ -1,4 +1,4 @@
-"""Camera photos of error and theft events (ADR 0053).
+"""Camera photos of error and theft events (ADR 0056).
 
 ``notification_images`` holds one photo per event (JPEG bytes, a day at most, ``data`` NULL when
 taking the photo failed) and ``inbox.image_id`` points the inbox items of that event at it. The

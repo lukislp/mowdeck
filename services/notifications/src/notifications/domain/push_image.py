@@ -1,4 +1,4 @@
-"""Signed, short-lived URLs of the push notification image (ADR 0053).
+"""Signed, short-lived URLs of the push notification image (ADR 0056).
 
 The APNs payload of an error or theft notification carries one URL on the owner's own server;
 the iOS Notification Service Extension downloads the photo from it. The photo never goes to

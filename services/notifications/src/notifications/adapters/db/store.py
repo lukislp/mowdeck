@@ -662,7 +662,7 @@ class SqlStore:
             row = result.first()
         return _inbox(row) if row else None
 
-    # --- camera images (ADR 0053) --------------------------------------------------------
+    # --- camera images (ADR 0056) --------------------------------------------------------
 
     async def put_image(self, image: NotificationImage, keep: int) -> None:
         p = tables.notification_images

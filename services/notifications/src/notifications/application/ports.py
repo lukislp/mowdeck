@@ -273,7 +273,7 @@ class Store(Protocol):
         """The users among ``user_ids`` with a silence of ``key`` lasting beyond ``now``."""
         ...
 
-    # --- camera images of error and theft events (ADR 0053) -------------------------------
+    # --- camera images of error and theft events (ADR 0056) -------------------------------
 
     async def put_image(self, image: NotificationImage, keep: int) -> None:
         """Store the image (or the failure marker) of an event, replacing the same id; expired

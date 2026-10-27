@@ -44,7 +44,7 @@ trap 'rm -rf "$WORK"' EXIT
 PROFILE="$($SIGNING find-profile "$PROFILE_DIR" --bundle-id "$BUNDLE_ID" --team "$APPLE_TEAM_ID")"
 $SIGNING check-profile "$PROFILE" --bundle-id "$BUNDLE_ID" --team "$APPLE_TEAM_ID"
 $SIGNING entitlements --declared "$DECLARED" --profile "$PROFILE" --out "$WORK/entitlements.plist"
-# The Notification Service Extension (camera photo in error and theft pushes, ADR 0053) is signed
+# The Notification Service Extension (camera photo in error and theft pushes, ADR 0056) is signed
 # with its own App Store profile, for app.mowdeck.mobile.NotificationService.
 EXT_PROFILE="$($SIGNING find-profile "$PROFILE_DIR" --bundle-id "$EXT_BUNDLE_ID" --team "$APPLE_TEAM_ID")"
 $SIGNING check-profile "$EXT_PROFILE" --bundle-id "$EXT_BUNDLE_ID" --team "$APPLE_TEAM_ID"

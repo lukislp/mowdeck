@@ -1,4 +1,4 @@
-# ADR 0053: Camera photo in push notifications for errors and theft alarms
+# ADR 0056: Camera photo in push notifications for errors and theft alarms
 
 ## Status
 

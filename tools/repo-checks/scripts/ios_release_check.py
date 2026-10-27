@@ -160,7 +160,7 @@ def check_entitlements(dev: dict[str, Any], release: dict[str, Any]) -> list[str
 
 def check_extension_plist(info: dict[str, Any]) -> list[str]:
     """Info.plist of the Notification Service Extension (camera photo in error and theft pushes,
-    ADR 0053): it must be a notification service and carry the app's version, or App Store Connect
+    ADR 0056): it must be a notification service and carry the app's version, or App Store Connect
     rejects the upload."""
     problems = []
     extension = info.get("NSExtension")

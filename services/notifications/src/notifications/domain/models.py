@@ -53,7 +53,7 @@ acknowledged (which silences repeats for the user)."""
 IMAGE_KINDS: frozenset[NotificationKind] = ALARM_KINDS | {NotificationKind.MOWER_STUCK}
 """Kinds that get a camera photo: the theft alarms and every ``mower_stuck`` (an error or no
 movement: stuck, trapped, obstacle, outside the area, wheel slip all arrive as that kind). The
-routine kinds never do (ADR 0053)."""
+routine kinds never do (ADR 0056)."""
 
 RULE_KINDS: frozenset[NotificationKind] = frozenset(SEVERITY) - {NotificationKind.TEST}
 """Kinds the rules derive (a user may enable each of them)."""
@@ -383,7 +383,7 @@ class Message:
     notification_id: UUID | None = None
     image_id: UUID | None = None
     """The camera photo taken for this occurrence (it may not exist yet, or ever); only the
-    push channels that can show an image use it, through a signed URL (ADR 0053)."""
+    push channels that can show an image use it, through a signed URL (ADR 0056)."""
 
     def to_json(self) -> dict[str, Any]:
         """JSON form for the outbox."""
