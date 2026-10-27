@@ -93,6 +93,7 @@ nav:
       - adr/0050-passkeys-and-app-login-hand-off.md
       - adr/0051-sign-in-with-github.md
       - adr/0052-sign-in-with-apple.md
+      - adr/0058-theft-tracking-mode.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -115,6 +116,7 @@ nav:
       - ops/passkeys.md
       - ops/github-login.md
       - ops/apple-login.md
+      - ops/theft-tracking.md
       - ops/source-code.md
   - Spikes:
       - spikes/index.md

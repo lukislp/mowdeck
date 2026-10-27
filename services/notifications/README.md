@@ -30,6 +30,10 @@ The rules are pure functions in `domain/rules.py` (table in the module docstring
 | `geofence_exit` | critical | two consecutive states with a position (`rtk_fix` not `none`) outside the mower's mapped areas, transfer paths and dock buffered by `GEOFENCE_MARGIN_METERS`; re-armed once the mower is inside again; not while a manual drive frame was seen within `DOCK_COMMAND_WINDOW_SECONDS`. Body with the position and the distance outside the fence, link to the map | 5 m |
 | `vision_proposal`, `vision_auto_proposal` | warning | Vision's `vision.proposal.created` (manual, or started by an error); `vision.proposal.updated` of an automatic analysis without a camera photo | |
 | `blade_maintenance` | info | Telemetry's `telemetry.blade_hours.threshold` (one per crossing, `dedupe_key` with `crossed_at`); the contract has no lower severity than `info` | |
+| `tracking_started` | critical | Telemetry's `tracking.started` ([ADR 0058](../../docs/adr/0058-theft-tracking-mode.md)): theft tracking began; opens `/mowers/<id>/tracking`. Ignores quiet hours, no cooldown (Telemetry sends no spam), no acknowledge |
+| `tracking_moved` | warning | `tracking.moved`: the tracked mower moved 50 m or more (at most every 5 minutes); ignores quiet hours |
+| `tracking_stale` | warning | `tracking.stale`: no report for a while (once per outage); ignores quiet hours |
+| `tracking_ended` | info | `tracking.ended`: false alarm, stopped or maximum duration; respects quiet hours |
 | `firmware_update_available` | info | `firmware_info.update_state` of a state is `available` with a version the mower was not notified for yet (once per offered version; the version is the `dedupe_key`). Links to the mower's settings ([ADR 0038](../../docs/adr/0038-dual-link-per-mower-and-firmware-updates.md)) | |
 | `firmware_update_finished`, `firmware_update_failed` | info, warning | `firmware_info` went from `installing` to `idle` (the new version is installed) or to `failed` (body with the mower's `reason`); the Device-Gateway's adapter follows the update, this service only watches the transition | |
 
@@ -136,6 +140,7 @@ Metrics: `mowdeck_notifications_deliveries_total{channel, status}` (`sent`, `ret
 | consumed | `command.mower.*` | durable queue `notifications-commands` | `CommandEnvelope`: newest command time per mower (`issued_at`; manual drive frames, kind `manual_drive` or correlation id `drive:<session>`, also as drive time) |
 | consumed | `device.mower.>` | durable queue `notifications-device`, starting with the newest stored message per subject | `MowerMapSnapshot` on `.map`: the geofence; `.capabilities` ignored |
 | consumed | `event.telemetry.>` | durable queue `notifications-telemetry` | `telemetry.blade_hours.threshold` (`BladeHoursThreshold`): `blade_maintenance`; other telemetry events ignored |
+| consumed | `event.tracking.>` | durable queue `notifications-tracking` | `tracking.started`, `.moved`, `.stale`, `.ended` (`TrackingEvent`): the four `tracking_*` kinds |
 | consumed | `event.identity.grants.changed` | every instance | drop cached authorization decisions |
 | request | `fleet.mowers.list` | at startup, retried | seeds the directory (`MowerListRequest` with one shard) |
 | produced | `event.notifications.sent` | | `NotificationSent`: one rendered notification for one user and the channels it was queued for, with `created_at` (the inbox item's) |

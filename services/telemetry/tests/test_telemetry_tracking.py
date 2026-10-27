@@ -193,7 +193,9 @@ async def test_tracking_starts_on_theft_alarm_only() -> None:
 
 
 async def test_tracking_alarm_start_can_be_switched_off() -> None:
-    async with harness(clock=Clock(), tracking_gateway=Gateway(), tracking_auto_start=False) as h:
+    async with harness(
+        clock=Clock(), tracking_gateway=Gateway(), telemetry_tracking_auto_start=False
+    ) as h:
         owner, mower_id = await setup(h)
         await publish_event(
             h.bus,
@@ -223,7 +225,10 @@ async def test_tracking_ends_after_the_configured_maximum_and_interval_is_config
     clock = Clock()
     gateway = Gateway()
     async with harness(
-        clock=clock, tracking_gateway=gateway, tracking_max_hours=2, tracking_interval_seconds=20
+        clock=clock,
+        tracking_gateway=gateway,
+        telemetry_tracking_max_hours=2,
+        telemetry_tracking_interval_seconds=20,
     ) as h:
         events = await collect(h)
         owner, mower_id = await setup(h)
@@ -437,7 +442,9 @@ async def test_tracking_link_shows_only_the_allowed_fields_and_stores_only_the_h
 
 async def test_tracking_link_expiry_revoke_ttl_cap_and_limit() -> None:
     clock = Clock()
-    async with harness(clock=clock, tracking_gateway=Gateway(), tracking_max_links=3) as h:
+    async with harness(
+        clock=clock, tracking_gateway=Gateway(), telemetry_tracking_max_links=3
+    ) as h:
         owner, mower_id = await setup(h)
         base = f"{API}/mowers/{mower_id}/tracking"
         assert (
@@ -485,7 +492,7 @@ async def test_tracking_link_survives_the_end_of_the_session_until_it_expires() 
 
 async def test_public_view_unknown_tokens_look_alike_and_are_rate_limited() -> None:
     async with harness(
-        clock=Clock(), tracking_gateway=Gateway(), tracking_public_failures_per_minute=3
+        clock=Clock(), tracking_gateway=Gateway(), telemetry_tracking_public_failures_per_minute=3
     ) as h:
         shapes = [new_token(), "x", "A" * 43, "../../etc/passwd"]
         codes = {(await public(h, t)).status_code for t in shapes[:3]}

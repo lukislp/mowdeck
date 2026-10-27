@@ -216,7 +216,7 @@ def start_background_tasks(
         )
         tasks.append(
             asyncio.create_task(
-                every(settings.tracking_tick_seconds, "tracking-tick", tracking.tick),
+                every(settings.telemetry_tracking_tick_seconds, "tracking-tick", tracking.tick),
                 name="telemetry-tracking-tick",
             )
         )

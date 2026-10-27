@@ -151,8 +151,25 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_TELEMETRY_HEATMAP_MAX_ROWS` | `200000` | Most position rows one heatmap reads, newest first; more: `truncated` |
 | `MOWDECK_TELEMETRY_HEATMAP_JOIN_SECONDS` | `30` | Coverage heatmap: consecutive blades-on positions at most this many seconds apart are joined by a straight swath |
 | `MOWDECK_TELEMETRY_HEATMAP_JOIN_METRES` | `10` | ... and at most this many metres apart (both limits must hold); farther positions stay separate discs |
+| `MOWDECK_TELEMETRY_TRACKING_INTERVAL_SECONDS` | `10` | Theft tracking ([ADR 0058](../../docs/adr/0058-theft-tracking-mode.md)): position report interval asked from the gateway (never below 5) |
+| `MOWDECK_TELEMETRY_TRACKING_MAX_HOURS` | `24` | A tracking session ends by itself after this many hours |
+| `MOWDECK_TELEMETRY_TRACKING_TICK_SECONDS` | `15` | How often active sessions are looked at (lease renewal, stale and move checks) |
+| `MOWDECK_TELEMETRY_TRACKING_LEASE_SECONDS` | `60` | Length of the gateway lease, renewed on every tick |
+| `MOWDECK_TELEMETRY_TRACKING_STALE_AFTER_SECONDS` | `120` | No report for this long marks the session stale and notifies once per outage |
+| `MOWDECK_TELEMETRY_TRACKING_MOVE_METERS` | `50` | A "moved" notification needs this distance from the previous notice |
+| `MOWDECK_TELEMETRY_TRACKING_MOVE_NOTICE_SECONDS` | `300` | ... and this long since it |
+| `MOWDECK_TELEMETRY_TRACKING_LINK_TTL_HOURS` | `48` | Lifetime of a share link (and the longest one may ask for) |
+| `MOWDECK_TELEMETRY_TRACKING_MAX_LINKS` | `10` | Active share links per session |
+| `MOWDECK_TELEMETRY_TRACKING_RETENTION_DAYS` | `30` | Ended sessions with links and photos are deleted after this many days |
+| `MOWDECK_TELEMETRY_TRACKING_AUTO_START` | `true` | Start a session on a theft alarm |
+| `MOWDECK_TELEMETRY_TRACKING_PHOTOS` | `true` | Take a camera photo at the start for the report |
+| `MOWDECK_TELEMETRY_TRACKING_PUBLIC_RATE_PER_MINUTE` | `60` | Requests per minute and client to the public share page |
+| `MOWDECK_TELEMETRY_TRACKING_PUBLIC_FAILURES_PER_MINUTE` | `20` | Unusable tokens per minute and client before it is slowed down |
 | `MOWDECK_TELEMETRY_HEALTH_MAX_STEP_METERS` | `25` | A step between two consecutive positions longer than this is left out of the distance (RTK jumps) |
 
+## Theft tracking
+
+Sessions, share links and photos of the theft tracking mode ([ADR 0058](../../docs/adr/0058-theft-tracking-mode.md), operations: [docs/ops/theft-tracking.md](../../docs/ops/theft-tracking.md)). Tables `tracking_sessions`, `tracking_links` (token hash only), `tracking_photos`; the directory also holds each mower's name and device name. Routes (all under `/api/v1/telemetry`): `GET|POST /mowers/{id}/tracking`, `POST .../tracking/stop`, `GET .../tracking/sessions`, `DELETE .../tracking/sessions/{id}`, `POST .../tracking/photo`, `GET|POST .../tracking/links`, `DELETE .../tracking/links/{id}`, `GET .../tracking/report.pdf`, and `POST /public/tracking/view` without login (the token in the body). Reading needs `can_view`, writing `can_control`. A session starts on `notifications.raised` of a theft alarm kind or by hand, holds a lease at the Device-Gateway (`gateway.mower.<id>.tracking`), publishes `event.tracking.{started,moved,stale,ended}` and ends by hand or after the maximum duration. The PDF is built with fpdf2.
 ## Layers
 
 | Package | Content | Rule |

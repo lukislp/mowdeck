@@ -136,7 +136,7 @@
     layer = lib.layerGroup().addTo(instance);
     lmap = instance;
     autoFit = true;
-    generation += 1;
+    // untrack: reading generation here would make this effect depend on its own write\n    generation = untrack(() => generation) + 1;
     return () => {
       instance.remove();
       lmap = null;
