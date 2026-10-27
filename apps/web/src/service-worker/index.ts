@@ -28,9 +28,13 @@ const SHELL = '/200.html';
 // `paths.base`), so the absolute pathname the fetch handler compares with is `/` + path.
 const absolute = ({ path }: { path: string }) => `/${path}`;
 // The legal pages' Markdown stays out of the cache: the operator replaces it without a new build.
+// So does /whats-new.json: the page compares it with /config.json (never cached), so both must come
+// from the server that serves the page.
 const ASSETS = [
   ...immutable.map(absolute),
-  ...assets.map(absolute).filter((path) => !path.startsWith('/legal/')),
+  ...assets
+    .map(absolute)
+    .filter((path) => !path.startsWith('/legal/') && path !== '/whats-new.json'),
   SHELL,
 ];
 
