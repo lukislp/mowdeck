@@ -20,6 +20,7 @@ coverage/
 playwright-report/
 test-results/
 apps/web/src/lib/paraglide/
+apps/web/static/whats-new.json
 
 # Env and secrets
 .env
