@@ -817,7 +817,7 @@ jobs:
         run: pnpm exec playwright merge-reports --config=playwright.merge.config.ts ./all-blob-reports
       - name: Test the summary script
         working-directory: tests/e2e-web
-        run: node --test scripts/
+        run: node --test scripts/markdown-cell.test.mjs
       - name: Flaky specs in the job summary
         working-directory: tests/e2e-web
         run: node scripts/flaky-summary.mjs merged-report/results.json >> "$GITHUB_STEP_SUMMARY"
