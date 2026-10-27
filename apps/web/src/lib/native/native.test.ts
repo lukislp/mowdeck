@@ -411,8 +411,10 @@ describe('NativeShell', () => {
     expect(cap.called('PushNotifications', 'register')).toHaveLength(1);
     expect(shell.local).toBe(true);
     await shell.inboxChanged([item('a')], 1); // baseline
+    // Registration still pending (token upload under way): the OS already showed these.
+    expect(shell.apns).toBe('pending');
     await shell.inboxChanged([item('b'), item('a')], 2);
-    expect(cap.called('LocalNotifications', 'schedule')).toHaveLength(1);
+    expect(cap.called('LocalNotifications', 'schedule')).toHaveLength(0);
     expect(cap.called('Badge', 'set').at(-1)?.options).toEqual({ count: 2 });
     cap.emit('PushNotifications', 'registration', { value: 'AA' });
     await flush();
@@ -420,6 +422,18 @@ describe('NativeShell', () => {
     expect(api.add).toHaveBeenCalledWith('AA', 'MowDeck iOS', INSTALLATION);
     expect(cap.called('MowDeckShell', 'getInstallationId')).toHaveLength(1);
     await shell.inboxChanged([item('c'), item('b'), item('a')], 3);
+    expect(cap.called('LocalNotifications', 'schedule')).toHaveLength(0);
+  });
+
+  it('iOS: falls back to local notifications when APNs failed or is denied', async () => {
+    const { cap, api, shell } = shellSetup('ios');
+    api.add.mockRejectedValue(new Error('offline'));
+    await shell.signedIn();
+    await shell.inboxChanged([item('a')], 1); // baseline
+    cap.emit('PushNotifications', 'registration', { value: 'AA' });
+    await flush();
+    expect(shell.apns).toBe('error');
+    await shell.inboxChanged([item('b'), item('a')], 2);
     expect(cap.called('LocalNotifications', 'schedule')).toHaveLength(1);
   });
 
