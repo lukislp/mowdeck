@@ -37,6 +37,7 @@ from notifications.adapters.db.tables import metadata
 from notifications.adapters.memory import MemoryStore
 from notifications.application.ports import Store
 from notifications.domain.geofence import Fence, MowerFence
+from notifications.domain.live_activity import ActivityDevice, ActivityRun, LiveActivity
 from notifications.domain.models import (
     ApnsDevice,
     DeliveryStatus,
@@ -800,3 +801,57 @@ async def test_notifications_db_images_inbox_link_expiry_and_bound(
         assert await store.notification_image(mine.id, T0 + seconds(3600)) is None  # expired
         assert await store.prune_images(T0 + seconds(3600)) == 2
         assert await store.notification_image(mine.id, T0) is None
+
+
+@pytest.mark.parametrize("kind", KINDS)
+async def test_notifications_live_activity_store_contract(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user, other, account, installation, mower = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        device = ActivityDevice(user, account, installation, "a1" * 32, False, T0)
+        await store.put_activity_device(device)
+        await store.put_activity_device(
+            ActivityDevice(user, account, installation, None, True, T0 + seconds(5))
+        )  # replaces the registration of the same installation
+        await store.put_activity_device(
+            ActivityDevice(other, account, uuid4(), "b2" * 32, True, T0)
+        )
+        found = await store.activity_devices(account)
+        assert len(found) == 2
+        mine = next(d for d in found if d.user_id == user)
+        assert mine.push_to_start_token is None and mine.widgets_enabled is True
+        assert await store.activity_devices(uuid4()) == []
+
+        row = LiveActivity(user, account, installation, mower, ActivityRun.STARTING, T0)
+        await store.put_live_activity(row)
+        assert await store.live_activity(user, installation, mower) == row
+        updated = LiveActivity(
+            user,
+            account,
+            installation,
+            mower,
+            ActivityRun.RUNNING,
+            T0,
+            "ABC-1",
+            "c3" * 32,
+            T0 + seconds(9),
+            "hash",
+        )
+        await store.put_live_activity(updated)
+        assert await store.live_activities(mower) == [updated]
+        assert await store.live_activity(other, installation, mower) is None
+        assert await store.live_activities(uuid4()) == []
+        assert await store.delete_live_activity(user, installation, mower)
+        assert not await store.delete_live_activity(user, installation, mower)
+
+        await store.put_live_activity(row)
+        assert await store.delete_activity_device(user, installation)  # takes its activities along
+        assert await store.live_activities(mower) == []
+        assert not await store.delete_activity_device(user, installation)
+        await store.put_live_activity(
+            LiveActivity(other, account, uuid4(), mower, ActivityRun.RUNNING, T0)
+        )
+        await store.drop_user(other, account)
+        assert await store.activity_devices(account) == []
+        assert await store.live_activities(mower) == []

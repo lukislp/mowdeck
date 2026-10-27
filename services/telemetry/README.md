@@ -13,6 +13,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 - **Command timeline**: every status transition from `command.result.mower.*` (Fleet stays the authority for the command record).
 - **Map and capabilities** of every mower as the Device-Gateway last read them (snapshots from the stream `DEVICE`), for the web app's area picker and setpoint ranges.
 - **Mow path** of the running job (the route the mower planned, with its progress; snapshot `device.mower.<id>.path`), for the path on the web app's map.
+- **iOS widget data** ([ADR 0059](../../docs/adr/0059-ios-widgets-and-live-activity.md)): `GET /mowers/{id}/widget` (compact state with the job's area name) and `GET /mowers/{id}/widget-map.png`, a bounded, cached PNG of the map with the mowed path and the mower, drawn with numpy and zlib in a worker thread (at most two at a time; 503 when busy; ETag, 30 s cache).
 - **Mower directory** (`mower_id` to `account_id`) from Fleet's events and a startup request, because command results carry no account id.
 - **Health history**: blade hours (since the last blade change, too), mowing hours, distance, battery cycles, charge sessions and error counts per mower, as running totals and per UTC day, plus a reminder event when the blade hours cross a threshold (see [Health history](#health-history)).
 - **Retention** of history, positions and the timeline.

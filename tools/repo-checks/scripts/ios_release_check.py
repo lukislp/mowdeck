@@ -242,7 +242,8 @@ def check_project(pbxproj: str) -> list[str]:
         )
     if f"PRODUCT_BUNDLE_IDENTIFIER = {WIDGETS_BUNDLE_ID};" not in pbxproj:
         problems.append(
-            f"App.xcodeproj: the widget extension's PRODUCT_BUNDLE_IDENTIFIER is not {WIDGETS_BUNDLE_ID}"
+            "App.xcodeproj: the widget extension's PRODUCT_BUNDLE_IDENTIFIER is not "
+            f"{WIDGETS_BUNDLE_ID}"
         )
     if "MowDeckWidgets.appex in Embed Foundation Extensions" not in pbxproj:
         problems.append("App.xcodeproj: the app does not embed the MowDeckWidgets extension")
@@ -277,9 +278,9 @@ def check_source(ios: Path = IOS, release_entitlements: Path = RELEASE_ENTITLEME
         _load_plist(ios / "App" / "App.entitlements"),
         _load_plist(release_entitlements.parent / "widgets.plist"),
     )
-    for source in ("MowDeckWidgets.swift", "Provider.swift", "MowingLiveActivity.swift"):
-        if not (widgets / source).is_file():
-            problems.append(f"{WIDGETS_NAME}/{source} is missing")
+    for name in ("MowDeckWidgets.swift", "Provider.swift", "MowingLiveActivity.swift"):
+        if not (widgets / name).is_file():
+            problems.append(f"{WIDGETS_NAME}/{name} is missing")
     if (_load_plist(ios / "App" / "Info.plist")).get("NSSupportsLiveActivities") is not True:
         problems.append("App/Info.plist: NSSupportsLiveActivities must be true")
     for source in (extension / "NotificationService.swift",):

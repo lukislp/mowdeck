@@ -57,3 +57,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0051](0051-sign-in-with-github.md) | Sign in with GitHub | Accepted |
 | [0052](0052-sign-in-with-apple.md) | Sign in with Apple | Accepted |
 | [0056](0056-camera-photo-in-push-notifications.md) | Camera photo in push notifications for errors and theft alarms | Accepted |
+| [0059](0059-ios-widgets-and-live-activity.md) | iOS widgets and the mowing Live Activity | Accepted |

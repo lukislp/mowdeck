@@ -95,6 +95,7 @@ nav:
       - adr/0051-sign-in-with-github.md
       - adr/0052-sign-in-with-apple.md
       - adr/0056-camera-photo-in-push-notifications.md
+      - adr/0059-ios-widgets-and-live-activity.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -127,4 +128,5 @@ nav:
       - guides/passkeys.md
       - guides/github-login.md
       - guides/apple-login.md
+      - guides/ios-widgets.md
   - Original plan (German): plan/project-plan.de.md
