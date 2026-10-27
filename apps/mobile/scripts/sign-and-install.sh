@@ -28,6 +28,13 @@ if [ "${MOWDECK_RESIGN:-0}" = "1" ]; then
         find "$APP/Frameworks" -maxdepth 1 \( -name "*.dylib" -o -name "*.framework" \) -print0 \
             | while IFS= read -r -d '' framework; do codesign -f -s "$IDENTITY" "$framework"; done
     fi
+    # The notification extension (camera photo in pushes) has its own App ID and profile.
+    EXT_PROFILE=$(find_profile "$MOWDECK_APPLE_TEAM_ID.$BUNDLE_ID.NotificationService")
+    if [ -d "$APP/PlugIns/NotificationService.appex" ] && [ -n "$EXT_PROFILE" ]; then
+        security cms -D -i "$EXT_PROFILE" | plutil -extract Entitlements xml1 -o "$WORK/ext-entitlements.plist" -
+        cp "$EXT_PROFILE" "$APP/PlugIns/NotificationService.appex/embedded.mobileprovision"
+        codesign -f -s "$IDENTITY" --entitlements "$WORK/ext-entitlements.plist" "$APP/PlugIns/NotificationService.appex"
+    fi
     codesign -f -s "$IDENTITY" --entitlements "$WORK/entitlements.plist" "$APP"
     echo "Re-signed with $IDENTITY and $PROFILE"
 fi

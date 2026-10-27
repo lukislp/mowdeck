@@ -2,6 +2,7 @@
 
 from collections.abc import Collection, Sequence
 from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
@@ -18,6 +19,7 @@ from notifications.domain.models import (
     InboxItem,
     MowerWatch,
     NewDelivery,
+    NotificationImage,
     NtfyTarget,
     Preferences,
     PushSubscription,
@@ -68,6 +70,23 @@ class ViewChecker(Protocol):
         self, user_ids: Sequence[UUID], mower_id: UUID, relation: str = "can_view"
     ) -> list[bool]:
         """One answer per user, in order; errors answer False."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedPhoto:
+    """One still image of a mower's camera."""
+
+    data: bytes
+    media_type: str
+
+
+class PhotoSource(Protocol):
+    """Takes a still image of a mower's camera (through the Device-Gateway, ADR 0045)."""
+
+    async def capture(self, mower_id: UUID, account_id: UUID) -> CapturedPhoto | None:
+        """The image, None when none can be had (no camera, mower asleep, timeout, over the
+        size limit); never raises for those."""
         ...
 
 
@@ -252,6 +271,30 @@ class Store(Protocol):
         self, account_id: UUID, key: str, user_ids: Sequence[UUID], now: datetime
     ) -> set[UUID]:
         """The users among ``user_ids`` with a silence of ``key`` lasting beyond ``now``."""
+        ...
+
+    # --- camera images of error and theft events (ADR 0056) -------------------------------
+
+    async def put_image(self, image: NotificationImage, keep: int) -> None:
+        """Store the image (or the failure marker) of an event, replacing the same id; expired
+        images are deleted and only the newest ``keep`` are kept."""
+        ...
+
+    async def notification_image(
+        self, notification_id: UUID, now: datetime
+    ) -> NotificationImage | None:
+        """The unexpired image of the inbox item ``notification_id`` (any user: the caller
+        proves possession with a signed URL), None when there is none yet."""
+        ...
+
+    async def inbox_image(
+        self, user_id: UUID, account_id: UUID, item_id: UUID, now: datetime
+    ) -> NotificationImage | None:
+        """The unexpired image of one of the user's own inbox items."""
+        ...
+
+    async def prune_images(self, now: datetime) -> int:
+        """Delete expired images."""
         ...
 
     async def claim_deliveries(

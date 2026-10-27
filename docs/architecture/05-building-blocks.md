@@ -1,5 +1,9 @@
 # 5. Building blocks
 
+!!! tip "Diagrams generated from the code"
+    The diagrams below are hand-written. For the routes, NATS subjects, API surface and database
+    ownership as the code has them today, see [Generated architecture diagrams](generated.md).
+
 ## Container view (C4 level 2)
 
 ```mermaid

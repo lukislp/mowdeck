@@ -39,6 +39,7 @@ nav:
       - architecture/10-quality-requirements.md
       - architecture/11-risks-and-technical-debt.md
       - architecture/12-glossary.md
+      - architecture/generated.md
   - Decisions (ADR):
       - adr/README.md
       - adr/0001-openfga-for-authorization.md
@@ -93,6 +94,7 @@ nav:
       - adr/0050-passkeys-and-app-login-hand-off.md
       - adr/0051-sign-in-with-github.md
       - adr/0052-sign-in-with-apple.md
+      - adr/0056-camera-photo-in-push-notifications.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
