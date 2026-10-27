@@ -68,8 +68,9 @@ main() {
   version="${version#v}"
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+.][0-9A-Za-z.-]+)?$ ]] ||
     die "not a version: $version (expected 1.2.3)"
-  [[ "$minutes" =~ ^[0-9]+$ ]] && [ "$minutes" -ge 1 ] && [ "$minutes" -le 60 ] ||
+  if ! [[ "$minutes" =~ ^[0-9]+$ ]] || [ "$minutes" -lt 1 ] || [ "$minutes" -gt 60 ]; then
     die "--window-minutes must be 1..60"
+  fi
 
   local files=(-f docker-compose.yml -f docker-compose.release.yml)
   local backup_dir="${MOWDECK_BACKUP_DIR:-$HOME/mowdeck-backups}"
