@@ -608,13 +608,25 @@ jobs:
 
   # Phase 2 gate (docs/phases.md): the Playwright suite tests/e2e-web against the full Compose
   # stack including the web app at /, on a phone (gate) and a desktop viewport.
-  e2e-web:
+  #
+  # The suite alone takes 19-25 min on one runner, so it runs in four shards (Playwright
+  # --shard=i/4), each on its own runner with its own stack: the specs register their own users
+  # and accounts per run, so nothing is shared between them but the order inside a stack, which
+  # one worker per shard keeps sequential as before. The shard jobs upload blob reports; the job
+  # `e2e-web` below merges them into one HTML/JUnit/JSON report, lists the specs that passed only
+  # on retry and is the required check of the branch ruleset.
+  e2e-web-shard:
+    name: e2e-web shard ${{ matrix.shard }}
     if: github.event_name != 'push'
     runs-on: ubuntu-24.04
     needs: [web, docker]
-    # The suite alone takes 19-25 min; one retried slow spec (a test timeout of 3 min) pushed the
-    # job past 30 minutes and got it cancelled.
-    timeout-minutes: 45
+    # A shard takes about 5 min of setup and a quarter of the suite; one retried slow spec (a test
+    # timeout of 3 min) must still fit.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       # The browsers and their system libraries, prebuilt: no apt and no browser download per run
       # (which on 2026-10-22 crawled or hung on azure.archive.ubuntu.com). The one image pinned
@@ -648,7 +660,7 @@ jobs:
           image=${PLAYWRIGHT_IMAGE%%@*}
           tag=${image##*:}
           if [ -z "$installed" ] || [ "$tag" != "v${installed}-noble" ]; then
-            echo "::error file=.github/workflows/ci.yml::PLAYWRIGHT_IMAGE (job e2e-web) is ${tag}, but tests/e2e-web installs @playwright/test ${installed:-(unknown)}: set it to mcr.microsoft.com/playwright:v${installed}-noble@<digest> (docker buildx imagetools inspect)"
+            echo "::error file=.github/workflows/ci.yml::PLAYWRIGHT_IMAGE (job e2e-web-shard) is ${tag}, but tests/e2e-web installs @playwright/test ${installed:-(unknown)}: set it to mcr.microsoft.com/playwright:v${installed}-noble@<digest> (docker buildx imagetools inspect)"
             exit 1
           fi
           echo "@playwright/test ${installed} = ${tag}"
@@ -741,9 +753,10 @@ jobs:
       # exec` helpers of tests/support.ts use the runner's docker CLI (same Ubuntu release as the
       # image) against the runner's daemon. `npm test` runs the package's test script; the image
       # brings node and npm, not pnpm.
-      - name: Phase 2 gate (Playwright)
+      - name: Phase 2 gate (Playwright, one shard)
         env:
           MOWDECK_E2E_BASE_URL: http://localhost
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: |
           docker run --rm --init --ipc=host --network=host \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/tests/e2e-web" \
@@ -751,19 +764,74 @@ jobs:
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$(command -v docker):/usr/local/bin/docker:ro" \
             -e CI -e MOWDECK_E2E_BASE_URL -e MOZ_GMP_PATH \
-            "$PLAYWRIGHT_IMAGE" npm test
+            "$PLAYWRIGHT_IMAGE" npm test -- "--shard=$SHARD"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml logs --no-color --timestamps > e2e-web-logs.txt
-      - name: Upload report on failure
+      # The blob report of the shard, also when it failed: the merge job builds the one report.
+      - name: Upload the blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-web-blob-${{ matrix.shard }}
+          path: tests/e2e-web/blob-report
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Upload traces and logs on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-web-report
+          name: e2e-web-failure-${{ matrix.shard }}
           path: |
-            tests/e2e-web/playwright-report
             tests/e2e-web/test-results
             e2e-web-logs.txt
       - name: Stop the stack
         if: always()
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml down -v
+
+  # The required check `e2e-web` (branch ruleset): merges the shards' blob reports into one report
+  # and fails when a shard failed, was cancelled or did not run.
+  e2e-web:
+    if: ${{ github.event_name != 'push' && !cancelled() }}
+    runs-on: ubuntu-24.04
+    needs: [e2e-web-shard]
+    timeout-minutes: 10
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter e2e-web
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: e2e-web-blob-*
+          path: tests/e2e-web/all-blob-reports
+          merge-multiple: true
+      - name: Merge the shard reports
+        working-directory: tests/e2e-web
+        run: pnpm exec playwright merge-reports --config=playwright.merge.config.ts ./all-blob-reports
+      - name: Test the summary script
+        working-directory: tests/e2e-web
+        run: node --test scripts/markdown-cell.test.mjs
+      - name: Flaky specs in the job summary
+        working-directory: tests/e2e-web
+        run: node scripts/flaky-summary.mjs merged-report/results.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the merged report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-web-report
+          path: tests/e2e-web/merged-report
+          retention-days: 14
+      - name: Every shard passed
+        env:
+          SHARDS: ${{ needs.e2e-web-shard.result }}
+        run: |
+          echo "e2e-web shards: ${SHARDS}"
+          [ "$SHARDS" = success ]

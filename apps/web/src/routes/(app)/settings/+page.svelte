@@ -1,7 +1,7 @@
 <!--
   The one settings page: every settings module the user may see as a section under its anchor
   (account and profile, notifications, users, AI provider, linked accounts, API tokens; the
-  order of `module.ts`), then About for everyone (the build and its source code, AGPL-3.0). A numbered section index sits on the left on the desktop and as a strip
+  order of `module.ts`), then Neuigkeiten (the "Was ist neu" history) and About for everyone (the build and its source code, AGPL-3.0). A numbered section index sits on the left on the desktop and as a strip
   under the top bar on phones; it marks the section in view. Old routes forward here
   (`#lib/settings/sections.js`).
 -->
@@ -22,6 +22,7 @@
   import NotificationsSection from '#lib/settings/sections/NotificationsSection.svelte';
   import ProfileSection from '#lib/settings/sections/ProfileSection.svelte';
   import UsersSection from '#lib/settings/sections/UsersSection.svelte';
+  import WhatsNewSection from '#lib/settings/sections/WhatsNewSection.svelte';
   import { builtIn, registry, visibleModules } from '#lib/shell/registry.svelte.js';
 
   /** The component of each settings module (by module id). */
@@ -32,11 +33,18 @@
     'ai-provider': AiProviderSection,
     'linked-accounts': LinkedAccountsSection,
     'api-tokens': ApiTokensSection,
+    'whats-new': WhatsNewSection,
     about: AboutSection,
   };
 
   /** Not a module: every user sees the build and its source code (AGPL-3.0 section 13). */
   const ABOUT: SettingsSection = { id: 'about', anchor: 'about', label: () => m.source_about() };
+  /** Not a module either: the history of "Was ist neu", just before About. */
+  const WHATS_NEW: SettingsSection = {
+    id: 'whats-new',
+    anchor: 'whats-new',
+    label: () => m.whatsnew_section(),
+  };
 
   const sections = $derived(
     settingsSections(
@@ -48,7 +56,7 @@
       ),
     )
       .filter((section) => section.id in VIEWS && section.id !== ABOUT.id)
-      .concat(ABOUT),
+      .concat(WHATS_NEW, ABOUT),
   );
   const anchors = $derived(sections.map((section) => section.anchor).join(' '));
   let current = $state('');
