@@ -88,6 +88,39 @@ services:
       - traefik.http.services.fake-github.loadbalancer.server.port=8000
     networks: [mowdeck]
 
+  # The aerial photo under the map (ADR 0053) against a fake WMS that paints a synthetic garden at
+  # the simulator map's coordinates (tests/e2e-web/fake-wms/fake_wms.py, standard library only,
+  # no internet). Telemetry asks it for tiles exactly as it asks the Bavarian service; Traefik
+  # routes /fake-wms so a spec can read the request counters.
+  telemetry:
+    environment:
+      MOWDECK_TELEMETRY_AERIAL_ALLOW_HTTP: "true"
+      MOWDECK_TELEMETRY_AERIAL_WMS_URL: http://fake-wms:8000/wms
+      MOWDECK_TELEMETRY_AERIAL_WMS_LAYER: fake_dop
+      MOWDECK_TELEMETRY_AERIAL_IMAGE_FORMAT: image/png
+      MOWDECK_TELEMETRY_AERIAL_ATTRIBUTION: "Fake aerial photo (tests only)"
+    depends_on:
+      fake-wms:
+        condition: service_healthy
+
+  fake-wms:
+    image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/identity:${MOWDECK_VERSION:-dev}
+    pull_policy: never
+    command: ["python", "/fake/fake_wms.py"]
+    read_only: true
+    volumes:
+      - ../../tests/e2e-web/fake-wms:/fake:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/fake-wms/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.fake-wms.rule=PathPrefix(`/fake-wms`)
+      - traefik.http.routers.fake-wms.entrypoints=web
+      - traefik.http.services.fake-wms.loadbalancer.server.port=8000
+    networks: [mowdeck]
   # A fake Apple (Sign in with Apple endpoints; tests/e2e-web/fake-apple/fake_apple.py, PyJWT and
   # cryptography from the identity image). It generates the key pair of the stack at startup
   # into the fake-apple-keys volume (root, so it may write there; Identity mounts it read-only)

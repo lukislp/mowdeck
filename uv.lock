@@ -3180,6 +3180,7 @@ version = "0.1.0"
 source = { editable = "services/telemetry" }
 dependencies = [
     { name = "alembic" },
+    { name = "httpx" },
     { name = "mowdeck-auth" },
     { name = "mowdeck-authz", extra = ["fastapi"] },
     { name = "mowdeck-contracts" },
@@ -3192,6 +3193,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.16.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mowdeck-auth", editable = "libs/mowdeck-auth" },
     { name = "mowdeck-authz", extras = ["fastapi"], editable = "libs/mowdeck-authz" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },

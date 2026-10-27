@@ -4,3 +4,4 @@
 - [Signing in with a passkey](passkeys.md): add a passkey in the browser and sign in without a password, in the browser and in the apps.
 - [Signing in with GitHub](github-login.md): link your GitHub account in the settings and sign in with it; unlink at any time.
 - [Signing in with Apple](apple-login.md): the same with your Apple ID.
+- [Aerial photo under the map](aerial-photo.md): lay a photo of your garden under the mower map, with an opacity slider.

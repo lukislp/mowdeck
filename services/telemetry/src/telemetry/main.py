@@ -17,6 +17,7 @@ database and OpenFGA.
 import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
@@ -29,12 +30,14 @@ from mowdeck_service_kit.bus import EventBus, Subscription
 from mowdeck_service_kit.db import create_engine, readiness_check_db
 from mowdeck_service_kit.health import ReadinessCheck
 
+from telemetry.adapters.aerial import DiskTileCache, HttpTileSource
 from telemetry.adapters.api.deps import install_error_mapping
 from telemetry.adapters.api.routes import router
 from telemetry.adapters.bus.fleet import seed_directory
 from telemetry.adapters.bus.health_events import BusHealthEvents
 from telemetry.adapters.bus.subscriptions import subscribe_all
 from telemetry.adapters.db.store import SqlStore
+from telemetry.application.aerial import TileCache, TileSource
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
 from telemetry.module import DESCRIPTOR
@@ -64,6 +67,8 @@ def build_app(
     clock: Clock | None = None,
     background_tasks: bool = True,
     seed_delay_seconds: float = 1.0,
+    aerial_source: TileSource | None = None,
+    aerial_cache: TileCache | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL and OpenFGA from the settings."""
     engine = None
@@ -79,11 +84,32 @@ def build_app(
     active_clock: Clock = clock or utc_now
     tasks: list[asyncio.Task[Any]] = []
     store_ref: Store = store
+    aerial_config = settings.to_aerial_config()
+    http_source: HttpTileSource | None = None
+    if aerial_source is None and aerial_config.enabled:
+        http_source = HttpTileSource(settings.telemetry_aerial_timeout_seconds)
+        aerial_source = http_source
+        if aerial_cache is None:
+            aerial_cache = DiskTileCache(
+                Path(settings.telemetry_aerial_cache_dir),
+                settings.telemetry_aerial_cache_max_mb * 1_048_576,
+            )
+        _log.info(
+            "aerial photo layer on", wms=aerial_config.wms_url, xyz=bool(aerial_config.xyz_url)
+        )
 
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus
         events = BusHealthEvents(lambda: getattr(app.state, "bus", None))
-        services = build_services(store_ref, settings.to_config(), active_clock, events)
+        services = build_services(
+            store_ref,
+            settings.to_config(),
+            active_clock,
+            events,
+            aerial_config=aerial_config,
+            aerial_source=aerial_source,
+            aerial_cache=aerial_cache,
+        )
         app.state.telemetry = services
         app.state.directory_seeded = False
         subscriptions: list[Subscription] = []
@@ -108,6 +134,8 @@ def build_app(
                 await task
         for subscription in getattr(app.state, "subscriptions", []):
             await subscription.unsubscribe()
+        if http_source is not None:
+            await http_source.close()
         if connection is not None:
             await connection.close()
         if engine is not None:

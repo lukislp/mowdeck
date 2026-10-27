@@ -93,6 +93,7 @@ nav:
       - adr/0050-passkeys-and-app-login-hand-off.md
       - adr/0051-sign-in-with-github.md
       - adr/0052-sign-in-with-apple.md
+      - adr/0053-aerial-photo-under-the-map.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -114,6 +115,7 @@ nav:
       - ops/mobile-apps.md
       - ops/passkeys.md
       - ops/github-login.md
+      - ops/aerial-photo.md
       - ops/apple-login.md
       - ops/source-code.md
   - Spikes:
@@ -124,5 +126,6 @@ nav:
       - guides/esp32-bridge-purchase-and-setup.md
       - guides/passkeys.md
       - guides/github-login.md
+      - guides/aerial-photo.md
       - guides/apple-login.md
   - Original plan (German): plan/project-plan.de.md

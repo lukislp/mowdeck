@@ -27,6 +27,7 @@ export * from './layout/bottom-sheet.js';
 export { default as Joystick } from './drive/Joystick.svelte';
 export * from './drive/stick.js';
 export { default as MowerMap, type MapTiles, type MowerMapLabels } from './map/MowerMap.svelte';
+export type { MapAerial } from './map/aerial';
 export { default as FleetMap, type FleetMapLabels } from './map/FleetMap.svelte';
 export * from './map/geo.js';
 export * from './map/projection.js';

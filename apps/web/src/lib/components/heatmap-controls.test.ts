@@ -40,6 +40,40 @@ describe('HeatmapControls', () => {
     expect(onpath).toHaveBeenCalledWith(false);
   });
 
+  it('offers the aerial photo only when the installation has one, with an opacity slider', async () => {
+    const on = handlers();
+    const onaerial = vi.fn();
+    const onaerialopacity = vi.fn();
+    const { unmount } = render(HeatmapControls, {
+      props: { ...base, ...on, layer: 'off', status: 'idle', onaerial },
+    });
+    expect(screen.queryByTestId('aerial-toggle')).toBeNull();
+    unmount();
+    const { rerender } = render(HeatmapControls, {
+      props: {
+        ...base,
+        ...on,
+        layer: 'off',
+        status: 'idle',
+        aerialOffered: true,
+        aerialShown: false,
+        aerialOpacity: 0.6,
+        onaerial,
+        onaerialopacity,
+      },
+    });
+    const toggle = screen.getByTestId('aerial-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByTestId('aerial-opacity')).toBeNull();
+    await fireEvent.click(toggle);
+    expect(onaerial).toHaveBeenCalledWith(true);
+    await rerender({ aerialShown: true });
+    const slider = screen.getByTestId('aerial-opacity') as HTMLInputElement;
+    expect(slider.getAttribute('aria-valuetext')).toBe('60 %');
+    expect(screen.getByLabelText(/Deckkraft|Opacity/)).toBe(slider);
+    await fireEvent.input(slider, { target: { value: '0.4' } });
+    expect(onaerialopacity).toHaveBeenCalledWith(0.4);
+  });
   it('shows only the switcher while the layer is off', async () => {
     const on = handlers();
     render(HeatmapControls, { props: { ...base, ...on, layer: 'off', status: 'idle' } });
