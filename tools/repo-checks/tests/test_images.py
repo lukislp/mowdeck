@@ -34,7 +34,7 @@ MIRROR_SCRIPT = "infra/mirror-env.sh"
 # The only images pinned outside the list: (workflow, job, variable) -> registry prefix. They may
 # not be republished by the public mirror (licence; test_release_licences.py, NOT_MIRRORED), so
 # the job pulls them from their own registry, pinned by digest.
-UNMIRRORED = {("ci.yml", "e2e-web", "PLAYWRIGHT_IMAGE"): "mcr.microsoft.com/playwright:"}
+UNMIRRORED = {("ci.yml", "e2e-web-shard", "PLAYWRIGHT_IMAGE"): "mcr.microsoft.com/playwright:"}
 
 
 def _images(repo_root: Path) -> dict[str, str]:
