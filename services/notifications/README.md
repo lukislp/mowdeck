@@ -58,6 +58,12 @@ One APNs registration per app installation (migration 0006): the iOS shell sends
 
 The deploy opens a window before it restarts services and closes it after the health checks ([ADR 0055](../../docs/adr/0055-deploy-maintenance-window.md), [operations](../../docs/ops/compose.md#deploying-with-the-maintenance-window)): `python -m notifications.cli maintenance open --minutes 15 | close | status` (table `maintenance_window`, expires by itself). A `mower_offline` whose offline began inside the window is not sent, so no `mower_online` follows either; a mower still offline `MAINTENANCE_GRACE_SECONDS` after the window ended is reported then. Theft alarms, errors and all other kinds are never held.
 
+## Camera photo (errors and theft alarms)
+
+[ADR 0056](../../docs/adr/0056-camera-photo-in-push-notifications.md). Events of the kinds `mower_stuck`, `mower_lifted`, `mower_left_dock_unexpectedly` and `geofence_exit` (`IMAGE_KINDS`; never the routine kinds) get one camera photo. The fan-out reserves an image id, stores the inbox items and deliveries with it and then asks the Device-Gateway for a frame in the background (`gateway.mower.<id>.photo`, demand `error_analysis`, one frame, `..._PHOTO_TIMEOUT_SECONDS` 20): **the push never waits for the camera**. A budget of its own limits it per mower (`..._IMAGE_MIN_INTERVAL_SECONDS` 60, `..._IMAGE_DAILY_LIMIT` 6 per 24 hours, per replica). The JPEG is kept in `notification_images` (24 hours, at most 200 rows, 512 KB each; a failed capture leaves a marker without bytes); `inbox.image_id` links it and `has_image` tells the clients.
+
+APNs messages with a photo carry `mutable-content: 1` and `image_url`: `<origin>/api/v1/notifications/push-images/<notification id>?e=<expiry>&s=<signature>` (HMAC-SHA256 over the notification id and the expiry, valid ten minutes from the moment the delivery is sent; no account data in it; key from `..._IMAGE_SECRET` or derived from the APNs key; origin `..._IMAGE_BASE_URL` or `..._APP_URL`). The endpoint needs no login and answers 404 (bad signature, or photo not ready yet), 410 (expired, or no photo was taken), 429 (rate limit) or the photo. The iOS Notification Service Extension downloads it and falls back to the text. Web: `GET /inbox/{id}/image` with the session.
+
 ## Recipients and delivery
 
 1. The users of the mower's account whose preferences follow the mower (`all_mowers` or the mower in `mower_ids`) and enable the kind, plus every user of the account who registered a target (Web Push subscription, APNs device or ntfy target) but never saved preferences: they count with the defaults, that is every mower they can view, the default kinds (all rule kinds except `job_started`), the default channels, no quiet hours, UTC and `MOWDECK_NOTIFICATIONS_DEFAULT_LANGUAGE`. Saved preferences always win. A user with neither preferences nor a target gets nothing ([ADR 0022](../../docs/adr/0022-notifications-rules-and-delivery.md#amendment-2026-10-22-defaults-for-users-who-never-saved-preferences)).
@@ -98,6 +104,8 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | GET | `/api/v1/notifications/push-subscriptions` | user | The caller's browser subscriptions (endpoint host, user agent, created) |
 | POST | `/api/v1/notifications/push-subscriptions` | user | Store `PushSubscription.toJSON()`; 201; the same endpoint again replaces it |
 | DELETE | `/api/v1/notifications/push-subscriptions/{id}` | user | 204, 404 for any other id |
+| GET | `/api/v1/notifications/inbox/{id}/image` | user | The camera photo of one of the caller's error or theft notifications (`InboxItemOut.has_image`); 404 when there is none, it expired or it is not the caller's |
+| GET | `/api/v1/notifications/push-images/{id}?e=&s=` | signed URL | The photo behind an iOS push, for the Notification Service Extension: no login, the signature is the credential (404 / 410 / 429 as above) |
 | GET | `/api/v1/notifications/me/push/apns` | user | The caller's iOS devices, oldest first: `{items: [{id, device_name, token_suffix, created_at}]}` (the token itself is never returned, `token_suffix` is its last 8 hex characters) |
 | POST | `/api/v1/notifications/me/push/apns` | user | Register the iOS app: `{token, device_name?, installation_id?}` (token hex, 64 to 200 characters, case-insensitive, stored in lower case; name up to 100; `installation_id` a UUID); 201; one row per installation: a new token of the caller's known `installation_id` replaces that row's token (id kept, a row that held the new token is removed); the same token again moves it to the caller (id kept). Without `installation_id` (app builds before it) each token is its own row, as before |
 | DELETE | `/api/v1/notifications/me/push/apns/{id}` | user | 204 (the app calls it on logout), 404 for any other id |
@@ -191,6 +199,21 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `..._INBOX_SIZE` | `200` | Inbox items kept per user and account |
 | `..._TEST_INTERVAL_SECONDS` | `60` | Minimum time between two test notifications |
 | `..._FLEET_TIMEOUT_SECONDS`, `..._FLEET_RETRY_MAX_SECONDS` | `5`, `30` | Directory seed request |
+
+Camera photo (ADR 0056):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `..._IMAGE_ENABLED` | `true` | Take a photo per error or theft event |
+| `..._IMAGE_BASE_URL` | `..._APP_URL` | Public origin of the push image URLs; without one no image is sent |
+| `..._IMAGE_SECRET` | derived from the APNs key | Key of the URL signature |
+| `..._IMAGE_URL_TTL_SECONDS` | 600 | Validity of a push image URL from the send |
+| `..._IMAGE_RETENTION_HOURS` | 24 | How long a photo is kept |
+| `..._IMAGE_KEEP` | 200 | Photos kept at most |
+| `..._IMAGE_MAX_BYTES` | 524288 | Largest photo |
+| `..._IMAGE_DAILY_LIMIT` | 6 | Photos per mower and 24 hours |
+| `..._IMAGE_MIN_INTERVAL_SECONDS` | 60 | Minimum time between two photos of one mower |
+| `..._PHOTO_TIMEOUT_SECONDS` | 20 | Timeout of the photo request to the Device-Gateway |
 
 APNs settings (prefix `MOWDECK_APNS_`):
 

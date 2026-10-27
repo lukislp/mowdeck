@@ -3,6 +3,7 @@
 
   import { fleetApi, unwrap } from '#lib/api/client.js';
   import { asProblem } from '#lib/api/problem.js';
+  import InboxImage from '#lib/components/InboxImage.svelte';
   import NotificationBadge from '#lib/components/NotificationBadge.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import { formatAge, problemMessage } from '#lib/i18n.js';
@@ -166,6 +167,9 @@
               </span>
               {#if item.url || item.mower_id}<Icon name="chevron" size={18} />{/if}
             </button>
+            {#if item.has_image}
+              <div class="photo-row"><InboxImage id={item.id} /></div>
+            {/if}
             {#if isAlarm(item.kind)}
               {@const where = alarmPosition(item.url)}
               <div class="alarm" data-testid="inbox-alarm" data-acked={item.acked}>
@@ -357,6 +361,17 @@
 
   .item > :global(svg) {
     align-self: center;
+  }
+
+  /* The photo sits under the text column of its item. */
+  .photo-row {
+    padding: 0 var(--md-gutter) var(--md-space-3) calc(var(--md-gutter) + 64px + var(--md-space-3));
+    border-bottom: var(--md-hairline) solid var(--md-color-line);
+    background: var(--md-color-surface);
+  }
+
+  li:has(.photo-row) .item {
+    border-bottom: 0;
   }
 
   /* Alarm actions sit under the text column of their item. */

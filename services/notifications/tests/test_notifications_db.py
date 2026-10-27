@@ -15,6 +15,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import time, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -45,6 +46,7 @@ from notifications.domain.models import (
     Message,
     MowerWatch,
     NewDelivery,
+    NotificationImage,
     NtfyTarget,
     Preferences,
     PushSubscription,
@@ -785,3 +787,43 @@ async def test_notifications_maintenance_db_window_and_held_offline(
             found = await tx.held_offline(10)
             assert [w.mower_id for w in found] == [held]
             assert found[0].offline_held
+
+
+@pytest.mark.parametrize("kind", KINDS)
+async def test_notifications_db_images_inbox_link_expiry_and_bound(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user, other, account, mower = uuid4(), uuid4(), uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        image_id = uuid4()
+        mine = replace(item(user, account, "photo"), image_id=image_id)
+        assert await store.record(mine, [], keep=10)
+        assert await store.notification_image(mine.id, T0) is None  # not taken yet
+        assert (await store.inbox(user, account, 10, unread_only=False))[0].has_image is False
+        photo = NotificationImage(
+            image_id, account, mower, T0, T0 + seconds(3600), "image/jpeg", b"\xff\xd8jpeg"
+        )
+        await store.put_image(photo, keep=5)
+        found = await store.notification_image(mine.id, T0 + seconds(10))
+        assert found is not None and found.data == b"\xff\xd8jpeg"
+        assert found.media_type == "image/jpeg"
+        assert await store.inbox_image(user, account, mine.id, T0) is not None
+        assert await store.inbox_image(other, account, mine.id, T0) is None
+        assert await store.inbox_image(user, uuid4(), mine.id, T0) is None
+        listed = await store.inbox(user, account, 10, unread_only=False)
+        assert listed[0].has_image is True and listed[0].image_id == image_id
+        marked = await store.mark_read(user, account, mine.id, T0)
+        assert marked is not None and marked.has_image is True
+        # a failure marker has no data: the item has no image, the lookup still finds the row
+        failed_id = uuid4()
+        failed = replace(item(user, account, "failed", 1), image_id=failed_id)
+        assert await store.record(failed, [], keep=10)
+        await store.put_image(
+            NotificationImage(failed_id, account, mower, T0, T0 + seconds(3600)), keep=5
+        )
+        row = await store.notification_image(failed.id, T0)
+        assert row is not None and not row.ready
+        assert (await store.inbox(user, account, 10, unread_only=False))[0].has_image is False
+        assert await store.notification_image(mine.id, T0 + seconds(3600)) is None  # expired
+        assert await store.prune_images(T0 + seconds(3600)) == 2
+        assert await store.notification_image(mine.id, T0) is None

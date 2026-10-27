@@ -10,7 +10,7 @@ Every deploy of the live stack restarts the Device-Gateway. For a second or two 
 
 ## Decision
 
-**A maintenance window in Notifications' database.** One row (table `maintenance_window`, `id = 1`, migration 0007): `opened_at`, `expires_at`, `closed_at`, `reason`. It expires by itself (the deploy asks for 15 minutes; the CLI accepts at most `MOWDECK_NOTIFICATIONS_MAINTENANCE_MAX_MINUTES`, default 60), so a forgotten window cannot silence alerts for long. There is no HTTP endpoint and no authentication surface: the window is written by a command inside the notifications container, which already holds the database credentials.
+**A maintenance window in Notifications' database.** One row (table `maintenance_window`, `id = 1`, migration 0008): `opened_at`, `expires_at`, `closed_at`, `reason`. It expires by itself (the deploy asks for 15 minutes; the CLI accepts at most `MOWDECK_NOTIFICATIONS_MAINTENANCE_MAX_MINUTES`, default 60), so a forgotten window cannot silence alerts for long. There is no HTTP endpoint and no authentication surface: the window is written by a command inside the notifications container, which already holds the database credentials.
 
 **CLI.** `python -m notifications.cli maintenance open --minutes 15 --reason "deploy 0.9.0"`, `maintenance close`, `maintenance status`. The deploy runs them with `docker compose exec -T notifications ...`. The output is one line and never contains a secret.
 

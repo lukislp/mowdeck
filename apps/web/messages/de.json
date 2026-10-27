@@ -971,6 +971,7 @@
   "notif_ack_failed": "Bestätigen fehlgeschlagen",
   "notif_alarm": "Alarm",
   "notif_position": "Position {lat}, {lon}",
+  "notif_photo_alt": "Kamerafoto zum Zeitpunkt des Ereignisses",
   "notif_position_map": "Auf der Karte zeigen",
   "detail_alarm_position": "Gemeldete Position",
   "detail_alarm_position_body": "Der Alarm meldete den Mäher bei {lat}, {lon}.",

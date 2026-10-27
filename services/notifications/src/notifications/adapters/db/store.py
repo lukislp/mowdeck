@@ -32,6 +32,7 @@ from notifications.domain.models import (
     Message,
     MowerWatch,
     NewDelivery,
+    NotificationImage,
     NtfyTarget,
     Preferences,
     PushSubscription,
@@ -118,6 +119,31 @@ def _inbox(row: Any) -> InboxItem:
         created_at=row.created_at,
         read_at=row.read_at,
         acked_at=row.acked_at,
+        image_id=row.image_id,
+        has_image=bool(getattr(row, "has_image", False)),
+    )
+
+
+def _inbox_select() -> sa.Select[Any]:
+    """The inbox columns plus ``has_image``: whether the referenced photo exists."""
+    photo = tables.notification_images.c
+    exists = (
+        sa.select(sa.literal(1))
+        .where(photo.id == tables.inbox.c.image_id, photo.data.is_not(None))
+        .exists()
+    )
+    return sa.select(tables.inbox, exists.label("has_image"))
+
+
+def _image(row: Any) -> NotificationImage:
+    return NotificationImage(
+        id=row.id,
+        account_id=row.account_id,
+        mower_id=row.mower_id,
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        media_type=row.media_type,
+        data=bytes(row.data) if row.data is not None else None,
     )
 
 
@@ -579,6 +605,7 @@ class SqlStore:
                     occurred_at=item.occurred_at,
                     created_at=item.created_at,
                     read_at=item.read_at,
+                    image_id=item.image_id,
                 )
                 .on_conflict_do_nothing(index_elements=["user_id", "dedupe_key"])
                 .returning(i.id)
@@ -627,7 +654,7 @@ class SqlStore:
     ) -> list[InboxItem]:
         i = tables.inbox.c
         statement = (
-            sa.select(tables.inbox)
+            _inbox_select()
             .where(i.user_id == user_id, i.account_id == account_id)
             .order_by(i.created_at.desc(), i.id.desc())
             .limit(limit)
@@ -657,7 +684,7 @@ class SqlStore:
             await conn.execute(
                 sa.update(tables.inbox).where(*owned, i.read_at.is_(None)).values(read_at=now)
             )
-            result = await conn.execute(sa.select(tables.inbox).where(*owned))
+            result = await conn.execute(_inbox_select().where(*owned))
             row = result.first()
         return _inbox(row) if row else None
 
@@ -675,9 +702,68 @@ class SqlStore:
                     acked_at=sa.func.coalesce(i.acked_at, now),
                 )
             )
-            result = await conn.execute(sa.select(tables.inbox).where(*owned))
+            result = await conn.execute(_inbox_select().where(*owned))
             row = result.first()
         return _inbox(row) if row else None
+
+    # --- camera images (ADR 0056) --------------------------------------------------------
+
+    async def put_image(self, image: NotificationImage, keep: int) -> None:
+        p = tables.notification_images
+        values = {
+            "account_id": image.account_id,
+            "mower_id": image.mower_id,
+            "media_type": image.media_type,
+            "data": image.data,
+            "created_at": image.created_at,
+            "expires_at": image.expires_at,
+        }
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                pg_insert(p)
+                .values(id=image.id, **values)
+                .on_conflict_do_update(index_elements=["id"], set_=values)
+            )
+            await conn.execute(sa.delete(p).where(p.c.expires_at <= image.created_at))
+            newest = sa.select(p.c.id).order_by(p.c.created_at.desc(), p.c.id.desc()).limit(keep)
+            await conn.execute(sa.delete(p).where(p.c.id.not_in(newest.scalar_subquery())))
+
+    async def notification_image(
+        self, notification_id: UUID, now: datetime
+    ) -> NotificationImage | None:
+        p, i = tables.notification_images, tables.inbox
+        statement = (
+            sa.select(p)
+            .select_from(p.join(i, i.c.image_id == p.c.id))
+            .where(i.c.id == notification_id, p.c.expires_at > now)
+        )
+        async with self.engine.connect() as conn:
+            row = (await conn.execute(statement)).first()
+        return _image(row) if row else None
+
+    async def inbox_image(
+        self, user_id: UUID, account_id: UUID, item_id: UUID, now: datetime
+    ) -> NotificationImage | None:
+        p, i = tables.notification_images, tables.inbox
+        statement = (
+            sa.select(p)
+            .select_from(p.join(i, i.c.image_id == p.c.id))
+            .where(
+                i.c.id == item_id,
+                i.c.user_id == user_id,
+                i.c.account_id == account_id,
+                p.c.expires_at > now,
+            )
+        )
+        async with self.engine.connect() as conn:
+            row = (await conn.execute(statement)).first()
+        return _image(row) if row else None
+
+    async def prune_images(self, now: datetime) -> int:
+        p = tables.notification_images
+        async with self.engine.begin() as conn:
+            result = await conn.execute(sa.delete(p).where(p.c.expires_at <= now))
+            return int(result.rowcount)
 
     async def silence(self, user_id: UUID, account_id: UUID, key: str, until: datetime) -> None:
         s = tables.alarm_silences

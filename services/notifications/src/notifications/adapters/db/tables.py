@@ -10,6 +10,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Index,
+    LargeBinary,
     MetaData,
     PrimaryKeyConstraint,
     SmallInteger,
@@ -158,8 +159,24 @@ inbox = Table(
     Column("created_at", TS, nullable=False),
     Column("read_at", TS),
     Column("acked_at", TS),
+    Column("image_id", Uuid),
     UniqueConstraint("user_id", "dedupe_key", name="uq_inbox_user_dedupe"),
 )
+
+notification_images = Table(
+    "notification_images",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("account_id", Uuid, nullable=False),
+    Column("mower_id", Uuid, nullable=False),
+    Column("media_type", String(32)),
+    Column("data", LargeBinary),
+    Column("created_at", TS, nullable=False),
+    Column("expires_at", TS, nullable=False),
+    Index("ix_notification_images_expires", "expires_at"),
+)
+"""The camera photo of an error or theft event (ADR 0056): one row per event, shared by the
+inbox items that reference it (``inbox.image_id``). ``data`` is NULL for a failed capture."""
 Index("ix_inbox_user_time", inbox.c.user_id, inbox.c.account_id, inbox.c.created_at.desc())
 
 deliveries = Table(
