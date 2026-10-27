@@ -52,3 +52,6 @@ apps/web/project.inlang/cache/
 # Helm: downloaded chart dependencies and packaged charts (Chart.lock pins the versions)
 infra/helm/mowdeck/charts/
 infra/helm/**/*.tgz
+blob-report/
+merged-report/
+all-blob-reports/
