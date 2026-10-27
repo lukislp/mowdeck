@@ -10,6 +10,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import NotificationRaised, NotificationSent
 
 from notifications.domain.geofence import MowerFence
+from notifications.domain.live_activity import ActivityDevice, LiveActivity
 from notifications.domain.models import (
     ApnsDevice,
     Delivery,
@@ -133,7 +134,43 @@ class Tx(Protocol):
         ...
 
 
-class Store(Protocol):
+class ActivityStore(Protocol):
+    """Persistence of Live Activity registrations (ADR 0059); part of the store."""
+
+    async def put_activity_device(self, device: ActivityDevice) -> None:
+        """Insert or replace the registration of a user's installation."""
+        ...
+
+    async def activity_devices(self, account_id: UUID) -> list[ActivityDevice]:
+        """Every registered installation of the account."""
+        ...
+
+    async def delete_activity_device(self, user_id: UUID, installation_id: UUID) -> bool:
+        """Delete an installation's registration and its activities; False when unknown."""
+        ...
+
+    async def put_live_activity(self, activity: LiveActivity) -> None:
+        """Insert or replace the activity of (user, installation, mower)."""
+        ...
+
+    async def live_activity(
+        self, user_id: UUID, installation_id: UUID, mower_id: UUID
+    ) -> LiveActivity | None:
+        """One activity row."""
+        ...
+
+    async def live_activities(self, mower_id: UUID) -> list[LiveActivity]:
+        """Every activity row of a mower."""
+        ...
+
+    async def delete_live_activity(
+        self, user_id: UUID, installation_id: UUID, mower_id: UUID
+    ) -> bool:
+        """Delete one activity row; False when there was none."""
+        ...
+
+
+class Store(ActivityStore, Protocol):
     """Persistence of notifications."""
 
     def transaction(self) -> AbstractAsyncContextManager[Tx]:

@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 from notifications.application.ports import Tx
 from notifications.domain.geofence import MowerFence
+from notifications.domain.live_activity import ActivityDevice, LiveActivity
 from notifications.domain.models import (
     ApnsDevice,
     Delivery,
@@ -64,6 +65,8 @@ class _Data:
     geofences: dict[UUID, MowerFence] = field(default_factory=dict)
     silences: dict[tuple[UUID, UUID, str], datetime] = field(default_factory=dict)
     images: dict[UUID, NotificationImage] = field(default_factory=dict)
+    activity_devices: dict[tuple[UUID, UUID], ActivityDevice] = field(default_factory=dict)
+    live_activities: dict[tuple[UUID, UUID, UUID], LiveActivity] = field(default_factory=dict)
 
 
 class _MemoryTx:
@@ -489,6 +492,40 @@ class MemoryStore:
             del self.data.deliveries[key]
         return len(old)
 
+    async def put_activity_device(self, device: ActivityDevice) -> None:
+        self.data.activity_devices[(device.user_id, device.installation_id)] = device
+
+    async def activity_devices(self, account_id: UUID) -> list[ActivityDevice]:
+        found = [d for d in self.data.activity_devices.values() if d.account_id == account_id]
+        return sorted(found, key=lambda d: (str(d.user_id), str(d.installation_id)))
+
+    async def delete_activity_device(self, user_id: UUID, installation_id: UUID) -> bool:
+        removed = self.data.activity_devices.pop((user_id, installation_id), None)
+        self.data.live_activities = {
+            k: v
+            for k, v in self.data.live_activities.items()
+            if (k[0], k[1]) != (user_id, installation_id)
+        }
+        return removed is not None
+
+    async def put_live_activity(self, activity: LiveActivity) -> None:
+        key = (activity.user_id, activity.installation_id, activity.mower_id)
+        self.data.live_activities[key] = activity
+
+    async def live_activity(
+        self, user_id: UUID, installation_id: UUID, mower_id: UUID
+    ) -> LiveActivity | None:
+        return self.data.live_activities.get((user_id, installation_id, mower_id))
+
+    async def live_activities(self, mower_id: UUID) -> list[LiveActivity]:
+        found = [a for a in self.data.live_activities.values() if a.mower_id == mower_id]
+        return sorted(found, key=lambda a: (str(a.user_id), str(a.installation_id)))
+
+    async def delete_live_activity(
+        self, user_id: UUID, installation_id: UUID, mower_id: UUID
+    ) -> bool:
+        return self.data.live_activities.pop((user_id, installation_id, mower_id), None) is not None
+
     async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
         def match(user: UUID, account: UUID) -> bool:
             return user == user_id and (account_id is None or account == account_id)
@@ -504,3 +541,9 @@ class MemoryStore:
             k: v for k, v in data.deliveries.items() if not match(v.user_id, v.account_id)
         }
         data.silences = {k: v for k, v in data.silences.items() if not match(k[0], k[1])}
+        data.activity_devices = {
+            k: v for k, v in data.activity_devices.items() if not match(v.user_id, v.account_id)
+        }
+        data.live_activities = {
+            k: v for k, v in data.live_activities.items() if not match(v.user_id, v.account_id)
+        }

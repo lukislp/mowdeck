@@ -5,6 +5,7 @@ from uuid import UUID
 
 from notifications.application.context import NotificationsConfig
 from notifications.application.fanout import Fanout
+from notifications.application.live_activity import LiveActivities
 from notifications.application.outbox import DeliveryObserver, Outbox
 from notifications.application.ports import (
     Channels,
@@ -42,6 +43,8 @@ class Services:
     users: UserNotifications
     accounts: Accounts
     config: NotificationsConfig
+    live: LiveActivities | None = None
+    """Live Activities and widget reloads (ADR 0059)."""
     push_images: PushImages | None = None
     """Serves the push image URLs; None without a public URL and signing secret."""
 
@@ -62,12 +65,14 @@ def build_services(
     """Create the use cases over ``store`` (``photos``: where error and theft events get their
     camera photo from, None for none; ``image_links``: the signed push image URLs)."""
     fanout = Fanout(store, channels, views, publisher, catalog, config, clock, photos)
+    live = LiveActivities(store, channels, views, clock)
     return Services(
-        watcher=Watcher(store, fanout, config, clock),
+        watcher=Watcher(store, fanout, config, clock, live),
         fanout=fanout,
         outbox=Outbox(store, channels, config, clock, observer),
         users=UserNotifications(store, fanout, channels, views, catalog, config, clock),
         accounts=Accounts(store),
         config=config,
+        live=live,
         push_images=PushImages(store, image_links, clock) if image_links is not None else None,
     )

@@ -210,3 +210,33 @@ alarm_silences = Table(
     Column("until", TS, nullable=False),
     PrimaryKeyConstraint("user_id", "account_id", "silence_key", name="pk_alarm_silences"),
 )
+
+live_activity_devices = Table(
+    "live_activity_devices",
+    metadata,
+    Column("user_id", Uuid, nullable=False),
+    Column("account_id", Uuid, nullable=False),
+    Column("installation_id", Uuid, nullable=False),
+    Column("push_to_start_token", String(200)),
+    Column("widgets_enabled", Boolean, nullable=False, server_default=text("false")),
+    Column("updated_at", TS, nullable=False),
+    PrimaryKeyConstraint("user_id", "installation_id", name="pk_live_activity_devices"),
+    Index("ix_live_activity_devices_account", "account_id"),
+)
+
+live_activities = Table(
+    "live_activities",
+    metadata,
+    Column("user_id", Uuid, nullable=False),
+    Column("account_id", Uuid, nullable=False),
+    Column("installation_id", Uuid, nullable=False),
+    Column("mower_id", Uuid, nullable=False),
+    Column("state", String(16), nullable=False),
+    Column("started_at", TS, nullable=False),
+    Column("activity_id", String(100)),
+    Column("update_token", String(200)),
+    Column("last_sent_at", TS),
+    Column("last_hash", String(32)),
+    PrimaryKeyConstraint("user_id", "installation_id", "mower_id", name="pk_live_activities"),
+    Index("ix_live_activities_mower", "mower_id"),
+)

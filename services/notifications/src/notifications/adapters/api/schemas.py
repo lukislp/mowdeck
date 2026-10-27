@@ -8,6 +8,7 @@ from mowdeck_contracts.v1 import NotificationKind, NotificationSeverity
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from notifications.application.users import PreferencesInput, parse_time
+from notifications.domain.live_activity import ActivityDevice, LiveActivity
 from notifications.domain.models import (
     RULE_KINDS,
     ApnsDevice,
@@ -297,3 +298,76 @@ class TestSent(BaseModel):
     channels: list[str] = Field(description="Channels a delivery was queued for.")
     title: str
     body: str
+
+
+class LiveActivityDeviceIn(BaseModel):
+    """What one app installation offers for Live Activities and widgets (ADR 0059)."""
+
+    installation_id: UUID = Field(
+        description="The installation id the iOS shell keeps in the Keychain "
+        "(the same as for `POST /me/push/apns`)."
+    )
+    push_to_start_token: str | None = Field(
+        default=None,
+        min_length=64,
+        max_length=200,
+        pattern=r"^[0-9a-fA-F]+$",
+        description="ActivityKit push-to-start token (hex); null when the device has none "
+        "(before iOS 17.2) or the user turned Live Activities off.",
+    )
+    widgets_enabled: bool = Field(
+        default=False, description="The installation has MowDeck widgets: reload them by push."
+    )
+
+
+class LiveActivityDeviceOut(BaseModel):
+    """The stored registration (the token, a capability, is not echoed)."""
+
+    installation_id: UUID
+    has_push_to_start_token: bool
+    widgets_enabled: bool
+    updated_at: datetime
+
+    @classmethod
+    def of(cls, device: ActivityDevice) -> "LiveActivityDeviceOut":
+        """Build from the domain model."""
+        return cls(
+            installation_id=device.installation_id,
+            has_push_to_start_token=device.push_to_start_token is not None,
+            widgets_enabled=device.widgets_enabled,
+            updated_at=device.updated_at,
+        )
+
+
+class LiveActivityIn(BaseModel):
+    """A Live Activity the app started for a mower, with its update token."""
+
+    installation_id: UUID
+    activity_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9-]+$")
+    push_token: str = Field(
+        min_length=64,
+        max_length=200,
+        pattern=r"^[0-9a-fA-F]+$",
+        description="The activity's push token (hex) the server updates it with.",
+    )
+
+
+class LiveActivityOut(BaseModel):
+    """The stored activity (tokens are not echoed)."""
+
+    mower_id: UUID
+    installation_id: UUID
+    activity_id: str | None
+    state: str
+    started_at: datetime
+
+    @classmethod
+    def of(cls, activity: LiveActivity) -> "LiveActivityOut":
+        """Build from the domain model."""
+        return cls(
+            mower_id=activity.mower_id,
+            installation_id=activity.installation_id,
+            activity_id=activity.activity_id,
+            state=activity.state.value,
+            started_at=activity.started_at,
+        )
