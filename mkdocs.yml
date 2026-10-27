@@ -93,6 +93,7 @@ nav:
       - adr/0050-passkeys-and-app-login-hand-off.md
       - adr/0051-sign-in-with-github.md
       - adr/0052-sign-in-with-apple.md
+      - adr/0053-position-retention-and-downsampling.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -111,6 +112,7 @@ nav:
       - ops/ble-bridge-esphome.md
       - ops/release.md
       - ops/billing.md
+      - ops/telemetry-retention.md
       - ops/mobile-apps.md
       - ops/passkeys.md
       - ops/github-login.md
