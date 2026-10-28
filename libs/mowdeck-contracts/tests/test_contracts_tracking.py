@@ -1,4 +1,4 @@
-"""Theft tracking contracts (ADR 0053)."""
+"""Theft tracking contracts (ADR 0058)."""
 
 from datetime import UTC, datetime
 from uuid import uuid4

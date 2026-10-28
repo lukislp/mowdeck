@@ -1,4 +1,4 @@
-"""Bus adapters of the theft tracking mode (ADR 0053).
+"""Bus adapters of the theft tracking mode (ADR 0058).
 
 * :class:`BusTrackingEvents` publishes ``tracking.*`` events (stream ``EVENTS``).
 * :class:`BusTrackingGateway` asks the Device-Gateway for a lease (``gateway.mower.<id>.tracking``)

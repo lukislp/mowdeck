@@ -598,7 +598,7 @@ async def test_mammotion_client_port_runs_the_closer_when_stopping_is_cancelled(
 
 
 async def test_mammotion_ble_tracking_interval_asks_for_reports_and_backs_off() -> None:
-    """The theft tracking lease (TrackingRateCapable, ADR 0053): the loop switches to ``track``
+    """The theft tracking lease (TrackingRateCapable, ADR 0058): the loop switches to ``track``
     mode with one undebounced request per interval, a mower that stays silent is asked less
     often (never beyond the backoff cap), and releasing restores the normal rhythm."""
     conn, port = ble()

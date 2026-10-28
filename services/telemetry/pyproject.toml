@@ -21,7 +21,7 @@ dependencies = [
   "alembic>=1.16.0",
   # Heatmaps: Shapely (through mowdeck-patterns) and its array library.
   "numpy>=2.0",
-  # Theft report (ADR 0053): pure Python PDF writer, LGPL-3.0, with Pillow for the photos.
+  # Theft report (ADR 0058): pure Python PDF writer, LGPL-3.0, with Pillow for the photos.
   "fpdf2>=2.8.5",
 ]
 

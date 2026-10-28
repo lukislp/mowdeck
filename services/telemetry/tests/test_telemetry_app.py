@@ -24,7 +24,10 @@ def test_telemetry_settings_defaults_and_config() -> None:
     assert settings.service_name == "telemetry" and settings.http_port == 8000
     assert config.heartbeat_history_seconds == 300
     assert config.retention_history.days == 30
-    assert config.retention_positions.days == 90
+    assert config.retention_positions.days == 730 and config.positions_detail.days == 90
+    assert config.thin_policy.active_seconds == 30 and config.thin_policy.idle_seconds == 300
+    assert config.thinning_enabled and config.thinning_zone == "UTC"
+    assert (config.thinning_window_start_hour, config.thinning_window_end_hour) == (1, 5)
     assert config.retention_commands.days == 30
     assert config.query_max_range.days == 31 and config.query_max_rows == 5000
     assert settings.telemetry_retention_interval_seconds == 3600
@@ -88,7 +91,7 @@ async def test_telemetry_without_a_bus_the_app_still_starts() -> None:
 
 async def test_telemetry_retention_deletes_only_old_rows() -> None:
     now = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
-    async with harness() as h:
+    async with harness(telemetry_retention_positions_days=90) as h:
         owner = await h.owner()
         mower_id = await h.add_mower(owner)
         h.app.state.telemetry.retention._clock = lambda: now

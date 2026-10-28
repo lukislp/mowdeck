@@ -1,4 +1,4 @@
-"""Theft tracking notifications (ADR 0053): events in, inbox items out."""
+"""Theft tracking notifications (ADR 0058): events in, inbox items out."""
 
 from typing import Any
 from uuid import uuid4

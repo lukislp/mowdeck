@@ -1,4 +1,4 @@
-"""Theft tracking mode (ADR 0053): state machine, lease, events, share links, public view,
+"""Theft tracking mode (ADR 0058): state machine, lease, events, share links, public view,
 report, permissions, retention."""
 
 import base64

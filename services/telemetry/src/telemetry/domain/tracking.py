@@ -1,4 +1,4 @@
-"""Theft tracking sessions, share links and photos (ADR 0053): plain data and pure rules."""
+"""Theft tracking sessions, share links and photos (ADR 0058): plain data and pure rules."""
 
 import hashlib
 import math

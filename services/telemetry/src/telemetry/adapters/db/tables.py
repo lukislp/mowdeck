@@ -117,6 +117,14 @@ Index(
 )
 Index("ix_mower_positions_observed_brin", mower_positions.c.observed_at, postgresql_using="brin")
 
+mower_positions_thinning = Table(
+    "mower_positions_thinning",
+    metadata,
+    Column("mower_id", Uuid, primary_key=True),
+    Column("thinned_until", TS, nullable=False),
+)
+"""Watermark of the position downsampling: everything of the mower before it is thinned."""
+
 command_timeline = Table(
     "command_timeline",
     metadata,

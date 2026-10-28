@@ -1,4 +1,4 @@
-"""The theft tracking mode (ADR 0053): sessions, the background tick, share links, the report.
+"""The theft tracking mode (ADR 0058): sessions, the background tick, share links, the report.
 
 A session starts on a theft alarm (``notifications.raised`` of kind ``mower_lifted``,
 ``mower_left_dock_unexpectedly`` or ``geofence_exit``) or by hand, and ends by hand ("false

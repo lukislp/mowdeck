@@ -235,7 +235,7 @@ class MowerSession:
         self._path_published_at = 0.0
         self._path_lock = asyncio.Lock()
         self._tracking_interval: float | None = None
-        """Interval of the theft tracking lease in force (ADR 0053); None: none."""
+        """Interval of the theft tracking lease in force (ADR 0058); None: none."""
         self._tracking_timer: asyncio.TimerHandle | None = None
 
     @property
@@ -592,7 +592,7 @@ class MowerSession:
         return info
 
     def set_tracking(self, interval_s: float, lease_s: float) -> TrackingLeaseReply:
-        """Take (or renew) a theft tracking lease (``gateway.mower.<id>.tracking``, ADR 0053):
+        """Take (or renew) a theft tracking lease (``gateway.mower.<id>.tracking``, ADR 0058):
         reports every ``interval_s`` seconds for ``lease_s`` seconds, then the normal rhythm
         again unless renewed. ``lease_s`` 0 releases. A connection that reports on its own
         (the simulator) needs no port: the state heartbeat follows the interval. While the

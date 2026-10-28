@@ -612,7 +612,7 @@ def observe_blade_hours(
 
 
 def tracking_event(event_type: str, payload: TrackingEvent) -> NotificationEvent:
-    """The notification of a theft tracking event (ADR 0053). Telemetry already limits how
+    """The notification of a theft tracking event (ADR 0058). Telemetry already limits how
     often it publishes them (one move notice per five minutes, one stale notice per outage),
     so there is no cooldown; the occurrence (session, kind, time) makes the inbox item unique.
     The notification opens the tracking view, where "false alarm" ends the session."""

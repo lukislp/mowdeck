@@ -490,7 +490,7 @@ class DeviceGateway:
     # --- theft tracking -----------------------------------------------------------------------
 
     async def tracking_lease(self, request: TrackingLeaseRequest) -> TrackingLeaseReply | None:
-        """Answer a tracking lease request (ADR 0053); None when the mower belongs to another
+        """Answer a tracking lease request (ADR 0058); None when the mower belongs to another
         shard. The account of the request must own the mower (like commands); otherwise the
         answer is ``not_found`` so a foreign mower never reveals itself."""
         if not self.shard.owns(request.mower_id):

@@ -1,4 +1,4 @@
-"""Ports of the theft tracking mode (ADR 0053)."""
+"""Ports of the theft tracking mode (ADR 0058)."""
 
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime

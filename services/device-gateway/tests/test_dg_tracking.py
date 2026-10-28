@@ -1,4 +1,4 @@
-"""Tracking leases (ADR 0053): ``gateway.mower.<id>.tracking`` against the simulator."""
+"""Tracking leases (ADR 0058): ``gateway.mower.<id>.tracking`` against the simulator."""
 
 import asyncio
 from uuid import uuid4

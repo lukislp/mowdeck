@@ -69,7 +69,7 @@ class NotificationKind(StrEnum):
     FIRMWARE_UPDATE_FAILED = "firmware_update_failed"
     """A firmware update failed; the mower keeps its old version."""
     TRACKING_STARTED = "tracking_started"
-    """Theft tracking started (by an alarm or by hand, ADR 0053)."""
+    """Theft tracking started (by an alarm or by hand, ADR 0058)."""
     TRACKING_MOVED = "tracking_moved"
     """The tracked mower moved a significant distance (at most once per five minutes)."""
     TRACKING_STALE = "tracking_stale"

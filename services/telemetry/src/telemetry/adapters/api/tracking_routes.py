@@ -1,4 +1,4 @@
-"""Routes of the theft tracking mode under ``/api/v1/telemetry`` (ADR 0053).
+"""Routes of the theft tracking mode under ``/api/v1/telemetry`` (ADR 0058).
 
 Reading a session, its links and the report need ``can_view`` on the mower; starting, ending,
 photos, links and deleting need ``can_control`` (404 for foreign mowers, 403 when visible

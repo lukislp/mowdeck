@@ -19,7 +19,7 @@
   ``telemetry.blade_hours.threshold`` becomes ``blade_maintenance``; other telemetry events are
   acknowledged and ignored.
 * ``event.tracking.>`` (JetStream ``EVENTS``, durable ``notifications-tracking``): the theft
-  tracking milestones of Telemetry (ADR 0053) become ``tracking_started``/``_moved``/``_stale``/
+  tracking milestones of Telemetry (ADR 0058) become ``tracking_started``/``_moved``/``_stale``/
   ``_ended``.
 * ``event.vision.>`` (JetStream ``EVENTS``, durable ``notifications-vision``):
   ``vision.proposal.created`` becomes ``vision_proposal`` for the users who may drive the mower;
@@ -242,7 +242,7 @@ def telemetry_event_handler(watcher: Watcher) -> MessageHandler:
 
 
 def tracking_event_handler(watcher: Watcher) -> MessageHandler:
-    """Theft tracking milestones from Telemetry (ADR 0053)."""
+    """Theft tracking milestones from Telemetry (ADR 0058)."""
 
     async def handle(message: BusMessage) -> None:
         try:

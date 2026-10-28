@@ -171,7 +171,7 @@ class Watcher:
         return events
 
     async def on_tracking(self, event_type: str, payload: TrackingEvent) -> list[NotificationEvent]:
-        """A theft tracking milestone from Telemetry (ADR 0053): notify the mower's viewers."""
+        """A theft tracking milestone from Telemetry (ADR 0058): notify the mower's viewers."""
         await self._check_account(payload.mower_id, payload.account_id, "event")
         events = [tracking_event(event_type, payload)]
         await self._fanout.dispatch(events)

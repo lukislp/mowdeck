@@ -586,7 +586,7 @@ def report_rate_port_of(connection: object) -> ReportRateCapable | None:
 @runtime_checkable
 class TrackingRateCapable(Protocol):
     """Optional capability of a :class:`MowerConnection` whose mower reports only when asked
-    (ADR 0053): while the theft tracking mode holds a lease, the adapter asks for a report every
+    (ADR 0058): while the theft tracking mode holds a lease, the adapter asks for a report every
     ``interval_s`` seconds, whatever the mower's activity, and backs off when the mower stays
     silent. A connection whose mower reports on its own (the simulator) needs no such port."""
 

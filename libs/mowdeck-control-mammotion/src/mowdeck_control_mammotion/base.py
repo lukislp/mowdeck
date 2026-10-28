@@ -421,7 +421,7 @@ class MammotionBase:
         self._drive_poll_override: float | None = None
         """Drive interval requested by a drive calibration (None: :data:`DRIVE_POLL_S`)."""
         self._tracking_interval_s: float | None = None
-        """Interval of the theft tracking lease (ADR 0053); None: not tracking."""
+        """Interval of the theft tracking lease (ADR 0058); None: not tracking."""
         self._tracking_silent_polls = 0
         """Consecutive tracking polls that brought no report (the mower is out of reach)."""
         self._tracking_polled_at: float | None = None
@@ -633,7 +633,7 @@ class MammotionBase:
         self._refresh_wake.set()
 
     def set_tracking_interval(self, interval_s: float | None) -> float | None:
-        """:class:`~mowdeck_control.TrackingRateCapable` (ADR 0053): ask the mower for a report
+        """:class:`~mowdeck_control.TrackingRateCapable` (ADR 0058): ask the mower for a report
         every ``interval_s`` seconds (at least :data:`TRACKING_MIN_INTERVAL_S`, one undebounced
         request each, no report stream) until called with None. Returns the applied interval.
         A mower that stays silent is asked less and less often (:meth:`_tracking_wait_s`)."""
@@ -2139,7 +2139,7 @@ MIN_DRIVE_POLL_S: Final = 0.5
 per half second, about what a Bluetooth round trip through the bridge allows without queueing
 requests behind each other (to be confirmed on hardware)."""
 TRACKING_MIN_INTERVAL_S: Final = 5.0
-"""Shortest interval of a theft tracking lease (ADR 0053): one report request per five seconds
+"""Shortest interval of a theft tracking lease (ADR 0058): one report request per five seconds
 at most, far below the drive rate the vendor cloud tolerates (ADR 0049)."""
 TRACKING_BACKOFF_MAX_S: Final = 120.0
 """Longest wait between tracking polls of a mower that does not answer."""

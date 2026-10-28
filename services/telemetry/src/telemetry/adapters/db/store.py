@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from telemetry.adapters.db import tables
-from telemetry.application.ports import RetentionScope, RetentionTarget, Tx
+from telemetry.application.ports import RetentionScope, RetentionTarget, ThinResult, Tx
 from telemetry.domain.health import BladeChange, DailyRow, HealthRow
 from telemetry.domain.models import (
     CommandEvent,
@@ -30,6 +30,14 @@ from telemetry.domain.models import (
     LatestRow,
     PositionRow,
     SnapshotRow,
+)
+from telemetry.domain.thinning import (
+    CONTEXT,
+    METRES_PER_DEGREE,
+    MOVING_METRES,
+    TURN_COS,
+    TURN_MIN_STEP_M,
+    ThinPolicy,
 )
 
 _log = get_logger("telemetry.db")
@@ -83,6 +91,81 @@ _BINNED_HISTORY = sa.text(
     sa.bindparam("end", type_=sa.DateTime(timezone=True)),
     sa.bindparam("limit", type_=sa.Integer()),
 )
+
+
+_THIN_SLICE = sa.text(
+    """
+    WITH w AS (
+      SELECT observed_at, blades_on, rtk_fix, lat, lon,
+             lag(observed_at) OVER o AS prev_t, lead(observed_at) OVER o AS next_t,
+             lag(blades_on) OVER o AS prev_b, lead(blades_on) OVER o AS next_b,
+             lag(rtk_fix) OVER o AS prev_f, lead(rtk_fix) OVER o AS next_f,
+             lag(lat) OVER o AS prev_lat, lag(lon) OVER o AS prev_lon,
+             lead(lat) OVER o AS next_lat, lead(lon) OVER o AS next_lon
+        FROM mower_positions
+       WHERE mower_id = :mower_id AND observed_at >= :ctx_start AND observed_at < :ctx_end
+      WINDOW o AS (ORDER BY observed_at)
+    ), s AS (
+      SELECT w.*,
+             (lon - prev_lon) * :mpd * cos(radians(lat)) AS dx1, (lat - prev_lat) * :mpd AS dy1,
+             (next_lon - lon) * :mpd * cos(radians(lat)) AS dx2, (next_lat - lat) * :mpd AS dy2
+        FROM w
+    ), a AS (
+      SELECT s.*,
+             (blades_on IS TRUE
+              OR (prev_lat IS NOT NULL AND sqrt(dx1 * dx1 + dy1 * dy1) > :moving)
+             ) AS active,
+             (prev_lat IS NOT NULL AND next_lat IS NOT NULL
+              AND sqrt(dx1 * dx1 + dy1 * dy1) >= :turn_min
+              AND sqrt(dx2 * dx2 + dy2 * dy2) >= :turn_min
+              AND dx1 * dx2 + dy1 * dy2
+                  < :turn_cos * sqrt(dx1 * dx1 + dy1 * dy1) * sqrt(dx2 * dx2 + dy2 * dy2)
+             ) AS turn
+        FROM s
+    ), k AS (
+      SELECT a.*,
+             row_number() OVER (
+               PARTITION BY active,
+                 date_bin((CASE WHEN active THEN :active_s ELSE :idle_s END) * INTERVAL '1 second',
+                          observed_at, TIMESTAMPTZ '2000-01-01 00:00:00+00')
+               ORDER BY observed_at) = 1 AS first_in_bin
+        FROM a
+    ), gone AS (
+      DELETE FROM mower_positions d USING k
+       WHERE d.mower_id = :mower_id AND d.observed_at = k.observed_at
+         AND k.observed_at >= :start AND k.observed_at < :end
+         AND NOT k.first_in_bin
+         AND NOT k.turn
+         AND NOT (k.prev_t IS NULL OR k.next_t IS NULL
+                  OR k.observed_at - k.prev_t > :gap OR k.next_t - k.observed_at > :gap
+                  OR k.blades_on IS DISTINCT FROM k.prev_b
+                  OR k.blades_on IS DISTINCT FROM k.next_b
+                  OR k.rtk_fix IS DISTINCT FROM k.prev_f
+                  OR k.rtk_fix IS DISTINCT FROM k.next_f)
+         AND NOT EXISTS (SELECT 1 FROM mower_history h
+                          WHERE h.mower_id = :mower_id AND h.observed_at = k.observed_at
+                            AND h.error_code IS NOT NULL)
+      RETURNING 1
+    )
+    SELECT (SELECT count(*) FROM gone)::int AS deleted,
+           (SELECT count(*) FROM k WHERE observed_at >= :start AND observed_at < :end)::int
+             AS scanned
+    """
+).bindparams(
+    sa.bindparam("mower_id", type_=sa.Uuid()),
+    sa.bindparam("start", type_=sa.DateTime(timezone=True)),
+    sa.bindparam("end", type_=sa.DateTime(timezone=True)),
+    sa.bindparam("ctx_start", type_=sa.DateTime(timezone=True)),
+    sa.bindparam("ctx_end", type_=sa.DateTime(timezone=True)),
+    sa.bindparam("gap", type_=sa.Interval()),
+    sa.bindparam("active_s", type_=sa.Integer()),
+    sa.bindparam("idle_s", type_=sa.Integer()),
+    sa.bindparam("mpd", type_=sa.Double()),
+    sa.bindparam("moving", type_=sa.Double()),
+    sa.bindparam("turn_min", type_=sa.Double()),
+    sa.bindparam("turn_cos", type_=sa.Double()),
+)
+"""One slice of the position thinning; mirrors :func:`telemetry.domain.thinning.keep_set`."""
 
 
 def _latest(row: Any) -> LatestRow:
@@ -193,6 +276,7 @@ class _SqlTx:
             tables.mower_latest,
             tables.mower_history,
             tables.mower_positions,
+            tables.mower_positions_thinning,
             tables.command_timeline,
             tables.mower_snapshots,
             tables.mower_health,
@@ -271,6 +355,58 @@ class _SqlRetention:
             total += result.rowcount
             if result.rowcount < batch_size:
                 return total
+
+    async def thin_candidates(self) -> list[UUID]:
+        result = await self._conn.execute(sa.select(tables.mower_directory.c.mower_id))
+        return [row[0] for row in result.all()]
+
+    async def thin_start(self, mower_id: UUID) -> datetime | None:
+        mark = tables.mower_positions_thinning.c
+        result = await self._conn.execute(
+            sa.select(mark.thinned_until).where(mark.mower_id == mower_id)
+        )
+        stored: datetime | None = result.scalar_one_or_none()
+        if stored is not None:
+            return stored
+        positions = tables.mower_positions.c
+        oldest = await self._conn.execute(
+            sa.select(sa.func.min(positions.observed_at)).where(positions.mower_id == mower_id)
+        )
+        found: datetime | None = oldest.scalar_one_or_none()
+        return found
+
+    async def thin_slice(
+        self, mower_id: UUID, start: datetime, end: datetime, policy: ThinPolicy
+    ) -> ThinResult:
+        result = await self._conn.execute(
+            _THIN_SLICE,
+            {
+                "mower_id": mower_id,
+                "start": start,
+                "end": end,
+                "ctx_start": start - CONTEXT,
+                "ctx_end": end + CONTEXT,
+                "gap": timedelta(seconds=policy.gap_seconds),
+                "active_s": policy.active_seconds,
+                "idle_s": policy.idle_seconds,
+                "mpd": METRES_PER_DEGREE,
+                "moving": MOVING_METRES,
+                "turn_min": TURN_MIN_STEP_M,
+                "turn_cos": TURN_COS,
+            },
+        )
+        deleted, scanned = result.one()
+        mark = pg_insert(tables.mower_positions_thinning).values(
+            mower_id=mower_id, thinned_until=end
+        )
+        await self._conn.execute(
+            mark.on_conflict_do_update(
+                index_elements=["mower_id"],
+                set_={"thinned_until": mark.excluded.thinned_until},
+                where=tables.mower_positions_thinning.c.thinned_until < mark.excluded.thinned_until,
+            )
+        )
+        return ThinResult(scanned=scanned, deleted=deleted)
 
 
 class SqlStore:

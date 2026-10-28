@@ -44,6 +44,7 @@ from telemetry.adapters.bus.tracking import (
 from telemetry.adapters.db.store import SqlStore
 from telemetry.adapters.db.tracking_store import SqlTrackingStore
 from telemetry.adapters.memory_tracking import MemoryTrackingStore
+from telemetry.adapters.metrics import PrometheusRetentionObserver
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
 from telemetry.application.tracking import Tracking
@@ -99,7 +100,11 @@ def build_app(
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus
         events = BusHealthEvents(lambda: getattr(app.state, "bus", None))
-        services = build_services(store_ref, settings.to_config(), active_clock, events)
+        registry = getattr(app.state, "metrics_registry", None)
+        observer = PrometheusRetentionObserver(registry) if registry is not None else None
+        services = build_services(
+            store_ref, settings.to_config(), active_clock, events, retention_observer=observer
+        )
         tracking = (
             Tracking(
                 tracking_store,
@@ -189,6 +194,17 @@ def start_background_tasks(
         deleted = await services.retention.run_once()
         if deleted is not None and any(deleted.values()):
             _log.info("retention deleted rows", **{t.value: n for t, n in deleted.items()})
+        report = await services.retention.thin_once()
+        if report is not None and (report.slices or not report.complete):
+            _log.info(
+                "position thinning round",
+                mowers=report.mowers,
+                slices=report.slices,
+                scanned=report.scanned,
+                deleted=report.deleted,
+                seconds=round(report.seconds, 1),
+                complete=report.complete,
+            )
 
     tasks: list[asyncio.Task[Any]] = [
         asyncio.create_task(

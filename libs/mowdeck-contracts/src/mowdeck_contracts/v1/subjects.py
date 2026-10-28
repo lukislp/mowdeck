@@ -29,7 +29,7 @@ Subject scheme:
                                       (Device-Gateway)
 ``gateway.mower.<mower_id>.photo``    core NATS request: a still image of one mower (Vision)
 ``gateway.mower.<id>.tracking``       core NATS request: a lease for fast position reports
-                                      (Telemetry to Device-Gateway, ADR 0053)
+                                      (Telemetry to Device-Gateway, ADR 0058)
 ``gateway.cloud.discover``            core NATS request: devices of a vendor cloud account
 ``relay.camera.attach``               core NATS request: a lease on the camera relay (ADR 0045)
 ``relay.camera.renew``                core NATS request: a lease's heartbeat, a fresh ticket
@@ -312,7 +312,7 @@ def parse_firmware_check_subject(subject: str) -> UUID:
 def tracking_lease_subject(mower_id: UUID) -> str:
     """Core NATS request subject of a tracking lease: ``gateway.mower.<id>.tracking``.
 
-    ``TrackingLeaseRequest`` in, ``TrackingLeaseReply`` out (ADR 0053); answered by the gateway
+    ``TrackingLeaseRequest`` in, ``TrackingLeaseReply`` out (ADR 0058); answered by the gateway
     instance that holds the mower (other shards stay silent).
     """
     return f"{GATEWAY_PREFIX}.{mower_id}.tracking"

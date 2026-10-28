@@ -1,4 +1,4 @@
-"""Theft tracking mode (ADR 0053): the lease the Device-Gateway takes and the tracking events.
+"""Theft tracking mode (ADR 0058): the lease the Device-Gateway takes and the tracking events.
 
 Telemetry owns the tracking sessions. While one is active it asks the Device-Gateway that holds
 the mower, every few seconds, to report fresh positions at the session's interval

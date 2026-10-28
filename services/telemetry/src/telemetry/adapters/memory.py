@@ -12,7 +12,7 @@ from dataclasses import replace as replace_fields
 from datetime import date, datetime, timedelta
 from uuid import UUID
 
-from telemetry.application.ports import RetentionScope, RetentionTarget, Tx
+from telemetry.application.ports import RetentionScope, RetentionTarget, ThinResult, Tx
 from telemetry.domain.health import BladeChange, DailyRow, HealthRow
 from telemetry.domain.models import (
     CommandEvent,
@@ -24,6 +24,7 @@ from telemetry.domain.models import (
     SnapshotRow,
 )
 from telemetry.domain.rules import downsample, raw_points
+from telemetry.domain.thinning import CONTEXT, ThinPolicy, keep_set
 
 
 class _Data:
@@ -33,6 +34,7 @@ class _Data:
         self.latest: dict[UUID, LatestRow] = {}
         self.history: dict[tuple[UUID, datetime], HistoryRow] = {}
         self.positions: dict[tuple[UUID, datetime], PositionRow] = {}
+        self.thinned_until: dict[UUID, datetime] = {}
         self.commands: dict[tuple[UUID, str], CommandEvent] = {}
         self.directory: dict[UUID, DirectoryEntry] = {}
         self.snapshots: dict[tuple[UUID, str], SnapshotRow] = {}
@@ -46,6 +48,7 @@ class _Data:
         other.latest = dict(self.latest)
         other.history = dict(self.history)
         other.positions = dict(self.positions)
+        other.thinned_until = dict(self.thinned_until)
         other.commands = dict(self.commands)
         other.directory = dict(self.directory)
         other.snapshots = dict(self.snapshots)
@@ -101,6 +104,7 @@ class _MemoryTx:
         data.latest.pop(mower_id, None)
         data.history = {k: v for k, v in data.history.items() if k[0] != mower_id}
         data.positions = {k: v for k, v in data.positions.items() if k[0] != mower_id}
+        data.thinned_until.pop(mower_id, None)
         data.commands = {k: v for k, v in data.commands.items() if v.mower_id != mower_id}
         data.snapshots = {k: v for k, v in data.snapshots.items() if k[0] != mower_id}
         data.health.pop(mower_id, None)
@@ -148,6 +152,41 @@ class _MemoryRetention:
                 before = len(data.commands)
                 data.commands = {k: v for k, v in data.commands.items() if v.at >= cutoff}
                 return before - len(data.commands)
+
+    async def thin_candidates(self) -> list[UUID]:
+        return list(self._data.directory)
+
+    async def thin_start(self, mower_id: UUID) -> datetime | None:
+        stored = self._data.thinned_until.get(mower_id)
+        if stored is not None:
+            return stored
+        times = [k[1] for k in self._data.positions if k[0] == mower_id]
+        return min(times) if times else None
+
+    async def thin_slice(
+        self, mower_id: UUID, start: datetime, end: datetime, policy: ThinPolicy
+    ) -> ThinResult:
+        data = self._data
+        rows = sorted(
+            (
+                row
+                for (owner, at), row in data.positions.items()
+                if owner == mower_id and start - CONTEXT <= at < end + CONTEXT
+            ),
+            key=lambda row: row.observed_at,
+        )
+        errors = {
+            at for (owner, at), h in data.history.items() if owner == mower_id and h.error_code
+        }
+        kept = keep_set(rows, start, end, policy, errors)
+        inside = [row.observed_at for row in rows if start <= row.observed_at < end]
+        doomed = [at for at in inside if at not in kept]
+        for at in doomed:
+            del data.positions[(mower_id, at)]
+        current = data.thinned_until.get(mower_id)
+        if current is None or current < end:
+            data.thinned_until[mower_id] = end
+        return ThinResult(scanned=len(inside), deleted=len(doomed))
 
 
 class MemoryStore:

@@ -1,4 +1,4 @@
-"""Tracking lease requests (ADR 0053): ``gateway.mower.*.tracking``, core NATS.
+"""Tracking lease requests (ADR 0058): ``gateway.mower.*.tracking``, core NATS.
 
 Telemetry renews a lease every few seconds while a theft tracking session is active
 (``TrackingLeaseRequest`` in, ``TrackingLeaseReply`` out). Every gateway instance subscribes (no
