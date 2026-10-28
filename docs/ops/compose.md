@@ -39,6 +39,26 @@ agora-bridge (profile `agora`) is never published: it keeps its local image `mow
 
 **Rollback.** Check out the earlier tag, run `./verify-release.sh <earlier>` (it rewrites the override), set `MOWDECK_VERSION=<earlier>` and run the same `pull` and `up` commands. Migrations are backward compatible, so the older images start against the newer schema ([Rolling back](release.md#rolling-back)); a rollback across a migration that is not needs the backup (`docker compose exec -T postgres psql -U postgres -d postgres < ~/mowdeck-before-<x>.sql` into an empty `postgres-data` volume).
 
+## Deploying with the maintenance window
+
+`deploy.sh` performs the procedure above in one go and wraps the restart in the deploy maintenance window ([ADR 0055](../adr/0055-deploy-maintenance-window.md)), so the Device-Gateway restart sends no "mower offline / back online" notifications:
+
+```bash
+cd infra/compose                 # of the checkout on the server
+./deploy.sh <x>                  # e.g. ./deploy.sh 0.9.0; --dry-run only prints the steps
+```
+
+It runs, and stops at the first failure: `git fetch --tags`; a backup into `${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}` (a copy of `.env` and a gzip'd `pg_dumpall`, refused unless the dump ends with "PostgreSQL database cluster dump complete"); `git checkout --detach v<x>` (refused with local changes); `./verify-release.sh <x>` (nothing is pulled when it fails); `MOWDECK_VERSION=<x>` in `.env`; `pull`; **open the window** (`--window-minutes`, default 15, expires by itself); `up -d --no-build --wait`; **close the window** (also when `up` fails); a table of every service, failing when one is not running and healthy. It never prints `.env` or its values. `--no-maintenance` skips the window. A stack under another project name: `COMPOSE_PROJECT_NAME=<name> ./deploy.sh <x>`. The manual procedure above stays possible; add the window by hand with:
+
+```bash
+docker compose exec -T notifications python -m notifications.cli maintenance open --minutes 15
+# ... pull / up --wait ...
+docker compose exec -T notifications python -m notifications.cli maintenance close
+docker compose exec -T notifications python -m notifications.cli maintenance status
+```
+
+While the window is open, `mower_offline` / `mower_online` are held back for a mower whose link broke inside it; a mower still offline two minutes after the close is reported then. Theft alarms and errors are never held. The first deploy of the release that introduces the window runs the old notifications image, which has no such command: the script warns and goes on, so that one deploy can still send the pair. Helm: no hook yet; the same CLI can run from a pre/post-upgrade Job later.
+
 ## Services and ports
 
 | Service | Image | Host port |

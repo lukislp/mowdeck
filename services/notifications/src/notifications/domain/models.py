@@ -119,6 +119,52 @@ class RuleConfig:
     """The allowed region is the mapped areas, paths and dock buffered by this margin."""
     geofence_confirm_states: int = 2
     """Consecutive states outside the fence before ``geofence_exit`` fires."""
+    maintenance_grace_seconds: float = 120
+    """An offline noticed up to this long after the deploy maintenance window ended is still
+    held back; a mower still offline after that is reported then (ADR 0055)."""
+    maintenance_lead_seconds: float = 60
+    """An offline whose start lies this much before the window opened still counts as inside
+    (the last state arrived shortly before the restart)."""
+
+
+@dataclass(frozen=True, slots=True)
+class MaintenanceWindow:
+    """The deploy maintenance window (one per installation, ADR 0055).
+
+    Opened by the deploy before it restarts services and closed after the health checks; it
+    expires by itself at ``expires_at``. While it holds, ``mower_offline`` (and with it the
+    ``mower_online`` that would follow) is not sent for a mower whose link broke because of the
+    restart.
+    """
+
+    opened_at: datetime
+    expires_at: datetime
+    closed_at: datetime | None = None
+    reason: str = "deploy"
+
+    @property
+    def ends_at(self) -> datetime:
+        """When the window stops: the close time, at the latest the expiry."""
+        if self.closed_at is not None:
+            return min(self.closed_at, self.expires_at)
+        return self.expires_at
+
+    def is_open(self, now: datetime) -> bool:
+        """True from the opening until the close or expiry."""
+        return self.opened_at <= now < self.ends_at
+
+    def held_until(self, grace_seconds: float) -> datetime:
+        """The end of the hold: the window end plus the grace."""
+        return self.ends_at + timedelta(seconds=grace_seconds)
+
+    def holds(self, since: datetime, now: datetime, config: "RuleConfig") -> bool:
+        """True when an offline that began at ``since`` and is noticed at ``now`` is held back."""
+        lead = timedelta(seconds=config.maintenance_lead_seconds)
+        return (
+            self.opened_at - lead <= since <= self.ends_at
+            and now <= self.held_until(config.maintenance_grace_seconds)
+            and now >= self.opened_at
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +266,9 @@ class MowerWatch:
     offline_since: datetime | None = None
     offline_notified: bool = False
     """Whether ``mower_offline`` went out (``mower_online`` follows only then)."""
+    offline_held: bool = False
+    """The offline began inside a maintenance window and was not announced; the sweep announces
+    it when the mower is still offline after the window and its grace."""
     last_sent: dict[str, datetime] = field(default_factory=dict)
     """Last notification per kind (cooldown)."""
     last_command_at: datetime | None = None
@@ -259,6 +308,7 @@ class MowerWatch:
             "offline": self.offline,
             "offline_since": _iso(self.offline_since),
             "offline_notified": self.offline_notified,
+            "offline_held": self.offline_held,
             "last_sent": {k: v.isoformat() for k, v in self.last_sent.items()},
             "last_command_at": _iso(self.last_command_at),
             "last_drive_at": _iso(self.last_drive_at),
@@ -294,6 +344,7 @@ class MowerWatch:
             offline=bool(data.get("offline", False)),
             offline_since=_parse(data.get("offline_since")),
             offline_notified=bool(data.get("offline_notified", False)),
+            offline_held=bool(data.get("offline_held", False)),
             last_sent={
                 k: datetime.fromisoformat(v) for k, v in dict(data.get("last_sent", {})).items()
             },
