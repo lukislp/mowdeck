@@ -154,6 +154,25 @@ async function switchLight(page: Page, to: 'on' | 'off'): Promise<void> {
   await expect(light).toHaveAttribute('aria-checked', to === 'on' ? 'true' : 'false');
 }
 
+/** Text and plate of an opaque element contrast at least 4.5:1 (WCAG AA). */
+async function expectReadable(locator: Locator, what: string): Promise<void> {
+  const ratio = await locator.evaluate((node) => {
+    const rgb = (value: string): number[] => (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const luminance = ([r = 0, g = 0, b = 0]: number[]): number => {
+      const c = (v: number): number => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b);
+    };
+    const style = getComputedStyle(node);
+    const ink = luminance(rgb(style.color));
+    const plate = luminance(rgb(style.backgroundColor));
+    return (Math.max(ink, plate) + 0.05) / (Math.min(ink, plate) + 0.05);
+  });
+  expect(ratio, what).toBeGreaterThanOrEqual(4.5);
+}
+
 async function expectNoSidewaysOverflow(page: Page): Promise<void> {
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -296,6 +315,15 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
   // "Both": the stereo pair side by side, and back to the left camera.
   await page.getByTestId('drive-camera-both').click();
   await expect(page.getByTestId('camera-tile-right')).toHaveAttribute('data-status', 'live');
+  // Pressed (also how it loads when "both" is the remembered layout): readable in both themes.
+  // It was white on white in the dark theme.
+  const both = page.getByTestId('drive-camera-both');
+  await expect(both).toHaveAttribute('aria-pressed', 'true');
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expectReadable(both, `both cameras pressed (${colorScheme})`);
+  }
+  await page.emulateMedia({ colorScheme: null });
   await page.getByTestId('drive-camera-both').click();
   await expect(page.getByTestId('camera-tile-right')).toBeHidden();
   await expect(page.getByTestId('camera-tile')).toHaveAttribute('data-side', 'left');
