@@ -87,6 +87,16 @@ export function mapLayers(
     minZoom: layer.min_zoom,
     maxZoom: layer.max_zoom,
     covered: layer.covers_last ?? true,
+    // The map keeps its view inside the box the server serves tiles in (ADR 0058).
+    margin: layer.margin_m ?? 0,
+    coverage: layer.coverage
+      ? ([
+          layer.coverage.south,
+          layer.coverage.west,
+          layer.coverage.north,
+          layer.coverage.east,
+        ] as const)
+      : null,
     load,
   }));
 }
