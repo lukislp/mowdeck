@@ -4,11 +4,14 @@
   Android the way to ntfy for the background.
 -->
 <script lang="ts">
+  import { onMount } from 'svelte';
+
   import { Button, Panel, ProblemNotice, Readout } from '@mowdeck/ui';
 
   import { m } from '#lib/paraglide/messages.js';
 
   import type { ApnsState } from './apns';
+  import type { WatchState } from './watch';
   import type { WidgetsState } from './widgets';
   import { nativeShell } from './runtime';
 
@@ -64,6 +67,23 @@
     }
   }
 
+  function watchLabel(state: WatchState): string {
+    switch (state) {
+      case 'ready':
+        return m.native_watch_ready();
+      case 'needs-widgets':
+        return m.native_watch_needs_widgets();
+      case 'not-installed':
+        return m.native_watch_not_installed();
+      default:
+        return m.native_watch_unpaired();
+    }
+  }
+
+  onMount(() => {
+    void nativeShell.refreshWatch();
+  });
+
   async function toggleWidgets(): Promise<void> {
     busy = true;
     try {
@@ -110,6 +130,15 @@
           size="inline"
           emptyText={m.no_data()}
           testid="native-widgets"
+        />
+      {/if}
+      {#if nativeShell.watchAvailable && nativeShell.watch !== 'unsupported'}
+        <Readout
+          label={m.native_watch()}
+          value={watchLabel(nativeShell.watch)}
+          size="inline"
+          emptyText={m.no_data()}
+          testid="native-watch"
         />
       {/if}
       <Readout
@@ -159,6 +188,13 @@
             : m.native_widgets_enable()}</Button
         >
       </div>
+    {/if}
+
+    {#if nativeShell.watchAvailable && nativeShell.watch !== 'unsupported'}
+      <p class="quiet small" data-testid="native-watch-hint">{m.native_watch_hint()}</p>
+      {#if nativeShell.watch === 'needs-widgets'}
+        <ProblemNotice tone="info" title={m.native_watch_needs_widgets_hint()} />
+      {/if}
     {/if}
 
     {#if nativeShell.platform === 'android'}

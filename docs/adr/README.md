@@ -63,3 +63,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0057](0057-step-up-reauthentication.md) | Step-up re-authentication for critical actions | Accepted |
 | [0058](0058-theft-tracking-mode.md) | Theft tracking mode | Accepted |
 | [0059](0059-ios-widgets-and-live-activity.md) | iOS widgets and the mowing Live Activity | Accepted |
+| [0060](0060-apple-watch-app.md) | Apple Watch app | Accepted |

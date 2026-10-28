@@ -22,6 +22,7 @@ import {
 } from './handoff';
 import { pathFromDeepLink, pathFromNotificationAction } from './links';
 import { WidgetsRegistration, type WidgetsApi, type WidgetsState } from './widgets';
+import { readWatchStatus, syncWatch, watchStateOf, type WatchState } from './watch';
 import { CHANNELS, InboxNotifier, toLocalNotification } from './local';
 import type { InboxItem } from '#lib/stores/inbox.svelte.js';
 
@@ -42,6 +43,8 @@ export class NativeShell {
   apns = $state<ApnsState>('idle');
   /** Widgets and the Live Activity on this device (iOS, ADR 0059). */
   widgets = $state<WidgetsState>('unsupported');
+  /** The Apple Watch app on this iPhone (iOS, ADR 0060). */
+  watch = $state<WatchState>('unsupported');
   /** Local notifications allowed by the user (null: not asked yet). */
   local = $state<boolean | null>(null);
   /** The server origin the shell loads (from the shell's own plugin). */
@@ -101,6 +104,19 @@ export class NativeShell {
   /** Widgets can be turned on here (iOS shell with the widget methods). */
   get widgetsAvailable(): boolean {
     return this.#widgets !== null;
+  }
+
+  /** The shell can relay for an Apple Watch (iOS builds with ADR 0060). */
+  get watchAvailable(): boolean {
+    const bridge = this.#deps.bridge;
+    return bridge?.platform === 'ios' && bridge.hasMethod('MowDeckShell', 'getWatchStatus');
+  }
+
+  /** Re-read whether a watch with the app is paired (the settings panel, after widget changes). */
+  async refreshWatch(): Promise<void> {
+    if (!this.watchAvailable) return;
+    const status = await readWatchStatus(this.#plugin('MowDeckShell'));
+    this.watch = watchStateOf(status, this.widgets);
   }
 
   #plugin(name: string) {
@@ -169,6 +185,9 @@ export class NativeShell {
     if (this.#registration) await this.#registration.enable();
     await this.#prepareLocal();
     await this.#widgets?.maintain();
+    await this.refreshWatch();
+    // The mower list may have changed: the watch gets it with the next state (ADR 0060).
+    if (this.watch === 'ready') await syncWatch(this.#plugin('MowDeckShell'));
   }
 
   /** Before logout: remove this device's APNs token from the server, clear the badge. */
@@ -190,11 +209,13 @@ export class NativeShell {
   /** Turn the widgets and the Live Activity on (the button on the settings page). */
   async enableWidgets(): Promise<void> {
     await this.#widgets?.enable();
+    await this.refreshWatch();
   }
 
   /** Turn them off: the credential is revoked and removed from this device. */
   async disableWidgets(): Promise<void> {
     await this.#widgets?.disable();
+    await this.refreshWatch();
   }
 
   /** Re-read whether the user has an ntfy target (after it was saved or removed). */

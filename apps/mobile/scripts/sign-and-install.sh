@@ -42,6 +42,18 @@ if [ "${MOWDECK_RESIGN:-0}" = "1" ]; then
         cp "$WIDGETS_PROFILE" "$APP/PlugIns/MowDeckWidgets.appex/embedded.mobileprovision"
         codesign -f -s "$IDENTITY" --entitlements "$WORK/widgets-entitlements.plist" "$APP/PlugIns/MowDeckWidgets.appex"
     fi
+    # The Apple Watch app and its complication (ADR 0060), inside out: complication, watch app.
+    WATCH="$APP/Watch/MowDeckWatch.app"
+    WATCH_PROFILE=$(find_profile "$MOWDECK_APPLE_TEAM_ID.$BUNDLE_ID.watchkitapp")
+    WATCH_WIDGETS_PROFILE=$(find_profile "$MOWDECK_APPLE_TEAM_ID.$BUNDLE_ID.watchkitapp.Widgets")
+    if [ -d "$WATCH" ] && [ -n "$WATCH_PROFILE" ] && [ -n "$WATCH_WIDGETS_PROFILE" ]; then
+        security cms -D -i "$WATCH_WIDGETS_PROFILE" | plutil -extract Entitlements xml1 -o "$WORK/watch-widgets-entitlements.plist" -
+        cp "$WATCH_WIDGETS_PROFILE" "$WATCH/PlugIns/MowDeckWatchWidgets.appex/embedded.mobileprovision"
+        codesign -f -s "$IDENTITY" --entitlements "$WORK/watch-widgets-entitlements.plist" "$WATCH/PlugIns/MowDeckWatchWidgets.appex"
+        security cms -D -i "$WATCH_PROFILE" | plutil -extract Entitlements xml1 -o "$WORK/watch-entitlements.plist" -
+        cp "$WATCH_PROFILE" "$WATCH/embedded.mobileprovision"
+        codesign -f -s "$IDENTITY" --entitlements "$WORK/watch-entitlements.plist" "$WATCH"
+    fi
     codesign -f -s "$IDENTITY" --entitlements "$WORK/entitlements.plist" "$APP"
     echo "Re-signed with $IDENTITY and $PROFILE"
 fi

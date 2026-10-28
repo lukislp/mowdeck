@@ -7,3 +7,4 @@
 - [Confirming critical actions](step-up.md): why MowDeck asks for your passkey or password again.
 - [Aerial photo under the map](aerial-photo.md): lay a photo of your garden under the mower map, with an opacity slider.
 - [iPhone widgets and the mowing Live Activity](ios-widgets.md): home and lock screen widgets, the map widget and the Live Activity of a job.
+- [Apple Watch](apple-watch.md): the mower's state on the wrist and on the watch face, Start, Pause, Station and the emergency stop.

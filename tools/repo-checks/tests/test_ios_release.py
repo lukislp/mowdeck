@@ -201,6 +201,12 @@ def test_project_settings(check: ModuleType) -> None:
         'TARGETED_DEVICE_FAMILY = "1,2";\n'
         'productType = "com.apple.product-type.app-extension";\n'
         'dstSubfolderSpec = 13;\nname = "Embed Foundation Extensions";\n'
+        f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE}.watchkitapp;\n"
+        f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE}.watchkitapp.Widgets;\n"
+        "B /* MowDeckWatch.app in Embed Watch Content */\n"
+        'dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";\ndstSubfolderSpec = 16;\n'
+        "C /* MowDeckWatchWidgets.appex in Embed Foundation Extensions */\n"
+        "SDKROOT = watchos;\nWATCHOS_DEPLOYMENT_TARGET = 10.0;\nTARGETED_DEVICE_FAMILY = 4;\n"
     )
     assert check.check_project(good) == []
     bad = good.replace('"1,2"', "1") + "SUPPORTS_MACCATALYST = YES;\n"
@@ -211,8 +217,83 @@ def test_project_settings(check: ModuleType) -> None:
     assert len(check.check_project(good.replace("dstSubfolderSpec = 13;", ""))) == 1
     assert len(check.check_project(good.replace("app-extension", "tool"))) == 1
     # ... and so must the widget extension
-    assert len(check.check_project(good.replace(".Widgets;", ".Other;"))) == 1
+    assert len(check.check_project(good.replace(f"{BUNDLE}.Widgets;", f"{BUNDLE}.Other;"))) == 1
     assert len(check.check_project(good.replace("MowDeckWidgets.appex in", "X in"))) == 1
+    # ... and the watch app with its complication (ADR 0060)
+    assert len(check.check_project(good.replace(".watchkitapp;", ".watch;"))) == 1
+    assert len(check.check_project(good.replace("dstSubfolderSpec = 16;", ""))) == 1
+    assert len(check.check_project(good.replace("MowDeckWatchWidgets.appex in", "X in"))) == 1
+    assert len(check.check_project(good.replace("SDKROOT = watchos;", ""))) == 1
+    assert len(check.check_project(good.replace("TARGETED_DEVICE_FAMILY = 4;", ""))) == 1
+
+
+def test_project_file_integrity(check: ModuleType, repo_root: Path) -> None:
+    pbxproj = (repo_root / "apps/mobile/ios/App/App.xcodeproj/project.pbxproj").read_text("utf-8")
+    assert check.check_project_integrity(pbxproj) == []
+    assert check.check_project_files(pbxproj, check.IOS) == []
+    # a build file whose file reference was never added
+    dangling = pbxproj.replace(
+        "/* End PBXBuildFile section */",
+        "\t\tFFFFFFFFFFFFFFFFFFFFFF01 /* X in Sources */ = {isa = PBXBuildFile; "
+        "fileRef = FFFFFFFFFFFFFFFFFFFFFF02 /* X */; };\n/* End PBXBuildFile section */",
+    )
+    assert check.check_project_integrity(dangling) == [
+        "App.xcodeproj: object FFFFFFFFFFFFFFFFFFFFFF02 is referenced but not defined"
+    ]
+    twice = pbxproj.replace(
+        "/* End PBXBuildFile section */",
+        "\t\tA0DECC200000000000000621 /* X in Sources */ = {isa = PBXBuildFile; "
+        "fileRef = A0DECC200000000000000601 /* X */; };\n/* End PBXBuildFile section */",
+    )
+    assert any("defined twice" in p for p in check.check_project_integrity(twice))
+
+
+def test_project_files_resolve_through_the_groups(check: ModuleType, repo_root: Path) -> None:
+    # PR #172 pointed the MowDeckWidgets group and its settings into App/, where nothing is.
+    pbxproj = (repo_root / "apps/mobile/ios/App/App.xcodeproj/project.pbxproj").read_text("utf-8")
+    wrong = pbxproj.replace("path = ../MowDeckWidgets;", "path = MowDeckWidgets;").replace(
+        "INFOPLIST_FILE = ../MowDeckWatch/Info.plist;", "INFOPLIST_FILE = MowDeckWatch/Info.plist;"
+    )
+    problems = check.check_project_files(wrong, check.IOS)
+    assert "App.xcodeproj: group folder apps/mobile/ios/App/MowDeckWidgets is missing" in problems
+    assert "App.xcodeproj: INFOPLIST_FILE MowDeckWatch/Info.plist does not exist" in problems
+    renamed = pbxproj.replace("path = MowerView.swift;", "path = MowerScreen.swift;")
+    assert check.check_project_files(renamed, check.IOS) == [
+        "App.xcodeproj: apps/mobile/ios/MowDeckWatch/MowerScreen.swift is missing"
+    ]
+
+
+def test_watch_plist(check: ModuleType, repo_root: Path) -> None:
+    info = plistlib.loads((repo_root / "apps/mobile/ios/MowDeckWatch/Info.plist").read_bytes())
+    assert check.check_watch_plist(info) == []
+    info["WKCompanionAppBundleIdentifier"] = "app.other"
+    info["WKRunsIndependentlyOfCompanionApp"] = True
+    info["WKWatchKitApp"] = True
+    del info["WKApplication"]
+    assert len(check.check_watch_plist(info)) == 4
+    widgets = plistlib.loads(
+        (repo_root / "apps/mobile/ios/MowDeckWatchWidgets/Info.plist").read_bytes()
+    )
+    assert check.check_widgets_plist(widgets, "MowDeckWatchWidgets") == []
+    del widgets["CFBundleVersion"]
+    assert check.check_widgets_plist(widgets, "MowDeckWatchWidgets") == [
+        "MowDeckWatchWidgets/Info.plist: CFBundleVersion must be $(CURRENT_PROJECT_VERSION)"
+    ]
+
+
+def test_watch_entitlements_hold_no_credential(check: ModuleType) -> None:
+    good = {"com.apple.security.application-groups": ["group.app.mowdeck.mobile"]}
+    assert check.check_watch_entitlements({"w": good}) == []
+    keychain = {
+        **good,
+        "keychain-access-groups": ["$(AppIdentifierPrefix)app.mowdeck.mobile.shared"],
+    }
+    assert check.check_watch_entitlements({"w": keychain}) == [
+        "w: the watch needs no other entitlement, found ['keychain-access-groups']"
+    ]
+    assert check.check_watch_entitlements({"w": {}}) == [
+        "w: the App Group must be exactly [group.app.mowdeck.mobile]"
+    ]
 
 
 def test_extension_plist(check: ModuleType, repo_root: Path) -> None:
@@ -287,6 +368,31 @@ def _built_app(tmp_path: Path, **info: Any) -> Path:
             fmt=plistlib.FMT_BINARY,
         )
     )
+    watch = app / "Watch" / "MowDeckWatch.app"
+    complication = watch / "PlugIns" / "MowDeckWatchWidgets.appex"
+    complication.mkdir(parents=True)
+    (watch / "Info.plist").write_bytes(
+        plistlib.dumps(
+            {
+                "CFBundleIdentifier": f"{BUNDLE}.watchkitapp",
+                "CFBundleShortVersionString": "0.3.12",
+                "CFBundleVersion": "312",
+                "WKCompanionAppBundleIdentifier": BUNDLE,
+            },
+            fmt=plistlib.FMT_BINARY,
+        )
+    )
+    (complication / "Info.plist").write_bytes(
+        plistlib.dumps(
+            {
+                "CFBundleIdentifier": f"{BUNDLE}.watchkitapp.Widgets",
+                "CFBundleShortVersionString": "0.3.12",
+                "CFBundleVersion": "312",
+                "NSExtension": {"NSExtensionPointIdentifier": "com.apple.widgetkit-extension"},
+            },
+            fmt=plistlib.FMT_BINARY,
+        )
+    )
     return app
 
 
@@ -325,6 +431,19 @@ def test_built_app_needs_the_widget_extension(check: ModuleType, tmp_path: Path)
         check.check_app(app, "0.3.12", "312")
     app = _built_app(tmp_path / "again")
     with pytest.raises(check.CheckError, match=r"MowDeckWidgets\.appex: CFBundleVersion"):
+        check.check_app(app, "0.3.12", "999")
+
+
+def test_built_app_needs_the_watch_app(check: ModuleType, tmp_path: Path) -> None:
+    app = _built_app(tmp_path)
+    shutil.rmtree(app / "Watch" / "MowDeckWatch.app" / "PlugIns")
+    with pytest.raises(check.CheckError, match=r"MowDeckWatchWidgets\.appex is missing"):
+        check.check_app(app, "0.3.12", "312")
+    shutil.rmtree(app / "Watch")
+    with pytest.raises(check.CheckError, match="built without the watch app"):
+        check.check_app(app, "0.3.12", "312")
+    app = _built_app(tmp_path / "again")
+    with pytest.raises(check.CheckError, match=r"MowDeckWatch\.app: CFBundleVersion"):
         check.check_app(app, "0.3.12", "999")
 
 
@@ -498,6 +617,36 @@ def test_widgets_profile_is_wired(repo_root: Path) -> None:
     assert "PlugIns/MowDeckWidgets.appex" in release
     assert "$BUNDLE_ID.Widgets" in release
     assert "widgets.plist" in release
+
+
+@pytest.mark.parametrize(
+    ("secret", "bundle"),
+    [
+        ("APPLE_PROFILE_WATCH_BASE64", "$WATCH_BUNDLE_ID"),
+        ("APPLE_PROFILE_WATCH_WIDGETS_BASE64", "$WATCH_WIDGETS_BUNDLE_ID"),
+    ],
+)
+def test_watch_profiles_are_wired(repo_root: Path, secret: str, bundle: str) -> None:
+    # The watch app and its complication are signed with their own profiles (ADR 0060).
+    workflow_text = (repo_root / ".github/workflows/apple-testflight.yml").read_text("utf-8")
+    assert workflow_text.count(f"{secret}: ${{{{ secrets.{secret} }}}}") == 2
+    keychain = (repo_root / "apps/mobile/scripts/apple/keychain.sh").read_text("utf-8")
+    assert re.search(rf"^REQUIRED=\".*\b{secret}\b.*\"$", keychain, re.MULTILINE)
+    assert f"decode {secret} " in keychain
+    release = (repo_root / "apps/mobile/scripts/apple/release-ios.sh").read_text("utf-8")
+    assert f'find-profile "$PROFILE_DIR" --bundle-id "{bundle}"' in release
+    assert "Watch/MowDeckWatch.app" in release
+    assert "PlugIns/MowDeckWatchWidgets.appex" in release
+
+
+def test_watch_profile_platform(signing: ModuleType) -> None:
+    profile = _profile(entitlements={"application-identifier": f"{TEAM}.{BUNDLE}.watchkitapp"})
+    assert signing.check_profile(profile, "p", f"{BUNDLE}.watchkitapp", TEAM, now=NOW) == []
+    watch_only = _profile(
+        Platform=["watchOS"],
+        entitlements={"application-identifier": f"{TEAM}.{BUNDLE}.watchkitapp"},
+    )
+    assert signing.check_profile(watch_only, "p", f"{BUNDLE}.watchkitapp", TEAM, now=NOW) == []
 
 
 def test_workflow_actions_pinned(repo_root: Path) -> None:

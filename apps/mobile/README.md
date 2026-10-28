@@ -8,10 +8,12 @@ The MowDeck apps for iPhone and Android: Capacitor 8 shells that load the web ap
 | `index.html`, `offline.html`, `src/` | The two bundled pages: first-launch server screen and "server not reachable" (built to `www/` by Vite) |
 | `src/shell.ts` | JavaScript side of the shell's own plugin `MowDeckShell` (server address; on iOS the installation id for APNs, kept in the Keychain) |
 | `ios/` | Xcode project (Swift Package Manager). `MainViewController.swift` sets the server, `MowDeckShellPlugin.swift` (also `openAuthSession`), `App.entitlements` (push) |
+| `ios/MowDeckWidgets/`, `ios/MowerWidgetKit/` | The iPhone widgets and the Live Activity ([ADR 0059](../../docs/adr/0059-ios-widgets-and-live-activity.md)) and their shared Swift package (models, presentation, API client, watch protocol; `swift test --package-path apps/mobile/ios/MowerWidgetKit` on a Mac) |
+| `ios/MowDeckWatch/`, `ios/MowDeckWatchWidgets/` | The Apple Watch app and its complication ([ADR 0060](../../docs/adr/0060-apple-watch-app.md)), SwiftUI; the iPhone side is `ios/App/App/WatchRelay.swift` (WatchConnectivity relay with the widget credential) |
 | `android/` | Gradle project. `MainActivity.java`, `ShellSettings.java`, `MowDeckShellPlugin.java` (also `openAuthSession`), `AuthSessionUrls.java`, release signing from the environment |
 | `resources/` | Icon and splash sources (`scripts/make-resources.py`), sizes by `pnpm assets` |
 | `scripts/` | `provision.sh`, `build-ios.sh`, `sign-and-install.sh` (Mac, development signing), `build-android.sh` |
-| `scripts/apple/` | TestFlight from GitHub Actions (`.github/workflows/apple-testflight.yml`): `keychain.sh` (temporary keychain from the `release` environment's secrets), `release-ios.sh` (unsigned build, App Store signature), `upload-testflight.sh` (altool), `entitlements/app-store.plist` (production APNs) |
+| `scripts/apple/` | TestFlight from GitHub Actions (`.github/workflows/apple-testflight.yml`): `keychain.sh` (temporary keychain from the `release` environment's secrets), `release-ios.sh` (unsigned build, App Store signature), `upload-testflight.sh` (altool), `entitlements/` (`app-store.plist` with production APNs, and one file per extension and watch target) |
 
 The web app's side of the bridge (detection, deep links, notifications, badge, APNs registration) is `apps/web/src/lib/native/`; it uses the bridge the shell injects, so the web app has no Capacitor dependency.
 

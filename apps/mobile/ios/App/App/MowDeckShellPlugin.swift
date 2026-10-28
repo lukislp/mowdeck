@@ -28,7 +28,9 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "startLiveActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endLiveActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPendingActivityRegistrations", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "clearPendingActivityRegistration", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "clearPendingActivityRegistration", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getWatchStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "syncWatch", returnType: CAPPluginReturnPromise)
     ]
 
     override public func load() {
@@ -194,6 +196,19 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
             pending.removeValue(forKey: mowerId)
             SharedState.shared.pendingRegistrations = pending
         }
+        call.resolve()
+    }
+
+    // MARK: Apple Watch (ADR 0060)
+
+    /// Whether a watch is paired, has the app, is reachable and shows the complication.
+    @objc func getWatchStatus(_ call: CAPPluginCall) {
+        call.resolve(WatchRelay.shared.status())
+    }
+
+    /// Send the current state to the watch now (after the mower list changed).
+    @objc func syncWatch(_ call: CAPPluginCall) {
+        Task { await WatchRelay.shared.pushState(reason: .configuration) }
         call.resolve()
     }
 

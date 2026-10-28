@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Entitlements of the watch app (app.mowdeck.mobile.watchkitapp) in the TestFlight build (release-ios.sh,
+     ADR 0060): only the App Group, where the watch app keeps the state the iPhone sends and the
+     complication reads it. No Keychain group: the watch holds no credential.
+     ios_release_check.py keeps this equal to the development entitlements; ios_signing.py adds
+     the identity keys of its App Store profile and fails if the profile lacks the App Group. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.mowdeck.mobile</string>
+	</array>
+</dict>
+</plist>

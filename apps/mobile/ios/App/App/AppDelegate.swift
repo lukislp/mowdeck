@@ -8,6 +8,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // The Apple Watch relay (ADR 0060) before anything else: a command from the watch can be
+        // the reason for this (background) launch and is delivered once the session is active.
+        WatchRelay.shared.activate()
         return true
     }
 
@@ -35,13 +38,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     /// The Notifications service sends `content-available` pushes with `kind: widget-reload` when
     /// a mower's state changes. iOS decides how often it wakes the app for them (a few per hour);
-    /// the widgets also refresh on their own schedule. Other background pushes do nothing here.
+    /// the widgets also refresh on their own schedule. The same push sends the new state to the
+    /// Apple Watch and its complication (ADR 0060). Other background pushes do nothing here.
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         if userInfo["kind"] as? String == "widget-reload" {
             WidgetCenter.shared.reloadAllTimelines()
-            completionHandler(.newData)
+            Task { @MainActor in
+                await WatchRelay.shared.pushState(reason: .serverPush)
+                completionHandler(.newData)
+            }
         } else {
             completionHandler(.noData)
         }

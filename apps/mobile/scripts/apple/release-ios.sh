@@ -34,6 +34,10 @@ EXT_BUNDLE_ID="$BUNDLE_ID.NotificationService"
 EXT_DECLARED="$MOBILE_DIR/scripts/apple/entitlements/notification-service.plist"
 WIDGETS_BUNDLE_ID="$BUNDLE_ID.Widgets"
 WIDGETS_DECLARED="$MOBILE_DIR/scripts/apple/entitlements/widgets.plist"
+WATCH_BUNDLE_ID="$BUNDLE_ID.watchkitapp"
+WATCH_DECLARED="$MOBILE_DIR/scripts/apple/entitlements/watch.plist"
+WATCH_WIDGETS_BUNDLE_ID="$WATCH_BUNDLE_ID.Widgets"
+WATCH_WIDGETS_DECLARED="$MOBILE_DIR/scripts/apple/entitlements/watch-widgets.plist"
 DERIVED="$BUILD_DIR/derived-appstore"
 
 require_mac
@@ -56,8 +60,19 @@ $SIGNING entitlements --declared "$EXT_DECLARED" --profile "$EXT_PROFILE" --out 
 WIDGETS_PROFILE="$($SIGNING find-profile "$PROFILE_DIR" --bundle-id "$WIDGETS_BUNDLE_ID" --team "$APPLE_TEAM_ID")"
 $SIGNING check-profile "$WIDGETS_PROFILE" --bundle-id "$WIDGETS_BUNDLE_ID" --team "$APPLE_TEAM_ID"
 $SIGNING entitlements --declared "$WIDGETS_DECLARED" --profile "$WIDGETS_PROFILE" --out "$WORK/widgets-entitlements.plist"
+# The Apple Watch app and its complication (ADR 0060): two more App IDs and profiles, with the
+# App Group only (the watch holds no credential).
+WATCH_PROFILE="$($SIGNING find-profile "$PROFILE_DIR" --bundle-id "$WATCH_BUNDLE_ID" --team "$APPLE_TEAM_ID")"
+$SIGNING check-profile "$WATCH_PROFILE" --bundle-id "$WATCH_BUNDLE_ID" --team "$APPLE_TEAM_ID"
+$SIGNING entitlements --declared "$WATCH_DECLARED" --profile "$WATCH_PROFILE" --out "$WORK/watch-entitlements.plist"
+WATCH_WIDGETS_PROFILE="$($SIGNING find-profile "$PROFILE_DIR" --bundle-id "$WATCH_WIDGETS_BUNDLE_ID" --team "$APPLE_TEAM_ID")"
+$SIGNING check-profile "$WATCH_WIDGETS_PROFILE" --bundle-id "$WATCH_WIDGETS_BUNDLE_ID" --team "$APPLE_TEAM_ID"
+$SIGNING entitlements --declared "$WATCH_WIDGETS_DECLARED" --profile "$WATCH_WIDGETS_PROFILE" --out "$WORK/watch-widgets-entitlements.plist"
 
 # --- 2. Bundled pages, cap sync, unsigned Release build for devices ---
+# The App scheme also builds the watch app (ADR 0060), which needs the watchOS SDK in this Xcode.
+xcodebuild -showsdks | grep -q watchos \
+    || fail "this Xcode has no watchOS SDK: the watch app cannot be built (install the watchOS platform or pick a runner image that has it)"
 sync_platform ios
 rm -rf "$DERIVED"
 xcodebuild -project "$XCODE_PROJECT" -scheme App -configuration Release \
@@ -95,6 +110,27 @@ cp "$WIDGETS_PROFILE" "$WIDGETS/embedded.mobileprovision"
 codesign -f -s "$DISTRIBUTION_IDENTITY" --keychain "$SIGNING_KEYCHAIN" \
     --entitlements "$WORK/widgets-entitlements.plist" --generate-entitlement-der "$WIDGETS"
 codesign --verify --strict --verbose=2 "$WIDGETS"
+# The watch app (built for watchOS as a dependency of the App scheme) sits in App.app/Watch,
+# its complication in the watch app's PlugIns; signed inside out like the rest.
+WATCH="$APP/Watch/MowDeckWatch.app"
+[ -d "$WATCH" ] || fail "the app has no Watch/MowDeckWatch.app"
+WATCH_WIDGETS="$WATCH/PlugIns/MowDeckWatchWidgets.appex"
+[ -d "$WATCH_WIDGETS" ] || fail "the watch app has no PlugIns/MowDeckWatchWidgets.appex"
+cp "$WATCH_WIDGETS_PROFILE" "$WATCH_WIDGETS/embedded.mobileprovision"
+codesign -f -s "$DISTRIBUTION_IDENTITY" --keychain "$SIGNING_KEYCHAIN" \
+    --entitlements "$WORK/watch-widgets-entitlements.plist" --generate-entitlement-der "$WATCH_WIDGETS"
+codesign --verify --strict --verbose=2 "$WATCH_WIDGETS"
+if [ -d "$WATCH/Frameworks" ]; then
+    find "$WATCH/Frameworks" -maxdepth 1 \( -name "*.framework" -o -name "*.dylib" \) -print0 \
+        | while IFS= read -r -d '' f; do
+            codesign -f -s "$DISTRIBUTION_IDENTITY" --keychain "$SIGNING_KEYCHAIN" "$f"
+            echo "Signed watch $(basename "$f")"
+        done
+fi
+cp "$WATCH_PROFILE" "$WATCH/embedded.mobileprovision"
+codesign -f -s "$DISTRIBUTION_IDENTITY" --keychain "$SIGNING_KEYCHAIN" \
+    --entitlements "$WORK/watch-entitlements.plist" --generate-entitlement-der "$WATCH"
+codesign --verify --deep --strict --verbose=2 "$WATCH"
 codesign -f -s "$DISTRIBUTION_IDENTITY" --keychain "$SIGNING_KEYCHAIN" \
     --entitlements "$WORK/entitlements.plist" --generate-entitlement-der "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
@@ -115,6 +151,15 @@ plutil -extract com.apple.security.application-groups.0 raw -o - "$WORK/widgets-
     | grep -qx group.app.mowdeck.mobile \
     || fail "the widget extension is not signed with the App Group group.app.mowdeck.mobile"
 echo "Signed $WIDGETS_BUNDLE_ID"
+for bundle in "$WATCH_WIDGETS" "$WATCH"; do
+    codesign -d --entitlements - --xml "$bundle" > "$WORK/watch-final.plist" 2> /dev/null
+    plutil -extract get-task-allow raw -o - "$WORK/watch-final.plist" | grep -qx false \
+        || fail "$(basename "$bundle") is signed with get-task-allow: not an App Store signature"
+    plutil -extract com.apple.security.application-groups.0 raw -o - "$WORK/watch-final.plist" \
+        | grep -qx group.app.mowdeck.mobile \
+        || fail "$(basename "$bundle") is not signed with the App Group group.app.mowdeck.mobile"
+done
+echo "Signed $WATCH_BUNDLE_ID and $WATCH_WIDGETS_BUNDLE_ID"
 echo "Signed $BUNDLE_ID with entitlements: $(plutil -convert json -o - "$WORK/final.plist")"
 
 # --- 4. The .ipa ---

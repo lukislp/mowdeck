@@ -24,7 +24,7 @@ What it does, in order:
 1. Job `resolve` (ubuntu): the tag (empty = the latest GitHub release) must be `vX.Y.Z` with a GitHub release and its commit on `main`; job `testflight-ios` (`macos-latest`) checks out exactly that commit.
 2. The secrets are all set (`apps/mobile/scripts/apple/keychain.sh check`), then `tools/repo-checks/scripts/ios_release_check.py source`: the 1024 px App Store icon without transparency, `ITSAppUsesNonExemptEncryption = false`, the iPad orientations, iPhone and iPad as device families, and the App Store entitlements (`apps/mobile/scripts/apple/entitlements/app-store.plist`) mirroring `App.entitlements` with `aps-environment = production`. The same checks run in the CI job `python` on every pull request, so a problem App Store Connect would only report after the upload fails the pull request instead.
 3. `keychain.sh setup`: a temporary keychain with the Apple Distribution certificate (plus Apple's pinned WWDR intermediate), the App Store profile and the App Store Connect API key, all below `RUNNER_TEMP`; `keychain.sh cleanup` removes them in an `always()` step.
-4. `apps/mobile/scripts/apple/release-ios.sh`: the profile must be an App Store profile for `app.mowdeck.mobile` of the team and grant every entitlement (the same for the notification extension's own profile) (`ios_signing.py` names the capability to enable otherwise); then `cap sync ios` (only the `mobile` package and its workspace dependencies are installed, `pnpm install --filter mobile...`), an unsigned `xcodebuild build`, `ios_release_check.py app` (versions, compiled icon, no Agora file or reference in the bundle) and `codesign` of the frameworks, the notification extension (`PlugIns/NotificationService.appex`, its own profile) and the app with the profile embedded. Building unsigned and signing afterwards keeps manual signing settings away from the Swift package targets.
+4. `apps/mobile/scripts/apple/release-ios.sh`: the profile must be an App Store profile for `app.mowdeck.mobile` of the team and grant every entitlement (the same for the notification extension's own profile) (`ios_signing.py` names the capability to enable otherwise); then `cap sync ios` (only the `mobile` package and its workspace dependencies are installed, `pnpm install --filter mobile...`), an unsigned `xcodebuild build`, `ios_release_check.py app` (versions, compiled icon, no Agora file or reference in the bundle) and `codesign` of the frameworks, the notification extension (`PlugIns/NotificationService.appex`, its own profile), the widget extension, the watch complication and the watch app (`Watch/MowDeckWatch.app`, two more profiles) and the app with the profile embedded. The unsigned build of the `App` scheme also builds the watch targets for watchOS, since the app embeds the watch app. Building unsigned and signing afterwards keeps manual signing settings away from the Swift package targets.
 5. `apps/mobile/scripts/apple/upload-testflight.sh`: `xcrun altool --upload-app` with the API key, at most 30 minutes, Apple's error messages as annotations.
 
 **Version and build number**: `CFBundleShortVersionString` is the release version, `CFBundleVersion` the Android `versionCode` formula `major * 10000 + minor * 100 + patch` (v0.3.12 -> `312`), so build numbers only grow. App Store Connect refuses a build number twice: to upload the same tag again, run the workflow with `rebuild` = 1 (then 2, ...), which uploads `312.1`.
@@ -40,6 +40,8 @@ GitHub Environment `release` of the repository (required reviewer: the owner; de
 | `APPLE_PROFILE_IOS_BASE64` | App Store provisioning profile for `app.mowdeck.mobile` (Distribution -> App Store Connect), base64. A development profile from `provision.sh` does not work |
 | `APPLE_PROFILE_IOS_NOTIFICATION_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.NotificationService` (the extension that adds the camera photo to error and theft notifications, [ADR 0056](../adr/0056-camera-photo-in-push-notifications.md)), base64. See [Camera photo in notifications](#camera-photo-in-notifications) for the one-time Apple portal steps |
 | `APPLE_PROFILE_IOS_WIDGETS_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.Widgets` (the widget extension with the Live Activity, [ADR 0059](../adr/0059-ios-widgets-and-live-activity.md)), base64. See [Widgets and the Live Activity](#widgets-and-the-live-activity) for the one-time Apple portal steps |
+| `APPLE_PROFILE_WATCH_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.watchkitapp` (the Apple Watch app, [ADR 0060](../adr/0060-apple-watch-app.md)), base64. See [Apple Watch](#apple-watch) for the one-time Apple portal steps |
+| `APPLE_PROFILE_WATCH_WIDGETS_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.watchkitapp.Widgets` (the watch complication), base64 |
 | `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` | App Store Connect API key (Users and Access -> Integrations, role Developer or higher), base64 of the `.p8` |
 
 Optional variable `APPLE_RELEASE_EGRESS_POLICY=audit`: the job's network egress is blocked except for an allow-list (Apple's upload and signing hosts, GitHub, the npm registry). If Apple or GitHub move a host, a step fails or altool hangs until its time limit; set the variable, re-run the job, read the new host from the Harden Runner insights, add it to `allowed-endpoints` and delete the variable again.
@@ -175,6 +177,45 @@ Installing from the Mac (`build-ios.sh`) uses automatic signing and creates the 
 | Widget shows old data | iOS decides when to reload (the budget is a few dozen a day); the data refreshes with every reload and silent push, in the app via the widget gallery |
 | No Live Activity | Live Activities are off for MowDeck (Settings -> MowDeck), the push-to-start token is not registered yet (open the app once with widgets on), or the build predates the extension |
 
+## Apple Watch
+
+A native watch app with the mower's state, Start, Pause, Station and the emergency stop, and a complication with battery and state ([ADR 0060](../adr/0060-apple-watch-app.md), [user guide](../guides/apple-watch.md)). watchOS 10 or newer.
+
+**How it works.** The watch holds no credential and never calls the server: it sends every command to the iPhone app over WatchConnectivity, and the iPhone runs it natively with the widget credential of this iPhone (see [Widgets and the Live Activity](#widgets-and-the-live-activity)). So widgets must be on in the iPhone app, the iPhone must be near the watch, and the iPhone must reach the server (LAN or VPN). Nothing to configure on the server; the state the watch shows comes with the same silent reload pushes as the widgets.
+
+**One-time Apple steps (before the first TestFlight build with the watch app)**
+
+The App Group `group.app.mowdeck.mobile` from the widget steps must exist.
+
+1. developer.apple.com -> Certificates, Identifiers & Profiles -> Identifiers -> "+" -> **App IDs** -> **App** -> description "MowDeck Watch", Bundle ID **Explicit** **`app.mowdeck.mobile.watchkitapp`**, capability **App Groups** (Configure -> `group.app.mowdeck.mobile`). Nothing else. Register.
+2. Identifiers -> "+" -> App IDs -> App -> description "MowDeck Watch Complication", Bundle ID **Explicit** **`app.mowdeck.mobile.watchkitapp.Widgets`**, capability **App Groups** with `group.app.mowdeck.mobile`. Register.
+3. Profiles -> "+" -> **Distribution: App Store Connect** -> the App ID `app.mowdeck.mobile.watchkitapp` -> the same Apple Distribution certificate as the app -> name "MowDeck Watch AppStore" -> Generate -> Download.
+4. The same for `app.mowdeck.mobile.watchkitapp.Widgets` -> name "MowDeck Watch Complication AppStore" -> Download.
+5. Base64 of each profile, in PowerShell (copies to the clipboard):
+
+    ```powershell
+    [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\Downloads\MowDeck_Watch_AppStore.mobileprovision")) | Set-Clipboard
+    ```
+
+    Paste it as the secret **`APPLE_PROFILE_WATCH_BASE64`** in the GitHub Environment `release` (Settings -> Environments -> release -> Add environment secret). Then the same for `MowDeck_Watch_Complication_AppStore.mobileprovision` as **`APPLE_PROFILE_WATCH_WIDGETS_BASE64`**. (macOS: `base64 -i file | tr -d '\n' | pbcopy`.)
+6. Run **Apple TestFlight** as usual. The job checks first that both secrets are set and that each profile is an App Store profile for its bundle id with the App Group ("does not grant: com.apple.security.application-groups" means step 1 or 2 lacks the App Group: fix it, then regenerate and download the profile again). **This is the first time the watch targets are compiled** (no macOS CI): expect to read the log of the first run and send compile errors over.
+7. On the iPhone: install the TestFlight build, then the **Watch** app on the iPhone -> Available Apps -> **MowDeck** -> Install. In MowDeck on the iPhone: Settings -> This app -> widgets on; the panel shows "Apple Watch: ready".
+
+App Store Connect needs no separate app record: the watch app ships inside the iPhone app. For an App Store release (not TestFlight) it would need watch screenshots.
+
+Installing from the Mac (`build-ios.sh`) uses automatic signing, which creates the two App IDs and development profiles itself; `sign-and-install.sh` with `MOWDECK_RESIGN=1` re-signs the watch app and its complication when their profiles exist.
+
+**Try it on the watch (safely).** With the mower docked: open MowDeck on the watch, check state and battery against the app. Turn the iPhone's Bluetooth and Wi-Fi off for a moment: the watch says "iPhone nicht erreichbar" and its buttons wait (the emergency stop stays). **Only press Start when the lawn is clear and the mower may mow**; then Pause, Station, and the emergency stop (confirm) while the job runs, and compare with the mower's command history in the app. Add the complication to a face and watch it follow the state.
+
+| Symptom | Likely cause |
+| --- | --- |
+| Watch: "Auf dem iPhone einrichten" | Widgets are off on the iPhone, or the widget credential expired or was revoked: turn widgets on again |
+| Watch: "iPhone nicht erreichbar" | The iPhone is out of range, in flight mode, or the MowDeck iPhone app was swiped away (open it once) |
+| Watch: "Das iPhone erreicht den MowDeck-Server nicht" | The iPhone is away from home without the VPN |
+| Watch: "Keine Antwort vom iPhone" | The iPhone did not answer in time; the command may have been sent: check the state |
+| Complication shows old values | It greys out after 15 minutes without a new state; watchOS allows about 50 complication updates a day, open the watch app to refresh |
+| MowDeck missing under Available Apps | The TestFlight build predates the watch app, or the watch runs watchOS 9 or older |
+
 ## Android
 
 ### Install the APK
@@ -233,6 +274,7 @@ On Windows `@capacitor/assets` can fail with `EBUSY` on `mipmap-anydpi-v26/ic_la
 | Apple Push on, but nothing arrives in the background | Server without APNs key (the panel says so), `APNS_ENVIRONMENT` does not match the build (`development` for a Mac-installed build, `production` for TestFlight), or a different bundle id on server and app. The notifications log names Apple's reason (`BadDeviceToken`, `TopicDisallowed`, ...). |
 | Notification arrives without the picture | The build has no extension (older than ADR 0056), `NOTIFICATIONS_APP_URL` is empty or not reachable from the phone over HTTPS, the photo was not ready within 14 s, or the mower had no camera frame (Notifications log: `no photo for the notification`, `the gateway delivered no photo`). The inbox shows the picture when it exists. |
 | TestFlight job: `APPLE_PROFILE_IOS_NOTIFICATION_BASE64` missing, or no profile for `...NotificationService` | The extension's App ID and profile are not set up: see [Camera photo in notifications](#camera-photo-in-notifications). |
+| TestFlight job: `APPLE_PROFILE_WATCH_BASE64` or `APPLE_PROFILE_WATCH_WIDGETS_BASE64` missing, or no profile for `...watchkitapp` | The watch App IDs and profiles are not set up: see [Apple Watch](#apple-watch). |
 | `errSecInternalComponent` over SSH | `~/.mowdeck-sign-pass` missing or wrong. |
 | `sign-and-install.sh`: no iPhone found | Unlock the phone; pair by USB once; Wi-Fi install needs the same network. |
 | iPhone: the top bar can be dragged under the status bar, or the page bounces | A build from before the edge-to-edge layout (`ios.contentInset: 'always'`, page bounce on). Rebuild with `build-ios.sh` (it runs `cap sync`, which carries `contentInset: 'never'` into the Xcode project) and install again. |
@@ -242,4 +284,4 @@ On Windows `@capacitor/assets` can fail with `EBUSY` on `mipmap-anydpi-v26/ic_la
 
 ## What has been verified where
 
-The configuration, scripts and native code were written against the Capacitor 8.5 sources and are covered by unit tests (the web app's bridge module, the first-launch checks, the APNs channel with a fake Apple endpoint). Building the iOS app, installing it with `devicectl`, APNs delivery to a phone, the passkey sign-in through `ASWebAuthenticationSession` and the Custom Tab, the Android Gradle build and the remote-content bridge on real devices are verified on the owner's Mac and phones, not in CI. The TestFlight workflow's project (including the notification extension target), profile and entitlement checks are unit-tested on every pull request, but no CI job compiles the Swift code of the app or the extension (only the TestFlight run does; `swift test --package-path apps/mobile/ios/NotificationServiceKit` runs the extension's decision tests on a Mac); the macOS build, the App Store signature and the upload are proven by its runs.
+The configuration, scripts and native code were written against the Capacitor 8.5 sources and are covered by unit tests (the web app's bridge module, the first-launch checks, the APNs channel with a fake Apple endpoint). Building the iOS app, installing it with `devicectl`, APNs delivery to a phone, the passkey sign-in through `ASWebAuthenticationSession` and the Custom Tab, the Android Gradle build and the remote-content bridge on real devices are verified on the owner's Mac and phones, not in CI. The TestFlight workflow's project (including the notification extension target), profile and entitlement checks are unit-tested on every pull request, but no CI job compiles the Swift code of the app, the extensions or the watch app (only the TestFlight run does; the project file's object references and file paths are checked statically; `swift test --package-path apps/mobile/ios/NotificationServiceKit` runs the extension's decision tests on a Mac); the macOS build, the App Store signature and the upload are proven by its runs.

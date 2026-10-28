@@ -31,6 +31,19 @@
 		A0DECC100000000000000222 /* MowDeckWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000113 /* MowDeckWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A0DECC100000000000000230 /* MowerWidgetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A0DECC100000000000000501 /* MowerWidgetCore */; };
 		A0DECC100000000000000231 /* MowerWidgetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A0DECC100000000000000501 /* MowerWidgetCore */; };
+		A0DECC200000000000000621 /* MowDeckWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000601 /* MowDeckWatchApp.swift */; };
+		A0DECC200000000000000622 /* WatchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000602 /* WatchModel.swift */; };
+		A0DECC200000000000000623 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000603 /* ContentView.swift */; };
+		A0DECC200000000000000624 /* MowerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000604 /* MowerView.swift */; };
+		A0DECC200000000000000625 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000605 /* Assets.xcassets */; };
+		A0DECC200000000000000626 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000606 /* Localizable.xcstrings */; };
+		A0DECC200000000000000627 /* MowerWidgetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A0DECC200000000000000690 /* MowerWidgetCore */; };
+		A0DECC200000000000000628 /* MowDeckWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000614 /* MowDeckWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A0DECC200000000000000631 /* MowDeckWatchWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000611 /* MowDeckWatchWidgets.swift */; };
+		A0DECC200000000000000632 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000606 /* Localizable.xcstrings */; };
+		A0DECC200000000000000633 /* MowerWidgetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A0DECC200000000000000691 /* MowerWidgetCore */; };
+		A0DECC200000000000000634 /* MowDeckWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000609 /* MowDeckWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A0DECC200000000000000635 /* WatchRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000615 /* WatchRelay.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +61,20 @@
 			remoteGlobalIDString = A0DECC100000000000000400;
 			remoteInfo = MowDeckWidgets;
 		};
+		A0DECC200000000000000670 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A0DECC200000000000000660;
+			remoteInfo = MowDeckWatchWidgets;
+		};
+		A0DECC200000000000000672 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A0DECC200000000000000650;
+			remoteInfo = MowDeckWatch;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -61,6 +88,28 @@
 				A0DECC100000000000000222 /* MowDeckWidgets.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0DECC200000000000000654 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A0DECC200000000000000628 /* MowDeckWatchWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0DECC200000000000000680 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				A0DECC200000000000000634 /* MowDeckWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -94,6 +143,20 @@
 		A0DECC100000000000000112 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		A0DECC100000000000000113 /* MowDeckWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MowDeckWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0DECC100000000000000114 /* WidgetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBridge.swift; sourceTree = "<group>"; };
+		A0DECC200000000000000601 /* MowDeckWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MowDeckWatchApp.swift; sourceTree = "<group>"; };
+		A0DECC200000000000000602 /* WatchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchModel.swift; sourceTree = "<group>"; };
+		A0DECC200000000000000603 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A0DECC200000000000000604 /* MowerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MowerView.swift; sourceTree = "<group>"; };
+		A0DECC200000000000000605 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A0DECC200000000000000606 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		A0DECC200000000000000607 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A0DECC200000000000000608 /* MowDeckWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MowDeckWatch.entitlements; sourceTree = "<group>"; };
+		A0DECC200000000000000609 /* MowDeckWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MowDeckWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0DECC200000000000000611 /* MowDeckWatchWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MowDeckWatchWidgets.swift; sourceTree = "<group>"; };
+		A0DECC200000000000000612 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A0DECC200000000000000613 /* MowDeckWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MowDeckWatchWidgets.entitlements; sourceTree = "<group>"; };
+		A0DECC200000000000000614 /* MowDeckWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MowDeckWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0DECC200000000000000615 /* WatchRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRelay.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +184,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A0DECC200000000000000652 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC200000000000000627 /* MowerWidgetCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0DECC200000000000000662 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC200000000000000633 /* MowerWidgetCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -131,6 +210,8 @@
 				504EC3061FED79650016851F /* App */,
 				A0DECC0000000000000000C1 /* NotificationService */,
 				A0DECC100000000000000300 /* MowDeckWidgets */,
+				A0DECC200000000000000640 /* MowDeckWatch */,
+				A0DECC200000000000000641 /* MowDeckWatchWidgets */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -141,6 +222,8 @@
 				504EC3041FED79650016851F /* App.app */,
 				A0DECC0000000000000000B3 /* NotificationService.appex */,
 				A0DECC100000000000000113 /* MowDeckWidgets.appex */,
+				A0DECC200000000000000609 /* MowDeckWatch.app */,
+				A0DECC200000000000000614 /* MowDeckWatchWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -153,6 +236,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				A0DECC000000000000000012 /* MowDeckShellPlugin.swift */,
 				A0DECC100000000000000114 /* WidgetBridge.swift */,
+				A0DECC200000000000000615 /* WatchRelay.swift */,
 				A0DECC000000000000000011 /* MainViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
@@ -187,7 +271,32 @@
 				A0DECC100000000000000110 /* Info.plist */,
 				A0DECC100000000000000111 /* MowDeckWidgets.entitlements */,
 			);
-			path = MowDeckWidgets;
+			path = ../MowDeckWidgets;
+			sourceTree = "<group>";
+		};
+		A0DECC200000000000000640 /* MowDeckWatch */ = {
+			isa = PBXGroup;
+			children = (
+				A0DECC200000000000000601 /* MowDeckWatchApp.swift */,
+				A0DECC200000000000000602 /* WatchModel.swift */,
+				A0DECC200000000000000603 /* ContentView.swift */,
+				A0DECC200000000000000604 /* MowerView.swift */,
+				A0DECC200000000000000605 /* Assets.xcassets */,
+				A0DECC200000000000000606 /* Localizable.xcstrings */,
+				A0DECC200000000000000607 /* Info.plist */,
+				A0DECC200000000000000608 /* MowDeckWatch.entitlements */,
+			);
+			path = ../MowDeckWatch;
+			sourceTree = "<group>";
+		};
+		A0DECC200000000000000641 /* MowDeckWatchWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				A0DECC200000000000000611 /* MowDeckWatchWidgets.swift */,
+				A0DECC200000000000000612 /* Info.plist */,
+				A0DECC200000000000000613 /* MowDeckWatchWidgets.entitlements */,
+			);
+			path = ../MowDeckWatchWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -201,12 +310,14 @@
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
 				A0DECC0000000000000000E1 /* Embed Foundation Extensions */,
+				A0DECC200000000000000680 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				A0DECC0000000000000000D2 /* PBXTargetDependency */,
 				A0DECC100000000000000421 /* PBXTargetDependency */,
+				A0DECC200000000000000673 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -254,6 +365,48 @@
 			productReference = A0DECC100000000000000113 /* MowDeckWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A0DECC200000000000000650 /* MowDeckWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A0DECC200000000000000655 /* Build configuration list for PBXNativeTarget "MowDeckWatch" */;
+			buildPhases = (
+				A0DECC200000000000000651 /* Sources */,
+				A0DECC200000000000000652 /* Frameworks */,
+				A0DECC200000000000000653 /* Resources */,
+				A0DECC200000000000000654 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A0DECC200000000000000671 /* PBXTargetDependency */,
+			);
+			name = MowDeckWatch;
+			packageProductDependencies = (
+				A0DECC200000000000000690 /* MowerWidgetCore */,
+			);
+			productName = MowDeckWatch;
+			productReference = A0DECC200000000000000609 /* MowDeckWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A0DECC200000000000000660 /* MowDeckWatchWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A0DECC200000000000000665 /* Build configuration list for PBXNativeTarget "MowDeckWatchWidgets" */;
+			buildPhases = (
+				A0DECC200000000000000661 /* Sources */,
+				A0DECC200000000000000662 /* Frameworks */,
+				A0DECC200000000000000663 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MowDeckWatchWidgets;
+			packageProductDependencies = (
+				A0DECC200000000000000691 /* MowerWidgetCore */,
+			);
+			productName = MowDeckWatchWidgets;
+			productReference = A0DECC200000000000000614 /* MowDeckWatchWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -273,6 +426,14 @@
 						ProvisioningStyle = Automatic;
 					};
 					A0DECC100000000000000400 = {
+						CreatedOnToolsVersion = 15.0;
+						ProvisioningStyle = Automatic;
+					};
+					A0DECC200000000000000650 = {
+						CreatedOnToolsVersion = 15.0;
+						ProvisioningStyle = Automatic;
+					};
+					A0DECC200000000000000660 = {
 						CreatedOnToolsVersion = 15.0;
 						ProvisioningStyle = Automatic;
 					};
@@ -299,6 +460,8 @@
 				504EC3031FED79650016851F /* App */,
 				A0DECC0000000000000000F1 /* NotificationService */,
 				A0DECC100000000000000400 /* MowDeckWidgets */,
+				A0DECC200000000000000650 /* MowDeckWatch */,
+				A0DECC200000000000000660 /* MowDeckWatchWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -332,6 +495,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A0DECC200000000000000653 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC200000000000000625 /* Assets.xcassets in Resources */,
+				A0DECC200000000000000626 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0DECC200000000000000663 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC200000000000000632 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -344,6 +524,7 @@
 				A0DECC000000000000000002 /* MowDeckShellPlugin.swift in Sources */,
 				A0DECC000000000000000001 /* MainViewController.swift in Sources */,
 				A0DECC100000000000000221 /* WidgetBridge.swift in Sources */,
+				A0DECC200000000000000635 /* WatchRelay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -368,6 +549,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A0DECC200000000000000651 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC200000000000000621 /* MowDeckWatchApp.swift in Sources */,
+				A0DECC200000000000000622 /* WatchModel.swift in Sources */,
+				A0DECC200000000000000623 /* ContentView.swift in Sources */,
+				A0DECC200000000000000624 /* MowerView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0DECC200000000000000661 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC200000000000000631 /* MowDeckWatchWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -380,6 +580,16 @@
 			isa = PBXTargetDependency;
 			target = A0DECC100000000000000400 /* MowDeckWidgets */;
 			targetProxy = A0DECC100000000000000420 /* PBXContainerItemProxy */;
+		};
+		A0DECC200000000000000671 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A0DECC200000000000000660 /* MowDeckWatchWidgets */;
+			targetProxy = A0DECC200000000000000670 /* PBXContainerItemProxy */;
+		};
+		A0DECC200000000000000673 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A0DECC200000000000000650 /* MowDeckWatch */;
+			targetProxy = A0DECC200000000000000672 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -604,10 +814,10 @@
 		A0DECC100000000000000431 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = MowDeckWidgets/MowDeckWidgets.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ../MowDeckWidgets/MowDeckWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				INFOPLIST_FILE = MowDeckWidgets/Info.plist;
+				INFOPLIST_FILE = ../MowDeckWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -627,10 +837,10 @@
 		A0DECC100000000000000432 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = MowDeckWidgets/MowDeckWidgets.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ../MowDeckWidgets/MowDeckWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				INFOPLIST_FILE = MowDeckWidgets/Info.plist;
+				INFOPLIST_FILE = ../MowDeckWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -643,6 +853,104 @@
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A0DECC200000000000000656 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ../MowDeckWatch/MowDeckWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = ../MowDeckWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mowdeck.mobile.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		A0DECC200000000000000657 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ../MowDeckWatch/MowDeckWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = ../MowDeckWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mowdeck.mobile.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		A0DECC200000000000000666 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ../MowDeckWatchWidgets/MowDeckWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = ../MowDeckWatchWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mowdeck.mobile.watchkitapp.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		A0DECC200000000000000667 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ../MowDeckWatchWidgets/MowDeckWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = ../MowDeckWatchWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mowdeck.mobile.watchkitapp.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
@@ -685,6 +993,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A0DECC200000000000000655 /* Build configuration list for PBXNativeTarget "MowDeckWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A0DECC200000000000000656 /* Debug */,
+				A0DECC200000000000000657 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A0DECC200000000000000665 /* Build configuration list for PBXNativeTarget "MowDeckWatchWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A0DECC200000000000000666 /* Debug */,
+				A0DECC200000000000000667 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -705,6 +1031,16 @@
 			productName = "CapApp-SPM";
 		};
 		A0DECC100000000000000501 /* MowerWidgetCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0DECC100000000000000500 /* XCLocalSwiftPackageReference "../MowerWidgetKit" */;
+			productName = MowerWidgetCore;
+		};
+		A0DECC200000000000000690 /* MowerWidgetCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0DECC100000000000000500 /* XCLocalSwiftPackageReference "../MowerWidgetKit" */;
+			productName = MowerWidgetCore;
+		};
+		A0DECC200000000000000691 /* MowerWidgetCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A0DECC100000000000000500 /* XCLocalSwiftPackageReference "../MowerWidgetKit" */;
 			productName = MowerWidgetCore;

@@ -75,7 +75,8 @@ public enum PushToken {
     }
 }
 
-#if canImport(ActivityKit)
+// iOS only: the watch targets link this package too (ADR 0060) and have no use for ActivityKit.
+#if canImport(ActivityKit) && os(iOS)
 import ActivityKit
 
 /// The Live Activity of a mowing job (Lock Screen and Dynamic Island). The type name is part of

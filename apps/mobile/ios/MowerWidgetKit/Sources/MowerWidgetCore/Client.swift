@@ -195,6 +195,13 @@ public actor MowDeckClient {
         try await send(Commands.dock, to: mowerId)
     }
 
+    /// Stop blades and wheels at once (`emergency_stop`, sent with emergency priority by Fleet).
+    /// It needs only `can_emergency_stop`, which equals `can_view`, and is never step-up
+    /// protected: whoever can see a mower can always stop it (ADR 0057, ADR 0060).
+    public func emergencyStop(mowerId: String) async throws {
+        try await send(Commands.emergencyStop, to: mowerId)
+    }
+
     private func send(_ command: [String: JSONValue], to mowerId: String) async throws {
         let body = try JSONEncoder().encode(["command": JSONValue.object(command)])
         _ = try await call("POST", "/api/v1/fleet/mowers/\(mowerId)/commands", body: body)
@@ -245,6 +252,7 @@ public enum Commands {
 
     public static let pause: [String: JSONValue] = ["kind": .string("pause_mow")]
     public static let resume: [String: JSONValue] = ["kind": .string("resume_mow")]
+    public static let emergencyStop: [String: JSONValue] = ["kind": .string("emergency_stop")]
     public static let dock: [String: JSONValue] = [
         "kind": .string("return_to_dock"), "end_job": .bool(false),
     ]
