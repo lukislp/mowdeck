@@ -96,7 +96,8 @@ test('the sheet appears once after a version change', async ({ browser }) => {
   expect(await page.evaluate((key) => localStorage.getItem(key), SEEN_KEY)).toBe('0.30.0');
 
   await page.reload();
-  await expect(page.getByTestId('mower-list').or(page.getByRole('main'))).toBeVisible();
+  // The user has a mower (for the mower-page check): the list and the main region both match.
+  await expect(page.getByTestId('mower-list').or(page.getByRole('main')).first()).toBeVisible();
   await page.waitForTimeout(1000);
   await expect(page.getByTestId('whats-new-sheet')).toBeHidden();
   await context.close();
