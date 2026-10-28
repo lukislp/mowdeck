@@ -80,7 +80,7 @@ def test_relying_party_from_the_public_url() -> None:
     )
     for bad, rp_id in (
         ("http://mowdeck.example.org", ""),
-        ("https://192.168.5.10", ""),
+        ("https://192.0.2.10", ""),
         ("https://[::1]", ""),
         ("ftp://mowdeck.example.org", ""),
         ("https://user:pw@mowdeck.example.org", ""),
