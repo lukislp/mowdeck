@@ -7,6 +7,7 @@
   import { onMount, type Snippet } from 'svelte';
 
   import { session } from '#lib/auth/session.svelte.js';
+  import StepUpSheet from '#lib/components/StepUpSheet.svelte';
   import { startLive } from '#lib/live.svelte.js';
   import { nativeShell } from '#lib/native/runtime.js';
   import { navigatePath } from '#lib/navigate.js';
@@ -39,6 +40,8 @@
 {/if}
 
 {@render children()}
+
+<StepUpSheet />
 
 <ToastRegion
   toasts={toasts.items}

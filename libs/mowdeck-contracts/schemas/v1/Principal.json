@@ -29,6 +29,28 @@
       "description": "Account (household or business) the token is scoped to (JWT `acc`). None for operator or service principals that are not bound to one account.",
       "title": "Account Id"
     },
+    "auth_methods": {
+      "description": "How the user authenticated at `auth_time` (JWT `amr`): `pwd`, `passkey`, `github`, `apple`.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Auth Methods",
+      "type": "array"
+    },
+    "auth_time": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the user last authenticated interactively (JWT `auth_time`, OIDC): a login or a step-up confirmation. None for API tokens, services and old sessions.",
+      "title": "Auth Time"
+    },
     "display_name": {
       "anyOf": [
         {

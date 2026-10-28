@@ -38,6 +38,7 @@ from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.application.ports import Ge, Tx
 from identity.application.ratelimit import TokenBucketLimiter
+from identity.application.reauth import Reauthenticator
 from identity.domain.credentials import (
     clean_return_query,
     new_app_code,
@@ -62,6 +63,9 @@ from identity.domain.models import (
     Status,
     User,
 )
+
+_AUTH_METHODS = {"password": "pwd"}
+"""Login ``method`` to the ``amr`` value (the others are their own value)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +122,8 @@ class SessionService:
         self.authenticators = authenticators
         self.ip_limiter = ip_limiter
         self.challenge_limiter = challenge_limiter or TokenBucketLimiter(per_minute=60, capacity=30)
+        self.reauth = Reauthenticator(deps, ip_limiter)
+        """The password check of a step-up confirmation (login limits of the user and address)."""
 
     # --- helpers -------------------------------------------------------------------------------
 
@@ -242,10 +248,14 @@ class SessionService:
         *,
         method: str = "password",
         details: dict[str, object] | None = None,
+        authenticated: tuple[datetime, str] | None = None,
     ) -> TokenPair:
         now = self.deps.clock()
         config = self.deps.config
         refresh = new_refresh_token()
+        # Step-up (ADR 0057): the login is the first interactive authentication. A hand-off to the
+        # native app brings the time and method of the browser login along.
+        auth_time, auth_method = authenticated or (now, _AUTH_METHODS.get(method, method))
         async with self.deps.uow() as work:
             tx = work.tx
             found = await tx.users.get(id=user_id)
@@ -264,6 +274,8 @@ class SessionService:
                 last_used_at=now,
                 user_agent=(ctx.user_agent or "")[:200] or None,
                 ip=ctx.ip,
+                auth_time=auth_time,
+                auth_method=auth_method,
             )
             await tx.sessions.add(session)
             await tx.login_attempts.add(
@@ -273,7 +285,14 @@ class SessionService:
             await tx.users.update(found)
             catalogue = await self.deps.catalogue.current(tx)
             principal = await user_principal(
-                tx, found, acct, membership, catalogue, session_id=session.family_id
+                tx,
+                found,
+                acct,
+                membership,
+                catalogue,
+                session_id=session.family_id,
+                auth_time=auth_time,
+                auth_method=auth_method,
             )
             principal = await self._with_plan(principal, acct)
             access = self.issuer.issue(principal)
@@ -513,8 +532,24 @@ class SessionService:
             await self._record_handoff_failure(ctx, record, reason or "failed")
             raise AuthenticationFailed(reason or "failed")
         details: dict[str, object] = {"via": "app", "from_session": str(record.source_session)}
+        # The browser login that is handed over is the authentication: its time and method count.
+        async with self.deps.store.transaction() as tx:
+            source = [
+                s
+                for s in await tx.sessions.find(family_id=record.source_session)
+                if s.auth_time is not None and s.auth_method
+            ]
+        latest = max(source, key=lambda s: s.auth_time or now, default=None)
+        authenticated: tuple[datetime, str] | None = None
+        if latest is not None and latest.auth_time is not None and latest.auth_method:
+            authenticated = (latest.auth_time, latest.auth_method)
         return await self._start_session(
-            record.user_id, record.account_id, ctx, method="app_handoff", details=details
+            record.user_id,
+            record.account_id,
+            ctx,
+            method="app_handoff",
+            details=details,
+            authenticated=authenticated,
         )
 
     async def _record_handoff_failure(
@@ -675,13 +710,22 @@ class SessionService:
                     last_used_at=now,
                     user_agent=(ctx.user_agent or "")[:200] or None,
                     ip=ctx.ip,
+                    auth_time=session.auth_time,
+                    auth_method=session.auth_method,
                 )
                 await tx.sessions.add(successor)
                 session.replaced_by, session.last_used_at = successor.id, now
                 await tx.sessions.update(session)
                 catalogue = await self.deps.catalogue.current(tx)
                 principal = await user_principal(
-                    tx, found, acct, membership, catalogue, session_id=session.family_id
+                    tx,
+                    found,
+                    acct,
+                    membership,
+                    catalogue,
+                    session_id=session.family_id,
+                    auth_time=session.auth_time,
+                    auth_method=session.auth_method,
                 )
                 principal = await self._with_plan(principal, acct)
                 access = self.issuer.issue(principal)
@@ -742,6 +786,116 @@ class SessionService:
             msg = "only users have sessions"
             raise ForbiddenError(msg)
         return principal
+
+    # --- step-up (ADR 0057) -----------------------------------------------------------------------
+
+    def _login_session(self, ctx: RequestContext) -> Principal:
+        principal = self._user_principal(ctx)
+        if principal.session_id is None:
+            msg = "only a login session can confirm a critical action"
+            raise ForbiddenError(msg)
+        return principal
+
+    async def step_up_password(self, ctx: RequestContext, password: str) -> TokenPair:
+        """Confirm with the password: a new access token whose ``auth_time`` is now.
+
+        Behaves like a password login of the user for the limits (address limit, per-username
+        throttle, failures counted) and is audited as ``step_up.reauth_failed`` /
+        ``step_up.succeeded``.
+        """
+        principal = self._login_session(ctx)
+        await self.reauth.check(ctx, principal, password, action="step_up")
+        return await self._confirm(ctx, principal, "pwd")
+
+    async def step_up_passkey_challenge(self, ctx: RequestContext) -> Challenge:
+        """Options for confirming with a passkey (the looser limit of every challenge)."""
+        self._login_session(ctx)
+        self._limit_ip(ctx, self.challenge_limiter)
+        return await self._passkeys().challenge()
+
+    async def step_up_passkey(
+        self, ctx: RequestContext, ceremony_id: UUID, credential: str
+    ) -> TokenPair:
+        """Confirm with a passkey (user verification is required by the ceremony). It must be
+        a passkey of the caller: another user's passkey fails like any bad assertion."""
+        principal = self._login_session(ctx)
+        self._limit_ip(ctx)
+        result = await self._passkeys().authenticate(
+            {"ceremony_id": str(ceremony_id), "credential": credential}
+        )
+        reason = result.reason or "failed"
+        if result.ok and result.subject_id != principal.subject:
+            reason = "passkey of another user"
+        if not result.ok or result.subject_id != principal.subject:
+            async with self.deps.uow() as work:
+                await work.audit(
+                    ctx,
+                    "step_up.failed",
+                    account_id=principal.account_id,
+                    target=("user", principal.subject),
+                    details={"method": "passkey", "reason": reason},
+                    outcome="failure",
+                )
+            raise AuthenticationFailed(reason)
+        return await self._confirm(
+            ctx, principal, "passkey", details={"passkey": result.credential_ref}
+        )
+
+    async def _confirm(
+        self,
+        ctx: RequestContext,
+        principal: Principal,
+        method: str,
+        *,
+        details: dict[str, object] | None = None,
+    ) -> TokenPair:
+        """Stamp the live session of the family with the confirmation and issue the token."""
+        assert principal.session_id is not None  # noqa: S101 - checked by _login_session
+        now = self.deps.clock()
+        async with self.deps.uow() as work:
+            tx = work.tx
+            live = await tx.sessions.find(
+                family_id=principal.session_id, revoked_at=None, replaced_by=None
+            )
+            if not live:
+                raise AuthenticationFailed("session ended")
+            for session in live:
+                session.auth_time, session.auth_method = now, method
+                await tx.sessions.update(session)
+            current = live[0]
+            found = await tx.users.get(id=current.user_id)
+            membership = await tx.memberships.get(
+                account_id=current.account_id, user_id=current.user_id
+            )
+            acct = await tx.accounts.get(id=current.account_id)
+            if found is None or membership is None or acct is None:
+                raise AuthenticationFailed("user or account no longer usable")
+            catalogue = await self.deps.catalogue.current(tx)
+            fresh = await user_principal(
+                tx,
+                found,
+                acct,
+                membership,
+                catalogue,
+                session_id=current.family_id,
+                auth_time=now,
+                auth_method=method,
+            )
+            fresh = await self._with_plan(fresh, acct)
+            access = self.issuer.issue(fresh)
+            await work.audit(
+                ctx,
+                "step_up.succeeded",
+                account_id=acct.id,
+                target=("user", found.id),
+                details={
+                    "method": method,
+                    "session": str(current.family_id),
+                    "jti": str(access.token_id),
+                    **(details or {}),
+                },
+            )
+        return TokenPair(access, fresh)
 
     # --- API tokens -----------------------------------------------------------------------------
 

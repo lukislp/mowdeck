@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from mowdeck_contracts.v1._base import ContractModel
+from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 
 
 class PrincipalKind(StrEnum):
@@ -62,6 +62,16 @@ class Principal(ContractModel):
     session_id: UUID | None = Field(
         default=None,
         description="Login session (JWT `sid`); None for API tokens and service principals.",
+    )
+    auth_time: UtcDateTime | None = Field(
+        default=None,
+        description="When the user last authenticated interactively (JWT `auth_time`, OIDC): "
+        "a login or a step-up confirmation. None for API tokens, services and old sessions.",
+    )
+    auth_methods: list[str] = Field(
+        default_factory=list,
+        description="How the user authenticated at `auth_time` (JWT `amr`): `pwd`, `passkey`, "
+        "`github`, `apple`.",
     )
 
     def has_permission(self, permission: str) -> bool:

@@ -11,11 +11,14 @@
 | ``plan`` | ``plan`` | plan key of the account |
 | ``sid`` | ``session_id`` | login session (absent for API tokens) |
 | ``jti`` | ``token_id`` | unique token id |
+| ``auth_time`` | ``auth_time`` | epoch seconds of the last login or step-up (not for API tokens) |
+| ``amr`` | ``auth_methods`` | how: ``pwd``, ``passkey``, ``github``, ``apple`` |
 
 Plus the registered claims ``iss``, ``aud``, ``iat``, ``nbf``, ``exp``.
 """
 
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -46,7 +49,19 @@ def principal_claims(principal: Principal) -> dict[str, Any]:
         claims["sid"] = str(principal.session_id)
     if principal.token_id is not None:
         claims["jti"] = str(principal.token_id)
+    if principal.auth_time is not None:
+        claims["auth_time"] = int(principal.auth_time.timestamp())
+        claims["amr"] = list(principal.auth_methods)
     return claims
+
+
+def _timestamp(value: Any, claim: str) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        msg = f"claim {claim} must be a number"
+        raise ValueError(msg)
+    return datetime.fromtimestamp(value, UTC)
 
 
 def _uuid(value: Any, claim: str) -> UUID | None:
@@ -80,5 +95,7 @@ def principal_from_claims(claims: Mapping[str, Any]) -> Principal:
             "plan": claims.get("plan"),
             "token_id": _uuid(claims.get("jti"), "jti"),
             "session_id": _uuid(claims.get("sid"), "sid"),
+            "auth_time": _timestamp(claims.get("auth_time"), "auth_time"),
+            "auth_methods": _strings(claims.get("amr"), "amr"),
         }
     )

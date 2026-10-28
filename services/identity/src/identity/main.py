@@ -93,6 +93,7 @@ def build_app(
         active_bus: EventBus | None = app.state.bus
         services = await runtime.start(active_bus)
         app.state.identity = services
+        app.state.auth_clock = services.deps.clock  # step-up freshness uses the service clock
 
         async def signing_key() -> bool:
             keys.active_key()

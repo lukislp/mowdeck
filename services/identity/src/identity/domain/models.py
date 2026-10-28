@@ -207,6 +207,11 @@ class Session:
     revoke_reason: str | None = None
     user_agent: str | None = None
     ip: str | None = None
+    auth_time: datetime | None = None
+    """When the user last authenticated interactively (login or step-up); rotation copies it
+    (ADR 0057). ``None`` for sessions from before the column existed: they count as stale."""
+    auth_method: str | None = None
+    """How: ``pwd``, ``passkey``, ``github``, ``apple``."""
 
 
 @dataclass(frozen=True, slots=True)

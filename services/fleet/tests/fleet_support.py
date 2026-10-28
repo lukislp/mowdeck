@@ -10,6 +10,7 @@ shortcuts. Identity's part (owners, members, role grants) is written into the fa
 from collections.abc import AsyncIterator, Callable, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -107,10 +108,17 @@ class Harness:
         *,
         kind: PrincipalKind = PrincipalKind.USER,
         permissions: Iterable[str] = (),
+        auth_age: timedelta | None = timedelta(seconds=10),
     ) -> Person:
-        """A principal with a minted token (no tuples)."""
+        """A principal with a minted token (no tuples). ``auth_age``: how long ago the user
+        confirmed with a passkey or password (step-up, ADR 0057); ``None``: never."""
         principal = Principal(
-            subject=uuid4(), account_id=account_id, kind=kind, permissions=list(permissions)
+            subject=uuid4(),
+            account_id=account_id,
+            kind=kind,
+            permissions=list(permissions),
+            auth_time=datetime.now(UTC) - auth_age if auth_age is not None else None,
+            auth_methods=["pwd"] if auth_age is not None else [],
         )
         return Person(principal, self.keys.mint(principal))
 
