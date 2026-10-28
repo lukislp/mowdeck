@@ -216,7 +216,7 @@ The library also ships the lint rules of the frontend workspace (`lint/`):
 
 - `stylelint-tokens.js`: Stylelint rule `mowdeck/use-tokens`. Raw colours (hex, `rgb()`, named colours), font stacks and radii are allowed only in `tokens.css`.
 - `eslint-no-literal-text.js`: ESLint rule `mowdeck/no-literal-text`, enabled for `apps/web/src/**/*.svelte`. Text nodes and `aria-label`, `title`, `placeholder` and `alt` values with letters must come from the messages (units like `mm`, `m/s`, `%` are allowed).
-- `contrast-check.js` (`tokens:check`): computes the WCAG contrast of the token pairs in both themes and fails below the target: text 4.5:1 (primary ink 7:1 in light, the outdoor theme), state marks and controls 3:1 against the surface, each state 4.5:1 on its tint, stop ink 4.5:1 on the stop fill.
+- `contrast-check.js` (`tokens:check`): computes the WCAG contrast of the token pairs in both themes and fails below the target: text 4.5:1 (primary ink 7:1 in light, the outdoor theme), state marks and controls 3:1 against the surface, each state 4.5:1 on its tint, stop ink 4.5:1 on the stop fill, inverse ink 4.5:1 on the paused and error fills (labels on a solid state chip), and the theme-independent HUD inks (`--md-hud-ink-inverse` on `--md-hud-ink`, `--md-hud-lit` on the HUD plate) 4.5:1.
 
 ## Pull request checklist (UI)
 
