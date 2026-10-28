@@ -38,6 +38,7 @@
     top: var(--md-safe-top);
     z-index: 15;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--md-space-2);
     min-height: var(--md-topbar-height);
@@ -86,5 +87,15 @@
     display: flex;
     align-items: center;
     gap: var(--md-space-2);
+  }
+
+  /* When the back link, the status and the actions no longer fit one line on a narrow phone (four
+     actions at 320 px, or a long status such as "Offline, letzte Werte"), the actions move to a
+     second line, right-aligned, instead of pushing the page wider than the screen. The title
+     takes no width of its own (flex-basis 0), so the bar only wraps when it has to. */
+  .actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-inline-start: auto;
   }
 </style>
