@@ -2,8 +2,12 @@
   The map of theft tracking: a recorded track on a world map (EPSG:3857), the start (green) and
   the last known position (red and pulsing, hollow grey while the mower is silent). It is not
   tied to the mower's own map: the mower may be anywhere, so positions are plain latitude and
-  longitude and the only background is the installation's raster tile server (`tiles`). Without
-  one the track is drawn on a plain surface and `labels.noTiles` says so.
+  longitude.
+
+  Background, first that applies: `layers` (base maps served by MowDeck itself around the track,
+  street map and aerial photo, loaded through `load` so the page can add a token; a switch on the
+  map picks one, `layer` is bindable), else the installation's raster tile server (`tiles`), else
+  a plain grid backdrop with `labels.noTiles`.
 
   The view fits the track until the user pans or zooms (the fit control turns it back on).
   `follow` (bindable) keeps the last position in the centre; a drag ends it. Leaflet is loaded
@@ -16,6 +20,20 @@
     lon: number;
   }
 
+  /** A base map under the track, loaded tile by tile through `load`. */
+  export interface TrackMapLayer {
+    id: string;
+    /** Name on the layer switch. */
+    label: string;
+    /** URL template with `{z}`, `{x}`, `{y}`; handed to `load` filled in. */
+    url: string;
+    attribution?: string | null;
+    minZoom?: number;
+    /** Highest zoom with real detail; deeper zooms scale the last level. */
+    maxZoom?: number;
+    load: (url: string, signal: AbortSignal) => Promise<Blob>;
+  }
+
   /** Translated texts of the map controls and markers. */
   export interface TrackMapLabels {
     /** Accessible name of the map region. */
@@ -26,8 +44,10 @@
     follow: string;
     start: string;
     last: string;
-    /** Shown on the map when no tile server is configured. */
+    /** Shown on the map when no base map is available. */
     noTiles: string;
+    /** Accessible name of the layer switch. */
+    layers?: string;
   }
 </script>
 
@@ -37,6 +57,7 @@
 
   import Icon from '../icons/Icon.svelte';
 
+  import { createAerialLayer } from './aerial';
   import type { MapTiles } from './MowerMap.svelte';
 
   type LeafletModule = typeof import('leaflet');
@@ -48,6 +69,10 @@
     last?: TrackMapPoint | null;
     /** The mower has not reported for a while: the last position is drawn hollow. */
     stale?: boolean;
+    /** Base maps served around the track (take precedence over `tiles`). */
+    layers?: readonly TrackMapLayer[];
+    /** Id of the shown base map (bindable; the first one when unset or unknown). */
+    layer?: string | null;
     tiles?: MapTiles | null;
     labels: TrackMapLabels;
     /** Keep the last position centred (bindable; a drag or the fit control ends it). */
@@ -60,6 +85,8 @@
     track,
     last = null,
     stale = false,
+    layers = [],
+    layer = $bindable(null),
     tiles = null,
     labels,
     follow = $bindable(false),
@@ -69,15 +96,23 @@
 
   let container: HTMLDivElement | undefined = $state();
   let L: LeafletModule | null = $state.raw(null);
-  /** Bumped when a Leaflet map is (re)created, so the drawing effect redraws. */
+  /** Bumped when a Leaflet map is (re)created, so the drawing effects run on the new map. */
   let generation = $state(0);
 
   let lmap: Leaflet.Map | null = null;
-  let layer: Leaflet.LayerGroup | null = null;
+  let group: Leaflet.LayerGroup | null = null;
   /** Fit the whole track on every change until the user pans or zooms. */
   let autoFit = true;
 
   const head = $derived(last ?? (track.length ? track[track.length - 1]! : null));
+  const chosen = $derived(layers.find((entry) => entry.id === layer) ?? layers[0] ?? null);
+  const chosenKey = $derived(chosen ? `${chosen.id} ${chosen.url}` : null);
+  /** Browser side tiles only without MowDeck's own base maps. */
+  const rasterUrl = $derived(chosen ? null : (tiles?.url ?? null));
+  const attribution = $derived(
+    chosen ? (chosen.attribution ?? null) : rasterUrl ? (tiles?.attribution ?? null) : null,
+  );
+  const bare = $derived(!chosen && !rasterUrl);
 
   $effect(() => {
     let cancelled = false;
@@ -94,10 +129,11 @@
     };
   });
 
+  // The map itself: one per Leaflet load and container. The background is a separate effect, so
+  // switching it (or the tile settings arriving late) never replaces the map and its drawing.
   $effect(() => {
     const lib = L;
     const el = container;
-    const currentTiles = tiles;
     if (!lib || !el) return;
     let instance: Leaflet.Map;
     try {
@@ -118,29 +154,66 @@
       onfail?.(error);
       return;
     }
-    if (currentTiles?.url) {
-      lib
-        .tileLayer(currentTiles.url, {
-          maxZoom: 22,
-          maxNativeZoom: currentTiles.maxZoom ?? 19,
-          className: 'md-map-tiles',
-        })
-        .addTo(instance);
-    }
     instance.createPane('md-track').style.zIndex = '450';
     // Only a drag of the user ends the automatic view; our own fit and pan do not.
     instance.on('dragstart', () => {
       follow = false;
       autoFit = false;
     });
-    layer = lib.layerGroup().addTo(instance);
+    group = lib.layerGroup().addTo(instance);
     lmap = instance;
     autoFit = true;
-    // untrack: reading generation here would make this effect depend on its own write\n    generation = untrack(() => generation) + 1;
+    // untrack: reading generation here would make this effect depend on its own write.
+    generation = untrack(() => generation) + 1;
+    const resize =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            instance.invalidateSize({ pan: false });
+            if (autoFit && !untrack(() => follow)) untrack(refit);
+          });
+    resize?.observe(el);
     return () => {
+      resize?.disconnect();
       instance.remove();
       lmap = null;
-      layer = null;
+      group = null;
+    };
+  });
+
+  // The background: MowDeck's base map, else the browser side tiles, else nothing (the grid).
+  // Keyed by id and URL: a page that hands in fresh layer objects on every poll keeps its tiles.
+  $effect(() => {
+    void generation;
+    void chosenKey;
+    const lib = L;
+    const instance = lmap;
+    const base = untrack(() => chosen);
+    const raster = rasterUrl;
+    if (!lib || !instance) return;
+    let background: Leaflet.TileLayer | null = null;
+    if (base) {
+      background = createAerialLayer(
+        lib,
+        {
+          url: base.url,
+          opacity: 1,
+          minZoom: base.minZoom ?? 0,
+          maxZoom: base.maxZoom ?? 19,
+          load: base.load,
+        },
+        () => untrack(() => chosen)?.load,
+      );
+    } else if (raster) {
+      background = lib.tileLayer(raster, {
+        maxZoom: 22,
+        maxNativeZoom: untrack(() => tiles?.maxZoom) ?? 19,
+        className: 'md-map-tiles',
+      });
+    }
+    background?.addTo(instance);
+    return () => {
+      background?.remove();
     };
   });
 
@@ -153,19 +226,20 @@
       iconAnchor: [11, 11],
     });
   }
+
   // Draw the track and the markers; fit or follow after every change.
   $effect(() => {
     void generation;
     const lib = L;
     const instance = lmap;
-    const group = layer;
+    const target = group;
     const points = track;
     const current = head;
     const hollow = stale;
     const startLabel = labels.start;
     const lastLabel = labels.last;
-    if (!lib || !instance || !group) return;
-    group.clearLayers();
+    if (!lib || !instance || !target) return;
+    target.clearLayers();
     const latlngs = points.map((p): Leaflet.LatLngTuple => [p.lat, p.lon]);
     if (latlngs.length > 1) {
       lib
@@ -177,7 +251,7 @@
           lineJoin: 'round',
           interactive: false,
         })
-        .addTo(group);
+        .addTo(target);
       lib
         .polyline(latlngs, {
           pane: 'md-track',
@@ -186,7 +260,7 @@
           lineJoin: 'round',
           interactive: false,
         })
-        .addTo(group);
+        .addTo(target);
     }
     if (points.length) {
       lib
@@ -196,7 +270,7 @@
           keyboard: false,
           interactive: false,
         })
-        .addTo(group);
+        .addTo(target);
     }
     if (current) {
       lib
@@ -207,7 +281,7 @@
           interactive: false,
           zIndexOffset: 1000,
         })
-        .addTo(group);
+        .addTo(target);
     }
     untrack(() => {
       if (!current) return;
@@ -238,14 +312,18 @@
   }
 
   function refit(): void {
-    follow = false;
-    autoFit = true;
     const lib = L;
     if (!lib || !lmap) return;
     const latlngs = track.map((p): Leaflet.LatLngTuple => [p.lat, p.lon]);
     const current = head;
     if (latlngs.length) fit(lmap, lib, latlngs);
     else if (current) fit(lmap, lib, [[current.lat, current.lon]]);
+  }
+
+  function fitAll(): void {
+    follow = false;
+    autoFit = true;
+    refit();
   }
 
   function zoom(delta: number): void {
@@ -261,7 +339,12 @@
   }
 </script>
 
-<div class="md-track-map" data-testid={testid}>
+<div
+  class="md-track-map"
+  class:bare
+  data-testid={testid}
+  data-layer={chosen?.id ?? (rasterUrl ? 'tiles' : 'grid')}
+>
   <div
     class="canvas"
     bind:this={container}
@@ -269,6 +352,19 @@
     aria-label={labels.region}
     onwheel={() => (autoFit = false)}
   ></div>
+  {#if layers.length > 1}
+    <div class="layers" role="radiogroup" aria-label={labels.layers ?? labels.region}>
+      {#each layers as entry (entry.id)}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={entry.id === chosen?.id}
+          data-testid="track-map-layer-{entry.id}"
+          onclick={() => (layer = entry.id)}>{entry.label}</button
+        >
+      {/each}
+    </div>
+  {/if}
   <div class="controls">
     <button type="button" aria-label={labels.zoomIn} onclick={() => zoom(1)}>
       <Icon name="plus" size={20} />
@@ -276,7 +372,7 @@
     <button type="button" aria-label={labels.zoomOut} onclick={() => zoom(-1)}>
       <Icon name="minus" size={20} />
     </button>
-    <button type="button" aria-label={labels.fit} onclick={refit}>
+    <button type="button" aria-label={labels.fit} onclick={fitAll}>
       <Icon name="fit" size={20} />
     </button>
     <button
@@ -289,10 +385,10 @@
       <Icon name="crosshair" size={20} />
     </button>
   </div>
-  {#if tiles?.url}
-    {#if tiles.attribution}<p class="note attribution">{tiles.attribution}</p>{/if}
-  {:else}
+  {#if bare}
     <p class="note">{labels.noTiles}</p>
+  {:else if attribution}
+    <p class="note attribution">{attribution}</p>
   {/if}
 </div>
 
@@ -310,6 +406,60 @@
     position: absolute;
     inset: 0;
     background: var(--md-color-surface-sunken);
+  }
+
+  /* Without any base map: a survey grid, so the track never sits on a featureless (in dark mode
+     black) plane. */
+  .bare .canvas {
+    background-color: var(--md-color-surface-sunken);
+    background-image:
+      linear-gradient(var(--md-color-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--md-color-line) 1px, transparent 1px),
+      linear-gradient(var(--md-color-line-strong) 1px, transparent 1px),
+      linear-gradient(90deg, var(--md-color-line-strong) 1px, transparent 1px);
+    background-size:
+      24px 24px,
+      24px 24px,
+      120px 120px,
+      120px 120px;
+  }
+
+  .layers {
+    position: absolute;
+    inset-block-start: var(--md-space-3);
+    inset-inline-start: var(--md-space-3);
+    z-index: 500;
+    display: flex;
+    gap: var(--md-space-0_5);
+    padding: var(--md-space-0_5);
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+    border-radius: var(--md-radius-round);
+    background: var(--md-color-surface);
+    box-shadow: var(--md-shadow-float);
+  }
+
+  .layers button {
+    min-block-size: 36px;
+    padding: 0 var(--md-space-3);
+    border: 0;
+    border-radius: var(--md-radius-round);
+    background: none;
+    color: var(--md-color-ink-muted);
+    font: inherit;
+    font-size: var(--md-font-size-13);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    cursor: pointer;
+  }
+
+  .layers button[aria-checked='true'] {
+    background: var(--md-color-ink);
+    color: var(--md-color-ink-inverse);
+  }
+
+  .layers button:focus-visible {
+    outline: 3px solid var(--md-color-focus);
+    outline-offset: 1px;
   }
 
   .controls {

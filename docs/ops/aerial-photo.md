@@ -13,6 +13,8 @@ Telemetry fetches the photo tiles itself and serves them to signed-in users at `
 
 The source learns your server's address and the tile coordinates around your garden, not who uses MowDeck.
 
+While a theft tracking session exists, the same source also serves the "Luftbild" layer of the tracking map, around the tracked positions instead of the garden (2 km margin), for the owner and for a share link; see [Theft tracking, base map](theft-tracking.md#base-map).
+
 ## Bavaria (Bayerische Vermessungsverwaltung, digital orthophoto 40 cm)
 
 Open data under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de), no registration, [terms of use](https://www.geodaten.bayern.de/odd/m/3/html/nutzungsbedingungen.html). In `infra/compose/.env`:

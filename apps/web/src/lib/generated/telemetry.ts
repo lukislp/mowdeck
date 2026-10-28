@@ -470,6 +470,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/map/{layer}/{z}/{x}/{y}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tracking Map Tile
+         * @description One base map tile (Web Mercator, XYZ) under the track of the active or newest session.
+         *     Tiles away from the tracked positions, outside the zoom range or of a layer that is not
+         *     offered are 404 `tile-outside-map`; new tiles are rate limited per account (429).
+         */
+        get: operations["tracking_map_tile_api_v1_telemetry_mowers__mower_id__tracking_map__layer___z___x___y__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/mowers/{mower_id}/tracking/photo": {
         parameters: {
             query?: never;
@@ -610,6 +632,28 @@ export type paths = {
         get: operations["get_widget_map_api_v1_telemetry_mowers__mower_id__widget_map_png_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/public/tracking/tile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Public Tracking Tile
+         * @description One base map tile for the page of a share link, only around the shared track. No
+         *     login; 404 for any unusable token or a tile away from the track, 429 when asked too
+         *     often.
+         */
+        post: operations["public_tracking_tile_api_v1_telemetry_public_tracking_tile_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1527,6 +1571,31 @@ export type components = {
             name?: string | null;
         };
         /**
+         * MapLayerOut
+         * @description A base map layer offered under the track: ``map`` (street map) or ``aerial`` (photo).
+         *     Tiles come from ``/mowers/{id}/tracking/map/{layer}/{z}/{x}/{y}`` (owner) or
+         *     ``POST /public/tracking/tile`` (share link), only around the tracked positions.
+         */
+        MapLayerOut: {
+            /**
+             * Attribution
+             * @description Credit line to show while the layer is visible.
+             */
+            attribution: string;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "map" | "aerial";
+            /**
+             * Max Zoom
+             * @description Highest zoom with real detail; deeper zooms scale it.
+             */
+            max_zoom: number;
+            /** Min Zoom */
+            min_zoom: number;
+        };
+        /**
          * MapPath
          * @description A transfer path between areas (driven with blades off).
          */
@@ -2326,6 +2395,26 @@ export type components = {
             truncated: boolean;
         };
         /**
+         * PublicTileIn
+         * @description Body of a public base map tile: the share token and the tile (in the body, so neither
+         *     the token nor the place reaches an access log).
+         */
+        PublicTileIn: {
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "map" | "aerial";
+            /** Token */
+            token: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /** Z */
+            z: number;
+        };
+        /**
          * PublicTrackIn
          * @description Body of the public view.
          */
@@ -2348,6 +2437,8 @@ export type components = {
              */
             expires_at: string;
             last?: components["schemas"]["TrackPointOut"] | null;
+            /** Map Layers */
+            map_layers?: components["schemas"]["MapLayerOut"][];
             /** Mower Model */
             mower_model?: string | null;
             /** Mower Name */
@@ -2768,6 +2859,11 @@ export type components = {
         TrackingStatus: {
             /** Links */
             links?: components["schemas"]["TrackingLinkOut"][];
+            /**
+             * Map Layers
+             * @description Base map layers under the track; empty without any.
+             */
+            map_layers?: components["schemas"]["MapLayerOut"][];
             /**
              * Photos
              * @default 0
@@ -3710,6 +3806,44 @@ export interface operations {
             };
         };
     };
+    tracking_map_tile_api_v1_telemetry_mowers__mower_id__tracking_map__layer___z___x___y__get: {
+        parameters: {
+            query?: {
+                session_id?: string | null;
+            };
+            header?: never;
+            path: {
+                layer: "map" | "aerial";
+                mower_id: string;
+                x: number;
+                y: number;
+                z: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     take_tracking_photo_api_v1_telemetry_mowers__mower_id__tracking_photo_post: {
         parameters: {
             query?: never;
@@ -3949,6 +4083,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    public_tracking_tile_api_v1_telemetry_public_tracking_tile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicTileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

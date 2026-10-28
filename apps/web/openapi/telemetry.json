@@ -1732,6 +1732,41 @@
         "title": "MapArea",
         "type": "object"
       },
+      "MapLayerOut": {
+        "description": "A base map layer offered under the track: ``map`` (street map) or ``aerial`` (photo).\nTiles come from ``/mowers/{id}/tracking/map/{layer}/{z}/{x}/{y}`` (owner) or\n``POST /public/tracking/tile`` (share link), only around the tracked positions.",
+        "properties": {
+          "attribution": {
+            "description": "Credit line to show while the layer is visible.",
+            "title": "Attribution",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "map",
+              "aerial"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "max_zoom": {
+            "description": "Highest zoom with real detail; deeper zooms scale it.",
+            "title": "Max Zoom",
+            "type": "integer"
+          },
+          "min_zoom": {
+            "title": "Min Zoom",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "attribution",
+          "min_zoom",
+          "max_zoom"
+        ],
+        "title": "MapLayerOut",
+        "type": "object"
+      },
       "MapPath": {
         "description": "A transfer path between areas (driven with blades off).",
         "properties": {
@@ -3320,6 +3355,50 @@
         "title": "PositionTrack",
         "type": "object"
       },
+      "PublicTileIn": {
+        "description": "Body of a public base map tile: the share token and the tile (in the body, so neither\nthe token nor the place reaches an access log).",
+        "properties": {
+          "layer": {
+            "enum": [
+              "map",
+              "aerial"
+            ],
+            "title": "Layer",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          },
+          "x": {
+            "minimum": 0.0,
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "integer"
+          },
+          "z": {
+            "maximum": 24.0,
+            "minimum": 0.0,
+            "title": "Z",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "token",
+          "layer",
+          "z",
+          "x",
+          "y"
+        ],
+        "title": "PublicTileIn",
+        "type": "object"
+      },
       "PublicTrackIn": {
         "description": "Body of the public view.",
         "properties": {
@@ -3369,6 +3448,13 @@
                 "type": "null"
               }
             ]
+          },
+          "map_layers": {
+            "items": {
+              "$ref": "#/components/schemas/MapLayerOut"
+            },
+            "title": "Map Layers",
+            "type": "array"
           },
           "mower_model": {
             "anyOf": [
@@ -4228,6 +4314,14 @@
               "$ref": "#/components/schemas/TrackingLinkOut"
             },
             "title": "Links",
+            "type": "array"
+          },
+          "map_layers": {
+            "description": "Base map layers under the track; empty without any.",
+            "items": {
+              "$ref": "#/components/schemas/MapLayerOut"
+            },
+            "title": "Map Layers",
             "type": "array"
           },
           "photos": {
@@ -5961,6 +6055,108 @@
         ]
       }
     },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/map/{layer}/{z}/{x}/{y}": {
+      "get": {
+        "description": "One base map tile (Web Mercator, XYZ) under the track of the active or newest session.\nTiles away from the tracked positions, outside the zoom range or of a layer that is not\noffered are 404 `tile-outside-map`; new tiles are rate limited per account (429).",
+        "operationId": "tracking_map_tile_api_v1_telemetry_mowers__mower_id__tracking_map__layer___z___x___y__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "layer",
+            "required": true,
+            "schema": {
+              "enum": [
+                "map",
+                "aerial"
+              ],
+              "title": "Layer",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "z",
+            "required": true,
+            "schema": {
+              "maximum": 24,
+              "minimum": 0,
+              "title": "Z",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "x",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "y",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Y",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tracking Map Tile",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
     "/api/v1/telemetry/mowers/{mower_id}/tracking/photo": {
       "post": {
         "description": "Take one more camera photo for the active session (it goes into the report).",
@@ -6362,6 +6558,46 @@
         "summary": "Get Widget Map",
         "tags": [
           "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/public/tracking/tile": {
+      "post": {
+        "description": "One base map tile for the page of a share link, only around the shared track. No\nlogin; 404 for any unusable token or a tile away from the track, 429 when asked too\noften.",
+        "operationId": "public_tracking_tile_api_v1_telemetry_public_tracking_tile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicTileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Public Tracking Tile",
+        "tags": [
+          "tracking",
+          "public"
         ]
       }
     },

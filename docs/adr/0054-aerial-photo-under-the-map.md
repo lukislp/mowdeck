@@ -41,3 +41,4 @@ Source research (verified 2026-10-27): the Bayerische Vermessungsverwaltung publ
 - With a photo source the source learns the operator's server address and the tile coordinates around the garden, not the users. Documented in the ops guide.
 - WMS sources must support EPSG:3857; sources without it are used through an XYZ proxy of the operator's choice.
 - The first view of a garden costs some dozens of requests; later views and other users of the map come from the cache.
+- Theft tracking reuses the source, the cache and the fetch limits for its base map, but around the tracked positions instead of the garden ([ADR 0058](0058-theft-tracking-mode.md), base map).

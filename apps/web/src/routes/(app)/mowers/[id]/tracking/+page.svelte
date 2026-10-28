@@ -22,7 +22,7 @@
 
   import { page } from '$app/state';
 
-  import { fleetApi, unwrap } from '#lib/api/client.js';
+  import { apiFetch, fleetApi, unwrap } from '#lib/api/client.js';
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
   import { clock } from '#lib/clock.svelte.js';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
@@ -30,6 +30,7 @@
   import type { components as Fleet } from '#lib/generated/fleet.js';
   import { formatAge, formatDateTime, formatNumber, problemMessage } from '#lib/i18n.js';
   import { permissions, revoked } from '#lib/live.svelte.js';
+  import { tileLoader } from '#lib/map/aerial.js';
   import { m } from '#lib/paraglide/messages.js';
   import { getLocale } from '#lib/paraglide/runtime.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
@@ -48,6 +49,14 @@
     type TrackingSession,
     type TrackingStatus,
   } from '#lib/tracking/api.js';
+  import {
+    loadLayer,
+    mapLayers,
+    mapsLink,
+    ownerTileUrl,
+    saveLayer,
+    type MapLayer,
+  } from '#lib/tracking/basemap.js';
   import { startPoller } from '#lib/tracking/poll.js';
   import { canShare, shareUrl } from '#lib/tracking/share.js';
   import { mergeTrack, newestAt, serverOffsetMs, type TrackPoint } from '#lib/tracking/track.js';
@@ -71,6 +80,8 @@
   let tiles = $state.raw<MapTilesConfig | null>(null);
   let mapFailed = $state(false);
   let follow = $state(false);
+  let offered = $state.raw<MapLayer[]>([]);
+  let layer = $state<string | null>(loadLayer());
   let sheet = $state<Sheets>(null);
   let busy = $state<'start' | 'stop' | 'report' | 'delete' | 'link' | null>(null);
   let actionProblem = $state<ApiProblem | null>(null);
@@ -93,6 +104,7 @@
     session = status.session;
     track = merge ? mergeTrack(track, status.track ?? []) : mergeTrack([], status.track ?? []);
     links = status.links ?? [];
+    if (!sameLayers(offered, status.map_layers ?? [])) offered = status.map_layers ?? [];
     photos = status.photos;
     truncated = status.truncated;
     offset = serverOffsetMs(status.server_time, Date.now());
@@ -297,7 +309,22 @@
     start: m.tracking_map_start(),
     last: m.tracking_map_last(),
     noTiles: m.tracking_map_no_tiles(),
+    layers: m.tracking_map_layers(),
   });
+
+  // The base map: the street map and the aerial photo Telemetry serves around the track.
+  const tileLoad = tileLoader(apiFetch);
+  const sameLayers = (a: readonly MapLayer[], b: readonly MapLayer[]) =>
+    JSON.stringify(a) === JSON.stringify(b);
+  const baseLayers = $derived(
+    mapLayers(
+      offered,
+      (kind) => ownerTileUrl(id, kind, session?.id),
+      tileLoad,
+      (kind) => (kind === 'map' ? m.tracking_layer_map() : m.tracking_layer_aerial()),
+    ),
+  );
+  $effect(() => saveLayer(layer));
 
   const hourOptions = $derived(
     ['1', '6', '24', '48'].map((value) => ({
@@ -345,6 +372,8 @@
             {track}
             {last}
             stale={Boolean(session.stale_since)}
+            layers={baseLayers}
+            bind:layer
             {tiles}
             labels={mapLabels}
             bind:follow
@@ -377,6 +406,14 @@
                     >{m.tracking_last_seen({ age: formatAge(last.at, now) })}</strong
                   >
                   <span class="mono">{coordinates(last)}</span>
+                  <a
+                    class="maps"
+                    href={mapsLink(last)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="tracking-open-maps"
+                    ><Icon name="pin" size={16} />{m.tracking_open_maps()}</a
+                  >
                 {:else}
                   {m.tracking_no_position()}
                 {/if}
@@ -732,6 +769,27 @@
   .mono {
     font-family: var(--md-font-mono);
     font-size: var(--md-font-size-13);
+  }
+
+  .maps {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    gap: var(--md-space-2);
+    min-block-size: var(--md-target);
+    margin-block-start: var(--md-space-1);
+    padding: 0 var(--md-space-3);
+    border: var(--md-border-control) solid var(--md-color-line-strong);
+    border-radius: var(--md-radius-round);
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-14);
+    font-weight: var(--md-weight-semibold);
+    text-decoration: none;
+  }
+
+  .maps:focus-visible {
+    outline: 3px solid var(--md-color-focus);
+    outline-offset: 2px;
   }
 
   .stale {

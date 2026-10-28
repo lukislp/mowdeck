@@ -34,13 +34,17 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_service_kit import get_logger
 
+from telemetry.application.aerial import FetchedTile
 from telemetry.application.ports import Clock, Store
 from telemetry.application.report import PhotoData, ReportData, build_report
+from telemetry.application.tracking_map import BaseLayer, TrackingMap
 from telemetry.application.tracking_ports import TrackingEvents, TrackingGateway, TrackingStore
+from telemetry.domain.aerial import Bounds, points_bounds
 from telemetry.domain.errors import (
     LinkLimitError,
     NoTrackingError,
     RateLimitedError,
+    TileOutsideMapError,
     TrackingStateError,
     UnknownTrackedMowerError,
 )
@@ -94,6 +98,8 @@ class TrackingConfig:
     """Most track points the public page gets."""
     public_rate_per_minute: int = 60
     public_failures_per_minute: int = 20
+    public_tiles_per_minute: int = 600
+    """Base map tiles per minute and client on the public share page."""
 
 
 class SlidingWindow:
@@ -173,8 +179,12 @@ class Tracking:
         clock: Clock,
         events: TrackingEvents,
         gateway: TrackingGateway,
+        *,
+        basemap: TrackingMap | None = None,
     ) -> None:
         self._store = store
+        self._basemap = basemap
+        self._areas: dict[UUID, tuple[datetime, Bounds | None]] = {}
         self._data = data
         self._config = config
         self._clock = clock
@@ -184,6 +194,9 @@ class Tracking:
         self._public_ok = SlidingWindow(config.public_rate_per_minute, timedelta(minutes=1), clock)
         self._public_bad = SlidingWindow(
             config.public_failures_per_minute, timedelta(minutes=1), clock
+        )
+        self._public_tiles = SlidingWindow(
+            config.public_tiles_per_minute, timedelta(minutes=1), clock
         )
 
     def now(self) -> datetime:
@@ -608,6 +621,78 @@ class Tracking:
             expires_at=link.expires_at,
             server_time=now,
         )
+
+    # --- base map -----------------------------------------------------------------------------
+
+    @property
+    def map_layers(self) -> list[BaseLayer]:
+        """The base map layers offered under a track (empty without a configured source)."""
+        return self._basemap.layers if self._basemap is not None else []
+
+    async def map_tile(
+        self,
+        account_id: UUID,
+        mower_id: UUID,
+        layer: str,
+        z: int,
+        x: int,
+        y: int,
+        *,
+        session_id: UUID | None = None,
+    ) -> FetchedTile:
+        """A base map tile around the track of the mower's active (else newest) session."""
+        session = await self._pick(account_id, mower_id, session_id)
+        if session is None:
+            raise NoTrackingError("no tracking session")
+        return await self._tile(session, layer, z, x, y)
+
+    async def public_map_tile(
+        self, token: str, client: str, layer: str, z: int, x: int, y: int
+    ) -> FetchedTile | None:
+        """A base map tile for a share link; None for any unusable token (like the view).
+        Tiles have their own, larger allowance per client; bad tokens count as for the view."""
+        wait = max(self._public_bad.retry_after(client), self._public_tiles.retry_after(client))
+        if wait:
+            raise RateLimitedError("too many requests", wait)
+        self._public_tiles.hit(client)
+        now = self._clock()
+        link = (
+            await self._store.link_by_hash(token_hash(token)) if is_plausible_token(token) else None
+        )
+        session = (
+            await self._store.session_of(link.account_id, link.session_id)
+            if link is not None and link.usable(now)
+            else None
+        )
+        if session is None:
+            self._public_bad.hit(client)
+            return None
+        return await self._tile(session, layer, z, x, y)
+
+    async def _tile(
+        self, session: TrackingSession, layer: str, z: int, x: int, y: int
+    ) -> FetchedTile:
+        if self._basemap is None:
+            raise TileOutsideMapError("no base map is configured")
+        area = await self._area(session, self._basemap.margin_m)
+        return await self._basemap.tile(session.account_id, area, layer, z, x, y)
+
+    async def _area(self, session: TrackingSession, margin_m: float) -> Bounds | None:
+        """The box around the session's positions plus the margin, kept for a few seconds (a
+        map view asks for a few dozen tiles at once)."""
+        now = self._clock()
+        cached = self._areas.get(session.id)
+        if cached is not None and timedelta(0) <= now - cached[0] < timedelta(seconds=15):
+            return cached[1]
+        track = await self._track(session, now, limit=self._config.track_limit)
+        points = [(p.lat, p.lon) for p in track]
+        if session.last_lat is not None and session.last_lon is not None:
+            points.append((session.last_lat, session.last_lon))
+        area = points_bounds(points, margin_m)
+        if len(self._areas) >= 1000:
+            self._areas.clear()
+        self._areas[session.id] = (now, area)
+        return area
 
     # --- report -------------------------------------------------------------------------------
 

@@ -7,17 +7,19 @@ it travels in the body (never in a URL, so no access log, referrer or history ho
 answer carries only the allowed fields.
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from mowdeck_service_kit import CurrentAccountId
 from mowdeck_service_kit.errors import NotFound
 from pydantic import BaseModel, Field
 
 from telemetry.adapters.api.deps import ControlMower, ServicesDep, ViewMower
 from telemetry.application.tracking import PublicTrack, Tracking, TrackingView, TrackPoint
+from telemetry.application.tracking_map import BaseLayer
 from telemetry.domain.errors import NoTrackingError
 from telemetry.domain.tracking import TrackingLink, TrackingSession
 
@@ -133,6 +135,30 @@ class TrackingLinkOut(BaseModel):
         )
 
 
+class MapLayerOut(BaseModel):
+    """A base map layer offered under the track: ``map`` (street map) or ``aerial`` (photo).
+    Tiles come from ``/mowers/{id}/tracking/map/{layer}/{z}/{x}/{y}`` (owner) or
+    ``POST /public/tracking/tile`` (share link), only around the tracked positions."""
+
+    id: Literal["map", "aerial"]
+    attribution: str = Field(description="Credit line to show while the layer is visible.")
+    min_zoom: int
+    max_zoom: int = Field(description="Highest zoom with real detail; deeper zooms scale it.")
+
+    @classmethod
+    def all(cls, layers: Sequence[BaseLayer]) -> list["MapLayerOut"]:
+        """From the offered layers."""
+        return [
+            cls(
+                id=layer.id,
+                attribution=layer.attribution,
+                min_zoom=layer.min_zoom,
+                max_zoom=layer.max_zoom,
+            )
+            for layer in layers
+        ]
+
+
 class TrackingStatus(BaseModel):
     """The tracking view of a mower: the session, its track and its links."""
 
@@ -143,10 +169,15 @@ class TrackingStatus(BaseModel):
     truncated: bool = False
     links: list[TrackingLinkOut] = Field(default_factory=list)
     photos: int = 0
+    map_layers: list[MapLayerOut] = Field(
+        default_factory=list, description="Base map layers under the track; empty without any."
+    )
     server_time: datetime
 
     @classmethod
-    def of(cls, view: TrackingView | None, now: datetime) -> "TrackingStatus":
+    def of(
+        cls, view: TrackingView | None, now: datetime, layers: Sequence[BaseLayer] = ()
+    ) -> "TrackingStatus":
         """From a view (None: no session yet)."""
         if view is None:
             return cls(session=None, server_time=now)
@@ -156,6 +187,7 @@ class TrackingStatus(BaseModel):
             truncated=view.truncated,
             links=[TrackingLinkOut.of(link, now) for link in view.links],
             photos=view.photos,
+            map_layers=MapLayerOut.all(layers),
             server_time=now,
         )
 
@@ -201,12 +233,14 @@ class PublicTrackOut(BaseModel):
     stale_since: datetime | None = None
     track: list[TrackPointOut]
     expires_at: datetime
+    map_layers: list[MapLayerOut] = Field(default_factory=list)
     server_time: datetime
 
     @classmethod
-    def of(cls, p: PublicTrack) -> "PublicTrackOut":
+    def of(cls, p: PublicTrack, layers: Sequence[BaseLayer] = ()) -> "PublicTrackOut":
         """From the public view."""
         return cls(
+            map_layers=MapLayerOut.all(layers),
             mower_name=p.mower_name,
             mower_model=p.mower_model,
             active=p.active,
@@ -234,7 +268,7 @@ async def get_tracking_status(
     """The active tracking session of the mower, else the newest one, with its track and
     links; ``after`` returns only newer positions."""
     view = await tracking.view(account_id, mower_id, session_id=session_id, after=after)
-    return TrackingStatus.of(view, tracking_now(tracking))
+    return TrackingStatus.of(view, tracking_now(tracking), tracking.map_layers)
 
 
 def tracking_now(tracking: Tracking) -> datetime:
@@ -305,7 +339,9 @@ async def take_tracking_photo(
     if view is None or not view.session.active:
         raise NoTrackingError("no active tracking session")
     await tracking.take_photo(account_id, mower_id, view.session.id)
-    return TrackingStatus.of(await tracking.view(account_id, mower_id), tracking_now(tracking))
+    return TrackingStatus.of(
+        await tracking.view(account_id, mower_id), tracking_now(tracking), tracking.map_layers
+    )
 
 
 @router.post("/mowers/{mower_id}/tracking/links", status_code=201)
@@ -398,7 +434,67 @@ async def public_tracking_view(
     view = await tracking.public_view(body.token, _client_key(request))
     if view is None:
         raise PublicNotFound("not found")
-    return PublicTrackOut.of(view)
+    return PublicTrackOut.of(view, tracking.map_layers)
+
+
+class PublicTileIn(BaseModel):
+    """Body of a public base map tile: the share token and the tile (in the body, so neither
+    the token nor the place reaches an access log)."""
+
+    token: str = Field(min_length=1, max_length=200)
+    layer: Literal["map", "aerial"]
+    z: int = Field(ge=0, le=24)
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+
+
+TILE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {"content": {"image/jpeg": {}, "image/png": {}}}
+}
+
+
+@router.get(
+    "/mowers/{mower_id}/tracking/map/{layer}/{z}/{x}/{y}",
+    response_class=Response,
+    responses=TILE_RESPONSES,
+)
+async def tracking_map_tile(
+    mower_id: UUID,
+    layer: Literal["map", "aerial"],
+    z: Annotated[int, Path(ge=0, le=24)],
+    x: Annotated[int, Path(ge=0)],
+    y: Annotated[int, Path(ge=0)],
+    _: ViewMower,
+    account_id: CurrentAccountId,
+    tracking: TrackingDep,
+    session_id: UUID | None = None,
+) -> Response:
+    """One base map tile (Web Mercator, XYZ) under the track of the active or newest session.
+    Tiles away from the tracked positions, outside the zoom range or of a layer that is not
+    offered are 404 `tile-outside-map`; new tiles are rate limited per account (429)."""
+    tile = await tracking.map_tile(account_id, mower_id, layer, z, x, y, session_id=session_id)
+    return Response(
+        tile.body,
+        media_type=tile.media_type,
+        headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.post(
+    "/public/tracking/tile", tags=["public"], response_class=Response, responses=TILE_RESPONSES
+)
+async def public_tracking_tile(
+    body: PublicTileIn, request: Request, tracking: TrackingDep
+) -> Response:
+    """One base map tile for the page of a share link, only around the shared track. No
+    login; 404 for any unusable token or a tile away from the track, 429 when asked too
+    often."""
+    tile = await tracking.public_map_tile(
+        body.token, _client_key(request), body.layer, body.z, body.x, body.y
+    )
+    if tile is None:
+        raise PublicNotFound("not found")
+    return Response(tile.body, media_type=tile.media_type, headers=PUBLIC_HEADERS)
 
 
 class PublicNotFound(NotFound):

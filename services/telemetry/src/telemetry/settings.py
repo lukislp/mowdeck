@@ -16,6 +16,7 @@ from pydantic import Field, field_validator, model_validator
 from telemetry.application.aerial import AerialConfig
 from telemetry.application.context import TelemetryConfig
 from telemetry.application.tracking import TrackingConfig
+from telemetry.application.tracking_map import TrackingMapConfig
 from telemetry.domain.thinning import ThinPolicy
 
 
@@ -176,7 +177,39 @@ class Settings(ServiceSettings):
     telemetry_aerial_timeout_seconds: float = Field(default=10, gt=0, le=120)
     """Timeout of a request to the photo source."""
 
-    @field_validator("telemetry_aerial_wms_url", "telemetry_aerial_xyz_url", mode="before")
+    telemetry_basemap_url: str | None = Field(
+        default=None,
+        pattern=r"^https?://[^\s\"<>\\]+$",
+    )
+    """Street map under a theft tracking track (ADR 0058): an https XYZ tile URL template with
+    ``{z}``, ``{x}``, ``{y}`` in any order (Web Mercator, 256 px), fetched by Telemetry only
+    around a tracked
+    track and cached with the aerial tiles. Empty (the default) means no street map and no
+    request to any third party. Germany (open data, no key): BKG TopPlusOpen
+    ``https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png``."""
+
+    telemetry_basemap_attribution: str = Field(default="", max_length=300)
+    """Credit line of the street map (shown while it is visible; TopPlusOpen:
+    ``© BKG (Jahr des letzten Datenbezugs), dl-de/by-2-0``)."""
+
+    telemetry_basemap_min_zoom: int = Field(default=8, ge=0, le=24)
+    """Lowest zoom of the street map that is served."""
+
+    telemetry_basemap_max_zoom: int = Field(default=18, ge=0, le=24)
+    """Highest zoom the street map source delivers (the client scales beyond it)."""
+
+    telemetry_tracking_map_margin_meters: float = Field(default=2000, ge=100, le=50_000)
+    """Base map tiles of a tracking session are served this far around its positions."""
+
+    telemetry_tracking_public_tiles_per_minute: int = Field(default=600, ge=1)
+    """Base map tiles per minute and client on the public share page."""
+
+    @field_validator(
+        "telemetry_aerial_wms_url",
+        "telemetry_aerial_xyz_url",
+        "telemetry_basemap_url",
+        mode="before",
+    )
     @classmethod
     def _empty_url_is_none(cls, value: object) -> object:
         """Compose passes unset variables as empty strings."""
@@ -184,11 +217,27 @@ class Settings(ServiceSettings):
 
     @model_validator(mode="after")
     def _https_sources(self) -> Self:
-        for url in (self.telemetry_aerial_wms_url, self.telemetry_aerial_xyz_url):
+        for url in (
+            self.telemetry_aerial_wms_url,
+            self.telemetry_aerial_xyz_url,
+            self.telemetry_basemap_url,
+        ):
             if url and not url.startswith("https://") and not self.telemetry_aerial_allow_http:
-                msg = "the aerial photo source must be an https URL"
+                msg = "the aerial photo and base map sources must be https URLs"
                 raise ValueError(msg)
+        basemap = self.telemetry_basemap_url
+        if basemap and not all(part in basemap for part in ("{z}", "{x}", "{y}")):
+            msg = "MOWDECK_TELEMETRY_BASEMAP_URL needs {z}, {x} and {y}"
+            raise ValueError(msg)
         return self
+
+    def to_tracking_map_config(self) -> TrackingMapConfig:
+        """Margin and cache of the base map under a tracking track."""
+        return TrackingMapConfig(
+            margin_m=self.telemetry_tracking_map_margin_meters,
+            cache_ttl=timedelta(days=self.telemetry_aerial_cache_ttl_days),
+            misses_per_minute=self.telemetry_aerial_misses_per_minute,
+        )
 
     def to_aerial_config(self) -> AerialConfig:
         """The aerial photo configuration."""
@@ -285,6 +334,7 @@ class Settings(ServiceSettings):
             photos=self.telemetry_tracking_photos,
             public_rate_per_minute=self.telemetry_tracking_public_rate_per_minute,
             public_failures_per_minute=self.telemetry_tracking_public_failures_per_minute,
+            public_tiles_per_minute=self.telemetry_tracking_public_tiles_per_minute,
         )
 
     def to_config(self) -> TelemetryConfig:

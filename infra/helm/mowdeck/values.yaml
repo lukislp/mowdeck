@@ -97,6 +97,11 @@ config:
   AERIAL_ATTRIBUTION: ""
   AERIAL_MAX_ZOOM: "19"
   AERIAL_CACHE_MAX_MB: "256"
+  # Optional street map under the theft tracking track (ADR 0058): an XYZ template fetched and
+  # cached by Telemetry only around a tracked track. Empty: off. Germany: BKG TopPlusOpen.
+  BASEMAP_URL: ""
+  BASEMAP_ATTRIBUTION: ""
+  BASEMAP_MAX_ZOOM: "18"
   TELEMETRY_HEARTBEAT_HISTORY_SECONDS: "300"
   TELEMETRY_RETENTION_HISTORY_DAYS: "30"
   TELEMETRY_RETENTION_POSITIONS_DAYS: "730"
