@@ -1,5 +1,17 @@
 # OSV-Scanner configuration, also read by the OpenSSF Scorecard Vulnerabilities check. It sits
 # next to pnpm-lock.yaml and uv.lock because OSV-Scanner looks for it beside the lock file.
 # Every entry is an explicit, time-boxed acceptance; CONTRIBUTING.md says when to remove one.
-#
-# No advisory is accepted at the moment.
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-01-28
+reason = """\
+deepmerge 4.3.1 (CVE-2026-93753, low): mergeObject() lets a malicious source object poison the \
+prototype of the merged result. No fixed release exists: 4.3.1 is the latest version and the \
+whole range >= 4.2.0 is affected. Only path in: @sveltejs/vite-plugin-svelte 7.3.1 (latest, a \
+devDependency of apps/web) depends on deepmerge ^4.3.1 and calls it in mergeConfigs() to merge \
+the plugin defaults, svelte.config.js and the inline options from vite.config.ts. All of that is \
+developer-authored build configuration, never user or network input, and it runs only during \
+vite dev/build. The web image ships the static build behind nginx, so deepmerge never reaches \
+production. Remove once deepmerge or vite-plugin-svelte ships a fix, or re-check by the \
+ignoreUntil date."""
