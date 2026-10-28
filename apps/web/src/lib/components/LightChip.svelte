@@ -119,17 +119,17 @@
   }
 
   [data-state='on'] {
-    border-color: var(--md-state-paused);
+    border-color: var(--md-hud-lit);
   }
 
   [data-state='on'] .lamp {
-    border-color: var(--md-state-paused);
-    background: var(--md-state-paused);
+    border-color: var(--md-hud-lit);
+    background: var(--md-hud-lit);
     box-shadow: 0 0 0 3px var(--md-state-paused-bg);
   }
 
   [data-state='on'] .word {
-    color: var(--md-state-paused);
+    color: var(--md-hud-lit);
   }
 
   .pending .word {

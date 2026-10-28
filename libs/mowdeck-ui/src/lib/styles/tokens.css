@@ -111,6 +111,9 @@
   /* Dark ink on a lit HUD plate (a pressed chip filled with --md-hud-ink), in both themes. */
   --md-hud-ink-inverse: #0a0c0d;
 
+  /* A lit state on the HUD glass (the camera light on): amber that reads on the dark plate. */
+  --md-hud-lit: #f2b24a;
+
   /* Targets */
   --md-target: 48px;
   --md-target-command: 56px;
