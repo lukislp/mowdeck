@@ -26,6 +26,7 @@
 
   import { telemetryApi } from '#lib/api/client.js';
   import type { ApiProblem } from '#lib/api/problem.js';
+  import AngleDial from '#lib/components/AngleDial.svelte';
   import AreaPlan from '#lib/components/AreaPlan.svelte';
   import MowOptions from '#lib/components/MowOptions.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
@@ -55,6 +56,14 @@
     type CapsLike,
   } from '#lib/schedules/mow-options.js';
   import { formatDuration, weekdayShort } from '#lib/schedules/recurrence.js';
+  import {
+    DEFAULT_STEP,
+    STEP_PRESETS,
+    angleText,
+    normalised,
+    stepSequence,
+    validStep,
+  } from '#lib/schedules/rotation.js';
   import { WEEKDAYS, type Locale, type Weekday } from '#lib/schedules/types.js';
 
   interface Target {
@@ -232,7 +241,13 @@
   const offer = $derived(
     capabilities === null ? NO_OFFER : commonOffer(members.map((id) => capabilities[id])),
   );
-  const mowParts = $derived(mowSummary({ ...mowBody(form.mow), rotation_angles: form.rotation }));
+  const mowParts = $derived(
+    mowSummary({
+      ...mowBody(form.mow),
+      rotation_angles: form.rotationMode === 'list' ? form.rotation : [],
+      rotation_step_deg: form.rotationMode === 'step' ? parseNumber(form.rotationStep) : null,
+    }),
+  );
 
   // Another target: what it does not offer is cleared (never moved into its range).
   let fittedFor = untrack(() => `${form.targetType}:${form.targetId}`);
@@ -273,6 +288,31 @@
     [next[index], next[target]] = [next[target]!, next[index]!];
     form.rotation = next;
   }
+
+  // --- rotation: off, a step per run (ADR 0061) or a list ---------------------------------------
+
+  const rotationModes = $derived([
+    { value: 'off', label: m.sched_rotation_off() },
+    { value: 'step', label: m.sched_rotation_mode_step() },
+    { value: 'list', label: m.sched_rotation_mode_list() },
+  ]);
+
+  function setRotationMode(value: string): void {
+    if (value !== 'off' && value !== 'step' && value !== 'list') return;
+    form.rotationMode = value;
+    if (value === 'step' && !validStep(parseNumber(form.rotationStep))) {
+      form.rotationStep = String(DEFAULT_STEP);
+    }
+  }
+
+  /** What the dial draws: the next five angles from the base angle (the first run). */
+  const dialAngles = $derived.by((): number[] => {
+    if (form.rotationMode === 'list') return form.rotation.slice(0, 6).map(normalised);
+    const step = parseNumber(form.rotationStep);
+    if (form.rotationMode !== 'step' || !validStep(step)) return [];
+    return stepSequence(null, step, form.mow.pattern.angle ?? 0, 6);
+  });
+  const dialText = $derived(dialAngles.map((a) => angleText(a, formatNumber)).join(' → '));
 
   const angleValid = $derived.by(() => {
     const value = parseNumber(newAngle);
@@ -582,73 +622,128 @@
       {/if}
       {#if err('mow')}<span class="error" role="alert">{err('mow')}</span>{/if}
       {#if offer.offered.length}
-        <div class="rotation" data-invalid={issues.rotation ? 'true' : undefined}>
+        <div
+          class="rotation"
+          data-invalid={issues.rotation ? 'true' : undefined}
+          data-testid="sched-rotation-section"
+        >
           <span class="label">{m.sched_rotation()}</span>
-          <p class="hint small">{m.sched_rotation_hint()}</p>
-          {#if form.rotation.length}
-            <ol class="angles" data-testid="sched-rotation">
-              {#each form.rotation as angle, i (i)}
-                <li>
-                  <span class="mono step">{i + 1}</span>
-                  <span class="mono value">{formatNumber(angle, angle % 1 ? 1 : 0)}°</span>
-                  <button
-                    type="button"
-                    class="mini turn"
-                    aria-label={m.sched_rotation_up()}
-                    disabled={i === 0}
-                    onclick={() => moveAngle(i, -1)}><Icon name="back" size={16} /></button
-                  >
-                  <button
-                    type="button"
-                    class="mini turn"
-                    aria-label={m.sched_rotation_down()}
-                    disabled={i === form.rotation.length - 1}
-                    onclick={() => moveAngle(i, 1)}><Icon name="chevron" size={16} /></button
-                  >
-                  <button
-                    type="button"
-                    class="mini"
-                    aria-label={m.remove()}
-                    onclick={() => removeAngle(i)}><Icon name="close" size={16} /></button
-                  >
-                </li>
-              {/each}
-            </ol>
+          <SegmentedControl
+            label={m.sched_rotation()}
+            options={rotationModes}
+            value={form.rotationMode}
+            onchange={setRotationMode}
+            testid="sched-rotation-mode"
+          />
+          {#if form.rotationMode !== 'off'}
+            <div class="turntable">
+              <AngleDial
+                angles={dialAngles}
+                label={m.sched_rotation_dial({ angles: dialText })}
+                testid="sched-rotation-dial"
+              />
+              <div class="turntable-text">
+                {#if form.rotationMode === 'step'}
+                  <p class="hint small">{m.sched_rotation_step_hint()}</p>
+                  <div class="steps" role="group" aria-label={m.sched_rotation_step()}>
+                    {#each STEP_PRESETS as step (step)}
+                      <button
+                        type="button"
+                        class="step-chip mono"
+                        aria-pressed={parseNumber(form.rotationStep) === step}
+                        data-testid="sched-rotation-step-{step}"
+                        onclick={() => (form.rotationStep = String(step))}>+{step}°</button
+                      >
+                    {/each}
+                  </div>
+                  <Field
+                    id="sched-rotation-step"
+                    label={m.sched_rotation_step_custom()}
+                    inputmode="decimal"
+                    mono
+                    testid="sched-rotation-step"
+                    bind:value={form.rotationStep}
+                  />
+                {:else}
+                  <p class="hint small">{m.sched_rotation_hint()}</p>
+                {/if}
+                <p class="sequence mono" data-testid="sched-rotation-sequence">
+                  {dialText}{#if dialAngles.length}
+                    …{/if}
+                </p>
+              </div>
+            </div>
           {/if}
-          <div class="add">
-            <Field
-              id="sched-rotation-new"
-              label={m.sched_rotation_add_label()}
-              inputmode="decimal"
-              mono
-              bind:value={newAngle}
-            />
-            <Button
-              icon="plus"
-              disabled={!angleValid || form.rotation.length >= LIMITS.rotation}
-              testid="sched-rotation-add"
-              onclick={addAngle}>{m.sched_rotation_add()}</Button
-            >
-          </div>
-          <div class="presets">
-            {#each rotationPresets as preset (preset.label)}
-              <button
-                type="button"
-                class="preset mono"
-                onclick={() => (form.rotation = [...preset.angles])}>{preset.label}</button
-              >
-            {/each}
-            {#if form.rotation.length}
-              <button type="button" class="preset" onclick={() => (form.rotation = [])}
-                >{m.sched_rotation_clear()}</button
-              >
-            {/if}
-          </div>
+          {#if form.rotationMode === 'list'}
+            {@render rotationList()}
+          {/if}
           {#if err('rotation')}<span class="error" role="alert">{err('rotation')}</span>{/if}
         </div>
       {/if}
     </div>
   </Panel>
+
+  {#snippet rotationList()}
+    {#if form.rotation.length}
+      <ol class="angles" data-testid="sched-rotation">
+        {#each form.rotation as angle, i (i)}
+          <li>
+            <span class="mono step">{i + 1}</span>
+            <span class="mono value">{formatNumber(angle, angle % 1 ? 1 : 0)}°</span>
+            <button
+              type="button"
+              class="mini turn"
+              aria-label={m.sched_rotation_up()}
+              disabled={i === 0}
+              onclick={() => moveAngle(i, -1)}><Icon name="back" size={16} /></button
+            >
+            <button
+              type="button"
+              class="mini turn"
+              aria-label={m.sched_rotation_down()}
+              disabled={i === form.rotation.length - 1}
+              onclick={() => moveAngle(i, 1)}><Icon name="chevron" size={16} /></button
+            >
+            <button
+              type="button"
+              class="mini"
+              aria-label={m.remove()}
+              onclick={() => removeAngle(i)}><Icon name="close" size={16} /></button
+            >
+          </li>
+        {/each}
+      </ol>
+    {/if}
+    <div class="add">
+      <Field
+        id="sched-rotation-new"
+        label={m.sched_rotation_add_label()}
+        inputmode="decimal"
+        mono
+        bind:value={newAngle}
+      />
+      <Button
+        icon="plus"
+        disabled={!angleValid || form.rotation.length >= LIMITS.rotation}
+        testid="sched-rotation-add"
+        onclick={addAngle}>{m.sched_rotation_add()}</Button
+      >
+    </div>
+    <div class="presets">
+      {#each rotationPresets as preset (preset.label)}
+        <button
+          type="button"
+          class="preset mono"
+          onclick={() => (form.rotation = [...preset.angles])}>{preset.label}</button
+        >
+      {/each}
+      {#if form.rotation.length}
+        <button type="button" class="preset" onclick={() => (form.rotation = [])}
+          >{m.sched_rotation_clear()}</button
+        >
+      {/if}
+    </div>
+  {/snippet}
 
   <Panel label={m.sched_section_rain()} testid="sched-rain">
     <div class="fields">
@@ -990,6 +1085,73 @@
     display: flex;
     flex-direction: column;
     gap: var(--md-space-2);
+  }
+
+  .turntable {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--md-space-4);
+    padding: var(--md-space-3);
+    border: var(--md-hairline) solid var(--md-color-line);
+    background:
+      repeating-linear-gradient(
+        135deg,
+        transparent 0 10px,
+        color-mix(in srgb, var(--md-state-mowing) 5%, transparent) 10px 20px
+      ),
+      var(--md-color-surface);
+  }
+
+  .turntable-text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--md-space-2);
+    min-width: 0;
+  }
+
+  .turntable-text .hint {
+    margin: 0;
+  }
+
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--md-space-1);
+  }
+
+  .step-chip {
+    min-width: 56px;
+    min-height: var(--md-target);
+    padding: 0 var(--md-space-2);
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+    border-radius: var(--md-radius-0);
+    background: var(--md-color-surface);
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-14);
+    cursor: pointer;
+  }
+
+  .step-chip[aria-pressed='true'] {
+    border-color: var(--md-state-mowing);
+    background: var(--md-state-mowing-bg);
+    color: var(--md-color-ink);
+    font-weight: var(--md-weight-semibold);
+    box-shadow: inset 0 -3px 0 var(--md-state-mowing);
+  }
+
+  .sequence {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+  }
+
+  @media (max-width: 420px) {
+    .turntable {
+      grid-template-columns: minmax(0, 1fr);
+      justify-items: center;
+    }
   }
 
   .angles {

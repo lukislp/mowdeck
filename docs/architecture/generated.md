@@ -475,7 +475,7 @@ flowchart LR
   end
   subgraph scheduler["scheduler"]
     direction TB
-    scheduler_schedules["schedules<br/>11 operations"]
+    scheduler_schedules["schedules<br/>14 operations"]
   end
   subgraph telemetry["telemetry"]
     direction TB
@@ -515,7 +515,7 @@ flowchart LR
 | `planner` | `planner` | 8 | 6 |
 | `realtime` | `operations` | 1 | 1 |
 | `scheduler` | `operations` | 1 | 1 |
-| `scheduler` | `schedules` | 11 | 8 |
+| `scheduler` | `schedules` | 14 | 10 |
 | `telemetry` | `operations` | 1 | 1 |
 | `telemetry` | `public` | 1 | 1 |
 | `telemetry` | `telemetry` | 21 | 21 |
@@ -549,7 +549,7 @@ flowchart LR
     db_identity[("identity<br/>5 migrations")]
     db_notifications[("notifications<br/>9 migrations")]
     db_planner[("planner<br/>2 migrations")]
-    db_scheduler[("scheduler<br/>3 migrations")]
+    db_scheduler[("scheduler<br/>4 migrations")]
     db_telemetry[("telemetry<br/>12 migrations")]
     db_vision[("vision<br/>7 migrations")]
   end

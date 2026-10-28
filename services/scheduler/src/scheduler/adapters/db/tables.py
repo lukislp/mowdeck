@@ -57,6 +57,7 @@ schedules = Table(
     Column("speed_mps", Float),
     Column("rotation_angles", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("rotation_index", Integer, nullable=False, server_default=text("0")),
+    Column("rotation_step_deg", Float),
     Column("rain", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("pause_running_jobs_on_rain", Boolean, nullable=False, server_default=text("true")),
     Column("return_to_dock_at_window_end", Boolean, nullable=False, server_default=text("false")),
@@ -92,6 +93,7 @@ schedule_runs = Table(
     Column("window_end_at", TS),
     Column("followup", String(16)),
     Column("followup_at", TS),
+    Column("angle_deg", Float),
     Index("ix_schedule_runs_schedule_started", "schedule_id", "started_at"),
     Index("ix_schedule_runs_started_at", "started_at"),
     # Started runs still followed (rain pause of running jobs, window end).
@@ -134,4 +136,27 @@ mower_capabilities = Table(
     Column("account_id", Uuid, nullable=False),
     Column("observed_at", TS, nullable=False),
     Column("capabilities", JSONB, nullable=False),
+)
+
+# The last mowing angle per mower and area (ADR 0061): where step rotation continues.
+mow_angles = Table(
+    "mow_angles",
+    metadata,
+    Column("mower_id", Uuid, primary_key=True),
+    Column("area_id", String(128), primary_key=True),
+    Column("account_id", Uuid, nullable=False),
+    Column("angle_deg", Float, nullable=False),
+    Column("used_at", TS, nullable=False),
+    Column("source", String(16), nullable=False),
+    Column("schedule_id", Uuid),
+)
+
+# Per mower: the rotation step the start sheet offers for manual starts (ADR 0061).
+mower_rotation = Table(
+    "mower_rotation",
+    metadata,
+    Column("mower_id", Uuid, primary_key=True),
+    Column("account_id", Uuid, nullable=False),
+    Column("manual_step_deg", Float),
+    Column("updated_at", TS, nullable=False),
 )

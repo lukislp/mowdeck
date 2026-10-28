@@ -25,7 +25,7 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from mowdeck_authz import account
-from mowdeck_contracts.v1 import Principal
+from mowdeck_contracts.v1 import Principal, ResolveTargetReply
 from mowdeck_service_kit.entitlements import (
     Entitlements,
     EntitlementsClient,
@@ -42,11 +42,14 @@ from scheduler.domain.errors import ConflictError, ForbiddenError, InvalidInput,
 from scheduler.domain.models import Schedule, ScheduleRun
 from scheduler.domain.rain import RainSettings
 from scheduler.domain.recurrence import upcoming
+from scheduler.domain.rotation import last_angle, list_sequence, step_sequence
 from scheduler.domain.rules import (
     CAN_CONTROL,
     CAN_EDIT_SCHEDULE,
     CAN_VIEW,
     mower_problem,
+    pattern_for_run,
+    run_angle,
     sets_mower_options,
     validate_schedule,
     window_end,
@@ -74,6 +77,7 @@ EDITABLE = frozenset(
         "blade_height_mm",
         "speed_mps",
         "rotation_angles",
+        "rotation_step_deg",
         "rain",
         "pause_running_jobs_on_rain",
         "return_to_dock_at_window_end",
@@ -102,6 +106,7 @@ class ScheduleInput:
     blade_height_mm: int | None = None
     speed_mps: float | None = None
     rotation_angles: list[float] = field(default_factory=list)
+    rotation_step_deg: float | None = None
     rain: dict[str, Any] = field(default_factory=lambda: RainSettings().to_json())
     pause_running_jobs_on_rain: bool = True
     return_to_dock_at_window_end: bool = False
@@ -115,15 +120,18 @@ class PreviewItem:
     at: datetime
     window_end: datetime
     skipped: bool
+    angle_deg: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Preview:
-    """Upcoming firings; the rain decision for the first one when a forecast exists."""
+    """Upcoming firings; the rain decision for the first one when a forecast exists; the angle
+    of each firing for ``angle_mower_id``."""
 
     items: list[PreviewItem]
     weather: WeatherAnswer | None
     weather_mower_id: UUID | None
+    angle_mower_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,28 +319,71 @@ class ScheduleService:
         found = await self._visible(principal, account_id, schedule_id, CAN_VIEW)
         now = self.clock()
         times = upcoming(found.recurrence, ZoneInfo(found.timezone), now, count, found.last_run_at)
+        skipped = [found.skip_until is not None and t <= found.skip_until for t in times]
+        try:
+            target: ResolveTargetReply | None = await self.fleet.resolve(
+                found.account_id, found.target_type, found.target_id
+            )
+        except Exception:
+            target = None
+        angles, angle_mower_id = await self._angles_for(found, target, skipped)
         items = [
             PreviewItem(
                 at=t,
                 window_end=window_end(t, found.duration_minutes),
-                skipped=found.skip_until is not None and t <= found.skip_until,
+                skipped=skip,
+                angle_deg=angle,
             )
-            for t in times
+            for t, skip, angle in zip(times, skipped, angles, strict=True)
         ]
         answer, mower_id = None, None
         first = next((i for i in items if not i.skipped), None)
         if first is not None and found.enabled:
-            answer, mower_id = await self._weather_for(found, first.at)
-        return Preview(items, answer, mower_id)
+            answer, mower_id = await self._weather_for(found, first.at, target)
+        return Preview(items, answer, mower_id, angle_mower_id)
+
+    async def _angles_for(
+        self, schedule: Schedule, target: ResolveTargetReply | None, skipped: list[bool]
+    ) -> tuple[list[float | None], UUID | None]:
+        """The angle of every upcoming firing for the target's first mower (ADR 0061): each
+        firing that is not skipped is assumed to start, so step rotation continues from it."""
+        none: list[float | None] = [None] * len(skipped)
+        if target is None or not target.found or not target.mowers:
+            return none, None
+        mower = target.mowers[0]
+        defaults = (
+            mower.mow_pattern.model_dump(mode="json", exclude_none=True)
+            if mower.mow_pattern is not None
+            else None
+        )
+        base = run_angle(pattern_for_run(schedule.pattern, (), 0, defaults))
+        if base is None:
+            return none, mower.mower_id
+        runs = skipped.count(False)
+        sequence: list[float]
+        if schedule.rotation_step_deg is not None:
+            async with self.store.transaction() as tx:
+                place = await tx.get_place(mower.mower_id)
+                area_ids = list(schedule.area_ids) or (list(place.area_ids) if place else [])
+                stored = [
+                    a
+                    for a in await tx.get_area_angles(mower.mower_id, area_ids)
+                    if a.account_id == schedule.account_id
+                ]
+            sequence = step_sequence(
+                last_angle(stored, area_ids), schedule.rotation_step_deg, base, runs
+            )
+        elif schedule.rotation_angles:
+            sequence = list_sequence(schedule.rotation_angles, schedule.rotation_index, runs)
+        else:
+            sequence = [base] * runs
+        upcoming_angles = iter(sequence)
+        return [None if skip else next(upcoming_angles) for skip in skipped], mower.mower_id
 
     async def _weather_for(
-        self, schedule: Schedule, at: datetime
+        self, schedule: Schedule, at: datetime, target: ResolveTargetReply | None
     ) -> tuple[WeatherAnswer | None, UUID | None]:
-        try:
-            target = await self.fleet.resolve(
-                schedule.account_id, schedule.target_type, schedule.target_id
-            )
-        except Exception:
+        if target is None:
             return None, None
         for mower in target.mowers:
             location = await self.weather.locate(mower.mower_id, mower)
@@ -381,6 +432,7 @@ class ScheduleService:
             blade_height_mm=data.blade_height_mm,
             speed_mps=data.speed_mps,
             rotation_angles=list(data.rotation_angles),
+            rotation_step_deg=data.rotation_step_deg,
             rain=dict(data.rain),
             pause_running_jobs_on_rain=data.pause_running_jobs_on_rain,
             return_to_dock_at_window_end=data.return_to_dock_at_window_end,

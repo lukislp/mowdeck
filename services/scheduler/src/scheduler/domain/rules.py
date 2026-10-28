@@ -19,6 +19,14 @@ from pydantic import ValidationError
 
 from scheduler.domain.errors import InvalidInput
 from scheduler.domain.models import Schedule
+from scheduler.domain.rotation import (
+    STEP_RANGE,
+    AreaAngle,
+    directed,
+    last_angle,
+    stepped,
+    valid_step,
+)
 
 CAN_VIEW: Final = "can_view"
 CAN_CONTROL: Final = "can_control"
@@ -167,6 +175,12 @@ def validate_schedule(schedule: Schedule) -> None:
         not math.isfinite(a) or not -360 <= a <= 360 for a in schedule.rotation_angles
     ):
         raise InvalidInput("rotation_angles: at most 24 angles between -360 and 360")
+    if schedule.rotation_step_deg is not None:
+        if not valid_step(schedule.rotation_step_deg):
+            low, high = STEP_RANGE
+            raise InvalidInput(f"rotation_step_deg must be between {low:g} and {high:g} degrees")
+        if schedule.rotation_angles:
+            raise InvalidInput("rotation_step_deg and rotation_angles exclude each other")
     if schedule.pattern is not None and len(json.dumps(schedule.pattern)) > MAX_PATTERN_BYTES:
         raise InvalidInput(f"pattern must not exceed {MAX_PATTERN_BYTES} bytes")
     schedule.pattern = schedule_pattern(schedule.pattern)
@@ -186,25 +200,60 @@ def pattern_for_run(
     rotation: Sequence[float],
     index: int,
     defaults: Mapping[str, Any] | None = None,
+    angle: float | None = None,
 ) -> dict[str, Any]:
     """The ``StartMow.pattern`` of the next run, shaped like ``MowPattern``.
 
     Precedence, lowest first: :data:`RUN_PATTERN_BASE`, the mower's saved mowing defaults
     (``TargetMower.mow_pattern``), the keys the schedule sets (``SchedulePattern``), then the
     angle taken round robin from ``rotation`` (the plan's "rotate between patterns", e.g. a new
-    direction every week). A key nobody sets is left out, so the mower keeps its own setting.
+    direction every week) or ``angle`` (step rotation, ADR 0061, worked out by the caller from
+    the mower's last angles). A key nobody sets is left out, so the mower keeps its own setting.
     Angles are normalised to 0 up to 180 degrees (stripes have no direction). A start progress
     in the defaults is never carried into a scheduled run (it belongs to one manual start).
     """
     result: dict[str, Any] = {**RUN_PATTERN_BASE, **(defaults or {})}
     result.update({k: v for k, v in (pattern or {}).items() if v is not None})
     result.pop("start_progress_pct", None)
-    if rotation:
+    if angle is not None:
+        result["angle_deg"] = angle
+    elif rotation:
         result["angle_deg"] = rotation[index % len(rotation)]
     angle = result.get("angle_deg")
     if isinstance(angle, int | float) and math.isfinite(angle):
         result["angle_deg"] = float(angle) % 180.0
     return {k: v for k, v in result.items() if v is not None}
+
+
+def step_angle(
+    schedule: Schedule,
+    defaults: Mapping[str, Any] | None,
+    angles: Sequence[AreaAngle],
+    area_ids: Sequence[str],
+) -> float | None:
+    """The angle of the next run of a schedule with step rotation (ADR 0061) for one mower:
+    the last angle on ``area_ids`` turned by the step, the base angle without one. None when
+    the schedule does not rotate by step or its pattern has no direction."""
+    step = schedule.rotation_step_deg
+    if step is None:
+        return None
+    base = pattern_for_run(schedule.pattern, (), 0, defaults)
+    if not directed(base.get("name")):
+        return None
+    start = base.get("angle_deg")
+    # Only the schedule's own account counts (a mower id never moves, but rows never leak).
+    own = [a for a in angles if a.account_id == schedule.account_id]
+    return stepped(
+        last_angle(own, area_ids), step, float(start) if isinstance(start, int | float) else 0.0
+    )
+
+
+def run_angle(pattern: Mapping[str, Any]) -> float | None:
+    """The angle a start with ``pattern`` mows with; None for a pattern without direction."""
+    angle = pattern.get("angle_deg")
+    if not directed(pattern.get("name")) or not isinstance(angle, int | float):
+        return None
+    return float(angle)
 
 
 @dataclass(slots=True)
@@ -222,6 +271,7 @@ def run_settings(
     schedule: Schedule,
     defaults: Mapping[str, Any] | None,
     capabilities: MowerCapabilities | None,
+    angle: float | None = None,
 ) -> RunSettings:
     """The settings of the next run of ``schedule`` for one mower: schedule over mow defaults
     over the mower's own setting (:func:`pattern_for_run`), fitted to the mower.
@@ -234,7 +284,7 @@ def run_settings(
     capabilities everything is sent as set and the controller decides.
     """
     pattern = pattern_for_run(
-        schedule.pattern, schedule.rotation_angles, schedule.rotation_index, defaults
+        schedule.pattern, schedule.rotation_angles, schedule.rotation_index, defaults, angle
     )
     result = RunSettings(pattern=pattern)
     caps = capabilities
