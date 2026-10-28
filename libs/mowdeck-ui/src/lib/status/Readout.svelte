@@ -87,7 +87,10 @@
     letter-spacing: var(--md-label-tracking);
     text-transform: uppercase;
     color: var(--md-color-ink-muted);
-    white-space: nowrap;
+
+    /* Long labels ("Messer seit Wechsel (MowDeck)") wrap inside the readout; a label kept on one
+       line ran past a narrow grid column and the phone page scrolled sideways. */
+    overflow-wrap: anywhere;
   }
 
   .value {
@@ -98,6 +101,13 @@
     font-weight: var(--md-weight-medium);
     font-variant-numeric: tabular-nums slashed-zero;
     white-space: nowrap;
+  }
+
+  /* A long text value (a firmware id) breaks rather than widening the page; a value that fits stays on one line. */
+  .number {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .primary .value {

@@ -602,6 +602,7 @@
 
   .grid {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
 
@@ -757,7 +758,9 @@
     display: inline-flex;
     align-items: center;
     gap: var(--md-space-1);
+    min-width: 0;
     color: var(--md-state-error);
+    overflow-wrap: anywhere;
   }
 
   .count {
@@ -766,7 +769,9 @@
 
   .note {
     flex-basis: 100%;
+    min-width: 0;
     color: var(--md-color-ink-muted);
+    overflow-wrap: anywhere;
   }
 
   @media (min-width: 1024px) {
