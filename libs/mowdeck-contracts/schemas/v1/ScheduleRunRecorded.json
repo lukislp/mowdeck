@@ -23,6 +23,21 @@
       "title": "Account Id",
       "type": "string"
     },
+    "angle_deg": {
+      "anyOf": [
+        {
+          "exclusiveMaximum": 180,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For a started run: the mowing angle the start sent, 0 up to below 180 degrees (ADR 0061); None when the pattern has no direction or the run did not start.",
+      "title": "Angle Deg"
+    },
     "command_id": {
       "anyOf": [
         {

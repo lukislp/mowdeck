@@ -18,8 +18,9 @@ One firing, per target mower (see ADR 0024):
    the controller runs a mower's commands in arrival order), then ``start_mow`` through Fleet
    (``fleet.commands.issue``) on behalf of the owner, with the schedule's areas (all map areas
    when none are set) and the settings of this run: schedule over the mower's mow defaults over
-   the mower's own setting, the angle by rotation, fitted to the mower's capabilities
-   (``rules.run_settings``).
+   the mower's own setting, the angle by rotation (the list, or the step from the mower's last
+   angle on these areas, ADR 0061), fitted to the mower's capabilities
+   (``rules.run_settings``). A started run stores its angle per mower and area.
 
 Started runs are followed until their job ends: when it rains while the mower is still mowing
 (``pause_running_jobs_on_rain``) or the window closes (``return_to_dock_at_window_end``) the
@@ -61,12 +62,15 @@ from scheduler.application.weather import WeatherService
 from scheduler.domain.errors import NotFoundError, Unavailable
 from scheduler.domain.models import Schedule, ScheduleRun
 from scheduler.domain.recurrence import next_after
+from scheduler.domain.rotation import AreaAngle
 from scheduler.domain.rules import (
     BUSY_ACTIVITIES,
     CAN_CONTROL,
     FINISHED_ACTIVITIES,
     RUNNING_ACTIVITIES,
+    run_angle,
     run_settings,
+    step_angle,
     window_end,
 )
 
@@ -97,6 +101,7 @@ def recorded(run: ScheduleRun) -> ScheduleRunRecorded:
         command_id=run.command_id,
         scheduled_for=run.scheduled_for,
         started_at=run.started_at,
+        angle_deg=run.angle_deg,
     )
 
 
@@ -333,13 +338,17 @@ class Runner:
         area_ids = list(schedule.area_ids) or (list(place.area_ids) if place else [])
         if not area_ids:
             return run(Outcome.FAILED, "no areas: set area_ids or wait for the mower's map")
-        settings = run_settings(
-            schedule,
+        defaults = (
             target.mow_pattern.model_dump(mode="json", exclude_none=True)
             if target.mow_pattern is not None
-            else None,
-            await tx.get_capabilities(mower_id),
+            else None
         )
+        angle = (
+            step_angle(schedule, defaults, await tx.get_area_angles(mower_id, area_ids), area_ids)
+            if schedule.rotation_step_deg is not None
+            else None
+        )
+        settings = run_settings(schedule, defaults, await tx.get_capabilities(mower_id), angle)
         command = StartMow(area_ids=area_ids, pattern=settings.pattern)
         result = run(Outcome.STARTED)
         result.issued_by = issuer.model_dump(mode="json")
@@ -369,6 +378,23 @@ class Runner:
             result.command_id = reply.accepted.command_id
         result.window_end_at = closes
         result.details = _started_details(area_ids, settings.pattern, settings.dropped)
+        result.angle_deg = run_angle(settings.pattern)
+        if result.angle_deg is not None:
+            # Where the next step rotation of this mower continues, also for other schedules.
+            await tx.put_area_angles(
+                [
+                    AreaAngle(
+                        mower_id=mower_id,
+                        area_id=area_id,
+                        account_id=schedule.account_id,
+                        angle_deg=result.angle_deg,
+                        used_at=result.started_at,
+                        source="schedule",
+                        schedule_id=schedule.id,
+                    )
+                    for area_id in dict.fromkeys(area_ids)
+                ]
+            )
         return result
 
     def _run(

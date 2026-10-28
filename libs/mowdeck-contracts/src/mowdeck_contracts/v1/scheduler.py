@@ -133,7 +133,8 @@ class SchedulePattern(ContractModel):
         ge=0,
         le=180,
         description="Base angle in degrees; null: the mow defaults'. A schedule's "
-        "`rotation_angles` replace it run by run.",
+        "`rotation_angles` replace it run by run; with `rotation_step_deg` it is the angle of "
+        "the first run, later runs turn the last angle by the step (ADR 0061).",
     )
     border_laps: int | None = Field(default=None, ge=0, le=MAX_BORDER_LAPS)
     spacing_m: float | None = Field(
@@ -252,6 +253,13 @@ class ScheduleRunRecorded(ContractModel):
     command_id: UUID | None = None
     scheduled_for: UtcDateTime
     started_at: UtcDateTime
+    angle_deg: float | None = Field(
+        default=None,
+        ge=0,
+        lt=180,
+        description="For a started run: the mowing angle the start sent, 0 up to below 180 "
+        "degrees (ADR 0061); None when the pattern has no direction or the run did not start.",
+    )
 
 
 class ScheduleDisabled(ContractModel):

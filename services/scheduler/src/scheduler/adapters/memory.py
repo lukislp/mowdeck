@@ -4,7 +4,7 @@ claimed schedule is never claimed twice."""
 
 import asyncio
 import copy
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -13,6 +13,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import MowerCapabilities
 
 from scheduler.domain.models import MowerPlace, MowerStatus, Schedule, ScheduleRun
+from scheduler.domain.rotation import AreaAngle, MowerRotation
 
 
 @dataclass
@@ -24,6 +25,8 @@ class MemoryData:
     status: dict[UUID, MowerStatus] = field(default_factory=dict)
     places: dict[UUID, MowerPlace] = field(default_factory=dict)
     capabilities: dict[UUID, tuple[datetime, MowerCapabilities]] = field(default_factory=dict)
+    angles: dict[tuple[UUID, str], AreaAngle] = field(default_factory=dict)
+    rotation: dict[UUID, MowerRotation] = field(default_factory=dict)
 
 
 class MemoryTx:
@@ -136,6 +139,27 @@ class MemoryTx:
         found = self._data.capabilities.get(mower_id)
         return found[1] if found else None
 
+    async def get_area_angles(
+        self, mower_id: UUID, area_ids: Sequence[str] | None = None
+    ) -> list[AreaAngle]:
+        wanted = None if area_ids is None else set(area_ids)
+        rows = [
+            a
+            for (mower, area), a in self._data.angles.items()
+            if mower == mower_id and (wanted is None or area in wanted)
+        ]
+        return sorted(rows, key=lambda a: a.area_id)
+
+    async def put_area_angles(self, angles: Sequence[AreaAngle]) -> None:
+        for angle in angles:
+            self._data.angles[(angle.mower_id, angle.area_id)] = angle
+
+    async def get_rotation(self, mower_id: UUID) -> MowerRotation | None:
+        return self._data.rotation.get(mower_id)
+
+    async def put_rotation(self, rotation: MowerRotation) -> None:
+        self._data.rotation[rotation.mower_id] = rotation
+
     async def purge_runs(self, before: datetime) -> int:
         doomed = [
             r.id
@@ -172,4 +196,6 @@ class MemoryStore:
                 self.data.status = snapshot.status
                 self.data.places = snapshot.places
                 self.data.capabilities = snapshot.capabilities
+                self.data.angles = snapshot.angles
+                self.data.rotation = snapshot.rotation
                 raise
