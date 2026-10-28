@@ -24,6 +24,11 @@ permissions:
 
 env:
   MOWDECK_IMAGE_MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck/mirror
+  # No build record artifact (*.dockerbuild) per docker/build-push-action step: about 30 per
+  # run, and every artifact makes ClusterFuzzLite's corpus lookup (which pages through all
+  # artifacts of the repository) and the API quota of GITHUB_TOKEN more expensive. The job
+  # summary stays (DOCKER_BUILD_SUMMARY).
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
   python:
@@ -473,6 +478,7 @@ jobs:
         with:
           name: camera-relay-media-logs
           path: camera-relay-media-logs.txt
+          retention-days: 7
 
   # Phase 1 acceptance test (docs/phases.md) against the full Compose stack.
   # The service images are built first with the GitHub Actions cache of the docker
@@ -615,6 +621,7 @@ jobs:
         with:
           name: e2e-logs
           path: e2e-logs.txt
+          retention-days: 7
       - name: Stop the stack
         if: always()
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml down -v
@@ -788,7 +795,8 @@ jobs:
         with:
           name: e2e-web-blob-${{ matrix.shard }}
           path: tests/e2e-web/blob-report
-          retention-days: 7
+          # Only the e2e-web job of the same run reads it.
+          retention-days: 2
           if-no-files-found: ignore
       - name: Upload traces and logs on failure
         if: failure()
@@ -798,6 +806,7 @@ jobs:
           path: |
             tests/e2e-web/test-results
             e2e-web-logs.txt
+          retention-days: 7
       - name: Stop the stack
         if: always()
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml down -v
@@ -841,7 +850,7 @@ jobs:
         with:
           name: e2e-web-report
           path: tests/e2e-web/merged-report
-          retention-days: 14
+          retention-days: 7
       - name: Every shard passed
         env:
           SHARDS: ${{ needs.e2e-web-shard.result }}

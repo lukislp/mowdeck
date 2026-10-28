@@ -26,6 +26,11 @@ permissions:
 
 env:
   MOWDECK_IMAGE_MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck/mirror
+  # No build record artifact (*.dockerbuild) per docker/build-push-action step: about 30 per
+  # run, and every artifact makes ClusterFuzzLite's corpus lookup (which pages through all
+  # artifacts of the repository) and the API quota of GITHUB_TOKEN more expensive. The job
+  # summary stays (DOCKER_BUILD_SUMMARY).
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
   kind:
