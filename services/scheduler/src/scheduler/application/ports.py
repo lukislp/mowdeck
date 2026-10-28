@@ -6,6 +6,7 @@ Two stores implement :class:`Store`: PostgreSQL (``adapters.db``) and memory
 questions go to ``mowdeck_authz.Authorizer`` directly (a library port of its own).
 """
 
+from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Protocol
@@ -22,6 +23,7 @@ from mowdeck_contracts.v1 import (
 
 from scheduler.domain.models import MowerPlace, MowerStatus, Schedule, ScheduleRun
 from scheduler.domain.rain import Forecast
+from scheduler.domain.rotation import AreaAngle, MowerRotation
 
 
 class Clock(Protocol):
@@ -111,6 +113,24 @@ class Tx(Protocol):
 
     async def get_capabilities(self, mower_id: UUID) -> MowerCapabilities | None:
         """The latest capabilities of a mower; None when its gateway never reported any."""
+        ...
+
+    async def get_area_angles(
+        self, mower_id: UUID, area_ids: Sequence[str] | None = None
+    ) -> list[AreaAngle]:
+        """The last angles of a mower's areas (of ``area_ids`` when given), by area id."""
+        ...
+
+    async def put_area_angles(self, angles: Sequence[AreaAngle]) -> None:
+        """Store the last angle per mower and area (replaces the stored one)."""
+        ...
+
+    async def get_rotation(self, mower_id: UUID) -> MowerRotation | None:
+        """The manual rotation step of a mower; None when never set."""
+        ...
+
+    async def put_rotation(self, rotation: MowerRotation) -> None:
+        """Store the manual rotation step of a mower."""
         ...
 
     async def purge_runs(self, before: datetime) -> int:

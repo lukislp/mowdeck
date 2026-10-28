@@ -10,6 +10,55 @@ Base path `/api/v1/scheduler` behind the gateway. Authentication, rate limits an
 
 ### schedules
 
+#### GET /api/v1/scheduler/mowers/{mower_id}/angles
+
+**Mower Angles**
+
+Where the mowing angle rotation of a mower stands (ADR 0061): the last angle per area (from scheduled runs and manual starts with rotation chosen) and the step the start sheet offers for manual starts. `can_view` on the mower.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [MowerAnglesOut](#moweranglesout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### POST /api/v1/scheduler/mowers/{mower_id}/angles
+
+**Record Manual Angle**
+
+A manual start with rotation chosen sent `angle_deg` for `area_ids`: the next run of these areas continues from it. A start with an explicit angle is not reported. `can_control` on the mower.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+
+**Request body** (required): `application/json` [ManualAngleIn](#manualanglein)
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [MowerAnglesOut](#moweranglesout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### PUT /api/v1/scheduler/mowers/{mower_id}/angles/settings
+
+**Set Rotation Settings**
+
+Set the rotation step of manual starts (null: off). `can_control` on the mower.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+
+**Request body** (required): `application/json` [RotationSettingsIn](#rotationsettingsin)
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [MowerAnglesOut](#moweranglesout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 #### GET /api/v1/scheduler/mowers/{mower_id}/widget
 
 **Widget**
@@ -180,6 +229,18 @@ The rain decision for the mower now and the forecast hours it used (`can_view`).
 
 ## Schemas
 
+### AreaAngleOut
+
+The last angle a job mowed one area with.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `angle_deg` | number | yes | 0 up to below 180 degrees. |
+| `area_id` | string | yes |  |
+| `schedule_id` | string (uuid) or null | yes |  |
+| `source` | `"schedule"` \| `"manual"` | yes | `schedule`: a schedule's run; `manual`: a start from the start sheet with rotation chosen. |
+| `used_at` | string (date-time) | yes |  |
+
 ### HourOut
 
 One forecast hour (values cover the hour ending at `end`).
@@ -198,6 +259,25 @@ One forecast hour (values cover the hour ending at `end`).
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `detail` | array of [ValidationError](#validationerror) | no |  |
+
+### ManualAngleIn
+
+`POST /mowers/{mower_id}/angles`: a manual start chose rotation and sent this angle.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `angle_deg` | number | yes | Stored modulo 180.; min 0.0; max 180.0 |
+| `area_ids` | array of string | yes | min items 1; max items 50 |
+
+### MowerAnglesOut
+
+`GET /mowers/{mower_id}/angles`: where the angle rotation of a mower stands (ADR 0061).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `areas` | array of [AreaAngleOut](#areaangleout) | yes | The last angle per area, by area id. |
+| `manual_step_deg` | number or null | yes | The rotation step the start sheet offers for manual starts; null: off. |
+| `mower_id` | string (uuid) | yes |  |
 
 ### ObstacleDetection
 
@@ -219,6 +299,7 @@ One upcoming firing.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `angle_deg` | number or null | no | The mowing angle this firing will use on `angle_mower_id` (rotation applied, assuming every earlier firing starts); null when skipped, for a pattern without direction or without a target mower. |
 | `at` | string (date-time) | yes |  |
 | `skipped` | boolean | yes | Skipped by `skip-next`. |
 | `window_end` | string (date-time) | yes |  |
@@ -229,6 +310,7 @@ One upcoming firing.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `angle_mower_id` | string (uuid) or null | no | The mower the angles are worked out for (a group: its first mower; each mower continues from its own last angle). |
 | `items` | array of [PreviewItemOut](#previewitemout) | yes |  |
 | `weather` | [RainDecisionOut](#raindecisionout) or null | yes | The rain decision for the first firing that is not skipped, with today's forecast (null without a target mower). |
 | `weather_mower_id` | string (uuid) or null | yes |  |
@@ -285,6 +367,14 @@ Rain pause settings of a schedule.
 | `probability_threshold` | integer | no | Percent; a forecast hour at or above holds the run.; min 0.0; max 100.0; default `60` |
 | `run_when_unknown` | boolean | no | Without a forecast (provider down): run (true) or hold.; default `true` |
 
+### RotationSettingsIn
+
+`PUT /mowers/{mower_id}/angles/settings`: the step of manual starts.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `manual_step_deg` | number or null | yes | Degrees the start sheet turns the last angle by; null: no rotation. |
+
 ### RunList
 
 `GET /schedules/{id}/runs` (newest first) and `POST .../run-now`.
@@ -300,6 +390,7 @@ One run of a schedule for one mower.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `angle_deg` | number or null | no | For a started run: the mowing angle the start sent (0 up to below 180 degrees); null for a pattern without direction and for runs that did not start. |
 | `command_id` | string (uuid) or null | yes |  |
 | `details` | string or null | yes |  |
 | `followup` | string or null | yes | After a start: `rain_dock`, `window_dock`, `finished`, `closed` or null while the job is followed. |
@@ -335,6 +426,7 @@ One run of a schedule for one mower.
 | `rain_pause` | [RainPause](#rainpause) | no |  |
 | `return_to_dock_at_window_end` | boolean | no | default `false` |
 | `rotation_angles` | array of number | no | Angles used round robin, one per run (replace `pattern.angle_deg`).; max items 24 |
+| `rotation_step_deg` | number or null | no | Step rotation (ADR 0061): each run turns the last angle the mower mowed its areas with by this many degrees (modulo 180); null: off. Excludes `rotation_angles`. |
 | `speed_mps` | number or null | no | Mowing speed in m/s sent before each start (`set_speed`); null keeps the mower's own. Must lie within every target mower's speed range. |
 | `start_time` | string (time) | yes |  |
 | `target_id` | string (uuid) | yes |  |
@@ -377,6 +469,7 @@ A schedule.
 | `return_to_dock_at_window_end` | boolean | yes |  |
 | `rotation_angles` | array of number | yes |  |
 | `rotation_index` | integer | yes |  |
+| `rotation_step_deg` | number or null | yes | Step rotation (ADR 0061): degrees each run turns the mower's last angle on its areas by; null: off. |
 | `skip_until` | string (date-time) or null | yes |  |
 | `speed_mps` | number or null | yes |  |
 | `start_time` | string (time) | yes |  |
@@ -406,6 +499,7 @@ A schedule.
 | `rain_pause` | [RainPause](#rainpause) or null | no |  |
 | `return_to_dock_at_window_end` | boolean or null | no |  |
 | `rotation_angles` | array of number or null | no |  |
+| `rotation_step_deg` | number or null | no | Step rotation (ADR 0061): each run turns the last angle the mower mowed its areas with by this many degrees (modulo 180); null: off. Excludes `rotation_angles`. |
 | `speed_mps` | number or null | no | Mowing speed in m/s sent before each start (`set_speed`); null keeps the mower's own. Must lie within every target mower's speed range. |
 | `start_time` | string (time) or null | no |  |
 | `target_id` | string (uuid) or null | no |  |
@@ -422,7 +516,7 @@ Which values fit one mower is decided with its :class:`MowerCapabilities` (:meth
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `angle_deg` | number or null | no | Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run. |
+| `angle_deg` | number or null | no | Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run; with `rotation_step_deg` it is the angle of the first run, later runs turn the last angle by the step (ADR 0061). |
 | `border_laps` | integer or null | no |  |
 | `name` | `"stripes"` \| `"diagonal"` \| `"checkerboard"` \| `"edge_only"` \| `"random_angle"` or null | no | The native pattern; null: the mow defaults'. |
 | `obstacle_detection` | [ObstacleDetection](#obstacledetection) or null | no | Needs the mode in `start_options.obstacle_detection`. |
@@ -436,7 +530,7 @@ The start settings of a schedule (`SchedulePattern`): every key optional, null o
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `angle_deg` | number or null | no | Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run. |
+| `angle_deg` | number or null | no | Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run; with `rotation_step_deg` it is the angle of the first run, later runs turn the last angle by the step (ADR 0061). |
 | `border_laps` | integer or null | no |  |
 | `name` | `"stripes"` \| `"diagonal"` \| `"checkerboard"` \| `"edge_only"` \| `"random_angle"` or null | no | The native pattern; null: the mow defaults'. |
 | `obstacle_detection` | [ObstacleDetection](#obstacledetection) or null | no | Needs the mode in `start_options.obstacle_detection`. |

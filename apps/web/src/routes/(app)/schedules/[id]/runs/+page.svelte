@@ -7,11 +7,12 @@
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import ToneBadge from '#lib/components/ToneBadge.svelte';
-  import { problemMessage } from '#lib/i18n.js';
+  import { formatNumber, problemMessage } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
   import { getLocale } from '#lib/paraglide/runtime.js';
   import { followupLabel, outcomeLook } from '#lib/schedules/labels.js';
   import { formatFiring, recurrenceSummary } from '#lib/schedules/recurrence.js';
+  import { angleText } from '#lib/schedules/rotation.js';
   import { loadTargets, type Targets } from '#lib/schedules/runtime.js';
   import type { Locale, Run, Schedule } from '#lib/schedules/types.js';
 
@@ -135,7 +136,12 @@
         </span>
         <!-- The server's English detail only where the badge alone does not explain the run. -->
         <span class="details" role="cell"
-          >{run.outcome === 'failed' ? (run.details ?? '') : ''}</span
+          >{#if run.outcome === 'failed'}{run.details ?? ''}{:else if run.angle_deg != null}<span
+              class="run-angle"
+              data-testid="run-angle"
+              ><span class="stripes" style:transform="rotate({-run.angle_deg}deg)"
+              ></span>{m.sched_run_angle({ angle: angleText(run.angle_deg, formatNumber) })}</span
+            >{/if}</span
         >
         <span role="cell" class="command">
           {#if run.command_id && run.mower_id}
@@ -264,6 +270,26 @@
 
   .details:empty {
     display: none;
+  }
+
+  .run-angle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--md-font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Three mown stripes at the run's angle. */
+  .stripes {
+    display: inline-block;
+    width: 12px;
+    height: 9px;
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--md-state-mowing) 0 1.5px,
+      transparent 1.5px 3.75px
+    );
   }
 
   .command {

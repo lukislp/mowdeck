@@ -7,7 +7,7 @@
 """
 
 import dataclasses
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from scheduler.adapters.db import tables
 from scheduler.domain.models import MowerPlace, MowerStatus, Schedule, ScheduleRun
+from scheduler.domain.rotation import AreaAngle, MowerRotation
 
 _SCHEDULE_FIELDS = [f.name for f in dataclasses.fields(Schedule)]
 _RUN_FIELDS = [f.name for f in dataclasses.fields(ScheduleRun)]
@@ -200,6 +201,43 @@ class SqlTx:
             return MowerCapabilities.model_validate(row.capabilities)
         except ValidationError:
             return None  # written by a newer version this one cannot read: unknown
+
+    async def get_area_angles(
+        self, mower_id: UUID, area_ids: Sequence[str] | None = None
+    ) -> list[AreaAngle]:
+        a = tables.mow_angles
+        statement = sa.select(a).where(a.c.mower_id == mower_id)
+        if area_ids is not None:
+            statement = statement.where(a.c.area_id.in_(list(area_ids)))
+        result = await self._conn.execute(statement.order_by(a.c.area_id))
+        return [AreaAngle(**dict(row._mapping)) for row in result]
+
+    async def put_area_angles(self, angles: Sequence[AreaAngle]) -> None:
+        if not angles:
+            return
+        rows = [_values(angle) for angle in angles]
+        insert = pg_insert(tables.mow_angles).values(rows)
+        await self._conn.execute(
+            insert.on_conflict_do_update(
+                index_elements=[tables.mow_angles.c.mower_id, tables.mow_angles.c.area_id],
+                set_={k: insert.excluded[k] for k in rows[0] if k not in ("mower_id", "area_id")},
+            )
+        )
+
+    async def get_rotation(self, mower_id: UUID) -> MowerRotation | None:
+        r = tables.mower_rotation
+        row = (await self._conn.execute(sa.select(r).where(r.c.mower_id == mower_id))).first()
+        return MowerRotation(**dict(row._mapping)) if row else None
+
+    async def put_rotation(self, rotation: MowerRotation) -> None:
+        values = _values(rotation)
+        insert = pg_insert(tables.mower_rotation).values(**values)
+        await self._conn.execute(
+            insert.on_conflict_do_update(
+                index_elements=[tables.mower_rotation.c.mower_id],
+                set_={k: insert.excluded[k] for k in values if k != "mower_id"},
+            )
+        )
 
     async def purge_runs(self, before: datetime) -> int:
         r = tables.schedule_runs

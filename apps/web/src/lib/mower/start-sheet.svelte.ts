@@ -10,6 +10,12 @@ import { untrack } from 'svelte';
 
 import { asProblem } from '#lib/api/problem.js';
 import type { HourBar } from '#lib/schedules/preview.js';
+import {
+  DEFAULT_STEP,
+  nextManualAngle,
+  validStep,
+  type MowerAngles,
+} from '#lib/schedules/rotation.js';
 
 import type { Range } from './limits';
 import {
@@ -23,6 +29,7 @@ import {
 import type { JobOptionsSpec } from './job-options';
 import {
   FALLBACK,
+  angleApplies,
   defaultsOf,
   initialDraft,
   toPattern,
@@ -89,6 +96,18 @@ export interface StartSheetDeps {
   /** Epoch ms of now, for the rain warning. */
   now(): number;
   context(): StartSheetContext;
+  /** The mower's angle rotation in the Scheduler (ADR 0061); absent: no rotation offered. */
+  rotation?: RotationDeps;
+}
+
+/** The Scheduler's angle rotation of the mower (`/scheduler/mowers/{id}/angles`). */
+export interface RotationDeps {
+  /** The last angle per area and the step of manual starts. */
+  load(): Promise<MowerAngles>;
+  /** Remember the step of manual starts (null: rotation off). */
+  saveStep(step: number | null): Promise<void>;
+  /** A start with rotation chosen mowed `areaIds` with `angle`. */
+  record(areaIds: string[], angle: number): Promise<void>;
 }
 
 export class StartSheetFlow {
@@ -106,6 +125,15 @@ export class StartSheetFlow {
   #previewAbort: AbortController | null = null;
   /** The extra click a rain warning asks for was given. */
   rainConfirmed = $state(false);
+  /** Rotate the angle of this start by the mower's step (ADR 0061). */
+  rotate = $state(false);
+  /** The step of manual starts in degrees. */
+  rotateStep = $state<number>(DEFAULT_STEP);
+  /** Where the mower's rotation stands; null until loaded. */
+  rotation = $state.raw<MowerAngles | null>(null);
+  /** Loading the rotation failed: the sheet offers none this time. */
+  rotationFailed = $state(false);
+  #rotationLoad = 0;
 
   constructor(private readonly deps: StartSheetDeps) {}
 
@@ -139,10 +167,29 @@ export class StartSheetFlow {
     if (untrack(() => this.key) !== before) this.rainConfirmed = false;
   }
 
-  /** The pattern the sheet would send now (null: the mower's own settings). */
-  pattern = $derived.by((): MowPattern | null =>
-    this.deps.context().offered.length ? toPattern(this.patternDraft) : null,
+  /** The sheet can rotate the angle: the Scheduler answered and the pattern has a direction. */
+  rotationOffered = $derived.by(
+    () =>
+      !!this.deps.rotation &&
+      this.rotation !== null &&
+      this.deps.context().offered.length > 0 &&
+      angleApplies(this.patternDraft.name),
   );
+  /**
+   * The angle a start with rotation sends: the last angle of the picked areas turned by the
+   * step, else the sheet's angle. Null when rotation is off or not offered, or nothing is picked.
+   */
+  rotatedAngle = $derived.by((): number | null =>
+    this.rotate && this.rotationOffered
+      ? nextManualAngle(this.rotation, this.picked, this.rotateStep, this.patternDraft.angle ?? 0)
+      : null,
+  );
+  /** The pattern the sheet would send now (null: the mower's own settings). */
+  pattern = $derived.by((): MowPattern | null => {
+    if (!this.deps.context().offered.length) return null;
+    const pattern = toPattern(this.patternDraft);
+    return this.rotatedAngle === null ? pattern : { ...pattern, angle_deg: this.rotatedAngle };
+  });
   key = $derived(previewKey(this.picked, this.pattern));
   /** The preview to draw while the sheet is open. */
   previewPath = $derived(this.picking ? currentPreview(this.preview, this.key) : null);
@@ -182,6 +229,27 @@ export class StartSheetFlow {
     this.setpointDraft = { ...this.#setpointStart };
     this.rainConfirmed = false;
     this.picking = true;
+    void this.loadRotation();
+  }
+
+  /** Read where the mower's rotation stands; the sheet opens with the mower's step. */
+  async loadRotation(): Promise<void> {
+    const rotation = this.deps.rotation;
+    if (!rotation) return;
+    const load = ++this.#rotationLoad;
+    try {
+      const state = await rotation.load();
+      if (load !== this.#rotationLoad) return;
+      this.rotation = state;
+      this.rotationFailed = false;
+      this.rotate = validStep(state.manual_step_deg);
+      this.rotateStep = validStep(state.manual_step_deg) ? state.manual_step_deg : DEFAULT_STEP;
+    } catch {
+      if (load !== this.#rotationLoad) return;
+      this.rotation = null;
+      this.rotationFailed = true;
+      this.rotate = false;
+    }
   }
 
   /** A closed sheet asks for the rain confirmation again when it opens. */
@@ -196,11 +264,15 @@ export class StartSheetFlow {
       : [...this.picked, areaId];
   }
 
-  /** Another mower: the selection and the preview belong to the old one. */
+  /** Another mower: the selection, the preview and the rotation belong to the old one. */
   reset(): void {
     this.picked = [];
     this.#previewAbort?.abort();
     this.preview = { kind: 'idle' };
+    this.#rotationLoad++;
+    this.rotation = null;
+    this.rotationFailed = false;
+    this.rotate = false;
   }
 
   /** "Pfad berechnen": the mower plans the sheet's areas and pattern without starting. */
@@ -238,6 +310,10 @@ export class StartSheetFlow {
     const areaIds = [...this.picked];
     const pattern = this.pattern;
     const remember = this.rememberPattern;
+    const rotated = this.rotatedAngle;
+    const loadedStep = this.rotation?.manual_step_deg ?? null;
+    const chosenStep = this.rotationOffered && this.rotate ? this.rotateStep : null;
+    const stepChanged = this.rotationOffered && chosenStep !== loadedStep;
     const setpoints = setpointCommands(this.setpointDraft, this.#setpointStart);
     this.starting = true;
     try {
@@ -257,19 +333,46 @@ export class StartSheetFlow {
         this.picked = [];
         this.rainConfirmed = false;
       }
+      // The rotated angle belongs to this start, not to the defaults: they keep the sheet's angle.
+      const remembered =
+        pattern && rotated !== null
+          ? { ...pattern, angle_deg: toPattern(this.patternDraft).angle_deg }
+          : pattern;
       // The defaults change only with a start that went out, and only when they differ from
       // what the sheet opened with (the saved defaults, else the fallback).
       if (
         sent &&
-        pattern &&
+        remembered &&
         remember &&
-        defaultsChanged(pattern, ctx.savedPattern, ctx.offered, ctx.spacing, ctx.jobOptions)
+        defaultsChanged(remembered, ctx.savedPattern, ctx.offered, ctx.spacing, ctx.jobOptions)
       ) {
-        await this.deps.saveDefaults(defaultsOf(pattern));
+        await this.deps.saveDefaults(defaultsOf(remembered));
       }
+      if (sent) await this.#rotationSent(areaIds, rotated, stepChanged ? chosenStep : undefined);
     } finally {
       this.starting = false;
     }
+  }
+
+  /**
+   * After a start went out: report the rotated angle (a start with an explicit angle is not
+   * reported, so the rotation stays where it was) and remember a changed step. A failure here
+   * does not undo the start; the next start just continues from the older angle.
+   */
+  async #rotationSent(
+    areaIds: string[],
+    angle: number | null,
+    step: number | null | undefined,
+  ): Promise<void> {
+    const rotation = this.deps.rotation;
+    if (!rotation) return;
+    try {
+      if (step !== undefined) await rotation.saveStep(step);
+      if (angle !== null) await rotation.record(areaIds, angle);
+    } catch {
+      // Reported by the API client; nothing to roll back.
+    }
+    this.rotation = null;
   }
 
   /** The dock choice's answer: to the station, ending the job or keeping it. */

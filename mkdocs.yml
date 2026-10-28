@@ -104,6 +104,7 @@ nav:
       - adr/0058-theft-tracking-mode.md
       - adr/0059-ios-widgets-and-live-activity.md
       - adr/0060-apple-watch-app.md
+      - adr/0061-mowing-angle-rotation.md
       - adr/0064-personal-access-tokens-and-public-api-docs.md
   - Development:
       - dev/getting-started.md

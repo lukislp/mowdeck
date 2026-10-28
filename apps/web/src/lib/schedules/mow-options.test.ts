@@ -180,5 +180,14 @@ describe('mowSummary', () => {
     expect(mowSummary({ pattern: { angle_deg: 10 }, rotation_angles: [0, 90, 225] })).toEqual([
       '0°/90°/45°',
     ]);
+    // Step rotation: the base angle, then the step per run.
+    expect(mowSummary({ pattern: { angle_deg: 30 }, rotation_step_deg: 45 })).toEqual([
+      '30°',
+      '+45°/Lauf',
+    ]);
+    // A pattern without direction does not rotate.
+    expect(
+      mowSummary({ pattern: { name: 'edge_only' }, rotation_step_deg: 45 }).join(' '),
+    ).not.toContain('Lauf');
   });
 });

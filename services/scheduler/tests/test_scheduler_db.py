@@ -35,6 +35,7 @@ from scheduler.adapters.db.tables import metadata
 from scheduler.adapters.memory import MemoryStore
 from scheduler.application.ports import Store
 from scheduler.domain.models import MowerPlace, MowerStatus, Schedule, ScheduleRun
+from scheduler.domain.rotation import AreaAngle, MowerRotation
 
 ADMIN_URL = os.environ.get("MOWDECK_TEST_DATABASE_URL")
 needs_db = pytest.mark.skipif(not ADMIN_URL, reason="needs MOWDECK_TEST_DATABASE_URL")
@@ -253,6 +254,91 @@ async def test_scheduler_db_capabilities_keep_the_newest(
         assert await tx.get_capabilities(mower_id) == first
         assert await tx.put_capabilities(mower_id, account_id, NOW + timedelta(minutes=1), second)
         assert await tx.get_capabilities(mower_id) == second
+
+
+@pytest.mark.parametrize("kind", STORES)
+async def test_scheduler_db_mow_angles_and_rotation(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mower_id, account_id, schedule_id = uuid4(), uuid4(), uuid4()
+
+    def angle(area: str, value: float, minutes: int, source: str = "schedule") -> AreaAngle:
+        return AreaAngle(
+            mower_id=mower_id,
+            area_id=area,
+            account_id=account_id,
+            angle_deg=value,
+            used_at=NOW + timedelta(minutes=minutes),
+            source=source,
+            schedule_id=schedule_id if source == "schedule" else None,
+        )
+
+    async with store_of(kind, monkeypatch) as store:
+        async with store.transaction() as tx:
+            assert await tx.get_area_angles(mower_id) == []
+            assert await tx.get_rotation(mower_id) is None
+            await tx.put_area_angles([])
+            await tx.put_area_angles([angle("front", 30, 0), angle("back", 30, 0)])
+            await tx.put_area_angles([angle("front", 120, 5, "manual")])
+            await tx.put_rotation(MowerRotation(mower_id, account_id, 45.0, NOW))
+            await tx.put_rotation(MowerRotation(mower_id, account_id, None, NOW))
+        async with store.transaction() as tx:
+            assert await tx.get_area_angles(mower_id) == [
+                angle("back", 30, 0),
+                angle("front", 120, 5, "manual"),
+            ]
+            assert await tx.get_area_angles(mower_id, ["front", "pond"]) == [
+                angle("front", 120, 5, "manual")
+            ]
+            assert await tx.get_area_angles(uuid4()) == []
+            assert await tx.get_rotation(mower_id) == MowerRotation(mower_id, account_id, None, NOW)
+
+
+@needs_db
+async def test_scheduler_db_migration_0004_keeps_schedules_and_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Revision 0004 adds step rotation off and no angle to everything stored so far."""
+    async with temporary_database() as url:
+        await migrate(url, monkeypatch, "0003")
+        engine = create_async_engine(async_database_url(url))
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "INSERT INTO schedules (id, account_id, name, target_type, target_id,"
+                        " kind, start_time, duration_minutes, timezone, owner, owner_subject,"
+                        " created_at, updated_at, rotation_angles) VALUES (:id, :account, 'A',"
+                        " 'mower', :target, 'weekly', '10:30', 60, 'Europe/Berlin',"
+                        " CAST(:owner AS jsonb), :subject, now(), now(), '[0, 90]'::jsonb)"
+                    ),
+                    {
+                        "id": uuid4(),
+                        "account": uuid4(),
+                        "target": uuid4(),
+                        "owner": json.dumps({"subject": str(uuid4()), "kind": "user"}),
+                        "subject": uuid4(),
+                    },
+                )
+            await migrate(url, monkeypatch)
+            async with engine.connect() as conn:
+                row = (
+                    await conn.execute(
+                        text("SELECT rotation_angles, rotation_step_deg FROM schedules")
+                    )
+                ).one()
+            assert row.rotation_angles == [0, 90] and row.rotation_step_deg is None
+            await migrate(url, monkeypatch, "0003", down=True)
+            async with engine.connect() as conn:
+                names = await table_names_of(conn)
+            assert "mow_angles" not in names and "mower_rotation" not in names
+        finally:
+            await engine.dispose()
+
+
+async def table_names_of(conn: Any) -> set[str]:
+    rows = await conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
+    return {r[0] for r in rows}
 
 
 @needs_db

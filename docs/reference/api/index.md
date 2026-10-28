@@ -14,7 +14,7 @@ Every MowDeck service publishes an HTTP API under `/api/v1/<service>` on the sam
 | [notifications](notifications.md) | `/api/v1/notifications` | 22 | Inbox, rules, channels and push devices. |
 | [planner](planner.md) | `/api/v1/planner` | 8 | Mowing patterns, spot paths and plans. |
 | [realtime](realtime.md) | `/api/v1/realtime` | 0 | The WebSocket for live state and command results (protocol in the guide). |
-| [scheduler](scheduler.md) | `/api/v1/scheduler` | 11 | Schedules, their runs, rain pause and the weather. |
+| [scheduler](scheduler.md) | `/api/v1/scheduler` | 14 | Schedules, their runs, rain pause and the weather. |
 | [telemetry](telemetry.md) | `/api/v1/telemetry` | 32 | Current state, history, positions, maps, health and reports. |
 | [vision](vision.md) | `/api/v1/vision` | 16 | AI assisted recovery: proposals, approvals and the provider settings. |
 
