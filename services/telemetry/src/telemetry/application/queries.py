@@ -31,6 +31,7 @@ from telemetry.domain.models import (
     SnapshotRow,
 )
 from telemetry.domain.rules import bin_count, link_lost, link_seen_at, parse_step
+from telemetry.domain.thinning import thinned_join_seconds
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,6 +232,14 @@ class Queries:
             width_mm / 1000,
             join_seconds=self._config.heatmap_join_seconds,
             join_m=self._config.heatmap_join_m,
+            thinned_before=(
+                self._clock() - self._config.positions_detail
+                if self._config.thinning_enabled
+                else None
+            ),
+            thin_join_seconds=thinned_join_seconds(
+                self._config.thin_policy, self._config.heatmap_join_seconds
+            ),
         )
         limit = self._config.heatmap_max_rows
         scanned = 0

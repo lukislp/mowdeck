@@ -34,6 +34,7 @@ import math
 import statistics
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 
 import numpy as np
@@ -159,6 +160,10 @@ class _Swaths:
     thin_m: float
     join_seconds: float = DEFAULT_JOIN_SECONDS
     join_m: float = DEFAULT_JOIN_M
+    thinned_before: float | None = None
+    """Epoch seconds: rows older than this may have been downsampled (ADR 0053)."""
+    thin_join_seconds: float = DEFAULT_JOIN_SECONDS
+    thin_join_m: float = DEFAULT_JOIN_M
     pieces: list[list[tuple[float, float]]] = field(default_factory=list)
     current: list[tuple[float, float]] = field(default_factory=list)
     pending: tuple[float, float] | None = None
@@ -167,11 +172,18 @@ class _Swaths:
 
     def add(self, x: float, y: float, t: float) -> None:
         point = (x, y)
+        seconds, metres = self.join_seconds, self.join_m
+        if (
+            self.thinned_before is not None
+            and self.last_t is not None
+            and min(t, self.last_t) < self.thinned_before
+        ):
+            seconds, metres = self.thin_join_seconds, self.thin_join_m
         joined = (
             self.last_t is not None
             and self.last_point is not None
-            and abs(t - self.last_t) <= self.join_seconds
-            and math.dist(self.last_point, point) <= self.join_m
+            and abs(t - self.last_t) <= seconds
+            and math.dist(self.last_point, point) <= metres
         )
         if not joined:
             self.close()
@@ -221,17 +233,28 @@ class HeatmapBuilder:
         *,
         join_seconds: float = DEFAULT_JOIN_SECONDS,
         join_m: float = DEFAULT_JOIN_M,
+        thinned_before: datetime | None = None,
+        thin_join_seconds: float | None = None,
     ) -> None:
+        """``thinned_before``: rows older than this were downsampled (retention, ADR 0053);
+        pairs of points where the older one is that old are joined within ``thin_join_seconds``
+        (and the metres scaled by the same factor, the speed limit stays the same)."""
         if cutting_width_m <= 0:
             msg = "cutting_width_m must be positive"
             raise ValueError(msg)
+        wide_seconds = max(join_seconds, thin_join_seconds or join_seconds)
         self.layer = layer
         self.reference = reference
         self.cutting_width_m = cutting_width_m
         self.samples = 0
         self._points: list[tuple[float, float, float]] = []
         self._swaths = _Swaths(
-            thin_m=cutting_width_m * _THIN_FACTOR, join_seconds=join_seconds, join_m=join_m
+            thin_m=cutting_width_m * _THIN_FACTOR,
+            join_seconds=join_seconds,
+            join_m=join_m,
+            thinned_before=thinned_before.timestamp() if thinned_before else None,
+            thin_join_seconds=wide_seconds,
+            thin_join_m=join_m * wide_seconds / join_seconds,
         )
 
     def add(self, row: PositionRow) -> None:
