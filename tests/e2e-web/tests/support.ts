@@ -396,6 +396,30 @@ export function fleetAuditCount(mowerId: string, action: string): number {
   return Number(output.trim());
 }
 
+/**
+ * Make the login sessions of a user look like their last confirmation was an hour ago (step-up,
+ * ADR 0057), so the next critical action asks to confirm. The next token refresh (a page reload)
+ * carries the old `auth_time`.
+ */
+export function ageConfirmations(username: string): void {
+  if (!/^[a-z0-9-]+$/.test(username)) throw new Error('unexpected username');
+  execFileSync(
+    'docker',
+    [
+      'exec',
+      serviceContainer('postgres'),
+      'psql',
+      '-U',
+      'postgres',
+      '-d',
+      'identity',
+      '-tAc',
+      `update sessions set auth_time = auth_time - interval '1 hour' where user_id in (select id from users where username_norm = '${username}')`,
+    ],
+    { encoding: 'utf-8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+}
+
 /** Pretend the page went hidden or visible again (`visibilitychange` with the new state). */
 export async function setPageVisibility(page: Page, visible: boolean): Promise<void> {
   await page.evaluate((shown) => {

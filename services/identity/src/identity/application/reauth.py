@@ -11,6 +11,7 @@ password again, right before the change. The check behaves like a password login
 
 from uuid import uuid4
 
+from mowdeck_auth.step_up import ensure_recent_auth
 from mowdeck_contracts.v1 import Principal
 
 from identity.application.context import RequestContext
@@ -29,11 +30,22 @@ class Reauthenticator:
         self.ip_limiter = ip_limiter
 
     async def check(
-        self, ctx: RequestContext, principal: Principal, password: str, *, action: str
+        self, ctx: RequestContext, principal: Principal, password: str | None, *, action: str
     ) -> User:
         """The caller (a user) after the password matched; ``action`` names the audit prefix
         (``passkey``, ``external_identity``). Raises ``RateLimited`` or
-        ``AuthenticationFailed``."""
+        ``AuthenticationFailed``.
+
+        Without a password the caller must have confirmed recently instead (step-up, ADR 0057:
+        ``ReauthRequired`` otherwise), so one sheet in the web app replaces the password field.
+        """
+        if password is None:
+            ensure_recent_auth(principal, now=self.deps.clock())
+            async with self.deps.store.transaction() as tx:
+                found = await tx.users.get(id=principal.subject)
+            if found is None:
+                raise AuthenticationFailed("user vanished")
+            return found
         if self.ip_limiter is not None:
             wait = self.ip_limiter.take(ctx.ip or "unknown")
             if wait > 0:

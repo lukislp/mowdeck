@@ -210,6 +210,20 @@ export class SessionManager {
     return this.refresh();
   }
 
+  /**
+   * Take the access token of a step-up confirmation (ADR 0057): same session, fresh `auth_time`.
+   * Other tabs adopt it too, so a confirmation in one tab is not asked for again in the next.
+   */
+  adopt(token: string, expiresIn: number): void {
+    this.#setToken(token, expiresIn);
+    this.#deps.channel?.postMessage({
+      type: 'token',
+      token,
+      expiresAt: this.#expiresAt,
+      at: this.#deps.now(),
+    });
+  }
+
   /** Single-flight refresh (tab and cross-tab). Resolves to null when the session is gone. */
   refresh(): Promise<string | null> {
     if (!this.#inflight) {

@@ -158,7 +158,13 @@ class Harness:
     ) -> Person:
         """A principal with a minted token (no tuples)."""
         principal = Principal(
-            subject=uuid4(), account_id=account_id, kind=kind, permissions=list(permissions)
+            subject=uuid4(),
+            account_id=account_id,
+            kind=kind,
+            permissions=list(permissions),
+            # Recently confirmed (step-up, ADR 0057): the test also deletes a mower through Fleet.
+            auth_time=datetime.now(UTC) - timedelta(seconds=10),
+            auth_methods=["pwd"],
         )
         return Person(principal, self.keys.mint(principal))
 

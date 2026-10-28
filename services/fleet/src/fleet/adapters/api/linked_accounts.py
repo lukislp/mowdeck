@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Response
 from mowdeck_service_kit import CurrentAccountId
 
-from fleet.adapters.api.deps import ActorDep, ServicesDep, to_service_error
+from fleet.adapters.api.deps import ActorDep, FreshAuth, ServicesDep, to_service_error
 from fleet.adapters.api.schemas import (
     LinkedAccountDetail,
     LinkedAccountIn,
@@ -96,9 +96,14 @@ async def get_linked_account(
     },
 )
 async def delete_linked_account(
-    linked_account_id: UUID, actor: ActorDep, account_id: CurrentAccountId, services: ServicesDep
+    linked_account_id: UUID,
+    actor: ActorDep,
+    _: FreshAuth,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
 ) -> None:
-    """Remove the link. Refused (409, the mowers in ``errors``) while mowers use it."""
+    """Remove the link. Refused (409, the mowers in ``errors``) while mowers use it. Step-up
+    (ADR 0057): 401 ``reauth-required`` without a recent confirmation, 403 for API tokens."""
     await services.linked_accounts.delete(actor, account_id, linked_account_id)
 
 
