@@ -339,6 +339,7 @@ class UserService:
                 # PostgreSQL cascades these; the memory store needs it spelled out.
                 await tx.external_identities.delete(user_id=user_id)
                 await tx.oauth_states.delete(user_id=user_id)
+                await tx.onboarding.delete(user_id=user_id)
                 await tx.login_attempts.delete(username_norm=found.username_norm)
                 await tx.users.delete(id=user_id)
             await work.audit(

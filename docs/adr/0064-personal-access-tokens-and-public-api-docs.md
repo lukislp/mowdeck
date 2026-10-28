@@ -25,7 +25,7 @@ Forces:
 
 ### Personal access tokens are API tokens with `purpose = personal`
 
-No second token mechanism: a personal access token is a row of `api_tokens` with the new column `purpose` (`integration` for every existing token, `personal` for these; migration `0006`). It is its own subject `api_token:<id>` in OpenFGA with `grant_*` tuples, exchanged at `POST /identity/token` like every API token, and revoked with its creator (disable, removal, account deletion). Everything that already holds for API tokens holds here: the secret (`mdk_<id>_<random>`) is shown once and only its SHA-256 is stored; the exchange records `last_used_at` (at most every few minutes) and is audited.
+No second token mechanism: a personal access token is a row of `api_tokens` with the new column `purpose` (`integration` for every existing token, `personal` for these; migration `0007`). It is its own subject `api_token:<id>` in OpenFGA with `grant_*` tuples, exchanged at `POST /identity/token` like every API token, and revoked with its creator (disable, removal, account deletion). Everything that already holds for API tokens holds here: the secret (`mdk_<id>_<random>`) is shown once and only its SHA-256 is stored; the exchange records `last_used_at` (at most every few minutes) and is audited.
 
 The rules that make it *personal*:
 

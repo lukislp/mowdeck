@@ -27,6 +27,7 @@ from identity.domain.models import (
     LoginAttempt,
     Membership,
     OAuthState,
+    OnboardingProgress,
     Passkey,
     RelyingParty,
     Role,
@@ -198,6 +199,11 @@ class Tx(Protocol):
     @property
     def oauth_states(self) -> Table[OAuthState]:
         """The OAuth round trips table (state and PKCE challenge)."""
+        ...
+
+    @property
+    def onboarding(self) -> Table[OnboardingProgress]:
+        """The setup tour progress table (one row per user)."""
         ...
 
 

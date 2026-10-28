@@ -7,6 +7,7 @@
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import ToneBadge from '#lib/components/ToneBadge.svelte';
   import { formatAge, problemMessage } from '#lib/i18n.js';
+  import FirstTimeHint from '#lib/onboarding/FirstTimeHint.svelte';
   import { m } from '#lib/paraglide/messages.js';
   import { getLocale } from '#lib/paraglide/runtime.js';
   import { outcomeLook, verdictLook } from '#lib/schedules/labels.js';
@@ -190,6 +191,7 @@
     {/if}
   {/snippet}
 </TopBar>
+<FirstTimeHint hint="schedules" text={m.firsttime_schedules_text()} />
 
 {#if loadProblem}
   <div class="pad">

@@ -9,6 +9,7 @@
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import { nativeShell } from '#lib/native/runtime.js';
   import { navigatePath } from '#lib/navigate.js';
+  import { onboarding } from '#lib/onboarding/runtime.js';
   import { inbox, pushDevice } from '#lib/notifications/runtime.js';
   import { operatorAccess } from '#lib/operator/access.svelte.js';
   import { m } from '#lib/paraglide/messages.js';
@@ -63,6 +64,7 @@
       inbox.clear();
       operatorAccess.reset();
       accountPlan.reset();
+      onboarding.reset();
     }
   });
 

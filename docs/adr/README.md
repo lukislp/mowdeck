@@ -65,4 +65,5 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0059](0059-ios-widgets-and-live-activity.md) | iOS widgets and the mowing Live Activity | Accepted |
 | [0060](0060-apple-watch-app.md) | Apple Watch app | Accepted |
 | [0061](0061-mowing-angle-rotation.md) | Mowing angle rotation | Accepted |
+| [0062](0062-setup-tour.md) | Setup tour for new users | Accepted |
 | [0064](0064-personal-access-tokens-and-public-api-docs.md) | Personal access tokens and the public API documentation | Accepted |

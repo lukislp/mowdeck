@@ -672,6 +672,33 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/me/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Onboarding
+         * @description The caller's progress through the setup tour of the web app (ADR 0062): status, skipped
+         *     steps and dismissed hints. `new` (nothing stored) for a user who never saw the tour. Only
+         *     users; API tokens get 403.
+         */
+        get: operations["my_onboarding_api_v1_identity_me_onboarding_get"];
+        /**
+         * Save Onboarding
+         * @description Replace the caller's tour progress (status, skipped steps, dismissed hints). The keys are
+         *     the web app's (`^[a-z][a-z0-9-]{0,31}$`, at most 32 each, duplicates dropped).
+         */
+        put: operations["save_onboarding_api_v1_identity_me_onboarding_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/me/passkeys": {
         parameters: {
             query?: never;
@@ -1677,6 +1704,50 @@ export type components = {
              * @description Seconds the round trip stays usable
              */
             expires_in: number;
+        };
+        /**
+         * OnboardingIn
+         * @description ``PUT /me/onboarding``: the whole state, replacing the stored one.
+         */
+        OnboardingIn: {
+            /** Dismissed Hints */
+            dismissed_hints?: string[];
+            /** Skipped Steps */
+            skipped_steps?: string[];
+            /**
+             * Status
+             * @description `active`, `dismissed` or `completed` (`new` cannot be stored).
+             * @enum {string}
+             */
+            status: "active" | "dismissed" | "completed";
+        };
+        /**
+         * OnboardingOut
+         * @description The caller's progress through the setup tour (ADR 0062). Whether a step is done is not
+         *     here: the web app reads that from the real state.
+         */
+        OnboardingOut: {
+            /**
+             * Dismissed Hints
+             * @description Keys of the "first time here" hints the user dismissed.
+             */
+            dismissed_hints: string[];
+            /**
+             * Skipped Steps
+             * @description Keys of the steps the user skipped.
+             */
+            skipped_steps: string[];
+            /**
+             * Status
+             * @description `new`: never decided (nothing stored yet); `active`: the tour runs; `dismissed`: closed without finishing; `completed`: every step done or skipped.
+             * @enum {string}
+             */
+            status: "new" | "active" | "dismissed" | "completed";
+            /**
+             * Updated At
+             * @description Last change; null while `new`.
+             */
+            updated_at: string | null;
         };
         /**
          * PasskeyLoginIn
@@ -3626,6 +3697,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OAuthStartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_onboarding_api_v1_identity_me_onboarding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingOut"];
+                };
+            };
+        };
+    };
+    save_onboarding_api_v1_identity_me_onboarding_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingOut"];
                 };
             };
             /** @description Validation Error */

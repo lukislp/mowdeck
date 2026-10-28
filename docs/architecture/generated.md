@@ -456,7 +456,7 @@ flowchart LR
     identity_identity__passkeys["identity: passkeys<br/>11 operations"]
     identity_identity__personal_access_tokens["identity: personal access tokens<br/>3 operations"]
     identity_identity__platform["identity: platform<br/>1 operation"]
-    identity_identity__sessions["identity: sessions<br/>21 operations"]
+    identity_identity__sessions["identity: sessions<br/>23 operations"]
   end
   subgraph notifications["notifications"]
     direction TB
@@ -504,7 +504,7 @@ flowchart LR
 | `identity` | `identity: passkeys` | 11 | 9 |
 | `identity` | `identity: personal access tokens` | 3 | 2 |
 | `identity` | `identity: platform` | 1 | 1 |
-| `identity` | `identity: sessions` | 21 | 19 |
+| `identity` | `identity: sessions` | 23 | 20 |
 | `identity` | `operations` | 1 | 1 |
 | `notifications` | `notifications` | 22 | 16 |
 | `notifications` | `operations` | 1 | 1 |
@@ -543,7 +543,7 @@ flowchart LR
     db_billing[("billing<br/>2 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>12 migrations")]
-    db_identity[("identity<br/>6 migrations")]
+    db_identity[("identity<br/>7 migrations")]
     db_notifications[("notifications<br/>9 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>4 migrations")]

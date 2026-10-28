@@ -1136,6 +1136,98 @@
         "title": "OAuthStartOut",
         "type": "object"
       },
+      "OnboardingIn": {
+        "additionalProperties": false,
+        "description": "``PUT /me/onboarding``: the whole state, replacing the stored one.",
+        "properties": {
+          "dismissed_hints": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9-]{0,31}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Dismissed Hints",
+            "type": "array"
+          },
+          "skipped_steps": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9-]{0,31}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Skipped Steps",
+            "type": "array"
+          },
+          "status": {
+            "description": "`active`, `dismissed` or `completed` (`new` cannot be stored).",
+            "enum": [
+              "active",
+              "dismissed",
+              "completed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "OnboardingIn",
+        "type": "object"
+      },
+      "OnboardingOut": {
+        "description": "The caller's progress through the setup tour (ADR 0062). Whether a step is done is not\nhere: the web app reads that from the real state.",
+        "properties": {
+          "dismissed_hints": {
+            "description": "Keys of the \"first time here\" hints the user dismissed.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Dismissed Hints",
+            "type": "array"
+          },
+          "skipped_steps": {
+            "description": "Keys of the steps the user skipped.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped Steps",
+            "type": "array"
+          },
+          "status": {
+            "description": "`new`: never decided (nothing stored yet); `active`: the tour runs; `dismissed`: closed without finishing; `completed`: every step done or skipped.",
+            "enum": [
+              "new",
+              "active",
+              "dismissed",
+              "completed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last change; null while `new`.",
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "status",
+          "skipped_steps",
+          "dismissed_hints",
+          "updated_at"
+        ],
+        "title": "OnboardingOut",
+        "type": "object"
+      },
       "PasskeyLoginIn": {
         "additionalProperties": false,
         "description": "``POST /passkeys/session``: the answer to a login challenge.",
@@ -4631,6 +4723,68 @@
         "summary": "Link External Identity",
         "tags": [
           "identity: login providers"
+        ]
+      }
+    },
+    "/api/v1/identity/me/onboarding": {
+      "get": {
+        "description": "The caller's progress through the setup tour of the web app (ADR 0062): status, skipped\nsteps and dismissed hints. `new` (nothing stored) for a user who never saw the tour. Only\nusers; API tokens get 403.",
+        "operationId": "my_onboarding_api_v1_identity_me_onboarding_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Onboarding",
+        "tags": [
+          "identity: sessions"
+        ]
+      },
+      "put": {
+        "description": "Replace the caller's tour progress (status, skipped steps, dismissed hints). The keys are\nthe web app's (`^[a-z][a-z0-9-]{0,31}$`, at most 32 each, duplicates dropped).",
+        "operationId": "save_onboarding_api_v1_identity_me_onboarding_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Onboarding",
+        "tags": [
+          "identity: sessions"
         ]
       }
     },

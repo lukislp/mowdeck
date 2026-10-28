@@ -302,6 +302,18 @@ oauth_states = Table(
     Column("return_query", String(1024)),
 )
 
+# Setup tour of the web app (ADR 0062): the user's own choices, one row per user.
+onboarding_progress = Table(
+    "onboarding_progress",
+    metadata,
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("status", String(16), nullable=False),
+    Column("skipped_steps", JSONB, nullable=False),
+    Column("dismissed_hints", JSONB, nullable=False),
+    Column("created_at", TS, nullable=False),
+    Column("updated_at", TS, nullable=False),
+)
+
 # Schema only in Phase 1 (design section 5): support access and invitations.
 support_grants = Table(
     "support_grants",

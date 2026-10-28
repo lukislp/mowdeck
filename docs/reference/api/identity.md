@@ -810,6 +810,29 @@ Revoke one of your personal access tokens at once (404 for any other token).
 | 204 | Successful Response | no body |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
+#### GET /api/v1/identity/me/onboarding
+
+**My Onboarding**
+
+The caller's progress through the setup tour of the web app (ADR 0062): status, skipped steps and dismissed hints. `new` (nothing stored) for a user who never saw the tour. Only users; API tokens get 403.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [OnboardingOut](#onboardingout) |
+
+#### PUT /api/v1/identity/me/onboarding
+
+**Save Onboarding**
+
+Replace the caller's tour progress (status, skipped steps, dismissed hints). The keys are the web app's (`^[a-z][a-z0-9-]{0,31}$`, at most 32 each, duplicates dropped).
+
+**Request body** (required): `application/json` [OnboardingIn](#onboardingin)
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [OnboardingOut](#onboardingout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 #### PUT /api/v1/identity/me/password
 
 **Change Password**
@@ -1283,6 +1306,27 @@ Where to send the browser for the provider's sign-in (the browser keeps a cookie
 | --- | --- | --- | --- |
 | `authorize_url` | string | yes |  |
 | `expires_in` | integer | yes | Seconds the round trip stays usable |
+
+### OnboardingIn
+
+`PUT /me/onboarding`: the whole state, replacing the stored one.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `dismissed_hints` | array of string | no | max items 32 |
+| `skipped_steps` | array of string | no | max items 32 |
+| `status` | `"active"` \| `"dismissed"` \| `"completed"` | yes | `active`, `dismissed` or `completed` (`new` cannot be stored). |
+
+### OnboardingOut
+
+The caller's progress through the setup tour (ADR 0062). Whether a step is done is not here: the web app reads that from the real state.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `dismissed_hints` | array of string | yes | Keys of the "first time here" hints the user dismissed. |
+| `skipped_steps` | array of string | yes | Keys of the steps the user skipped. |
+| `status` | `"new"` \| `"active"` \| `"dismissed"` \| `"completed"` | yes | `new`: never decided (nothing stored yet); `active`: the tour runs; `dismissed`: closed without finishing; `completed`: every step done or skipped. |
+| `updated_at` | string (date-time) or null | yes | Last change; null while `new`. |
 
 ### PasskeyLoginIn
 

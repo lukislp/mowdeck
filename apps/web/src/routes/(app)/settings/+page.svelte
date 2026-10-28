@@ -22,6 +22,7 @@
   import LinkedAccountsSection from '#lib/settings/sections/LinkedAccountsSection.svelte';
   import NotificationsSection from '#lib/settings/sections/NotificationsSection.svelte';
   import ProfileSection from '#lib/settings/sections/ProfileSection.svelte';
+  import SetupSection from '#lib/settings/sections/SetupSection.svelte';
   import UsersSection from '#lib/settings/sections/UsersSection.svelte';
   import WhatsNewSection from '#lib/settings/sections/WhatsNewSection.svelte';
   import { builtIn, registry, visibleModules } from '#lib/shell/registry.svelte.js';
@@ -34,6 +35,7 @@
     'ai-provider': AiProviderSection,
     'linked-accounts': LinkedAccountsSection,
     'api-tokens': ApiTokensSection,
+    setup: SetupSection,
     'api-access': ApiAccessSection,
     'whats-new': WhatsNewSection,
     about: AboutSection,
@@ -41,6 +43,12 @@
 
   /** Not a module: every user sees the build and its source code (AGPL-3.0 section 13). */
   const ABOUT: SettingsSection = { id: 'about', anchor: 'about', label: () => m.source_about() };
+  /** Not a module either: the way back into the setup tour (ADR 0062), for every user. */
+  const SETUP: SettingsSection = {
+    id: 'setup',
+    anchor: 'setup',
+    label: () => m.onboarding_title(),
+  };
   /** Not a module either: the history of "Was ist neu", just before About. */
   const WHATS_NEW: SettingsSection = {
     id: 'whats-new',
@@ -57,8 +65,10 @@
         operatorAccess.allowed,
       ),
     )
-      .filter((section) => section.id in VIEWS && section.id !== ABOUT.id)
-      .concat(WHATS_NEW, ABOUT),
+      .filter(
+        (section) => section.id in VIEWS && section.id !== ABOUT.id && section.id !== SETUP.id,
+      )
+      .concat(SETUP, WHATS_NEW, ABOUT),
   );
   const anchors = $derived(sections.map((section) => section.anchor).join(' '));
   let current = $state('');

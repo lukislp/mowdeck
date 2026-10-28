@@ -520,3 +520,44 @@ async def test_apple_and_github_links_coexist_on_postgres(
     assert link.provider == "apple" and link.subject == sub and link.display_name == "Apple ID"
     assert link.last_used_at is not None
     assert providers == ["apple", "github"]
+
+
+@needs_db
+async def test_onboarding_progress_on_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0062: the JSON lists round trip, the row goes with the user, migration 0006 down."""
+    url_me = "/api/v1/identity/me/onboarding"
+    async with store_of("postgres", monkeypatch) as store, harness(store=store) as h:
+        lukas = await h.register("lukas")
+        anna_id, anna_token = await h.subuser(lukas, "anna")
+        anna = {"Authorization": f"Bearer {anna_token}"}
+        body = {"status": "active", "skipped_steps": ["passkey"], "dismissed_hints": ["mower-map"]}
+        saved = await h.client.put(url_me, headers=anna, json=body)
+        replaced = await h.client.put(
+            url_me, headers=anna, json={**body, "status": "completed", "skipped_steps": []}
+        )
+        read = (await h.client.get(url_me, headers=anna)).json()
+        removed = await h.client.delete(lukas.url(f"/users/{anna_id}"), headers=lukas.headers)
+        async with store.transaction() as tx:
+            left = await tx.onboarding.count()
+    assert saved.status_code == 200, saved.text
+    assert replaced.status_code == 200, replaced.text
+    assert read["status"] == "completed"
+    assert read["skipped_steps"] == [] and read["dismissed_hints"] == ["mower-map"]
+    assert removed.status_code == 204
+    assert left == 0
+
+
+@needs_db
+async def test_migration_0006_down_drops_only_the_tour(monkeypatch: pytest.MonkeyPatch) -> None:
+    async with temporary_database() as url:
+        await migrate(url, monkeypatch)
+        await migrate(url, monkeypatch, "0005", down=True)
+        engine = create_async_engine(async_database_url(url))
+        try:
+            tables = await table_names(engine)
+            assert "onboarding_progress" not in tables
+            assert {"users", "passkeys", "external_identities"} <= tables
+            await migrate(url, monkeypatch)
+            assert "onboarding_progress" in await table_names(engine)
+        finally:
+            await engine.dispose()

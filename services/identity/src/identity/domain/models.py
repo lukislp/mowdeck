@@ -501,6 +501,40 @@ class OAuthState:
         self.purpose = RedirectPurpose(self.purpose)
 
 
+class OnboardingStatus(StrEnum):
+    """Where a user stands with the setup tour of the web app (ADR 0062)."""
+
+    NEW = "new"
+    """Never decided: no row is stored yet. The web app decides whether to offer the tour."""
+    ACTIVE = "active"
+    """The tour runs (opened by the user, or started for an account without a mower)."""
+    DISMISSED = "dismissed"
+    """Closed without finishing; it opens again only on request (Settings → Einrichtung)."""
+    COMPLETED = "completed"
+    """Every step done or skipped."""
+
+
+@dataclass(slots=True)
+class OnboardingProgress:
+    """A user's progress through the setup tour and the "first time here" hints (ADR 0062).
+
+    Only the user's own choices are stored: whether the tour runs, which steps they skipped and
+    which hints they dismissed. Whether a step is *done* is never stored; the web app reads it
+    from the real state (a mower exists, a schedule exists, a passkey is registered, ...). One
+    row per user, removed with the user.
+    """
+
+    user_id: UUID
+    status: OnboardingStatus
+    skipped_steps: list[str]
+    dismissed_hints: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+    def __post_init__(self) -> None:
+        self.status = OnboardingStatus(self.status)
+
+
 @dataclass(frozen=True, slots=True)
 class RelyingParty:
     """The WebAuthn relying party of this installation (from the public URL).

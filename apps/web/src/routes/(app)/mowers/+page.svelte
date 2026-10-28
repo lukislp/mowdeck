@@ -15,6 +15,7 @@
   import { clock } from '#lib/clock.svelte.js';
   import LiveStatus from '#lib/components/LiveStatus.svelte';
   import PlanBanner from '#lib/components/PlanBanner.svelte';
+  import SetupCard from '#lib/onboarding/SetupCard.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import type { components } from '#lib/generated/fleet.js';
   import {
@@ -155,6 +156,7 @@
   {/snippet}
 </TopBar>
 <PlanBanner />
+<SetupCard />
 
 {#if showInstall}
   <div class="install" data-testid="install-hint" data-offer={install.offer}>
