@@ -145,13 +145,21 @@ class Harness:
             await self.announce(mower_id, owner.account_id)
         return mower_id
 
-    async def announce(self, mower_id: UUID, account_id: UUID, *, removed: bool = False) -> None:
+    async def announce(
+        self,
+        mower_id: UUID,
+        account_id: UUID,
+        *,
+        removed: bool = False,
+        options: dict[str, Any] | None = None,
+    ) -> None:
         """Publish ``mower.registered`` (or ``mower.removed``)."""
         registration = MowerRegistration(
             mower_id=mower_id,
             account_id=account_id,
             name="Front lawn",
             connection_kind=ConnectionKind.SIMULATED,
+            connection_options=options or {},
         )
         await publish_event(
             self.bus,
@@ -190,6 +198,8 @@ async def harness(
     bus: Any = None,
     authz: InMemoryAuthorizer | None = None,
     background_tasks: bool = False,
+    clock: Any = None,
+    tracking_gateway: Any = None,
     aerial_source: Any = None,
     aerial_cache: Any = None,
     **overrides: Any,
@@ -206,6 +216,8 @@ async def harness(
         authorizer=fake,
         principal_resolver=keys.resolver(),
         background_tasks=background_tasks,
+        clock=clock,
+        tracking_gateway=tracking_gateway,
         seed_delay_seconds=0.01,
         aerial_source=aerial_source,
         aerial_cache=aerial_cache,

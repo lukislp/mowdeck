@@ -68,3 +68,22 @@ describe('vision proposal kind', () => {
     expect(assistProposal(null)).toBeNull();
   });
 });
+
+describe('tracking kinds', () => {
+  it('are switchable, labelled in both languages and not acknowledged alarms', () => {
+    for (const kind of [
+      'tracking_started',
+      'tracking_moved',
+      'tracking_stale',
+      'tracking_ended',
+    ] as const) {
+      expect(USER_KINDS).toContain(kind);
+      expect(kindLabel(kind)).not.toBe('');
+      expect(kindHint(kind)).not.toBe('');
+      expect(isAlarm(kind)).toBe(false);
+    }
+    expect(kindTone('tracking_started')).toBe('error');
+    expect(kindTone('tracking_stale')).toBe('paused');
+    expect(kindTone('tracking_ended')).toBe('docked');
+  });
+});

@@ -23,6 +23,10 @@ SEVERITY: dict[NotificationKind, NotificationSeverity] = {
     NotificationKind.MOWER_LIFTED: NotificationSeverity.CRITICAL,
     NotificationKind.MOWER_LEFT_DOCK_UNEXPECTEDLY: NotificationSeverity.CRITICAL,
     NotificationKind.GEOFENCE_EXIT: NotificationSeverity.CRITICAL,
+    NotificationKind.TRACKING_STARTED: NotificationSeverity.CRITICAL,
+    NotificationKind.TRACKING_MOVED: NotificationSeverity.WARNING,
+    NotificationKind.TRACKING_STALE: NotificationSeverity.WARNING,
+    NotificationKind.TRACKING_ENDED: NotificationSeverity.INFO,
     NotificationKind.BLADE_MAINTENANCE: NotificationSeverity.INFO,
     NotificationKind.VISION_PROPOSAL: NotificationSeverity.WARNING,
     NotificationKind.VISION_AUTO_PROPOSAL: NotificationSeverity.WARNING,
@@ -54,6 +58,21 @@ IMAGE_KINDS: frozenset[NotificationKind] = ALARM_KINDS | {NotificationKind.MOWER
 """Kinds that get a camera photo: the theft alarms and every ``mower_stuck`` (an error or no
 movement: stuck, trapped, obstacle, outside the area, wheel slip all arrive as that kind). The
 routine kinds never do (ADR 0056)."""
+TRACKING_KINDS: frozenset[NotificationKind] = frozenset(
+    {
+        NotificationKind.TRACKING_STARTED,
+        NotificationKind.TRACKING_MOVED,
+        NotificationKind.TRACKING_STALE,
+        NotificationKind.TRACKING_ENDED,
+    }
+)
+"""The theft tracking notices (ADR 0058). Telemetry rate limits them, so they have no cooldown
+here. All but the end ignore quiet hours (:data:`QUIET_HOURS_EXEMPT`)."""
+
+QUIET_HOURS_EXEMPT: frozenset[NotificationKind] = ALARM_KINDS | (
+    TRACKING_KINDS - {NotificationKind.TRACKING_ENDED}
+)
+"""Kinds delivered during quiet hours: the theft alarms and the live tracking notices."""
 
 RULE_KINDS: frozenset[NotificationKind] = frozenset(SEVERITY) - {NotificationKind.TEST}
 """Kinds the rules derive (a user may enable each of them)."""

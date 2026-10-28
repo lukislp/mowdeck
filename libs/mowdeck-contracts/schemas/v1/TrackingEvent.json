@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``tracking.started``, ``.ended``, ``.stale`` and ``.moved``.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "at": {
+      "description": "When the event happened.",
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "distance_m": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "`tracking.moved`: metres moved since the last notice.",
+      "title": "Distance M"
+    },
+    "end_reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "false_alarm",
+            "stopped",
+            "max_duration"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Only in `tracking.ended`.",
+      "title": "End Reason"
+    },
+    "lat": {
+      "anyOf": [
+        {
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Last known position.",
+      "title": "Lat"
+    },
+    "lon": {
+      "anyOf": [
+        {
+          "maximum": 180,
+          "minimum": -180,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lon"
+    },
+    "mower_id": {
+      "format": "uuid",
+      "title": "Mower Id",
+      "type": "string"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "stale_minutes": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "`tracking.stale`: minutes without a report.",
+      "title": "Stale Minutes"
+    },
+    "track_points": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "`tracking.ended`: positions recorded in the session.",
+      "title": "Track Points"
+    },
+    "trigger": {
+      "description": "What started the session.",
+      "enum": [
+        "mower_lifted",
+        "mower_left_dock_unexpectedly",
+        "geofence_exit",
+        "manual"
+      ],
+      "title": "Trigger",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id",
+    "mower_id",
+    "account_id",
+    "at",
+    "trigger"
+  ],
+  "title": "TrackingEvent",
+  "type": "object"
+}

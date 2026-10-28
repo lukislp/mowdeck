@@ -400,6 +400,199 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tracking Status
+         * @description The active tracking session of the mower, else the newest one, with its track and
+         *     links; ``after`` returns only newer positions.
+         */
+        get: operations["get_tracking_status_api_v1_telemetry_mowers__mower_id__tracking_get"];
+        put?: never;
+        /**
+         * Start Tracking
+         * @description Start tracking by hand (also the safe way to test the whole chain). Answers 200 with the
+         *     running session when there is one.
+         */
+        post: operations["start_tracking_api_v1_telemetry_mowers__mower_id__tracking_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tracking Links
+         * @description The share links of the session (active ones first by recency; tokens are never shown).
+         */
+        get: operations["list_tracking_links_api_v1_telemetry_mowers__mower_id__tracking_links_get"];
+        put?: never;
+        /**
+         * Create Tracking Link
+         * @description Issue a secret share link (default 48 h). The token is in this answer only.
+         */
+        post: operations["create_tracking_link_api_v1_telemetry_mowers__mower_id__tracking_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Tracking Link
+         * @description Revoke a share link; it stops working at once.
+         */
+        delete: operations["revoke_tracking_link_api_v1_telemetry_mowers__mower_id__tracking_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take Tracking Photo
+         * @description Take one more camera photo for the active session (it goes into the report).
+         */
+        post: operations["take_tracking_photo_api_v1_telemetry_mowers__mower_id__tracking_photo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/report.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tracking Report
+         * @description The theft report as a PDF: mower, alarm, track (table and drawing), photos, blank owner
+         *     fields.
+         */
+        get: operations["tracking_report_api_v1_telemetry_mowers__mower_id__tracking_report_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tracking Sessions
+         * @description Past and current sessions of the mower, newest first (at most 20).
+         */
+        get: operations["list_tracking_sessions_api_v1_telemetry_mowers__mower_id__tracking_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Tracking Session
+         * @description Delete an ended session with its links and photos.
+         */
+        delete: operations["delete_tracking_session_api_v1_telemetry_mowers__mower_id__tracking_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Tracking
+         * @description End the active session ("Fehlalarm / Ortung beenden").
+         */
+        post: operations["stop_tracking_api_v1_telemetry_mowers__mower_id__tracking_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/public/tracking/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Public Tracking View
+         * @description The live page of a share link: the position, the track since the alarm, the times and
+         *     the mower's name and model. No login; 404 for any unusable token, 429 when asked too
+         *     often.
+         */
+        post: operations["public_tracking_view_api_v1_telemetry_public_tracking_view_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/reports/summary": {
         parameters: {
             query?: never;
@@ -2088,6 +2281,48 @@ export type components = {
             truncated: boolean;
         };
         /**
+         * PublicTrackIn
+         * @description Body of the public view.
+         */
+        PublicTrackIn: {
+            /** Token */
+            token: string;
+        };
+        /**
+         * PublicTrackOut
+         * @description What a share link shows: nothing else.
+         */
+        PublicTrackOut: {
+            /** Active */
+            active: boolean;
+            /** Ended At */
+            ended_at?: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            last?: components["schemas"]["TrackPointOut"] | null;
+            /** Mower Model */
+            mower_model?: string | null;
+            /** Mower Name */
+            mower_name: string;
+            /**
+             * Server Time
+             * Format: date-time
+             */
+            server_time: string;
+            /** Stale Since */
+            stale_since?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Track */
+            track: components["schemas"]["TrackPointOut"][];
+        };
+        /**
          * ReportMowerOut
          * @description The day totals of one mower in a report (days without data are absent).
          */
@@ -2365,6 +2600,175 @@ export type components = {
              * @description Start, `HH:MM` (24-hour clock).
              */
             start: string;
+        };
+        /**
+         * TrackingLinkCreated
+         * @description A new share link. ``token`` is shown only here; the page address is
+         *     ``<app>/track#<token>``.
+         */
+        TrackingLinkCreated: {
+            link: components["schemas"]["TrackingLinkOut"];
+            /** Token */
+            token: string;
+        };
+        /**
+         * TrackingLinkIn
+         * @description Body of a link request.
+         */
+        TrackingLinkIn: {
+            /**
+             * Hours
+             * @description Lifetime; at most the server's limit (48 h).
+             */
+            hours?: number | null;
+            /** Session Id */
+            session_id?: string | null;
+        };
+        /**
+         * TrackingLinkOut
+         * @description A share link (never its token).
+         */
+        TrackingLinkOut: {
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Uses */
+            uses: number;
+        };
+        /**
+         * TrackingSessionOut
+         * @description A theft tracking session.
+         */
+        TrackingSessionOut: {
+            /** Active */
+            active: boolean;
+            /** End Reason */
+            end_reason?: ("false_alarm" | "stopped" | "max_duration") | null;
+            /** Ended At */
+            ended_at?: string | null;
+            /**
+             * Ends At
+             * Format: date-time
+             * @description The automatic end (maximum duration).
+             */
+            ends_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Interval Seconds */
+            interval_seconds: number;
+            /** @description Newest position seen by the background tick. */
+            last?: components["schemas"]["TrackPointOut"] | null;
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
+            /** Mower Model */
+            mower_model?: string | null;
+            /** Mower Name */
+            mower_name: string;
+            /** Mower Serial */
+            mower_serial?: string | null;
+            /**
+             * Points
+             * @description Positions recorded; final once the session ended.
+             */
+            points: number;
+            /**
+             * Stale Since
+             * @description Set while the mower has not reported for a while.
+             */
+            stale_since?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Trigger
+             * @enum {string}
+             */
+            trigger: "mower_lifted" | "mower_left_dock_unexpectedly" | "geofence_exit" | "manual";
+        };
+        /**
+         * TrackingStatus
+         * @description The tracking view of a mower: the session, its track and its links.
+         */
+        TrackingStatus: {
+            /** Links */
+            links?: components["schemas"]["TrackingLinkOut"][];
+            /**
+             * Photos
+             * @default 0
+             */
+            photos: number;
+            /**
+             * Server Time
+             * Format: date-time
+             */
+            server_time: string;
+            /** @description The active session, else the newest one; null when the mower never had one. */
+            session: components["schemas"]["TrackingSessionOut"] | null;
+            /** Track */
+            track?: components["schemas"]["TrackPointOut"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * TrackingStopIn
+         * @description Body of the stop request.
+         */
+        TrackingStopIn: {
+            /**
+             * Reason
+             * @default stopped
+             * @enum {string}
+             */
+            reason: "false_alarm" | "stopped";
+        };
+        /**
+         * TrackPointOut
+         * @description One position of a track.
+         */
+        TrackPointOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
         };
         /**
          * TurnStyle
@@ -3026,6 +3430,362 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MowerStateSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tracking_status_api_v1_telemetry_mowers__mower_id__tracking_get: {
+        parameters: {
+            query?: {
+                /** @description Only positions after this time (polling). */
+                after?: string | null;
+                session_id?: string | null;
+            };
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackingStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_tracking_api_v1_telemetry_mowers__mower_id__tracking_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackingSessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tracking_links_api_v1_telemetry_mowers__mower_id__tracking_links_get: {
+        parameters: {
+            query?: {
+                session_id?: string | null;
+            };
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackingLinkOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_tracking_link_api_v1_telemetry_mowers__mower_id__tracking_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackingLinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackingLinkCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_tracking_link_api_v1_telemetry_mowers__mower_id__tracking_links__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    take_tracking_photo_api_v1_telemetry_mowers__mower_id__tracking_photo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackingStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tracking_report_api_v1_telemetry_mowers__mower_id__tracking_report_pdf_get: {
+        parameters: {
+            query?: {
+                lang?: "de" | "en";
+                session_id?: string | null;
+            };
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tracking_sessions_api_v1_telemetry_mowers__mower_id__tracking_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackingSessionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tracking_session_api_v1_telemetry_mowers__mower_id__tracking_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_tracking_api_v1_telemetry_mowers__mower_id__tracking_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackingStopIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackingSessionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_tracking_view_api_v1_telemetry_public_tracking_view_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicTrackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicTrackOut"];
                 };
             };
             /** @description Validation Error */

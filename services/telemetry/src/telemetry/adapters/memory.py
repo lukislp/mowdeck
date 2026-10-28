@@ -8,6 +8,7 @@ lock and is always granted.
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator, Collection
 from contextlib import asynccontextmanager
+from dataclasses import replace as replace_fields
 from datetime import date, datetime, timedelta
 from uuid import UUID
 
@@ -89,8 +90,13 @@ class _MemoryTx:
         return entry.account_id if entry else None
 
     async def put_directory(self, entry: DirectoryEntry, *, replace: bool) -> None:
-        if replace or entry.mower_id not in self._data.directory:
+        existing = self._data.directory.get(entry.mower_id)
+        if replace or existing is None:
             self._data.directory[entry.mower_id] = entry
+        elif existing.name is None or existing.serial is None:
+            self._data.directory[entry.mower_id] = replace_fields(
+                existing, name=existing.name or entry.name, serial=existing.serial or entry.serial
+            )
 
     async def drop_mower(self, mower_id: UUID) -> None:
         data = self._data
@@ -201,6 +207,9 @@ class MemoryStore:
             except BaseException:
                 self.data = snapshot
                 raise
+
+    async def directory_of(self, mower_id: UUID) -> DirectoryEntry | None:
+        return self.data.directory.get(mower_id)
 
     async def latest_of(self, account_id: UUID, mower_id: UUID) -> LatestRow | None:
         row = self.data.latest.get(mower_id)

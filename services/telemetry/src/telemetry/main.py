@@ -16,6 +16,7 @@ database and OpenFGA.
 
 import asyncio
 import contextlib
+import dataclasses
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -33,14 +34,24 @@ from mowdeck_service_kit.health import ReadinessCheck
 from telemetry.adapters.aerial import DiskTileCache, HttpTileSource
 from telemetry.adapters.api.deps import install_error_mapping
 from telemetry.adapters.api.routes import router
+from telemetry.adapters.api.tracking_routes import router as tracking_router
 from telemetry.adapters.bus.fleet import seed_directory
 from telemetry.adapters.bus.health_events import BusHealthEvents
 from telemetry.adapters.bus.subscriptions import subscribe_all
+from telemetry.adapters.bus.tracking import (
+    BusTrackingEvents,
+    BusTrackingGateway,
+    subscribe_notifications,
+)
 from telemetry.adapters.db.store import SqlStore
+from telemetry.adapters.db.tracking_store import SqlTrackingStore
+from telemetry.adapters.memory_tracking import MemoryTrackingStore
 from telemetry.adapters.metrics import PrometheusRetentionObserver
 from telemetry.application.aerial import TileCache, TileSource
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
+from telemetry.application.tracking import Tracking
+from telemetry.application.tracking_ports import TrackingGateway, TrackingStore
 from telemetry.module import DESCRIPTOR
 from telemetry.settings import Settings
 
@@ -63,6 +74,8 @@ def build_app(
     *,
     bus: EventBus | None = None,
     store: Store | None = None,
+    tracking_store: TrackingStore | None = None,
+    tracking_gateway: TrackingGateway | None = None,
     authorizer: Authorizer | None = None,
     principal_resolver: PrincipalResolver | None = None,
     clock: Clock | None = None,
@@ -79,10 +92,13 @@ def build_app(
             raise ValueError(msg)
         engine = create_engine(settings)
         store = SqlStore(engine)
+        tracking_store = tracking_store or SqlTrackingStore(engine)
     connection: FgaConnection | None = None
     if authorizer is None:
         connection = FgaConnection(AuthzSettings.from_env())
     active_clock: Clock = clock or utc_now
+    if tracking_store is None:
+        tracking_store = MemoryTrackingStore()  # only reached with an injected store (tests)
     tasks: list[asyncio.Task[Any]] = []
     store_ref: Store = store
     aerial_config = settings.to_aerial_config()
@@ -114,6 +130,23 @@ def build_app(
             aerial_cache=aerial_cache,
             retention_observer=observer,
         )
+        tracking = (
+            Tracking(
+                tracking_store,
+                store_ref,
+                settings.to_tracking_config(),
+                active_clock,
+                BusTrackingEvents(lambda: getattr(app.state, "bus", None)),
+                tracking_gateway
+                or BusTrackingGateway(
+                    lambda: getattr(app.state, "bus", None),
+                    photo_timeout_seconds=settings.to_tracking_config().photo_timeout_seconds,
+                ),
+            )
+            if tracking_store is not None
+            else None
+        )
+        services = dataclasses.replace(services, tracking=tracking)
         app.state.telemetry = services
         app.state.directory_seeded = False
         subscriptions: list[Subscription] = []
@@ -124,6 +157,8 @@ def build_app(
                 unknown_mower_attempts=settings.telemetry_unknown_mower_attempts,
                 queries=services.queries,
             )
+        if active_bus is not None and tracking is not None:
+            subscriptions.append(await subscribe_notifications(active_bus, tracking))
         app.state.subscriptions = subscriptions
         if background_tasks:
             tasks.extend(
@@ -136,6 +171,9 @@ def build_app(
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        tracking_uc = getattr(getattr(app.state, "telemetry", None), "tracking", None)
+        if tracking_uc is not None:
+            await tracking_uc.close()
         for subscription in getattr(app.state, "subscriptions", []):
             await subscription.unsubscribe()
         if http_source is not None:
@@ -152,7 +190,7 @@ def build_app(
     app = create_app(
         settings,
         DESCRIPTOR,
-        routers=[router],
+        routers=[router, tracking_router],
         readiness_checks=[
             *([readiness_check_db(engine)] if engine is not None else []),
             ReadinessCheck(name="subscriptions", check=subscriptions_active),
@@ -201,6 +239,30 @@ def start_background_tasks(
             name="telemetry-retention",
         )
     ]
+    tracking = services.tracking
+    if tracking is not None:
+
+        async def retain_tracking() -> None:
+            deleted = await tracking.retain()
+            if deleted:
+                _log.info("retention deleted tracking sessions", count=deleted)
+
+        tasks.append(
+            asyncio.create_task(
+                every(
+                    settings.telemetry_retention_interval_seconds,
+                    "tracking-retention",
+                    retain_tracking,
+                ),
+                name="telemetry-tracking-retention",
+            )
+        )
+        tasks.append(
+            asyncio.create_task(
+                every(settings.telemetry_tracking_tick_seconds, "tracking-tick", tracking.tick),
+                name="telemetry-tracking-tick",
+            )
+        )
     if bus is not None:
 
         def seeded(_count: int) -> None:

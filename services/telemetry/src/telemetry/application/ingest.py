@@ -231,10 +231,17 @@ class Ingest:
     async def mower_registered(self, registration: MowerRegistration) -> None:
         """Remember (or update) which account owns a mower (events win over the seed)."""
         async with self._store.transaction() as tx:
-            await tx.put_directory(
-                DirectoryEntry(registration.mower_id, registration.account_id, self._clock()),
-                replace=True,
-            )
+            await tx.put_directory(self._entry(registration), replace=True)
+
+    def _entry(self, registration: MowerRegistration) -> DirectoryEntry:
+        device_name = registration.connection_options.get("device_name")
+        return DirectoryEntry(
+            registration.mower_id,
+            registration.account_id,
+            self._clock(),
+            name=registration.name,
+            serial=device_name if isinstance(device_name, str) and device_name else None,
+        )
 
     async def mower_removed(self, mower_id: UUID) -> None:
         """Forget a mower and delete everything stored about it."""
@@ -246,10 +253,7 @@ class Ingest:
         count = 0
         async with self._store.transaction() as tx:
             for registration in registrations:
-                await tx.put_directory(
-                    DirectoryEntry(registration.mower_id, registration.account_id, self._clock()),
-                    replace=False,
-                )
+                await tx.put_directory(self._entry(registration), replace=False)
                 count += 1
         return count
 

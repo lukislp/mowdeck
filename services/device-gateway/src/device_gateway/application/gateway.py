@@ -35,6 +35,9 @@ from mowdeck_contracts.v1 import (
     PhotoFrame,
     PhotoReply,
     PhotoRequest,
+    TrackingLeaseCode,
+    TrackingLeaseReply,
+    TrackingLeaseRequest,
     utc_now,
 )
 from mowdeck_control import CommandRejected, NotConnected, PathUnavailable
@@ -483,6 +486,28 @@ class DeviceGateway:
             update_state=info.update_state,
         )
         return FirmwareCheckReply(info=info)
+
+    # --- theft tracking -----------------------------------------------------------------------
+
+    async def tracking_lease(self, request: TrackingLeaseRequest) -> TrackingLeaseReply | None:
+        """Answer a tracking lease request (ADR 0058); None when the mower belongs to another
+        shard. The account of the request must own the mower (like commands); otherwise the
+        answer is ``not_found`` so a foreign mower never reveals itself."""
+        if not self.shard.owns(request.mower_id):
+            return None
+        session = self._sessions.get(request.mower_id)
+        if session is None or session.registration.account_id != request.account_id:
+            return TrackingLeaseReply(code=TrackingLeaseCode.NOT_FOUND, detail="unknown mower")
+        reply = session.set_tracking(request.interval_seconds, request.lease_seconds)
+        if request.lease_seconds > 0:
+            _log.info(
+                "tracking lease",
+                mower_id=str(request.mower_id),
+                code=reply.code.value,
+                interval_seconds=reply.interval_seconds,
+                lease_seconds=request.lease_seconds,
+            )
+        return reply
 
     # --- mow path preview ---------------------------------------------------------------------
 

@@ -3320,6 +3320,112 @@
         "title": "PositionTrack",
         "type": "object"
       },
+      "PublicTrackIn": {
+        "description": "Body of the public view.",
+        "properties": {
+          "token": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "PublicTrackIn",
+        "type": "object"
+      },
+      "PublicTrackOut": {
+        "description": "What a share link shows: nothing else.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackPointOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mower_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mower Model"
+          },
+          "mower_name": {
+            "title": "Mower Name",
+            "type": "string"
+          },
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          },
+          "stale_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale Since"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "track": {
+            "items": {
+              "$ref": "#/components/schemas/TrackPointOut"
+            },
+            "title": "Track",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mower_name",
+          "active",
+          "started_at",
+          "track",
+          "expires_at",
+          "server_time"
+        ],
+        "title": "PublicTrackOut",
+        "type": "object"
+      },
       "ReportMowerOut": {
         "description": "The day totals of one mower in a report (days without data are absent).",
         "properties": {
@@ -3829,6 +3935,356 @@
           "end"
         ],
         "title": "TimeWindow",
+        "type": "object"
+      },
+      "TrackPointOut": {
+        "description": "One position of a track.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lon",
+          "at"
+        ],
+        "title": "TrackPointOut",
+        "type": "object"
+      },
+      "TrackingLinkCreated": {
+        "description": "A new share link. ``token`` is shown only here; the page address is\n``<app>/track#<token>``.",
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/TrackingLinkOut"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link",
+          "token"
+        ],
+        "title": "TrackingLinkCreated",
+        "type": "object"
+      },
+      "TrackingLinkIn": {
+        "description": "Body of a link request.",
+        "properties": {
+          "hours": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 48.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lifetime; at most the server's limit (48 h).",
+            "title": "Hours"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "title": "TrackingLinkIn",
+        "type": "object"
+      },
+      "TrackingLinkOut": {
+        "description": "A share link (never its token).",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "created_at",
+          "expires_at",
+          "uses",
+          "active"
+        ],
+        "title": "TrackingLinkOut",
+        "type": "object"
+      },
+      "TrackingSessionOut": {
+        "description": "A theft tracking session.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "end_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "false_alarm",
+                  "stopped",
+                  "max_duration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Reason"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "ends_at": {
+            "description": "The automatic end (maximum duration).",
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "interval_seconds": {
+            "title": "Interval Seconds",
+            "type": "number"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackPointOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Newest position seen by the background tick."
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "mower_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mower Model"
+          },
+          "mower_name": {
+            "title": "Mower Name",
+            "type": "string"
+          },
+          "mower_serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mower Serial"
+          },
+          "points": {
+            "description": "Positions recorded; final once the session ended.",
+            "title": "Points",
+            "type": "integer"
+          },
+          "stale_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set while the mower has not reported for a while.",
+            "title": "Stale Since"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "mower_lifted",
+              "mower_left_dock_unexpectedly",
+              "geofence_exit",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "mower_id",
+          "trigger",
+          "active",
+          "started_at",
+          "ends_at",
+          "interval_seconds",
+          "mower_name",
+          "points"
+        ],
+        "title": "TrackingSessionOut",
+        "type": "object"
+      },
+      "TrackingStatus": {
+        "description": "The tracking view of a mower: the session, its track and its links.",
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/TrackingLinkOut"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "photos": {
+            "default": 0,
+            "title": "Photos",
+            "type": "integer"
+          },
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          },
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackingSessionOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The active session, else the newest one; null when the mower never had one."
+          },
+          "track": {
+            "items": {
+              "$ref": "#/components/schemas/TrackPointOut"
+            },
+            "title": "Track",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session",
+          "server_time"
+        ],
+        "title": "TrackingStatus",
+        "type": "object"
+      },
+      "TrackingStopIn": {
+        "description": "Body of the stop request.",
+        "properties": {
+          "reason": {
+            "default": "stopped",
+            "enum": [
+              "false_alarm",
+              "stopped"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "TrackingStopIn",
         "type": "object"
       },
       "TurnStyle": {
@@ -5044,6 +5500,596 @@
         "summary": "Get State",
         "tags": [
           "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking": {
+      "get": {
+        "description": "The active tracking session of the mower, else the newest one, with its track and\nlinks; ``after`` returns only newer positions.",
+        "operationId": "get_tracking_status_api_v1_telemetry_mowers__mower_id__tracking_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "description": "Only positions after this time (polling).",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only positions after this time (polling).",
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tracking Status",
+        "tags": [
+          "tracking"
+        ]
+      },
+      "post": {
+        "description": "Start tracking by hand (also the safe way to test the whole chain). Answers 200 with the\nrunning session when there is one.",
+        "operationId": "start_tracking_api_v1_telemetry_mowers__mower_id__tracking_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Tracking",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/links": {
+      "get": {
+        "description": "The share links of the session (active ones first by recency; tokens are never shown).",
+        "operationId": "list_tracking_links_api_v1_telemetry_mowers__mower_id__tracking_links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TrackingLinkOut"
+                  },
+                  "title": "Response List Tracking Links Api V1 Telemetry Mowers  Mower Id  Tracking Links Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tracking Links",
+        "tags": [
+          "tracking"
+        ]
+      },
+      "post": {
+        "description": "Issue a secret share link (default 48 h). The token is in this answer only.",
+        "operationId": "create_tracking_link_api_v1_telemetry_mowers__mower_id__tracking_links_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackingLinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingLinkCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Tracking Link",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/links/{link_id}": {
+      "delete": {
+        "description": "Revoke a share link; it stops working at once.",
+        "operationId": "revoke_tracking_link_api_v1_telemetry_mowers__mower_id__tracking_links__link_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Tracking Link",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/photo": {
+      "post": {
+        "description": "Take one more camera photo for the active session (it goes into the report).",
+        "operationId": "take_tracking_photo_api_v1_telemetry_mowers__mower_id__tracking_photo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Take Tracking Photo",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/report.pdf": {
+      "get": {
+        "description": "The theft report as a PDF: mower, alarm, track (table and drawing), photos, blank owner\nfields.",
+        "operationId": "tracking_report_api_v1_telemetry_mowers__mower_id__tracking_report_pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lang",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "enum": [
+                "de",
+                "en"
+              ],
+              "title": "Lang",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tracking Report",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/sessions": {
+      "get": {
+        "description": "Past and current sessions of the mower, newest first (at most 20).",
+        "operationId": "list_tracking_sessions_api_v1_telemetry_mowers__mower_id__tracking_sessions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TrackingSessionOut"
+                  },
+                  "title": "Response List Tracking Sessions Api V1 Telemetry Mowers  Mower Id  Tracking Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tracking Sessions",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/sessions/{session_id}": {
+      "delete": {
+        "description": "Delete an ended session with its links and photos.",
+        "operationId": "delete_tracking_session_api_v1_telemetry_mowers__mower_id__tracking_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Tracking Session",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/tracking/stop": {
+      "post": {
+        "description": "End the active session (\"Fehlalarm / Ortung beenden\").",
+        "operationId": "stop_tracking_api_v1_telemetry_mowers__mower_id__tracking_stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackingStopIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingSessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Tracking",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/public/tracking/view": {
+      "post": {
+        "description": "The live page of a share link: the position, the track since the alarm, the times and\nthe mower's name and model. No login; 404 for any unusable token, 429 when asked too\noften.",
+        "operationId": "public_tracking_view_api_v1_telemetry_public_tracking_view_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicTrackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Public Tracking View",
+        "tags": [
+          "tracking",
+          "public"
         ]
       }
     },

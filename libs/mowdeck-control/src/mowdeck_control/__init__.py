@@ -58,6 +58,7 @@ from mowdeck_control.connection import (
     PhotoCapture,
     ReportRateCapable,
     SettingsCapable,
+    TrackingRateCapable,
     TwoPhaseExecution,
     UndockCapable,
     base_station_port_of,
@@ -72,6 +73,7 @@ from mowdeck_control.connection import (
     maintenance_port_of,
     release_camera_session_of,
     settings_port_of,
+    tracking_rate_port_of,
 )
 from mowdeck_control.controller import MowerController, StateCallback
 from mowdeck_control.errors import (
@@ -215,6 +217,7 @@ __all__ = [
     "StateSubscription",
     "Timer",
     "TimerFactory",
+    "TrackingRateCapable",
     "TransitConfig",
     "TransitRoute",
     "TwoPhaseExecution",
@@ -257,6 +260,7 @@ __all__ = [
     "spot_start_problem",
     "to_geo_position",
     "to_wgs84",
+    "tracking_rate_port_of",
     "transit_start",
     "weak_link_problem",
     "without_undeclared_options",

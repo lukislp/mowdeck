@@ -59,15 +59,21 @@ confirming state arrives.
 import math
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    TRACKING_ENDED,
+    TRACKING_MOVED,
+    TRACKING_STALE,
+    TRACKING_STARTED,
     BladeHoursThreshold,
     FirmwareInfo,
     MowerActivity,
     MowerState,
     NotificationKind,
     RtkFixStatus,
+    TrackingEvent,
     VisionProposalCreated,
     VisionProposalState,
     VisionProposalUpdated,
@@ -656,6 +662,44 @@ def observe_blade_hours(
     events: list[NotificationEvent] = []
     w, _ = _emit(watch, event, now, config, events)
     return w, events
+
+
+def tracking_event(event_type: str, payload: TrackingEvent) -> NotificationEvent:
+    """The notification of a theft tracking event (ADR 0058). Telemetry already limits how
+    often it publishes them (one move notice per five minutes, one stale notice per outage),
+    so there is no cooldown; the occurrence (session, kind, time) makes the inbox item unique.
+    The notification opens the tracking view, where "false alarm" ends the session."""
+    kind = {
+        TRACKING_STARTED: NotificationKind.TRACKING_STARTED,
+        TRACKING_MOVED: NotificationKind.TRACKING_MOVED,
+        TRACKING_STALE: NotificationKind.TRACKING_STALE,
+        TRACKING_ENDED: NotificationKind.TRACKING_ENDED,
+    }[event_type]
+    has_position = payload.lat is not None and payload.lon is not None
+    params: dict[str, Any] = {
+        "lat": f"{payload.lat:.5f}" if payload.lat is not None else "",
+        "lon": f"{payload.lon:.5f}" if payload.lon is not None else "",
+        "meters": round(payload.distance_m or 0),
+        "minutes": payload.stale_minutes or 0,
+        "points": payload.track_points or 0,
+        "trigger": payload.trigger,
+    }
+    if kind is NotificationKind.TRACKING_ENDED:
+        variant: str | None = payload.end_reason or "stopped"
+    elif has_position:
+        variant = None
+    else:
+        variant = "no_position"
+    return NotificationEvent.of(
+        kind,
+        payload.mower_id,
+        payload.account_id,
+        payload.at,
+        f"{payload.session_id}:{payload.at.isoformat()}",
+        variant=variant,
+        link=f"/mowers/{payload.mower_id}/tracking",
+        **params,
+    )
 
 
 def vision_no_photo_event(payload: VisionProposalUpdated) -> NotificationEvent | None:
