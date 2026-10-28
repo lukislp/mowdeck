@@ -11,7 +11,7 @@ from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, Request, Response
+from fastapi import APIRouter, Header, Path, Query, Request, Response
 from mowdeck_service_kit import CurrentAccountId, CurrentPrincipal
 
 from telemetry.adapters.api.deps import (
@@ -21,6 +21,7 @@ from telemetry.adapters.api.deps import (
     visible_mower_ids,
 )
 from telemetry.adapters.api.schemas import (
+    AerialOut,
     BatteryPointOut,
     BatterySeries,
     BladeChangeList,
@@ -354,3 +355,44 @@ async def get_report_summary(
         wanted = set(mower_id) if visible is None else visible & set(mower_id)
     result = await services.health.report(account_id, wanted, first, last)
     return ReportSummary.of(result.first, result.last, result.rows, result.truncated)
+
+
+@router.get("/mowers/{mower_id}/aerial")
+async def get_aerial(
+    mower_id: UUID, _: ViewMower, account_id: CurrentAccountId, services: ServicesDep
+) -> AerialOut:
+    """Whether an aerial photo can be laid under the mower's map, with its credit line, zoom
+    range and the box where tiles are served; `enabled: false` without a configured source.
+    404 `no-map-yet` before the gateway published a map."""
+    info = await services.aerial.info(account_id, mower_id)
+    return AerialOut.of(
+        mower_id, info, f"/api/v1/telemetry/mowers/{mower_id}/aerial/{{z}}/{{x}}/{{y}}"
+    )
+
+
+@router.get(
+    "/mowers/{mower_id}/aerial/{z}/{x}/{y}",
+    response_class=Response,
+    responses={200: {"content": {"image/jpeg": {}, "image/png": {}}}},
+)
+async def get_aerial_tile(
+    mower_id: UUID,
+    z: Annotated[int, Path(ge=0, le=24)],
+    x: Annotated[int, Path(ge=0)],
+    y: Annotated[int, Path(ge=0)],
+    _: ViewMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> Response:
+    """One aerial photo tile (Web Mercator, XYZ) around the mower's map. Tiles away from the
+    map or outside the zoom range are 404 `tile-outside-map`, so this is no open proxy; new
+    tiles are rate limited per account (429)."""
+    tile = await services.aerial.tile(account_id, mower_id, z, x, y)
+    return Response(
+        tile.body,
+        media_type=tile.media_type,
+        headers={
+            "Cache-Control": "private, max-age=86400",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

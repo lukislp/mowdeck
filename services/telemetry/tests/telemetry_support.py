@@ -190,6 +190,8 @@ async def harness(
     bus: Any = None,
     authz: InMemoryAuthorizer | None = None,
     background_tasks: bool = False,
+    aerial_source: Any = None,
+    aerial_cache: Any = None,
     **overrides: Any,
 ) -> AsyncIterator[Harness]:
     """The app with fakes, inside its lifespan."""
@@ -205,6 +207,8 @@ async def harness(
         principal_resolver=keys.resolver(),
         background_tasks=background_tasks,
         seed_delay_seconds=0.01,
+        aerial_source=aerial_source,
+        aerial_cache=aerial_cache,
     )
     async with lifespan_client(app) as client:
         yield Harness(client, memory, fake, active_bus, keys, app)

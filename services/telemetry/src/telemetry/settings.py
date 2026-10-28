@@ -7,11 +7,13 @@ with the ``MOWDECK_AUTH_*`` variables of ``mowdeck-auth``.
 """
 
 from datetime import timedelta
+from typing import Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from mowdeck_service_kit import ServiceSettings
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
+from telemetry.application.aerial import AerialConfig
 from telemetry.application.context import TelemetryConfig
 from telemetry.domain.thinning import ThinPolicy
 
@@ -116,6 +118,93 @@ class Settings(ServiceSettings):
     telemetry_heatmap_join_metres: float = Field(default=10, gt=0, le=1000)
     """Coverage heatmap: ... and at most this many metres apart (both limits must hold; about
     0.6 m/s for 20 s with margin). Farther positions stay separate discs (RTK jumps)."""
+
+    telemetry_aerial_wms_url: str | None = Field(default=None, pattern=r"^https?://[^\s\"<>\\]+$")
+    """Aerial photo under the map: base URL of a WMS (https) that can answer ``GetMap`` in
+    EPSG:3857. Empty (the default) means no aerial layer and no request to any third party.
+    Bavaria: ``https://geoservices.bayern.de/od/wms/dop/v1/dop40`` (ADR 0054)."""
+
+    telemetry_aerial_allow_http: bool = False
+    """Accept ``http://`` source URLs. Only for the fake source of the test stack: real sources
+    are https, and the default refuses a plain http URL."""
+
+    telemetry_aerial_wms_layer: str = Field(default="", max_length=200, pattern=r"^[^\s&?=#]*$")
+    """Layer name of the WMS (Bavaria: ``by_dop40c``, colour)."""
+
+    telemetry_aerial_wms_version: str = Field(default="1.3.0", pattern=r"^1\.[13]\.\d$")
+    """WMS version (``1.3.0`` or ``1.1.1``)."""
+
+    telemetry_aerial_image_format: str = Field(default="image/jpeg", pattern=r"^image/(jpeg|png)$")
+    """Image format requested from the WMS."""
+
+    telemetry_aerial_xyz_url: str | None = Field(
+        default=None,
+        pattern=r"^https?://[^\s\"<>\\]*\{z\}[^\s\"<>\\]*\{x\}[^\s\"<>\\]*\{y\}[^\s\"<>\\]*$",
+    )
+    """Alternative to the WMS: an https XYZ tile URL template with ``{z}``, ``{x}``, ``{y}`` (Web
+    Mercator, 256 px). Takes precedence over the WMS."""
+
+    telemetry_aerial_attribution: str = Field(default="", max_length=300)
+    """Credit line the client shows on the map while the photo is on (the licence usually
+    requires it)."""
+
+    telemetry_aerial_min_zoom: int = Field(default=14, ge=0, le=24)
+    """Lowest zoom served."""
+
+    telemetry_aerial_max_zoom: int = Field(default=19, ge=0, le=24)
+    """Highest zoom the source has real detail for (the client scales beyond it)."""
+
+    telemetry_aerial_tile_size: int = Field(default=256, ge=128, le=1024)
+    """Pixel size of the WMS request for one tile."""
+
+    telemetry_aerial_margin_meters: float = Field(default=60, ge=0, le=2000)
+    """Tiles are served this far around the outline of the map (areas, zones, paths, dock)."""
+
+    telemetry_aerial_cache_dir: str = Field(default="/var/cache/mowdeck/aerial", min_length=1)
+    """Directory of the tile cache (a volume; unwritable means no caching)."""
+
+    telemetry_aerial_cache_max_mb: int = Field(default=256, ge=1, le=100_000)
+    """Size limit of the tile cache; the oldest tiles are deleted above it."""
+
+    telemetry_aerial_cache_ttl_days: int = Field(default=30, ge=1, le=3650)
+    """A cached tile is fetched again after this many days (new flights, 40 cm DOP: yearly)."""
+
+    telemetry_aerial_misses_per_minute: int = Field(default=240, ge=1, le=100_000)
+    """New tiles (not in the cache) one account may fetch from the source per minute."""
+
+    telemetry_aerial_timeout_seconds: float = Field(default=10, gt=0, le=120)
+    """Timeout of a request to the photo source."""
+
+    @field_validator("telemetry_aerial_wms_url", "telemetry_aerial_xyz_url", mode="before")
+    @classmethod
+    def _empty_url_is_none(cls, value: object) -> object:
+        """Compose passes unset variables as empty strings."""
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def _https_sources(self) -> Self:
+        for url in (self.telemetry_aerial_wms_url, self.telemetry_aerial_xyz_url):
+            if url and not url.startswith("https://") and not self.telemetry_aerial_allow_http:
+                msg = "the aerial photo source must be an https URL"
+                raise ValueError(msg)
+        return self
+
+    def to_aerial_config(self) -> AerialConfig:
+        """The aerial photo configuration."""
+        return AerialConfig(
+            wms_url=self.telemetry_aerial_wms_url or None,
+            wms_layer=self.telemetry_aerial_wms_layer,
+            wms_version=self.telemetry_aerial_wms_version,
+            image_format=self.telemetry_aerial_image_format,
+            xyz_url=self.telemetry_aerial_xyz_url or None,
+            attribution=self.telemetry_aerial_attribution,
+            min_zoom=self.telemetry_aerial_min_zoom,
+            max_zoom=self.telemetry_aerial_max_zoom,
+            tile_size=self.telemetry_aerial_tile_size,
+            margin_m=self.telemetry_aerial_margin_meters,
+            cache_ttl=timedelta(days=self.telemetry_aerial_cache_ttl_days),
+            misses_per_minute=self.telemetry_aerial_misses_per_minute,
+        )
 
     @model_validator(mode="after")
     def _check_positions_policy(self) -> "Settings":
