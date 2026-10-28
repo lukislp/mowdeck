@@ -5,6 +5,12 @@ tuples for its grants. It never inherits the creator's rights, can never hold ad
 keys (``users.manage``, ``billing.manage``, ``audit.view``), and is revoked when its creator is
 disabled or removed. The secret is shown once; only its SHA-256 is stored.
 
+Personal access tokens (ADR 0064) are API tokens with ``purpose=personal`` that any user creates
+for their own scripts: only the curated :data:`PERSONAL_SCOPES`, always with an expiry of at most
+:data:`PERSONAL_MAX_LIFETIME`, created only after a recent step-up (the route requires it) and
+managed by their creator through ``/me/api-tokens``. Like every token they appear in the
+account's token list, so an admin sees and can revoke them.
+
 Revoked tokens stay listed until the owner deletes them for good (``purge`` for one,
 ``purge_revoked`` for all of the account). Only revoked tokens can be deleted: an active token
 is revoked first, so its ``api_token.revoked`` event always goes out. The audit rows of a deleted
@@ -17,7 +23,12 @@ from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from mowdeck_authz import api_token
-from mowdeck_contracts.v1 import IDENTITY_API_TOKEN_REVOKED, ApiTokenRevoked, PrincipalKind
+from mowdeck_contracts.v1 import (
+    IDENTITY_API_TOKEN_REVOKED,
+    ApiTokenRevoked,
+    Principal,
+    PrincipalKind,
+)
 
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
@@ -25,7 +36,7 @@ from identity.application.ports import In
 from identity.application.work import Work
 from identity.domain.credentials import new_api_token, sha256_hex
 from identity.domain.errors import ConflictError, ForbiddenError, InvalidInput, NotFoundError
-from identity.domain.models import ApiToken, Level, LevelType, TokenGrant
+from identity.domain.models import ApiToken, Level, LevelType, TokenGrant, TokenPurpose
 from identity.domain.permissions import validate_token_grant
 
 WIDGET_PREFIX = "iOS widgets: "
@@ -41,6 +52,21 @@ WIDGET_LIFETIME = timedelta(days=90)
 
 MAX_WIDGET_CREDENTIALS = 10
 """Active widget credentials one user can hold (one per iPhone or iPad)."""
+
+
+PERSONAL_SCOPES: tuple[str, ...] = ("mower.view", "mower.control", "schedule.edit")
+"""The keys a personal access token can hold: see the mowers (state, telemetry, history,
+realtime through the implied account keys), start, pause and dock them, edit schedules. Nothing
+that drives a mower by hand, changes devices or firmware, or manages users, tokens or billing."""
+
+PERSONAL_VIEW_KEY = "mower.view"
+"""Every other personal scope needs it (as in roles: control without seeing makes no sense)."""
+
+PERSONAL_MAX_LIFETIME_DAYS = 365
+"""A personal access token expires after at most this many days; there is no token for ever."""
+
+MAX_PERSONAL_TOKENS = 25
+"""Active personal access tokens one user can hold."""
 
 
 def is_widget_token(token: ApiToken) -> bool:
@@ -268,6 +294,112 @@ class ApiTokenService:
             await self._revoke_in(work, token, account_id, ctx)
         return token
 
+    async def list_personal(self, account_id: UUID, ctx: RequestContext) -> list[ApiToken]:
+        """The caller's personal access tokens (active and revoked), newest first."""
+        actor = _user_actor(ctx, "only users have personal access tokens")
+        found = await self.list_tokens(account_id)
+        return [
+            t for t in found if t.purpose is TokenPurpose.PERSONAL and t.created_by == actor.subject
+        ]
+
+    async def create_personal(
+        self,
+        account_id: UUID,
+        name: str,
+        scopes: Sequence[str],
+        expires_in_days: int,
+        level: Level | None,
+        ctx: RequestContext,
+    ) -> CreatedToken:
+        """Create a personal access token for the caller (ADR 0064).
+
+        ``scopes`` must come from :data:`PERSONAL_SCOPES` (with ``mower.view`` whenever another
+        is chosen) and be held by the caller on ``level`` (default: the whole account). The
+        token expires after ``expires_in_days`` (1 to :data:`PERSONAL_MAX_LIFETIME_DAYS`). The
+        route demands a recent step-up, so an API token can never create one.
+        """
+        actor = _user_actor(ctx, "only users can create personal access tokens")
+        cleaned = " ".join(name.split())
+        if not 1 <= len(cleaned) <= 100:
+            msg = "token names have 1 to 100 characters"
+            raise InvalidInput(msg)
+        wanted = sorted(set(scopes))
+        unknown = [key for key in wanted if key not in PERSONAL_SCOPES]
+        if not wanted or unknown:
+            msg = f"choose scopes from {', '.join(PERSONAL_SCOPES)}"
+            raise InvalidInput(msg)
+        if PERSONAL_VIEW_KEY not in wanted:
+            msg = f"{', '.join(wanted)} needs {PERSONAL_VIEW_KEY}"
+            raise InvalidInput(msg)
+        if not 1 <= expires_in_days <= PERSONAL_MAX_LIFETIME_DAYS:
+            msg = f"a personal access token expires after 1 to {PERSONAL_MAX_LIFETIME_DAYS} days"
+            raise InvalidInput(msg)
+        target = level or Level(LevelType.ACCOUNT, account_id)
+        now = self.deps.clock()
+        token_id = uuid4()
+        secret_token, secret = new_api_token(token_id)
+        async with self.deps.uow() as work:
+            work.account_id = account_id
+            tx = work.tx
+            active = [
+                t
+                for t in await tx.api_tokens.find(account_id=account_id, created_by=actor.subject)
+                if t.purpose is TokenPurpose.PERSONAL and t.is_usable(now)
+            ]
+            if len(active) >= MAX_PERSONAL_TOKENS:
+                msg = "too many active personal access tokens, revoke one first"
+                raise ConflictError(msg)
+            catalogue = await self.deps.catalogue.current(tx)
+            keys = validate_token_grant(wanted, target.type, catalogue)
+            await self.deps.access.require_level_in_account(target, account_id)
+            await self.deps.access.require_holds(tx, actor, account_id, keys, target, catalogue)
+            grant = TokenGrant(target, tuple(keys))
+            expires_at = now + timedelta(days=expires_in_days)
+            token = ApiToken(
+                id=token_id,
+                account_id=account_id,
+                name=cleaned,
+                prefix=secret_token[:12],
+                secret_hash=sha256_hex(secret),
+                created_by=actor.subject,
+                grants=[grant.to_json()],
+                created_at=now,
+                expires_at=expires_at,
+                purpose=TokenPurpose.PERSONAL,
+            )
+            await tx.api_tokens.add(token)
+            work.touch(api_token(token.id))
+            await work.audit(
+                ctx,
+                "api_token.personal_created",
+                account_id=account_id,
+                target=("api_token", token.id),
+                details={
+                    "name": cleaned,
+                    "grants": token.grants,
+                    "expires_at": expires_at.isoformat(),
+                },
+            )
+        return CreatedToken(token, secret_token)
+
+    async def revoke_personal(
+        self, account_id: UUID, token_id: UUID, ctx: RequestContext
+    ) -> ApiToken:
+        """Revoke one of the caller's personal access tokens (404 for any other token)."""
+        actor = _user_actor(ctx, "only users have personal access tokens")
+        async with self.deps.uow() as work:
+            work.account_id = account_id
+            token = await work.tx.api_tokens.get(id=token_id, account_id=account_id)
+            if (
+                token is None
+                or token.purpose is not TokenPurpose.PERSONAL
+                or token.created_by != actor.subject
+            ):
+                msg = "personal access token not found"
+                raise NotFoundError(msg)
+            await self._revoke_in(work, token, account_id, ctx)
+        return token
+
     async def _revoke_in(
         self, work: Work, token: ApiToken, account_id: UUID, ctx: RequestContext
     ) -> None:
@@ -321,6 +453,15 @@ class ApiTokenService:
             for token in revoked:
                 await _purged(work, ctx, account_id, token, bulk=True)
         return revoked
+
+
+def _user_actor(ctx: RequestContext, message: str) -> Principal:
+    """The calling user or sub-user; API tokens (and anonymous calls) are refused, so a token
+    can never see or manage tokens."""
+    actor = ctx.principal
+    if actor is None or actor.kind not in (PrincipalKind.USER, PrincipalKind.SUBUSER):
+        raise ForbiddenError(message)
+    return actor
 
 
 async def _purged(

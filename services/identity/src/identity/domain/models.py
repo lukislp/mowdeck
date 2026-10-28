@@ -50,6 +50,15 @@ class SubjectType(StrEnum):
     API_TOKEN = "api_token"  # noqa: S105 - subject type, not a secret
 
 
+class TokenPurpose(StrEnum):
+    """Why an API token exists: who manages it and which rules it follows (ADR 0064)."""
+
+    INTEGRATION = "integration"
+    """Created by an account admin for an integration (Home Assistant, iOS widgets)."""
+    PERSONAL = "personal"
+    """A personal access token: a user's own, for their scripts; curated scopes, always expires."""
+
+
 class LevelType(StrEnum):
     """Where a right is granted; it applies to everything below."""
 
@@ -255,6 +264,10 @@ class ApiToken:
     last_used_at: datetime | None = None
     revoked_at: datetime | None = None
     revoke_reason: str | None = None
+    purpose: TokenPurpose = TokenPurpose.INTEGRATION
+
+    def __post_init__(self) -> None:
+        self.purpose = TokenPurpose(self.purpose)
 
     @property
     def token_grants(self) -> list[TokenGrant]:
