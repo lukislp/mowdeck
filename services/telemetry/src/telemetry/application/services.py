@@ -8,7 +8,7 @@ from telemetry.application.health import Health
 from telemetry.application.ingest import Ingest
 from telemetry.application.ports import Clock, HealthEvents, Store
 from telemetry.application.queries import Queries
-from telemetry.application.retention import Retention
+from telemetry.application.retention import Retention, RetentionObserver
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,15 +32,17 @@ def build_services(
     aerial_config: AerialConfig | None = None,
     aerial_source: TileSource | None = None,
     aerial_cache: TileCache | None = None,
+    retention_observer: RetentionObserver | None = None,
 ) -> Services:
-    """Create the use cases over ``store``; ``events`` publishes the health events. Without an
+    """Create the use cases over ``store``; ``events`` publishes the health events and
+    ``retention_observer`` receives the numbers of the retention rounds. Without an
     ``aerial_source`` the aerial photo layer is off."""
     queries = Queries(store, config, clock)
     return Services(
         ingest=Ingest(store, config, clock, events),
         queries=queries,
         health=Health(store, config, clock, queries),
-        retention=Retention(store, config, clock),
+        retention=Retention(store, config, clock, observer=retention_observer),
         config=config,
         aerial=Aerial(aerial_config or AerialConfig(), queries, aerial_source, aerial_cache),
     )

@@ -37,6 +37,7 @@ from telemetry.adapters.bus.fleet import seed_directory
 from telemetry.adapters.bus.health_events import BusHealthEvents
 from telemetry.adapters.bus.subscriptions import subscribe_all
 from telemetry.adapters.db.store import SqlStore
+from telemetry.adapters.metrics import PrometheusRetentionObserver
 from telemetry.application.aerial import TileCache, TileSource
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
@@ -101,6 +102,8 @@ def build_app(
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus
         events = BusHealthEvents(lambda: getattr(app.state, "bus", None))
+        registry = getattr(app.state, "metrics_registry", None)
+        observer = PrometheusRetentionObserver(registry) if registry is not None else None
         services = build_services(
             store_ref,
             settings.to_config(),
@@ -109,6 +112,7 @@ def build_app(
             aerial_config=aerial_config,
             aerial_source=aerial_source,
             aerial_cache=aerial_cache,
+            retention_observer=observer,
         )
         app.state.telemetry = services
         app.state.directory_seeded = False
@@ -179,6 +183,17 @@ def start_background_tasks(
         deleted = await services.retention.run_once()
         if deleted is not None and any(deleted.values()):
             _log.info("retention deleted rows", **{t.value: n for t, n in deleted.items()})
+        report = await services.retention.thin_once()
+        if report is not None and (report.slices or not report.complete):
+            _log.info(
+                "position thinning round",
+                mowers=report.mowers,
+                slices=report.slices,
+                scanned=report.scanned,
+                deleted=report.deleted,
+                seconds=round(report.seconds, 1),
+                complete=report.complete,
+            )
 
     tasks: list[asyncio.Task[Any]] = [
         asyncio.create_task(

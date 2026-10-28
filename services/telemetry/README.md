@@ -125,7 +125,11 @@ Cost on a laptop (synthetic week, 200 000 positions on a 40 m by 30 m lawn): sig
 
 ## Retention
 
-Every `MOWDECK_TELEMETRY_RETENTION_INTERVAL_SECONDS` each replica tries `pg_try_advisory_lock`; only the one that gets it deletes (batches of 5 000 rows) and releases the lock afterwards. The in-memory store ignores the lock. Defaults: history 30 days, positions 90 days, command timeline 30 days. The health totals, the day totals (one small row per mower and day) and the blade changes are kept; they are deleted only with the mower.
+Every `MOWDECK_TELEMETRY_RETENTION_INTERVAL_SECONDS` each replica tries `pg_try_advisory_lock`; only the one that gets it deletes (batches of 5 000 rows) and releases the lock afterwards. The in-memory store ignores the lock. Defaults: history 30 days, command timeline 30 days, positions 730 days (`0` keeps them forever).
+
+### Position downsampling
+
+Positions younger than `MOWDECK_TELEMETRY_POSITIONS_DETAIL_DAYS` (90) keep every row. Older ones are thinned in the nightly window (`MOWDECK_TELEMETRY_THINNING_WINDOW_START_HOUR` to `_END_HOUR` in `MOWDECK_TELEMETRY_MAINTENANCE_TIMEZONE`, DST-safe) by the same maintenance loop: one row per 30 s while the blades run or the mower moves, one per 5 min while it stands, always the rows next to gaps, blade or RTK changes, bends over 25 degrees and error instants. Slices of 6 hours per mower and statement, a watermark per mower (table `mower_positions_thinning`, migration 0011), time budget per round, metrics `mowdeck_telemetry_position_thinning_*`. The heatmap joins thinned swaths with a wider limit. Anything that needs raw positions (theft tracking) must stay inside the detail window. Details: [ADR 0053](../../docs/adr/0053-position-retention-and-downsampling.md), operations and the size-check SQL: [ops guide](../../docs/ops/telemetry-retention.md). The health totals, the day totals (one small row per mower and day) and the blade changes are kept; they are deleted only with the mower.
 
 ## Settings
 
@@ -138,7 +142,13 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_DATABASE_URL` | required | PostgreSQL URL (usually `MOWDECK_DATABASE_URL_FILE`) |
 | `MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS` | `300` | An unchanged state is stored in the history at most once per this many seconds; a change is always stored |
 | `MOWDECK_TELEMETRY_RETENTION_HISTORY_DAYS` | `30` | History older than this is deleted |
-| `MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS` | `90` | Position track older than this is deleted |
+| `MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS` | `730` | Position track older than this is deleted; `0` keeps it forever |
+| `MOWDECK_TELEMETRY_POSITIONS_DETAIL_DAYS` | `90` | Positions younger than this keep every row (at least 7) |
+| `MOWDECK_TELEMETRY_POSITIONS_THINNING_ENABLED` | `true` | Downsample older positions |
+| `MOWDECK_TELEMETRY_POSITIONS_THIN_ACTIVE_SECONDS` / `_IDLE_SECONDS` | `30` / `300` | Rows kept per bin while moving or mowing / standing |
+| `MOWDECK_TELEMETRY_MAINTENANCE_TIMEZONE` | `UTC` | Time zone of the thinning window |
+| `MOWDECK_TELEMETRY_THINNING_WINDOW_START_HOUR` / `_END_HOUR` | `1` / `5` | Local hours of the window (equal: always) |
+| `MOWDECK_TELEMETRY_THINNING_BUDGET_SECONDS` | `900` | Longest one thinning round |
 | `MOWDECK_TELEMETRY_RETENTION_COMMANDS_DAYS` | `30` | Command timeline older than this is deleted |
 | `MOWDECK_TELEMETRY_RETENTION_INTERVAL_SECONDS` | `3600` | How often the retention job runs (one replica at a time) |
 | `MOWDECK_TELEMETRY_QUERY_MAX_RANGE_DAYS` | `31` | Longest time range of a history or position query |

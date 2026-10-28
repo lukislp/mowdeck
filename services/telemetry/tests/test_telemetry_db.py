@@ -13,12 +13,14 @@ the memory store, so both implementations behave the same. Locally::
 
 import asyncio
 import dataclasses
+import math
 import os
+import random
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -38,8 +40,16 @@ from telemetry.application.context import TelemetryConfig
 from telemetry.application.ports import RetentionTarget, Store
 from telemetry.application.services import build_services
 from telemetry.domain.health import BladeChange, DailyRow
-from telemetry.domain.models import CommandEvent, DirectoryEntry, LatestRow, SnapshotRow
+from telemetry.domain.models import (
+    CommandEvent,
+    DirectoryEntry,
+    HistoryRow,
+    LatestRow,
+    PositionRow,
+    SnapshotRow,
+)
 from telemetry.domain.rules import downsample, history_row, position_row
+from telemetry.domain.thinning import ThinPolicy, floor_to_grid, slice_end
 
 ADMIN_URL = os.environ.get("MOWDECK_TEST_DATABASE_URL")
 needs_db = pytest.mark.skipif(not ADMIN_URL, reason="needs MOWDECK_TEST_DATABASE_URL")
@@ -648,3 +658,203 @@ async def test_telemetry_db_health_stores_the_device_lifetime_totals(
     assert (without.device_mowing_seconds, without.device_distance_m) == (None, None)
     assert stored is not None
     assert (stored.device_mowing_seconds, stored.device_distance_m) == (1_234_567, 456_789)
+
+
+# --- position thinning (ADR 0053) --------------------------------------------------------------
+
+THIN_BASE = datetime(2026, 1, 5, 0, 0, tzinfo=UTC)
+
+
+def random_track(mower: UUID, account: UUID, seed: int, hours: int = 14) -> list[PositionRow]:
+    """A messy track: mowing runs, transits, standing, silences, lost fixes, curves."""
+    generator = random.Random(seed)  # noqa: S311
+    rows: list[PositionRow] = []
+    t, x, y, heading, blades, fix = 0.0, 0.0, 0.0, 0.0, False, "fixed"
+    while t < hours * 3600:
+        t += generator.choice([1, 1, 1, 2, 5, 10, 10, 30, 90, 400])
+        if generator.random() < 0.01:
+            blades = not blades
+        if generator.random() < 0.01:
+            fix = "none" if fix == "fixed" else "fixed"
+        speed = generator.choice([0.0, 0.0, 0.5, 0.5, 1.2])
+        if generator.random() < 0.1:
+            heading += generator.uniform(-1.5, 1.5)
+        x += speed * math.cos(heading)
+        y += speed * math.sin(heading)
+        lat, lon = 48.1 + y / 111_320.0, 11.5 + x / (111_320.0 * math.cos(math.radians(48.1)))
+        rows.append(
+            PositionRow(
+                account_id=account,
+                mower_id=mower,
+                observed_at=THIN_BASE + timedelta(seconds=t),
+                lat=lat,
+                lon=lon,
+                rtk_fix=fix,
+                rtk_source="base_station",
+                blades_on=blades if generator.random() > 0.05 else None,
+            )
+        )
+    return rows
+
+
+async def seed_positions(
+    store: Store, account: UUID, mower: UUID, rows: list[PositionRow], errors: list[datetime]
+) -> None:
+    async with store.transaction() as tx:
+        await tx.put_directory(DirectoryEntry(mower, account, THIN_BASE), replace=True)
+        for row in rows:
+            await tx.add_position(row)
+        for at in errors:
+            await tx.add_history(
+                HistoryRow(
+                    account, mower, at, "error", 50, False, "fixed", "simulated", error_code="E42"
+                )
+            )
+
+
+async def thin_all(store: Store, mower: UUID, end: datetime, policy: ThinPolicy) -> tuple[int, int]:
+    scanned = deleted = 0
+    async with store.retention() as scope:
+        assert scope is not None
+        start = await scope.thin_start(mower)
+        assert start is not None
+        start = floor_to_grid(start)
+        while start < end:
+            stop = slice_end(start, end)
+            result = await scope.thin_slice(mower, start, stop, policy)
+            scanned, deleted = scanned + result.scanned, deleted + result.deleted
+            start = stop
+    return scanned, deleted
+
+
+async def survivors(store: Store, account: UUID, mower: UUID) -> list[datetime]:
+    rows = await store.positions(
+        account, mower, THIN_BASE - timedelta(days=1), THIN_BASE + timedelta(days=2), 10**6
+    )
+    return [r.observed_at for r in rows]
+
+
+@needs_db
+@pytest.mark.parametrize("seed", [1, 2, 3])
+@pytest.mark.parametrize("policy", [ThinPolicy(), ThinPolicy(10, 60, 30)])
+async def test_telemetry_db_thinning_sql_matches_the_pure_policy(
+    seed: int, policy: ThinPolicy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account, mower = uuid4(), uuid4()
+    rows = random_track(mower, account, seed)
+    errors = [rows[40].observed_at, rows[900].observed_at]
+    end = THIN_BASE + timedelta(hours=12)
+    async with store_of("sql", monkeypatch) as sql, store_of("memory", monkeypatch) as memory:
+        for store in (sql, memory):
+            await seed_positions(store, account, mower, rows, errors)
+        sql_result = await thin_all(sql, mower, end, policy)
+        memory_result = await thin_all(memory, mower, end, policy)
+        assert sql_result == memory_result
+        assert await survivors(sql, account, mower) == await survivors(memory, account, mower)
+        scanned, deleted = sql_result
+        assert deleted > 0 and scanned >= deleted
+        kept = set(await survivors(sql, account, mower))
+        assert {r.observed_at for r in rows if r.observed_at >= end} <= kept
+        assert set(errors) <= kept
+        assert (await thin_all(sql, mower, end, policy))[1] == 0
+        async with sql.retention() as scope:
+            assert scope is not None
+            assert await scope.thin_start(mower) == end
+
+
+@needs_db
+async def test_telemetry_db_thinning_is_safe_with_concurrent_writes_and_purged_with_the_mower(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    account, mower = uuid4(), uuid4()
+    rows = random_track(mower, account, 9, hours=8)
+    end = THIN_BASE + timedelta(hours=6)
+    fresh = [
+        PositionRow(account, mower, end + seconds(i + 400), 48.1, 11.5, "fixed", "base_station")
+        for i in range(200)
+    ]
+    async with store_of("sql", monkeypatch) as store:
+        await seed_positions(store, account, mower, rows, [])
+
+        async def write() -> None:
+            for row in fresh:
+                async with store.transaction() as tx:
+                    await tx.add_position(row)
+
+        _, (scanned, deleted) = await asyncio.gather(
+            write(), thin_all(store, mower, end, ThinPolicy())
+        )
+        kept = set(await survivors(store, account, mower))
+        assert {r.observed_at for r in fresh} <= kept  # the writer lost nothing
+        assert deleted > 0 and scanned > 0
+        async with store.transaction() as tx:
+            await tx.drop_mower(mower)
+        async with store.retention() as scope:
+            assert scope is not None
+            assert await scope.thin_start(mower) is None  # watermark and rows are gone
+
+
+@needs_db
+async def test_telemetry_db_thinning_round_and_heatmap_on_thinned_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from mowdeck_contracts.v1 import GeoReference, MapArea, MowerCapabilities, MowerMap
+    from mowdeck_control.geo import to_wgs84
+
+    from telemetry.application.heatmap import Layer
+    from telemetry.application.queries import Queries
+    from telemetry.application.retention import Retention
+
+    ref = GeoReference(origin_lat=48.1, origin_lon=11.5, rotation_deg=30)
+    account, mower = uuid4(), uuid4()
+    rows: list[PositionRow] = []
+    t = 0.0
+    for lane in range(8):
+        xs = [0.5 * s for s in range(80)]
+        for x in xs if lane % 2 == 0 else list(reversed(xs)):
+            lat, lon = to_wgs84(ref, x, lane * 0.8)
+            rows.append(
+                PositionRow(
+                    account,
+                    mower,
+                    THIN_BASE + seconds(t),
+                    lat,
+                    lon,
+                    "fixed",
+                    "base_station",
+                    blades_on=True,
+                )
+            )
+            t += 1
+        t += 4
+    now = THIN_BASE + timedelta(days=120)
+    area = MapArea(id="a", boundary=[(0, 0), (50, 0), (50, 8), (0, 8)])
+    mower_map = MowerMap(reference=ref, areas=[area], revision="r1")
+    async with store_of("sql", monkeypatch) as store:
+        await seed_positions(store, account, mower, rows, [])
+        async with store.transaction() as tx:
+            body = mower_map.model_dump(mode="json")
+            await tx.put_snapshot(SnapshotRow(mower, "map", account, now, now, "r1", body))
+            caps = MowerCapabilities(cutting_width_mm=400).model_dump(mode="json")
+            await tx.put_snapshot(SnapshotRow(mower, "capabilities", account, now, now, "c", caps))
+        config = TelemetryConfig(thinning_window_start_hour=0, thinning_window_end_hour=0)
+
+        async def covered() -> float:
+            q = Queries(store, config, lambda: now)
+            result = await q.heatmap(
+                account,
+                mower,
+                Layer.COVERAGE,
+                THIN_BASE - timedelta(hours=1),
+                THIN_BASE + timedelta(hours=1),
+                0.5,
+            )
+            return sum(c.value for c in result.heatmap.cells) * 0.25
+
+        before = await covered()
+        report = await Retention(store, config, lambda: now).thin_once()
+        assert report is not None and report.complete and report.deleted > len(rows) // 2
+        after = await covered()
+        assert before > 50 and abs(after - before) <= 0.12 * before
+        again = await Retention(store, config, lambda: now).thin_once()
+        assert again is not None and again.deleted == 0 and again.slices == 0

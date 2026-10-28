@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator, Collection
 from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
@@ -19,6 +20,7 @@ from telemetry.domain.models import (
     PositionRow,
     SnapshotRow,
 )
+from telemetry.domain.thinning import ThinPolicy
 
 
 class Clock(Protocol):
@@ -35,6 +37,14 @@ class HealthEvents(Protocol):
     async def blade_threshold(self, event: BladeHoursThreshold) -> None:
         """Announce that the blade hours since the last change crossed the threshold."""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class ThinResult:
+    """What thinning one slice did."""
+
+    scanned: int
+    deleted: int
 
 
 class RetentionTarget(StrEnum):
@@ -112,6 +122,23 @@ class RetentionScope(Protocol):
         self, target: RetentionTarget, cutoff: datetime, batch_size: int
     ) -> int:
         """Delete rows older than ``cutoff`` in batches; returns the number of rows."""
+        ...
+
+    async def thin_candidates(self) -> list[UUID]:
+        """The mowers whose track may need thinning (the directory)."""
+        ...
+
+    async def thin_start(self, mower_id: UUID) -> datetime | None:
+        """Where thinning of this mower's track resumes: the stored watermark, else the time of
+        its oldest position; None without positions."""
+        ...
+
+    async def thin_slice(
+        self, mower_id: UUID, start: datetime, end: datetime, policy: ThinPolicy
+    ) -> ThinResult:
+        """Thin ``[start, end)`` of one mower's track (rows the policy does not keep are
+        deleted) and move the watermark to ``end``. Idempotent; ``start`` and ``end`` are on
+        the 5 minute grid."""
         ...
 
 
