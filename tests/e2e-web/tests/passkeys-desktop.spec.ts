@@ -53,6 +53,20 @@ async function logout(page: Page): Promise<void> {
   await page.waitForURL(/\/login/);
 }
 
+/**
+ * Wait until the sign-in page has started its autofill offer (conditional UI): its challenge
+ * call is the page's first. Presence must stay off until then, or the autofill request,
+ * started a few milliseconds after the page, answers by itself and signs in before the
+ * button is pressed (the button is then gone and its click waits forever).
+ */
+function autofillStarted(page: Page): Promise<unknown> {
+  return page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/v1/identity/passkeys/challenge') &&
+      response.request().method() === 'POST',
+  );
+}
+
 test('passkeys: add, sign in without a password, hand over to the app, remove', async ({
   page,
   request,
@@ -91,7 +105,9 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
   // 2. Sign in with the passkey: no username, no password. Presence is held back until the
   // button is pressed, so the autofill request started with the page cannot answer first.
   await authenticator.presence(false);
+  const offered = autofillStarted(page);
   await logout(page);
+  await offered;
   await authenticator.presence(true);
   await page.getByTestId('login-passkey').click();
   await page.waitForURL(/\/mowers/);
@@ -108,8 +124,10 @@ test('passkeys: add, sign in without a password, hand over to the app, remove', 
   });
   expect(started.status(), await started.text()).toBe(200);
   const requestId = ((await started.json()) as { request_id: string }).request_id;
+  const offeredForApp = autofillStarted(page);
   await page.goto(`/login?app_request=${requestId}&app_state=${state}`);
   await expect(page.getByTestId('login-app-notice')).toBeVisible();
+  await offeredForApp;
   await authenticator.presence(true);
   await page.getByTestId('login-passkey').click();
   // Signed in for the app: the user confirms before the login goes there.

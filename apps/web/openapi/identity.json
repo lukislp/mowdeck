@@ -211,6 +211,10 @@
             "title": "Prefix",
             "type": "string"
           },
+          "purpose": {
+            "$ref": "#/components/schemas/TokenPurpose",
+            "description": "`integration` (created by an admin) or `personal` (a user's own personal access token, ADR 0064)"
+          },
           "revoked_at": {
             "anyOf": [
               {
@@ -246,7 +250,8 @@
           "created_at",
           "expires_at",
           "last_used_at",
-          "revoked_at"
+          "revoked_at",
+          "purpose"
         ],
         "title": "ApiTokenOut",
         "type": "object"
@@ -1617,6 +1622,156 @@
         "title": "PermissionsIn",
         "type": "object"
       },
+      "PersonalTokenIn": {
+        "additionalProperties": false,
+        "description": "``POST /me/api-tokens``: a personal access token for the caller's own scripts.",
+        "properties": {
+          "expires_in_days": {
+            "description": "The token stops working after this many days.",
+            "examples": [
+              90
+            ],
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Expires In Days",
+            "type": "integer"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LevelIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the scopes apply; default the whole account (a site, group or mower of the account limits the token to it)."
+          },
+          "name": {
+            "examples": [
+              "Garden dashboard script"
+            ],
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "From `mower.view` (read state, telemetry, history, realtime), `mower.control` (start, pause, resume, dock) and `schedule.edit`; `mower.view` is required with any other. Each must be held by the caller on `level`.",
+            "examples": [
+              [
+                "mower.view",
+                "mower.control"
+              ]
+            ],
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "scopes",
+          "expires_in_days"
+        ],
+        "title": "PersonalTokenIn",
+        "type": "object"
+      },
+      "PersonalTokenOut": {
+        "description": "A personal access token (never with its secret, except once at creation).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last exchange for an access token (updated at most every few minutes)",
+            "title": "Last Used At"
+          },
+          "level": {
+            "$ref": "#/components/schemas/LevelOut"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "description": "The first characters of the secret, to recognise it",
+            "title": "Prefix",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The secret (`mdk_...`), returned only at creation. Exchange it at `POST /api/v1/identity/token` for 10 minute access tokens.",
+            "title": "Token"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "scopes",
+          "level",
+          "created_at",
+          "expires_at",
+          "last_used_at",
+          "revoked_at"
+        ],
+        "title": "PersonalTokenOut",
+        "type": "object"
+      },
       "PlatformAccountOut": {
         "description": "An account for operators.",
         "properties": {
@@ -2284,6 +2439,15 @@
         ],
         "title": "TokenOut",
         "type": "object"
+      },
+      "TokenPurpose": {
+        "description": "Why an API token exists: who manages it and which rules it follows (ADR 0064).",
+        "enum": [
+          "integration",
+          "personal"
+        ],
+        "title": "TokenPurpose",
+        "type": "string"
       },
       "UiAreaDef": {
         "description": "An area the module occupies in the web app shell.",
@@ -4338,6 +4502,112 @@
         "summary": "Me",
         "tags": [
           "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/me/api-tokens": {
+      "get": {
+        "description": "The caller's personal access tokens (ADR 0064), newest first, without secrets. Users\nonly: an API token gets 403, so a token never sees or manages tokens.",
+        "operationId": "list_personal_tokens_api_v1_identity_me_api_tokens_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PersonalTokenOut"
+                  },
+                  "title": "Response List Personal Tokens Api V1 Identity Me Api Tokens Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Personal Tokens",
+        "tags": [
+          "identity: sessions",
+          "identity: personal access tokens"
+        ]
+      },
+      "post": {
+        "description": "Create a personal access token for your own scripts: curated scopes, an expiry of at\nmost 365 days, at most 25 active per user. Needs a recent step-up (ADR 0057): without it\n401 `reauth-required`; API tokens get 403. The secret is in the response once.",
+        "operationId": "create_personal_token_api_v1_identity_me_api_tokens_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalTokenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalTokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Personal Token",
+        "tags": [
+          "identity: sessions",
+          "identity: personal access tokens"
+        ]
+      }
+    },
+    "/api/v1/identity/me/api-tokens/{token_id}": {
+      "delete": {
+        "description": "Revoke one of your personal access tokens at once (404 for any other token).",
+        "operationId": "revoke_personal_token_api_v1_identity_me_api_tokens__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Personal Token",
+        "tags": [
+          "identity: sessions",
+          "identity: personal access tokens"
         ]
       }
     },
