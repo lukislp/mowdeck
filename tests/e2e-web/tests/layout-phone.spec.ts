@@ -1,6 +1,7 @@
 /**
  * Phone layout guard (360 and 390 px wide, touch): no page scrolls sideways, wide tables scroll
- * inside their own box, and the top bar stays pinned under the status bar while the page
+ * inside their own box, the health page with a mower's own lifetime counters (long readout
+ * labels) and the other mower subpages fit 320 to 430 px, and the top bar stays pinned under the status bar while the page
  * scrolls (the document does not rubber-band, so a drag cannot pull the header out of view).
  */
 import { expect, test, type Page } from '@playwright/test';
@@ -142,6 +143,124 @@ for (const width of [360, 390]) {
     await box.evaluate((element) => element.scrollBy({ left: 400 }));
     await expect.poll(() => box.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
     await expectNoSidewaysScroll(page, '/reports (table scrolled)');
+
+    csp.assertNone();
+    await context.close();
+  });
+}
+
+/**
+ * A health answer as a mower with its own lifetime counters gives it: every readout then carries
+ * its long "(Mäher, gesamt)" / "(seit MowDeck)" label, plus a long error code.
+ */
+function deviceHealth(mowerId: string): Record<string, unknown> {
+  const now = new Date().toISOString();
+  return {
+    mower_id: mowerId,
+    battery_cycles: 41,
+    battery_cycles_source: 'device',
+    battery_cycles_tracked: 12,
+    blade_changed_at: now,
+    blade_hours: 18.4,
+    blade_hours_since_change: 6.2,
+    blade_hours_threshold: 100,
+    blade_hours_threshold_custom: false,
+    blade_hours_threshold_effective: 100,
+    blade_hours_threshold_source: 'device',
+    blade_source: 'device',
+    charge_sessions: 97,
+    device_battery_cycles: 412,
+    device_blade_hours: 84.25,
+    device_blade_warn_hours: 100,
+    device_distance_m: 1_234_567,
+    device_mowing_hours: 1234.5,
+    distance_m: 45_678,
+    errors: { blade_motor_overcurrent_protection_triggered_repeatedly_0123456789: 3, '1005': 1 },
+    mowing_hours: 56.7,
+    since: now,
+    updated_at: now,
+  };
+}
+
+/** Thirty days with mowing, so the bar strips render. */
+function dailyDays(): Record<string, unknown>[] {
+  const days: Record<string, unknown>[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const day = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+    days.push({ day, blade_hours: (i % 5) * 0.4, distance_m: (i % 7) * 310, mowing_hours: 1 });
+  }
+  return days;
+}
+
+async function expectFits(page: Page, path: string): Promise<void> {
+  await expectNoSidewaysScroll(page, path);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    `${path} is wider than the phone`,
+  ).toBe(true);
+}
+
+for (const width of [320, 375, 390, 430]) {
+  test(`the health page with a mower's own counters and the mower subpages fit ${width} px`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width, height: 780 },
+      locale: 'de-DE',
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await context.newPage();
+    const csp = watchCsp(page);
+    await loginByUi(page, owner);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    await page.route(/\/api\/v1\/telemetry\/mowers\/[^/]+\/health(\?.*)?$/, (route) =>
+      route.fulfill(json(deviceHealth(mowerId))),
+    );
+    await page.route(/\/api\/v1\/telemetry\/mowers\/[^/]+\/health\/daily(\?.*)?$/, (route) =>
+      route.fulfill(json({ days: dailyDays() })),
+    );
+    await page.route(
+      /\/api\/v1\/telemetry\/mowers\/[^/]+\/health\/blade-changes(\?.*)?$/,
+      (route) =>
+        route.fulfill(
+          json({
+            items: [
+              {
+                id: '00000000-0000-4000-8000-000000000001',
+                changed_at: new Date().toISOString(),
+                changed_by: null,
+                note: 'Messerwechsel-LB2AWDX4G-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+              },
+            ],
+          }),
+        ),
+    );
+
+    const health = `/mowers/${mowerId}/health`;
+    await page.goto(health);
+    // The long "(seit MowDeck)" labels and the bar strips are there before the width is measured.
+    await expect(page.getByTestId('health-mowing-hours-mowdeck')).toBeVisible();
+    await expect(page.getByTestId('health-blade-since-mowdeck')).toBeVisible();
+    await expect(page.getByTestId('daily-blade')).toBeVisible();
+    await settle(page);
+    await expectFits(page, health);
+
+    for (const path of [
+      `/mowers/${mowerId}`,
+      `/mowers/${mowerId}/settings`,
+      `/mowers/${mowerId}/drive`,
+      `/mowers/${mowerId}/map`,
+    ]) {
+      await page.goto(path);
+      await settle(page);
+      await expectFits(page, path);
+    }
 
     csp.assertNone();
     await context.close();

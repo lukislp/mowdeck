@@ -561,6 +561,53 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/me/api-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Personal Tokens
+         * @description The caller's personal access tokens (ADR 0064), newest first, without secrets. Users
+         *     only: an API token gets 403, so a token never sees or manages tokens.
+         */
+        get: operations["list_personal_tokens_api_v1_identity_me_api_tokens_get"];
+        put?: never;
+        /**
+         * Create Personal Token
+         * @description Create a personal access token for your own scripts: curated scopes, an expiry of at
+         *     most 365 days, at most 25 active per user. Needs a recent step-up (ADR 0057): without it
+         *     401 `reauth-required`; API tokens get 403. The secret is in the response once.
+         */
+        post: operations["create_personal_token_api_v1_identity_me_api_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/api-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Personal Token
+         * @description Revoke one of your personal access tokens at once (404 for any other token).
+         */
+        delete: operations["revoke_personal_token_api_v1_identity_me_api_tokens__token_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/me/external-identities": {
         parameters: {
             query?: never;
@@ -1242,6 +1289,8 @@ export type components = {
             permissions: string[];
             /** Prefix */
             prefix: string;
+            /** @description `integration` (created by an admin) or `personal` (a user's own personal access token, ADR 0064) */
+            purpose: components["schemas"]["TokenPurpose"];
             /** Revoked At */
             revoked_at: string | null;
             /**
@@ -1900,6 +1949,77 @@ export type components = {
             checks: components["schemas"]["PermissionQuery"][];
         };
         /**
+         * PersonalTokenIn
+         * @description ``POST /me/api-tokens``: a personal access token for the caller's own scripts.
+         */
+        PersonalTokenIn: {
+            /**
+             * Expires In Days
+             * @description The token stops working after this many days.
+             * @example 90
+             */
+            expires_in_days: number;
+            /** @description Where the scopes apply; default the whole account (a site, group or mower of the account limits the token to it). */
+            level?: components["schemas"]["LevelIn"] | null;
+            /**
+             * Name
+             * @example Garden dashboard script
+             */
+            name: string;
+            /**
+             * Scopes
+             * @description From `mower.view` (read state, telemetry, history, realtime), `mower.control` (start, pause, resume, dock) and `schedule.edit`; `mower.view` is required with any other. Each must be held by the caller on `level`.
+             * @example [
+             *       "mower.view",
+             *       "mower.control"
+             *     ]
+             */
+            scopes: string[];
+        };
+        /**
+         * PersonalTokenOut
+         * @description A personal access token (never with its secret, except once at creation).
+         */
+        PersonalTokenOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Used At
+             * @description Last exchange for an access token (updated at most every few minutes)
+             */
+            last_used_at: string | null;
+            level: components["schemas"]["LevelOut"];
+            /** Name */
+            name: string;
+            /**
+             * Prefix
+             * @description The first characters of the secret, to recognise it
+             */
+            prefix: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Scopes */
+            scopes: string[];
+            /**
+             * Token
+             * @description The secret (`mdk_...`), returned only at creation. Exchange it at `POST /api/v1/identity/token` for 10 minute access tokens.
+             */
+            token?: string | null;
+        };
+        /**
          * PlatformAccountOut
          * @description An account for operators.
          */
@@ -2199,6 +2319,12 @@ export type components = {
              */
             token_type: "Bearer";
         };
+        /**
+         * TokenPurpose
+         * @description Why an API token exists: who manages it and which rules it follows (ADR 0064).
+         * @enum {string}
+         */
+        TokenPurpose: "integration" | "personal";
         /**
          * UiAreaDef
          * @description An area the module occupies in the web app shell.
@@ -3414,6 +3540,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    list_personal_tokens_api_v1_identity_me_api_tokens_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTokenOut"][];
+                };
+            };
+        };
+    };
+    create_personal_token_api_v1_identity_me_api_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonalTokenIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_personal_token_api_v1_identity_me_api_tokens__token_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -3,6 +3,8 @@
   actions: one tap sends `emergency_stop` through Fleet, the status follows the command result.
   Full width at the bottom on phones, the instrument column's foot on desktops. It lifts the
   toasts above itself and reports its height (bindable) so the page can keep content clear.
+  The root element gets `--md-stop-clearance` (bar height) or, as a rail, `--md-stop-inset-start`
+  (rail width), so layout-level sheets and toasts keep clear of the stop (`publishStopClearance`).
 
   `rail`: a phone held sideways (the drive view, ADR 0044) gets a narrow vertical rail at the
   left edge instead, full height, `--md-stop-rail` wide (default 112 px), the stop upright at its
@@ -14,6 +16,7 @@
 
   import { commands, sendCommand } from '#lib/live.svelte.js';
   import { m } from '#lib/paraglide/messages.js';
+  import { publishStopClearance } from '#lib/stop-clearance.js';
 
   interface Props {
     mowerId: string;
@@ -26,6 +29,7 @@
     children?: Snippet;
   }
   let { mowerId, onbeforestop, height = $bindable(120), rail = false, children }: Props = $props();
+  let width = $state(0);
 
   let stopState = $state<StopState>('idle');
 
@@ -63,12 +67,14 @@
     root.style.setProperty('--md-toast-offset', isPhone ? `${height + 8}px` : '16px');
     return () => root.style.removeProperty('--md-toast-offset');
   });
+  $effect(() => publishStopClearance(rail ? { insetStart: width } : { bottom: height }));
 </script>
 
 <div
   class="stop-bar"
   class:rail
   bind:clientHeight={height}
+  bind:clientWidth={width}
   data-testid="stop-bar"
   data-variant={rail ? 'rail' : 'bar'}
 >

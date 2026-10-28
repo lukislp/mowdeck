@@ -1,6 +1,9 @@
 <!--
   A non-modal sheet (area picker and similar). On phones it rises from the bottom but stops
   above the command bar (`--md-sheet-bottom`), so the emergency stop stays visible and usable.
+  A sheet outside the page (mounted in a layout: "Was ist neu", step-up) does not see the page's
+  `--md-sheet-bottom`; it falls back to `--md-stop-clearance` and `--md-stop-inset-start`, which a
+  page with a fixed emergency stop publishes on the root element (bar height, rail width).
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -50,13 +53,15 @@
 
 <style>
   .md-sheet {
+    --sheet-bottom: var(--md-sheet-bottom, var(--md-stop-clearance, 0px));
+
     position: fixed;
-    inset-inline: 0;
-    bottom: var(--md-sheet-bottom, 0);
+    inset-inline: var(--md-stop-inset-start, 0) 0;
+    bottom: var(--sheet-bottom);
     z-index: 25;
     display: flex;
     flex-direction: column;
-    max-height: calc(var(--md-viewport-height) - var(--md-sheet-bottom, 0px) - 64px);
+    max-height: calc(var(--md-viewport-height) - var(--sheet-bottom) - 64px);
     border-top: var(--md-border-control) solid var(--md-color-ink);
     background: var(--md-color-surface);
     box-shadow: var(--md-shadow-float);
@@ -101,8 +106,12 @@
 
   @media (min-width: 1024px) {
     .md-sheet {
+      --sheet-bottom: var(
+        --md-sheet-bottom,
+        calc(var(--md-stop-clearance, 0px) + var(--md-space-6))
+      );
+
       inset-inline: auto var(--md-space-6);
-      bottom: var(--md-sheet-bottom, var(--md-space-6));
       width: 400px;
       border: var(--md-hairline) solid var(--md-color-line-strong);
       border-radius: var(--md-radius-3);

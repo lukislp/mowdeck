@@ -82,6 +82,11 @@ While the window is open, `mower_offline` / `mower_online` are held back for a m
 | notifications | `mowdeck/notifications:dev`, built from the repository | via Traefik at `/api/v1/notifications` |
 | scheduler-migrate | `mowdeck/scheduler:dev`, built from the repository | one-shot, no port |
 | scheduler | `mowdeck/scheduler:dev`, built from the repository | via Traefik at `/api/v1/scheduler` |
+| entitlements-migrate | `mowdeck/entitlements:dev`, built from the repository | one-shot, no port |
+| entitlements | `mowdeck/entitlements:dev`, built from the repository | via Traefik at `/api/v1/entitlements` |
+| planner-migrate | `mowdeck/planner:dev`, built from the repository | one-shot, no port |
+| planner | `mowdeck/planner:dev`, built from the repository | via Traefik at `/api/v1/planner` |
+| billing-migrate, billing (profile `billing`) | `mowdeck/billing:dev`, built from the repository | via Traefik at `/api/v1/billing` ([Billing](billing.md)) |
 | vision-migrate | `mowdeck/vision:dev`, built from the repository | one-shot, no port |
 | vision | `mowdeck/vision:dev`, built from the repository | via Traefik at `/api/v1/vision` |
 | camera-relay (profile `relay`) | `mowdeck/camera-relay:dev`, built from the repository (with ffmpeg) | none (internal: NATS requests `relay.camera.*` and MediaMTX's auth callback; [ADR 0045](../adr/0045-camera-relay.md)) |
@@ -90,7 +95,7 @@ While the window is open, `mower_offline` / `mower_online` are held back for a m
 | mediamtx (profile `relay`) | `bluenviron/mediamtx:1.21.2` (MIT) | via Traefik at `/media/whep/r/` (WHEP only, `/media/whep` stripped); `RELAY_ICE_BIND:RELAY_ICE_PORT` UDP and TCP (ICE media, default 8189) |
 | web | `mowdeck/web:dev`, built from `apps/web/Dockerfile` | via Traefik at `/` (the web app; router priority 1, behind every `/api/v1` route) |
 
-PostgreSQL creates the databases `identity`, `fleet`, `telemetry`, `scheduler`, `notifications`, `entitlements`, `billing`, `vision`, `openfga`, each with a role of the same name.
+PostgreSQL creates the databases `identity`, `fleet`, `telemetry`, `scheduler`, `notifications`, `entitlements`, `billing`, `planner`, `vision`, `openfga`, each with a role of the same name.
 
 The complete operating notes are in the repository file `infra/compose/README.md`.
 
@@ -127,7 +132,7 @@ Fleet owns sites, groups and mowers, writes their place in the hierarchy to Open
 
 ## Telemetry
 
-Telemetry stores what the Device-Gateway publishes: the latest state of every mower, a history in which unchanged heartbeats are kept only once per `TELEMETRY_HEARTBEAT_HISTORY_SECONDS`, the position track and the timeline of command results. Read it with `GET /api/v1/telemetry/mowers/<id>/state`, `.../history?step=5s`, `.../positions` and `.../commands`, or the states of all visible mowers with `GET /api/v1/telemetry/accounts/me/mowers/states`; a mower you cannot see answers 404 like an unknown one, and a visible mower that has not reported yet answers 404 "no telemetry yet". The mower's map and capabilities, as the Device-Gateway last read them, are at `.../map` (with an ETag) and `.../capabilities` (404 "no map yet" or "no capabilities yet" before the first report). A retention job (history 30 days, positions 90, command timeline 30; `TELEMETRY_RETENTION_*_DAYS` in `.env`) deletes older rows, on one replica at a time. Details: `services/telemetry/README.md` and [ADR 0017](../adr/0017-telemetry-storage-and-retention.md).
+Telemetry stores what the Device-Gateway publishes: the latest state of every mower, a history in which unchanged heartbeats are kept only once per `TELEMETRY_HEARTBEAT_HISTORY_SECONDS`, the position track and the timeline of command results. Read it with `GET /api/v1/telemetry/mowers/<id>/state`, `.../history?step=5s`, `.../positions` and `.../commands`, or the states of all visible mowers with `GET /api/v1/telemetry/accounts/me/mowers/states`; a mower you cannot see answers 404 like an unknown one, and a visible mower that has not reported yet answers 404 "no telemetry yet". The mower's map and capabilities, as the Device-Gateway last read them, are at `.../map` (with an ETag) and `.../capabilities` (404 "no map yet" or "no capabilities yet" before the first report). A retention job (history 30 days, positions 730 with every row kept for the first 90 and older ones thinned in a nightly window, command timeline 30; `TELEMETRY_RETENTION_*_DAYS` and `TELEMETRY_POSITIONS_DETAIL_DAYS` in `.env`, [Telemetry retention](telemetry-retention.md)) deletes older rows, on one replica at a time. Details: `services/telemetry/README.md` and [ADR 0017](../adr/0017-telemetry-storage-and-retention.md).
 
 ## Realtime
 
