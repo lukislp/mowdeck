@@ -9,13 +9,21 @@
 -->
 <script lang="ts">
   import { Icon, TrackMap } from '@mowdeck/ui';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   import { clock } from '#lib/clock.svelte.js';
   import { loadConfig, type MapTilesConfig } from '#lib/config.js';
   import { formatAge, formatDateTime } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
+  import {
+    loadLayer,
+    mapLayers,
+    publicTileLoader,
+    publicTileUrl,
+    saveLayer,
+  } from '#lib/tracking/basemap.js';
   import { startPoller } from '#lib/tracking/poll.js';
+  import PositionFix from '#lib/tracking/PositionFix.svelte';
   import { viewPublic, type PublicTrack } from '#lib/tracking/public.js';
   import { tokenFromHash } from '#lib/tracking/share.js';
   import { mergeTrack, serverOffsetMs } from '#lib/tracking/track.js';
@@ -32,6 +40,23 @@
   let tiles = $state.raw<MapTilesConfig | null>(null);
   let mapFailed = $state(false);
   let follow = $state(false);
+  let layer = $state<string | null>(loadLayer());
+  /** The share token, kept in memory for the tile requests (never in a URL). */
+  let token = $state<string | null>(null);
+
+  const offeredKey = $derived(JSON.stringify(data?.map_layers ?? []));
+  const baseLayers = $derived.by(() => {
+    void offeredKey;
+    const current = token;
+    if (!current) return [];
+    return mapLayers(
+      untrack(() => data?.map_layers),
+      publicTileUrl,
+      publicTileLoader(current),
+      (kind) => (kind === 'map' ? m.tracking_layer_map() : m.tracking_layer_aerial()),
+    );
+  });
+  $effect(() => saveLayer(layer));
 
   const track = $derived(data ? mergeTrack([], data.track) : []);
   const last = $derived(data?.last ?? (track.length ? track[track.length - 1]! : null));
@@ -77,14 +102,15 @@
   onMount(() => {
     const releaseClock = clock.hold(1000);
     void loadConfig().then((config) => (tiles = config.mapTiles));
-    const token = readToken();
+    const read = readToken();
+    token = read;
     let stopPolling = () => {};
-    if (!token) {
+    if (!read) {
       phase = 'invalid';
     } else {
       const abort = new AbortController();
       const stop = startPoller(async () => {
-        const result = await viewPublic(token, undefined, abort.signal);
+        const result = await viewPublic(read, undefined, abort.signal);
         if (abort.signal.aborted) return { stop: true };
         switch (result.kind) {
           case 'ok':
@@ -126,6 +152,9 @@
     start: m.tracking_map_start(),
     last: m.tracking_map_last(),
     noTiles: m.tracking_map_no_tiles(),
+    layers: m.tracking_map_layers(),
+    uncovered: (layer: string) => m.tracking_map_uncovered({ layer }),
+    noneHere: m.tracking_map_none_here(),
   });
 
   const shortTime = (value: string) =>
@@ -174,6 +203,8 @@
           {track}
           {last}
           {stale}
+          layers={baseLayers}
+          bind:layer
           {tiles}
           labels={mapLabels}
           bind:follow
@@ -192,6 +223,9 @@
           {m.tracking_no_position()}
         {/if}
       </p>
+      {#if last}
+        <PositionFix point={last} {now} testid="track-fix" />
+      {/if}
       {#if stale && data.stale_since}
         <p class="banner warn" data-testid="track-stale">
           <Icon name="offline" size={18} />
@@ -313,7 +347,7 @@
   }
 
   .map {
-    min-block-size: 280px;
+    min-block-size: max(320px, 50dvh);
   }
 
   .info {

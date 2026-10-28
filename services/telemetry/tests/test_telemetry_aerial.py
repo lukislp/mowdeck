@@ -179,34 +179,34 @@ def test_bounds_intersection_ignores_touching_edges() -> None:
 
 
 async def test_disk_cache_hits_expires_and_trims(tmp_path: Path) -> None:
+    import os
+
     cache = DiskTileCache(tmp_path / "c", max_bytes=1000)
     key = "ab" + "0" * 62
-    assert await cache.get(key, timedelta(days=1)) is None
-    await cache.put(key, FetchedTile(JPEG, "image/jpeg"))
-    hit = await cache.get(key, timedelta(days=1))
+    assert await cache.get(key) is None
+    await cache.put(key, FetchedTile(JPEG, "image/jpeg"), timedelta(days=1))
+    hit = await cache.get(key)
     assert hit is not None and hit.body == JPEG and hit.media_type == "image/jpeg"
-    assert await cache.get(key, timedelta(seconds=0)) is None  # older than the TTL
-    old = time.time() - 3600
+    await cache.put(key, FetchedTile(JPEG, "image/jpeg"), timedelta(seconds=0))
+    assert await cache.get(key) is None  # expired
+    soon = time.time() + 3600
     for i in range(30):
         k = f"{i:02x}" + "1" * 62
-        await cache.put(k, FetchedTile(PNG, "image/png"))
-        (tmp_path / "c" / k[:2] / k).touch()
-        import os
-
-        os.utime(tmp_path / "c" / k[:2] / k, (old + i, old + i))
+        await cache.put(k, FetchedTile(PNG, "image/png"), timedelta(days=1))
+        os.utime(tmp_path / "c" / k[:2] / k, (soon + i, soon + i))
     cache.trim()
     assert cache.size_bytes() <= 1000
-    # the oldest tiles went first
-    assert await cache.get("00" + "1" * 62, timedelta(days=1)) is None
-    assert await cache.get("1d" + "1" * 62, timedelta(days=1)) is not None
+    # the tiles expiring first went first
+    assert await cache.get("00" + "1" * 62) is None
+    assert await cache.get("1d" + "1" * 62) is not None
 
 
 async def test_cache_that_cannot_be_written_just_misses(tmp_path: Path) -> None:
     blocker = tmp_path / "file"
     blocker.write_text("x")
     cache = DiskTileCache(blocker / "sub", max_bytes=1000)
-    await cache.put("ab" + "0" * 62, FetchedTile(JPEG, "image/jpeg"))
-    assert await cache.get("ab" + "0" * 62, timedelta(days=1)) is None
+    await cache.put("ab" + "0" * 62, FetchedTile(JPEG, "image/jpeg"), timedelta(days=1))
+    assert await cache.get("ab" + "0" * 62) is None
 
 
 def test_sniffing_accepts_only_jpeg_and_png() -> None:
@@ -268,10 +268,10 @@ class MemoryCache:
     def __init__(self) -> None:
         self.items: dict[str, FetchedTile] = {}
 
-    async def get(self, key: str, max_age: timedelta) -> FetchedTile | None:
+    async def get(self, key: str) -> FetchedTile | None:
         return self.items.get(key)
 
-    async def put(self, key: str, tile: FetchedTile) -> None:
+    async def put(self, key: str, tile: FetchedTile, lifetime: timedelta) -> None:
         self.items[key] = tile
 
 

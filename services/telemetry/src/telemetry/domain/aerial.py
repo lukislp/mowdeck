@@ -100,6 +100,24 @@ def map_bounds(mower_map: MowerMap, margin_m: float) -> Bounds:
     return Bounds(min(lats) - d_lat, min(lons) - d_lon, max(lats) + d_lat, max(lons) + d_lon)
 
 
+def points_bounds(points: list[tuple[float, float]], margin_m: float) -> Bounds | None:
+    """The WGS84 box around ``(lat, lon)`` points and ``margin_m`` metres more on every side;
+    None without points. The base map of theft tracking serves tiles only inside it (ADR 0058)."""
+    if not points:
+        return None
+    lats = [p[0] for p in points]
+    lons = [p[1] for p in points]
+    mid_lat = (min(lats) + max(lats)) / 2
+    d_lat = math.degrees(margin_m / 6_378_137.0)
+    d_lon = math.degrees(margin_m / (6_378_137.0 * max(math.cos(math.radians(mid_lat)), 0.01)))
+    return Bounds(
+        max(-90.0, min(lats) - d_lat),
+        max(-180.0, min(lons) - d_lon),
+        min(90.0, max(lats) + d_lat),
+        min(180.0, max(lons) + d_lon),
+    )
+
+
 def xyz_url(template: str, z: int, x: int, y: int) -> str:
     """Fill ``{z}``, ``{x}`` and ``{y}`` of a tile URL template."""
     return template.replace("{z}", str(z)).replace("{x}", str(x)).replace("{y}", str(y))

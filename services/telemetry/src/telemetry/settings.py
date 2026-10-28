@@ -16,6 +16,8 @@ from pydantic import Field, field_validator, model_validator
 from telemetry.application.aerial import AerialConfig
 from telemetry.application.context import TelemetryConfig
 from telemetry.application.tracking import TrackingConfig
+from telemetry.application.tracking_map import TrackingMapConfig
+from telemetry.domain.aerial import Bounds
 from telemetry.domain.thinning import ThinPolicy
 
 
@@ -176,7 +178,69 @@ class Settings(ServiceSettings):
     telemetry_aerial_timeout_seconds: float = Field(default=10, gt=0, le=120)
     """Timeout of a request to the photo source."""
 
-    @field_validator("telemetry_aerial_wms_url", "telemetry_aerial_xyz_url", mode="before")
+    telemetry_basemap_url: str | None = Field(
+        default=None,
+        pattern=r"^https?://[^\s\"<>\\]+$",
+    )
+    """Street map under a theft tracking track (ADR 0058): an https XYZ tile URL template with
+    ``{z}``, ``{x}``, ``{y}`` in any order (Web Mercator, 256 px), fetched by Telemetry only
+    around a tracked
+    track and cached with the aerial tiles. Empty (the default) means no street map and no
+    request to any third party. Recommended: OpenStreetMap
+    ``https://tile.openstreetmap.org/{z}/{x}/{y}.png`` (worldwide, zoom 19; the fetcher follows
+    its tile usage policy). Alternative for Germany: BKG TopPlusOpen."""
+
+    telemetry_basemap_attribution: str = Field(default="", max_length=300)
+    """Credit line of the street map, shown while it is visible (OpenStreetMap:
+    ``© OpenStreetMap contributors``; the app links it to the copyright page)."""
+
+    telemetry_basemap_min_zoom: int = Field(default=8, ge=0, le=24)
+    """Lowest zoom of the street map that is served."""
+
+    telemetry_basemap_max_zoom: int = Field(default=19, ge=0, le=24)
+    """Highest zoom the street map source delivers (the client scales beyond it)."""
+
+    telemetry_basemap_coverage: str = Field(default="", max_length=100)
+    """Optional box the street map source covers, ``south,west,north,east`` in degrees; the
+    tracking map falls back to another layer for a position outside it. Empty: the world."""
+
+    telemetry_aerial_coverage: str = Field(default="", max_length=100)
+    """Optional box the aerial photo source covers (Bavaria: ``47.27,8.97,50.57,13.84``); the
+    tracking map falls back to the street map for a position outside it. Empty: the world."""
+
+    @field_validator("telemetry_basemap_coverage", "telemetry_aerial_coverage")
+    @classmethod
+    def _valid_coverage(cls, value: str) -> str:
+        cls.coverage_of(value)
+        return value.strip()
+
+    @staticmethod
+    def coverage_of(value: str) -> Bounds | None:
+        """Parse ``south,west,north,east``; None for an empty value."""
+        if not value.strip():
+            return None
+        try:
+            south, west, north, east = (float(part) for part in value.split(","))
+        except ValueError as error:
+            msg = "a coverage box is south,west,north,east in degrees"
+            raise ValueError(msg) from error
+        if not (-90 <= south < north <= 90 and -180 <= west < east <= 180):
+            msg = "a coverage box needs south < north and west < east within the world"
+            raise ValueError(msg)
+        return Bounds(south, west, north, east)
+
+    telemetry_tracking_map_margin_meters: float = Field(default=2000, ge=100, le=50_000)
+    """Base map tiles of a tracking session are served this far around its positions."""
+
+    telemetry_tracking_public_tiles_per_minute: int = Field(default=600, ge=1)
+    """Base map tiles per minute and client on the public share page."""
+
+    @field_validator(
+        "telemetry_aerial_wms_url",
+        "telemetry_aerial_xyz_url",
+        "telemetry_basemap_url",
+        mode="before",
+    )
     @classmethod
     def _empty_url_is_none(cls, value: object) -> object:
         """Compose passes unset variables as empty strings."""
@@ -184,11 +248,27 @@ class Settings(ServiceSettings):
 
     @model_validator(mode="after")
     def _https_sources(self) -> Self:
-        for url in (self.telemetry_aerial_wms_url, self.telemetry_aerial_xyz_url):
+        for url in (
+            self.telemetry_aerial_wms_url,
+            self.telemetry_aerial_xyz_url,
+            self.telemetry_basemap_url,
+        ):
             if url and not url.startswith("https://") and not self.telemetry_aerial_allow_http:
-                msg = "the aerial photo source must be an https URL"
+                msg = "the aerial photo and base map sources must be https URLs"
                 raise ValueError(msg)
+        basemap = self.telemetry_basemap_url
+        if basemap and not all(part in basemap for part in ("{z}", "{x}", "{y}")):
+            msg = "MOWDECK_TELEMETRY_BASEMAP_URL needs {z}, {x} and {y}"
+            raise ValueError(msg)
         return self
+
+    def to_tracking_map_config(self) -> TrackingMapConfig:
+        """Margin and cache of the base map under a tracking track."""
+        return TrackingMapConfig(
+            margin_m=self.telemetry_tracking_map_margin_meters,
+            cache_ttl=timedelta(days=self.telemetry_aerial_cache_ttl_days),
+            misses_per_minute=self.telemetry_aerial_misses_per_minute,
+        )
 
     def to_aerial_config(self) -> AerialConfig:
         """The aerial photo configuration."""
@@ -285,6 +365,7 @@ class Settings(ServiceSettings):
             photos=self.telemetry_tracking_photos,
             public_rate_per_minute=self.telemetry_tracking_public_rate_per_minute,
             public_failures_per_minute=self.telemetry_tracking_public_failures_per_minute,
+            public_tiles_per_minute=self.telemetry_tracking_public_tiles_per_minute,
         )
 
     def to_config(self) -> TelemetryConfig:

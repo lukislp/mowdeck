@@ -434,6 +434,26 @@ Revoke a share link; it stops working at once.
 | 204 | Successful Response | no body |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
+#### GET /api/v1/telemetry/mowers/{mower_id}/tracking/map/{layer}/{z}/{x}/{y}
+
+**Tracking Map Tile**
+
+One base map tile (Web Mercator, XYZ) under the track of the active or newest session. Tiles away from the tracked positions, outside the zoom range or of a layer that is not offered are 404 `tile-outside-map`; new tiles are rate limited per account (429).
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+| `layer` | path | `"map"` \| `"aerial"` | yes |  |
+| `z` | path | integer | yes | min 0; max 24 |
+| `x` | path | integer | yes | min 0 |
+| `y` | path | integer | yes | min 0 |
+| `session_id` | query | string (uuid) or null | no |  |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `image/jpeg` any, `image/png` any |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 #### POST /api/v1/telemetry/mowers/{mower_id}/tracking/photo
 
 **Take Tracking Photo**
@@ -512,6 +532,19 @@ End the active session ("Fehlalarm / Ortung beenden").
 | Status | Meaning | Body |
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [TrackingSessionOut](#trackingsessionout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### POST /api/v1/telemetry/public/tracking/tile
+
+**Public Tracking Tile**
+
+One base map tile for the page of a share link, only around the shared track. No login; 404 for any unusable token or a tile away from the track, 429 when asked too often.
+
+**Request body** (required): `application/json` [PublicTileIn](#publictilein)
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `image/jpeg` any, `image/png` any |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
 #### POST /api/v1/telemetry/public/tracking/view
@@ -933,6 +966,18 @@ A mowable area (a "zone" in the Mammotion app).
 | `id` | string | yes | Stable id; for Mammotion the zone hash.; min length 1; max length 128 |
 | `name` | string or null | no |  |
 
+### MapLayerOut
+
+A base map layer offered under the track: `map` (street map) or `aerial` (photo). Tiles come from `/mowers/{id}/tracking/map/{layer}/{z}/{x}/{y}` (owner) or `POST /public/tracking/tile` (share link), only around the tracked positions.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `attribution` | string | yes | Credit line to show while the layer is visible. |
+| `covers_last` | boolean | no | Whether the source has data at the last known position (false: show another layer; e.g. an aerial photo of one state only).; default `true` |
+| `id` | `"map"` \| `"aerial"` | yes |  |
+| `max_zoom` | integer | yes | Highest zoom with real detail; deeper zooms scale it. |
+| `min_zoom` | integer | yes |  |
+
 ### MapPath
 
 A transfer path between areas (driven with blades off).
@@ -1243,6 +1288,18 @@ Position track of a mower in a time range, oldest first.
 | `to` | string (date-time) | yes |  |
 | `truncated` | boolean | yes |  |
 
+### PublicTileIn
+
+Body of a public base map tile: the share token and the tile (in the body, so neither the token nor the place reaches an access log).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `layer` | `"map"` \| `"aerial"` | yes |  |
+| `token` | string | yes | min length 1; max length 200 |
+| `x` | integer | yes | min 0.0 |
+| `y` | integer | yes | min 0.0 |
+| `z` | integer | yes | min 0.0; max 24.0 |
+
 ### PublicTrackIn
 
 Body of the public view.
@@ -1261,6 +1318,7 @@ What a share link shows: nothing else.
 | `ended_at` | string (date-time) or null | no |  |
 | `expires_at` | string (date-time) | yes |  |
 | `last` | [TrackPointOut](#trackpointout) or null | no |  |
+| `map_layers` | array of [MapLayerOut](#maplayerout) | no |  |
 | `mower_model` | string or null | no |  |
 | `mower_name` | string | yes |  |
 | `server_time` | string (date-time) | yes |  |
@@ -1471,6 +1529,7 @@ The tracking view of a mower: the session, its track and its links.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `links` | array of [TrackingLinkOut](#trackinglinkout) | no |  |
+| `map_layers` | array of [MapLayerOut](#maplayerout) | no | Base map layers under the track; empty without any. |
 | `photos` | integer | no | default `0` |
 | `server_time` | string (date-time) | yes |  |
 | `session` | [TrackingSessionOut](#trackingsessionout) or null | yes | The active session, else the newest one; null when the mower never had one. |

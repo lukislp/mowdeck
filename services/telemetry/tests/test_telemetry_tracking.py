@@ -422,8 +422,10 @@ async def test_tracking_link_shows_only_the_allowed_fields_and_stores_only_the_h
             "stale_since",
             "track",
             "expires_at",
+            "map_layers",
             "server_time",
         }
+        assert body["map_layers"] == []  # no base map source configured
         assert body["mower_name"] == "Front lawn" and body["active"] is True
         assert body["last"]["lat"] > 48.0 and len(body["track"]) >= 3
         assert set(body["track"][0]) == {"lat", "lon", "at"}

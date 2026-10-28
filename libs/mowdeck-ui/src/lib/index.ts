@@ -32,6 +32,7 @@ export { default as FleetMap, type FleetMapLabels } from './map/FleetMap.svelte'
 export {
   default as TrackMap,
   type TrackMapLabels,
+  type TrackMapLayer,
   type TrackMapPoint,
 } from './map/TrackMap.svelte';
 export * from './map/geo.js';

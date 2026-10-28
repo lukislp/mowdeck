@@ -51,6 +51,7 @@ from telemetry.application.aerial import TileCache, TileSource
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
 from telemetry.application.tracking import Tracking
+from telemetry.application.tracking_map import BaseLayer, TrackingMap, street_layer
 from telemetry.application.tracking_ports import TrackingGateway, TrackingStore
 from telemetry.module import DESCRIPTOR
 from telemetry.settings import Settings
@@ -103,17 +104,23 @@ def build_app(
     store_ref: Store = store
     aerial_config = settings.to_aerial_config()
     http_source: HttpTileSource | None = None
-    if aerial_source is None and aerial_config.enabled:
-        http_source = HttpTileSource(settings.telemetry_aerial_timeout_seconds)
+    basemap_on = settings.telemetry_basemap_url is not None
+    if aerial_source is None and (aerial_config.enabled or basemap_on):
+        http_source = HttpTileSource(
+            settings.telemetry_aerial_timeout_seconds, version=settings.version
+        )
         aerial_source = http_source
         if aerial_cache is None:
             aerial_cache = DiskTileCache(
                 Path(settings.telemetry_aerial_cache_dir),
                 settings.telemetry_aerial_cache_max_mb * 1_048_576,
             )
-        _log.info(
-            "aerial photo layer on", wms=aerial_config.wms_url, xyz=bool(aerial_config.xyz_url)
-        )
+        if aerial_config.enabled:
+            _log.info(
+                "aerial photo layer on", wms=aerial_config.wms_url, xyz=bool(aerial_config.xyz_url)
+            )
+        if basemap_on:
+            _log.info("tracking street map on")
 
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus
@@ -142,6 +149,7 @@ def build_app(
                     lambda: getattr(app.state, "bus", None),
                     photo_timeout_seconds=settings.to_tracking_config().photo_timeout_seconds,
                 ),
+                basemap=tracking_basemap(settings, services, aerial_source, aerial_cache),
             )
             if tracking_store is not None
             else None
@@ -206,6 +214,42 @@ def build_app(
     install_authz(app, authorizer)
     install_error_mapping(app)
     return app
+
+
+def tracking_basemap(
+    settings: Settings,
+    services: Services,
+    source: TileSource | None,
+    cache: TileCache | None,
+) -> TrackingMap | None:
+    """The base map under tracking tracks: the street map (``MOWDECK_TELEMETRY_BASEMAP_*``) and
+    the aerial photo source, whichever is configured; None without both (ADR 0058)."""
+    layers: list[BaseLayer] = []
+    if settings.telemetry_basemap_url:
+        layers.append(
+            street_layer(
+                settings.telemetry_basemap_url,
+                settings.telemetry_basemap_attribution,
+                settings.telemetry_basemap_min_zoom,
+                settings.telemetry_basemap_max_zoom,
+                coverage=settings.coverage_of(settings.telemetry_basemap_coverage),
+            )
+        )
+    aerial = settings.to_aerial_config()
+    if aerial.enabled:
+        layers.append(
+            BaseLayer(
+                id="aerial",
+                attribution=aerial.attribution,
+                min_zoom=aerial.min_zoom,
+                max_zoom=aerial.max_zoom,
+                url=services.aerial.upstream_url,
+                coverage=settings.coverage_of(settings.telemetry_aerial_coverage),
+            )
+        )
+    if not layers or source is None:
+        return None
+    return TrackingMap(layers, source, cache, settings.to_tracking_map_config())
 
 
 def start_background_tasks(

@@ -97,6 +97,15 @@ config:
   AERIAL_ATTRIBUTION: ""
   AERIAL_MAX_ZOOM: "19"
   AERIAL_CACHE_MAX_MB: "256"
+  # Optional street map under the theft tracking track (ADR 0058): an XYZ template fetched and
+  # cached by Telemetry only around a tracked track. Empty: off. Recommended: OpenStreetMap,
+  # https://tile.openstreetmap.org/{z}/{x}/{y}.png with "© OpenStreetMap contributors", zoom 19
+  # (the fetcher follows the OSM tile usage policy). Coverage boxes: south,west,north,east.
+  BASEMAP_URL: ""
+  BASEMAP_ATTRIBUTION: ""
+  BASEMAP_MAX_ZOOM: "19"
+  BASEMAP_COVERAGE: ""
+  AERIAL_COVERAGE: ""
   TELEMETRY_HEARTBEAT_HISTORY_SECONDS: "300"
   TELEMETRY_RETENTION_HISTORY_DAYS: "30"
   TELEMETRY_RETENTION_POSITIONS_DAYS: "730"

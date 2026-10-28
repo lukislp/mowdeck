@@ -1,10 +1,18 @@
-"""The photo source (HTTP) and the tile cache (a bounded directory on disk)."""
+"""The tile sources (HTTP) and the tile cache (a bounded directory on disk).
+
+Every upstream request identifies MowDeck (``User-Agent: MowDeck/<version> (+<repo>)``), sends no
+``Referer`` and follows no redirect; a tile is kept as long as the source's ``Cache-Control`` or
+``Expires`` allows (at least 7 days without either) and never fetched again before that. This is
+what the OpenStreetMap tile usage policy asks of a server that uses its tiles.
+"""
 
 import asyncio
 import contextlib
 import os
+import re
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import httpx
@@ -17,6 +25,38 @@ _log = get_logger("telemetry.aerial")
 
 _PNG = b"\x89PNG\r\n\x1a\n"
 _JPEG = b"\xff\xd8\xff"
+
+
+PROJECT_URL = "https://github.com/lukislp/mowdeck"
+
+
+def user_agent(version: str | None) -> str:
+    """The identifying ``User-Agent`` of every upstream tile request."""
+    return f"MowDeck/{version or 'dev'} (+{PROJECT_URL})"
+
+
+_MAX_AGE = re.compile(r"(?:^|,)\s*max-age\s*=\s*\"?(\d+)\"?", re.IGNORECASE)
+_NO_STORE = re.compile(r"(?:^|,)\s*(?:no-store|no-cache)\b", re.IGNORECASE)
+
+
+def cache_lifetime_of(headers: httpx.Headers, now: datetime) -> timedelta | None:
+    """How long an answer may be reused according to ``Cache-Control`` (``max-age`` wins,
+    ``no-store``/``no-cache`` mean not at all) or ``Expires``; None when neither says."""
+    control = headers.get("cache-control", "")
+    if _NO_STORE.search(control):
+        return timedelta(0)
+    if match := _MAX_AGE.search(control):
+        return timedelta(seconds=int(match.group(1)))
+    expires = headers.get("expires")
+    if expires:
+        try:
+            when = parsedate_to_datetime(expires)
+        except (TypeError, ValueError):
+            return timedelta(0)  # an invalid Expires means already expired (RFC 9111)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        return max(timedelta(0), when - now)
+    return None
 
 
 def sniff_media_type(body: bytes) -> str | None:
@@ -32,21 +72,27 @@ def sniff_media_type(body: bytes) -> str | None:
 class HttpTileSource:
     """Fetches tiles with one shared client; redirects are not followed."""
 
-    def __init__(self, timeout_seconds: float = 10.0, client: httpx.AsyncClient | None = None):
-        self._client = client or httpx.AsyncClient(
-            timeout=timeout_seconds,
-            follow_redirects=False,
-            headers={"User-Agent": "MowDeck-aerial-cache (+https://github.com/lukislp/mowdeck)"},
-        )
+    def __init__(
+        self,
+        timeout_seconds: float = 10.0,
+        client: httpx.AsyncClient | None = None,
+        *,
+        version: str | None = None,
+    ):
+        self._client = client or httpx.AsyncClient(timeout=timeout_seconds)
+        self._headers = {"User-Agent": user_agent(version)}
 
     async def fetch(self, url: str) -> FetchedTile:
         """GET ``url``; the answer must be a PNG or JPEG of reasonable size."""
         body = bytearray()
         try:
-            async with self._client.stream("GET", url) as response:
+            async with self._client.stream(
+                "GET", url, headers=self._headers, follow_redirects=False
+            ) as response:
                 if response.status_code != 200:
                     msg = f"the aerial photo source answered {response.status_code}"
                     raise AerialUpstreamError(msg)
+                lifetime = cache_lifetime_of(response.headers, datetime.now(UTC))
                 async for chunk in response.aiter_bytes():
                     body.extend(chunk)
                     if len(body) > MAX_TILE_BYTES:
@@ -60,7 +106,7 @@ class HttpTileSource:
         if media_type is None:
             msg = "the aerial photo source did not send an image"
             raise AerialUpstreamError(msg)
-        return FetchedTile(bytes(body), media_type)
+        return FetchedTile(bytes(body), media_type, lifetime)
 
     async def close(self) -> None:
         """Close the client."""
@@ -68,10 +114,10 @@ class HttpTileSource:
 
 
 class DiskTileCache:
-    """Tiles as files named by the hash of their upstream URL. A file older than the TTL is
-    ignored (and replaced on the next write); when the directory grows beyond ``max_bytes`` the
-    oldest files are deleted down to 90 percent. A directory that cannot be written is logged
-    once and the cache then just misses."""
+    """Tiles as files named by the hash of their upstream URL; a file's modification time is
+    the moment it expires, so an expired file is ignored (and replaced on the next write). When
+    the directory grows beyond ``max_bytes`` the files expiring first are deleted down to 90
+    percent. A directory that cannot be written is logged once and the cache then just misses."""
 
     def __init__(self, directory: Path, max_bytes: int) -> None:
         self._dir = directory
@@ -82,10 +128,10 @@ class DiskTileCache:
     def _path(self, key: str) -> Path:
         return self._dir / key[:2] / key
 
-    def _read(self, key: str, max_age: timedelta) -> FetchedTile | None:
+    def _read(self, key: str) -> FetchedTile | None:
         path = self._path(key)
         try:
-            if time.time() - path.stat().st_mtime > max_age.total_seconds():
+            if path.stat().st_mtime <= time.time():
                 return None
             body = path.read_bytes()
         except OSError:
@@ -93,12 +139,14 @@ class DiskTileCache:
         media_type = sniff_media_type(body)
         return FetchedTile(body, media_type) if media_type else None
 
-    def _write(self, key: str, tile: FetchedTile) -> None:
+    def _write(self, key: str, tile: FetchedTile, lifetime: timedelta) -> None:
         path = self._path(key)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(f".{os.getpid()}.tmp")
             tmp.write_bytes(tile.body)
+            expires = time.time() + lifetime.total_seconds()
+            os.utime(tmp, (expires, expires))
             tmp.replace(path)
         except OSError as exc:
             if not self._warned:
@@ -110,7 +158,7 @@ class DiskTileCache:
             self.trim()
 
     def trim(self) -> None:
-        """Delete the oldest files until the directory is at 90 percent of its limit."""
+        """Delete the files expiring first until the directory is at 90 percent of its limit."""
         files: list[tuple[float, int, Path]] = []
         total = 0
         with contextlib.suppress(OSError):
@@ -129,13 +177,13 @@ class DiskTileCache:
                 path.unlink()
                 total -= size
 
-    async def get(self, key: str, max_age: timedelta) -> FetchedTile | None:
-        """The cached tile when present and younger than ``max_age``."""
-        return await asyncio.to_thread(self._read, key, max_age)
+    async def get(self, key: str) -> FetchedTile | None:
+        """The cached tile when present and not expired."""
+        return await asyncio.to_thread(self._read, key)
 
-    async def put(self, key: str, tile: FetchedTile) -> None:
-        """Store a tile."""
-        await asyncio.to_thread(self._write, key, tile)
+    async def put(self, key: str, tile: FetchedTile, lifetime: timedelta) -> None:
+        """Store a tile for ``lifetime``."""
+        await asyncio.to_thread(self._write, key, tile, lifetime)
 
     def size_bytes(self) -> int:
         """Total size of the cached files."""

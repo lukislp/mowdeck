@@ -480,9 +480,9 @@ flowchart LR
   end
   subgraph telemetry["telemetry"]
     direction TB
-    telemetry_public["public<br/>1 operation"]
+    telemetry_public["public<br/>2 operations"]
     telemetry_telemetry["telemetry<br/>21 operations"]
-    telemetry_tracking["tracking<br/>11 operations"]
+    telemetry_tracking["tracking<br/>13 operations"]
   end
   subgraph vision["vision"]
     direction TB
@@ -519,9 +519,9 @@ flowchart LR
 | `scheduler` | `operations` | 1 | 1 |
 | `scheduler` | `schedules` | 14 | 10 |
 | `telemetry` | `operations` | 1 | 1 |
-| `telemetry` | `public` | 1 | 1 |
+| `telemetry` | `public` | 2 | 2 |
 | `telemetry` | `telemetry` | 21 | 21 |
-| `telemetry` | `tracking` | 11 | 9 |
+| `telemetry` | `tracking` | 13 | 11 |
 | `vision` | `operations` | 1 | 1 |
 | `vision` | `vision` | 16 | 13 |
 

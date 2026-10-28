@@ -65,10 +65,13 @@ class AerialConfig:
 
 @dataclass(frozen=True, slots=True)
 class FetchedTile:
-    """An image from the photo source."""
+    """An image from a tile source."""
 
     body: bytes
     media_type: str
+    lifetime: timedelta | None = None
+    """How long the source allows the tile to be reused (``Cache-Control``/``Expires``); None
+    when it said nothing."""
 
 
 class TileSource(Protocol):
@@ -78,11 +81,48 @@ class TileSource(Protocol):
 
 
 class TileCache(Protocol):
-    """Keeps fetched tiles on disk."""
+    """Keeps fetched tiles on disk until they expire."""
 
-    async def get(self, key: str, max_age: timedelta) -> FetchedTile | None: ...
+    async def get(self, key: str) -> FetchedTile | None: ...
 
-    async def put(self, key: str, tile: FetchedTile) -> None: ...
+    async def put(self, key: str, tile: FetchedTile, lifetime: timedelta) -> None: ...
+
+
+MIN_DEFAULT_LIFETIME = timedelta(days=7)
+"""A tile without cache headers is kept at least this long (OSM tile usage policy)."""
+
+
+def cache_lifetime(tile: FetchedTile, default: timedelta) -> timedelta:
+    """How long to keep ``tile``: what its source said, else ``default`` but at least 7 days."""
+    if tile.lifetime is not None:
+        return tile.lifetime
+    return max(default, MIN_DEFAULT_LIFETIME)
+
+
+async def fetch_cached(
+    url: str,
+    source: TileSource,
+    cache: TileCache | None,
+    default_lifetime: timedelta,
+    *,
+    before_fetch: Callable[[], None],
+    gate: asyncio.Semaphore,
+) -> FetchedTile:
+    """The tile at ``url`` from the cache while it is fresh, else fetched once from the source
+    (``before_fetch`` may refuse by raising, e.g. a rate limit) and cached for its lifetime. No
+    tile is ever fetched ahead of a request."""
+    key = hashlib.sha256(url.encode()).hexdigest()
+    if cache is not None:
+        cached = await cache.get(key)
+        if cached is not None:
+            return cached
+    before_fetch()
+    async with gate:
+        tile = await source.fetch(url)
+    lifetime = cache_lifetime(tile, default_lifetime)
+    if cache is not None and lifetime > timedelta(0):
+        await cache.put(key, tile, lifetime)
+    return tile
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,18 +228,18 @@ class Aerial:
         if not map_bounds(mower_map, cfg.margin_m).intersects(tile_bounds(z, x, y)):
             msg = "the tile is not around the mower's map"
             raise TileOutsideMapError(msg)
-        url = self.upstream_url(z, x, y)
-        key = hashlib.sha256(url.encode()).hexdigest()
-        if self._cache is not None:
-            cached = await self._cache.get(key, cfg.cache_ttl)
-            if cached is not None:
-                return cached
-        wait = self._limiter.take(account_id)
-        if wait is not None:
-            msg = "too many new aerial tiles requested; try again shortly"
-            raise AerialRateLimitedError(msg, wait)
-        async with self._gate:
-            tile = await self._source.fetch(url)
-        if self._cache is not None:
-            await self._cache.put(key, tile)
-        return tile
+
+        def take() -> None:
+            wait = self._limiter.take(account_id)
+            if wait is not None:
+                msg = "too many new aerial tiles requested; try again shortly"
+                raise AerialRateLimitedError(msg, wait)
+
+        return await fetch_cached(
+            self.upstream_url(z, x, y),
+            self._source,
+            self._cache,
+            cfg.cache_ttl,
+            before_fetch=take,
+            gate=self._gate,
+        )
