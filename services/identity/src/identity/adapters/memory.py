@@ -23,6 +23,7 @@ from identity.domain.models import (
     LoginAttempt,
     Membership,
     OAuthState,
+    OnboardingProgress,
     Passkey,
     Role,
     RoleAssignment,
@@ -153,6 +154,7 @@ class MemoryTx:
     app_login_requests: MemoryTable[AppLoginRequest]
     external_identities: MemoryTable[ExternalIdentity]
     oauth_states: MemoryTable[OAuthState]
+    onboarding: MemoryTable[OnboardingProgress]
 
 
 class MemoryStore:
@@ -182,6 +184,7 @@ class MemoryStore:
                 "id", [("provider", "subject"), ("user_id", "provider")]
             ),
             oauth_states=MemoryTable("id", [("state_hash",)]),
+            onboarding=MemoryTable("user_id"),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

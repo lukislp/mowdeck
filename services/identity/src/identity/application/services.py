@@ -20,6 +20,7 @@ from identity.application.authenticators import (
 )
 from identity.application.deps import Deps
 from identity.application.external import ExternalIdentityService
+from identity.application.onboarding import OnboardingService
 from identity.application.passkeys import PasskeyService
 from identity.application.platform import PlatformService
 from identity.application.ports import OAuthClient, PasskeyCeremonies
@@ -45,6 +46,7 @@ class Services:
     platform: PlatformService = field(init=False)
     passkeys: PasskeyService = field(init=False)
     external: ExternalIdentityService = field(init=False)
+    onboarding: OnboardingService = field(init=False)
     ip_limiter: TokenBucketLimiter | None = None
     ceremonies: PasskeyCeremonies | None = None
 
@@ -59,6 +61,7 @@ class Services:
         self.platform = PlatformService(self.deps)
         self.passkeys = PasskeyService(self.deps, self.ceremonies, limiter)
         self.external = ExternalIdentityService(self.deps, self.sessions, limiter)
+        self.onboarding = OnboardingService(self.deps)
 
 
 def build_services(

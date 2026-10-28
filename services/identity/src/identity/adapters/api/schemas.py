@@ -18,6 +18,8 @@ from identity.domain.models import (
     ExternalIdentity,
     Level,
     LevelType,
+    OnboardingProgress,
+    OnboardingStatus,
     Passkey,
     Role,
     RoleAssignment,
@@ -748,6 +750,47 @@ class ExternalIdentityOut(BaseModel):
             linked_at=link.linked_at,
             last_used_at=link.last_used_at,
         )
+
+
+OnboardingKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,31}$")]
+"""A step or hint key of the setup tour (the web app names them)."""
+
+
+class OnboardingOut(BaseModel):
+    """The caller's progress through the setup tour (ADR 0062). Whether a step is done is not
+    here: the web app reads that from the real state."""
+
+    status: Literal["new", "active", "dismissed", "completed"] = Field(
+        description="`new`: never decided (nothing stored yet); `active`: the tour runs; "
+        "`dismissed`: closed without finishing; `completed`: every step done or skipped."
+    )
+    skipped_steps: list[str] = Field(description="Keys of the steps the user skipped.")
+    dismissed_hints: list[str] = Field(
+        description='Keys of the "first time here" hints the user dismissed.'
+    )
+    updated_at: datetime | None = Field(description="Last change; null while `new`.")
+
+    @classmethod
+    def of(cls, progress: OnboardingProgress | None) -> "OnboardingOut":
+        """From the entity; None is the untouched state."""
+        if progress is None:
+            return cls(status="new", skipped_steps=[], dismissed_hints=[], updated_at=None)
+        return cls(
+            status=progress.status.value,
+            skipped_steps=list(progress.skipped_steps),
+            dismissed_hints=list(progress.dismissed_hints),
+            updated_at=progress.updated_at,
+        )
+
+
+class OnboardingIn(In):
+    """``PUT /me/onboarding``: the whole state, replacing the stored one."""
+
+    status: Literal[
+        OnboardingStatus.ACTIVE, OnboardingStatus.DISMISSED, OnboardingStatus.COMPLETED
+    ] = Field(description="`active`, `dismissed` or `completed` (`new` cannot be stored).")
+    skipped_steps: list[OnboardingKey] = Field(default_factory=list, max_length=32)
+    dismissed_hints: list[OnboardingKey] = Field(default_factory=list, max_length=32)
 
 
 class WidgetCredentialIn(In):

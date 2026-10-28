@@ -17,6 +17,8 @@ from identity.adapters.api.schemas import (
     AppSessionIn,
     LoginIn,
     MeOut,
+    OnboardingIn,
+    OnboardingOut,
     PasswordChangeIn,
     PermissionsIn,
     RefreshIn,
@@ -29,7 +31,9 @@ from identity.adapters.api.schemas import (
     WidgetCredentialOut,
 )
 from identity.application.accounts import Registration
+from identity.application.onboarding import OnboardingChoice
 from identity.application.sessions import TokenPair
+from identity.domain.models import OnboardingStatus
 
 router = APIRouter(prefix="/identity", tags=["identity: sessions"])
 
@@ -253,6 +257,27 @@ async def me(services: ServicesDep, ctx: Ctx) -> MeOut:
     """The caller: claims of the current token, user data and memberships."""
     assert ctx.principal is not None  # noqa: S101 - Ctx requires a principal
     return MeOut.of(await services.sessions.me(ctx.principal))
+
+
+@router.get("/me/onboarding")
+async def my_onboarding(services: ServicesDep, ctx: Ctx, response: Response) -> OnboardingOut:
+    """The caller's progress through the setup tour of the web app (ADR 0062): status, skipped
+    steps and dismissed hints. `new` (nothing stored) for a user who never saw the tour. Only
+    users; API tokens get 403."""
+    response.headers["Cache-Control"] = "no-store"
+    return OnboardingOut.of(await services.onboarding.get(ctx))
+
+
+@router.put("/me/onboarding")
+async def save_onboarding(body: OnboardingIn, services: ServicesDep, ctx: Ctx) -> OnboardingOut:
+    """Replace the caller's tour progress (status, skipped steps, dismissed hints). The keys are
+    the web app's (`^[a-z][a-z0-9-]{0,31}$`, at most 32 each, duplicates dropped)."""
+    choice = OnboardingChoice(
+        status=OnboardingStatus(body.status),
+        skipped_steps=list(body.skipped_steps),
+        dismissed_hints=list(body.dismissed_hints),
+    )
+    return OnboardingOut.of(await services.onboarding.save(ctx, choice))
 
 
 class MePlatformOut(BaseModel):
