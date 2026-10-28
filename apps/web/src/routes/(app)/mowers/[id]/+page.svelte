@@ -63,6 +63,7 @@
   import LiveStatus from '#lib/components/LiveStatus.svelte';
   import MowSettings from '#lib/components/MowSettings.svelte';
   import PlanBanner from '#lib/components/PlanBanner.svelte';
+  import FirstTimeHint from '#lib/onboarding/FirstTimeHint.svelte';
   import RainReadout from '#lib/components/RainReadout.svelte';
   import ReceptionPanel from '#lib/components/ReceptionPanel.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
@@ -1367,6 +1368,7 @@
         {/snippet}
       </TopBar>
       <PlanBanner />
+      <FirstTimeHint hint="mower-map" text={m.firsttime_mower_map_text()} />
       {#if trackingActive}
         <a class="tracking-banner" href="/mowers/{id}/tracking" data-testid="mower-tracking-banner">
           <Icon name="shield" size={18} />
