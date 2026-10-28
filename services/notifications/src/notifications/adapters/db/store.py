@@ -28,6 +28,7 @@ from notifications.domain.models import (
     DeliveryStatus,
     DirectoryEntry,
     InboxItem,
+    MaintenanceWindow,
     Message,
     MowerWatch,
     NewDelivery,
@@ -206,6 +207,17 @@ class _SqlTx:
         )
         return [_watch(row) for row in result.all()]
 
+    async def held_offline(self, limit: int) -> list[MowerWatch]:
+        w = tables.mower_watch.c
+        result = await self._conn.execute(
+            sa.select(tables.mower_watch)
+            .where(w.offline, w.state["offline_held"].as_boolean())
+            .order_by(w.last_seen_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return [_watch(row) for row in result.all()]
+
     async def put_directory(self, entry: DirectoryEntry, *, replace: bool) -> None:
         insert = pg_insert(tables.mower_directory).values(
             mower_id=entry.mower_id,
@@ -276,6 +288,38 @@ class SqlStore:
             )
             row = result.first()
         return _fence(row) if row else None
+
+    # --- maintenance window --------------------------------------------------------------
+
+    async def maintenance_window(self) -> MaintenanceWindow | None:
+        async with self.engine.connect() as conn:
+            result = await conn.execute(sa.select(tables.maintenance_window))
+            row = result.first()
+        if row is None:
+            return None
+        return MaintenanceWindow(
+            opened_at=row.opened_at,
+            expires_at=row.expires_at,
+            closed_at=row.closed_at,
+            reason=row.reason,
+        )
+
+    async def put_maintenance_window(self, window: MaintenanceWindow) -> None:
+        values = {
+            "id": 1,
+            "opened_at": window.opened_at,
+            "expires_at": window.expires_at,
+            "closed_at": window.closed_at,
+            "reason": window.reason,
+        }
+        insert = pg_insert(tables.maintenance_window).values(**values)
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                insert.on_conflict_do_update(
+                    index_elements=[tables.maintenance_window.c.id],
+                    set_={k: insert.excluded[k] for k in values if k != "id"},
+                )
+            )
 
     # --- preferences ---------------------------------------------------------------------
 
