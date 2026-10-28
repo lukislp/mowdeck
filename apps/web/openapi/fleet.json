@@ -5584,7 +5584,7 @@
     },
     "/api/v1/fleet/linked-accounts/{linked_account_id}": {
       "delete": {
-        "description": "Remove the link. Refused (409, the mowers in ``errors``) while mowers use it.",
+        "description": "Remove the link. Refused (409, the mowers in ``errors``) while mowers use it. Step-up\n(ADR 0057): 401 ``reauth-required`` without a recent confirmation, 403 for API tokens.",
         "operationId": "delete_linked_account_api_v1_fleet_linked_accounts__linked_account_id__delete",
         "parameters": [
           {
@@ -5951,7 +5951,7 @@
     },
     "/api/v1/fleet/mowers/{mower_id}": {
       "delete": {
-        "description": "Remove the mower and its tuples; publishes ``mower.removed``.",
+        "description": "Remove the mower and its tuples; publishes ``mower.removed``. Step-up: 401\n``reauth-required`` without a recent passkey or password confirmation, 403 for API tokens\n(ADR 0057).",
         "operationId": "delete_mower_api_v1_fleet_mowers__mower_id__delete",
         "parameters": [
           {

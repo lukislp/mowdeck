@@ -447,7 +447,7 @@ flowchart LR
     identity_identity__accounts["identity: accounts<br/>28 operations"]
     identity_identity__keys["identity: keys<br/>1 operation"]
     identity_identity__login_providers["identity: login providers<br/>5 operations"]
-    identity_identity__passkeys["identity: passkeys<br/>8 operations"]
+    identity_identity__passkeys["identity: passkeys<br/>11 operations"]
     identity_identity__platform["identity: platform<br/>1 operation"]
     identity_identity__sessions["identity: sessions<br/>15 operations"]
   end
@@ -492,7 +492,7 @@ flowchart LR
 | `identity` | `identity: accounts` | 28 | 19 |
 | `identity` | `identity: keys` | 1 | 1 |
 | `identity` | `identity: login providers` | 5 | 5 |
-| `identity` | `identity: passkeys` | 8 | 6 |
+| `identity` | `identity: passkeys` | 11 | 9 |
 | `identity` | `identity: platform` | 1 | 1 |
 | `identity` | `identity: sessions` | 15 | 15 |
 | `identity` | `operations` | 1 | 1 |
@@ -531,7 +531,7 @@ flowchart LR
     db_billing[("billing<br/>2 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>12 migrations")]
-    db_identity[("identity<br/>4 migrations")]
+    db_identity[("identity<br/>5 migrations")]
     db_notifications[("notifications<br/>7 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>3 migrations")]

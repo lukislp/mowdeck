@@ -275,7 +275,8 @@ export type paths = {
         post?: never;
         /**
          * Delete Linked Account
-         * @description Remove the link. Refused (409, the mowers in ``errors``) while mowers use it.
+         * @description Remove the link. Refused (409, the mowers in ``errors``) while mowers use it. Step-up
+         *     (ADR 0057): 401 ``reauth-required`` without a recent confirmation, 403 for API tokens.
          */
         delete: operations["delete_linked_account_api_v1_fleet_linked_accounts__linked_account_id__delete"];
         options?: never;
@@ -392,7 +393,9 @@ export type paths = {
         post?: never;
         /**
          * Delete Mower
-         * @description Remove the mower and its tuples; publishes ``mower.removed``.
+         * @description Remove the mower and its tuples; publishes ``mower.removed``. Step-up: 401
+         *     ``reauth-required`` without a recent passkey or password confirmation, 403 for API tokens
+         *     (ADR 0057).
          */
         delete: operations["delete_mower_api_v1_fleet_mowers__mower_id__delete"];
         options?: never;

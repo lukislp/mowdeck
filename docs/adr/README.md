@@ -59,3 +59,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0053](0053-position-retention-and-downsampling.md) | Retention and downsampling of the position track | Accepted |
 | [0054](0054-aerial-photo-under-the-map.md) | Aerial photo under the mower map | Accepted |
 | [0056](0056-camera-photo-in-push-notifications.md) | Camera photo in push notifications for errors and theft alarms | Accepted |
+| [0057](0057-step-up-reauthentication.md) | Step-up re-authentication for critical actions | Accepted |

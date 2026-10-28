@@ -3,18 +3,22 @@
     "schemas": {
       "AccountDeleteIn": {
         "additionalProperties": false,
-        "description": "``DELETE /accounts/{id}``: the owner's password.",
+        "description": "``DELETE /accounts/{id}``: the owner's password, or none after a step-up confirmation.",
         "properties": {
           "password": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Password",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
           }
         },
-        "required": [
-          "password"
-        ],
         "title": "AccountDeleteIn",
         "type": "object"
       },
@@ -586,18 +590,22 @@
       },
       "ExternalLinkIn": {
         "additionalProperties": false,
-        "description": "``POST /me/external-identities/{provider}/link``: the current password again.",
+        "description": "``POST /me/external-identities/{provider}/link``: the current password again, or none\nafter a step-up confirmation.",
         "properties": {
           "password": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Password",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
           }
         },
-        "required": [
-          "password"
-        ],
         "title": "ExternalLinkIn",
         "type": "object"
       },
@@ -1320,18 +1328,22 @@
       },
       "PasskeyRegistrationOptionsIn": {
         "additionalProperties": false,
-        "description": "``POST /me/passkeys/options``: the current password (re-authentication).",
+        "description": "``POST /me/passkeys/options``: the current password (re-authentication), or none after a\nstep-up confirmation.",
         "properties": {
           "password": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Password",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
           }
         },
-        "required": [
-          "password"
-        ],
         "title": "PasskeyRegistrationOptionsIn",
         "type": "object"
       },
@@ -1939,6 +1951,46 @@
         "title": "RolePatch",
         "type": "object"
       },
+      "StepUpPasskeyIn": {
+        "additionalProperties": false,
+        "description": "``POST /me/step-up/passkey``: the answer to a challenge of the options endpoint.",
+        "properties": {
+          "ceremony_id": {
+            "format": "uuid",
+            "title": "Ceremony Id",
+            "type": "string"
+          },
+          "credential": {
+            "additionalProperties": true,
+            "description": "The PublicKeyCredential as JSON (PublicKeyCredential.toJSON(): id, rawId, type, response with base64url fields, clientExtensionResults)",
+            "title": "Credential",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ceremony_id",
+          "credential"
+        ],
+        "title": "StepUpPasskeyIn",
+        "type": "object"
+      },
+      "StepUpPasswordIn": {
+        "additionalProperties": false,
+        "description": "``POST /me/step-up/password``: the caller's current password.",
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "StepUpPasswordIn",
+        "type": "object"
+      },
       "SubUserIn": {
         "additionalProperties": false,
         "description": "``POST /users``: a sub-user with username and password (no e-mail needed).",
@@ -2067,6 +2119,19 @@
               }
             ],
             "title": "Account Id"
+          },
+          "auth_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the user last authenticated interactively (login or step-up); critical actions need this to be recent",
+            "title": "Auth Time"
           },
           "expires_at": {
             "format": "date-time",
@@ -2324,7 +2389,7 @@
     },
     "/api/v1/identity/accounts/{account_id}": {
       "delete": {
-        "description": "Request deletion (owner, password re-entry): locked for the grace period.",
+        "description": "Request deletion (owner): locked for the grace period. Needs the password in the body\nor, without it, a recent step-up confirmation.",
         "operationId": "delete_account_api_v1_identity_accounts__account_id__delete",
         "parameters": [
           {
@@ -2342,11 +2407,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AccountDeleteIn"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AccountDeleteIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -2518,7 +2590,7 @@
         ]
       },
       "post": {
-        "description": "Create an API token; the secret is in the response once.",
+        "description": "Create an API token; the secret is in the response once. Step-up.",
         "operationId": "create_token_api_v1_identity_accounts__account_id__api_tokens_post",
         "parameters": [
           {
@@ -3019,7 +3091,7 @@
         ]
       },
       "post": {
-        "description": "Assign a role at a level; writes the expanded grant tuples.",
+        "description": "Assign a role at a level; writes the expanded grant tuples. Step-up.",
         "operationId": "assign_role_api_v1_identity_accounts__account_id__role_assignments_post",
         "parameters": [
           {
@@ -3073,7 +3145,7 @@
     },
     "/api/v1/identity/accounts/{account_id}/role-assignments/{assignment_id}": {
       "delete": {
-        "description": "Remove an assignment; the subject's tuples are reconciled.",
+        "description": "Remove an assignment; the subject's tuples are reconciled. Step-up.",
         "operationId": "unassign_role_api_v1_identity_accounts__account_id__role_assignments__assignment_id__delete",
         "parameters": [
           {
@@ -3265,7 +3337,7 @@
         ]
       },
       "patch": {
-        "description": "Change a role; every holder is reconciled.",
+        "description": "Change a role; every holder is reconciled. Step-up.",
         "operationId": "update_role_api_v1_identity_accounts__account_id__roles__role_id__patch",
         "parameters": [
           {
@@ -3375,7 +3447,7 @@
         ]
       },
       "post": {
-        "description": "Create a sub-user, optionally with roles at levels (anti-escalation applies).",
+        "description": "Create a sub-user, optionally with roles at levels (anti-escalation applies). Step-up.",
         "operationId": "create_user_api_v1_identity_accounts__account_id__users_post",
         "parameters": [
           {
@@ -3429,7 +3501,7 @@
     },
     "/api/v1/identity/accounts/{account_id}/users/{user_id}": {
       "delete": {
-        "description": "Delete a sub-user, or remove a person from the account.",
+        "description": "Delete a sub-user, or remove a person from the account. Step-up.",
         "operationId": "delete_user_api_v1_identity_accounts__account_id__users__user_id__delete",
         "parameters": [
           {
@@ -3756,7 +3828,7 @@
     },
     "/api/v1/identity/accounts/{account_id}/users/{user_id}/passkeys/{passkey_id}": {
       "delete": {
-        "description": "Remove a passkey of a sub-user of this account (its password stays).",
+        "description": "Remove a passkey of a sub-user of this account (its password stays). Step-up.",
         "operationId": "remove_user_passkey_api_v1_identity_accounts__account_id__users__user_id__passkeys__passkey_id__delete",
         "parameters": [
           {
@@ -3813,7 +3885,7 @@
     },
     "/api/v1/identity/accounts/{account_id}/users/{user_id}/password": {
       "post": {
-        "description": "Set a temporary password of a sub-user (must be changed at the next login).",
+        "description": "Set a temporary password of a sub-user (must be changed at the next login). Step-up.",
         "operationId": "set_password_api_v1_identity_accounts__account_id__users__user_id__password_post",
         "parameters": [
           {
@@ -4086,7 +4158,7 @@
     },
     "/api/v1/identity/me/external-identities/{provider}": {
       "delete": {
-        "description": "Remove the caller's link to a login provider (always allowed; the password stays).",
+        "description": "Remove the caller's link to a login provider (the password stays). Step-up: a stolen\nsession must not be able to strip the owner's ways in unnoticed.",
         "operationId": "unlink_external_identity_api_v1_identity_me_external_identities__provider__delete",
         "parameters": [
           {
@@ -4122,7 +4194,7 @@
     },
     "/api/v1/identity/me/external-identities/{provider}/link": {
       "post": {
-        "description": "Start linking an account of a login provider to the caller: the current password again\n(the login limits apply), then the provider's authorization URL and the binding cookie.\n409 when an account of this provider is already linked.",
+        "description": "Start linking an account of a login provider to the caller: the current password again\n(the login limits apply) or, without it, a recent step-up confirmation, then the provider's\nauthorization URL and the binding cookie.\n409 when an account of this provider is already linked.",
         "operationId": "link_external_identity_api_v1_identity_me_external_identities__provider__link_post",
         "parameters": [
           {
@@ -4283,7 +4355,7 @@
     },
     "/api/v1/identity/me/passkeys/{passkey_id}": {
       "delete": {
-        "description": "Remove one of the caller's passkeys; the password always stays.",
+        "description": "Remove one of the caller's passkeys; the password always stays. Needs a recent\nconfirmation (step-up).",
         "operationId": "remove_passkey_api_v1_identity_me_passkeys__passkey_id__delete",
         "parameters": [
           {
@@ -4470,6 +4542,112 @@
         "summary": "My Platform",
         "tags": [
           "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/me/step-up/passkey": {
+      "post": {
+        "description": "Confirm a critical action with one of the caller's passkeys: a new access token.",
+        "operationId": "step_up_passkey_api_v1_identity_me_step_up_passkey_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepUpPasskeyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Step Up Passkey",
+        "tags": [
+          "identity: passkeys"
+        ]
+      }
+    },
+    "/api/v1/identity/me/step-up/passkey/options": {
+      "post": {
+        "description": "Options for ``navigator.credentials.get()`` to confirm with a passkey (user verification\nrequired).",
+        "operationId": "step_up_passkey_options_api_v1_identity_me_step_up_passkey_options_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Step Up Passkey Options",
+        "tags": [
+          "identity: passkeys"
+        ]
+      }
+    },
+    "/api/v1/identity/me/step-up/password": {
+      "post": {
+        "description": "Confirm a critical action with the current password: a new access token with a fresh\n``auth_time``. The login limits apply; a wrong password is a failed login of the user.",
+        "operationId": "step_up_password_api_v1_identity_me_step_up_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepUpPasswordIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Step Up Password",
+        "tags": [
+          "identity: passkeys"
         ]
       }
     },
