@@ -47,11 +47,17 @@ export async function passkeysEnabled(
 /**
  * A passwordless login. Resolves when the session is up (`/me` loaded); rejects with an
  * {@link ApiProblem} from Identity or the browser's `DOMException` (`NotAllowedError` when the
- * user cancels, `AbortError` when `signal` fires).
+ * user cancels, `AbortError` when `signal` fires, `NotSupportedError` and the like when the
+ * browser cannot run the ceremony).
  */
 export async function signInWithPasskey(
   session: Pick<SessionManager, 'signIn'>,
-  options: { mediation?: CredentialMediationRequirement; signal?: AbortSignal } = {},
+  options: {
+    mediation?: CredentialMediationRequirement;
+    signal?: AbortSignal;
+    /** Called once the authenticator has produced a credential (before the server checks it). */
+    onChosen?: () => void;
+  } = {},
   deps: PasskeyDeps = browserDeps(),
 ): Promise<void> {
   const started = await deps.fetch(`${IDENTITY}/passkeys/challenge`, {
@@ -67,6 +73,7 @@ export async function signInWithPasskey(
     ...(options.signal ? { signal: options.signal } : {}),
   });
   if (!credential) throw new DOMException('no passkey chosen', 'NotAllowedError');
+  options.onChosen?.();
   await session.signIn(`${IDENTITY}/passkeys/session`, {
     ceremony_id: challenge.ceremony_id,
     credential: credentialJson(credential),
