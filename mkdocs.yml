@@ -96,11 +96,8 @@ nav:
       - adr/0052-sign-in-with-apple.md
       - adr/0053-position-retention-and-downsampling.md
       - adr/0056-camera-photo-in-push-notifications.md
-<<<<<<< HEAD
-      - adr/0058-theft-tracking-mode.md
-=======
       - adr/0057-step-up-reauthentication.md
->>>>>>> origin/main
+      - adr/0058-theft-tracking-mode.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
