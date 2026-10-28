@@ -177,6 +177,26 @@ describe('passkey login', () => {
     expect(e.session.status).toBe('authenticated');
   });
 
+  it('tells when the authenticator has produced a credential, and not when it failed', async () => {
+    const e = env();
+    const onChosen = vi.fn();
+    await signInWithPasskey(e.session, { onChosen }, e);
+    expect(onChosen).toHaveBeenCalledTimes(1);
+    const unsupported = env();
+    unsupported.credentials.get.mockRejectedValueOnce(new DOMException('no', 'NotSupportedError'));
+    const never = vi.fn();
+    await expect(
+      signInWithPasskey(unsupported.session, { onChosen: never }, unsupported),
+    ).rejects.toMatchObject({ name: 'NotSupportedError' });
+    expect(never).not.toHaveBeenCalled();
+    const refused = env(json(401, { status: 401, title: 'Unauthorized' }));
+    const after = vi.fn();
+    await expect(
+      signInWithPasskey(refused.session, { onChosen: after }, refused),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(after).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a refused passkey as a problem and a cancelled dialog as a DOMException', async () => {
     const refused = env(json(401, { status: 401, title: 'Unauthorized' }));
     await expect(signInWithPasskey(refused.session, {}, refused)).rejects.toMatchObject({
