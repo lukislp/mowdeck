@@ -189,6 +189,9 @@ wiki = "wiki-sync build --docs docs --mkdocs mkdocs.yml --out build/wiki"
 # OpenAPI documents of the services for the web app's generated types (apps/web/openapi).
 openapi = "python tools/repo-checks/scripts/export_openapi.py"
 openapi-check = "python tools/repo-checks/scripts/export_openapi.py --check"
+# HTTP API reference (Markdown) rendered from those OpenAPI documents: docs/reference/api.
+api-reference = "python tools/repo-checks/scripts/api_reference.py"
+api-reference-check = "python tools/repo-checks/scripts/api_reference.py --check"
 # Architecture diagrams (Mermaid) generated from the Compose file, the NATS subjects and the
 # OpenAPI documents: docs/architecture/generated.md.
 arch-diagrams = "python tools/repo-checks/scripts/arch_diagrams.py"
