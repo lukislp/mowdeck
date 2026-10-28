@@ -170,6 +170,7 @@ jobs:
           enable-cache: true
       - run: uv sync
       - run: uv run poe arch-diagrams-check
+      - run: uv run poe api-reference-check
       - run: uv run poe docs
 
   # The web frontend (pnpm workspace): lint (ESLint, Prettier, Stylelint, i18n), svelte-check,
