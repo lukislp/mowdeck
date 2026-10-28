@@ -7,11 +7,13 @@ with the ``MOWDECK_AUTH_*`` variables of ``mowdeck-auth``.
 """
 
 from datetime import timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from mowdeck_service_kit import ServiceSettings
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from telemetry.application.context import TelemetryConfig
+from telemetry.domain.thinning import ThinPolicy
 
 
 class Settings(ServiceSettings):
@@ -32,8 +34,35 @@ class Settings(ServiceSettings):
     telemetry_retention_history_days: int = Field(default=30, ge=1, le=3650)
     """History rows older than this are deleted."""
 
-    telemetry_retention_positions_days: int = Field(default=90, ge=1, le=3650)
-    """Position track rows older than this are deleted."""
+    telemetry_retention_positions_days: int = Field(default=730, ge=0, le=36500)
+    """Position track rows older than this are deleted; 0 keeps them forever (ADR 0053).
+    Rows older than ``MOWDECK_TELEMETRY_POSITIONS_DETAIL_DAYS`` are thinned first."""
+
+    telemetry_positions_detail_days: int = Field(default=90, ge=7, le=3650)
+    """Positions newer than this keep every row; older ones are downsampled (the floor for
+    anything that reads the raw track, such as theft tracking, ADR 0053)."""
+
+    telemetry_positions_thinning_enabled: bool = True
+    """Downsample old positions in the nightly window. Off: old rows are only deleted."""
+
+    telemetry_positions_thin_active_seconds: int = Field(default=30, ge=1, le=300)
+    """Old positions: one row per this many seconds while the blades run or the mower moves
+    (must divide 300)."""
+
+    telemetry_positions_thin_idle_seconds: int = Field(default=300, ge=1, le=300)
+    """Old positions: one row per this many seconds while the mower stands (must divide 300)."""
+
+    telemetry_maintenance_timezone: str = "UTC"
+    """IANA time zone of the maintenance window (for example ``Europe/Berlin``)."""
+
+    telemetry_thinning_window_start_hour: int = Field(default=1, ge=0, le=23)
+    """Local hour at which thinning may start."""
+
+    telemetry_thinning_window_end_hour: int = Field(default=5, ge=0, le=23)
+    """Local hour at which thinning must stop (exclusive); equal to the start: always."""
+
+    telemetry_thinning_budget_seconds: float = Field(default=900, ge=1)
+    """Longest one thinning round runs before it releases the lock until the next round."""
 
     telemetry_retention_commands_days: int = Field(default=30, ge=1, le=3650)
     """Command timeline rows older than this are deleted."""
@@ -88,9 +117,36 @@ class Settings(ServiceSettings):
     """Coverage heatmap: ... and at most this many metres apart (both limits must hold; about
     0.6 m/s for 20 s with margin). Farther positions stay separate discs (RTK jumps)."""
 
+    @model_validator(mode="after")
+    def _check_positions_policy(self) -> "Settings":
+        days = self.telemetry_retention_positions_days
+        if 0 < days < self.telemetry_positions_detail_days:
+            msg = "MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS must be 0 or at least the detail days"
+            raise ValueError(msg)
+        try:
+            ZoneInfo(self.telemetry_maintenance_timezone)
+        except (ZoneInfoNotFoundError, ValueError) as error:
+            msg = f"unknown time zone {self.telemetry_maintenance_timezone!r}"
+            raise ValueError(msg) from error
+        ThinPolicy(
+            active_seconds=self.telemetry_positions_thin_active_seconds,
+            idle_seconds=self.telemetry_positions_thin_idle_seconds,
+        )
+        return self
+
     def to_config(self) -> TelemetryConfig:
         """The use case configuration."""
         return TelemetryConfig(
+            positions_detail=timedelta(days=self.telemetry_positions_detail_days),
+            thinning_enabled=self.telemetry_positions_thinning_enabled,
+            thin_policy=ThinPolicy(
+                active_seconds=self.telemetry_positions_thin_active_seconds,
+                idle_seconds=self.telemetry_positions_thin_idle_seconds,
+            ),
+            thinning_zone=self.telemetry_maintenance_timezone,
+            thinning_window_start_hour=self.telemetry_thinning_window_start_hour,
+            thinning_window_end_hour=self.telemetry_thinning_window_end_hour,
+            thinning_budget=timedelta(seconds=self.telemetry_thinning_budget_seconds),
             heartbeat_history_seconds=self.telemetry_heartbeat_history_seconds,
             unknown_mower_attempts=self.telemetry_unknown_mower_attempts,
             query_max_range=timedelta(days=self.telemetry_query_max_range_days),
