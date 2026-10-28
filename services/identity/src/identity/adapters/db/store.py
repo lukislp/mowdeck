@@ -28,6 +28,7 @@ from identity.domain.models import (
     LoginAttempt,
     Membership,
     OAuthState,
+    OnboardingProgress,
     Passkey,
     Role,
     RoleAssignment,
@@ -174,6 +175,7 @@ class SqlTx:
     app_login_requests: SqlTable[AppLoginRequest]
     external_identities: SqlTable[ExternalIdentity]
     oauth_states: SqlTable[OAuthState]
+    onboarding: SqlTable[OnboardingProgress]
 
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
@@ -196,6 +198,7 @@ class SqlTx:
             app_login_requests=SqlTable(conn, tables.app_login_requests, AppLoginRequest, "id"),
             external_identities=SqlTable(conn, tables.external_identities, ExternalIdentity, "id"),
             oauth_states=SqlTable(conn, tables.oauth_states, OAuthState, "id"),
+            onboarding=SqlTable(conn, tables.onboarding_progress, OnboardingProgress, "user_id"),
         )
 
 
