@@ -365,7 +365,11 @@ class ScheduleService:
             async with self.store.transaction() as tx:
                 place = await tx.get_place(mower.mower_id)
                 area_ids = list(schedule.area_ids) or (list(place.area_ids) if place else [])
-                stored = await tx.get_area_angles(mower.mower_id, area_ids)
+                stored = [
+                    a
+                    for a in await tx.get_area_angles(mower.mower_id, area_ids)
+                    if a.account_id == schedule.account_id
+                ]
             sequence = step_sequence(
                 last_angle(stored, area_ids), schedule.rotation_step_deg, base, runs
             )

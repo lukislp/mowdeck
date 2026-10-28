@@ -241,8 +241,10 @@ def step_angle(
     if not directed(base.get("name")):
         return None
     start = base.get("angle_deg")
+    # Only the schedule's own account counts (a mower id never moves, but rows never leak).
+    own = [a for a in angles if a.account_id == schedule.account_id]
     return stepped(
-        last_angle(angles, area_ids), step, float(start) if isinstance(start, int | float) else 0.0
+        last_angle(own, area_ids), step, float(start) if isinstance(start, int | float) else 0.0
     )
 
 

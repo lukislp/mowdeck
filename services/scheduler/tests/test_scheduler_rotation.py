@@ -2,6 +2,7 @@
 angle of each run in the run history and the event, the angle of each firing in the preview,
 and the mower angle API for manual starts."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -122,6 +123,9 @@ def test_step_angle_of_a_schedule() -> None:
     assert step_angle(_schedule(), None, angles, ["front"]) is None  # no step rotation
     edges = _schedule(rotation_step_deg=45, pattern={"name": "edge_only"})
     assert step_angle(edges, None, angles, ["front"]) is None
+    # A row of another account is never read.
+    foreign = replace(_angle("front", 100, 9), account_id=uuid4())
+    assert step_angle(stepping, None, [*angles, foreign], ["front"]) == 30.0
 
 
 # --- end to end --------------------------------------------------------------------------------
