@@ -4,7 +4,7 @@ Telemetry bounds its tables with age limits and thins old positions at night ([A
 
 ## Settings
 
-Set as environment variables of the Telemetry service (Compose `.env`, Helm `telemetry.env`).
+Set as environment variables of the Telemetry service (Compose `.env`, Helm `telemetry.env`). Compose and the Helm chart pass `TELEMETRY_RETENTION_POSITIONS_DAYS`, `TELEMETRY_POSITIONS_DETAIL_DAYS` and `TELEMETRY_MAINTENANCE_TIMEZONE` through under the `MOWDECK_` names below.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
