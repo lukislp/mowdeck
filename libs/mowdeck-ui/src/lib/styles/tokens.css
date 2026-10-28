@@ -107,6 +107,8 @@
   --md-hud-ink: #f4f5f2;
   --md-hud-ink-muted: rgb(244 245 242 / 74%);
   --md-hud-line: rgb(244 245 242 / 42%);
+  /* Dark ink on a lit HUD plate (a pressed chip filled with --md-hud-ink), in both themes. */
+  --md-hud-ink-inverse: #0a0c0d;
 
   /* Targets */
   --md-target: 48px;
