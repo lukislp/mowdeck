@@ -30,6 +30,19 @@ apps/web/static/whats-new.json
 infra/compose/docker-compose.release.yml
 *.pem
 *.key
+# Signing material anywhere in the tree (APNs and Sign in with Apple keys, distribution
+# certificates, provisioning profiles, Android keystores); apps/mobile and infra/compose/secrets
+# have their own, narrower rules as well
+*.p8
+*.p12
+*.pfx
+*.mobileprovision
+*.provisionprofile
+*.jks
+*.keystore
+# infra/compose/deploy.sh backups (.env copy and database dump) if MOWDECK_BACKUP_DIR points here
+env-before-*.env
+*.sql.gz
 # Owner script output: JSON lines logs and the PyMammotion credential cache (live tokens)
 out/
 mammotion_session*.json
