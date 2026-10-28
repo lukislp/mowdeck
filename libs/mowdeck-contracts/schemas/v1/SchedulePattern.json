@@ -37,7 +37,7 @@
         }
       ],
       "default": null,
-      "description": "Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run.",
+      "description": "Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run; with `rotation_step_deg` it is the angle of the first run, later runs turn the last angle by the step (ADR 0061).",
       "title": "Angle Deg"
     },
     "border_laps": {

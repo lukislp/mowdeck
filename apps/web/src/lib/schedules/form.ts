@@ -7,6 +7,7 @@ import type { ApiProblem } from '#lib/api/problem.js';
 
 import { emptyMow, mowBody, mowDraftOf, type MowDraft } from './mow-options';
 import { clockTime } from './recurrence';
+import { DEFAULT_STEP, STEP_RANGE, rotationModeOf, type RotationMode } from './rotation';
 import { isWeekday, WEEKDAYS, type Schedule, type ScheduleIn, type Weekday } from './types';
 
 export interface ScheduleFormState {
@@ -26,7 +27,11 @@ export interface ScheduleFormState {
   areaIds: string[];
   /** The start settings (`#lib/schedules/mow-options.js`): pattern keys and setpoints. */
   mow: MowDraft;
-  /** Angles used round robin, one per run (replace the angle). */
+  /** How the angle rotates (ADR 0061): off, by a step per run, or round robin over a list. */
+  rotationMode: RotationMode;
+  /** The step in degrees (text as typed) for `rotationMode: 'step'`. */
+  rotationStep: string;
+  /** Angles used round robin, one per run (replace the angle), for `rotationMode: 'list'`. */
   rotation: number[];
   rainEnabled: boolean;
   probability: string;
@@ -125,6 +130,8 @@ export function emptyForm(
     duration: '120',
     areaIds: [],
     mow: emptyMow(),
+    rotationMode: 'off',
+    rotationStep: String(DEFAULT_STEP),
     rotation: [],
     rainEnabled: true,
     probability: '60',
@@ -153,6 +160,8 @@ export function fromSchedule(schedule: Schedule): ScheduleFormState {
     duration: String(schedule.duration_minutes),
     areaIds: [...schedule.area_ids],
     mow: mowDraftOf(schedule),
+    rotationMode: rotationModeOf(schedule),
+    rotationStep: String(schedule.rotation_step_deg ?? DEFAULT_STEP),
     rotation: [...schedule.rotation_angles],
     rainEnabled: schedule.rain_pause.enabled,
     probability: String(schedule.rain_pause.probability_threshold),
@@ -210,10 +219,14 @@ export function validateForm(state: ScheduleFormState): FormIssues {
   set('duration', checkInteger(state.duration, LIMITS.duration));
   if (state.targetType === 'group' && state.areaIds.length) set('areas', { code: 'group_areas' });
   else if (state.areaIds.length > LIMITS.areas) set('areas', { code: 'count', max: LIMITS.areas });
-  if (state.rotation.length > LIMITS.rotation) {
-    set('rotation', { code: 'count', max: LIMITS.rotation });
-  } else if (state.rotation.some((a) => !Number.isFinite(a) || a < -360 || a > 360)) {
-    set('rotation', { code: 'range', min: -360, max: 360 });
+  if (state.rotationMode === 'step') {
+    set('rotation', checkNumber(state.rotationStep, STEP_RANGE));
+  } else if (state.rotationMode === 'list') {
+    if (state.rotation.length > LIMITS.rotation) {
+      set('rotation', { code: 'count', max: LIMITS.rotation });
+    } else if (state.rotation.some((a) => !Number.isFinite(a) || a < -360 || a > 360)) {
+      set('rotation', { code: 'range', min: -360, max: 360 });
+    }
   }
   set('probability', checkInteger(state.probability, LIMITS.probability));
   set('precipitation', checkNumber(state.precipitation, LIMITS.precipitation));
@@ -244,7 +257,9 @@ export function toBody(state: ScheduleFormState): ScheduleIn {
     duration_minutes: int(state.duration, 120),
     area_ids: state.targetType === 'group' ? [] : [...state.areaIds],
     ...mowBody(state.mow),
-    rotation_angles: [...state.rotation],
+    rotation_angles: state.rotationMode === 'list' ? [...state.rotation] : [],
+    rotation_step_deg:
+      state.rotationMode === 'step' ? (parseNumber(state.rotationStep) ?? DEFAULT_STEP) : null,
     rain_pause: {
       enabled: state.rainEnabled,
       probability_threshold: int(state.probability, 60),
@@ -275,6 +290,7 @@ const FIELD_OF_KEY: Record<string, FormField> = {
   blade_height_mm: 'mow',
   speed_mps: 'mow',
   rotation_angles: 'rotation',
+  rotation_step_deg: 'rotation',
   probability_threshold: 'probability',
   precipitation_mm_threshold: 'precipitation',
   lookahead_hours: 'lookahead',
@@ -290,7 +306,7 @@ const FIELD_OF_MESSAGE: [RegExp, FormField][] = [
   [/^interval_days/, 'interval_days'],
   [/^duration_minutes/, 'duration'],
   [/area_ids/, 'areas'],
-  [/^rotation_angles/, 'rotation'],
+  [/^rotation_(angles|step_deg)/, 'rotation'],
   [/^pattern/, 'mow'],
   [/^start settings/, 'mow'],
   [/^(blade_height_mm|speed_mps)/, 'mow'],

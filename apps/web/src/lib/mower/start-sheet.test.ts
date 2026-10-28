@@ -13,7 +13,13 @@ import {
   previewFailure,
   rainStatusOf,
 } from './start-sheet';
-import { StartSheetFlow, type StartSheetContext, type StartSheetDeps } from './start-sheet.svelte';
+import {
+  StartSheetFlow,
+  type RotationDeps,
+  type StartSheetContext,
+  type StartSheetDeps,
+} from './start-sheet.svelte';
+import type { MowerAngles } from '#lib/schedules/rotation.js';
 
 const SQUARE = [
   [0, 0],
@@ -121,6 +127,111 @@ function fake(
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+interface RotationFake {
+  deps: RotationDeps;
+  steps: (number | null)[];
+  records: { areaIds: string[]; angle: number }[];
+}
+
+function rotationFake(state: MowerAngles | Error): RotationFake {
+  const f: RotationFake = {
+    steps: [],
+    records: [],
+    deps: {
+      load: async () => {
+        if (state instanceof Error) throw state;
+        return state;
+      },
+      saveStep: async (step) => {
+        f.steps.push(step);
+      },
+      record: async (areaIds, angle) => {
+        f.records.push({ areaIds, angle });
+      },
+    },
+  };
+  return f;
+}
+
+const ANGLES: MowerAngles = {
+  mower_id: 'm1',
+  manual_step_deg: 45,
+  areas: [
+    {
+      area_id: 'a',
+      angle_deg: 150,
+      used_at: '2026-06-01T10:00:00Z',
+      source: 'schedule',
+      schedule_id: null,
+    },
+  ],
+};
+
+describe('StartSheetFlow angle rotation', () => {
+  it('turns the last angle of the picked areas by the mower step and reports it', async () => {
+    const f = fake();
+    const r = rotationFake(ANGLES);
+    const flow = new StartSheetFlow({ ...f.deps, rotation: r.deps });
+    flow.picked = ['a'];
+    flow.open();
+    await flush();
+    expect(flow.rotate).toBe(true);
+    expect(flow.rotateStep).toBe(45);
+    expect(flow.rotatedAngle).toBe(15); // 150 + 45 = 195, the stripe at 15
+    expect(flow.pattern).toEqual({ ...STRIPES, angle_deg: 15 });
+    // An area without history starts at the sheet's angle.
+    flow.picked = ['b'];
+    flow.patternDraft = { ...flow.patternDraft, angle: 30 };
+    expect(flow.rotatedAngle).toBe(30);
+    flow.picked = ['a'];
+    await flow.start();
+    expect(r.records).toEqual([{ areaIds: ['a'], angle: 15 }]);
+    expect(r.steps).toEqual([]); // the step did not change
+    // The defaults keep the sheet's angle, not the rotated one.
+    expect(f.saved).toEqual([{ ...STRIPES, angle_deg: 30 }]);
+  });
+
+  it('does not advance with an explicit angle and remembers the switch', async () => {
+    const f = fake();
+    const r = rotationFake(ANGLES);
+    const flow = new StartSheetFlow({ ...f.deps, rotation: r.deps });
+    flow.picked = ['a'];
+    flow.open();
+    await flush();
+    flow.rotate = false;
+    expect(flow.rotatedAngle).toBeNull();
+    expect(flow.pattern).toEqual(STRIPES);
+    await flow.start();
+    expect(r.records).toEqual([]);
+    expect(r.steps).toEqual([null]);
+  });
+
+  it('saves a changed step and offers nothing when the Scheduler does not answer', async () => {
+    const off = rotationFake({ ...ANGLES, manual_step_deg: null });
+    const flow = new StartSheetFlow({ ...fake().deps, rotation: off.deps });
+    flow.picked = ['a'];
+    flow.open();
+    await flush();
+    expect(flow.rotate).toBe(false);
+    flow.rotate = true;
+    flow.rotateStep = 90;
+    expect(flow.rotatedAngle).toBe(60);
+    await flow.start();
+    expect(off.steps).toEqual([90]);
+    expect(off.records).toEqual([{ areaIds: ['a'], angle: 60 }]);
+
+    const down = rotationFake(new Error('unreachable'));
+    const failed = new StartSheetFlow({ ...fake().deps, rotation: down.deps });
+    failed.picked = ['a'];
+    failed.open();
+    await flush();
+    expect(failed.rotationFailed).toBe(true);
+    failed.rotate = true;
+    expect(failed.rotationOffered).toBe(false);
+    expect(failed.rotatedAngle).toBeNull();
+  });
+});
 
 describe('previewFailure', () => {
   it('names a timeout and an adapter without previews, else the problem', () => {

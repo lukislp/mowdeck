@@ -1,13 +1,16 @@
 <!--
   The preview of a saved schedule: the rain verdict for the next firing with the forecast strip,
   then the next firings (skipped ones struck through) in the schedule's time zone with a
-  countdown to the first. `dirty` says the form has unsaved changes the preview does not show.
+  countdown to the first, each with the mowing angle it will use (rotation applied, ADR 0061);
+  when the angles change from run to run a dial shows them. `dirty` says the form has unsaved
+  changes the preview does not show.
 -->
 <script lang="ts">
   import { Icon, ProblemNotice } from '@mowdeck/ui';
 
   import type { ApiProblem } from '#lib/api/problem.js';
   import { clock } from '#lib/clock.svelte.js';
+  import AngleDial from '#lib/components/AngleDial.svelte';
   import RainStrip from '#lib/components/RainStrip.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import ToneBadge from '#lib/components/ToneBadge.svelte';
@@ -17,6 +20,7 @@
   import { verdictLook } from '#lib/schedules/labels.js';
   import { hourBars, parsePreview } from '#lib/schedules/preview.js';
   import { formatCountdown, formatFiring } from '#lib/schedules/recurrence.js';
+  import { angleText } from '#lib/schedules/rotation.js';
   import type { Preview, RainPause } from '#lib/schedules/types.js';
 
   interface Props {
@@ -52,6 +56,12 @@
       { p: 0, mm: 0 },
     ),
   );
+
+  /** The angles of the firings that run, in order. */
+  const angles = $derived(
+    view.items.flatMap((item) => (item.skipped || item.angle_deg == null ? [] : [item.angle_deg])),
+  );
+  const rotates = $derived(new Set(angles).size > 1);
 
   $effect(() => clock.hold(30_000));
 
@@ -127,15 +137,49 @@
 
     {#if firings}
       <span class="label">{m.sched_next_firings()}</span>
+      {#if rotates}
+        <div class="rotation" data-testid="preview-rotation">
+          <AngleDial
+            {angles}
+            size={88}
+            label={m.sched_rotation_dial({
+              angles: angles.map((a) => angleText(a, formatNumber)).join(', '),
+            })}
+          />
+          <p class="sequence mono">
+            {angles.map((a) => angleText(a, formatNumber)).join(' → ')}
+          </p>
+        </div>
+      {/if}
       <ol class="firings" data-testid="preview-firings">
         {#each view.items as item, i (item.at)}
           <li class:skipped={item.skipped} data-skipped={item.skipped}>
             <span class="index mono">{i + 1}</span>
             <span class="when mono">{formatFiring(item.at, timeZone, locale)}</span>
+            {#if item.angle_deg != null && !item.skipped}
+              <span
+                class="angle mono"
+                title={m.sched_preview_angle({ angle: angleText(item.angle_deg, formatNumber) })}
+                data-testid="preview-angle"
+              >
+                <svg viewBox="-8 -8 16 16" aria-hidden="true">
+                  <g transform="rotate({-item.angle_deg})">
+                    <line x1="-7" y1="-3.5" x2="7" y2="-3.5" />
+                    <line x1="-7" y1="0" x2="7" y2="0" />
+                    <line x1="-7" y1="3.5" x2="7" y2="3.5" />
+                  </g>
+                </svg>
+                {angleText(item.angle_deg, formatNumber)}
+              </span>
+            {:else}
+              <span></span>
+            {/if}
             {#if item.skipped}
               <span class="flag">{m.sched_skipped()}</span>
             {:else if item === view.next}
               <span class="countdown mono">{formatCountdown(item.at, clock.now, locale)}</span>
+            {:else}
+              <span></span>
             {/if}
           </li>
         {:else}
@@ -206,7 +250,7 @@
 
   .firings li {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto auto;
     align-items: center;
     gap: var(--md-space-2);
     min-height: 40px;
@@ -237,6 +281,40 @@
 
   .countdown {
     font-size: var(--md-font-size-12);
+  }
+
+  .rotation {
+    display: flex;
+    align-items: center;
+    gap: var(--md-space-3);
+  }
+
+  .sequence {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-12);
+  }
+
+  .angle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 6px;
+    border-radius: var(--md-radius-0);
+    background: var(--md-state-mowing-bg);
+    font-size: var(--md-font-size-12);
+  }
+
+  .angle svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .angle line {
+    stroke: var(--md-state-mowing);
+    stroke-width: 1.6;
+    stroke-linecap: round;
   }
 
   .none {

@@ -254,20 +254,29 @@ const CM = 'cm';
  * The settings a schedule sets, as short parts for the list and the editor ("Diagonal",
  * "45°", "2 Randrunden", "Empfindlich", "Zuerst Rand", "Sperrzone 1×", "40 mm", "0,6 m/s");
  * empty when it sets nothing (the mow defaults, else the mower's own). With a rotation list the
- * angles replace the angle ("0°/90°").
+ * angles replace the angle ("0°/90°"); with step rotation the angle is followed by the step
+ * ("30° · +45°/Lauf").
  */
 export function mowSummary(
-  schedule: StoredSettings & { rotation_angles?: readonly number[] },
+  schedule: StoredSettings & {
+    rotation_angles?: readonly number[];
+    rotation_step_deg?: number | null;
+  },
 ): string[] {
   const p: Partial<StoredPattern> = schedule.pattern ?? {};
   const parts: string[] = [];
   const name = patternName(p.name);
   if (name) parts.push(patternLabel(name));
   const rotation = schedule.rotation_angles ?? [];
+  const directed = !name || angleApplies(name);
   if (rotation.length) {
     parts.push(rotation.map((a) => `${formatNumber(((a % 180) + 180) % 180)}°`).join('/'));
-  } else if (finite(p.angle_deg) && (!name || angleApplies(name))) {
+  } else if (finite(p.angle_deg) && directed) {
     parts.push(`${formatNumber(Math.min(ANGLE_MAX, p.angle_deg))}°`);
+  }
+  const step = schedule.rotation_step_deg;
+  if (!rotation.length && finite(step) && directed) {
+    parts.push(m.sched_rotation_step_summary({ step: formatNumber(step, step % 1 ? 1 : 0) }));
   }
   if (finite(p.border_laps)) {
     const laps = Math.min(BORDER_LAPS_MAX, p.border_laps);

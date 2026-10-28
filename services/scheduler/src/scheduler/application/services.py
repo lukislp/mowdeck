@@ -6,6 +6,7 @@ from mowdeck_authz import Authorizer
 from mowdeck_service_kit.entitlements import Entitlements
 
 from scheduler.application.access import Access
+from scheduler.application.angles import AngleService
 from scheduler.application.context import SchedulerConfig
 from scheduler.application.ingest import Ingest
 from scheduler.application.ports import (
@@ -31,6 +32,7 @@ class Services:
     weather: WeatherService
     access: Access
     config: SchedulerConfig
+    angles: AngleService
 
 
 def build_services(
@@ -55,4 +57,5 @@ def build_services(
         weather=weather,
         access=access,
         config=config,
+        angles=AngleService(store, clock),
     )

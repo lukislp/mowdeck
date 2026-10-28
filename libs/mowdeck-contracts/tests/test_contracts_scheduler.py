@@ -106,6 +106,27 @@ def test_contracts_resolve_target_and_run_event() -> None:
         started_at=NOW,
     )
     assert run.mower_id is None and run.outcome == "skipped_rain"
+    assert run.angle_deg is None
+
+
+def test_contracts_run_event_carries_the_angle_of_a_started_run() -> None:
+    base = {
+        "run_id": str(uuid4()),
+        "schedule_id": str(uuid4()),
+        "account_id": str(uuid4()),
+        "trigger": "schedule",
+        "outcome": "started",
+        "scheduled_for": NOW.isoformat(),
+        "started_at": NOW.isoformat(),
+    }
+    run = ScheduleRunRecorded.model_validate({**base, "angle_deg": 135})
+    assert run.angle_deg == 135.0
+    assert ScheduleRunRecorded.model_validate_json(run.model_dump_json()) == run
+    # An event of an older Scheduler has no angle: still valid (tolerant reader).
+    assert ScheduleRunRecorded.model_validate(base).angle_deg is None
+    for angle in (-1, 180, 270):
+        with pytest.raises(ValidationError):
+            ScheduleRunRecorded.model_validate({**base, "angle_deg": angle})
 
 
 def test_contracts_scheduler_subjects_and_command_view_origin() -> None:

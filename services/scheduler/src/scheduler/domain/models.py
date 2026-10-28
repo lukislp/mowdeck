@@ -46,6 +46,9 @@ class Schedule:
     """Mowing speed set before each start (``set_speed``); None keeps the mower's."""
     rotation_angles: list[float] = field(default_factory=list)
     rotation_index: int = 0
+    rotation_step_deg: float | None = None
+    """Step rotation (ADR 0061): each run turns the mower's last angle on its areas by this
+    many degrees; None: off. Excludes ``rotation_angles``."""
     rain: dict[str, Any] = field(default_factory=dict)
     pause_running_jobs_on_rain: bool = True
     return_to_dock_at_window_end: bool = False
@@ -96,6 +99,9 @@ class ScheduleRun:
     """For started runs: what happened afterwards (``rain_dock``, ``window_dock``,
     ``finished``, ``closed``); None while the job may still need a return to the dock."""
     followup_at: datetime | None = None
+    angle_deg: float | None = None
+    """For started runs: the mowing angle the start sent (None: the pattern has no direction
+    or the run did not start)."""
 
 
 @dataclass(slots=True)

@@ -69,6 +69,7 @@
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import SpotRunBar from '#lib/components/SpotRunBar.svelte';
   import SpotSheet from '#lib/components/SpotSheet.svelte';
+  import StartRotation from '#lib/components/StartRotation.svelte';
   import ToneBadge from '#lib/components/ToneBadge.svelte';
   import { loadConfig, type MapTilesConfig } from '#lib/config.js';
   import { getTracking } from '#lib/tracking/api.js';
@@ -318,6 +319,31 @@
             }
           : null,
     }),
+    // Angle rotation of manual starts (ADR 0061): the Scheduler keeps the last angle per area.
+    rotation: {
+      load: () =>
+        unwrap(
+          schedulerApi.GET('/api/v1/scheduler/mowers/{mower_id}/angles', {
+            params: { path: { mower_id: id } },
+          }),
+        ),
+      saveStep: async (step) => {
+        await unwrap(
+          schedulerApi.PUT('/api/v1/scheduler/mowers/{mower_id}/angles/settings', {
+            params: { path: { mower_id: id } },
+            body: { manual_step_deg: step },
+          }),
+        );
+      },
+      record: async (areaIds, angle) => {
+        await unwrap(
+          schedulerApi.POST('/api/v1/scheduler/mowers/{mower_id}/angles', {
+            params: { path: { mower_id: id } },
+            body: { area_ids: areaIds, angle_deg: angle },
+          }),
+        );
+      },
+    },
   });
 
   // Spot mowing (ADR 0039): the spot on the map, the sheet's settings, the Planner preview, the
@@ -2027,6 +2053,7 @@
               {bladeRange}
               {speedRange}
             />
+            <StartRotation flow={sheet} />
           {:else}
             <p class="hint" data-testid="start-no-patterns">{m.start_no_patterns()}</p>
           {/if}
