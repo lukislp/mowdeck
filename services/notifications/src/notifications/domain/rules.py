@@ -77,6 +77,7 @@ from mowdeck_contracts.v1 import (
 from notifications.domain.geofence import Fence, distance_outside
 from notifications.domain.models import (
     ALARM_KINDS,
+    MaintenanceWindow,
     MowerWatch,
     NotificationEvent,
     RuleConfig,
@@ -134,7 +135,18 @@ def _go_offline(
     now: datetime,
     config: RuleConfig,
     events: list[NotificationEvent],
+    window: MaintenanceWindow | None = None,
 ) -> MowerWatch:
+    if window is not None and window.holds(since, now, config):
+        # A restart of the deploy broke the link: no offline now, and so no online later. The
+        # sweep announces it if the mower is still offline when the window and its grace are over.
+        return watch.evolve(
+            offline=True,
+            offline_since=since,
+            offline_notified=False,
+            offline_held=True,
+            disconnected_at=None,
+        )
     event = NotificationEvent.of(
         NotificationKind.MOWER_OFFLINE,
         watch.mower_id,
@@ -147,8 +159,39 @@ def _go_offline(
     )
     watch, sent = _emit(watch, event, now, config, events)
     return watch.evolve(
-        offline=True, offline_since=since, offline_notified=sent, disconnected_at=None
+        offline=True,
+        offline_since=since,
+        offline_notified=sent,
+        offline_held=False,
+        disconnected_at=None,
     )
+
+
+def release_held_offline(
+    watch: MowerWatch, now: datetime, config: RuleConfig, window: MaintenanceWindow | None
+) -> Outcome:
+    """Announce an offline that was held back once the window and its grace are over.
+
+    The mower is still offline then (a come-back clears the hold), so this is a real outage.
+    """
+    events: list[NotificationEvent] = []
+    if not (watch.offline and watch.offline_held):
+        return watch, events
+    if window is not None and now <= window.held_until(config.maintenance_grace_seconds):
+        return watch, events
+    since = watch.offline_since or now
+    event = NotificationEvent.of(
+        NotificationKind.MOWER_OFFLINE,
+        watch.mower_id,
+        watch.account_id,
+        now,
+        since.isoformat(),
+        variant="no_state",
+        reason="no_state",
+        minutes=_minutes(now - since),
+    )
+    watch, sent = _emit(watch, event, now, config, events)
+    return watch.evolve(offline_notified=sent, offline_held=False), events
 
 
 def _come_online(
@@ -167,7 +210,9 @@ def _come_online(
             minutes=_minutes(now - since),
         )
         watch, _ = _emit(watch, event, now, config, events)
-    return watch.evolve(offline=False, offline_since=None, offline_notified=False)
+    return watch.evolve(
+        offline=False, offline_since=None, offline_notified=False, offline_held=False
+    )
 
 
 def is_lift(state: MowerState, config: RuleConfig) -> bool:
@@ -366,8 +411,10 @@ def observe_state(
     now: datetime,
     config: RuleConfig,
     fence: Fence | None = None,
+    window: MaintenanceWindow | None = None,
 ) -> Outcome:
-    """Apply one state of the mower (``fence``: its geofence, when a map is known)."""
+    """Apply one state of the mower (``fence``: its geofence, when a map is known; ``window``:
+    the deploy maintenance window, if one was open)."""
     events: list[NotificationEvent] = []
     if watch is None or watch.account_id != state.account_id:
         # First sight (or the mower changed accounts): remember the state, notify nothing, so a
@@ -397,7 +444,7 @@ def observe_state(
 
     if activity is MowerActivity.OFFLINE:
         if not w.offline:
-            w = _go_offline(w, observed, "reported", now, config, events)
+            w = _go_offline(w, observed, "reported", now, config, events, window)
         return w.evolve(activity=activity.value, battery_percent=state.battery_percent), events
     w = _come_online(w, now, config, events)
 
@@ -529,6 +576,7 @@ def observe_connection(
     at: datetime,
     now: datetime,
     config: RuleConfig,
+    window: MaintenanceWindow | None = None,
 ) -> Outcome:
     """Apply ``mower.connected`` (``connected=True``) or ``mower.disconnected``."""
     events: list[NotificationEvent] = []
@@ -541,7 +589,7 @@ def observe_connection(
     if w.offline:
         return w, events
     if config.disconnect_grace_seconds <= 0:
-        return _go_offline(w, at, "disconnected", now, config, events), events
+        return _go_offline(w, at, "disconnected", now, config, events, window), events
     if w.disconnected_at is None:
         w = w.evolve(disconnected_at=at)
     return w, events
@@ -558,7 +606,12 @@ def offline_due(watch: MowerWatch, now: datetime, config: RuleConfig) -> bool:
     return now - watch.last_seen_at >= timedelta(seconds=config.offline_after_seconds)
 
 
-def check_offline(watch: MowerWatch, now: datetime, config: RuleConfig) -> Outcome:
+def check_offline(
+    watch: MowerWatch,
+    now: datetime,
+    config: RuleConfig,
+    window: MaintenanceWindow | None = None,
+) -> Outcome:
     """The timer rule: no state for too long, or a disconnect without a reconnect."""
     events: list[NotificationEvent] = []
     if not offline_due(watch, now, config):
@@ -566,9 +619,9 @@ def check_offline(watch: MowerWatch, now: datetime, config: RuleConfig) -> Outco
     grace = timedelta(seconds=config.disconnect_grace_seconds)
     if watch.disconnected_at is not None and now - watch.disconnected_at >= grace:
         return _go_offline(
-            watch, watch.disconnected_at, "disconnected", now, config, events
+            watch, watch.disconnected_at, "disconnected", now, config, events, window
         ), events
-    return _go_offline(watch, watch.last_seen_at, "no_state", now, config, events), events
+    return _go_offline(watch, watch.last_seen_at, "no_state", now, config, events, window), events
 
 
 def observe_command(watch: MowerWatch, issued_at: datetime, *, drive: bool) -> MowerWatch:

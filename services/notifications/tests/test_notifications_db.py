@@ -43,6 +43,7 @@ from notifications.domain.models import (
     DeliveryStatus,
     DirectoryEntry,
     InboxItem,
+    MaintenanceWindow,
     Message,
     MowerWatch,
     NewDelivery,
@@ -761,6 +762,32 @@ async def test_notifications_apns_db_concurrent_first_registration_is_retried(
             ApnsDevice(uuid4(), user, account, "b2" * 32, None, T0, install)
         )
         assert calls == 2 and again.id == winner.id and again.token == "b2" * 32
+
+
+@pytest.mark.parametrize("kind", KINDS)
+async def test_notifications_maintenance_db_window_and_held_offline(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account, held, plain = uuid4(), uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        assert await store.maintenance_window() is None
+        first = MaintenanceWindow(opened_at=T0, expires_at=T0 + seconds(900))
+        await store.put_maintenance_window(first)
+        assert await store.maintenance_window() == first
+        closed = MaintenanceWindow(
+            opened_at=T0, expires_at=T0 + seconds(900), closed_at=T0 + seconds(60), reason="x"
+        )
+        await store.put_maintenance_window(closed)  # replaces: one window per installation
+        assert await store.maintenance_window() == closed
+        async with store.transaction() as tx:
+            await tx.put_watch(
+                MowerWatch(held, account, T0, offline=True, offline_since=T0, offline_held=True)
+            )
+            await tx.put_watch(MowerWatch(plain, account, T0, offline=True, offline_since=T0))
+        async with store.transaction() as tx:
+            found = await tx.held_offline(10)
+            assert [w.mower_id for w in found] == [held]
+            assert found[0].offline_held
 
 
 @pytest.mark.parametrize("kind", KINDS)

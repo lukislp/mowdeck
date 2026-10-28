@@ -21,6 +21,7 @@ from notifications.domain.models import (
     DeliveryStatus,
     DirectoryEntry,
     InboxItem,
+    MaintenanceWindow,
     Message,
     MowerWatch,
     NewDelivery,
@@ -63,6 +64,7 @@ class _Data:
     inbox: dict[UUID, InboxItem] = field(default_factory=dict)
     deliveries: dict[UUID, DeliveryRow] = field(default_factory=dict)
     geofences: dict[UUID, MowerFence] = field(default_factory=dict)
+    maintenance: dict[int, MaintenanceWindow] = field(default_factory=dict)
     silences: dict[tuple[UUID, UUID, str], datetime] = field(default_factory=dict)
     images: dict[UUID, NotificationImage] = field(default_factory=dict)
     activity_devices: dict[tuple[UUID, UUID], ActivityDevice] = field(default_factory=dict)
@@ -91,6 +93,11 @@ class _MemoryTx:
                 or (w.disconnected_at is not None and w.disconnected_at <= disconnected_before)
             )
         ]
+        found.sort(key=lambda w: w.last_seen_at)
+        return found[:limit]
+
+    async def held_offline(self, limit: int) -> list[MowerWatch]:
+        found = [w for w in self._data.watches.values() if w.offline and w.offline_held]
         found.sort(key=lambda w: w.last_seen_at)
         return found[:limit]
 
@@ -135,6 +142,12 @@ class MemoryStore:
 
     async def geofence(self, mower_id: UUID) -> MowerFence | None:
         return self.data.geofences.get(mower_id)
+
+    async def maintenance_window(self) -> MaintenanceWindow | None:
+        return self.data.maintenance.get(1)
+
+    async def put_maintenance_window(self, window: MaintenanceWindow) -> None:
+        self.data.maintenance[1] = window
 
     async def preferences(self, user_id: UUID, account_id: UUID) -> Preferences | None:
         return self.data.preferences.get((user_id, account_id))

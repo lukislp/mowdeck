@@ -35,18 +35,22 @@ from notifications.application.live_activity import LiveActivities
 from notifications.application.ports import Clock, Store
 from notifications.domain.errors import AccountMismatchError
 from notifications.domain.geofence import Fence, MowerFence
-from notifications.domain.models import DirectoryEntry, NotificationEvent
+from notifications.domain.models import DirectoryEntry, MaintenanceWindow, NotificationEvent
 from notifications.domain.rules import (
     check_offline,
     observe_blade_hours,
     observe_command,
     observe_connection,
     observe_state,
+    release_held_offline,
     vision_no_photo_event,
     vision_proposal_event,
 )
 
 _log = get_logger("notifications.watcher")
+
+WINDOW_CACHE = timedelta(seconds=2)
+"""How long a replica reuses the maintenance window it read (states come every 10 s per mower)."""
 
 COMMAND_RESOLUTION = timedelta(seconds=5)
 """A replica skips a command less than this newer than the last one it recorded for the mower
@@ -70,6 +74,16 @@ class Watcher:
         self._config = config
         self._clock = clock
         self._recorded: dict[tuple[UUID, bool], datetime] = {}
+        self._window: tuple[datetime, MaintenanceWindow | None] | None = None
+
+    async def _maintenance(self, now: datetime) -> MaintenanceWindow | None:
+        """The maintenance window, read at most every :data:`WINDOW_CACHE`."""
+        cached = self._window
+        if cached is not None and now - cached[0] < WINDOW_CACHE:
+            return cached[1]
+        window = await self._store.maintenance_window()
+        self._window = (now, window)
+        return window
 
     async def _check_account(self, mower_id: UUID, account_id: UUID, what: str) -> None:
         entry = await self._store.directory_entry(mower_id)
@@ -91,9 +105,10 @@ class Watcher:
             stored.fence if stored is not None and stored.account_id == state.account_id else None
         )
         now = self._clock()
+        window = await self._maintenance(now)
         async with self._store.transaction() as tx:
             watch, events = observe_state(
-                await tx.watch(state.mower_id), state, now, self._config.rules, fence
+                await tx.watch(state.mower_id), state, now, self._config.rules, fence, window
             )
             await tx.put_watch(watch)
         await self._fanout.dispatch(events)
@@ -110,6 +125,7 @@ class Watcher:
             msg = "the event's account differs from the mower directory"
             raise AccountMismatchError(msg)
         now = self._clock()
+        window = await self._maintenance(now)
         async with self._store.transaction() as tx:
             watch, events = observe_connection(
                 await tx.watch(mower_id),
@@ -119,6 +135,7 @@ class Watcher:
                 at=at,
                 now=now,
                 config=self._config.rules,
+                window=window,
             )
             await tx.put_watch(watch)
         await self._fanout.dispatch(events)
@@ -206,6 +223,7 @@ class Watcher:
         now = self._clock()
         rules = self._config.rules
         events: list[NotificationEvent] = []
+        window = await self._maintenance(now)
         async with self._store.transaction() as tx:
             candidates = await tx.offline_candidates(
                 now - timedelta(seconds=rules.offline_after_seconds),
@@ -213,8 +231,13 @@ class Watcher:
                 self._config.offline_batch_size,
             )
             for watch in candidates:
-                updated, derived = check_offline(watch, now, rules)
+                updated, derived = check_offline(watch, now, rules, window)
                 if updated != watch:
+                    await tx.put_watch(updated)
+                events.extend(derived)
+            for held in await tx.held_offline(self._config.offline_batch_size):
+                updated, derived = release_held_offline(held, now, rules, window)
+                if updated != held:
                     await tx.put_watch(updated)
                 events.extend(derived)
         await self._fanout.dispatch(events)

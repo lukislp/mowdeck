@@ -18,6 +18,7 @@ from notifications.domain.models import (
     DeliveryStatus,
     DirectoryEntry,
     InboxItem,
+    MaintenanceWindow,
     MowerWatch,
     NewDelivery,
     NotificationImage,
@@ -120,6 +121,11 @@ class Tx(Protocol):
         """Watches due for the offline rule, locked; rows locked elsewhere are skipped."""
         ...
 
+    async def held_offline(self, limit: int) -> list[MowerWatch]:
+        """Watches whose offline is held back by a maintenance window, locked; rows locked
+        elsewhere are skipped."""
+        ...
+
     async def put_directory(self, entry: DirectoryEntry, *, replace: bool) -> None:
         """Insert a directory entry; with ``replace`` also overwrite an existing one."""
         ...
@@ -185,6 +191,16 @@ class Store(ActivityStore, Protocol):
 
     async def geofence(self, mower_id: UUID) -> MowerFence | None:
         """The stored geofence of a mower."""
+        ...
+
+    # --- maintenance window --------------------------------------------------------------
+
+    async def maintenance_window(self) -> MaintenanceWindow | None:
+        """The deploy maintenance window (the latest one opened), None when never opened."""
+        ...
+
+    async def put_maintenance_window(self, window: MaintenanceWindow) -> None:
+        """Replace the maintenance window."""
         ...
 
     # --- preferences ---------------------------------------------------------------------
