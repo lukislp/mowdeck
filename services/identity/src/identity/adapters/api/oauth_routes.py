@@ -25,7 +25,7 @@ from fastapi import APIRouter, Cookie, Request, Response
 from fastapi.responses import RedirectResponse
 
 from identity.adapters.api.auth_routes import set_refresh_cookie
-from identity.adapters.api.deps import Ctx, PublicCtx, ServicesDep
+from identity.adapters.api.deps import Ctx, FreshAuth, PublicCtx, ServicesDep
 from identity.adapters.api.schemas import (
     ExternalIdentityOut,
     ExternalLinkIn,
@@ -129,13 +129,17 @@ async def link_external_identity(
     ctx: Ctx,
 ) -> OAuthStartOut:
     """Start linking an account of a login provider to the caller: the current password again
-    (the login limits apply), then the provider's authorization URL and the binding cookie.
+    (the login limits apply) or, without it, a recent step-up confirmation, then the provider's
+    authorization URL and the binding cookie.
     409 when an account of this provider is already linked."""
     start = await services.external.start_link(ctx, provider, body.password)
     return _bind_browser(request, response, start)
 
 
 @router.delete("/me/external-identities/{provider}", status_code=204)
-async def unlink_external_identity(provider: str, services: ServicesDep, ctx: Ctx) -> None:
-    """Remove the caller's link to a login provider (always allowed; the password stays)."""
+async def unlink_external_identity(
+    provider: str, _: FreshAuth, services: ServicesDep, ctx: Ctx
+) -> None:
+    """Remove the caller's link to a login provider (the password stays). Step-up: a stolen
+    session must not be able to strip the owner's ways in unnoticed."""
     await services.external.unlink(ctx, provider)

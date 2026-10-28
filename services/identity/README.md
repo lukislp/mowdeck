@@ -49,9 +49,12 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | GET | `/api/v1/identity/ui-areas` | token only | Areas of the web app shell: the `ui_areas` of Identity's own descriptor and of the last descriptor every module URL answered with, filtered to the areas whose `required_permission` the caller holds; each with `module`, `module_version`, `route`, `menu_label`, `labels`, `required_permission`. `Cache-Control: private, max-age=300` |
 | POST | `/api/v1/identity/session/logout-all` | token only (users) | Ends every session of the caller |
 | GET | `/api/v1/identity/me/passkeys` | token only (users) | The caller's passkeys (no key material) |
-| POST | `/api/v1/identity/me/passkeys/options` | token only (users) | `{password}` (re-authentication, the username throttle applies): creation options and `ceremony_id` |
+| POST | `/api/v1/identity/me/step-up/password` | token only (users) | Step-up (ADR 0057): `{password}` gives a new access token with `auth_time` = now (login limits, failures counted; audited `step_up.succeeded` / `step_up.reauth_failed`). API tokens: 403 |
+| POST | `/api/v1/identity/me/step-up/passkey/options` | token only (users) | Step-up with a passkey: options (user verification required) and `ceremony_id` |
+| POST | `/api/v1/identity/me/step-up/passkey` | token only (users) | `{ceremony_id, credential}`: must be a passkey of the caller; a new access token with `auth_time` = now (`amr` `passkey`) |
+| POST | `/api/v1/identity/me/passkeys/options` | token only (users) | `{password?}` (re-authentication, the username throttle applies; without it a recent step-up is required): creation options and `ceremony_id` |
 | POST | `/api/v1/identity/me/passkeys` | token only (users) | `{ceremony_id, credential, name?}`: verifies and stores the passkey, 201; 409 for a known credential or more than 20 |
-| PATCH, DELETE | `/api/v1/identity/me/passkeys/{passkey_id}` | token only (users) | Rename `{name}`; remove (the password always stays) |
+| PATCH, DELETE | `/api/v1/identity/me/passkeys/{passkey_id}` | token only (users) | Rename `{name}`; remove (the password always stays; **needs a recent step-up**) |
 | GET | `/api/v1/identity/me/external-identities` | token only (users) | The caller's linked provider accounts: `[{provider, display_name, linked_at, last_used_at}]` |
 | POST | `/api/v1/identity/me/external-identities/{provider}/link` | token only (users) | `{password}` (re-authentication, the login limits apply): `{authorize_url, expires_in}` and the binding cookie; 409 when an account of that provider is already linked |
 | DELETE | `/api/v1/identity/me/external-identities/{provider}` | token only (users) | Unlink (always allowed, also with the provider turned off; the password stays), 204; 404 when nothing is linked |
@@ -103,6 +106,10 @@ The catalogue holds every key of the authorization model (always present, with t
 ### Token claims
 
 `sub`, `acc`, `kind` (`user`, `subuser`, `api_token`), `name`, `roles`, `perms` (keys held anywhere in the account: an upper bound for pre-filters, never a grant), `plan` (asked from Entitlements at issue through the kit client with its cache; `unlimited` while billing is disabled, also when Entitlements does not answer; empty with billing enabled and no answer; informational, services decide through the client, [ADR 0028](../../docs/adr/0028-entitlements-plans-and-enforcement.md)), `sid` (login session), `jti`, `iss` (`MOWDECK_IDENTITY_ISSUER`), `aud` (`mowdeck-api`), `iat`, `nbf`, `exp` (10 minutes). Header `{"alg": "EdDSA", "kid", "typ": "at+jwt"}`.
+
+## Step-up re-authentication (ADR 0057)
+
+Critical actions need the user to have confirmed with a passkey or the password within `MOWDECK_AUTH_STEP_UP_MAX_AGE_SECONDS` (default 300, 30 to 3600; set the same value for every service). The access token carries `auth_time` and `amr`; they live on the login session (`sessions.auth_time`, `auth_method`), a login sets them (password, passkey, GitHub, Apple), a refresh copies them and `/me/step-up/*` renews them with a new access token. Identity's own routes use `FreshAuth` (`require_recent_auth()` of `mowdeck-auth`): without a recent confirmation the answer is `401 urn:mowdeck:problem:reauth-required` (`WWW-Authenticate: Bearer error="insufficient_user_authentication", max_age="300"`), for API tokens `403 urn:mowdeck:problem:step-up-unavailable`. Protected here: create an API token, create/delete a user or sub-user, set a sub-user's password, assign/unassign roles and change a role, remove a passkey (own or a sub-user's), unlink GitHub/Apple; adding a passkey, linking a provider and deleting the account accept the old `password` field or, without it, a recent step-up. Fleet protects deleting a mower and removing a linked cloud account the same way. Audit: `step_up.succeeded`, `step_up.failed`, `step_up.reauth_failed`.
 
 ## Events
 

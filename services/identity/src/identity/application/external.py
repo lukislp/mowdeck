@@ -103,9 +103,11 @@ class ExternalIdentityService:
         async with self.deps.store.transaction() as tx:
             return await tx.external_identities.find(user_id=principal.subject, order_by="provider")
 
-    async def start_link(self, ctx: RequestContext, provider: str, password: str) -> RedirectStart:
-        """Check the password again, then send the browser to the provider to pick the account
-        that is linked to the caller."""
+    async def start_link(
+        self, ctx: RequestContext, provider: str, password: str | None
+    ) -> RedirectStart:
+        """Check the password again (or a recent step-up confirmation), then send the browser to the
+        provider to pick the account that is linked to the caller."""
         principal = self._user(ctx)
         redirector = self.sessions.redirector(self._provider(provider))
         await self.reauth.check(ctx, principal, password, action="external_identity")

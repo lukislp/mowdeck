@@ -10,6 +10,7 @@ Runs when ``MOWDECK_TEST_OPENFGA_URL`` (and ``MOWDECK_TEST_OPENFGA_TOKEN``) is s
 """
 
 import os
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -56,7 +57,13 @@ async def test_fleet_openfga_tuples_show_the_mower_to_its_owner_only() -> None:
     authz = OpenFgaAuthorizer(connection)
     backend = OpenFgaTupleBackend(connection)
     keys = TestKeys()
-    lukas = Principal(subject=uuid4(), account_id=uuid4(), kind=PrincipalKind.USER)
+    lukas = Principal(
+        subject=uuid4(),
+        account_id=uuid4(),
+        kind=PrincipalKind.USER,
+        auth_time=datetime.now(UTC),  # confirmed just now (step-up, ADR 0057): he deletes the mower
+        auth_methods=["pwd"],
+    )
     bob = Principal(subject=uuid4(), account_id=uuid4(), kind=PrincipalKind.USER)
     identity = TupleWriter(backend, owner="identity")
     for person in (lukas, bob):

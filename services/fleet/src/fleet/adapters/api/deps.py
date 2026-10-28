@@ -11,6 +11,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
+from mowdeck_auth import require_recent_auth
 from mowdeck_authz import Relation
 from mowdeck_authz.fastapi import path_object, principal_account, require, require_or_not_found
 from mowdeck_contracts.v1 import Principal, ProblemFieldError
@@ -56,6 +57,10 @@ from fleet.domain.errors import (
     PlanLimitError,
     Unavailable,
 )
+
+FreshAuth = Annotated[Principal, Depends(require_recent_auth())]
+"""Critical action (ADR 0057): 401 ``reauth-required`` unless the caller confirmed with a passkey
+or the password recently, 403 for API tokens. Declare it after the permission dependency."""
 
 
 class CameraUnsupported(Conflict):

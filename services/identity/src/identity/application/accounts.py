@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from mowdeck_auth.step_up import ensure_recent_auth
 from mowdeck_authz import Subject, api_token, user
 from mowdeck_contracts.v1 import (
     IDENTITY_ACCOUNT_CREATED,
@@ -245,9 +246,10 @@ class AccountService:
         return acct
 
     async def request_deletion(
-        self, account_id: UUID, password: str, ctx: RequestContext
+        self, account_id: UUID, password: str | None, ctx: RequestContext
     ) -> Account:
-        """Lock the account for the grace period (owner only, password re-entry).
+        """Lock the account for the grace period (owner only, password re-entry or a recent
+        step-up confirmation, ADR 0057).
 
         API tokens are revoked and the sessions of other members end; the owner keeps access
         to restore the account. The purge after the grace period is a later job.
@@ -255,12 +257,16 @@ class AccountService:
         if ctx.principal is None:
             msg = "login required"
             raise ForbiddenError(msg)
+        if password is None:
+            ensure_recent_auth(ctx.principal, now=self.deps.clock())
         async with self.deps.store.transaction() as tx:
             actor = await tx.users.get(id=ctx.principal.subject)
-        if (
-            actor is None
-            or actor.password_hash is None
-            or not await self.deps.hasher.verify(actor.password_hash, password)
+        if actor is None or (
+            password is not None
+            and (
+                actor.password_hash is None
+                or not await self.deps.hasher.verify(actor.password_hash, password)
+            )
         ):
             raise AuthenticationFailed("password re-entry failed")
         now = self.deps.clock()

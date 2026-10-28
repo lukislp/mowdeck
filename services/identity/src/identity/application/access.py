@@ -10,6 +10,7 @@ Anti-escalation (design section 3.6): an actor can only hand out what it holds i
 """
 
 from collections.abc import Iterable
+from datetime import datetime
 from uuid import UUID
 
 from mowdeck_authz import PERMISSION_RELATIONS, Authorizer, CheckItem, user
@@ -51,6 +52,8 @@ async def user_principal(
     catalogue: Catalogue,
     *,
     session_id: UUID | None,
+    auth_time: datetime | None = None,
+    auth_method: str | None = None,
 ) -> Principal:
     """The principal (token claims) of a user acting in an account."""
     roles, perms = token_permissions(membership, await held_roles(tx, acct.id, found.id), catalogue)
@@ -63,6 +66,8 @@ async def user_principal(
         permissions=perms,
         plan=acct.plan,
         session_id=session_id,
+        auth_time=auth_time,
+        auth_methods=[auth_method] if auth_time is not None and auth_method else [],
     )
 
 
