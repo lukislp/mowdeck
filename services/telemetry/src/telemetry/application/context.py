@@ -1,7 +1,9 @@
 """Configuration of the use cases (built from the settings)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
+
+from telemetry.domain.thinning import ThinPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,7 +20,19 @@ class TelemetryConfig:
     states_limit: int = 200
     stale_after: timedelta = timedelta(seconds=60)
     retention_history: timedelta = timedelta(days=30)
-    retention_positions: timedelta = timedelta(days=90)
+    retention_positions: timedelta = timedelta(days=730)
+    """Positions older than this are deleted; zero keeps them forever."""
+    positions_detail: timedelta = timedelta(days=90)
+    """Positions newer than this are never thinned (also the floor for theft tracking)."""
+    thinning_enabled: bool = True
+    thin_policy: ThinPolicy = field(default_factory=ThinPolicy)
+    thinning_zone: str = "UTC"
+    """Time zone of the maintenance window."""
+    thinning_window_start_hour: int = 1
+    thinning_window_end_hour: int = 5
+    """Thinning runs while the local hour is in [start, end); equal means always."""
+    thinning_budget: timedelta = timedelta(minutes=15)
+    """Longest one thinning round runs before it yields the lock."""
     retention_commands: timedelta = timedelta(days=30)
     retention_batch_size: int = 5000
     blade_hours_threshold: float = 50.0
