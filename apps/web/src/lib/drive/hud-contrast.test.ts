@@ -73,10 +73,10 @@ function contrast(a: string, b: string): number {
 
 /** Every rule of the page's style block that fills its plate with `--md-hud-ink`. */
 function litRules(): { selector: string; color: string | null }[] {
+  // The CSS after the opening tag of the style block, without comments.
   const style = drivePage
-    .slice(drivePage.indexOf('<style'))
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/<style[^>]*>/, '');
+    .slice(drivePage.indexOf('>', drivePage.indexOf('<style')) + 1)
+    .replace(/\/\*[\s\S]*?\*\//g, '');
   const rules: { selector: string; color: string | null }[] = [];
   for (const match of style.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const body = match[2]!;
