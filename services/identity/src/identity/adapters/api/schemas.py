@@ -21,6 +21,7 @@ from identity.domain.models import (
     Passkey,
     Role,
     RoleAssignment,
+    TokenPurpose,
 )
 
 Password = Annotated[str, StringConstraints(min_length=1, max_length=256)]
@@ -475,6 +476,10 @@ class ApiTokenOut(BaseModel):
     expires_at: datetime | None
     last_used_at: datetime | None
     revoked_at: datetime | None
+    purpose: TokenPurpose = Field(
+        description="`integration` (created by an admin) or `personal` (a user's own personal "
+        "access token, ADR 0064)"
+    )
     token: str | None = Field(default=None, description="The secret, returned only at creation")
 
     @classmethod
@@ -487,6 +492,68 @@ class ApiTokenOut(BaseModel):
             created_by=t.created_by,
             grants=t.grants,
             permissions=t.permissions,
+            created_at=t.created_at,
+            expires_at=t.expires_at,
+            last_used_at=t.last_used_at,
+            revoked_at=t.revoked_at,
+            purpose=t.purpose,
+            token=secret,
+        )
+
+
+class PersonalTokenIn(In):
+    """``POST /me/api-tokens``: a personal access token for the caller's own scripts."""
+
+    name: str = Field(min_length=1, max_length=100, examples=["Garden dashboard script"])
+    scopes: list[PermissionKey] = Field(
+        min_length=1,
+        max_length=3,
+        examples=[["mower.view", "mower.control"]],
+        description="From `mower.view` (read state, telemetry, history, realtime), "
+        "`mower.control` (start, pause, resume, dock) and `schedule.edit`; `mower.view` is "
+        "required with any other. Each must be held by the caller on `level`.",
+    )
+    expires_in_days: int = Field(
+        ge=1, le=365, examples=[90], description="The token stops working after this many days."
+    )
+    level: LevelIn | None = Field(
+        default=None,
+        description="Where the scopes apply; default the whole account (a site, group or "
+        "mower of the account limits the token to it).",
+    )
+
+
+class PersonalTokenOut(BaseModel):
+    """A personal access token (never with its secret, except once at creation)."""
+
+    id: UUID
+    name: str
+    prefix: str = Field(description="The first characters of the secret, to recognise it")
+    scopes: list[str]
+    level: LevelOut
+    created_at: datetime
+    expires_at: datetime
+    last_used_at: datetime | None = Field(
+        description="Last exchange for an access token (updated at most every few minutes)"
+    )
+    revoked_at: datetime | None
+    token: str | None = Field(
+        default=None,
+        description="The secret (`mdk_...`), returned only at creation. Exchange it at "
+        "`POST /api/v1/identity/token` for 10 minute access tokens.",
+    )
+
+    @classmethod
+    def of(cls, t: ApiToken, secret: str | None = None) -> "PersonalTokenOut":
+        """From the entity (a personal token always has one grant and an expiry)."""
+        grant = t.token_grants[0]
+        assert t.expires_at is not None  # noqa: S101 - personal tokens always expire
+        return cls(
+            id=t.id,
+            name=t.name,
+            prefix=t.prefix,
+            scopes=list(grant.permissions),
+            level=LevelOut(type=grant.level.type.value, id=grant.level.id),
             created_at=t.created_at,
             expires_at=t.expires_at,
             last_used_at=t.last_used_at,

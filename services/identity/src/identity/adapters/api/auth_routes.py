@@ -8,7 +8,7 @@ from mowdeck_authz import PLATFORM_OBJECT, CheckItem, ObjectRef, principal_subje
 from mowdeck_service_kit.errors import BadRequest, ValidationFailed
 from pydantic import BaseModel, Field
 
-from identity.adapters.api.deps import Ctx, PublicCtx, ServicesDep
+from identity.adapters.api.deps import Ctx, FreshAuth, PublicCtx, ServicesDep
 from identity.adapters.api.schemas import (
     AppCodeIn,
     AppCodeOut,
@@ -19,6 +19,8 @@ from identity.adapters.api.schemas import (
     MeOut,
     PasswordChangeIn,
     PermissionsIn,
+    PersonalTokenIn,
+    PersonalTokenOut,
     RefreshIn,
     RegisteredOut,
     RegisterIn,
@@ -246,6 +248,41 @@ async def create_widget_credential(
 async def revoke_widget_credential(token_id: UUID, services: ServicesDep, ctx: Ctx) -> None:
     """Revoke one of the caller's widget credentials (404 for any other token)."""
     await services.tokens.revoke_widget_credential(_account_of(ctx), token_id, ctx)
+
+
+@router.get("/me/api-tokens", tags=["identity: personal access tokens"])
+async def list_personal_tokens(services: ServicesDep, ctx: Ctx) -> list[PersonalTokenOut]:
+    """The caller's personal access tokens (ADR 0064), newest first, without secrets. Users
+    only: an API token gets 403, so a token never sees or manages tokens."""
+    found = await services.tokens.list_personal(_account_of(ctx), ctx)
+    return [PersonalTokenOut.of(t) for t in found]
+
+
+@router.post("/me/api-tokens", status_code=201, tags=["identity: personal access tokens"])
+async def create_personal_token(
+    body: PersonalTokenIn, response: Response, _: FreshAuth, services: ServicesDep, ctx: Ctx
+) -> PersonalTokenOut:
+    """Create a personal access token for your own scripts: curated scopes, an expiry of at
+    most 365 days, at most 25 active per user. Needs a recent step-up (ADR 0057): without it
+    401 `reauth-required`; API tokens get 403. The secret is in the response once."""
+    created = await services.tokens.create_personal(
+        _account_of(ctx),
+        body.name,
+        body.scopes,
+        body.expires_in_days,
+        body.level.level() if body.level else None,
+        ctx,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return PersonalTokenOut.of(created.token, created.secret)
+
+
+@router.delete(
+    "/me/api-tokens/{token_id}", status_code=204, tags=["identity: personal access tokens"]
+)
+async def revoke_personal_token(token_id: UUID, services: ServicesDep, ctx: Ctx) -> None:
+    """Revoke one of your personal access tokens at once (404 for any other token)."""
+    await services.tokens.revoke_personal(_account_of(ctx), token_id, ctx)
 
 
 @router.get("/me")

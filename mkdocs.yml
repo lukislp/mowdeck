@@ -14,6 +14,8 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -102,6 +104,7 @@ nav:
       - adr/0058-theft-tracking-mode.md
       - adr/0059-ios-widgets-and-live-activity.md
       - adr/0060-apple-watch-app.md
+      - adr/0064-personal-access-tokens-and-public-api-docs.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -141,4 +144,18 @@ nav:
       - guides/step-up.md
       - guides/ios-widgets.md
       - guides/apple-watch.md
+      - guides/scripting.md
+  - API reference:
+      - reference/api/index.md
+      - reference/api/billing.md
+      - reference/api/device-gateway.md
+      - reference/api/entitlements.md
+      - reference/api/fleet.md
+      - reference/api/identity.md
+      - reference/api/notifications.md
+      - reference/api/planner.md
+      - reference/api/realtime.md
+      - reference/api/scheduler.md
+      - reference/api/telemetry.md
+      - reference/api/vision.md
   - Original plan (German): plan/project-plan.de.md

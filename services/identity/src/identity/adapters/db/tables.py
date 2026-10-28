@@ -153,6 +153,7 @@ api_tokens = Table(
     Column("last_used_at", TS),
     Column("revoked_at", TS),
     Column("revoke_reason", String(100)),
+    Column("purpose", String(16), nullable=False, server_default="integration"),
 )
 
 signing_keys = Table(

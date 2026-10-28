@@ -64,3 +64,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0058](0058-theft-tracking-mode.md) | Theft tracking mode | Accepted |
 | [0059](0059-ios-widgets-and-live-activity.md) | iOS widgets and the mowing Live Activity | Accepted |
 | [0060](0060-apple-watch-app.md) | Apple Watch app | Accepted |
+| [0064](0064-personal-access-tokens-and-public-api-docs.md) | Personal access tokens and the public API documentation | Accepted |
