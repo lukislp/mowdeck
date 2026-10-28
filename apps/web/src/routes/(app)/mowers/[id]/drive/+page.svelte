@@ -1002,10 +1002,15 @@
     display: contents;
   }
 
+  /*
+   * Pressed ("both cameras" on, e.g. the remembered layout on load): a lit plate with dark ink.
+   * The ink is a HUD token, not --md-color-ink: that one turns light in the dark theme and left
+   * the label and icon white on white.
+   */
   .tool[aria-pressed='true'] {
     border-color: var(--md-hud-ink);
     background: var(--md-hud-ink);
-    color: var(--md-color-ink);
+    color: var(--md-hud-ink-inverse);
   }
 
   .camera-note {
