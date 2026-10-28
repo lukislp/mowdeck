@@ -532,7 +532,7 @@ flowchart LR
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>12 migrations")]
     db_identity[("identity<br/>5 migrations")]
-    db_notifications[("notifications<br/>7 migrations")]
+    db_notifications[("notifications<br/>8 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>3 migrations")]
     db_telemetry[("telemetry<br/>11 migrations")]

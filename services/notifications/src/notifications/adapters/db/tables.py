@@ -6,6 +6,7 @@ token (API) or from the message (consumers), and every user-facing query filters
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Index,
@@ -59,6 +60,17 @@ mower_watch = Table(
         "last_seen_at",
         postgresql_where=text("NOT offline"),
     ),
+)
+
+maintenance_window = Table(
+    "maintenance_window",
+    metadata,
+    Column("id", SmallInteger, primary_key=True),
+    Column("opened_at", TS, nullable=False),
+    Column("expires_at", TS, nullable=False),
+    Column("closed_at", TS),
+    Column("reason", String(100), nullable=False),
+    CheckConstraint("id = 1", name="single_row"),
 )
 
 preferences = Table(
