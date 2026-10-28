@@ -450,7 +450,7 @@
     display: grid;
     overflow: hidden;
     border-radius: var(--md-radius-2);
-    background: var(--md-color-ink);
+    background: var(--md-hud-ink-inverse);
     container-type: inline-size;
   }
 
@@ -487,7 +487,7 @@
     min-width: 0;
     overflow: hidden;
     aspect-ratio: 16 / 9;
-    background: var(--md-color-ink);
+    background: var(--md-hud-ink-inverse);
   }
 
   .compact .tile {
@@ -568,7 +568,7 @@
 
   .quiet-notice {
     background: transparent;
-    color: var(--md-color-surface);
+    color: var(--md-hud-ink);
     font-size: var(--md-font-size-13);
   }
 
@@ -582,9 +582,9 @@
     align-items: center;
     gap: var(--md-space-1) var(--md-space-2);
     pointer-events: none;
-    color: var(--md-color-surface);
+    color: var(--md-hud-ink);
     font-size: var(--md-font-size-12);
-    text-shadow: 0 1px 2px var(--md-color-ink);
+    text-shadow: 0 1px 2px var(--md-hud-ink-inverse);
   }
 
   .compact .caption {
@@ -621,7 +621,7 @@
     padding: var(--md-space-1) var(--md-space-2);
     border-radius: var(--md-radius-1);
     background: var(--md-state-error);
-    color: var(--md-color-surface);
+    color: var(--md-color-ink-inverse);
     font-size: var(--md-font-size-12);
   }
 

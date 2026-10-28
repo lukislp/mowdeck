@@ -1122,7 +1122,7 @@
     border: 0;
     border-radius: var(--md-radius-1);
     background: var(--md-state-paused);
-    color: var(--md-color-ink);
+    color: var(--md-color-ink-inverse);
     font-size: var(--md-font-size-12);
     font-weight: var(--md-weight-semibold);
     cursor: pointer;

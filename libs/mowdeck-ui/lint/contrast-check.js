@@ -80,6 +80,12 @@ const pairs = [
   ['--md-color-focus', '--md-color-bg', 3],
   ['--md-stop-ink', '--md-stop-fill', 4.5],
   ['--md-stop-fill', '--md-stop-ring', 3],
+  // Labels on a solid state fill (the drive view's "blades on" chip, the "held" banner).
+  ['--md-color-ink-inverse', '--md-state-paused', 4.5],
+  ['--md-color-ink-inverse', '--md-state-error', 4.5],
+  // The HUD over the camera picture is the same in both themes.
+  ['--md-hud-ink-inverse', '--md-hud-ink', 4.5],
+  ['--md-hud-lit', '--md-hud-ink-inverse', 4.5],
   ...STATES.flatMap((s) => [
     [`--md-state-${s}`, `--md-state-${s}-bg`, 4.5],
     [`--md-state-${s}`, '--md-color-surface', 3],
