@@ -30,7 +30,7 @@
 <style>
   .md-toasts {
     position: fixed;
-    inset-inline: var(--md-gutter);
+    inset-inline: calc(var(--md-gutter) + var(--md-stop-inset-start, 0px)) var(--md-gutter);
     bottom: var(--md-toast-offset, var(--md-space-4));
     z-index: 30;
     display: flex;
@@ -95,9 +95,11 @@
     cursor: pointer;
   }
 
+  /* Desktop: the stop sits at the foot of the instrument column on the right, where the toasts
+     are, too: they keep clear of it (--md-stop-clearance, published by such a page). */
   @media (min-width: 1024px) {
     .md-toasts {
-      bottom: var(--md-space-4);
+      bottom: calc(var(--md-stop-clearance, 0px) + var(--md-space-4));
     }
   }
 </style>

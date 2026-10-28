@@ -14,6 +14,8 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -105,6 +107,7 @@ nav:
       - adr/0061-mowing-angle-rotation.md
       - adr/0062-setup-tour.md
       - adr/0063-matter-server.md
+      - adr/0064-personal-access-tokens-and-public-api-docs.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -147,4 +150,18 @@ nav:
       - guides/apple-watch.md
       - guides/setup-tour.md
       - guides/matter.md
+      - guides/scripting.md
+  - API reference:
+      - reference/api/index.md
+      - reference/api/billing.md
+      - reference/api/device-gateway.md
+      - reference/api/entitlements.md
+      - reference/api/fleet.md
+      - reference/api/identity.md
+      - reference/api/notifications.md
+      - reference/api/planner.md
+      - reference/api/realtime.md
+      - reference/api/scheduler.md
+      - reference/api/telemetry.md
+      - reference/api/vision.md
   - Original plan (German): plan/project-plan.de.md
