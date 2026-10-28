@@ -86,6 +86,7 @@ While the window is open, `mower_offline` / `mower_online` are held back for a m
 | vision | `mowdeck/vision:dev`, built from the repository | via Traefik at `/api/v1/vision` |
 | camera-relay (profile `relay`) | `mowdeck/camera-relay:dev`, built from the repository (with ffmpeg) | none (internal: NATS requests `relay.camera.*` and MediaMTX's auth callback; [ADR 0045](../adr/0045-camera-relay.md)) |
 | agora-bridge (profile `agora`, with `relay`) | `mowdeck-local/agora-bridge:local`, built locally from `integrations/agora-bridge` (contains Agora's SDK, never pulled or published) | none (listens on camera-relay's loopback `127.0.0.1:7700`, shares its network namespace; [Agora source](#agora-source-profile-agora)) |
+| matter-server (profile `matter`) | `mowdeck/matter-server:dev`, built from the repository (Node 24, matter.js) | host network: UDP 5353 (mDNS) and one UDP port per mower from `MATTER_PORT_BASE`; admin API `MATTER_HTTP_PORT` (8790) via Traefik at `/api/v1/matter` ([Matter server](matter.md), [ADR 0063](../adr/0063-matter-server.md)) |
 | mediamtx (profile `relay`) | `bluenviron/mediamtx:1.21.2` (MIT) | via Traefik at `/media/whep/r/` (WHEP only, `/media/whep` stripped); `RELAY_ICE_BIND:RELAY_ICE_PORT` UDP and TCP (ICE media, default 8189) |
 | web | `mowdeck/web:dev`, built from `apps/web/Dockerfile` | via Traefik at `/` (the web app; router priority 1, behind every `/api/v1` route) |
 

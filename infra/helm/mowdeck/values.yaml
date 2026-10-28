@@ -66,6 +66,9 @@ config:
   IDENTITY_PUBLIC_URL: ""
   # Optional: a parent domain of that host as the passkeys' RP ID (e.g. example.org).
   IDENTITY_PASSKEY_RP_ID: ""
+  # Descriptors of further modules Identity lists (comma separated). The Matter server is added
+  # by itself when services.matterServer is enabled.
+  IDENTITY_EXTRA_MODULE_URLS: ""
 
   # --- Fleet ---
   # Connection kinds accepted when a mower is registered (simulated, cloud, ble_bridge).
@@ -244,6 +247,18 @@ config:
   RELAY_ICE_HOSTS: ""
   # The ICE port; the container listens on the same port (ICE candidates carry it).
   RELAY_ICE_PORT: "8189"
+  # --- Matter server (services.matterServer, ADR 0063) ---
+  # MowDeck's API as the server reaches it; empty: https://<ingress.host>.
+  MATTER_API_URL: ""
+  # Admin API (pairing codes for the web app) on the node's network.
+  MATTER_HTTP_PORT: "8790"
+  # UDP port of the first mower node; every further mower takes the next one.
+  MATTER_PORT_BASE: "5540"
+  MATTER_MAX_NODES: "16"
+  # Labels Apple and Google show (run modes, battery): de or en.
+  MATTER_LANGUAGE: de
+  # Network interface for mDNS (e.g. enp2s0); empty: every interface.
+  MATTER_MDNS_INTERFACE: ""
 
 # Host ports of the Compose stack have no counterpart: services are reached through the Ingress
 # (GATEWAY_HTTP_PORT, GATEWAY_HTTPS_PORT) and cluster-internal Services (POSTGRES_PORT,
@@ -269,6 +284,7 @@ secrets:
   #   billing-stripe-secret-key, billing-stripe-webhook-secret   only with services.billing
   #   vision-secrets-key, vision-default-api-key   (may be empty)
   #   relay-frames-token            only with services.cameraRelay (may be empty)
+  #   matter-api-tokens             only with services.matterServer (one API token per line)
   #   fleet-credential-encryption-key   FLEET_CREDENTIAL_ENCRYPTION_KEY (may be empty)
   #   fleet-credential-encryption-key-previous   FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS (may be empty)
   #   notifications-vapid-private-key   only with existingSecretHasVapidKey: true
@@ -308,6 +324,9 @@ secrets:
   # photos through the relay, services.cameraRelay). Empty: the frame tap is off and photos of
   # mowers without an own photo function answer "unsupported".
   RELAY_FRAMES_TOKEN: ""
+  # -- API tokens of the Matter server (services.matterServer), one per line and account, each
+  # with mower.view and mower.control only (Einstellungen > API-Tokens). Empty: no mower is served.
+  MATTER_API_TOKENS: ""
   # -- Web Push private key (VAPID). Empty: each Notifications pod creates a development pair in
   # an emptyDir on start (lost on restart, and different per replica, so the chart refuses more
   # than one replica without it). Generate once:
@@ -684,6 +703,32 @@ services:
       nodeSelector: {}
       tolerations: []
       affinity: {}
+  # Matter server (ADR 0063): every mower as its own Matter node for Apple Home, Google Home and
+  # Home Assistant. Off by default (Compose: the "matter" profile). Runs on the node's network
+  # (mDNS, IPv6): pin it to a node in the same LAN as the Apple or Google hub and open
+  # config.MATTER_HTTP_PORT and the UDP ports from config.MATTER_PORT_BASE to the LAN only
+  # (docs/ops/matter.md). Needs secrets.MATTER_API_TOKENS. One replica.
+  matterServer:
+    enabled: false
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+    pdb: {enabled: false, minAvailable: 1}
+    # The fabrics and pairing codes (a few kB): without persistence every restart needs pairing
+    # every mower again.
+    persistence:
+      enabled: true
+      existingClaim: ""
+      storageClassName: ""
+      size: 64Mi
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
+    # e.g. nodeSelector: {kubernetes.io/hostname: ms01}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
   # Subscriptions and payments (ADR 0031). Off by default: billing.enabled=false means nothing
   # of it is rendered (Compose: the "billing" profile). Add <fullname>-billing to Identity's
   # module URLs via services.identity.extraEnv only when enabled (docs/ops/billing.md).

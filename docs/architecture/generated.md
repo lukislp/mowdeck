@@ -46,6 +46,9 @@ flowchart LR
   subgraph sg_demo["Profile demo (opt-in)"]
     whoami["whoami"]
   end
+  subgraph sg_matter["Profile matter (opt-in)"]
+    matter_server["matter-server"]
+  end
   subgraph sg_relay["Profile relay (opt-in)"]
     mediamtx["mediamtx"]
   end
@@ -62,6 +65,7 @@ flowchart LR
   traefik -->|"/"| web
   traefik -.->|"/api/v1/billing<br/>+1 exact path"| billing
   traefik -.->|"/api/v1/whoami"| whoami
+  traefik -.->|"/api/v1/matter"| matter_server
   traefik -.->|"/media/whep/r/"| mediamtx
 ```
 
@@ -72,6 +76,7 @@ flowchart LR
 | `entitlements` | `/api/v1/entitlements` | - | always |
 | `fleet` | `/api/v1/fleet` | - | always |
 | `identity` | `/api/v1/identity`, `/api/v1/identity/session/` | `/.well-known/jwks.json`, `/api/v1/identity/app-login/session`, `/api/v1/identity/app-login/start`, `/api/v1/identity/me/external-identities/apple/link`, `/api/v1/identity/me/external-identities/github/link`, `/api/v1/identity/oauth/apple/callback`, `/api/v1/identity/oauth/apple/start`, `/api/v1/identity/oauth/github/callback`, `/api/v1/identity/oauth/github/start`, `/api/v1/identity/passkeys/challenge`, `/api/v1/identity/passkeys/session`, `/api/v1/identity/register`, `/api/v1/identity/session`, `/api/v1/identity/token` | always |
+| `matter-server` | `/api/v1/matter` | - | matter |
 | `mediamtx` | `/media/whep/r/` | - | relay |
 | `notifications` | `/api/v1/notifications` | - | always |
 | `planner` | `/api/v1/planner` | - | always |
@@ -559,4 +564,4 @@ flowchart LR
   vision -->|owns| db_vision
 ```
 
-Services without a database: `agora-bridge`, `camera-relay`, `device-gateway`, `realtime`, `web`.
+Services without a database: `agora-bridge`, `camera-relay`, `device-gateway`, `matter-server`, `realtime`, `web`.

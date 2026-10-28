@@ -1,0 +1,58 @@
+{{- /* Matter server (ADR 0063): every mower as its own Matter node for Apple Home, Google Home and
+Home Assistant (Compose service matter-server, profile "matter"). Off by default
+(services.matterServer.enabled=false).
+
+Matter needs mDNS and IPv6 link-local on the LAN, so the pod runs on the node's network
+(hostNetwork): the mower nodes listen on UDP ports from config.MATTER_PORT_BASE, the admin API on
+config.MATTER_HTTP_PORT; open them to the LAN only in the node's firewall (docs/ops/matter.md).
+Pin the pod to a node on the same layer-2 network as the Apple or Google hub
+(services.matterServer.nodeSelector). One replica (the fabrics live in one volume) with the
+Recreate strategy. The admin API is reached through the Ingress (/api/v1/matter) and Identity
+lists its descriptor, so the web app shows the "Matter" settings section.
+
+The server calls MowDeck's API at config.MATTER_API_URL (default: https://<ingress.host>) with
+the API tokens of secrets.MATTER_API_TOKENS (one per line; mower.view and mower.control only). */ -}}
+{{- $c := .Values.config }}
+{{- $v := .Values.services.matterServer }}
+{{- $name := include "mowdeck.serviceName" (dict "ctx" . "component" "matter-server") }}
+{{- $apiUrl := default (include "mowdeck.publicOrigin" .) $c.MATTER_API_URL }}
+{{- if and $v.enabled (not $apiUrl) }}
+{{- fail "services.matterServer needs config.MATTER_API_URL or ingress.host (the address the server reaches MowDeck's API at)" }}
+{{- end }}
+{{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (dict
+  "MOWDECK_MATTER_API_URL" $apiUrl
+  "MOWDECK_MATTER_DATA_DIR" "/data"
+  "MOWDECK_MATTER_HTTP_PORT" (toString $c.MATTER_HTTP_PORT)
+  "MOWDECK_MATTER_PORT_BASE" (toString $c.MATTER_PORT_BASE)
+  "MOWDECK_MATTER_MAX_NODES" (toString $c.MATTER_MAX_NODES)
+  "MOWDECK_MATTER_LANGUAGE" $c.MATTER_LANGUAGE
+  "MOWDECK_MATTER_MDNS_INTERFACE" $c.MATTER_MDNS_INTERFACE) }}
+{{- $secretFiles := list (dict "key" "matter-api-tokens" "file" "matter-api-tokens" "env" "MOWDECK_MATTER_API_TOKENS_FILE") }}
+{{- $data := dict "name" "data" }}
+{{- if $v.persistence.enabled }}
+{{- $_ := set $data "persistentVolumeClaim" (dict "claimName" (default $name $v.persistence.existingClaim)) }}
+{{- else }}
+{{- $_ := set $data "emptyDir" (dict) }}
+{{- end }}
+{{- if and $v.enabled $v.persistence.enabled (not $v.persistence.existingClaim) }}
+---
+# Matter fabrics and the setup credentials of every mower node: losing them means pairing every
+# mower again in every controller.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "matter-server") | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with $v.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $v.persistence.size }}
+{{- end }}
+{{ include "mowdeck.workload" (dict "ctx" . "component" "matter-server" "key" "matterServer" "image" "matter-server"
+  "port" (int $c.MATTER_HTTP_PORT) "env" $env "secretFiles" $secretFiles "hostNetwork" true
+  "volumes" (list $data) "volumeMounts" (list (dict "name" "data" "mountPath" "/data"))) }}

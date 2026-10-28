@@ -1,0 +1,18 @@
+# Build context of services/matter-server/Dockerfile is the repository root: send only the
+# workspace manifests, this service's sources and the licence texts.
+**
+!pnpm-workspace.yaml
+!package.json
+!pnpm-lock.yaml
+!.npmrc
+!LICENSE
+!LICENSING.md
+!LICENSES/
+!apps/web/package.json
+!apps/mobile/package.json
+!libs/mowdeck-ui/package.json
+!tools/ts-codegen/package.json
+!tests/e2e-web/package.json
+!services/matter-server/package.json
+!services/matter-server/src/**
+**/node_modules
