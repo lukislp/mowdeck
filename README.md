@@ -70,7 +70,7 @@ What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extr
 
 **Integrations and apps**
 
-- Home Assistant integration (its own repository, see below), REST APIs with OpenAPI documents for every service, WebSocket live stream.
+- Home Assistant integration (its own repository, see below), REST APIs with OpenAPI documents for every service, WebSocket live stream; personal access tokens for your own scripts with a [scripting guide](docs/guides/scripting.md) and a generated [API reference](docs/reference/api/index.md).
 - iOS and Android app shells (Capacitor) that load your own MowDeck server, with local notifications.
 
 **Operations**
