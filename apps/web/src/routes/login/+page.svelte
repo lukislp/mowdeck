@@ -162,10 +162,19 @@
   function startConditional(): void {
     conditional = new AbortController();
     const { signal } = conditional;
-    void signInWithPasskey(session, { mediation: 'conditional', signal })
+    // The autofill offer is a background attempt: until the user has picked a passkey, a failure
+    // (the browser cannot run it, the challenge call failed, a navigation cut it off) says
+    // nothing to them and must not replace the page's message (e.g. the result of a GitHub or
+    // Apple round trip) with a "no connection" notice.
+    let chosen = false;
+    void signInWithPasskey(session, {
+      mediation: 'conditional',
+      signal,
+      onChosen: () => (chosen = true),
+    })
       .then(() => finish())
       .catch((error: unknown) => {
-        if (signal.aborted || cancelled(error)) return;
+        if (!chosen || signal.aborted || cancelled(error)) return;
         usedPasskey = true;
         problem = asProblem(error);
         notice = null;
