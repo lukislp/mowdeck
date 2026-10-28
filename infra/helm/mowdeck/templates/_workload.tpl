@@ -21,6 +21,9 @@ Call with a dict:
   volumeMounts   extra container volumeMounts
   command        container command (list); default: the image's CMD
   tmpSizeLimit   size of the in-memory /tmp (default 64Mi; a browser needs more)
+  hostNetwork    true: the pod uses the node's network (matter-server: mDNS); implies the
+                 Recreate strategy, since two pods cannot hold the same node ports
+  recreate       true: Deployment strategy Recreate (a ReadWriteOnce volume)
   sidecars       further containers of the pod (full container specs, after the main one)
 */}}
 {{- define "mowdeck.workload" -}}
@@ -95,6 +98,9 @@ spec:
   {{- if eq $kind "StatefulSet" }}
   serviceName: {{ $name }}-headless
   podManagementPolicy: Parallel
+  {{- else if or .recreate .hostNetwork }}
+  strategy:
+    type: Recreate
   {{- else }}
   strategy:
     type: RollingUpdate
@@ -127,6 +133,10 @@ spec:
     spec:
       serviceAccountName: {{ include "mowdeck.serviceAccountName" $ctx }}
       automountServiceAccountToken: false
+      {{- if .hostNetwork }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       {{- include "mowdeck.imagePullSecrets" $ctx | nindent 6 }}
       securityContext:
         {{- if .web }}

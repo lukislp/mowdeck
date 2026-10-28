@@ -15,6 +15,10 @@ Stripe webhook of Billing when it is enabled), so a rate limit can be attached t
 {{- $routes = append $routes (dict "path" (printf "/api/v1/%s" $component) "type" "Prefix" "component" $component "port" 8000) }}
 {{- end }}
 {{- end }}
+{{- if .Values.services.matterServer.enabled }}
+{{- /* Matter server (ADR 0063): its admin API on config.MATTER_HTTP_PORT. */ -}}
+{{- $routes = append $routes (dict "path" "/api/v1/matter" "type" "Prefix" "component" "matter-server" "port" (int .Values.config.MATTER_HTTP_PORT)) }}
+{{- end }}
 {{- if .Values.services.identity.enabled }}
 {{- $routes = append $routes (dict "path" "/.well-known/jwks.json" "type" "Exact" "component" "identity" "port" 8000) }}
 {{- end }}

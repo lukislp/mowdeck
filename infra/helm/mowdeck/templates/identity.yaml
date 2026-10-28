@@ -5,6 +5,13 @@ publishes /.well-known/jwks.json (Compose services identity and identity-migrate
 {{- range list "device-gateway" "fleet" "telemetry" "realtime" "notifications" "scheduler" "entitlements" "planner" "vision" }}
 {{- $modules = append $modules (include "mowdeck.serviceUrl" (dict "ctx" $ "component" .)) }}
 {{- end }}
+{{- /* The Matter server (ADR 0063) when enabled, plus config.IDENTITY_EXTRA_MODULE_URLS. */ -}}
+{{- if .Values.services.matterServer.enabled }}
+{{- $modules = append $modules (printf "http://%s:%s" (include "mowdeck.serviceName" (dict "ctx" . "component" "matter-server")) (toString $c.MATTER_HTTP_PORT)) }}
+{{- end }}
+{{- with $c.IDENTITY_EXTRA_MODULE_URLS }}
+{{- $modules = append $modules . }}
+{{- end }}
 {{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (dict
   "MOWDECK_IDENTITY_REGISTRATION" $c.IDENTITY_REGISTRATION
   "MOWDECK_IDENTITY_ARGON2_PROFILE" $c.IDENTITY_ARGON2_PROFILE

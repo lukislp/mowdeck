@@ -9,4 +9,5 @@
 - [Aerial photo under the map](aerial-photo.md): lay a photo of your garden under the mower map, with an opacity slider.
 - [iPhone widgets and the mowing Live Activity](ios-widgets.md): home and lock screen widgets, the map widget and the Live Activity of a job.
 - [Apple Watch](apple-watch.md): the mower's state on the wrist and on the watch face, Start, Pause, Station and the emergency stop.
+- [Apple Home and Google Home (Matter)](matter.md): pair each mower with the Home app, start, pause and send it home from there.
 - [Scripting MowDeck](scripting.md): personal access tokens, the API with examples in curl, Python and JavaScript, and the [API reference](../reference/api/index.md).

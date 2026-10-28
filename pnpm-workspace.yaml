@@ -4,3 +4,4 @@ packages:
   - libs/mowdeck-ui
   - tests/e2e-web
   - tools/ts-codegen
+  - services/matter-server

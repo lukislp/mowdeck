@@ -1,6 +1,6 @@
 <!--
   The one settings page: every settings module the user may see as a section under its anchor
-  (account and profile, notifications, users, AI provider, linked accounts, API tokens, API access; the
+  (account and profile, notifications, users, AI provider, Matter, linked accounts, API tokens, API access; the
   order of `module.ts`), then Neuigkeiten (the "Was ist neu" history) and About for everyone (the build and its source code, AGPL-3.0). A numbered section index sits on the left on the desktop and as a strip
   under the top bar on phones; it marks the section in view. Old routes forward here
   (`#lib/settings/sections.js`).
@@ -20,6 +20,7 @@
   import ApiAccessSection from '#lib/settings/sections/ApiAccessSection.svelte';
   import ApiTokensSection from '#lib/settings/sections/ApiTokensSection.svelte';
   import LinkedAccountsSection from '#lib/settings/sections/LinkedAccountsSection.svelte';
+  import MatterSection from '#lib/settings/sections/MatterSection.svelte';
   import NotificationsSection from '#lib/settings/sections/NotificationsSection.svelte';
   import ProfileSection from '#lib/settings/sections/ProfileSection.svelte';
   import SetupSection from '#lib/settings/sections/SetupSection.svelte';
@@ -33,6 +34,7 @@
     'notification-settings': NotificationsSection,
     users: UsersSection,
     'ai-provider': AiProviderSection,
+    matter: MatterSection,
     'linked-accounts': LinkedAccountsSection,
     'api-tokens': ApiTokensSection,
     setup: SetupSection,

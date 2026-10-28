@@ -416,6 +416,18 @@ jobs:
           tags: mowdeck/web:ci
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
+      - name: Build matter-server image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/matter-server/Dockerfile
+          build-args: |
+            NODE_IMAGE=${{ env.NODE_IMAGE }}
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/matter-server:ci
+          cache-from: type=gha,scope=matter-server
+          cache-to: type=gha,mode=max,scope=matter-server
 
   # The camera relay's media plane (ADR 0045) against a real MediaMTX and the relay image
   # (services/camera-relay/tests/media): WHEP with aiortc, tickets, the freeze hook, the grace
