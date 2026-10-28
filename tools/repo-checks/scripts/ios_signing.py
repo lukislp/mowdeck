@@ -123,8 +123,10 @@ def check_profile(
             f"profile type is {info['kind']}, expected an App Store profile "
             "(Distribution -> App Store Connect)"
         )
+    # A watch app's App ID is an iOS App ID too (ADR 0060); "watchOS" is accepted in case Apple
+    # ever lists it separately.
     platforms = profile.get("Platform") or []
-    if platforms and "iOS" not in platforms:
+    if platforms and not {"iOS", "watchOS"} & set(platforms):
         problems.append(f"platform is {', '.join(map(str, platforms))}, expected iOS")
     # timezone.utc, not dt.UTC: the macOS runner's python3 may be older than 3.11.
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)  # noqa: UP017

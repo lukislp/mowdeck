@@ -23,6 +23,7 @@ enum WidgetBridge {
         try vault.save(credential)
         SharedState.shared.mowers = mowers
         WidgetCenter.shared.reloadAllTimelines()
+        Task { await WatchRelay.shared.pushState(reason: .configuration) }
     }
 
     static func setMowers(_ mowers: [MowerRef]) {
@@ -34,6 +35,8 @@ enum WidgetBridge {
         try? vault.delete()
         SharedState.shared.clear()
         WidgetCenter.shared.reloadAllTimelines()
+        // The watch relays through this credential (ADR 0060): it now shows the set-up hint.
+        Task { await WatchRelay.shared.pushState(reason: .configuration) }
         if #available(iOS 16.2, *) { LiveActivityCoordinator.shared.endAll() }
     }
 

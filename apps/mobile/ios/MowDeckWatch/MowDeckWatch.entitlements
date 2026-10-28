@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The watch's own App Group container (same id as on the iPhone, a separate device): the
+	     watch app writes the state the iPhone sent, the complication reads it (ADR 0060). No
+	     Keychain group: the watch holds no credential. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.mowdeck.mobile</string>
+	</array>
+</dict>
+</plist>
