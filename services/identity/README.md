@@ -58,6 +58,8 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | GET | `/api/v1/identity/me/external-identities` | token only (users) | The caller's linked provider accounts: `[{provider, display_name, linked_at, last_used_at}]` |
 | POST | `/api/v1/identity/me/external-identities/{provider}/link` | token only (users) | `{password}` (re-authentication, the login limits apply): `{authorize_url, expires_in}` and the binding cookie; 409 when an account of that provider is already linked |
 | DELETE | `/api/v1/identity/me/external-identities/{provider}` | token only (users) | Unlink (always allowed, also with the provider turned off; the password stays), 204; 404 when nothing is linked |
+| GET | `/api/v1/identity/me/onboarding` | token only (users) | The caller's setup tour progress (ADR 0062): `{status, skipped_steps, dismissed_hints, updated_at}`; `status` `new` (nothing stored), `active`, `dismissed` or `completed`. `Cache-Control: no-store`. API tokens: 403 |
+| PUT | `/api/v1/identity/me/onboarding` | token only (users) | Replace it: `{status, skipped_steps?, dismissed_hints?}` (`status` not `new`; keys `^[a-z][a-z0-9-]{0,31}$`, at most 32 each, duplicates dropped). Whether a step is done is never stored; the web app reads it from the services |
 | POST | `/api/v1/identity/app-login/code` | token only (users) | Native app hand-off, browser side: `{request_id}` of the app's request (unknown, used or expired: 403). Ends the caller's login session, which must be younger than 5 minutes (else 403), and returns a one-time code `{code, expires_in}` (60 s) bound to the request's challenge |
 | GET | `/accounts/{account_id}` | `member` | |
 | PATCH | `/accounts/{account_id}` | `can_manage_users` | Name |
