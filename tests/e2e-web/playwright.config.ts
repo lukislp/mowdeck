@@ -30,7 +30,8 @@ export default defineConfig({
   projects: [
     {
       name: 'phone',
-      testMatch: /(gate|spot-phone|layout-phone|api-tokens-phone|source|scroll)\.spec\.ts/,
+      testMatch:
+        /(gate|spot-phone|layout-phone|aerial-desktop|api-tokens-phone|source|scroll)\.spec\.ts/,
       use: {
         ...devices['Pixel 7'],
         browserName: 'chromium',

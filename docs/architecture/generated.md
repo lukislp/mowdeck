@@ -468,7 +468,7 @@ flowchart LR
   end
   subgraph telemetry["telemetry"]
     direction TB
-    telemetry_telemetry["telemetry<br/>17 operations"]
+    telemetry_telemetry["telemetry<br/>19 operations"]
   end
   subgraph vision["vision"]
     direction TB
@@ -504,7 +504,7 @@ flowchart LR
 | `scheduler` | `operations` | 1 | 1 |
 | `scheduler` | `schedules` | 10 | 7 |
 | `telemetry` | `operations` | 1 | 1 |
-| `telemetry` | `telemetry` | 17 | 17 |
+| `telemetry` | `telemetry` | 19 | 19 |
 | `vision` | `operations` | 1 | 1 |
 | `vision` | `vision` | 16 | 13 |
 

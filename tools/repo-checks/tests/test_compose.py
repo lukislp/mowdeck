@@ -52,6 +52,8 @@ def test_e2e_override_adds_the_marker_and_the_relay_with_test_hooks(repo_root: P
         "identity",
         "fake-github",
         "fake-apple",
+        "fake-wms",
+        "telemetry",
     }
     identity = override["services"]["identity"]
     assert identity["labels"] == [
@@ -73,6 +75,13 @@ def test_e2e_override_adds_the_marker_and_the_relay_with_test_hooks(repo_root: P
         )
     assert identity["depends_on"] == {"fake-apple": {"condition": "service_healthy"}}
     assert "fake-github" not in base["services"] and "fake-apple" not in base["services"]
+    # The aerial photo (ADR 0054) against a fake WMS: Telemetry only gets the source variables.
+    telemetry = override["services"]["telemetry"]
+    assert set(telemetry) == {"environment", "depends_on"}
+    assert (
+        telemetry["environment"]["MOWDECK_TELEMETRY_AERIAL_WMS_URL"] == "http://fake-wms:8000/wms"
+    )
+    assert "fake-wms" not in base["services"]
     base_env = base["services"]["identity"]["environment"]
     assert base_env["MOWDECK_IDENTITY_GITHUB_CLIENT_ID"] == "${IDENTITY_GITHUB_CLIENT_ID:-}"
     assert not any("_GITHUB_" in k and k.endswith("_URL") for k in base_env)

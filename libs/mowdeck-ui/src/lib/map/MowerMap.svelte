@@ -92,6 +92,8 @@
     attribution?: string | null;
     maxZoom?: number | null;
   }
+
+  import type { MapAerial } from './aerial';
 </script>
 
 <script lang="ts">
@@ -108,6 +110,7 @@
     type MapSnapshot,
     type RoutePoint,
   } from './layers';
+  import { createAerialLayer } from './aerial';
   import { createGridLayer } from './grid';
   import { createProjection, type MapCoord } from './projection';
   import { RTK_CELL_SIZES, binRtk, cellRing, type RtkAggregate, type RtkCellSize } from './rtk';
@@ -158,6 +161,8 @@
     /** The mower has no live link (offline, ADR 0040; the chevron is drawn hollow). */
     stale?: boolean;
     tiles?: MapTiles | null;
+    /** An aerial photo under the map (switches the map to geographic mode). */
+    aerial?: MapAerial | null;
     labels: MowerMapLabels;
     areaName: (area: { id: string; name?: string | null }) => string;
     onselectionchange?: (ids: string[]) => void;
@@ -195,6 +200,7 @@
     selectable = false,
     stale = false,
     tiles = null,
+    aerial = null,
     labels,
     areaName,
     onselectionchange,
@@ -243,7 +249,10 @@
   /** Refit on resize until the user pans or zooms (the fit control turns it back on). */
   let autoFit = true;
 
-  const mode = $derived(tiles?.url ? 'geo' : 'local');
+  /** The layer is rebuilt only when the source changes; opacity is updated in place. */
+  const aerialKey = $derived(aerial?.url ?? null);
+  const mode = $derived(tiles?.url || aerialKey ? 'geo' : 'local');
+  let aerialLayer: Leaflet.TileLayer | null = null;
   const projection = $derived(createProjection(map.reference, mode));
   const geometry = $derived(buildLayers({ map, projection, areaName }));
   const mower = $derived(
@@ -289,6 +298,7 @@
     const el = container;
     const currentMode = mode;
     const currentTiles = tiles;
+    const currentAerial = aerialKey ? untrack(() => aerial) : null;
     if (!lib || !el) return;
     let instance: Leaflet.Map;
     try {
@@ -328,6 +338,9 @@
           className: 'md-map-tiles',
         })
         .addTo(instance);
+    }
+    if (currentMode === 'geo' && currentAerial) {
+      aerialLayer = createAerialLayer(lib, currentAerial, () => aerial?.load).addTo(instance);
     }
     // The metric grid is a tile layer, so it follows any pan and zoom (local projection only).
     let themeWatch: (() => void) | null = null;
@@ -397,10 +410,17 @@
       themeWatch?.();
       instance.remove();
       lmap = null;
+      aerialLayer = null;
       groups = null;
       mowerMarker = null;
       areaPolygons = new Map();
     };
+  });
+
+  // The photo's opacity is changed in place (the layer is rebuilt only for another source).
+  $effect(() => {
+    void generation;
+    aerialLayer?.setOpacity(aerial?.opacity ?? 1);
   });
 
   // --- static layers: grid, areas, zones, paths, dock ---------------------------------------
@@ -1184,8 +1204,10 @@
     </div>
   {/if}
 
-  {#if mode === 'geo' && tiles?.attribution}
-    <p class="attribution">{tiles.attribution}</p>
+  {#if mode === 'geo' && (tiles?.attribution || aerial?.attribution)}
+    <p class="attribution" data-testid="map-attribution">
+      {[tiles?.attribution, aerial?.attribution].filter(Boolean).join(' | ')}
+    </p>
   {/if}
 </div>
 

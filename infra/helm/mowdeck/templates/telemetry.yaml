@@ -8,9 +8,17 @@
   "MOWDECK_TELEMETRY_POSITIONS_DETAIL_DAYS" $c.TELEMETRY_POSITIONS_DETAIL_DAYS
   "MOWDECK_TELEMETRY_MAINTENANCE_TIMEZONE" $c.TELEMETRY_MAINTENANCE_TIMEZONE
   "MOWDECK_TELEMETRY_RETENTION_COMMANDS_DAYS" $c.TELEMETRY_RETENTION_COMMANDS_DAYS
-  "MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD" $c.TELEMETRY_BLADE_HOURS_THRESHOLD) }}
+  "MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD" $c.TELEMETRY_BLADE_HOURS_THRESHOLD
+  "MOWDECK_TELEMETRY_AERIAL_WMS_URL" $c.AERIAL_WMS_URL
+  "MOWDECK_TELEMETRY_AERIAL_WMS_LAYER" $c.AERIAL_WMS_LAYER
+  "MOWDECK_TELEMETRY_AERIAL_IMAGE_FORMAT" $c.AERIAL_IMAGE_FORMAT
+  "MOWDECK_TELEMETRY_AERIAL_XYZ_URL" $c.AERIAL_XYZ_URL
+  "MOWDECK_TELEMETRY_AERIAL_ATTRIBUTION" $c.AERIAL_ATTRIBUTION
+  "MOWDECK_TELEMETRY_AERIAL_MAX_ZOOM" (toString $c.AERIAL_MAX_ZOOM)
+  "MOWDECK_TELEMETRY_AERIAL_CACHE_MAX_MB" (toString $c.AERIAL_CACHE_MAX_MB)) }}
 {{- include "mowdeck.migrationJob" (dict "ctx" . "component" "telemetry" "key" "telemetry" "image" "telemetry" "module" "telemetry.adapters.db.migrate" "weight" 3) }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "telemetry" "key" "telemetry" "image" "telemetry"
+  "writableDirs" (list (dict "name" "aerial-cache" "mountPath" "/var/cache/mowdeck/aerial"))
   "env" $env "db" "telemetry" "migrateModule" "telemetry.adapters.db.migrate" "authz" true
   "secretFiles" (list
     (dict "key" "database-url-telemetry" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
