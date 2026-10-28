@@ -111,3 +111,22 @@ test('Apple: cancelling at Apple ends the round trip with a message', async ({ p
   await page.waitForURL((url) => url.pathname === '/login');
   await expect(page.getByText('Die Anmeldung bei Apple wurde abgebrochen.')).toBeVisible();
 });
+
+test('Apple: the autofill offer failing in the browser does not replace the result message', async ({
+  page,
+}) => {
+  // The passkey offer in the username field is a background attempt. Where the browser cannot
+  // run it (here: it rejects with NotSupportedError, as headless browsers without an
+  // authenticator may), the page must still show what the Apple round trip ended with, not "no
+  // connection to the server".
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.credentials, 'get', {
+      value: () => Promise.reject(new DOMException('not supported here', 'NotSupportedError')),
+    });
+  });
+  const challenge = page.waitForResponse((r) => r.url().endsWith('/passkeys/challenge'));
+  await page.goto('/login?sign_in_error=cancelled&provider=apple');
+  await challenge;
+  await expect(page.getByText('Die Anmeldung bei Apple wurde abgebrochen.')).toBeVisible();
+  await expect(page.getByText('Keine Verbindung zum Server.')).toHaveCount(0);
+});
