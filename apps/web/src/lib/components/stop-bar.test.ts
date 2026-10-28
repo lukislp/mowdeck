@@ -36,6 +36,19 @@ describe('StopBar', () => {
     expect(screen.queryByTestId('extra')).toBeNull();
     // On a phone the toasts are lifted above the bar.
     expect(document.documentElement.style.getPropertyValue('--md-toast-offset')).not.toBe('16px');
+    // A bar takes the bottom edge, never the side.
+    expect(document.documentElement.style.getPropertyValue('--md-stop-inset-start')).toBe('');
+  });
+
+  it('withdraws the published clearance when it leaves the page', () => {
+    const root = document.documentElement;
+    root.style.setProperty('--md-stop-inset-start', '112px');
+    const { unmount } = render(StopBar, { props: { mowerId: 'm1' } });
+    expect(root.style.getPropertyValue('--md-stop-inset-start')).toBe('');
+    root.style.setProperty('--md-stop-clearance', '120px');
+    unmount();
+    expect(root.style.getPropertyValue('--md-stop-clearance')).toBe('');
+    expect(root.style.getPropertyValue('--md-toast-offset')).toBe('');
   });
 
   it('has a rail form with the stop upright and the extra controls above it', async () => {
@@ -55,5 +68,6 @@ describe('StopBar', () => {
     expect(sendCommand).toHaveBeenCalledWith('m1', { kind: 'emergency_stop' });
     // The rail is at the side: the toasts keep their place at the bottom.
     expect(document.documentElement.style.getPropertyValue('--md-toast-offset')).toBe('16px');
+    expect(document.documentElement.style.getPropertyValue('--md-stop-clearance')).toBe('');
   });
 });

@@ -172,6 +172,7 @@
   import type { CommandKind, CommandOutcome } from '#lib/stores/commands.svelte.js';
   import { lastLoad } from '#lib/stores/last-load.js';
   import { mowers as states } from '#lib/stores/mowers.svelte.js';
+  import { publishStopClearance } from '#lib/stop-clearance.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
   import type { VisionTask } from '#lib/vision/api.js';
 
@@ -665,6 +666,9 @@
       root.style.removeProperty('scroll-padding-bottom');
     };
   });
+  // Sheets mounted in the layout ("Was ist neu", step-up) and the toasts on a desktop do not see
+  // this page's --md-sheet-bottom: the bar's height on the root keeps them clear of the stop.
+  $effect(() => (mower ? publishStopClearance({ bottom: barHeight }) : undefined));
   $effect(() => clock.hold(5_000));
   $effect(() => {
     void permissions.version;

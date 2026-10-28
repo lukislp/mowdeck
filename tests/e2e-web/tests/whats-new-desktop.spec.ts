@@ -2,12 +2,13 @@
  * "Was ist neu": a version bump shows the sheet once, with the changes since the version this
  * device saw, and Settings → Neuigkeiten keeps the history. The build's version (/config.json)
  * and notes (/whats-new.json, written by the release build) are simulated with routes, so the
- * test needs no release image. Screenshots (light and dark, phone and desktop) are written to
+ * test needs no release image. On a mower's page the sheet stops above the emergency stop (phone
+ * and desktop) and never covers it. Screenshots (light and dark, phone and desktop) are written to
  * the directory in MOWDECK_E2E_SHOTS when it is set.
  */
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
-import { actor, loginByUi, registerByApi } from './support';
+import { RUN, actor, createMowerByApi, loginByUi, registerByApi } from './support';
 
 const SEEN_KEY = 'mowdeck.whats-new-seen';
 const notes = {
@@ -46,6 +47,7 @@ test.describe.configure({ mode: 'serial' });
 
 const user = actor('whatsnew');
 let build = '0.30.0';
+let mowerId = '';
 
 async function simulate(context: BrowserContext): Promise<void> {
   await context.route('**/config.json', async (route) => {
@@ -65,7 +67,8 @@ async function simulate(context: BrowserContext): Promise<void> {
 }
 
 test.beforeAll(async ({ request }) => {
-  await registerByApi(request, user);
+  const who = await registerByApi(request, user);
+  mowerId = await createMowerByApi(request, who, `What's new ${RUN}`);
 });
 
 test('the sheet appears once after a version change', async ({ browser }) => {
@@ -163,6 +166,73 @@ test('phone width', async ({ browser }) => {
   await shots(page, 'whats-new-phone');
   await context.close();
 });
+
+/** The two boxes share no pixel (a one-pixel touch of the edges is allowed). */
+async function expectApart(a: Locator, b: Locator): Promise<void> {
+  const one = await a.boundingBox();
+  const two = await b.boundingBox();
+  expect(one).not.toBeNull();
+  expect(two).not.toBeNull();
+  const overlapX = Math.min(one!.x + one!.width, two!.x + two!.width) - Math.max(one!.x, two!.x);
+  const overlapY = Math.min(one!.y + one!.height, two!.y + two!.height) - Math.max(one!.y, two!.y);
+  expect(
+    overlapX <= 1 || overlapY <= 1,
+    `overlap ${JSON.stringify(one)} / ${JSON.stringify(two)}`,
+  ).toBe(true);
+}
+
+/** The emergency stop is the topmost element at its centre: nothing floats over it. */
+async function expectStopOnTop(page: Page): Promise<void> {
+  const stop = page.getByTestId('emergency-stop').first();
+  await expect(stop).toBeVisible();
+  const box = (await stop.boundingBox())!;
+  const onTop = await page.evaluate(
+    ({ x, y }) => {
+      const hit = document.elementFromPoint(x, y);
+      return Boolean(hit?.closest('[data-testid="emergency-stop"]'));
+    },
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  );
+  expect(onTop).toBe(true);
+}
+
+for (const [label, viewport] of [
+  ['phone', { width: 390, height: 844 }],
+  ['desktop', { width: 1280, height: 800 }],
+] as const) {
+  test(`on a mower's page the sheet stays clear of the emergency stop (${label})`, async ({
+    browser,
+  }) => {
+    build = '0.31.0';
+    const phone = label === 'phone';
+    const context = await browser.newContext({
+      locale: 'de-DE',
+      viewport,
+      isMobile: phone,
+      hasTouch: phone,
+    });
+    await simulate(context);
+    const page = await context.newPage();
+    await loginByUi(page, user);
+    await page.evaluate((key) => localStorage.setItem(key, '0.28.5'), SEEN_KEY);
+    await page.goto(`/mowers/${mowerId}`);
+
+    const sheet = page.getByTestId('whats-new-sheet');
+    await expect(sheet).toBeVisible();
+    await expect(page.getByTestId('emergency-stop').first()).toBeVisible();
+    // The sheet's rise animation ends before the boxes are measured.
+    await page.waitForTimeout(400);
+    await expectApart(sheet, page.locator('.md-command-bar').first());
+    await expectStopOnTop(page);
+    // The whole sheet is on screen: its footer ("Verstanden") can be reached.
+    await expect(sheet.getByRole('button', { name: 'Verstanden' })).toBeInViewport();
+    await shots(page, `whats-new-mower-${label}`);
+
+    await sheet.getByRole('button', { name: 'Verstanden' }).click();
+    await expect(sheet).toBeHidden();
+    await context.close();
+  });
+}
 
 async function shots(page: Page, name: string): Promise<void> {
   const dir = process.env.MOWDECK_E2E_SHOTS;
