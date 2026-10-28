@@ -83,11 +83,16 @@ export function mapLayers(
     label: label(layer.id),
     url: url(layer.id),
     attribution: layer.attribution || null,
+    attributionUrl: /openstreetmap/i.test(layer.attribution) ? OSM_COPYRIGHT : null,
     minZoom: layer.min_zoom,
     maxZoom: layer.max_zoom,
+    covered: layer.covers_last ?? true,
     load,
   }));
 }
+
+/** The licence page an OpenStreetMap credit line must link to. */
+export const OSM_COPYRIGHT = 'https://www.openstreetmap.org/copyright';
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -119,19 +124,36 @@ export function saveLayer(layer: string | null, store: Store | null = defaultSto
   }
 }
 
+/** A position as text for the police: decimal degrees, 6 places (about 0.1 m), dot decimal. */
+export function coordinatesText(point: { lat: number; lon: number }): string {
+  return `${point.lat.toFixed(6)}, ${point.lon.toFixed(6)}`;
+}
+
+export interface MapLinks {
+  apple: string;
+  google: string;
+  osm: string;
+  /** The `geo:` URI of the device's maps app; only on Android, where it is handled. */
+  geo: string | null;
+}
+
 /**
- * A link that opens the position in the device's maps app: Apple Maps on Apple devices, a
- * `geo:` URI on Android, OpenStreetMap elsewhere. Only followed when the user taps it.
+ * Links that open the position in Apple Maps, Google Maps and OpenStreetMap (always), and in
+ * the Android maps app (`geo:`). Built from the coordinates only, never from the page address,
+ * so a share token can never end up in them. Only followed when the user taps one.
  */
-export function mapsLink(
+export function mapLinks(
   point: { lat: number; lon: number },
+  label: string,
   userAgent: string = globalThis.navigator?.userAgent ?? '',
-): string {
+): MapLinks {
   const lat = point.lat.toFixed(6);
   const lon = point.lon.toFixed(6);
-  if (/iPhone|iPad|iPod|Macintosh/.test(userAgent)) {
-    return `https://maps.apple.com/?ll=${lat},${lon}&q=${lat},${lon}`;
-  }
-  if (/Android/.test(userAgent)) return `geo:${lat},${lon}?q=${lat},${lon}`;
-  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=18/${lat}/${lon}`;
+  const pair = `${lat},${lon}`;
+  return {
+    apple: `https://maps.apple.com/?ll=${pair}&q=${encodeURIComponent(label)}`,
+    google: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pair)}`,
+    osm: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=18/${lat}/${lon}`,
+    geo: /Android/.test(userAgent) ? `geo:${pair}?q=${encodeURIComponent(pair)}` : null,
+  };
 }

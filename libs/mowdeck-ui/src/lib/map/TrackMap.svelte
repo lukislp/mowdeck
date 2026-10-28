@@ -7,7 +7,8 @@
   Background, first that applies: `layers` (base maps served by MowDeck itself around the track,
   street map and aerial photo, loaded through `load` so the page can add a token; a switch on the
   map picks one, `layer` is bindable), else the installation's raster tile server (`tiles`), else
-  a plain grid backdrop with `labels.noTiles`.
+  a plain grid backdrop with `labels.noTiles`. A layer without data at the position (`covered:
+  false`, or a whole round of tiles failing) is skipped for the next one, with `labels.uncovered`.
 
   The view fits the track until the user pans or zooms (the fit control turns it back on).
   `follow` (bindable) keeps the last position in the centre; a drag ends it. Leaflet is loaded
@@ -28,10 +29,14 @@
     /** URL template with `{z}`, `{x}`, `{y}`; handed to `load` filled in. */
     url: string;
     attribution?: string | null;
+    /** Where the credit line links to (e.g. OpenStreetMap's copyright page). */
+    attributionUrl?: string | null;
     minZoom?: number;
     /** Highest zoom with real detail; deeper zooms scale the last level. */
     maxZoom?: number;
     load: (url: string, signal: AbortSignal) => Promise<Blob>;
+    /** False when the source has no data at the last position (then another layer is shown). */
+    covered?: boolean;
   }
 
   /** Translated texts of the map controls and markers. */
@@ -48,6 +53,10 @@
     noTiles: string;
     /** Accessible name of the layer switch. */
     layers?: string;
+    /** Shown when the chosen layer has no data here and another one stands in. */
+    uncovered?: (layer: string) => string;
+    /** Shown when base maps exist but none has data at the position. */
+    noneHere?: string;
   }
 </script>
 
@@ -105,13 +114,25 @@
   let autoFit = true;
 
   const head = $derived(last ?? (track.length ? track[track.length - 1]! : null));
-  const chosen = $derived(layers.find((entry) => entry.id === layer) ?? layers[0] ?? null);
+  /** Layers whose tiles kept failing here (no single tile loaded): treated as uncovered. */
+  let failed = $state.raw<ReadonlySet<string>>(new Set());
+  const usable = $derived(
+    layers.filter((entry) => entry.covered !== false && !failed.has(entry.id)),
+  );
+  const requested = $derived(layers.find((entry) => entry.id === layer) ?? layers[0] ?? null);
+  // The chosen layer when it has data at the position, else the first one that has (a stolen
+  // mower may be far outside an aerial photo of one state), else none (the grid).
+  const chosen = $derived(
+    requested && usable.includes(requested) ? requested : (usable[0] ?? null),
+  );
+  const fallbackFrom = $derived(requested && requested !== chosen ? requested : null);
   const chosenKey = $derived(chosen ? `${chosen.id} ${chosen.url}` : null);
   /** Browser side tiles only without MowDeck's own base maps. */
   const rasterUrl = $derived(chosen ? null : (tiles?.url ?? null));
   const attribution = $derived(
     chosen ? (chosen.attribution ?? null) : rasterUrl ? (tiles?.attribution ?? null) : null,
   );
+  const attributionUrl = $derived(chosen?.attributionUrl ?? null);
   const bare = $derived(!chosen && !rasterUrl);
 
   $effect(() => {
@@ -193,6 +214,9 @@
     if (!lib || !instance) return;
     let background: Leaflet.TileLayer | null = null;
     if (base) {
+      const id = base.id;
+      let loaded = 0;
+      let errors = 0;
       background = createAerialLayer(
         lib,
         {
@@ -204,6 +228,17 @@
         },
         () => untrack(() => chosen)?.load,
       );
+      background.on('tileload', () => (loaded += 1));
+      const giveUp = () => (failed = new Set([...untrack(() => failed), id]));
+      background.on('tileerror', () => {
+        errors += 1;
+        if (errors >= 6 && loaded === 0) giveUp();
+      });
+      // A whole round of tiles in view without a single image: no data here (or the source is
+      // down); the next layer stands in.
+      background.on('load', () => {
+        if (errors > 0 && loaded === 0) giveUp();
+      });
     } else if (raster) {
       background = lib.tileLayer(raster, {
         maxZoom: 22,
@@ -359,6 +394,7 @@
           type="button"
           role="radio"
           aria-checked={entry.id === chosen?.id}
+          disabled={!usable.includes(entry)}
           data-testid="track-map-layer-{entry.id}"
           onclick={() => (layer = entry.id)}>{entry.label}</button
         >
@@ -385,10 +421,23 @@
       <Icon name="crosshair" size={20} />
     </button>
   </div>
+  {#if fallbackFrom && labels.uncovered}
+    <p class="hint" role="status" data-testid="track-map-uncovered">
+      {labels.uncovered(fallbackFrom.label)}
+    </p>
+  {/if}
   {#if bare}
-    <p class="note">{labels.noTiles}</p>
+    <p class="note" data-testid="track-map-bare">
+      {layers.length ? (labels.noneHere ?? labels.noTiles) : labels.noTiles}
+    </p>
   {:else if attribution}
-    <p class="note attribution">{attribution}</p>
+    <p class="note attribution">
+      {#if attributionUrl}
+        <a href={attributionUrl} target="_blank" rel="noopener noreferrer">{attribution}</a>
+      {:else}
+        {attribution}
+      {/if}
+    </p>
   {/if}
 </div>
 
@@ -455,6 +504,32 @@
   .layers button[aria-checked='true'] {
     background: var(--md-color-ink);
     color: var(--md-color-ink-inverse);
+  }
+
+  .layers button:disabled {
+    opacity: 0.45;
+    cursor: default;
+    text-decoration: line-through;
+  }
+
+  .hint {
+    position: absolute;
+    inset-block-start: calc(var(--md-space-3) + 48px);
+    inset-inline: var(--md-space-3);
+    z-index: 500;
+    max-inline-size: 36ch;
+    margin: 0;
+    padding: var(--md-space-2) var(--md-space-3);
+    border-inline-start: 4px solid var(--md-state-paused);
+    border-radius: var(--md-radius-2);
+    background: var(--md-color-surface);
+    box-shadow: var(--md-shadow-float);
+    color: var(--md-color-ink);
+    font-size: var(--md-font-size-13);
+  }
+
+  .attribution a {
+    color: inherit;
   }
 
   .layers button:focus-visible {

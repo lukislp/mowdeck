@@ -17,6 +17,7 @@ from telemetry.application.aerial import AerialConfig
 from telemetry.application.context import TelemetryConfig
 from telemetry.application.tracking import TrackingConfig
 from telemetry.application.tracking_map import TrackingMapConfig
+from telemetry.domain.aerial import Bounds
 from telemetry.domain.thinning import ThinPolicy
 
 
@@ -185,18 +186,48 @@ class Settings(ServiceSettings):
     ``{z}``, ``{x}``, ``{y}`` in any order (Web Mercator, 256 px), fetched by Telemetry only
     around a tracked
     track and cached with the aerial tiles. Empty (the default) means no street map and no
-    request to any third party. Germany (open data, no key): BKG TopPlusOpen
-    ``https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png``."""
+    request to any third party. Recommended: OpenStreetMap
+    ``https://tile.openstreetmap.org/{z}/{x}/{y}.png`` (worldwide, zoom 19; the fetcher follows
+    its tile usage policy). Alternative for Germany: BKG TopPlusOpen."""
 
     telemetry_basemap_attribution: str = Field(default="", max_length=300)
-    """Credit line of the street map (shown while it is visible; TopPlusOpen:
-    ``© BKG (Jahr des letzten Datenbezugs), dl-de/by-2-0``)."""
+    """Credit line of the street map, shown while it is visible (OpenStreetMap:
+    ``© OpenStreetMap contributors``; the app links it to the copyright page)."""
 
     telemetry_basemap_min_zoom: int = Field(default=8, ge=0, le=24)
     """Lowest zoom of the street map that is served."""
 
-    telemetry_basemap_max_zoom: int = Field(default=18, ge=0, le=24)
+    telemetry_basemap_max_zoom: int = Field(default=19, ge=0, le=24)
     """Highest zoom the street map source delivers (the client scales beyond it)."""
+
+    telemetry_basemap_coverage: str = Field(default="", max_length=100)
+    """Optional box the street map source covers, ``south,west,north,east`` in degrees; the
+    tracking map falls back to another layer for a position outside it. Empty: the world."""
+
+    telemetry_aerial_coverage: str = Field(default="", max_length=100)
+    """Optional box the aerial photo source covers (Bavaria: ``47.27,8.97,50.57,13.84``); the
+    tracking map falls back to the street map for a position outside it. Empty: the world."""
+
+    @field_validator("telemetry_basemap_coverage", "telemetry_aerial_coverage")
+    @classmethod
+    def _valid_coverage(cls, value: str) -> str:
+        cls.coverage_of(value)
+        return value.strip()
+
+    @staticmethod
+    def coverage_of(value: str) -> Bounds | None:
+        """Parse ``south,west,north,east``; None for an empty value."""
+        if not value.strip():
+            return None
+        try:
+            south, west, north, east = (float(part) for part in value.split(","))
+        except ValueError as error:
+            msg = "a coverage box is south,west,north,east in degrees"
+            raise ValueError(msg) from error
+        if not (-90 <= south < north <= 90 and -180 <= west < east <= 180):
+            msg = "a coverage box needs south < north and west < east within the world"
+            raise ValueError(msg)
+        return Bounds(south, west, north, east)
 
     telemetry_tracking_map_margin_meters: float = Field(default=2000, ge=100, le=50_000)
     """Base map tiles of a tracking session are served this far around its positions."""

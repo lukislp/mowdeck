@@ -1583,6 +1583,12 @@ export type components = {
              */
             attribution: string;
             /**
+             * Covers Last
+             * @description Whether the source has data at the last known position (false: show another layer; e.g. an aerial photo of one state only).
+             * @default true
+             */
+            covers_last: boolean;
+            /**
              * Id
              * @enum {string}
              */

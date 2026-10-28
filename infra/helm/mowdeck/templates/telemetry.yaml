@@ -18,7 +18,9 @@
   "MOWDECK_TELEMETRY_AERIAL_CACHE_MAX_MB" (toString $c.AERIAL_CACHE_MAX_MB)
   "MOWDECK_TELEMETRY_BASEMAP_URL" $c.BASEMAP_URL
   "MOWDECK_TELEMETRY_BASEMAP_ATTRIBUTION" $c.BASEMAP_ATTRIBUTION
-  "MOWDECK_TELEMETRY_BASEMAP_MAX_ZOOM" (toString $c.BASEMAP_MAX_ZOOM)) }}
+  "MOWDECK_TELEMETRY_BASEMAP_MAX_ZOOM" (toString $c.BASEMAP_MAX_ZOOM)
+  "MOWDECK_TELEMETRY_BASEMAP_COVERAGE" $c.BASEMAP_COVERAGE
+  "MOWDECK_TELEMETRY_AERIAL_COVERAGE" $c.AERIAL_COVERAGE) }}
 {{- include "mowdeck.migrationJob" (dict "ctx" . "component" "telemetry" "key" "telemetry" "image" "telemetry" "module" "telemetry.adapters.db.migrate" "weight" 3) }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "telemetry" "key" "telemetry" "image" "telemetry"
   "writableDirs" (list (dict "name" "aerial-cache" "mountPath" "/var/cache/mowdeck/aerial"))

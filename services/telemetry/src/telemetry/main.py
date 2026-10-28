@@ -106,7 +106,9 @@ def build_app(
     http_source: HttpTileSource | None = None
     basemap_on = settings.telemetry_basemap_url is not None
     if aerial_source is None and (aerial_config.enabled or basemap_on):
-        http_source = HttpTileSource(settings.telemetry_aerial_timeout_seconds)
+        http_source = HttpTileSource(
+            settings.telemetry_aerial_timeout_seconds, version=settings.version
+        )
         aerial_source = http_source
         if aerial_cache is None:
             aerial_cache = DiskTileCache(
@@ -230,6 +232,7 @@ def tracking_basemap(
                 settings.telemetry_basemap_attribution,
                 settings.telemetry_basemap_min_zoom,
                 settings.telemetry_basemap_max_zoom,
+                coverage=settings.coverage_of(settings.telemetry_basemap_coverage),
             )
         )
     aerial = settings.to_aerial_config()
@@ -241,6 +244,7 @@ def tracking_basemap(
                 min_zoom=aerial.min_zoom,
                 max_zoom=aerial.max_zoom,
                 url=services.aerial.upstream_url,
+                coverage=settings.coverage_of(settings.telemetry_aerial_coverage),
             )
         )
     if not layers or source is None:

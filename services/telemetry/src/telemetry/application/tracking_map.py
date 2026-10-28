@@ -11,7 +11,6 @@ Anything outside the box or the zoom range is refused, so this is no open proxy 
 """
 
 import asyncio
-import hashlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -19,7 +18,13 @@ from datetime import timedelta
 from typing import Literal
 from uuid import UUID
 
-from telemetry.application.aerial import FetchedTile, MissLimiter, TileCache, TileSource
+from telemetry.application.aerial import (
+    FetchedTile,
+    MissLimiter,
+    TileCache,
+    TileSource,
+    fetch_cached,
+)
 from telemetry.domain.aerial import Bounds, tile_bounds, tile_in_range, xyz_url
 from telemetry.domain.errors import AerialRateLimitedError, TileOutsideMapError
 
@@ -28,16 +33,31 @@ LayerId = Literal["map", "aerial"]
 
 @dataclass(frozen=True, slots=True)
 class BaseLayer:
-    """One base map layer: its credit line, zoom range and the URL of tile ``z/x/y``."""
+    """One base map layer: its credit line, zoom range, the URL of tile ``z/x/y`` and the box
+    the source covers (None: the whole world)."""
 
     id: LayerId
     attribution: str
     min_zoom: int
     max_zoom: int
     url: Callable[[int, int, int], str]
+    coverage: Bounds | None = None
+
+    def covers(self, lat: float | None, lon: float | None) -> bool:
+        """Whether the source has data at the position (True without a position or a box)."""
+        if self.coverage is None or lat is None or lon is None:
+            return True
+        c = self.coverage
+        return c.south <= lat <= c.north and c.west <= lon <= c.east
 
 
-def street_layer(template: str, attribution: str, min_zoom: int, max_zoom: int) -> BaseLayer:
+def street_layer(
+    template: str,
+    attribution: str,
+    min_zoom: int,
+    max_zoom: int,
+    coverage: Bounds | None = None,
+) -> BaseLayer:
     """The street map from an XYZ URL template."""
     return BaseLayer(
         id="map",
@@ -45,6 +65,7 @@ def street_layer(template: str, attribution: str, min_zoom: int, max_zoom: int) 
         min_zoom=min_zoom,
         max_zoom=max_zoom,
         url=lambda z, x, y: xyz_url(template, z, x, y),
+        coverage=coverage,
     )
 
 
@@ -100,21 +121,25 @@ class TrackingMap:
         if not (tile_in_range(z, x, y) and layer.min_zoom <= z <= layer.max_zoom):
             msg = "the tile is outside the zoom range of the base map"
             raise TileOutsideMapError(msg)
-        if area is None or not area.intersects(tile_bounds(z, x, y)):
+        box = tile_bounds(z, x, y)
+        if area is None or not area.intersects(box):
             msg = "the tile is not around the tracked positions"
             raise TileOutsideMapError(msg)
-        url = layer.url(z, x, y)
-        key = hashlib.sha256(url.encode()).hexdigest()
-        if self._cache is not None:
-            cached = await self._cache.get(key, self._config.cache_ttl)
-            if cached is not None:
-                return cached
-        wait = self._limiter.take(account_id)
-        if wait is not None:
-            msg = "too many new map tiles requested; try again shortly"
-            raise AerialRateLimitedError(msg, wait)
-        async with self._gate:
-            tile = await self._source.fetch(url)
-        if self._cache is not None:
-            await self._cache.put(key, tile)
-        return tile
+        if layer.coverage is not None and not layer.coverage.intersects(box):
+            msg = "the base map source has no data here"
+            raise TileOutsideMapError(msg)
+
+        def take() -> None:
+            wait = self._limiter.take(account_id)
+            if wait is not None:
+                msg = "too many new map tiles requested; try again shortly"
+                raise AerialRateLimitedError(msg, wait)
+
+        return await fetch_cached(
+            layer.url(z, x, y),
+            self._source,
+            self._cache,
+            self._config.cache_ttl,
+            before_fetch=take,
+            gate=self._gate,
+        )

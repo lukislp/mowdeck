@@ -15,6 +15,8 @@ const LABELS = {
   last: 'Last',
   noTiles: 'No background map',
   layers: 'Layer',
+  uncovered: (layer: string) => `${layer} not here`,
+  noneHere: 'Nothing covers this place',
 };
 
 const TRACK = [
@@ -95,5 +97,59 @@ describe('TrackMap', () => {
     });
     await waitFor(() => expect(container.querySelector('.md-track-dot.last')).not.toBeNull());
     expect(queryByRole('radiogroup')).toBeNull();
+  });
+
+  it('falls back to a covered layer when the chosen one has no data at the position', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:tile');
+    URL.revokeObjectURL = vi.fn();
+    const layers = [
+      {
+        ...layer('map', blobLoader()),
+        attribution: '© OpenStreetMap contributors',
+        attributionUrl: 'https://www.openstreetmap.org/copyright',
+      },
+      { ...layer('aerial', blobLoader()), covered: false },
+    ];
+    const { container, getByTestId } = render(TrackMap, {
+      track: TRACK,
+      labels: LABELS,
+      layers,
+      layer: 'aerial',
+    });
+    await waitFor(() => expect(container.querySelector('.md-track-dot.last')).not.toBeNull());
+    expect(getByTestId('track-map').getAttribute('data-layer')).toBe('map');
+    expect(getByTestId('track-map-uncovered').textContent).toContain('AERIAL not here');
+    expect(getByTestId('track-map-layer-aerial')).toBeDisabled();
+    const credit = container.querySelector('.attribution a') as HTMLAnchorElement;
+    expect(credit.href).toBe('https://www.openstreetmap.org/copyright');
+    expect(credit.rel).toBe('noopener noreferrer');
+  });
+
+  it('shows the grid with a hint when no layer covers the position', async () => {
+    const { container, getByTestId } = render(TrackMap, {
+      track: TRACK,
+      labels: LABELS,
+      layers: [{ ...layer('aerial', blobLoader()), covered: false }],
+    });
+    await waitFor(() => expect(container.querySelector('.md-track-dot.last')).not.toBeNull());
+    expect(getByTestId('track-map').getAttribute('data-layer')).toBe('grid');
+    expect(getByTestId('track-map-bare').textContent).toContain('Nothing covers this place');
+  });
+
+  it('gives up a layer whose tiles keep failing and uses the next one', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:tile');
+    URL.revokeObjectURL = vi.fn();
+    const broken = vi.fn(async (_url: string, _signal: AbortSignal): Promise<Blob> => {
+      throw new Error('502');
+    });
+    const { getByTestId } = render(TrackMap, {
+      track: TRACK,
+      labels: LABELS,
+      layers: [layer('aerial', broken), layer('map', blobLoader())],
+    });
+    await waitFor(() => expect(broken).toHaveBeenCalled());
+    const map = getByTestId('track-map');
+    await waitFor(() => expect(map.getAttribute('data-layer')).toBe('map'), { timeout: 3000 });
+    expect(getByTestId('track-map-uncovered').textContent).toContain('AERIAL not here');
   });
 });

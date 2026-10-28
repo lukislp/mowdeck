@@ -5,7 +5,7 @@ When a theft alarm fires (lifted, left the dock without a command, left the gard
 ## What the owner sees
 
 - A notification "Ortung gestartet" (critical, also during quiet hours). Tapping it opens `/mowers/<id>/tracking`.
-- On that page: a big map with the track since the alarm on a street map or aerial photo ([Base map](#base-map)), the last position and its age, **In Karten-App öffnen**, **Link teilen**, **Bericht (PDF)** and **Ortung beenden**. Ending asks for the reason: **Fehlalarm** or **Ortung beenden**. The mower page has a shield button that turns red while tracking runs.
+- On that page: a big map with the track since the alarm on a street map or aerial photo ([Base map](#base-map)), the last position and its age, the coordinates as text with a copy button and links to Apple Maps, Google Maps and OpenStreetMap, **Link teilen**, **Bericht (PDF)** and **Ortung beenden**. Ending asks for the reason: **Fehlalarm** or **Ortung beenden**. The mower page has a shield button that turns red while tracking runs.
 - Further notifications are rare on purpose: a move of 50 m or more (at most every 5 minutes), "Kontakt verloren" once per outage (the last position stays on the map, "stale since"), and the end (by hand or after the maximum time).
 
 Starting needs `can_control` on the mower, viewing the track, the links and the report needs `can_view`.
@@ -20,19 +20,31 @@ Start tracking by hand on the tracking page ("Ortung starten"): it takes the sam
 
 ## Base map
 
-A stolen mower leaves the garden, so the tracking map needs a real map of the surroundings, not the garden map. Telemetry serves up to two background layers, switchable on the map ("Karte" / "Luftbild"), for the owner's view and for the share link:
+A stolen mower can be carried hundreds of kilometres away, so the tracking map needs a real map of wherever it is, not the garden map. Telemetry serves up to two background layers, switchable on the map ("Karte" / "Luftbild"), for the owner's view and for the share link. The map always fits the whole track, wherever it lies.
 
-- **Karte** (street map): `MOWDECK_TELEMETRY_BASEMAP_URL` (Compose `BASEMAP_URL`), an XYZ template. Off by default. For Germany we recommend the federal open data map **BKG TopPlusOpen** (Bundesamt für Kartographie und Geodäsie, licence dl-de/by-2-0, no key, no tracking, worldwide at low zoom and detailed for Germany and Europe):
+| Layer | Setting | Coverage |
+| --- | --- | --- |
+| **Karte** (street map), recommended source **OpenStreetMap** | `BASEMAP_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png`, `BASEMAP_ATTRIBUTION=© OpenStreetMap contributors`, `BASEMAP_MAX_ZOOM=19` | worldwide, street level up to zoom 19 |
+| **Karte**, alternative **BKG TopPlusOpen** (Bundesamt für Kartographie und Geodäsie, open data dl-de/by-2-0, no key) | `BASEMAP_URL=https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png`, `BASEMAP_MAX_ZOOM=18`, credit `© BKG (2026), dl-de/by-2-0, Datenquellen: sgx.geodatenzentrum.de/web_public/gdz/datenquellen/Datenquellen_TopPlusOpen.html` | world up to zoom 12; Europe up to about zoom 16 to 17 (checked: Madrid, Warsaw, Istanbul, Moscow); Germany up to zoom 18. Outside Europe deeper zooms are empty tiles (checked: New York, Tokyo from zoom 13) |
+| **Luftbild** (aerial photo) | the aerial photo source of the mower map ([aerial-photo.md](aerial-photo.md), `AERIAL_*`) | that source's area only; the Bavarian orthophoto covers Bavaria only: set `AERIAL_COVERAGE=47.27,8.97,50.57,13.84` |
 
-  ```dotenv
-  BASEMAP_URL=https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png
-  BASEMAP_ATTRIBUTION=© BKG (2026), dl-de/by-2-0, Datenquellen: sgx.geodatenzentrum.de/web_public/gdz/datenquellen/Datenquellen_TopPlusOpen.html
-  ```
+The street map is **off by default** (no request to any third party until the operator sets it). The credit line is always shown while a layer is visible; an OpenStreetMap credit links to https://www.openstreetmap.org/copyright.
 
-  Other providers work the same way when their terms allow server side use with caching (the public OpenStreetMap tile servers are not meant for apps).
-- **Luftbild** (aerial photo): the source of the aerial photo under the mower map ([aerial-photo.md](aerial-photo.md), `AERIAL_*`). When it is set, tracking uses it too, around the track instead of the garden.
+**Coverage and fallback.** `BASEMAP_COVERAGE` and `AERIAL_COVERAGE` (`south,west,north,east` in degrees, empty: the world) tell Telemetry where a source has data. The tracking status says per layer whether it covers the last position (`covers_last`); the map then shows the chosen layer only where it has data and otherwise switches to the next one (for example from Luftbild to Karte once the mower leaves Bavaria) with a hint, or to a grid with a hint when no layer covers the place. A layer whose tiles all fail to load is skipped the same way. Tiles outside a coverage box are refused before any upstream request.
 
-How it works: the browser asks MowDeck for each tile (`GET /api/v1/telemetry/mowers/{id}/tracking/map/{layer}/{z}/{x}/{y}` for the owner, `POST /api/v1/telemetry/public/tracking/tile` with the token in the body for the share link). Telemetry serves only tiles that overlap the session's positions plus `MOWDECK_TELEMETRY_TRACKING_MAP_MARGIN_METERS` (2000) and lie in the layer's zoom range, fetches missing ones from the source and keeps them in the aerial cache volume (30 days, 256 MB). So the browser never contacts the provider, the content security policy stays as it is, and a share link reveals nothing beyond the track it already shows. The provider sees the server's address and the tiles around the track. Without any source the map draws the track on a grid and says so; the button **In Karten-App öffnen** under the last position opens it in Apple Maps, the Android maps app (`geo:`) or OpenStreetMap, on the owner's page and on the share page.
+**Coordinates as text.** Under the map both pages show the last position as decimal latitude and longitude with six places (about 10 cm), the time of the fix and its age, a copy button, and links "In Apple Karten öffnen", "In Google Maps öffnen" and "In OpenStreetMap öffnen" (plus the Android maps app via `geo:`). They are built from the coordinates only, so a share token never appears in them. This works even where no map covers the place; give these coordinates to the police. The vendor reports no accuracy figure; without RTK the position can be several metres off.
+
+**How tiles are fetched.** The browser asks MowDeck for each tile (`GET /api/v1/telemetry/mowers/{id}/tracking/map/{layer}/{z}/{x}/{y}` for the owner, `POST /api/v1/telemetry/public/tracking/tile` with the token in the body for the share link). Telemetry serves only tiles that overlap the session's positions plus `MOWDECK_TELEMETRY_TRACKING_MAP_MARGIN_METERS` (2000) and lie in the layer's zoom range and coverage, and keeps them in the aerial cache volume (256 MB). So the browser never contacts the provider, the content security policy stays as it is, and a share link reveals nothing beyond the track it already shows. The provider sees the server's address and the tiles around the track.
+
+**OpenStreetMap tile usage policy** (https://operations.osmfoundation.org/policies/tiles/). Telemetry, which is the only client of the tile server:
+
+- identifies itself on every upstream request: `User-Agent: MowDeck/<version> (+https://github.com/lukislp/mowdeck)`, and sends no `Referer` (none is forged either);
+- keeps every tile as long as the server's `Cache-Control: max-age` or `Expires` allows and does not ask again before that; without either header it keeps a tile for `AERIAL_CACHE_TTL_DAYS` (30), never less than 7 days; `no-store`/`no-cache` answers are not kept;
+- fetches only tiles a viewer is looking at: no prefetching, no bulk download, no tiles outside the track's box;
+- limits new tiles per account (`MOWDECK_TELEMETRY_AERIAL_MISSES_PER_MINUTE`, 240) with four requests in flight at most, and the share page per client (600 tiles per minute);
+- shows the attribution with a link to the copyright page.
+
+Keep it that way for a family-sized installation; an operator with heavy use needs its own tile server or a commercial provider.
 
 ## Theft report (PDF)
 
@@ -53,7 +65,8 @@ Mower model, serial number or device name (from the connection options, Mammotio
 | `MOWDECK_TELEMETRY_TRACKING_PUBLIC_RATE_PER_MINUTE` / `_PUBLIC_FAILURES_PER_MINUTE` | `60` / `20` | Rate limits of the public page per client |
 | `MOWDECK_TELEMETRY_TRACKING_TICK_SECONDS` / `_LEASE_SECONDS` | `15` / `60` | Background tick and gateway lease |
 | `MOWDECK_TELEMETRY_BASEMAP_URL` / `_ATTRIBUTION` | empty | Street map under the track (see [Base map](#base-map)); empty: off |
-| `MOWDECK_TELEMETRY_BASEMAP_MIN_ZOOM` / `_MAX_ZOOM` | `8` / `18` | Zoom range of the street map |
+| `MOWDECK_TELEMETRY_BASEMAP_MIN_ZOOM` / `_MAX_ZOOM` | `8` / `19` | Zoom range of the street map |
+| `MOWDECK_TELEMETRY_BASEMAP_COVERAGE` / `MOWDECK_TELEMETRY_AERIAL_COVERAGE` | empty (the world) | Box a source covers, `south,west,north,east`; outside it the map switches layers |
 | `MOWDECK_TELEMETRY_TRACKING_MAP_MARGIN_METERS` | `2000` | Base map tiles are served this far around the session's positions |
 | `MOWDECK_TELEMETRY_TRACKING_PUBLIC_TILES_PER_MINUTE` | `600` | Base map tiles per minute and client on the share page |
 

@@ -52,12 +52,12 @@
   import {
     loadLayer,
     mapLayers,
-    mapsLink,
     ownerTileUrl,
     saveLayer,
     type MapLayer,
   } from '#lib/tracking/basemap.js';
   import { startPoller } from '#lib/tracking/poll.js';
+  import PositionFix from '#lib/tracking/PositionFix.svelte';
   import { canShare, shareUrl } from '#lib/tracking/share.js';
   import { mergeTrack, newestAt, serverOffsetMs, type TrackPoint } from '#lib/tracking/track.js';
 
@@ -310,6 +310,8 @@
     last: m.tracking_map_last(),
     noTiles: m.tracking_map_no_tiles(),
     layers: m.tracking_map_layers(),
+    uncovered: (layer: string) => m.tracking_map_uncovered({ layer }),
+    noneHere: m.tracking_map_none_here(),
   });
 
   // The base map: the street map and the aerial photo Telemetry serves around the track.
@@ -332,9 +334,6 @@
       label: m.tracking_share_hours_option({ hours: value }),
     })),
   );
-
-  const coordinates = (point: { lat: number; lon: number }) =>
-    `${formatNumber(point.lat, 5)}, ${formatNumber(point.lon, 5)}`;
 </script>
 
 <svelte:head><title>{m.tracking_title()} · {mower?.name ?? m.app_name()}</title></svelte:head>
@@ -405,15 +404,6 @@
                   <strong class="age" data-testid="tracking-age"
                     >{m.tracking_last_seen({ age: formatAge(last.at, now) })}</strong
                   >
-                  <span class="mono">{coordinates(last)}</span>
-                  <a
-                    class="maps"
-                    href={mapsLink(last)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="tracking-open-maps"
-                    ><Icon name="pin" size={16} />{m.tracking_open_maps()}</a
-                  >
                 {:else}
                   {m.tracking_no_position()}
                 {/if}
@@ -435,6 +425,10 @@
               </div>
             {/if}
           </dl>
+
+          {#if last}
+            <div class="fixwrap"><PositionFix point={last} {now} testid="tracking-fix" /></div>
+          {/if}
 
           {#if active && session.stale_since}
             <p class="stale" role="status" data-testid="tracking-stale">
@@ -771,25 +765,8 @@
     font-size: var(--md-font-size-13);
   }
 
-  .maps {
-    display: inline-flex;
-    align-items: center;
-    justify-self: start;
-    gap: var(--md-space-2);
-    min-block-size: var(--md-target);
-    margin-block-start: var(--md-space-1);
-    padding: 0 var(--md-space-3);
-    border: var(--md-border-control) solid var(--md-color-line-strong);
-    border-radius: var(--md-radius-round);
-    color: var(--md-color-ink);
-    font-size: var(--md-font-size-14);
-    font-weight: var(--md-weight-semibold);
-    text-decoration: none;
-  }
-
-  .maps:focus-visible {
-    outline: 3px solid var(--md-color-focus);
-    outline-offset: 2px;
+  .fixwrap {
+    margin-block-start: var(--md-space-4);
   }
 
   .stale {

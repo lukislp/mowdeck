@@ -144,16 +144,24 @@ class MapLayerOut(BaseModel):
     attribution: str = Field(description="Credit line to show while the layer is visible.")
     min_zoom: int
     max_zoom: int = Field(description="Highest zoom with real detail; deeper zooms scale it.")
+    covers_last: bool = Field(
+        default=True,
+        description="Whether the source has data at the last known position (false: show "
+        "another layer; e.g. an aerial photo of one state only).",
+    )
 
     @classmethod
-    def all(cls, layers: Sequence[BaseLayer]) -> list["MapLayerOut"]:
-        """From the offered layers."""
+    def all(
+        cls, layers: Sequence[BaseLayer], lat: float | None = None, lon: float | None = None
+    ) -> list["MapLayerOut"]:
+        """From the offered layers, judged at the last known position."""
         return [
             cls(
                 id=layer.id,
                 attribution=layer.attribution,
                 min_zoom=layer.min_zoom,
                 max_zoom=layer.max_zoom,
+                covers_last=layer.covers(lat, lon),
             )
             for layer in layers
         ]
@@ -187,7 +195,7 @@ class TrackingStatus(BaseModel):
             truncated=view.truncated,
             links=[TrackingLinkOut.of(link, now) for link in view.links],
             photos=view.photos,
-            map_layers=MapLayerOut.all(layers),
+            map_layers=MapLayerOut.all(layers, view.session.last_lat, view.session.last_lon),
             server_time=now,
         )
 
@@ -240,7 +248,9 @@ class PublicTrackOut(BaseModel):
     def of(cls, p: PublicTrack, layers: Sequence[BaseLayer] = ()) -> "PublicTrackOut":
         """From the public view."""
         return cls(
-            map_layers=MapLayerOut.all(layers),
+            map_layers=MapLayerOut.all(
+                layers, p.last.lat if p.last else None, p.last.lon if p.last else None
+            ),
             mower_name=p.mower_name,
             mower_model=p.mower_model,
             active=p.active,

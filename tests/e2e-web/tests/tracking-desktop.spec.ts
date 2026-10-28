@@ -68,9 +68,18 @@ test('tracking: start, positions arrive, share link works logged out, report, fa
   await expect(map).toHaveAttribute('data-layer', 'aerial');
   await expect.poll(() => loadedTiles(page), { timeout: 30_000 }).toBeGreaterThan(0);
   await expect(map).toContainText('Fake aerial photo');
-  await expect(page.getByTestId('tracking-open-maps')).toHaveAttribute(
+  // The last position as text with a copy button and links to the maps apps.
+  await expect(page.getByTestId('tracking-fix-coordinates')).toHaveValue(
+    /^-?\d{1,2}\.\d{6}, -?\d{1,3}\.\d{6}$/,
+  );
+  await expect(page.getByTestId('tracking-fix-copy')).toBeVisible();
+  await expect(page.getByTestId('tracking-fix-apple')).toHaveAttribute(
     'href',
-    /(maps\.apple\.com|openstreetmap\.org|^geo:)/,
+    /^https:\/\/maps\.apple\.com\/\?ll=-?[\d.]+,-?[\d.]+&q=/,
+  );
+  await expect(page.getByTestId('tracking-fix-google')).toHaveAttribute(
+    'href',
+    /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/,
   );
   csp.assertNone();
 
@@ -91,7 +100,14 @@ test('tracking: start, positions arrive, share link works logged out, report, fa
   // The guest sees the same base map, its tiles fetched with the token in the body.
   await expect(guest.getByTestId('track-map')).toHaveAttribute('data-layer', 'aerial');
   await expect.poll(() => loadedTiles(guest), { timeout: 30_000 }).toBeGreaterThan(0);
-  await expect(guest.getByTestId('track-open-maps')).toBeVisible();
+  await expect(guest.getByTestId('track-fix-coordinates')).toHaveValue(
+    /^-?\d{1,2}\.\d{6}, -?\d{1,3}\.\d{6}$/,
+  );
+  for (const id of ['track-fix-apple', 'track-fix-google', 'track-fix-osm']) {
+    const link = guest.getByTestId(id);
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(await link.getAttribute('href')).not.toContain(token);
+  }
   const html = await guest.content();
   expect(html).not.toContain(owner.accountId);
   expect(html).not.toContain(mowerId);

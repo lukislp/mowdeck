@@ -37,10 +37,10 @@ class MemoryCache:
     def __init__(self) -> None:
         self.items: dict[str, FetchedTile] = {}
 
-    async def get(self, key: str, max_age: timedelta) -> FetchedTile | None:
+    async def get(self, key: str) -> FetchedTile | None:
         return self.items.get(key)
 
-    async def put(self, key: str, tile: FetchedTile) -> None:
+    async def put(self, key: str, tile: FetchedTile, lifetime: timedelta) -> None:
         self.items[key] = tile
 
 
@@ -126,8 +126,20 @@ async def test_owner_gets_street_and_aerial_tiles_around_the_track_only() -> Non
         foreign = await h.client.get(f"{base}/map/16/{x}/{y}", headers=stranger.headers)
     layers = status.json()["map_layers"]
     assert layers == [
-        {"id": "map", "attribution": "© Example", "min_zoom": 8, "max_zoom": 18},
-        {"id": "aerial", "attribution": "Photo credit", "min_zoom": 14, "max_zoom": 19},
+        {
+            "id": "map",
+            "attribution": "© Example",
+            "min_zoom": 8,
+            "max_zoom": 19,
+            "covers_last": True,
+        },
+        {
+            "id": "aerial",
+            "attribution": "Photo credit",
+            "min_zoom": 14,
+            "max_zoom": 19,
+            "covers_last": True,
+        },
     ]
     assert street.status_code == 200 and street.content == JPEG
     assert street.headers["content-type"] == "image/jpeg"
@@ -171,7 +183,13 @@ async def test_share_link_gets_tiles_of_its_track_and_nothing_else() -> None:
         )
         links = await h.client.get(f"{API}/mowers/{mower_id}/tracking/links", headers=owner.headers)
     assert view.json()["map_layers"] == [
-        {"id": "map", "attribution": "© Example", "min_zoom": 8, "max_zoom": 18}
+        {
+            "id": "map",
+            "attribution": "© Example",
+            "min_zoom": 8,
+            "max_zoom": 19,
+            "covers_last": True,
+        }
     ]
     assert ok.status_code == 200 and ok.content == JPEG
     assert ok.headers["cache-control"] == "no-store"
@@ -226,3 +244,140 @@ def test_tile_of_the_track_lies_inside_the_area() -> None:
     x, y = slippy(LAT, LON, 17)
     assert box.intersects(tile_bounds(17, x, y))
     assert not box.intersects(tile_bounds(17, x + 100, y))
+
+
+# --- upstream etiquette (OpenStreetMap tile usage policy) -----------------------------------
+
+
+async def test_upstream_requests_identify_mowdeck_and_send_no_referer() -> None:
+    import httpx
+
+    from telemetry.adapters.aerial import HttpTileSource, user_agent
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, content=JPEG, headers={"Cache-Control": "max-age=86400"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    source = HttpTileSource(client=client, version="1.2.3")
+    tile = await source.fetch("https://tile.openstreetmap.org/15/1/2.png")
+    await source.close()
+    assert seen[0].headers["user-agent"] == "MowDeck/1.2.3 (+https://github.com/lukislp/mowdeck)"
+    assert "referer" not in seen[0].headers
+    assert tile.lifetime == timedelta(days=1)
+    assert user_agent(None) == "MowDeck/dev (+https://github.com/lukislp/mowdeck)"
+
+
+def test_cache_lifetime_follows_cache_control_then_expires() -> None:
+    from datetime import UTC, datetime
+
+    import httpx
+
+    from telemetry.adapters.aerial import cache_lifetime_of
+
+    now = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
+
+    def of(**headers: str) -> timedelta | None:
+        return cache_lifetime_of(
+            httpx.Headers({k.replace("_", "-"): v for k, v in headers.items()}), now
+        )
+
+    assert of() is None
+    assert of(cache_control="public, max-age=604800") == timedelta(days=7)
+    assert of(cache_control='max-age="60", stale-while-revalidate=10') == timedelta(seconds=60)
+    assert of(cache_control="no-store") == timedelta(0)
+    assert of(cache_control="no-cache, max-age=600") == timedelta(0)
+    assert of(expires="Wed, 28 Oct 2026 14:00:00 GMT") == timedelta(hours=2)
+    assert of(expires="Tue, 27 Oct 2026 14:00:00 GMT") == timedelta(0)
+    assert of(expires="0") == timedelta(0)
+    # max-age wins over Expires
+    assert of(cache_control="max-age=5", expires="Wed, 28 Oct 2026 14:00:00 GMT") == timedelta(
+        seconds=5
+    )
+
+
+async def test_tiles_are_kept_as_long_as_the_source_allows_and_never_prefetched() -> None:
+    import asyncio
+
+    from telemetry.application.aerial import cache_lifetime, fetch_cached
+
+    class Source:
+        def __init__(self, lifetime: timedelta | None) -> None:
+            self.urls: list[str] = []
+            self.lifetime = lifetime
+
+        async def fetch(self, url: str) -> FetchedTile:
+            self.urls.append(url)
+            return FetchedTile(JPEG, "image/jpeg", self.lifetime)
+
+    class Recording(MemoryCache):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lifetimes: list[timedelta] = []
+
+        async def put(self, key: str, tile: FetchedTile, lifetime: timedelta) -> None:
+            self.lifetimes.append(lifetime)
+            await super().put(key, tile, lifetime)
+
+    gate = asyncio.Semaphore(1)
+    # no header: the configured TTL, but never below 7 days
+    assert cache_lifetime(FetchedTile(JPEG, "image/jpeg"), timedelta(days=1)) == timedelta(days=7)
+    assert cache_lifetime(FetchedTile(JPEG, "image/jpeg"), timedelta(days=30)) == timedelta(days=30)
+    for lifetime, kept in ((timedelta(hours=3), timedelta(hours=3)), (None, timedelta(days=30))):
+        source, cache = Source(lifetime), Recording()
+        for _ in range(3):
+            await fetch_cached(
+                "https://t/1",
+                source,
+                cache,
+                timedelta(days=30),
+                before_fetch=lambda: None,
+                gate=gate,
+            )
+        assert source.urls == ["https://t/1"]  # fetched once, then from the cache
+        assert cache.lifetimes == [kept]
+    # no-store: served, not kept
+    source, cache = Source(timedelta(0)), Recording()
+    await fetch_cached(
+        "https://t/2", source, cache, timedelta(days=30), before_fetch=lambda: None, gate=gate
+    )
+    assert cache.items == {}
+
+
+async def test_layer_outside_its_coverage_is_flagged_and_refused() -> None:
+    bavaria: dict[str, Any] = {"telemetry_aerial_coverage": "47.27,8.97,50.57,13.84"}
+    elsewhere: dict[str, Any] = {"telemetry_aerial_coverage": "52.0,13.0,53.0,14.0"}
+    for coverage, covered in ((bavaria, True), (elsewhere, False)):
+        source = FakeSource()
+        async with harness(
+            tracking_gateway=Gateway(),
+            aerial_source=source,
+            aerial_cache=MemoryCache(),
+            **STREET,
+            **AERIAL,
+            **coverage,
+        ) as h:
+            owner, mower_id, token = await tracked(h)
+            status = await h.client.get(f"{API}/mowers/{mower_id}/tracking", headers=owner.headers)
+            view = await h.client.post(f"{API}/public/tracking/view", json={"token": token})
+            x, y = slippy(LAT, LON, 16)
+            aerial = await h.client.get(
+                f"{API}/mowers/{mower_id}/tracking/map/aerial/16/{x}/{y}", headers=owner.headers
+            )
+        flags = {layer["id"]: layer["covers_last"] for layer in status.json()["map_layers"]}
+        assert flags == {"map": True, "aerial": covered}
+        assert [layer["covers_last"] for layer in view.json()["map_layers"]] == [True, covered]
+        assert aerial.status_code == (200 if covered else 404)
+
+
+def test_coverage_setting_is_validated() -> None:
+    import pytest
+    from pydantic import ValidationError
+    from telemetry_support import make_settings
+
+    assert make_settings(telemetry_aerial_coverage="").telemetry_aerial_coverage == ""
+    for bad in ("1,2,3", "50,8,47,13", "a,b,c,d", "47,8,95,13"):
+        with pytest.raises(ValidationError):
+            make_settings(telemetry_aerial_coverage=bad)

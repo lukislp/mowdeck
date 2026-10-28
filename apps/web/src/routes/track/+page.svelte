@@ -18,12 +18,12 @@
   import {
     loadLayer,
     mapLayers,
-    mapsLink,
     publicTileLoader,
     publicTileUrl,
     saveLayer,
   } from '#lib/tracking/basemap.js';
   import { startPoller } from '#lib/tracking/poll.js';
+  import PositionFix from '#lib/tracking/PositionFix.svelte';
   import { viewPublic, type PublicTrack } from '#lib/tracking/public.js';
   import { tokenFromHash } from '#lib/tracking/share.js';
   import { mergeTrack, serverOffsetMs } from '#lib/tracking/track.js';
@@ -153,6 +153,8 @@
     last: m.tracking_map_last(),
     noTiles: m.tracking_map_no_tiles(),
     layers: m.tracking_map_layers(),
+    uncovered: (layer: string) => m.tracking_map_uncovered({ layer }),
+    noneHere: m.tracking_map_none_here(),
   });
 
   const shortTime = (value: string) =>
@@ -222,13 +224,7 @@
         {/if}
       </p>
       {#if last}
-        <a
-          class="maps"
-          href={mapsLink(last)}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="track-open-maps"><Icon name="pin" size={18} />{m.tracking_open_maps()}</a
-        >
+        <PositionFix point={last} {now} testid="track-fix" />
       {/if}
       {#if stale && data.stale_since}
         <p class="banner warn" data-testid="track-stale">
@@ -351,7 +347,7 @@
   }
 
   .map {
-    min-block-size: 280px;
+    min-block-size: max(320px, 50dvh);
   }
 
   .info {
@@ -370,26 +366,6 @@
   .seen {
     font-size: var(--md-font-size-20);
     font-weight: var(--md-weight-semibold);
-  }
-
-  .maps {
-    display: inline-flex;
-    align-items: center;
-    justify-self: start;
-    gap: var(--md-space-2);
-    min-block-size: var(--md-target);
-    padding: 0 var(--md-space-4);
-    border-radius: var(--md-radius-round);
-    background: var(--md-color-ink);
-    color: var(--md-color-ink-inverse);
-    font-size: var(--md-font-size-14);
-    font-weight: var(--md-weight-semibold);
-    text-decoration: none;
-  }
-
-  .maps:focus-visible {
-    outline: 3px solid var(--md-color-focus);
-    outline-offset: 2px;
   }
 
   .banner {

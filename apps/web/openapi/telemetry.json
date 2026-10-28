@@ -1740,6 +1740,12 @@
             "title": "Attribution",
             "type": "string"
           },
+          "covers_last": {
+            "default": true,
+            "description": "Whether the source has data at the last known position (false: show another layer; e.g. an aerial photo of one state only).",
+            "title": "Covers Last",
+            "type": "boolean"
+          },
           "id": {
             "enum": [
               "map",

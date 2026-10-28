@@ -5,7 +5,9 @@ import {
   PUBLIC_TILE,
   loadLayer,
   mapLayers,
-  mapsLink,
+  coordinatesText,
+  mapLinks,
+  OSM_COPYRIGHT,
   ownerTileUrl,
   parsePublicTile,
   publicTileLoader,
@@ -15,8 +17,14 @@ import {
 } from './basemap.js';
 
 const OFFERED: MapLayer[] = [
-  { id: 'map', attribution: '© BKG', min_zoom: 8, max_zoom: 18 },
-  { id: 'aerial', attribution: '', min_zoom: 14, max_zoom: 19 },
+  {
+    id: 'map',
+    attribution: '© OpenStreetMap contributors',
+    min_zoom: 8,
+    max_zoom: 19,
+    covers_last: true,
+  },
+  { id: 'aerial', attribution: '', min_zoom: 14, max_zoom: 19, covers_last: false },
 ];
 
 function memoryStore(initial: Record<string, string> = {}) {
@@ -106,9 +114,11 @@ describe('mapLayers', () => {
         id: 'map',
         label: 'MAP',
         url: 'map/{z}/{x}/{y}',
-        attribution: '© BKG',
+        attribution: '© OpenStreetMap contributors',
+        attributionUrl: OSM_COPYRIGHT,
         minZoom: 8,
-        maxZoom: 18,
+        maxZoom: 19,
+        covered: true,
         load,
       },
       {
@@ -116,8 +126,10 @@ describe('mapLayers', () => {
         label: 'AERIAL',
         url: 'aerial/{z}/{x}/{y}',
         attribution: null,
+        attributionUrl: null,
         minZoom: 14,
         maxZoom: 19,
+        covered: false,
         load,
       },
     ]);
@@ -149,18 +161,41 @@ describe('remembered layer', () => {
   });
 });
 
-describe('mapsLink', () => {
-  const point = { lat: 48.1371539, lon: 11.5761251 };
+describe('position as text and map links', () => {
+  const point = { lat: 48.1371539, lon: -11.5761251 };
+  const token = 'Zk3_secret-token-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
-  it('opens the platform maps app', () => {
-    expect(mapsLink(point, 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)')).toBe(
-      'https://maps.apple.com/?ll=48.137154,11.576125&q=48.137154,11.576125',
+  it('writes decimal degrees with six places and a dot', () => {
+    expect(coordinatesText(point)).toBe('48.137154, -11.576125');
+    expect(coordinatesText({ lat: 0, lon: 0 })).toBe('0.000000, 0.000000');
+  });
+
+  it('builds Apple, Google and OpenStreetMap links on every platform', () => {
+    for (const ua of ['Mozilla/5.0 (iPhone)', 'Mozilla/5.0 (Windows NT 10.0)']) {
+      const links = mapLinks(point, 'Mäher & Co', ua);
+      expect(links.apple).toBe(
+        'https://maps.apple.com/?ll=48.137154,-11.576125&q=M%C3%A4her%20%26%20Co',
+      );
+      expect(links.google).toBe(
+        'https://www.google.com/maps/search/?api=1&query=48.137154%2C-11.576125',
+      );
+      expect(links.osm).toBe(
+        'https://www.openstreetmap.org/?mlat=48.137154&mlon=-11.576125#map=18/48.137154/-11.576125',
+      );
+      expect(links.geo).toBeNull();
+    }
+    expect(mapLinks(point, 'Mower', 'Mozilla/5.0 (Linux; Android 15)').geo).toBe(
+      'geo:48.137154,-11.576125?q=48.137154%2C-11.576125',
     );
-    expect(mapsLink(point, 'Mozilla/5.0 (Linux; Android 15)')).toBe(
-      'geo:48.137154,11.576125?q=48.137154,11.576125',
-    );
-    expect(mapsLink(point, 'Mozilla/5.0 (Windows NT 10.0)')).toBe(
-      'https://www.openstreetmap.org/?mlat=48.137154&mlon=11.576125#map=18/48.137154/11.576125',
-    );
+  });
+
+  it('never carries the share token or the page address', () => {
+    const before = globalThis.location?.href;
+    const links = mapLinks(point, 'Mäher', 'Mozilla/5.0 (Linux; Android 15)');
+    for (const url of Object.values(links)) {
+      expect(url).not.toContain(token);
+      expect(url).not.toContain('/track');
+      if (before) expect(url).not.toContain(before);
+    }
   });
 });
