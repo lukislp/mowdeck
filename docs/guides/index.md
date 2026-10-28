@@ -5,4 +5,5 @@
 - [Signing in with GitHub](github-login.md): link your GitHub account in the settings and sign in with it; unlink at any time.
 - [Signing in with Apple](apple-login.md): the same with your Apple ID.
 - [Confirming critical actions](step-up.md): why MowDeck asks for your passkey or password again.
+- [Aerial photo under the map](aerial-photo.md): lay a photo of your garden under the mower map, with an opacity slider.
 - [iPhone widgets and the mowing Live Activity](ios-widgets.md): home and lock screen widgets, the map widget and the Live Activity of a job.

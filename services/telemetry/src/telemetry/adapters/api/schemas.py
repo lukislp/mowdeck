@@ -8,6 +8,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import GeoReference, MowerCapabilities, MowerMap, MowerState, MowPath
 from pydantic import BaseModel, ConfigDict, Field
 
+from telemetry.application.aerial import AerialInfo
 from telemetry.application.queries import HeatmapResult
 from telemetry.application.widget import WidgetState
 from telemetry.domain.health import (
@@ -607,4 +608,53 @@ class WidgetStateOut(BaseModel):
                 if value.job is not None
                 else None
             ),
+        )
+
+
+class AerialBounds(BaseModel):
+    """A box in WGS84 degrees."""
+
+    south: float
+    west: float
+    north: float
+    east: float
+
+
+class AerialOut(BaseModel):
+    """The aerial photo under a mower's map."""
+
+    mower_id: UUID
+    enabled: bool = Field(description="False when the installation has no aerial photo source.")
+    tile_url: str | None = Field(
+        description="URL template of the tiles (`{z}`, `{x}`, `{y}`); needs the bearer token."
+    )
+    attribution: str | None = Field(description="Credit line to show while the photo is on.")
+    min_zoom: int | None
+    max_zoom: int | None = Field(description="Highest zoom with real detail; scale beyond it.")
+    bounds: AerialBounds | None = Field(
+        description="Where tiles are served: the map's outline plus a margin."
+    )
+
+    @classmethod
+    def of(cls, mower_id: UUID, info: AerialInfo, tile_url: str) -> "AerialOut":
+        """Build from the use case result."""
+        if not info.enabled or info.bounds is None:
+            return cls(
+                mower_id=mower_id,
+                enabled=False,
+                tile_url=None,
+                attribution=None,
+                min_zoom=None,
+                max_zoom=None,
+                bounds=None,
+            )
+        b = info.bounds
+        return cls(
+            mower_id=mower_id,
+            enabled=True,
+            tile_url=tile_url,
+            attribution=info.attribution or None,
+            min_zoom=info.min_zoom,
+            max_zoom=info.max_zoom,
+            bounds=AerialBounds(south=b.south, west=b.west, north=b.north, east=b.east),
         )

@@ -5,8 +5,8 @@
 #   docker build -f services/telemetry/Dockerfile -t mowdeck/telemetry:dev .
 #
 # Only this service and the workspace libraries it depends on are installed. The runtime image
-# runs as the non-root user "app" (uid 10001), writes nothing at runtime (read-only root file
-# system; mount a tmpfs at /tmp) and has no architecture specific steps (amd64 and arm64).
+# runs as the non-root user "app" (uid 10001), writes only the aerial tile cache at runtime
+# (read-only root file system; mount a tmpfs at /tmp and a volume at /var/cache/mowdeck/aerial) and has no architecture specific steps (amd64 and arm64).
 
 ARG PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a
@@ -36,6 +36,8 @@ RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent \
        --shell /usr/sbin/nologin app
 COPY --from=build /app/.venv /app/.venv
+# The aerial photo tile cache (a volume mounts here and inherits the owner).
+RUN mkdir -p /var/cache/mowdeck/aerial && chown 10001:10001 /var/cache/mowdeck/aerial
 # The MowDeck licence texts (LICENSING.md). Third-party notices: each package's dist-info and
 # /usr/share/doc.
 COPY LICENSE LICENSING.md /usr/share/doc/mowdeck/

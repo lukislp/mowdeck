@@ -59,6 +59,50 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/mowers/{mower_id}/aerial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Aerial
+         * @description Whether an aerial photo can be laid under the mower's map, with its credit line, zoom
+         *     range and the box where tiles are served; `enabled: false` without a configured source.
+         *     404 `no-map-yet` before the gateway published a map.
+         */
+        get: operations["get_aerial_api_v1_telemetry_mowers__mower_id__aerial_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/aerial/{z}/{x}/{y}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Aerial Tile
+         * @description One aerial photo tile (Web Mercator, XYZ) around the mower's map. Tiles away from the
+         *     map or outside the zoom range are 404 `tile-outside-map`, so this is no open proxy; new
+         *     tiles are rate limited per account (429).
+         */
+        get: operations["get_aerial_tile_api_v1_telemetry_mowers__mower_id__aerial__z___x___y__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/mowers/{mower_id}/battery": {
         parameters: {
             query?: never;
@@ -429,6 +473,55 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
+        /**
+         * AerialBounds
+         * @description A box in WGS84 degrees.
+         */
+        AerialBounds: {
+            /** East */
+            east: number;
+            /** North */
+            north: number;
+            /** South */
+            south: number;
+            /** West */
+            west: number;
+        };
+        /**
+         * AerialOut
+         * @description The aerial photo under a mower's map.
+         */
+        AerialOut: {
+            /**
+             * Attribution
+             * @description Credit line to show while the photo is on.
+             */
+            attribution: string | null;
+            /** @description Where tiles are served: the map's outline plus a margin. */
+            bounds: components["schemas"]["AerialBounds"] | null;
+            /**
+             * Enabled
+             * @description False when the installation has no aerial photo source.
+             */
+            enabled: boolean;
+            /**
+             * Max Zoom
+             * @description Highest zoom with real detail; scale beyond it.
+             */
+            max_zoom: number | null;
+            /** Min Zoom */
+            min_zoom: number | null;
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
+            /**
+             * Tile Url
+             * @description URL template of the tiles (`{z}`, `{x}`, `{y}`); needs the bearer token.
+             */
+            tile_url: string | null;
+        };
         /**
          * BaseStationPosition
          * @description Where the base station stands (WGS84 degrees), as the mower knows it.
@@ -2485,6 +2578,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MowerStateList"];
+                };
+            };
+        };
+    };
+    get_aerial_api_v1_telemetry_mowers__mower_id__aerial_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AerialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_aerial_tile_api_v1_telemetry_mowers__mower_id__aerial__z___x___y__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+                x: number;
+                y: number;
+                z: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

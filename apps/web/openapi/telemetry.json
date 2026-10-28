@@ -1,6 +1,119 @@
 {
   "components": {
     "schemas": {
+      "AerialBounds": {
+        "description": "A box in WGS84 degrees.",
+        "properties": {
+          "east": {
+            "title": "East",
+            "type": "number"
+          },
+          "north": {
+            "title": "North",
+            "type": "number"
+          },
+          "south": {
+            "title": "South",
+            "type": "number"
+          },
+          "west": {
+            "title": "West",
+            "type": "number"
+          }
+        },
+        "required": [
+          "south",
+          "west",
+          "north",
+          "east"
+        ],
+        "title": "AerialBounds",
+        "type": "object"
+      },
+      "AerialOut": {
+        "description": "The aerial photo under a mower's map.",
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Credit line to show while the photo is on.",
+            "title": "Attribution"
+          },
+          "bounds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AerialBounds"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where tiles are served: the map's outline plus a margin."
+          },
+          "enabled": {
+            "description": "False when the installation has no aerial photo source.",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "max_zoom": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Highest zoom with real detail; scale beyond it.",
+            "title": "Max Zoom"
+          },
+          "min_zoom": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Zoom"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "tile_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "URL template of the tiles (`{z}`, `{x}`, `{y}`); needs the bearer token.",
+            "title": "Tile Url"
+          }
+        },
+        "required": [
+          "mower_id",
+          "enabled",
+          "tile_url",
+          "attribution",
+          "min_zoom",
+          "max_zoom",
+          "bounds"
+        ],
+        "title": "AerialOut",
+        "type": "object"
+      },
       "BaseStationPosition": {
         "description": "Where the base station stands (WGS84 degrees), as the mower knows it.",
         "properties": {
@@ -4050,6 +4163,122 @@
           }
         },
         "summary": "List States",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/aerial": {
+      "get": {
+        "description": "Whether an aerial photo can be laid under the mower's map, with its credit line, zoom\nrange and the box where tiles are served; `enabled: false` without a configured source.\n404 `no-map-yet` before the gateway published a map.",
+        "operationId": "get_aerial_api_v1_telemetry_mowers__mower_id__aerial_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AerialOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Aerial",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/aerial/{z}/{x}/{y}": {
+      "get": {
+        "description": "One aerial photo tile (Web Mercator, XYZ) around the mower's map. Tiles away from the\nmap or outside the zoom range are 404 `tile-outside-map`, so this is no open proxy; new\ntiles are rate limited per account (429).",
+        "operationId": "get_aerial_tile_api_v1_telemetry_mowers__mower_id__aerial__z___x___y__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "z",
+            "required": true,
+            "schema": {
+              "maximum": 24,
+              "minimum": 0,
+              "title": "Z",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "x",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "y",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Y",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Aerial Tile",
         "tags": [
           "telemetry"
         ]

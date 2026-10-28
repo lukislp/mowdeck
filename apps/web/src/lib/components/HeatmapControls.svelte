@@ -46,6 +46,13 @@
     /** A line about the path (progress, or that it follows), already translated. */
     pathNote?: string | null;
     onpath?: (shown: boolean) => void;
+    /** The installation offers an aerial photo for this map (the toggle is hidden otherwise). */
+    aerialOffered?: boolean;
+    aerialShown?: boolean;
+    /** 0.2 to 1. */
+    aerialOpacity?: number;
+    onaerial?: (shown: boolean) => void;
+    onaerialopacity?: (opacity: number) => void;
   }
 
   let {
@@ -65,6 +72,11 @@
     pathShown = undefined,
     pathNote = null,
     onpath,
+    aerialOffered = false,
+    aerialShown = false,
+    aerialOpacity = 0.85,
+    onaerial,
+    onaerialopacity,
   }: Props = $props();
 
   const uid = $props.id();
@@ -124,20 +136,51 @@
 </script>
 
 <div class="heat" data-testid="heatmap-controls" data-layer={layer}>
-  {#if pathShown !== undefined}
+  {#if pathShown !== undefined || aerialOffered}
     <div class="path">
-      <button
-        type="button"
-        class="path-toggle"
-        aria-pressed={pathShown}
-        title={m.path_toggle_hint()}
-        data-testid="mow-path-toggle"
-        onclick={() => onpath?.(!pathShown)}
-      >
-        <span class="path-swatch" aria-hidden="true"></span>{m.path_toggle()}
-      </button>
-      {#if pathShown && pathNote}
-        <span class="path-note mono" data-testid="mow-path-note">{pathNote}</span>
+      {#if aerialOffered}
+        <button
+          type="button"
+          class="path-toggle aerial-toggle"
+          aria-pressed={aerialShown}
+          title={m.aerial_toggle_hint()}
+          data-testid="aerial-toggle"
+          onclick={() => onaerial?.(!aerialShown)}
+        >
+          <span class="aerial-swatch" aria-hidden="true"></span>{m.aerial_toggle()}
+        </button>
+        {#if aerialShown}
+          <label class="aerial-opacity" for="{uid}-aerial-opacity">
+            <span class="field-label">{m.aerial_opacity()}</span>
+            <input
+              id="{uid}-aerial-opacity"
+              type="range"
+              min="0.2"
+              max="1"
+              step="0.05"
+              value={aerialOpacity}
+              aria-valuetext="{Math.round(aerialOpacity * 100)} %"
+              data-testid="aerial-opacity"
+              oninput={(event) => onaerialopacity?.(event.currentTarget.valueAsNumber)}
+            />
+            <span class="mono aerial-percent">{Math.round(aerialOpacity * 100)} %</span>
+          </label>
+        {/if}
+      {/if}
+      {#if pathShown !== undefined}
+        <button
+          type="button"
+          class="path-toggle"
+          aria-pressed={pathShown}
+          title={m.path_toggle_hint()}
+          data-testid="mow-path-toggle"
+          onclick={() => onpath?.(!pathShown)}
+        >
+          <span class="path-swatch" aria-hidden="true"></span>{m.path_toggle()}
+        </button>
+        {#if pathShown && pathNote}
+          <span class="path-note mono" data-testid="mow-path-note">{pathNote}</span>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -313,6 +356,42 @@
   .path-toggle:focus-visible {
     outline: 2px solid var(--md-color-focus);
     outline-offset: -2px;
+  }
+
+  .aerial-swatch {
+    width: 20px;
+    height: 12px;
+    background: linear-gradient(
+      135deg,
+      var(--md-color-surface-sunken) 50%,
+      var(--md-color-line-strong) 50%
+    );
+    border: var(--md-hairline) solid var(--md-color-line-strong);
+  }
+
+  .aerial-opacity {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--md-space-2);
+    min-height: var(--md-target);
+    font-size: var(--md-font-size-12);
+    color: var(--md-color-ink-muted);
+  }
+
+  .aerial-opacity input {
+    width: 110px;
+    min-height: var(--md-target);
+    accent-color: var(--md-color-focus);
+  }
+
+  .aerial-percent {
+    min-width: 3.5ch;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .aerial-toggle[aria-pressed='true'] .aerial-swatch {
+    border-color: var(--md-color-focus);
   }
 
   .path-note {

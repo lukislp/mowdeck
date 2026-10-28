@@ -31,3 +31,23 @@ class NoSnapshotYetError(TelemetryError):
     def __init__(self, message: str, kind: str) -> None:
         super().__init__(message)
         self.kind = kind
+
+
+class AerialDisabledError(TelemetryError):
+    """No aerial photo source is configured."""
+
+
+class TileOutsideMapError(TelemetryError):
+    """The tile is not around the mower's map or not in the configured zoom range."""
+
+
+class AerialRateLimitedError(TelemetryError):
+    """The account asked the photo source for too many new tiles."""
+
+    def __init__(self, message: str, retry_after: int) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+class AerialUpstreamError(TelemetryError):
+    """The photo source did not deliver an image."""

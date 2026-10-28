@@ -26,10 +26,14 @@ from mowdeck_service_kit.errors import (
 from telemetry.application.services import Services
 from telemetry.application.widget import BusyError
 from telemetry.domain.errors import (
+    AerialDisabledError,
+    AerialRateLimitedError,
+    AerialUpstreamError,
     InvalidQueryError,
     NoSnapshotYetError,
     NoTelemetryYetError,
     TelemetryError,
+    TileOutsideMapError,
 )
 
 
@@ -59,6 +63,36 @@ class NoPathProblem(NotFound):
 
     problem_type: ClassVar[str] = "no-path"
     title: ClassVar[str] = "No mow path"
+
+
+class AerialDisabledProblem(NotFound):
+    """No aerial photo source is configured."""
+
+    problem_type: ClassVar[str] = "aerial-disabled"
+    title: ClassVar[str] = "No aerial photo"
+
+
+class TileOutsideMapProblem(NotFound):
+    """The tile is not around the mower's map."""
+
+    problem_type: ClassVar[str] = "tile-outside-map"
+    title: ClassVar[str] = "Tile outside the map"
+
+
+class AerialRateLimitedProblem(ServiceError):  # noqa: N818 - named like the other problems
+    """Too many new aerial tiles."""
+
+    status: ClassVar[int] = 429
+    problem_type: ClassVar[str] = "rate-limited"
+    title: ClassVar[str] = "Too many requests"
+
+
+class AerialUpstreamProblem(ServiceError):  # noqa: N818 - named like the other problems
+    """The photo source failed."""
+
+    status: ClassVar[int] = 502
+    problem_type: ClassVar[str] = "aerial-source-failed"
+    title: ClassVar[str] = "Aerial photo source failed"
 
 
 def get_services(request: Request) -> Services:
@@ -120,6 +154,16 @@ def to_service_error(exc: TelemetryError) -> ServiceError:
             return ValidationFailed(exc.message)
         case BusyError():
             return ServiceUnavailable(exc.message)
+        case AerialDisabledError():
+            return AerialDisabledProblem(exc.message)
+        case TileOutsideMapError():
+            return TileOutsideMapProblem(exc.message)
+        case AerialRateLimitedError():
+            return AerialRateLimitedProblem(
+                exc.message, headers={"Retry-After": str(exc.retry_after)}
+            )
+        case AerialUpstreamError():
+            return AerialUpstreamProblem(exc.message)
         case _:
             return ServiceError(exc.message)
 
