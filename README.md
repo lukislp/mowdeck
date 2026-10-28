@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/lukislp/mowdeck)](https://github.com/lukislp/mowdeck/releases)
 [![License: AGPL-3.0](https://img.shields.io/github/license/lukislp/mowdeck)](LICENSING.md)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB)](https://www.python.org/)
-[![Node](https://img.shields.io/badge/Node-22-339933)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/Node-24-339933)](https://nodejs.org/)
 
 MowDeck is a self-hosted control centre for robotic mowers. It runs on a mini PC or Raspberry Pi at home with Docker Compose, keeps your data in your own house, and gives you and your family one web app for everything the mower does: live status and map, starting a job with your own settings, spot mowing that MowDeck steers itself, schedules that respect the weather, the cameras, notifications on the phone, and an optional AI assistant for a stuck mower. The same images also run on Kubernetes if you prefer a server.
 
@@ -28,6 +28,7 @@ What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extr
 - Commands confirmed by the mower's real state: start, pause, resume, emergency stop, "to the station" with the choice to end the job or keep it paused.
 - Start sheet: mowing pattern, angle, border laps, spacing, blade height and speed per run, remembered per mower; a path preview before you start; a rain warning with the expected duration.
 - Area names you choose, model limits read from the mower (cutting height, speed), real model names in the mower list.
+- Optional aerial photo under the map from an open-data WMS or a tile server you configure, fetched and cached by your own server (browsers never contact the source).
 
 **Links and firmware**
 
@@ -47,7 +48,7 @@ What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extr
 
 **Schedules and weather**
 
-- Weekly schedules per mower and zone with a rain pause that looks at the forecast and at the past hours, so a wet lawn after a shower counts too.
+- Weekly schedules per mower and zone with a rain pause that looks at the forecast and at the past hours, so a wet lawn after a shower counts too; the mowing angle can turn by a step on every run.
 - Rain readout in the mower sidebar: what the rule decided and until when.
 
 **Cameras** (where the mower has them)
@@ -66,17 +67,21 @@ What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extr
 
 - Manufacturer cloud accounts linked per MowDeck account (several per account), mowers added from the account's device list; one mower belongs to exactly one MowDeck account.
 - Sub-users with roles, support access with a time limit, audit log, fleet views with sites and groups for more than one mower.
-- Notifications as Web Push, ntfy, or directly through APNs to the iOS app; an inbox in the web app.
+- Sign-in with a password, passkeys, GitHub or Apple; critical changes ask to confirm again (step-up); a setup tour for new accounts.
+- Notifications as Web Push, ntfy, or directly through APNs to the iOS app, with a camera photo on error and theft alarms; an inbox in the web app.
 
 **Integrations and apps**
 
 - Home Assistant integration (its own repository, see below), REST APIs with OpenAPI documents for every service, WebSocket live stream; personal access tokens for your own scripts with a [scripting guide](docs/guides/scripting.md) and a generated [API reference](docs/reference/api/index.md).
 - iOS and Android app shells (Capacitor) that load your own MowDeck server, with local notifications.
+- iPhone widgets and a mowing Live Activity, and an Apple Watch app with start, pause, dock and emergency stop.
+- Optional Matter server: every mower appears in Apple Home, Google Home or Home Assistant (start, pause, dock, state, battery).
 
 **Operations**
 
 - Docker Compose stack with Traefik, NATS, PostgreSQL and OpenFGA; Helm chart for Kubernetes; images for amd64 and arm64.
-- Health history, battery statistics and a theft alarm.
+- Health history, battery statistics, a theft alarm and a theft tracking mode with a shareable position link.
+- Position history kept for two years and thinned after 90 days; `deploy.sh` updates to a signed release with a backup and a maintenance window that keeps the restart from sending offline alerts.
 
 Roadmap and what is done: [docs/phases.md](docs/phases.md).
 
