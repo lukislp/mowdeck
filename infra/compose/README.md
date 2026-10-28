@@ -41,12 +41,23 @@ curl http://localhost/api/v1/whoami
 | fleet | `mowdeck/fleet:dev` (built from `services/fleet/Dockerfile`) | via Traefik at `/api/v1/fleet` | Sites, groups, mowers, the Device-Gateway's registry, commands and command records |
 | telemetry-migrate | `mowdeck/telemetry:dev` | none | One-shot: Alembic migrations of the `telemetry` database |
 | telemetry | `mowdeck/telemetry:dev` (built from `services/telemetry/Dockerfile`) | via Traefik at `/api/v1/telemetry` | Latest state, history, position track and command timeline of every mower |
-| device-gateway | `mowdeck/device-gateway:dev` (built from `services/device-gateway/Dockerfile`) | via Traefik at `/api/v1/device-gateway` | Mower connections (simulated in Phase 1), commands, telemetry |
+| device-gateway | `mowdeck/device-gateway:dev` (built from `services/device-gateway/Dockerfile`) | via Traefik at `/api/v1/device-gateway` | Mower connections (simulator, Mammotion cloud, Bluetooth bridge), commands, telemetry |
 | realtime | `mowdeck/realtime:dev` (built from `services/realtime/Dockerfile`) | via Traefik at `/api/v1/realtime` (WebSocket `/api/v1/realtime/ws`) | Live states and command results of the mowers a client may view |
 | notifications-migrate | `mowdeck/notifications:dev` | none | One-shot: Alembic migrations of the `notifications` database |
 | notifications | `mowdeck/notifications:dev` (built from `services/notifications/Dockerfile`) | via Traefik at `/api/v1/notifications` | Notifications from the mower states: rules, inbox, Web Push, ntfy and log delivery |
 | scheduler-migrate | `mowdeck/scheduler:dev` | none | One-shot: Alembic migrations of the `scheduler` database |
-| scheduler | `mowdeck/scheduler:dev` (built from `services/scheduler/Dockerfile`) | via Traefik at `/api/v1/scheduler` | Mowing schedules with rain pause; starts mowers through Fleet |
+| scheduler | `mowdeck/scheduler:dev` (built from `services/scheduler/Dockerfile`) | via Traefik at `/api/v1/scheduler` | Mowing schedules with rain pause and mowing angle rotation; starts mowers through Fleet |
+| entitlements-migrate | `mowdeck/entitlements:dev` | none | One-shot: Alembic migrations of the `entitlements` database |
+| entitlements | `mowdeck/entitlements:dev` (built from `services/entitlements/Dockerfile`) | via Traefik at `/api/v1/entitlements` | Plans and limits per account (`unlimited` unless billing is on) |
+| planner-migrate | `mowdeck/planner:dev` | none | One-shot: Alembic migrations of the `planner` database |
+| planner | `mowdeck/planner:dev` (built from `services/planner/Dockerfile`) | via Traefik at `/api/v1/planner` | Spot mowing: patterns, previews, plans, coverage gaps |
+| vision-migrate | `mowdeck/vision:dev` | none | One-shot: Alembic migrations of the `vision` database |
+| vision | `mowdeck/vision:dev` (built from `services/vision/Dockerfile`) | via Traefik at `/api/v1/vision` | AI assist: recovery proposals from camera photos, nothing moves without an approval |
+| billing-migrate, billing (profile `billing`) | `mowdeck/billing:dev` (built from `services/billing/Dockerfile`) | via Traefik at `/api/v1/billing` | Subscriptions and payments (Stripe); off unless the profile is enabled, see [Planner, plans, billing and AI assist](#planner-plans-billing-and-ai-assist) |
+| camera-relay (profile `relay`) | `mowdeck/camera-relay:dev` (built from `services/camera-relay/Dockerfile`, with ffmpeg) | none | Receives each mower's stream once and serves it to every viewer through MediaMTX; frame tap for Vision ([ADR 0045](../../docs/adr/0045-camera-relay.md)) |
+| mediamtx (profile `relay`) | `bluenviron/mediamtx:1.21.2` | via Traefik at `/media/whep/r/`; `RELAY_ICE_BIND:RELAY_ICE_PORT` UDP and TCP (default `0.0.0.0:8189`) | WebRTC (WHEP) media server of the camera relay; uid 65534, all capabilities dropped |
+| agora-bridge (profile `agora`, with `relay`) | `mowdeck-local/agora-bridge:local`, always built locally from `integrations/agora-bridge` (contains Agora's proprietary SDK; never pulled or published) | none (camera-relay's loopback `127.0.0.1:7700`) | Agora source of the camera relay ([integrations/agora-bridge](../../integrations/agora-bridge/README.md)) |
+| matter-server (profile `matter`) | `mowdeck/matter-server:dev` (built from `services/matter-server/Dockerfile`, Node 24, matter.js) | **host network**: UDP 5353 (mDNS), one UDP port per mower from `MATTER_PORT_BASE` (5540), admin API `MATTER_HTTP_PORT` (8790) via Traefik at `/api/v1/matter` | Every mower as a Matter device for Apple Home, Google Home and Home Assistant ([Matter server](../../docs/ops/matter.md), [ADR 0063](../../docs/adr/0063-matter-server.md)); firewall the ports to the LAN and the admin port to Docker's bridges |
 | web | `mowdeck/web:dev` (built from `apps/web/Dockerfile`) | via Traefik at `/` | The web app (static SvelteKit PWA in an unprivileged nginx) |
 
 Model and model tests: `infra/openfga/README.md`.
@@ -86,7 +97,7 @@ authz-bootstrap: found store mowdeck (01M4ETX89CTD4SGA6DPRT42J0E)
 authz-bootstrap: model unchanged (01M4ETX8EHR001DM13HZ5S5J1Y)
 ```
 
-The ids are only logged. Services using `mowdeck-authz` resolve the store **by name** and pin the latest model at startup, so nothing has to be copied into their configuration; `MOWDECK_OPENFGA_STORE_ID` and `MOWDECK_OPENFGA_MODEL_ID` pin both when wanted. Identity, Fleet, Telemetry, Realtime, Notifications and Scheduler depend on the job with `service_completed_successfully`, which also lets `up --wait` accept the exited job; Traefik depends on a healthy Identity, Fleet, Telemetry, Realtime, Notifications, Scheduler and web app. After changing `model.fga`, rebuild the job: `docker compose up -d --build --wait`.
+The ids are only logged. Services using `mowdeck-authz` resolve the store **by name** and pin the latest model at startup, so nothing has to be copied into their configuration; `MOWDECK_OPENFGA_STORE_ID` and `MOWDECK_OPENFGA_MODEL_ID` pin both when wanted. Every service that uses authorization (Identity, Fleet, Telemetry, Realtime, Notifications, Scheduler, Entitlements, Planner, Vision, and Billing with its profile) depends on the job with `service_completed_successfully`, which also lets `up --wait` accept the exited job; Traefik depends on a healthy Identity, Fleet, Telemetry, Realtime, Notifications, Scheduler, Entitlements, Planner, Vision and web app. After changing `model.fga`, rebuild the job: `docker compose up -d --build --wait`.
 
 | Variable | `.env.example` | Meaning |
 | --- | --- | --- |
@@ -100,12 +111,13 @@ Services are built from the repository root (`build.context: ../..`); `docker co
 
 ### Identity
 
-`identity-migrate` runs the Alembic migrations and exits; `identity` starts after it, after `authz-bootstrap` and with NATS and OpenFGA healthy. On first start Identity creates its signing key. Traefik routes `/api/v1/identity` and `/.well-known/jwks.json`. Two routers with priority 100 add rate limits per client IP:
+`identity-migrate` runs the Alembic migrations and exits; `identity` starts after it, after `authz-bootstrap` and with NATS and OpenFGA healthy. On first start Identity creates its signing key. Traefik routes `/api/v1/identity` and `/.well-known/jwks.json`. Three routers with priority 100 and 101 add rate limits per client IP:
 
 | Router | Rule | Middleware | Limit |
 | --- | --- | --- | --- |
-| `identity-auth` | `Path(/api/v1/identity/session)` (login), `Path(/api/v1/identity/register)`, `Path(/api/v1/identity/token)` | `identity-ratelimit` | 10 per minute, burst 20 |
+| `identity-auth` | `Path(/api/v1/identity/session)` (login), `/register`, `/token`, `/passkeys/session`, `/app-login/session`, the GitHub and Apple callbacks (`/oauth/<provider>/callback`) and link starts (`/me/external-identities/<provider>/link`) | `identity-ratelimit` | 10 per minute, burst 20 |
 | `identity-session` | `PathPrefix(/api/v1/identity/session/)` (refresh, logout) | `identity-session-ratelimit` | 60 per minute, burst 30 |
+| `identity-passkey-challenge` | `/passkeys/challenge`, `/app-login/start`, `/oauth/github/start`, `/oauth/apple/start` (they check nothing; every sign-in page asks for a challenge) | `identity-session-ratelimit` | 60 per minute, burst 30 |
 
 Refresh and logout need a valid refresh cookie anyway; their looser limit keeps several devices of a household behind one address (Tailscale, a proxy) logged in. Services inside the network verify tokens against `http://identity:8000/.well-known/jwks.json` (`MOWDECK_AUTH_JWKS_URL`).
 
@@ -115,6 +127,11 @@ Refresh and logout need a valid refresh cookie anyway; their looser limit keeps 
 | `IDENTITY_REGISTRATION` | `open` | `open`, or `closed` (only the first account; more owners with the CLI) |
 | `IDENTITY_ARGON2_PROFILE` | `rfc9106_low` | `owasp_min` for small hosts |
 | `IDENTITY_REFRESH_COOKIE_SECURE` | `false` | `true` behind HTTPS (see [HTTPS](#https)) |
+| `IDENTITY_PUBLIC_URL` | empty (passkeys off) | The address users open MowDeck at, for example `https://mowdeck.example.org`; passkeys are bound to its host name (HTTPS and a host name, not an IP; plain HTTP only for `http://localhost`), and the GitHub and Apple callbacks are built from it ([Passkeys](../../docs/ops/passkeys.md)) |
+| `IDENTITY_PASSKEY_RP_ID` | empty | Optional parent domain of that host as the passkeys' relying party id |
+| `IDENTITY_GITHUB_CLIENT_ID`, `IDENTITY_GITHUB_CLIENT_SECRET_FILE` | empty (GitHub login off) | Sign in with GitHub ([ADR 0051](../../docs/adr/0051-sign-in-with-github.md), [operations](../../docs/ops/github-login.md)); the secret is a file in `secrets/github/` (git-ignored, mounted at `/run/secrets/github`, readable by uid 10001) |
+| `IDENTITY_APPLE_SERVICES_ID`, `_TEAM_ID`, `_KEY_ID`, `_PRIVATE_KEY_FILE`, `IDENTITY_APPLE_PKCE` | empty, `true` | Sign in with Apple ([ADR 0052](../../docs/adr/0052-sign-in-with-apple.md), [operations](../../docs/ops/apple-login.md)); the `.p8` key is a file in `secrets/apple/` (git-ignored, mounted at `/run/secrets/apple`) |
+| `IDENTITY_EXTRA_MODULE_URLS` | empty | Descriptors of optional modules Identity lists besides the built-in services (comma separated); with the profile `matter`: `http://host.docker.internal:8790` |
 
 Try it:
 
@@ -136,6 +153,7 @@ docker compose exec identity python -m identity.cli list-keys
 | `FLEET_ALLOWED_CONNECTION_KINDS` | `simulated` | Connection kinds accepted at registration |
 | `FLEET_CREDENTIAL_ENCRYPTION_KEY` | a marked development value | 256-bit key (base64) that encrypts the passwords of linked Mammotion accounts ([ADR 0034](../../docs/adr/0034-linked-cloud-accounts-and-device-discovery.md)). Empty: Fleet starts, but linking a Mammotion account answers 503, so no cloud mower can be added. Fleet refuses the development value with `MOWDECK_ENVIRONMENT=prod`; generate your own and keep a backup |
 | `FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` | empty | Key rotation: earlier keys (comma separated) that still decrypt; the next re-read of a linked account re-encrypts with the current key |
+| `FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS` | `85` | How long Fleet waits for a path preview (504 after); keep `GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS` (75) < this < the web app's 90 s |
 | `GATEWAY_FAKE_MAMMOTION_CLOUD` | `false` | **Development only.** The Device-Gateway answers linked account logins and connects cloud mowers through the fake Mammotion cloud (`*@fake.mowdeck.test`, password `fake-cloud-password`); the browser tests switch it on |
 
 Register a simulated mower and start it (`<token>` from the login above; the simulator's default map has the areas `front` and `back`):
@@ -158,6 +176,10 @@ curl http://localhost/api/v1/fleet/commands/<command_id> -H "Authorization: Bear
 | `TELEMETRY_POSITIONS_DETAIL_DAYS` | `90` | Positions younger than this keep every row; older ones are thinned |
 | `TELEMETRY_MAINTENANCE_TIMEZONE` | `UTC` | IANA zone of the nightly thinning window, for example `Europe/Berlin` |
 | `TELEMETRY_RETENTION_COMMANDS_DAYS` | `30` | Command timeline older than this is deleted |
+| `TELEMETRY_BLADE_HOURS_THRESHOLD` | `50` | Health history: remind to change the blades after this many blade hours since the last change |
+| `AERIAL_WMS_URL`, `AERIAL_WMS_LAYER`, `AERIAL_XYZ_URL`, `AERIAL_ATTRIBUTION`, `AERIAL_IMAGE_FORMAT`, `AERIAL_MAX_ZOOM`, `AERIAL_CACHE_MAX_MB` | empty (off), `image/jpeg`, `19`, `256` | Optional aerial photo under the map ([ADR 0054](../../docs/adr/0054-aerial-photo-under-the-map.md), [operations](../../docs/ops/aerial-photo.md)): Telemetry fetches and caches the tiles (volume `aerial-cache`) and serves them only around an account's own maps |
+
+Position thinning, the nightly window and the retention numbers: [Telemetry retention](../../docs/ops/telemetry-retention.md) ([ADR 0053](../../docs/adr/0053-position-retention-and-downsampling.md)). Theft tracking: [operations](../../docs/ops/theft-tracking.md) ([ADR 0058](../../docs/adr/0058-theft-tracking-mode.md)).
 
 ```bash
 curl http://localhost/api/v1/telemetry/mowers/<mower_id>/state -H "Authorization: Bearer <token>"
@@ -177,6 +199,7 @@ Traefik passes the WebSocket upgrade through without extra configuration: the ro
 | `REALTIME_PING_SECONDS` | `20` | Protocol ping interval and pong timeout |
 | `REALTIME_MAX_CONNECTIONS_PER_ACCOUNT` | `50` | Open sockets per account (close 4429 above) |
 | `REALTIME_MAX_CONNECTIONS_PER_USER` | `10` | Open sockets per user (close 4429 above) |
+| `REALTIME_DRIVE_MAX_SECONDS` | `600` | A manual drive session (joystick) ends after this long |
 | `REALTIME_ALLOWED_ORIGINS` | `http://localhost` | Comma separated allowed `Origin` values (empty allows all). The web app is served at the gateway's origin: add the address you open it with when it is not `http://localhost`, such as the LAN address a phone uses (`http://localhost,http://192.168.1.20`); realtime logs each refused origin at info level |
 
 Close codes and the protocol: `services/realtime/README.md`, [ADR 0018](../../docs/adr/0018-realtime-websocket-protocol.md).
@@ -205,6 +228,11 @@ docker compose run --rm notifications python -m notifications.cli generate-vapid
 | `NOTIFICATIONS_OFFLINE_AFTER_SECONDS` | `120` | Offline after this long without a state |
 | `NOTIFICATIONS_BATTERY_LOW_PERCENT` | `20` | Battery threshold |
 | `NOTIFICATIONS_MOWING_MIN_SECONDS` | `10` (service default 120) | Shorter jobs end without `mowing_finished`; the simulated front lawn takes well under a minute of wall time at `MOWDECK_SIM_TIME_SCALE=30` |
+| `NOTIFICATIONS_GEOFENCE_MARGIN_METERS` | `5` | Theft alarm: margin around the mapped areas, paths and dock before `geofence_exit` |
+| `NOTIFICATIONS_ACK_SILENCE_SECONDS` | `3600` | An acknowledged alarm stays silent for that user this long |
+| `NOTIFICATIONS_DEFAULT_LANGUAGE` | `de` | Message language (`de`, `en`) of users who never saved preferences |
+
+Deploys with `./deploy.sh <version>` open a maintenance window in Notifications so that the restart does not send `mower_offline`/`mower_online` ([ADR 0055](../../docs/adr/0055-deploy-maintenance-window.md), [Deploying with the maintenance window](../../docs/ops/compose.md#deploying-with-the-maintenance-window)). Camera photos in error and theft pushes: [ADR 0056](../../docs/adr/0056-camera-photo-in-push-notifications.md).
 
 ```bash
 curl -X PUT http://localhost/api/v1/notifications/preferences -H "Authorization: Bearer <token>"   -H 'Content-Type: application/json' -d '{"enabled_kinds": ["mowing_finished", "mower_stuck", "battery_low", "mower_offline", "mower_online"], "all_mowers": true, "channels": ["webpush", "ntfy", "log"]}'
@@ -235,7 +263,14 @@ curl http://localhost/api/v1/scheduler/schedules/<schedule_id>/runs -H "Authoriz
 
 ### Web app
 
-`web` serves the web app built from `apps/web` (SvelteKit static build, `public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine`, uid 101, port 8080, `read_only: true` with a tmpfs at `/tmp`). Traefik routes `PathPrefix(/)` to it with priority 1, so every `/api/v1` route and `/.well-known/jwks.json` win; the app and the API share one origin, so no CORS is needed and the refresh cookie works as is. nginx sets the Content Security Policy (hashes computed at build time), `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options: DENY` and `Cross-Origin-Opener-Policy`; hashed assets under `/_app/immutable/` are cached for a year, everything else is revalidated, unknown paths get the SPA fallback `200.html`. The healthcheck calls `/healthz`. It needs no variables.
+`web` serves the web app built from `apps/web` (SvelteKit static build, `public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine`, uid 101, port 8080, `read_only: true` with a tmpfs at `/tmp`). Traefik routes `PathPrefix(/)` to it with priority 1, so every `/api/v1` route and `/.well-known/jwks.json` win; the app and the API share one origin, so no CORS is needed and the refresh cookie works as is. nginx sets the Content Security Policy (hashes computed at build time), `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options: DENY` and `Cross-Origin-Opener-Policy`; hashed assets under `/_app/immutable/` are cached for a year, everything else is revalidated, unknown paths get the SPA fallback `200.html`. The healthcheck calls `/healthz`. Its runtime configuration (written at container start, no rebuild needed except for `WEB_AGORA_SDK`):
+
+| Variable | `.env.example` | Meaning |
+| --- | --- | --- |
+| `WEB_MAP_TILES`, `WEB_MAP_ATTRIBUTION`, `WEB_MAP_MAX_ZOOM` | empty, empty, `19` | Optional raster tiles under the map (`{z}/{x}/{y}` template). Empty: a metric grid, no request leaves the installation; with tiles every map view sends the garden's location and the viewer's IP address to the tile server |
+| `WEB_CAMERA_ENABLED` | `false` | Direct live camera of cloud mowers through Agora (the CSP then allows `*.agora.io` and `*.sd-rtn.com`; video and IP address go to Agora and Mammotion) |
+| `WEB_AGORA_SDK` | `include` | Build argument: `include` keeps the proprietary Agora Web SDK in the locally built image (for your own installation only, never redistribute it), `exclude` is what releases publish |
+| `WEB_LEGAL_ENABLED` | `false` | Links the legal pages from the login page (replace the placeholder pages first) |
 
 ```bash
 docker compose up -d --build web     # rebuild after a change to apps/web or libs/mowdeck-ui
@@ -252,6 +287,7 @@ Installing the PWA reliably and Web Push (Phase 2, Task 12) need HTTPS. At home 
 | --- | --- |
 | `IDENTITY_REFRESH_COOKIE_SECURE` | `true` |
 | `REALTIME_ALLOWED_ORIGINS` | the HTTPS origin, for example `https://mowdeck.<tailnet>.ts.net` (comma separated with `http://localhost` if you keep both) |
+| `IDENTITY_PUBLIC_URL` | the same HTTPS origin, for passkeys and the GitHub and Apple sign-in callbacks |
 
 and run `docker compose up -d`.
 
@@ -291,9 +327,15 @@ The Device-Gateway loads its mowers from Fleet (`fleet.mowers.list` on start, th
 | `MOWDECK_SIM_TIME_SCALE` | `30` | Simulated seconds per real second, so a lawn is mown in minutes |
 | `MOWDECK_TELEMETRY_HEARTBEAT_SECONDS` | `10` | Telemetry heartbeat |
 
+| `GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS` | `75` | Longest time a mower may take to plan a path preview; keep it below `FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS` (85) |
+| `GATEWAY_RELAY_URL`, `RELAY_FRAMES_TOKEN` | empty | With the profile `relay`: `http://camera-relay:8000` and a shared secret (`openssl rand -hex 24`), so Vision's photos of cloud mowers come from the camera relay's frame tap; either empty: no relay frames |
+| `GATEWAY_PHOTO_TIMEOUT_SECONDS`, `CAPTURE_TIMEOUT_SECONDS` | `30`, `20` | Longest time for a whole photo and for one relay frame (at most 30 s) |
+
 `MOWDECK_BOOTSTRAP_MOWERS` remains a development-only setting of the service for running it without Fleet (see `services/device-gateway/README.md`); the stack does not pass it.
 
-Databases created: `identity`, `fleet`, `telemetry`, `scheduler`, `notifications`, `entitlements`, `billing`, `planner`, `openfga`, each owned by a role of the same name. The init scripts run only on an empty volume: on an existing one create the planner database once with `docker compose exec postgres psql -U postgres -c "CREATE ROLE planner LOGIN PASSWORD '<SERVICE_DB_PASSWORD>'" -c "CREATE DATABASE planner OWNER planner"`.
+Databases created: `identity`, `fleet`, `telemetry`, `scheduler`, `notifications`, `entitlements`, `billing`, `planner`, `vision`, `openfga`, each owned by a role of the same name. The init scripts run only on an empty volume: on an existing one create a database added later (for example `planner`) once with `docker compose exec postgres psql -U postgres -c "CREATE ROLE planner LOGIN PASSWORD '<SERVICE_DB_PASSWORD>'" -c "CREATE DATABASE planner OWNER planner"`.
+
+### Planner, plans, billing and AI assist
 
 Spot mowing ([ADR 0030](../../docs/adr/0030-mowing-patterns-and-planner.md)): `planner-migrate` and `planner` serve `/api/v1/planner` (patterns, previews, plans, coverage gaps, templates). A plan is started through Fleet with the `command` the Planner returns; the simulated mower follows it (`custom_paths`), a LUBA runs only plans with a native job. `PLANNER_CUTTING_WIDTH_M` and `PLANNER_MAX_PARALLEL` tune it.
 
@@ -302,6 +344,14 @@ Plans ([ADR 0028](../../docs/adr/0028-entitlements-plans-and-enforcement.md)): t
 Billing ([ADR 0031](../../docs/adr/0031-billing-with-stripe-adapter.md)): `billing-migrate` and `billing` belong to the Compose profile `billing` and are not started without it (`docker compose config --services` lists them only with `--profile billing`); that is what `billing.enabled=false` means. To sell plans set `COMPOSE_PROFILES=billing`, `ENTITLEMENTS_BILLING_ENABLED=true` and the `BILLING_*` variables of `.env.example` (Stripe keys, price ids, `BILLING_APP_URL`) and run `docker compose up -d --wait`. The price file `infra/billing/prices.yaml` is mounted read-only into the Billing container. Traefik routes `/api/v1/billing` to it and rate limits the Stripe webhook path (`billing-webhook-ratelimit`, 120 per minute, burst 60). For a demo without Stripe use `BILLING_PROVIDER=fake` and `python -m billing.cli send-fixture` ([Billing operations](../../docs/ops/billing.md)). `WEB_LEGAL_ENABLED=true` links the legal pages from the login page.
 
 AI assist ([ADR 0033](../../docs/adr/0033-vision-assisted-recovery-with-approval.md)): `vision-migrate` and `vision` start with the stack. Users configure their own vision model in the web app (keys encrypted with `VISION_SECRETS_KEY`); `VISION_DEFAULT_ENABLED=true` with `VISION_DEFAULT_MODEL` (any LiteLLM model string, `fake/recover` for an offline demo) and `VISION_DEFAULT_API_KEY` offers the installation's model. Details: [Compose operations, AI assist](../../docs/ops/compose.md#ai-assist-vision).
+
+### Camera relay (profile `relay`)
+
+`camera-relay` and `mediamtx` serve the mowers' cameras to every viewer over WebRTC (WHEP) ([ADR 0045](../../docs/adr/0045-camera-relay.md)). Signalling runs through Traefik (`/media/whep/r/...`); the media uses one ICE port for UDP and TCP that LAN clients must reach (`RELAY_ICE_HOSTS`, the addresses clients reach this host under, default `127.0.0.1`; `RELAY_ICE_PORT` 8189; `RELAY_ICE_BIND` 0.0.0.0). Agora mowers additionally need the self-built `agora-bridge` (profile `agora`). Details: [Compose operations, Camera relay](../../docs/ops/compose.md#camera-relay-profile-relay).
+
+### Matter server (profile `matter`)
+
+`matter-server` exposes every mower as its own Matter device ([ADR 0063](../../docs/adr/0063-matter-server.md)). It runs on the **host network** (mDNS and IPv6 link-local), so Docker publishes nothing and the host firewall decides who reaches it: allow UDP 5353 and the UDP ports from `MATTER_PORT_BASE` (5540) on, one per mower (at most `MATTER_MAX_NODES`), from the LAN only, and the admin API `MATTER_HTTP_PORT` (8790) from Docker's bridges only ([nftables example](../../docs/ops/matter.md#firewall-nftables)). Its API tokens (one per account, `mower.view` and `mower.control` only) go one per line into `secrets/matter/api-tokens` (git-ignored, mounted read-only, readable by uid 1000); set `IDENTITY_EXTRA_MODULE_URLS=http://host.docker.internal:8790` so the web app shows the Matter section. Other variables: `MATTER_API_URL` (default Traefik on the host), `MATTER_LANGUAGE`, `MATTER_MDNS_INTERFACE`. The volume `matter-data` holds the fabrics and setup codes: back it up like `.env`.
 
 ## Check health
 
@@ -326,7 +376,8 @@ The PostgreSQL init scripts only run on an empty data volume, so changes to `ini
 
 ## Notes
 
-- Never commit `.env`. Secrets never go into images.
+- Never commit `.env` or anything under `secrets/` (each folder carries a `.gitignore` that ignores everything but itself). Secrets never go into images: every Dockerfile has an allow-list `Dockerfile.dockerignore`, so neither `.env` nor `secrets/` reaches a build context.
+- The full list of variables with comments is `.env.example`; this README covers the ones an operator usually sets.
 - `docker compose config -q` needs the required variables: use `--env-file .env.example` for a dry check (`uv run poe compose-check` does this).
 - `MOWDECK_NETWORK` (default `mowdeck`) names the Docker network that the services and Traefik share (`networks.mowdeck.name`, `--providers.docker.network`). To run a second stack on the same host without crossing the first, use another project name and network, and other host ports: `MOWDECK_NETWORK=other GATEWAY_HTTP_PORT=8081 GATEWAY_HTTPS_PORT=8443 docker compose -p other up -d --wait` (or `-p other` with `MOWDECK_NETWORK=other` in that stack's `.env`).
 - Traefik v3.6.1 or newer is required with Docker 29 (older versions cannot talk to the Docker API).
