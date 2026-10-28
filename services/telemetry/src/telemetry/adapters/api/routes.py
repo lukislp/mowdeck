@@ -12,6 +12,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Header, Path, Query, Request, Response
+from fastapi.responses import Response as RawResponse
 from mowdeck_service_kit import CurrentAccountId, CurrentPrincipal
 
 from telemetry.adapters.api.deps import (
@@ -45,6 +46,7 @@ from telemetry.adapters.api.schemas import (
     PositionTrack,
     ReportSummary,
     StateHistory,
+    WidgetStateOut,
 )
 from telemetry.application.heatmap import DEFAULT_CELL_M, Layer
 
@@ -178,6 +180,53 @@ async def get_mow_path(
     or before the route arrived. Clients poll it while the mower works."""
     row = await services.queries.mow_path(account_id, mower_id)
     return MowPathOut.of(row)
+
+
+@router.get("/mowers/{mower_id}/widget")
+async def get_widget_state(
+    mower_id: UUID,
+    _: ViewMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    response: Response,
+) -> WidgetStateOut:
+    """A compact state for the iOS widgets and the Live Activity (ADR 0059): activity (`offline`
+    when stale), battery, rain sensor, error and the job with progress, area name and remaining
+    time. 404 "no telemetry yet" before the first state."""
+    response.headers["Cache-Control"] = "private, max-age=15"
+    return WidgetStateOut.of(await services.widget.state(account_id, mower_id))
+
+
+@router.get(
+    "/mowers/{mower_id}/widget-map.png",
+    response_class=RawResponse,
+    responses={
+        200: {"content": {"image/png": {}}, "description": "The map picture."},
+        304: {"description": "Not modified (`If-None-Match` equals the ETag)"},
+        503: {"description": "All drawing slots are taken; retry in a few seconds."},
+    },
+)
+async def get_widget_map(
+    mower_id: UUID,
+    _: ViewMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    width: Annotated[
+        int, Query(ge=160, le=1200, description="Pixels (clamped to 700k in all).")
+    ] = 640,
+    height: Annotated[int, Query(ge=96, le=800)] = 384,
+    theme: Annotated[str, Query(pattern="^(light|dark)$")] = "light",
+    if_none_match: Annotated[str | None, Header()] = None,
+) -> RawResponse:
+    """A PNG of the mower's map for the iOS map widget (ADR 0059): areas, no-go zones, the mowed
+    path (the mow path up to its progress, else the last 3 hours of the track), the dock and the
+    mower. Bounded in size, cached for 30 seconds and drawn at most twice at a time. 404
+    `no-map-yet` before the gateway published a map."""
+    rendered = await services.widget.map_png(account_id, mower_id, width, height, theme)
+    headers = {"ETag": rendered.etag, "Cache-Control": "private, max-age=30"}
+    if if_none_match == rendered.etag:
+        return RawResponse(status_code=304, headers=headers)
+    return RawResponse(rendered.png, media_type="image/png", headers=headers)
 
 
 @router.get("/mowers/{mower_id}/heatmap")

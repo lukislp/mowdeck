@@ -32,6 +32,7 @@ from mowdeck_service_kit import get_logger
 
 from notifications.application.context import NotificationsConfig
 from notifications.application.fanout import Fanout
+from notifications.application.live_activity import LiveActivities
 from notifications.application.ports import Clock, Store
 from notifications.domain.errors import AccountMismatchError
 from notifications.domain.geofence import Fence, MowerFence
@@ -62,8 +63,14 @@ class Watcher:
     """The rules use case."""
 
     def __init__(
-        self, store: Store, fanout: Fanout, config: NotificationsConfig, clock: Clock
+        self,
+        store: Store,
+        fanout: Fanout,
+        config: NotificationsConfig,
+        clock: Clock,
+        live: LiveActivities | None = None,
     ) -> None:
+        self._live = live
         self._store = store
         self._fanout = fanout
         self._config = config
@@ -107,6 +114,8 @@ class Watcher:
             )
             await tx.put_watch(watch)
         await self._fanout.dispatch(events)
+        if self._live is not None:
+            await self._live.on_state(state)
         return events
 
     async def on_connection(
@@ -159,6 +168,11 @@ class Watcher:
     async def on_map(self, snapshot: MowerMapSnapshot) -> bool:
         """Store the geofence of a map snapshot; True when stored."""
         await self._check_account(snapshot.mower_id, snapshot.account_id, "map")
+        if self._live is not None:
+            self._live.remember_areas(
+                snapshot.mower_id,
+                {a.id: a.name for a in snapshot.map.areas if a.name},
+            )
         fence = Fence.from_map(snapshot.map)
         if fence is None:
             _log.info(

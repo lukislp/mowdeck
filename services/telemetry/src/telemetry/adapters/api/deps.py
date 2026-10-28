@@ -25,6 +25,7 @@ from mowdeck_service_kit.errors import (
 )
 
 from telemetry.application.services import Services
+from telemetry.application.widget import BusyError
 from telemetry.domain.errors import (
     AerialDisabledError,
     AerialRateLimitedError,
@@ -189,6 +190,8 @@ def to_service_error(exc: TelemetryError) -> ServiceError:
                     "X-Robots-Tag": "noindex, nofollow, noarchive",
                 },
             )
+        case BusyError():
+            return ServiceUnavailable(exc.message)
         case AerialDisabledError():
             return AerialDisabledProblem(exc.message)
         case TileOutsideMapError():

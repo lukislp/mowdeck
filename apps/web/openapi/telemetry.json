@@ -4378,6 +4378,178 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WidgetJobOut": {
+        "description": "The running job as the iOS widgets and the Live Activity show it.",
+        "properties": {
+          "area_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area Id"
+          },
+          "area_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Name of the map area, when the map names it.",
+            "title": "Area Name"
+          },
+          "elapsed_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed S"
+          },
+          "mowed_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mowed M2"
+          },
+          "progress_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Percent"
+          },
+          "remaining_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining S"
+          }
+        },
+        "required": [
+          "progress_percent",
+          "area_id",
+          "area_name",
+          "elapsed_s",
+          "remaining_s",
+          "mowed_m2"
+        ],
+        "title": "WidgetJobOut",
+        "type": "object"
+      },
+      "WidgetStateOut": {
+        "description": "``GET /mowers/{id}/widget``: a compact state (ADR 0059).",
+        "properties": {
+          "activity": {
+            "description": "`MowerActivity`; `offline` replaces the activity while the state is stale.",
+            "title": "Activity",
+            "type": "string"
+          },
+          "battery_percent": {
+            "title": "Battery Percent",
+            "type": "integer"
+          },
+          "charging": {
+            "title": "Charging",
+            "type": "boolean"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WidgetJobOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "rain_detected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rain Detected"
+          },
+          "stale": {
+            "description": "The mower is offline (see `MowerStateSnapshot.stale`).",
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mower_id",
+          "observed_at",
+          "stale",
+          "activity",
+          "battery_percent",
+          "charging",
+          "rain_detected",
+          "error_code",
+          "error_message",
+          "job"
+        ],
+        "title": "WidgetStateOut",
+        "type": "object"
       }
     }
   },
@@ -6047,6 +6219,149 @@
         "summary": "Stop Tracking",
         "tags": [
           "tracking"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/widget": {
+      "get": {
+        "description": "A compact state for the iOS widgets and the Live Activity (ADR 0059): activity (`offline`\nwhen stale), battery, rain sensor, error and the job with progress, area name and remaining\ntime. 404 \"no telemetry yet\" before the first state.",
+        "operationId": "get_widget_state_api_v1_telemetry_mowers__mower_id__widget_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetStateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Widget State",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/widget-map.png": {
+      "get": {
+        "description": "A PNG of the mower's map for the iOS map widget (ADR 0059): areas, no-go zones, the mowed\npath (the mow path up to its progress, else the last 3 hours of the track), the dock and the\nmower. Bounded in size, cached for 30 seconds and drawn at most twice at a time. 404\n`no-map-yet` before the gateway published a map.",
+        "operationId": "get_widget_map_api_v1_telemetry_mowers__mower_id__widget_map_png_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Pixels (clamped to 700k in all).",
+            "in": "query",
+            "name": "width",
+            "required": false,
+            "schema": {
+              "default": 640,
+              "description": "Pixels (clamped to 700k in all).",
+              "maximum": 1200,
+              "minimum": 160,
+              "title": "Width",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "height",
+            "required": false,
+            "schema": {
+              "default": 384,
+              "maximum": 800,
+              "minimum": 96,
+              "title": "Height",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "theme",
+            "required": false,
+            "schema": {
+              "default": "light",
+              "pattern": "^(light|dark)$",
+              "title": "Theme",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {}
+            },
+            "description": "The map picture."
+          },
+          "304": {
+            "description": "Not modified (`If-None-Match` equals the ETag)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "All drawing slots are taken; retry in a few seconds."
+          }
+        },
+        "summary": "Get Widget Map",
+        "tags": [
+          "telemetry"
         ]
       }
     },

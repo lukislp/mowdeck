@@ -295,6 +295,42 @@ class ApnsChannel:
             url, headers, body = self.request(delivery)
         except ValueError as exc:
             return DeliveryResult(DeliveryOutcome.FAILED, f"invalid apns target: {exc}")
+        return await self._post(url, headers, body)
+
+    async def push(
+        self,
+        token: str,
+        payload: dict[str, Any],
+        *,
+        push_type: Literal["liveactivity", "background"],
+        priority: int,
+        expiration: int = 0,
+    ) -> DeliveryResult:
+        """Post a Live Activity (``liveactivity``, topic ``<bundle>.push-type.liveactivity``,
+        token = push-to-start or update token) or a silent background push (``background``,
+        priority 5, token = device token) for the widgets (ADR 0059). Same connection, lock,
+        provider token and answers as :meth:`send`; ``gone`` means the token is dead."""
+        if not _HEX_TOKEN.match(token):
+            return DeliveryResult(DeliveryOutcome.FAILED, "invalid apns target: not hexadecimal")
+        topic = (
+            f"{self._bundle_id}.push-type.liveactivity"
+            if push_type == "liveactivity"
+            else self._bundle_id
+        )
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(body) > MAX_PAYLOAD_BYTES:
+            return DeliveryResult(DeliveryOutcome.FAILED, "apns payload too large")
+        headers = {
+            "authorization": f"bearer {self.provider_token()}",
+            "apns-topic": topic,
+            "apns-push-type": push_type,
+            "apns-priority": str(priority),
+            "apns-expiration": str(expiration),
+            "content-type": "application/json",
+        }
+        return await self._post(f"https://{self.host}/3/device/{token.lower()}", headers, body)
+
+    async def _post(self, url: str, headers: dict[str, str], body: bytes) -> DeliveryResult:
         async with self._lock:
             try:
                 async with asyncio.timeout(self._deadline):

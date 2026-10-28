@@ -32,6 +32,11 @@ IOS = REPO / "apps" / "mobile" / "ios" / "App"
 BUNDLE_ID = "app.mowdeck.mobile"
 EXTENSION_BUNDLE_ID = f"{BUNDLE_ID}.NotificationService"
 EXTENSION_NAME = "NotificationService"
+WIDGETS_BUNDLE_ID = f"{BUNDLE_ID}.Widgets"
+WIDGETS_NAME = "MowDeckWidgets"
+WIDGETS_POINT = "com.apple.widgetkit-extension"
+APP_GROUP = "group.app.mowdeck.mobile"
+KEYCHAIN_GROUP = "$(AppIdentifierPrefix)app.mowdeck.mobile.shared"
 DEV_ENTITLEMENTS = IOS / "App" / "App.entitlements"
 RELEASE_ENTITLEMENTS = (
     REPO / "apps" / "mobile" / "scripts" / "apple" / "entitlements" / "app-store.plist"
@@ -190,6 +195,41 @@ def check_extension_plist(info: dict[str, Any]) -> list[str]:
     return problems
 
 
+def check_widgets_plist(info: dict[str, Any]) -> list[str]:
+    """Info.plist of the widget extension (widgets and the mowing Live Activity, ADR 0059)."""
+    problems = []
+    extension = info.get("NSExtension")
+    extension = extension if isinstance(extension, dict) else {}
+    if extension.get("NSExtensionPointIdentifier") != WIDGETS_POINT:
+        problems.append(
+            f"MowDeckWidgets/Info.plist: NSExtensionPointIdentifier must be {WIDGETS_POINT}"
+        )
+    if info.get("CFBundleVersion") != "$(CURRENT_PROJECT_VERSION)":
+        problems.append(
+            "MowDeckWidgets/Info.plist: CFBundleVersion must be $(CURRENT_PROJECT_VERSION)"
+        )
+    if info.get("CFBundleShortVersionString") != "$(MARKETING_VERSION)":
+        problems.append(
+            "MowDeckWidgets/Info.plist: CFBundleShortVersionString must be $(MARKETING_VERSION)"
+        )
+    if info.get("ITSAppUsesNonExemptEncryption") is not False:
+        problems.append("MowDeckWidgets/Info.plist: ITSAppUsesNonExemptEncryption must be false")
+    return problems
+
+
+def check_widget_entitlements(app: dict[str, Any], widgets: dict[str, Any]) -> list[str]:
+    """The app and the widget extension must share the App Group and the Keychain group, or the
+    widgets cannot read the credential the app stores (ADR 0059)."""
+    problems = []
+    for name, entitlements in (("App.entitlements", app), ("widgets entitlements", widgets)):
+        if APP_GROUP not in (entitlements.get("com.apple.security.application-groups") or []):
+            problems.append(f"{name}: the App Group {APP_GROUP} is missing")
+        groups = entitlements.get("keychain-access-groups") or []
+        if not groups or groups[0] != KEYCHAIN_GROUP:
+            problems.append(f"{name}: the first keychain access group must be {KEYCHAIN_GROUP}")
+    return problems
+
+
 def check_project(pbxproj: str) -> list[str]:
     """Build settings of the app target: iPhone and iPad, the bundle id, no Mac Catalyst; the
     Notification Service Extension target, embedded in the app."""
@@ -200,6 +240,13 @@ def check_project(pbxproj: str) -> list[str]:
         problems.append(
             f"App.xcodeproj: the extension's PRODUCT_BUNDLE_IDENTIFIER is not {EXTENSION_BUNDLE_ID}"
         )
+    if f"PRODUCT_BUNDLE_IDENTIFIER = {WIDGETS_BUNDLE_ID};" not in pbxproj:
+        problems.append(
+            "App.xcodeproj: the widget extension's PRODUCT_BUNDLE_IDENTIFIER is not "
+            f"{WIDGETS_BUNDLE_ID}"
+        )
+    if "MowDeckWidgets.appex in Embed Foundation Extensions" not in pbxproj:
+        problems.append("App.xcodeproj: the app does not embed the MowDeckWidgets extension")
     if "com.apple.product-type.app-extension" not in pbxproj:
         problems.append("App.xcodeproj: the NotificationService app extension target is missing")
     if "dstSubfolderSpec = 13;" not in pbxproj or "Embed Foundation Extensions" not in pbxproj:
@@ -225,6 +272,17 @@ def check_source(ios: Path = IOS, release_entitlements: Path = RELEASE_ENTITLEME
     problems += check_project((ios / "App.xcodeproj" / "project.pbxproj").read_text("utf-8"))
     extension = ios / EXTENSION_NAME
     problems += check_extension_plist(_load_plist(extension / "Info.plist"))
+    widgets = ios.parent / WIDGETS_NAME
+    problems += check_widgets_plist(_load_plist(widgets / "Info.plist"))
+    problems += check_widget_entitlements(
+        _load_plist(ios / "App" / "App.entitlements"),
+        _load_plist(release_entitlements.parent / "widgets.plist"),
+    )
+    for name in ("MowDeckWidgets.swift", "Provider.swift", "MowingLiveActivity.swift"):
+        if not (widgets / name).is_file():
+            problems.append(f"{WIDGETS_NAME}/{name} is missing")
+    if (_load_plist(ios / "App" / "Info.plist")).get("NSSupportsLiveActivities") is not True:
+        problems.append("App/Info.plist: NSSupportsLiveActivities must be true")
     for source in (extension / "NotificationService.swift",):
         if not source.is_file():
             problems.append(f"{source.name} is missing")
@@ -275,6 +333,30 @@ def check_built_extension(appex: Path, version: str, build: str) -> list[str]:
     return problems
 
 
+def check_built_widgets(appex: Path, version: str, build: str) -> list[str]:
+    """The built widget extension inside App.app/PlugIns."""
+    if not (appex / "Info.plist").is_file():
+        return [f"PlugIns/{appex.name} is missing: the app was built without the widget extension"]
+    info = _load_plist(appex / "Info.plist")
+    problems = []
+    if info.get("CFBundleIdentifier") != WIDGETS_BUNDLE_ID:
+        problems.append(f"{appex.name}: CFBundleIdentifier is {info.get('CFBundleIdentifier')!r}")
+    if info.get("CFBundleShortVersionString") != version:
+        problems.append(
+            f"{appex.name}: CFBundleShortVersionString is "
+            f"{info.get('CFBundleShortVersionString')!r}"
+        )
+    if info.get("CFBundleVersion") != build:
+        problems.append(
+            f"{appex.name}: CFBundleVersion is {info.get('CFBundleVersion')!r}, expected {build!r}"
+        )
+    extension = info.get("NSExtension")
+    point = extension.get("NSExtensionPointIdentifier") if isinstance(extension, dict) else None
+    if point != WIDGETS_POINT:
+        problems.append(f"{appex.name}: NSExtensionPointIdentifier is {point!r}")
+    return problems
+
+
 def check_app(app: Path, version: str, build: str) -> None:
     """The built App.app before it is signed."""
     info = _load_plist(app / "Info.plist")
@@ -297,6 +379,7 @@ def check_app(app: Path, version: str, build: str) -> None:
             f"Info.plist keys {sorted(k for k in info if 'Icon' in k) or 'none'}"
         )
     problems += check_built_extension(app / "PlugIns" / f"{EXTENSION_NAME}.appex", version, build)
+    problems += check_built_widgets(app / "PlugIns" / f"{WIDGETS_NAME}.appex", version, build)
     if not (app / "public" / "index.html").is_file():
         problems.append("the bundled pages are missing (public/index.html): cap sync did not run")
     for path in app.rglob("*"):

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from mowdeck_contracts.v1 import Principal
 from mowdeck_service_kit import CurrentAccountId
 from mowdeck_service_kit.entitlements import feature_gate
-from mowdeck_service_kit.errors import NotFound
+from mowdeck_service_kit.errors import NotFound, ServiceUnavailable
 
 from notifications.adapters.api.deps import NotificationUser, ServicesDep
 from notifications.adapters.api.schemas import (
@@ -20,6 +20,10 @@ from notifications.adapters.api.schemas import (
     ApnsDeviceOut,
     Inbox,
     InboxItemOut,
+    LiveActivityDeviceIn,
+    LiveActivityDeviceOut,
+    LiveActivityIn,
+    LiveActivityOut,
     NtfyIn,
     NtfyOut,
     PreferencesBody,
@@ -30,6 +34,7 @@ from notifications.adapters.api.schemas import (
     TestSent,
     VapidPublicKey,
 )
+from notifications.application.live_activity import LiveActivities
 from notifications.domain.models import NotificationImage, Preferences
 from notifications.module import PUSH_FEATURE
 
@@ -164,6 +169,78 @@ async def delete_apns_device(
     """Delete one of the caller's iOS devices (the app calls it on logout; 404 for any other
     id)."""
     await services.users.delete_apns_device(principal.subject, account_id, device_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _live(services: ServicesDep) -> LiveActivities:
+    if services.live is None:
+        raise ServiceUnavailable("live activities are not available")
+    return services.live
+
+
+@router.put("/me/live-activities/device")
+async def put_live_activity_device(
+    body: LiveActivityDeviceIn,
+    principal: NotificationUser,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> LiveActivityDeviceOut:
+    """Register what the caller's app installation offers (ADR 0059): the push-to-start token
+    for Live Activities and whether it has widgets. Replaces the earlier registration."""
+    device = await _live(services).register_device(
+        principal.subject,
+        account_id,
+        body.installation_id,
+        push_to_start_token=body.push_to_start_token,
+        widgets_enabled=body.widgets_enabled,
+    )
+    return LiveActivityDeviceOut.of(device)
+
+
+@router.delete(
+    "/me/live-activities/device/{installation_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_live_activity_device(
+    installation_id: UUID,
+    principal: NotificationUser,
+    services: ServicesDep,
+) -> Response:
+    """Forget the caller's installation and its activities (logout; 404 for any other id)."""
+    await _live(services).unregister_device(principal.subject, installation_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/me/live-activities/mowers/{mower_id}")
+async def put_live_activity(
+    mower_id: UUID,
+    body: LiveActivityIn,
+    principal: NotificationUser,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> LiveActivityOut:
+    """The app started a Live Activity for the mower: its update token (the server updates and
+    ends the activity with it). 404 when the caller cannot view the mower."""
+    activity = await _live(services).report_activity(
+        principal.subject,
+        account_id,
+        body.installation_id,
+        mower_id,
+        activity_id=body.activity_id,
+        push_token=body.push_token,
+    )
+    return LiveActivityOut.of(activity)
+
+
+@router.delete("/me/live-activities/mowers/{mower_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_live_activity(
+    mower_id: UUID,
+    installation_id: UUID,
+    principal: NotificationUser,
+    services: ServicesDep,
+) -> Response:
+    """The user ended the activity on the device: the server does not restart it during this
+    job and sends it no more updates."""
+    await _live(services).activity_ended(principal.subject, installation_id, mower_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

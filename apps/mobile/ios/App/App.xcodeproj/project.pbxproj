@@ -21,6 +21,16 @@
 		A0DECC0000000000000000A1 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC0000000000000000B1 /* NotificationService.swift */; };
 		A0DECC0000000000000000A2 /* PushImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC0000000000000000B2 /* PushImage.swift */; };
 		A0DECC0000000000000000A3 /* NotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A0DECC0000000000000000B3 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A0DECC100000000000000201 /* MowDeckWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000101 /* MowDeckWidgets.swift */; };
+		A0DECC100000000000000202 /* Intents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000102 /* Intents.swift */; };
+		A0DECC100000000000000203 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000103 /* Provider.swift */; };
+		A0DECC100000000000000204 /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000104 /* Views.swift */; };
+		A0DECC100000000000000205 /* MowingLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000105 /* MowingLiveActivity.swift */; };
+		A0DECC100000000000000220 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000112 /* Localizable.xcstrings */; };
+		A0DECC100000000000000221 /* WidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000114 /* WidgetBridge.swift */; };
+		A0DECC100000000000000222 /* MowDeckWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A0DECC100000000000000113 /* MowDeckWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A0DECC100000000000000230 /* MowerWidgetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A0DECC100000000000000501 /* MowerWidgetCore */; };
+		A0DECC100000000000000231 /* MowerWidgetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A0DECC100000000000000501 /* MowerWidgetCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,6 +40,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A0DECC0000000000000000F1;
 			remoteInfo = NotificationService;
+		};
+		A0DECC100000000000000420 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A0DECC100000000000000400;
+			remoteInfo = MowDeckWidgets;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -41,6 +58,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				A0DECC0000000000000000A3 /* NotificationService.appex in Embed Foundation Extensions */,
+				A0DECC100000000000000222 /* MowDeckWidgets.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -66,6 +84,16 @@
 		A0DECC0000000000000000B2 /* PushImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PushImage.swift; path = ../NotificationServiceKit/Sources/PushImage/PushImage.swift; sourceTree = SOURCE_ROOT; };
 		A0DECC0000000000000000B3 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0DECC0000000000000000B4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A0DECC100000000000000101 /* MowDeckWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MowDeckWidgets.swift; sourceTree = "<group>"; };
+		A0DECC100000000000000102 /* Intents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Intents.swift; sourceTree = "<group>"; };
+		A0DECC100000000000000103 /* Provider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Provider.swift; sourceTree = "<group>"; };
+		A0DECC100000000000000104 /* Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views.swift; sourceTree = "<group>"; };
+		A0DECC100000000000000105 /* MowingLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MowingLiveActivity.swift; sourceTree = "<group>"; };
+		A0DECC100000000000000110 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A0DECC100000000000000111 /* MowDeckWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MowDeckWidgets.entitlements; sourceTree = "<group>"; };
+		A0DECC100000000000000112 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		A0DECC100000000000000113 /* MowDeckWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MowDeckWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0DECC100000000000000114 /* WidgetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBridge.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +102,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				A0DECC100000000000000230 /* MowerWidgetCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,6 +110,14 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A0DECC100000000000000411 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC100000000000000231 /* MowerWidgetCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -93,6 +130,7 @@
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				A0DECC0000000000000000C1 /* NotificationService */,
+				A0DECC100000000000000300 /* MowDeckWidgets */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -102,6 +140,7 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				A0DECC0000000000000000B3 /* NotificationService.appex */,
+				A0DECC100000000000000113 /* MowDeckWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -113,6 +152,7 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				A0DECC000000000000000012 /* MowDeckShellPlugin.swift */,
+				A0DECC100000000000000114 /* WidgetBridge.swift */,
 				A0DECC000000000000000011 /* MainViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
@@ -135,6 +175,21 @@
 			path = NotificationService;
 			sourceTree = "<group>";
 		};
+		A0DECC100000000000000300 /* MowDeckWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				A0DECC100000000000000101 /* MowDeckWidgets.swift */,
+				A0DECC100000000000000102 /* Intents.swift */,
+				A0DECC100000000000000103 /* Provider.swift */,
+				A0DECC100000000000000104 /* Views.swift */,
+				A0DECC100000000000000105 /* MowingLiveActivity.swift */,
+				A0DECC100000000000000112 /* Localizable.xcstrings */,
+				A0DECC100000000000000110 /* Info.plist */,
+				A0DECC100000000000000111 /* MowDeckWidgets.entitlements */,
+			);
+			path = MowDeckWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -151,10 +206,12 @@
 			);
 			dependencies = (
 				A0DECC0000000000000000D2 /* PBXTargetDependency */,
+				A0DECC100000000000000421 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
+				A0DECC100000000000000501 /* MowerWidgetCore */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -177,6 +234,26 @@
 			productReference = A0DECC0000000000000000B3 /* NotificationService.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A0DECC100000000000000400 /* MowDeckWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A0DECC100000000000000430 /* Build configuration list for PBXNativeTarget "MowDeckWidgets" */;
+			buildPhases = (
+				A0DECC100000000000000410 /* Sources */,
+				A0DECC100000000000000411 /* Frameworks */,
+				A0DECC100000000000000412 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MowDeckWidgets;
+			packageProductDependencies = (
+				A0DECC100000000000000501 /* MowerWidgetCore */,
+			);
+			productName = MowDeckWidgets;
+			productReference = A0DECC100000000000000113 /* MowDeckWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -195,6 +272,10 @@
 						CreatedOnToolsVersion = 15.0;
 						ProvisioningStyle = Automatic;
 					};
+					A0DECC100000000000000400 = {
+						CreatedOnToolsVersion = 15.0;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */;
@@ -203,11 +284,13 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				de,
 				Base,
 			);
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
 				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				A0DECC100000000000000500 /* XCLocalSwiftPackageReference "../MowerWidgetKit" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -215,6 +298,7 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				A0DECC0000000000000000F1 /* NotificationService */,
+				A0DECC100000000000000400 /* MowDeckWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -240,6 +324,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A0DECC100000000000000412 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC100000000000000220 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -251,6 +343,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				A0DECC000000000000000002 /* MowDeckShellPlugin.swift in Sources */,
 				A0DECC000000000000000001 /* MainViewController.swift in Sources */,
+				A0DECC100000000000000221 /* WidgetBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,6 +356,18 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A0DECC100000000000000410 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0DECC100000000000000201 /* MowDeckWidgets.swift in Sources */,
+				A0DECC100000000000000202 /* Intents.swift in Sources */,
+				A0DECC100000000000000203 /* Provider.swift in Sources */,
+				A0DECC100000000000000204 /* Views.swift in Sources */,
+				A0DECC100000000000000205 /* MowingLiveActivity.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -270,6 +375,11 @@
 			isa = PBXTargetDependency;
 			target = A0DECC0000000000000000F1 /* NotificationService */;
 			targetProxy = A0DECC0000000000000000D1 /* PBXContainerItemProxy */;
+		};
+		A0DECC100000000000000421 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A0DECC100000000000000400 /* MowDeckWidgets */;
+			targetProxy = A0DECC100000000000000420 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -491,6 +601,51 @@
 			};
 			name = Release;
 		};
+		A0DECC100000000000000431 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MowDeckWidgets/MowDeckWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = MowDeckWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mowdeck.mobile.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A0DECC100000000000000432 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MowDeckWidgets/MowDeckWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = MowDeckWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mowdeck.mobile.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -521,12 +676,25 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A0DECC100000000000000430 /* Build configuration list for PBXNativeTarget "MowDeckWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A0DECC100000000000000431 /* Debug */,
+				A0DECC100000000000000432 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
 		D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "CapApp-SPM";
+		};
+		A0DECC100000000000000500 /* XCLocalSwiftPackageReference "../MowerWidgetKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../MowerWidgetKit;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -535,6 +703,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";
+		};
+		A0DECC100000000000000501 /* MowerWidgetCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0DECC100000000000000500 /* XCLocalSwiftPackageReference "../MowerWidgetKit" */;
+			productName = MowerWidgetCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

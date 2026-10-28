@@ -1,6 +1,7 @@
 """Public authentication endpoints, ``/me`` and the JWKS under ``/api/v1/identity``."""
 
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Header, Request, Response
 from mowdeck_authz import PLATFORM_OBJECT, CheckItem, ObjectRef, principal_subject
@@ -24,6 +25,8 @@ from identity.adapters.api.schemas import (
     TokenExchangeIn,
     TokenOut,
     UiAreaOut,
+    WidgetCredentialIn,
+    WidgetCredentialOut,
 )
 from identity.application.accounts import Registration
 from identity.application.sessions import TokenPair
@@ -207,6 +210,42 @@ async def exchange(
     pair = await services.sessions.exchange(body.token, ctx)
     response.headers["Cache-Control"] = "no-store"
     return TokenOut.of(pair)
+
+
+def _account_of(ctx: Ctx) -> UUID:
+    assert ctx.principal is not None  # noqa: S101 - Ctx requires a principal
+    if ctx.principal.account_id is None:
+        raise BadRequest("the token is not bound to an account")
+    return ctx.principal.account_id
+
+
+@router.get("/me/widget-credentials")
+async def list_widget_credentials(services: ServicesDep, ctx: Ctx) -> list[WidgetCredentialOut]:
+    """The caller's iOS widget credentials (ADR 0059), newest first, without secrets."""
+    assert ctx.principal is not None  # noqa: S101 - Ctx requires a principal
+    found = await services.tokens.list_widget_credentials(_account_of(ctx), ctx.principal.subject)
+    return [WidgetCredentialOut.of(t) for t in found]
+
+
+@router.post("/me/widget-credentials", status_code=201)
+async def create_widget_credential(
+    body: WidgetCredentialIn, response: Response, services: ServicesDep, ctx: Ctx
+) -> WidgetCredentialOut:
+    """Create the credential the iOS widgets and the Live Activity use instead of the app's
+    session: an API token limited to `mower.view` and `mower.control` on the account (as far
+    as the caller holds them), valid for 90 days, revocable here and in the token list. The
+    secret is in the response once. Only users (not API tokens) can call it."""
+    created = await services.tokens.create_widget_credential(
+        _account_of(ctx), body.device_name, body.replaces, ctx
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return WidgetCredentialOut.of(created.token, created.secret)
+
+
+@router.delete("/me/widget-credentials/{token_id}", status_code=204)
+async def revoke_widget_credential(token_id: UUID, services: ServicesDep, ctx: Ctx) -> None:
+    """Revoke one of the caller's widget credentials (404 for any other token)."""
+    await services.tokens.revoke_widget_credential(_account_of(ctx), token_id, ctx)
 
 
 @router.get("/me")

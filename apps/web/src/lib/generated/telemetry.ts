@@ -571,6 +571,51 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/mowers/{mower_id}/widget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Widget State
+         * @description A compact state for the iOS widgets and the Live Activity (ADR 0059): activity (`offline`
+         *     when stale), battery, rain sensor, error and the job with progress, area name and remaining
+         *     time. 404 "no telemetry yet" before the first state.
+         */
+        get: operations["get_widget_state_api_v1_telemetry_mowers__mower_id__widget_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/widget-map.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Widget Map
+         * @description A PNG of the mower's map for the iOS map widget (ADR 0059): areas, no-go zones, the mowed
+         *     path (the mow path up to its progress, else the last 3 hours of the track), the dock and the
+         *     mower. Bounded in size, cached for 30 seconds and drawn at most twice at a time. 404
+         *     `no-map-yet` before the gateway published a map.
+         */
+        get: operations["get_widget_map_api_v1_telemetry_mowers__mower_id__widget_map_png_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/public/tracking/view": {
         parameters: {
             query?: never;
@@ -2814,6 +2859,64 @@ export type components = {
             /** Error Type */
             type: string;
         };
+        /**
+         * WidgetJobOut
+         * @description The running job as the iOS widgets and the Live Activity show it.
+         */
+        WidgetJobOut: {
+            /** Area Id */
+            area_id: string | null;
+            /**
+             * Area Name
+             * @description Name of the map area, when the map names it.
+             */
+            area_name: string | null;
+            /** Elapsed S */
+            elapsed_s: number | null;
+            /** Mowed M2 */
+            mowed_m2: number | null;
+            /** Progress Percent */
+            progress_percent: number | null;
+            /** Remaining S */
+            remaining_s: number | null;
+        };
+        /**
+         * WidgetStateOut
+         * @description ``GET /mowers/{id}/widget``: a compact state (ADR 0059).
+         */
+        WidgetStateOut: {
+            /**
+             * Activity
+             * @description `MowerActivity`; `offline` replaces the activity while the state is stale.
+             */
+            activity: string;
+            /** Battery Percent */
+            battery_percent: number;
+            /** Charging */
+            charging: boolean;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            job: components["schemas"]["WidgetJobOut"] | null;
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Rain Detected */
+            rain_detected: boolean | null;
+            /**
+             * Stale
+             * @description The mower is offline (see `MowerStateSnapshot.stale`).
+             */
+            stale: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -3763,6 +3866,89 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_widget_state_api_v1_telemetry_mowers__mower_id__widget_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetStateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_widget_map_api_v1_telemetry_mowers__mower_id__widget_map_png_get: {
+        parameters: {
+            query?: {
+                height?: number;
+                theme?: string;
+                /** @description Pixels (clamped to 700k in all). */
+                width?: number;
+            };
+            header?: {
+                "if-none-match"?: string | null;
+            };
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The map picture. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            /** @description Not modified (`If-None-Match` equals the ETag) */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description All drawing slots are taken; retry in a few seconds. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

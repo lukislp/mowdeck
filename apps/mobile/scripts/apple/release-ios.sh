@@ -32,6 +32,8 @@ SIGNING="python3 $REPO_DIR/tools/repo-checks/scripts/ios_signing.py"
 DECLARED="$MOBILE_DIR/scripts/apple/entitlements/app-store.plist"
 EXT_BUNDLE_ID="$BUNDLE_ID.NotificationService"
 EXT_DECLARED="$MOBILE_DIR/scripts/apple/entitlements/notification-service.plist"
+WIDGETS_BUNDLE_ID="$BUNDLE_ID.Widgets"
+WIDGETS_DECLARED="$MOBILE_DIR/scripts/apple/entitlements/widgets.plist"
 DERIVED="$BUILD_DIR/derived-appstore"
 
 require_mac
@@ -49,6 +51,11 @@ $SIGNING entitlements --declared "$DECLARED" --profile "$PROFILE" --out "$WORK/e
 EXT_PROFILE="$($SIGNING find-profile "$PROFILE_DIR" --bundle-id "$EXT_BUNDLE_ID" --team "$APPLE_TEAM_ID")"
 $SIGNING check-profile "$EXT_PROFILE" --bundle-id "$EXT_BUNDLE_ID" --team "$APPLE_TEAM_ID"
 $SIGNING entitlements --declared "$EXT_DECLARED" --profile "$EXT_PROFILE" --out "$WORK/ext-entitlements.plist"
+# The widget extension (widgets and the mowing Live Activity, ADR 0059) has its own profile
+# too, with the App Group and the Keychain group it shares with the app.
+WIDGETS_PROFILE="$($SIGNING find-profile "$PROFILE_DIR" --bundle-id "$WIDGETS_BUNDLE_ID" --team "$APPLE_TEAM_ID")"
+$SIGNING check-profile "$WIDGETS_PROFILE" --bundle-id "$WIDGETS_BUNDLE_ID" --team "$APPLE_TEAM_ID"
+$SIGNING entitlements --declared "$WIDGETS_DECLARED" --profile "$WIDGETS_PROFILE" --out "$WORK/widgets-entitlements.plist"
 
 # --- 2. Bundled pages, cap sync, unsigned Release build for devices ---
 sync_platform ios
@@ -82,6 +89,12 @@ cp "$EXT_PROFILE" "$EXT/embedded.mobileprovision"
 codesign -f -s "$DISTRIBUTION_IDENTITY" --keychain "$SIGNING_KEYCHAIN" \
     --entitlements "$WORK/ext-entitlements.plist" --generate-entitlement-der "$EXT"
 codesign --verify --strict --verbose=2 "$EXT"
+WIDGETS="$APP/PlugIns/MowDeckWidgets.appex"
+[ -d "$WIDGETS" ] || fail "the app has no PlugIns/MowDeckWidgets.appex"
+cp "$WIDGETS_PROFILE" "$WIDGETS/embedded.mobileprovision"
+codesign -f -s "$DISTRIBUTION_IDENTITY" --keychain "$SIGNING_KEYCHAIN" \
+    --entitlements "$WORK/widgets-entitlements.plist" --generate-entitlement-der "$WIDGETS"
+codesign --verify --strict --verbose=2 "$WIDGETS"
 codesign -f -s "$DISTRIBUTION_IDENTITY" --keychain "$SIGNING_KEYCHAIN" \
     --entitlements "$WORK/entitlements.plist" --generate-entitlement-der "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
@@ -95,6 +108,13 @@ codesign -d --entitlements - --xml "$EXT" > "$WORK/ext-final.plist" 2> /dev/null
 plutil -extract get-task-allow raw -o - "$WORK/ext-final.plist" | grep -qx false \
     || fail "the notification extension is signed with get-task-allow: not an App Store signature"
 echo "Signed $EXT_BUNDLE_ID"
+codesign -d --entitlements - --xml "$WIDGETS" > "$WORK/widgets-final.plist" 2> /dev/null
+plutil -extract get-task-allow raw -o - "$WORK/widgets-final.plist" | grep -qx false \
+    || fail "the widget extension is signed with get-task-allow: not an App Store signature"
+plutil -extract com.apple.security.application-groups.0 raw -o - "$WORK/widgets-final.plist" \
+    | grep -qx group.app.mowdeck.mobile \
+    || fail "the widget extension is not signed with the App Group group.app.mowdeck.mobile"
+echo "Signed $WIDGETS_BUNDLE_ID"
 echo "Signed $BUNDLE_ID with entitlements: $(plutil -convert json -o - "$WORK/final.plist")"
 
 # --- 4. The .ipa ---

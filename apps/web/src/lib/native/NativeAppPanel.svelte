@@ -9,6 +9,7 @@
   import { m } from '#lib/paraglide/messages.js';
 
   import type { ApnsState } from './apns';
+  import type { WidgetsState } from './widgets';
   import { nativeShell } from './runtime';
 
   let {
@@ -50,6 +51,29 @@
     return nativeShell.local ? m.native_local_on() : m.native_local_off();
   }
 
+  function widgetsLabel(state: WidgetsState): string {
+    switch (state) {
+      case 'on':
+        return m.native_widgets_on();
+      case 'pending':
+        return m.native_widgets_pending();
+      case 'error':
+        return m.native_widgets_error();
+      default:
+        return m.native_widgets_off();
+    }
+  }
+
+  async function toggleWidgets(): Promise<void> {
+    busy = true;
+    try {
+      if (nativeShell.widgets === 'on') await nativeShell.disableWidgets();
+      else await nativeShell.enableWidgets();
+    } finally {
+      busy = false;
+    }
+  }
+
   async function enableApns(): Promise<void> {
     busy = true;
     try {
@@ -77,6 +101,15 @@
           size="inline"
           emptyText={m.no_data()}
           testid="native-apns"
+        />
+      {/if}
+      {#if nativeShell.widgetsAvailable}
+        <Readout
+          label={m.native_widgets()}
+          value={widgetsLabel(nativeShell.widgets)}
+          size="inline"
+          emptyText={m.no_data()}
+          testid="native-widgets"
         />
       {/if}
       <Readout
@@ -107,6 +140,25 @@
           >
         </div>
       {/if}
+    {/if}
+
+    {#if nativeShell.widgetsAvailable}
+      <p class="quiet small">{m.native_widgets_hint()}</p>
+      {#if nativeShell.widgets === 'error'}
+        <ProblemNotice title={m.native_widgets_error_hint()} />
+      {/if}
+      <div>
+        <Button
+          variant={nativeShell.widgets === 'on' ? 'secondary' : 'primary'}
+          icon="layers"
+          pending={busy || nativeShell.widgets === 'pending'}
+          testid="native-widgets-toggle"
+          onclick={toggleWidgets}
+          >{nativeShell.widgets === 'on'
+            ? m.native_widgets_disable()
+            : m.native_widgets_enable()}</Button
+        >
+      </div>
     {/if}
 
     {#if nativeShell.platform === 'android'}

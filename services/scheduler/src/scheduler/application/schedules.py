@@ -126,6 +126,31 @@ class Preview:
     weather_mower_id: UUID | None
 
 
+@dataclass(frozen=True, slots=True)
+class WidgetRun:
+    """One upcoming run for the iOS widgets."""
+
+    schedule_id: UUID
+    name: str
+    starts_at: datetime
+    duration_minutes: int
+
+
+@dataclass(frozen=True, slots=True)
+class WidgetOverview:
+    """The next runs of one mower and the rain decision for the first of them (ADR 0059)."""
+
+    runs: list[WidgetRun]
+    answer: WeatherAnswer | None
+
+
+WIDGET_RUNS = 3
+"""Upcoming runs the widgets show."""
+
+WIDGET_GROUP_LOOKUPS = 10
+"""Most groups looked at to find the schedules that reach one mower."""
+
+
 class ScheduleService:
     """Use cases of schedules."""
 
@@ -215,6 +240,51 @@ class ScheduleService:
             for s in rows
             if visible is None or str(target_object(s.target_type, s.target_id)) in visible
         ]
+
+    async def widget_overview(
+        self, principal: Principal, account_id: UUID, mower_id: UUID
+    ) -> WidgetOverview:
+        """Next runs of the mower (schedules aimed at it directly or through a group, enabled,
+        not skipped) and the rain decision for now, with the first run's rain settings.
+        The route checked ``can_view`` on the mower; schedules the caller may not see are left
+        out."""
+        reaches: dict[UUID, bool] = {}
+        runs: list[tuple[Schedule, datetime]] = []
+        lookups = 0
+        for item in await self.visible(principal, account_id):
+            at = item.next_run_at
+            if not item.enabled or at is None:
+                continue
+            if item.skip_until is not None and at <= item.skip_until:
+                continue
+            if item.target_type == "mower":
+                if item.target_id == mower_id:
+                    runs.append((item, at))
+            elif item.target_type == "group":
+                if item.target_id not in reaches:
+                    if lookups >= WIDGET_GROUP_LOOKUPS:
+                        continue
+                    lookups += 1
+                    try:
+                        reply = await self.fleet.resolve(account_id, "group", item.target_id)
+                        reaches[item.target_id] = any(m.mower_id == mower_id for m in reply.mowers)
+                    except Exception:
+                        reaches[item.target_id] = False
+                if reaches[item.target_id]:
+                    runs.append((item, at))
+        runs.sort(key=lambda pair: pair[1])
+        first = runs[0] if runs else None
+        settings = first[0].rain_settings if first is not None else RainSettings()
+        try:
+            answer: WeatherAnswer | None = await self.weather_of_mower(
+                account_id, mower_id, settings
+            )
+        except (NotFoundError, ForbiddenError):
+            answer = None
+        return WidgetOverview(
+            [WidgetRun(s.id, s.name, at, s.duration_minutes) for s, at in runs[:WIDGET_RUNS]],
+            answer,
+        )
 
     async def get(self, principal: Principal, account_id: UUID, schedule_id: UUID) -> Schedule:
         """One schedule (``can_view`` on its target)."""

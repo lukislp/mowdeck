@@ -2332,6 +2332,125 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WidgetCredentialIn": {
+        "additionalProperties": false,
+        "description": "``POST /me/widget-credentials``.",
+        "properties": {
+          "device_name": {
+            "description": "Shown in the account's token list as `iOS widgets: <device_name>`.",
+            "examples": [
+              "Lukas' iPhone"
+            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Device Name",
+            "type": "string"
+          },
+          "replaces": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An earlier widget credential of the caller on this device: revoked in the same transaction (rotation).",
+            "title": "Replaces"
+          }
+        },
+        "required": [
+          "device_name"
+        ],
+        "title": "WidgetCredentialIn",
+        "type": "object"
+      },
+      "WidgetCredentialOut": {
+        "description": "A widget credential: an API token for the iOS widgets (never with its secret, except once\nat creation).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The secret (`mdk_...`), returned only at creation. Exchange it at `POST /token` for 10 minute access tokens.",
+            "title": "Token"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "permissions",
+          "created_at",
+          "expires_at",
+          "last_used_at",
+          "revoked_at"
+        ],
+        "title": "WidgetCredentialOut",
+        "type": "object"
       }
     }
   },
@@ -4648,6 +4767,109 @@
         "summary": "Step Up Password",
         "tags": [
           "identity: passkeys"
+        ]
+      }
+    },
+    "/api/v1/identity/me/widget-credentials": {
+      "get": {
+        "description": "The caller's iOS widget credentials (ADR 0059), newest first, without secrets.",
+        "operationId": "list_widget_credentials_api_v1_identity_me_widget_credentials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WidgetCredentialOut"
+                  },
+                  "title": "Response List Widget Credentials Api V1 Identity Me Widget Credentials Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Widget Credentials",
+        "tags": [
+          "identity: sessions"
+        ]
+      },
+      "post": {
+        "description": "Create the credential the iOS widgets and the Live Activity use instead of the app's\nsession: an API token limited to `mower.view` and `mower.control` on the account (as far\nas the caller holds them), valid for 90 days, revocable here and in the token list. The\nsecret is in the response once. Only users (not API tokens) can call it.",
+        "operationId": "create_widget_credential_api_v1_identity_me_widget_credentials_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WidgetCredentialIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetCredentialOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Widget Credential",
+        "tags": [
+          "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/me/widget-credentials/{token_id}": {
+      "delete": {
+        "description": "Revoke one of the caller's widget credentials (404 for any other token).",
+        "operationId": "revoke_widget_credential_api_v1_identity_me_widget_credentials__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Widget Credential",
+        "tags": [
+          "identity: sessions"
         ]
       }
     },

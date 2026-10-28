@@ -35,6 +35,13 @@ if [ "${MOWDECK_RESIGN:-0}" = "1" ]; then
         cp "$EXT_PROFILE" "$APP/PlugIns/NotificationService.appex/embedded.mobileprovision"
         codesign -f -s "$IDENTITY" --entitlements "$WORK/ext-entitlements.plist" "$APP/PlugIns/NotificationService.appex"
     fi
+    # The widget extension (widgets and the mowing Live Activity, ADR 0059) likewise.
+    WIDGETS_PROFILE=$(find_profile "$MOWDECK_APPLE_TEAM_ID.$BUNDLE_ID.Widgets")
+    if [ -d "$APP/PlugIns/MowDeckWidgets.appex" ] && [ -n "$WIDGETS_PROFILE" ]; then
+        security cms -D -i "$WIDGETS_PROFILE" | plutil -extract Entitlements xml1 -o "$WORK/widgets-entitlements.plist" -
+        cp "$WIDGETS_PROFILE" "$APP/PlugIns/MowDeckWidgets.appex/embedded.mobileprovision"
+        codesign -f -s "$IDENTITY" --entitlements "$WORK/widgets-entitlements.plist" "$APP/PlugIns/MowDeckWidgets.appex"
+    fi
     codesign -f -s "$IDENTITY" --entitlements "$WORK/entitlements.plist" "$APP"
     echo "Re-signed with $IDENTITY and $PROFILE"
 fi

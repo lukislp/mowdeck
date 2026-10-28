@@ -18,6 +18,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scheduler/mowers/{mower_id}/widget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Widget
+         * @description What the iOS schedule and weather widgets show for one mower (ADR 0059): the next runs
+         *     (at most 3), the verdict of the rain pause for now (`runs`, `rain_pause`, `unsure`) and a few
+         *     rain facts. `can_view` on the mower; schedules the caller may not see are left out.
+         */
+        get: operations["widget_api_v1_scheduler_mowers__mower_id__widget_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scheduler/schedules": {
         parameters: {
             query?: never;
@@ -867,6 +889,85 @@ export type components = {
              */
             mower_id: string;
         };
+        /**
+         * WidgetRain
+         * @description Rain facts for the widgets (everything null when no forecast is available).
+         */
+        WidgetRain: {
+            /**
+             * Expected Mm Next Hours
+             * @description Precipitation of the coming hours the rain pause looks at (its look-ahead).
+             */
+            expected_mm_next_hours: number | null;
+            /**
+             * Pause Until
+             * @description When a rain pause ends, if one holds.
+             */
+            pause_until: string | null;
+            /**
+             * Raining Now
+             * @description The forecast hour that contains `at` has measurable precipitation.
+             */
+            raining_now: boolean | null;
+            /** Recent Mm 6H */
+            recent_mm_6h: number | null;
+            /**
+             * Wet
+             * @description The lawn is still wet from earlier rain.
+             */
+            wet: boolean;
+            /** Wet Until */
+            wet_until: string | null;
+        };
+        /**
+         * WidgetRunOut
+         * @description One upcoming run in the widget overview.
+         */
+        WidgetRunOut: {
+            /** Duration Minutes */
+            duration_minutes: number;
+            /** Name */
+            name: string;
+            /**
+             * Schedule Id
+             * Format: uuid
+             */
+            schedule_id: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+        };
+        /**
+         * WidgetScheduleOut
+         * @description ``GET /mowers/{mower_id}/widget``: what the schedule and weather widgets of the iOS app
+         *     show for one mower (ADR 0059).
+         */
+        WidgetScheduleOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
+            rain: components["schemas"]["WidgetRain"];
+            /**
+             * Runs
+             * @description The next runs, soonest first (at most 3).
+             */
+            runs: components["schemas"]["WidgetRunOut"][];
+            /**
+             * Verdict
+             * @description `runs`: the next run would start; `rain_pause`: the rain pause holds it; `unsure`: no forecast or no location, or the forecast is unknown.
+             * @enum {string}
+             */
+            verdict: "runs" | "rain_pause" | "unsure";
+        };
     };
     responses: never;
     parameters: never;
@@ -892,6 +993,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModuleDescriptor"];
+                };
+            };
+        };
+    };
+    widget_api_v1_scheduler_mowers__mower_id__widget_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetScheduleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

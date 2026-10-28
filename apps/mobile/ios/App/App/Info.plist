@@ -37,6 +37,17 @@
 	     builds do not wait for the export compliance question. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Live Activity of the mowing job on the lock screen and in the Dynamic Island (ADR 0059);
+	     the server updates it by push, several times a minute while mowing. -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
+	<!-- Silent pushes that make the widgets reload when the mower's state changes (ADR 0059). -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- The MowDeck server is usually internal: allow LAN addresses and plain HTTP in the web

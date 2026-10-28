@@ -303,6 +303,150 @@
         "title": "InboxItemOut",
         "type": "object"
       },
+      "LiveActivityDeviceIn": {
+        "description": "What one app installation offers for Live Activities and widgets (ADR 0059).",
+        "properties": {
+          "installation_id": {
+            "description": "The installation id the iOS shell keeps in the Keychain (the same as for `POST /me/push/apns`).",
+            "format": "uuid",
+            "title": "Installation Id",
+            "type": "string"
+          },
+          "push_to_start_token": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 64,
+                "pattern": "^[0-9a-fA-F]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ActivityKit push-to-start token (hex); null when the device has none (before iOS 17.2) or the user turned Live Activities off.",
+            "title": "Push To Start Token"
+          },
+          "widgets_enabled": {
+            "default": false,
+            "description": "The installation has MowDeck widgets: reload them by push.",
+            "title": "Widgets Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "installation_id"
+        ],
+        "title": "LiveActivityDeviceIn",
+        "type": "object"
+      },
+      "LiveActivityDeviceOut": {
+        "description": "The stored registration (the token, a capability, is not echoed).",
+        "properties": {
+          "has_push_to_start_token": {
+            "title": "Has Push To Start Token",
+            "type": "boolean"
+          },
+          "installation_id": {
+            "format": "uuid",
+            "title": "Installation Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "widgets_enabled": {
+            "title": "Widgets Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "installation_id",
+          "has_push_to_start_token",
+          "widgets_enabled",
+          "updated_at"
+        ],
+        "title": "LiveActivityDeviceOut",
+        "type": "object"
+      },
+      "LiveActivityIn": {
+        "description": "A Live Activity the app started for a mower, with its update token.",
+        "properties": {
+          "activity_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9-]+$",
+            "title": "Activity Id",
+            "type": "string"
+          },
+          "installation_id": {
+            "format": "uuid",
+            "title": "Installation Id",
+            "type": "string"
+          },
+          "push_token": {
+            "description": "The activity's push token (hex) the server updates it with.",
+            "maxLength": 200,
+            "minLength": 64,
+            "pattern": "^[0-9a-fA-F]+$",
+            "title": "Push Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "installation_id",
+          "activity_id",
+          "push_token"
+        ],
+        "title": "LiveActivityIn",
+        "type": "object"
+      },
+      "LiveActivityOut": {
+        "description": "The stored activity (tokens are not echoed).",
+        "properties": {
+          "activity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Id"
+          },
+          "installation_id": {
+            "format": "uuid",
+            "title": "Installation Id",
+            "type": "string"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "installation_id",
+          "activity_id",
+          "state",
+          "started_at"
+        ],
+        "title": "LiveActivityOut",
+        "type": "object"
+      },
       "ModuleDescriptor": {
         "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
         "properties": {
@@ -1126,6 +1270,184 @@
           }
         },
         "summary": "Mark Read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/me/live-activities/device": {
+      "put": {
+        "description": "Register what the caller's app installation offers (ADR 0059): the push-to-start token\nfor Live Activities and whether it has widgets. Replaces the earlier registration.",
+        "operationId": "put_live_activity_device_api_v1_notifications_me_live_activities_device_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveActivityDeviceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveActivityDeviceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Live Activity Device",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/me/live-activities/device/{installation_id}": {
+      "delete": {
+        "description": "Forget the caller's installation and its activities (logout; 404 for any other id).",
+        "operationId": "delete_live_activity_device_api_v1_notifications_me_live_activities_device__installation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "installation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Installation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Live Activity Device",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/me/live-activities/mowers/{mower_id}": {
+      "delete": {
+        "description": "The user ended the activity on the device: the server does not restart it during this\njob and sends it no more updates.",
+        "operationId": "delete_live_activity_api_v1_notifications_me_live_activities_mowers__mower_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "installation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Installation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Live Activity",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "put": {
+        "description": "The app started a Live Activity for the mower: its update token (the server updates and\nends the activity with it). 404 when the caller cannot view the mower.",
+        "operationId": "put_live_activity_api_v1_notifications_me_live_activities_mowers__mower_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveActivityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveActivityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Live Activity",
         "tags": [
           "notifications"
         ]

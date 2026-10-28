@@ -1757,6 +1757,162 @@
         ],
         "title": "WeatherOut",
         "type": "object"
+      },
+      "WidgetRain": {
+        "description": "Rain facts for the widgets (everything null when no forecast is available).",
+        "properties": {
+          "expected_mm_next_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Precipitation of the coming hours the rain pause looks at (its look-ahead).",
+            "title": "Expected Mm Next Hours"
+          },
+          "pause_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When a rain pause ends, if one holds.",
+            "title": "Pause Until"
+          },
+          "raining_now": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The forecast hour that contains `at` has measurable precipitation.",
+            "title": "Raining Now"
+          },
+          "recent_mm_6h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Mm 6H"
+          },
+          "wet": {
+            "description": "The lawn is still wet from earlier rain.",
+            "title": "Wet",
+            "type": "boolean"
+          },
+          "wet_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wet Until"
+          }
+        },
+        "required": [
+          "raining_now",
+          "expected_mm_next_hours",
+          "wet",
+          "wet_until",
+          "pause_until",
+          "recent_mm_6h"
+        ],
+        "title": "WidgetRain",
+        "type": "object"
+      },
+      "WidgetRunOut": {
+        "description": "One upcoming run in the widget overview.",
+        "properties": {
+          "duration_minutes": {
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schedule_id": {
+            "format": "uuid",
+            "title": "Schedule Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schedule_id",
+          "name",
+          "starts_at",
+          "duration_minutes"
+        ],
+        "title": "WidgetRunOut",
+        "type": "object"
+      },
+      "WidgetScheduleOut": {
+        "description": "``GET /mowers/{mower_id}/widget``: what the schedule and weather widgets of the iOS app\nshow for one mower (ADR 0059).",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "rain": {
+            "$ref": "#/components/schemas/WidgetRain"
+          },
+          "runs": {
+            "description": "The next runs, soonest first (at most 3).",
+            "items": {
+              "$ref": "#/components/schemas/WidgetRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "verdict": {
+            "description": "`runs`: the next run would start; `rain_pause`: the rain pause holds it; `unsure`: no forecast or no location, or the forecast is unknown.",
+            "enum": [
+              "runs",
+              "rain_pause",
+              "unsure"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "at",
+          "runs",
+          "verdict",
+          "rain"
+        ],
+        "title": "WidgetScheduleOut",
+        "type": "object"
       }
     }
   },
@@ -1784,6 +1940,50 @@
         "summary": "Module Descriptor",
         "tags": [
           "operations"
+        ]
+      }
+    },
+    "/api/v1/scheduler/mowers/{mower_id}/widget": {
+      "get": {
+        "description": "What the iOS schedule and weather widgets show for one mower (ADR 0059): the next runs\n(at most 3), the verdict of the rain pause for now (`runs`, `rain_pause`, `unsure`) and a few\nrain facts. `can_view` on the mower; schedules the caller may not see are left out.",
+        "operationId": "widget_api_v1_scheduler_mowers__mower_id__widget_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetScheduleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Widget",
+        "tags": [
+          "schedules"
         ]
       }
     },

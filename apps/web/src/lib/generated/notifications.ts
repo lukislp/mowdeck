@@ -101,6 +101,73 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notifications/me/live-activities/device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Live Activity Device
+         * @description Register what the caller's app installation offers (ADR 0059): the push-to-start token
+         *     for Live Activities and whether it has widgets. Replaces the earlier registration.
+         */
+        put: operations["put_live_activity_device_api_v1_notifications_me_live_activities_device_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/me/live-activities/device/{installation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Live Activity Device
+         * @description Forget the caller's installation and its activities (logout; 404 for any other id).
+         */
+        delete: operations["delete_live_activity_device_api_v1_notifications_me_live_activities_device__installation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/me/live-activities/mowers/{mower_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Live Activity
+         * @description The app started a Live Activity for the mower: its update token (the server updates and
+         *     ends the activity with it). 404 when the caller cannot view the mower.
+         */
+        put: operations["put_live_activity_api_v1_notifications_me_live_activities_mowers__mower_id__put"];
+        post?: never;
+        /**
+         * Delete Live Activity
+         * @description The user ended the activity on the device: the server does not restart it during this
+         *     job and sends it no more updates.
+         */
+        delete: operations["delete_live_activity_api_v1_notifications_me_live_activities_mowers__mower_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications/me/push/apns": {
         parameters: {
             query?: never;
@@ -458,6 +525,92 @@ export type components = {
             title: string;
             /** Url */
             url: string | null;
+        };
+        /**
+         * LiveActivityDeviceIn
+         * @description What one app installation offers for Live Activities and widgets (ADR 0059).
+         */
+        LiveActivityDeviceIn: {
+            /**
+             * Installation Id
+             * Format: uuid
+             * @description The installation id the iOS shell keeps in the Keychain (the same as for `POST /me/push/apns`).
+             */
+            installation_id: string;
+            /**
+             * Push To Start Token
+             * @description ActivityKit push-to-start token (hex); null when the device has none (before iOS 17.2) or the user turned Live Activities off.
+             */
+            push_to_start_token?: string | null;
+            /**
+             * Widgets Enabled
+             * @description The installation has MowDeck widgets: reload them by push.
+             * @default false
+             */
+            widgets_enabled: boolean;
+        };
+        /**
+         * LiveActivityDeviceOut
+         * @description The stored registration (the token, a capability, is not echoed).
+         */
+        LiveActivityDeviceOut: {
+            /** Has Push To Start Token */
+            has_push_to_start_token: boolean;
+            /**
+             * Installation Id
+             * Format: uuid
+             */
+            installation_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Widgets Enabled */
+            widgets_enabled: boolean;
+        };
+        /**
+         * LiveActivityIn
+         * @description A Live Activity the app started for a mower, with its update token.
+         */
+        LiveActivityIn: {
+            /** Activity Id */
+            activity_id: string;
+            /**
+             * Installation Id
+             * Format: uuid
+             */
+            installation_id: string;
+            /**
+             * Push Token
+             * @description The activity's push token (hex) the server updates it with.
+             */
+            push_token: string;
+        };
+        /**
+         * LiveActivityOut
+         * @description The stored activity (tokens are not echoed).
+         */
+        LiveActivityOut: {
+            /** Activity Id */
+            activity_id: string | null;
+            /**
+             * Installation Id
+             * Format: uuid
+             */
+            installation_id: string;
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** State */
+            state: string;
         };
         /**
          * ModuleDescriptor
@@ -887,6 +1040,134 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InboxItemOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_live_activity_device_api_v1_notifications_me_live_activities_device_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveActivityDeviceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveActivityDeviceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_live_activity_device_api_v1_notifications_me_live_activities_device__installation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_live_activity_api_v1_notifications_me_live_activities_mowers__mower_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveActivityIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_live_activity_api_v1_notifications_me_live_activities_mowers__mower_id__delete: {
+        parameters: {
+            query: {
+                installation_id: string;
+            };
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

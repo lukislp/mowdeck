@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from notifications.adapters.db import tables
 from notifications.application.ports import Tx
 from notifications.domain.geofence import Fence, MowerFence
+from notifications.domain.live_activity import ActivityDevice, ActivityRun, LiveActivity
 from notifications.domain.models import (
     ApnsDevice,
     Delivery,
@@ -929,6 +930,134 @@ class SqlStore:
             )
             return int(result.rowcount)
 
+    async def put_activity_device(self, device: ActivityDevice) -> None:
+        t = tables.live_activity_devices
+        insert = pg_insert(t).values(
+            user_id=device.user_id,
+            account_id=device.account_id,
+            installation_id=device.installation_id,
+            push_to_start_token=device.push_to_start_token,
+            widgets_enabled=device.widgets_enabled,
+            updated_at=device.updated_at,
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=["user_id", "installation_id"],
+            set_={
+                k: insert.excluded[k]
+                for k in ("account_id", "push_to_start_token", "widgets_enabled", "updated_at")
+            },
+        )
+        async with self.engine.begin() as conn:
+            await conn.execute(statement)
+
+    async def activity_devices(self, account_id: UUID) -> list[ActivityDevice]:
+        t = tables.live_activity_devices
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(t)
+                .where(t.c.account_id == account_id)
+                .order_by(t.c.user_id, t.c.installation_id)
+            )
+            return [
+                ActivityDevice(
+                    r.user_id,
+                    r.account_id,
+                    r.installation_id,
+                    r.push_to_start_token,
+                    r.widgets_enabled,
+                    r.updated_at,
+                )
+                for r in result.all()
+            ]
+
+    async def delete_activity_device(self, user_id: UUID, installation_id: UUID) -> bool:
+        d, a = tables.live_activity_devices, tables.live_activities
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                sa.delete(a).where(a.c.user_id == user_id, a.c.installation_id == installation_id)
+            )
+            result = await conn.execute(
+                sa.delete(d).where(d.c.user_id == user_id, d.c.installation_id == installation_id)
+            )
+            return bool(result.rowcount)
+
+    async def put_live_activity(self, activity: LiveActivity) -> None:
+        t = tables.live_activities
+        keys = {"user_id", "installation_id", "mower_id"}
+        values = {
+            "user_id": activity.user_id,
+            "account_id": activity.account_id,
+            "installation_id": activity.installation_id,
+            "mower_id": activity.mower_id,
+            "state": activity.state.value,
+            "started_at": activity.started_at,
+            "activity_id": activity.activity_id,
+            "update_token": activity.update_token,
+            "last_sent_at": activity.last_sent_at,
+            "last_hash": activity.last_hash,
+        }
+        insert = pg_insert(t).values(**values)
+        statement = insert.on_conflict_do_update(
+            index_elements=sorted(keys),
+            set_={k: insert.excluded[k] for k in values if k not in keys},
+        )
+        async with self.engine.begin() as conn:
+            await conn.execute(statement)
+
+    @staticmethod
+    def _activity(r: Any) -> LiveActivity:
+        return LiveActivity(
+            r.user_id,
+            r.account_id,
+            r.installation_id,
+            r.mower_id,
+            ActivityRun(r.state),
+            r.started_at,
+            r.activity_id,
+            r.update_token,
+            r.last_sent_at,
+            r.last_hash,
+        )
+
+    async def live_activity(
+        self, user_id: UUID, installation_id: UUID, mower_id: UUID
+    ) -> LiveActivity | None:
+        t = tables.live_activities
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(t).where(
+                    t.c.user_id == user_id,
+                    t.c.installation_id == installation_id,
+                    t.c.mower_id == mower_id,
+                )
+            )
+            row = result.first()
+            return self._activity(row) if row is not None else None
+
+    async def live_activities(self, mower_id: UUID) -> list[LiveActivity]:
+        t = tables.live_activities
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(t)
+                .where(t.c.mower_id == mower_id)
+                .order_by(t.c.user_id, t.c.installation_id)
+            )
+            return [self._activity(r) for r in result.all()]
+
+    async def delete_live_activity(
+        self, user_id: UUID, installation_id: UUID, mower_id: UUID
+    ) -> bool:
+        t = tables.live_activities
+        async with self.engine.begin() as conn:
+            result = await conn.execute(
+                sa.delete(t).where(
+                    t.c.user_id == user_id,
+                    t.c.installation_id == installation_id,
+                    t.c.mower_id == mower_id,
+                )
+            )
+            return bool(result.rowcount)
+
     async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
         async with self.engine.begin() as conn:
             for table in (
@@ -940,6 +1069,8 @@ class SqlStore:
                 tables.inbox,
                 tables.deliveries,
                 tables.alarm_silences,
+                tables.live_activity_devices,
+                tables.live_activities,
             ):
                 condition = table.c.user_id == user_id
                 if account_id is not None:

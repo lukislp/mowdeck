@@ -14,5 +14,15 @@
 	<!-- Theft alarms are sent as time-sensitive notifications (they break through Focus). -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- Widgets and the Live Activity (ADR 0059): the App Group shared with the widget extension and
+	     the Keychain group of the widget credential. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.mowdeck.mobile</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)app.mowdeck.mobile.shared</string>
+	</array>
 </dict>
 </plist>

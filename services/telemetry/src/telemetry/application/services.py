@@ -10,6 +10,7 @@ from telemetry.application.ports import Clock, HealthEvents, Store
 from telemetry.application.queries import Queries
 from telemetry.application.retention import Retention, RetentionObserver
 from telemetry.application.tracking import Tracking
+from telemetry.application.widget import Widget
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +21,7 @@ class Services:
     queries: Queries
     health: Health
     retention: Retention
+    widget: Widget
     config: TelemetryConfig
     aerial: Aerial
     tracking: Tracking | None = None
@@ -45,6 +47,7 @@ def build_services(
         queries=queries,
         health=Health(store, config, clock, queries),
         retention=Retention(store, config, clock, observer=retention_observer),
+        widget=Widget(store, queries.is_stale, clock),
         config=config,
         aerial=Aerial(aerial_config or AerialConfig(), queries, aerial_source, aerial_cache),
     )

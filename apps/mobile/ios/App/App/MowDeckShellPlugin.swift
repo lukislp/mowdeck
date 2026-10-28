@@ -1,6 +1,8 @@
 import AuthenticationServices
 import Capacitor
+import MowerWidgetCore
 import Security
+import WidgetKit
 import UIKit
 
 /// `MowDeckShell`: stores the server origin and restarts the bridge with it, hands out the
@@ -17,8 +19,26 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "resetServerUrl", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "reload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getInstallationId", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "openAuthSession", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "openAuthSession", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "configureWidgets", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setWidgetMowers", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearWidgets", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getWidgetStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "reloadWidgets", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startLiveActivity", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "endLiveActivity", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getPendingActivityRegistrations", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearPendingActivityRegistration", returnType: CAPPluginReturnPromise)
     ]
+
+    override public func load() {
+        if #available(iOS 16.2, *) {
+            LiveActivityCoordinator.shared.emit = { [weak self] name, data in
+                self?.notifyListeners(name, data: data)
+            }
+            LiveActivityCoordinator.shared.startObserving()
+        }
+    }
 
     /// The running sign-in session (kept alive until it completes).
     private var authSession: ASWebAuthenticationSession?
@@ -55,6 +75,126 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
         } catch {
             call.reject("installation id not available", nil, error)
         }
+    }
+
+    // MARK: Widgets and the Live Activity (ADR 0059)
+
+    private static func mowers(from call: CAPPluginCall) -> [MowerRef] {
+        (call.getArray("mowers") as? [[String: Any]] ?? []).compactMap { item in
+            guard let id = item["id"] as? String, let name = item["name"] as? String else { return nil }
+            return MowerRef(id: id, name: name)
+        }
+    }
+
+    /// Store the widget credential the web app created on the server and the mower list.
+    @objc func configureWidgets(_ call: CAPPluginCall) {
+        guard let raw = call.getString("serverUrl"),
+              let origin = MowDeckShellPlugin.origin(of: raw),
+              let server = URL(string: origin),
+              let secret = call.getString("secret"), secret.hasPrefix("mdk_"),
+              let credentialId = call.getString("credentialId"),
+              let expires = call.getString("expiresAt"),
+              let expiresAt = ISO8601DateFormatter().date(from: expires)
+        else {
+            call.reject("expected serverUrl, secret, credentialId and expiresAt")
+            return
+        }
+        // The credential is only ever sent to the server the shell is configured for.
+        guard let configured = ShellSettings.serverURL, MowDeckShellPlugin.sameOrigin(origin, configured) else {
+            call.reject("serverUrl is not the configured server")
+            return
+        }
+        let credential = WidgetCredential(
+            serverURL: server, secret: secret, credentialId: credentialId, expiresAt: expiresAt,
+            deviceName: call.getString("deviceName") ?? "iPhone")
+        do {
+            try WidgetBridge.configure(credential, mowers: MowDeckShellPlugin.mowers(from: call))
+            call.resolve()
+        } catch {
+            call.reject("the credential could not be stored", nil, error)
+        }
+    }
+
+    @objc func setWidgetMowers(_ call: CAPPluginCall) {
+        WidgetBridge.setMowers(MowDeckShellPlugin.mowers(from: call))
+        call.resolve()
+    }
+
+    @objc func clearWidgets(_ call: CAPPluginCall) {
+        WidgetBridge.clear()
+        call.resolve()
+    }
+
+    @objc func reloadWidgets(_ call: CAPPluginCall) {
+        WidgetCenter.shared.reloadAllTimelines()
+        call.resolve()
+    }
+
+    @objc func getWidgetStatus(_ call: CAPPluginCall) {
+        let status = WidgetBridge.status()
+        var activities = false
+        var pushToStart: String?
+        if #available(iOS 16.2, *) { activities = LiveActivityCoordinator.shared.enabled }
+        pushToStart = SharedState.shared.pushToStartToken
+        call.resolve([
+            "supported": true,
+            "configured": status.configured,
+            "credentialId": status.credentialId as Any,
+            "expiresAt": status.expiresAt.map { ISO8601DateFormatter().string(from: $0) } as Any,
+            "needsRotation": status.needsRotation,
+            "activitiesEnabled": activities,
+            "pushToStartToken": pushToStart as Any
+        ])
+    }
+
+    @objc func startLiveActivity(_ call: CAPPluginCall) {
+        guard #available(iOS 16.2, *) else {
+            call.reject("Live Activities need iOS 16.2")
+            return
+        }
+        guard let mowerId = call.getString("mowerId"), let name = call.getString("mowerName") else {
+            call.reject("expected mowerId and mowerName")
+            return
+        }
+        let battery = call.getInt("batteryPercent") ?? 0
+        let state = MowingContentState(
+            state: call.getString("state") ?? "mowing", batteryPercent: battery,
+            progressPercent: call.getInt("progressPercent"), areaName: call.getString("areaName"),
+            remainingSeconds: call.getInt("remainingSeconds"),
+            endsAt: call.getInt("remainingSeconds").map { Int(Date().timeIntervalSince1970) + $0 },
+            updatedAt: Int(Date().timeIntervalSince1970))
+        do {
+            let id = try LiveActivityCoordinator.shared.start(mowerId: mowerId, mowerName: name, state: state)
+            call.resolve(["activityId": id])
+        } catch {
+            call.reject("the Live Activity could not be started", nil, error)
+        }
+    }
+
+    @objc func endLiveActivity(_ call: CAPPluginCall) {
+        if #available(iOS 16.2, *), let mowerId = call.getString("mowerId") {
+            LiveActivityCoordinator.shared.end(mowerId: mowerId)
+        }
+        call.resolve()
+    }
+
+    @objc func getPendingActivityRegistrations(_ call: CAPPluginCall) {
+        let items = SharedState.shared.pendingRegistrations.map { mowerId, registration in
+            [
+                "mowerId": mowerId, "installationId": registration.installationId,
+                "activityId": registration.activityId, "pushToken": registration.pushToken
+            ]
+        }
+        call.resolve(["items": items])
+    }
+
+    @objc func clearPendingActivityRegistration(_ call: CAPPluginCall) {
+        if let mowerId = call.getString("mowerId") {
+            var pending = SharedState.shared.pendingRegistrations
+            pending.removeValue(forKey: mowerId)
+            SharedState.shared.pendingRegistrations = pending
+        }
+        call.resolve()
     }
 
     /// Open `url` (a page of the configured server) in an `ASWebAuthenticationSession` and

@@ -820,6 +820,53 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/me/widget-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Widget Credentials
+         * @description The caller's iOS widget credentials (ADR 0059), newest first, without secrets.
+         */
+        get: operations["list_widget_credentials_api_v1_identity_me_widget_credentials_get"];
+        put?: never;
+        /**
+         * Create Widget Credential
+         * @description Create the credential the iOS widgets and the Live Activity use instead of the app's
+         *     session: an API token limited to `mower.view` and `mower.control` on the account (as far
+         *     as the caller holds them), valid for 90 days, revocable here and in the token list. The
+         *     secret is in the response once. Only users (not API tokens) can call it.
+         */
+        post: operations["create_widget_credential_api_v1_identity_me_widget_credentials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/widget-credentials/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Widget Credential
+         * @description Revoke one of the caller's widget credentials (404 for any other token).
+         */
+        delete: operations["revoke_widget_credential_api_v1_identity_me_widget_credentials__token_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/oauth/{provider}/callback": {
         parameters: {
             query?: never;
@@ -2140,6 +2187,55 @@ export type components = {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * WidgetCredentialIn
+         * @description ``POST /me/widget-credentials``.
+         */
+        WidgetCredentialIn: {
+            /**
+             * Device Name
+             * @description Shown in the account's token list as `iOS widgets: <device_name>`.
+             * @example Lukas' iPhone
+             */
+            device_name: string;
+            /**
+             * Replaces
+             * @description An earlier widget credential of the caller on this device: revoked in the same transaction (rotation).
+             */
+            replaces?: string | null;
+        };
+        /**
+         * WidgetCredentialOut
+         * @description A widget credential: an API token for the iOS widgets (never with its secret, except once
+         *     at creation).
+         */
+        WidgetCredentialOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expires At */
+            expires_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Name */
+            name: string;
+            /** Permissions */
+            permissions: string[];
+            /** Revoked At */
+            revoked_at: string | null;
+            /**
+             * Token
+             * @description The secret (`mdk_...`), returned only at creation. Exchange it at `POST /token` for 10 minute access tokens.
+             */
+            token?: string | null;
         };
     };
     responses: never;
@@ -3643,6 +3739,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TokenOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_widget_credentials_api_v1_identity_me_widget_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetCredentialOut"][];
+                };
+            };
+        };
+    };
+    create_widget_credential_api_v1_identity_me_widget_credentials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WidgetCredentialIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetCredentialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_widget_credential_api_v1_identity_me_widget_credentials__token_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

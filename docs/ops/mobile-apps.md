@@ -39,6 +39,7 @@ GitHub Environment `release` of the repository (required reviewer: the owner; de
 | `APPLE_DISTRIBUTION_P12_BASE64`, `APPLE_DISTRIBUTION_P12_PASSWORD` | "Apple Distribution" certificate with its private key, `.p12` (legacy encryption: Keychain Access or `openssl pkcs12 -export -legacy`), base64 |
 | `APPLE_PROFILE_IOS_BASE64` | App Store provisioning profile for `app.mowdeck.mobile` (Distribution -> App Store Connect), base64. A development profile from `provision.sh` does not work |
 | `APPLE_PROFILE_IOS_NOTIFICATION_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.NotificationService` (the extension that adds the camera photo to error and theft notifications, [ADR 0056](../adr/0056-camera-photo-in-push-notifications.md)), base64. See [Camera photo in notifications](#camera-photo-in-notifications) for the one-time Apple portal steps |
+| `APPLE_PROFILE_IOS_WIDGETS_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.Widgets` (the widget extension with the Live Activity, [ADR 0059](../adr/0059-ios-widgets-and-live-activity.md)), base64. See [Widgets and the Live Activity](#widgets-and-the-live-activity) for the one-time Apple portal steps |
 | `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` | App Store Connect API key (Users and Access -> Integrations, role Developer or higher), base64 of the `.p8` |
 
 Optional variable `APPLE_RELEASE_EGRESS_POLICY=audit`: the job's network egress is blocked except for an allow-list (Apple's upload and signing hosts, GitHub, the npm registry). If Apple or GitHub move a host, a step fails or altool hangs until its time limit; set the variable, re-run the job, read the new host from the Harden Runner insights, add it to `allowed-endpoints` and delete the variable again.
@@ -144,6 +145,35 @@ Error and theft notifications (`mower_stuck`, `mower_lifted`, `mower_left_dock_u
 Installing from the Mac (`build-ios.sh`) uses automatic signing: Xcode creates the extension's App ID and development profile itself (`-allowProvisioningUpdates`), nothing to do. Only a build that contains the extension shows pictures; older builds show the text.
 
 **Try it on the phone (safely).** With the new TestFlight build installed and logged in, make sure the kinds are on in Settings -> Notifications. Lift the docked, idle mower a few centimetres by hand until it reports "lifted" (the lift sensor), or, with the mower docked and not working, cover the route: `geofence_exit` and `mower_stuck` are harder to provoke safely. The lift alarm arrives as a time-sensitive notification; pull down / long-press it to see the picture (a dock-side frame if it is asleep: the relay may need a few seconds to wake it). The same picture is in the web app's inbox under the item. No picture and no error means the photo was not available in time (see the Notifications log: "no photo for the notification").
+
+## Widgets and the Live Activity
+
+Home and lock screen widgets (status, lock screen, map, schedule and weather) and a Live Activity for a mowing job on the Lock Screen and in the Dynamic Island ([ADR 0059](../adr/0059-ios-widgets-and-live-activity.md), [user guide](../guides/ios-widgets.md)). They need iOS 17 (the Live Activity iOS 16.2, started by push 17.2).
+
+**How the widgets get their data.** The widget extension cannot use the app's login. In the app: Settings -> "This app" -> **Turn on widgets** creates a *widget credential* on the server: an API token `iOS widgets: <device>` that can only see and control mowers, valid 90 days, renewed by the app when 30 days remain. It sits in the Keychain (this device only, readable while the phone is locked after the first unlock) and is exchanged for 10 minute access tokens. You see and can revoke it under Settings -> API tokens; logging out or turning widgets off revokes it and removes it from the phone. The account's users need `mower.view` on the whole account (owner, admin, manager, operator, viewer roles do).
+
+**Server.** Nothing to configure: the same APNs key and `MOWDECK_APNS_ENVIRONMENT` as for notifications. The Notifications service sends Live Activity pushes (`liveactivity`) and silent reload pushes (`background`) with them; new tables come with its migration. Telemetry draws the map picture (about 100-300 ms of CPU per picture, cached 30 seconds). Reverse proxy: nothing new (`/api/v1/telemetry`, `/api/v1/scheduler`, `/api/v1/identity/token` are routed already).
+
+**One-time Apple steps (before the first TestFlight build with widgets)**
+
+1. developer.apple.com -> Certificates, Identifiers & Profiles -> Identifiers -> **App Groups** -> "+" -> description "MowDeck", identifier **`group.app.mowdeck.mobile`**. Register.
+2. Identifiers -> the App ID **`app.mowdeck.mobile`** -> enable **App Groups** (Configure -> select `group.app.mowdeck.mobile`) and keep Push Notifications and Time Sensitive Notifications. Keychain Sharing needs no portal setting (the profile's `<TeamID>.*` covers `<TeamID>.app.mowdeck.mobile.shared`). Save. (Live Activities need no capability, only `NSSupportsLiveActivities` in the app, which the project has.)
+3. Identifiers -> "+" -> App IDs -> App -> description "MowDeck Widgets", Bundle ID **Explicit** `app.mowdeck.mobile.Widgets`, capability **App Groups** with `group.app.mowdeck.mobile`. Register.
+4. Profiles: **regenerate** the App Store profile of `app.mowdeck.mobile` (edit -> save -> download) so it contains the App Group, and update the secret `APPLE_PROFILE_IOS_BASE64`. Create a new profile -> **App Store Connect** -> the App ID `app.mowdeck.mobile.Widgets` -> the same Apple Distribution certificate -> download.
+5. `base64 -w0 MowDeck_Widgets_AppStore.mobileprovision` (macOS: `base64 -i file | tr -d '\n'`) as the secret **`APPLE_PROFILE_IOS_WIDGETS_BASE64`** in the GitHub Environment `release`.
+6. Run **Apple TestFlight** as usual (the job fails early with a readable message when a secret or a profile does not fit: e.g. "does not grant: com.apple.security.application-groups"). **This is the first time the extension is compiled**: there is no macOS CI, so expect to read the log of the first run and fix compile errors; send them over.
+
+Installing from the Mac (`build-ios.sh`) uses automatic signing and creates the extension's App ID and the App Group itself with `-allowProvisioningUpdates`.
+
+**Try it on the phone (safely).** After the TestFlight build: open the app, Settings -> This app -> Turn on widgets. Long-press the home screen -> "+" -> MowDeck -> add "Mower status" (medium), long-press it -> Edit Widget -> choose the mower. With the mower docked the Start button starts all areas with the saved mow defaults: **only press it when the lawn is clear and the mower may mow**, or test Pause and Station while a job runs. Start a job from the app, and the Live Activity appears on the Lock Screen; start one from a schedule ("Run now" on a schedule) with the app closed, and it appears by push (see the ADR for the limit: its updates start once the app has reported the activity's token).
+
+| Symptom | Likely cause |
+| --- | --- |
+| Widget says "Open MowDeck and turn on widgets" | Not turned on, the credential expired or was revoked (Settings -> API tokens); turn it on again |
+| Turning widgets on fails | The role lacks `mower.view` on the whole account (403), or the server is not reachable from the phone |
+| Buttons do nothing | iOS 16 (needs 17), no `mower.control`, or the credential is revoked; the widget shows nothing special, press and watch the mower's command history |
+| Widget shows old data | iOS decides when to reload (the budget is a few dozen a day); the data refreshes with every reload and silent push, in the app via the widget gallery |
+| No Live Activity | Live Activities are off for MowDeck (Settings -> MowDeck), the push-to-start token is not registered yet (open the app once with widgets on), or the build predates the extension |
 
 ## Android
 
