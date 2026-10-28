@@ -47,6 +47,7 @@ const stored: Schedule = {
   speed_mps: null,
   rotation_angles: [0, 90],
   rotation_index: 1,
+  rotation_step_deg: null,
   rain_pause: {
     enabled: true,
     probability_threshold: 70,
@@ -99,6 +100,7 @@ describe('validateForm', () => {
         days: [],
         startTime: '25:00',
         duration: '0',
+        rotationMode: 'list',
         rotation: [0, 500],
         probability: '101',
         precipitation: 'x',
@@ -138,9 +140,25 @@ describe('validateForm', () => {
     expect(validateForm(form({ targetType: 'group', areaIds: ['a'] })).areas).toEqual({
       code: 'group_areas',
     });
-    expect(validateForm(form({ rotation: Array.from({ length: 25 }, () => 0) })).rotation).toEqual({
-      code: 'count',
-      max: 24,
+    expect(
+      validateForm(form({ rotationMode: 'list', rotation: Array.from({ length: 25 }, () => 0) }))
+        .rotation,
+    ).toEqual({ code: 'count', max: 24 });
+    // A list that is not used is not checked.
+    expect(validateForm(form({ rotation: [500] })).rotation).toBeUndefined();
+  });
+
+  it('checks the rotation step', () => {
+    expect(
+      validateForm(form({ rotationMode: 'step', rotationStep: '45' })).rotation,
+    ).toBeUndefined();
+    expect(validateForm(form({ rotationMode: 'step', rotationStep: '180' })).rotation).toEqual({
+      code: 'range',
+      min: 1,
+      max: 179,
+    });
+    expect(validateForm(form({ rotationMode: 'step', rotationStep: '' })).rotation).toEqual({
+      code: 'required',
     });
     expect(validateForm(form({ name: 'x'.repeat(101) })).name).toEqual({ code: 'count', max: 100 });
   });
@@ -178,6 +196,24 @@ describe('toBody and fromSchedule', () => {
     });
   });
 
+  it('sends the rotation of the chosen mode only', () => {
+    const base = { rotation: [0, 90], rotationStep: '60' };
+    expect(toBody(form({ ...base, rotationMode: 'off' }))).toMatchObject({
+      rotation_angles: [],
+      rotation_step_deg: null,
+    });
+    expect(toBody(form({ ...base, rotationMode: 'step' }))).toMatchObject({
+      rotation_angles: [],
+      rotation_step_deg: 60,
+    });
+    expect(toBody(form({ ...base, rotationMode: 'list' }))).toMatchObject({
+      rotation_angles: [0, 90],
+      rotation_step_deg: null,
+    });
+    const stepping = fromSchedule({ ...stored, rotation_angles: [], rotation_step_deg: 30 });
+    expect(stepping).toMatchObject({ rotationMode: 'step', rotationStep: '30' });
+  });
+
   it('builds an every-N-days body and drops areas for groups', () => {
     const body = toBody(
       form({
@@ -206,6 +242,7 @@ describe('toBody and fromSchedule', () => {
     expect(state).toMatchObject({
       startTime: '07:30',
       days: ['mon', 'thu'],
+      rotationMode: 'list',
       rotation: [0, 90],
       probability: '70',
       runWhenUnknown: false,

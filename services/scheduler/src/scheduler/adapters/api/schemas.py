@@ -7,10 +7,12 @@ from uuid import UUID
 from mowdeck_contracts.v1 import PrincipalRef, SchedulePattern, ScheduleRunOutcome
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from scheduler.application.angles import MowerAngles
 from scheduler.application.schedules import Preview, WidgetOverview, WidgetRun
 from scheduler.application.weather import WeatherAnswer
 from scheduler.domain.models import Schedule, ScheduleRun
 from scheduler.domain.rain import HourlyPoint, RainSettings
+from scheduler.domain.rotation import STEP_RANGE
 from scheduler.domain.rules import WEEKDAYS
 
 Weekday = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -37,6 +39,13 @@ BladeHeight = Field(
     description="Blade height in millimetres sent before each start (`set_blade_height`); "
     "null keeps the mower's own. Must lie within every target mower's "
     "`blade_height_range_mm`.",
+)
+RotationStep = Field(
+    default=None,
+    ge=STEP_RANGE[0],
+    le=STEP_RANGE[1],
+    description="Step rotation (ADR 0061): each run turns the last angle the mower mowed its "
+    "areas with by this many degrees (modulo 180); null: off. Excludes `rotation_angles`.",
 )
 Speed = Field(
     default=None,
@@ -112,6 +121,7 @@ class ScheduleIn(In):
         max_length=24,
         description="Angles used round robin, one per run (replace `pattern.angle_deg`).",
     )
+    rotation_step_deg: float | None = RotationStep
     rain_pause: RainPause = Field(default_factory=RainPause)
     pause_running_jobs_on_rain: bool = Field(
         default=True, description="Send a running scheduled job back to the dock when it rains."
@@ -148,13 +158,22 @@ class SchedulePatch(In):
     blade_height_mm: int | None = BladeHeight
     speed_mps: float | None = Speed
     rotation_angles: list[float] | None = Field(default=None, max_length=24)
+    rotation_step_deg: float | None = RotationStep
     rain_pause: RainPause | None = None
     pause_running_jobs_on_rain: bool | None = None
     return_to_dock_at_window_end: bool | None = None
     enabled: bool | None = None
 
     _NULLABLE: ClassVar[frozenset[str]] = frozenset(
-        {"anchor_date", "interval_days", "timezone", "pattern", "blade_height_mm", "speed_mps"}
+        {
+            "anchor_date",
+            "interval_days",
+            "timezone",
+            "pattern",
+            "blade_height_mm",
+            "speed_mps",
+            "rotation_step_deg",
+        }
     )
 
     def changes(self) -> dict[str, Any]:
@@ -202,6 +221,10 @@ class ScheduleOut(BaseModel):
     speed_mps: float | None
     rotation_angles: list[float]
     rotation_index: int
+    rotation_step_deg: float | None = Field(
+        description="Step rotation (ADR 0061): degrees each run turns the mower's last angle "
+        "on its areas by; null: off.",
+    )
     rain_pause: RainPause
     pause_running_jobs_on_rain: bool
     return_to_dock_at_window_end: bool
@@ -237,6 +260,7 @@ class ScheduleOut(BaseModel):
             speed_mps=item.speed_mps,
             rotation_angles=item.rotation_angles,
             rotation_index=item.rotation_index,
+            rotation_step_deg=item.rotation_step_deg,
             rain_pause=RainPause.of(item.rain_settings),
             pause_running_jobs_on_rain=item.pause_running_jobs_on_rain,
             return_to_dock_at_window_end=item.return_to_dock_at_window_end,
@@ -276,6 +300,11 @@ class RunOut(BaseModel):
         "while the job is followed."
     )
     followup_at: datetime | None
+    angle_deg: float | None = Field(
+        default=None,
+        description="For a started run: the mowing angle the start sent (0 up to below 180 "
+        "degrees); null for a pattern without direction and for runs that did not start.",
+    )
 
     @classmethod
     def of(cls, run: ScheduleRun) -> "RunOut":
@@ -293,6 +322,7 @@ class RunOut(BaseModel):
             window_end_at=run.window_end_at,
             followup=run.followup,
             followup_at=run.followup_at,
+            angle_deg=run.angle_deg,
         )
 
 
@@ -394,6 +424,12 @@ class PreviewItemOut(BaseModel):
     at: datetime
     window_end: datetime
     skipped: bool = Field(description="Skipped by `skip-next`.")
+    angle_deg: float | None = Field(
+        default=None,
+        description="The mowing angle this firing will use on `angle_mower_id` (rotation "
+        "applied, assuming every earlier firing starts); null when skipped, for a pattern "
+        "without direction or without a target mower.",
+    )
 
 
 class PreviewOut(BaseModel):
@@ -405,17 +441,25 @@ class PreviewOut(BaseModel):
         "forecast (null without a target mower)."
     )
     weather_mower_id: UUID | None
+    angle_mower_id: UUID | None = Field(
+        default=None,
+        description="The mower the angles are worked out for (a group: its first mower; each "
+        "mower continues from its own last angle).",
+    )
 
     @classmethod
     def of(cls, preview: Preview) -> "PreviewOut":
         """From the use case answer."""
         return cls(
             items=[
-                PreviewItemOut(at=i.at, window_end=i.window_end, skipped=i.skipped)
+                PreviewItemOut(
+                    at=i.at, window_end=i.window_end, skipped=i.skipped, angle_deg=i.angle_deg
+                )
                 for i in preview.items
             ],
             weather=RainDecisionOut.of(preview.weather) if preview.weather else None,
             weather_mower_id=preview.weather_mower_id,
+            angle_mower_id=preview.angle_mower_id,
         )
 
 
@@ -527,3 +571,62 @@ def vars_of(run: WidgetRun) -> dict[str, Any]:
         "starts_at": run.starts_at,
         "duration_minutes": run.duration_minutes,
     }
+
+
+class AreaAngleOut(BaseModel):
+    """The last angle a job mowed one area with."""
+
+    area_id: str
+    angle_deg: float = Field(description="0 up to below 180 degrees.")
+    used_at: datetime
+    source: Literal["schedule", "manual"] = Field(
+        description="`schedule`: a schedule's run; `manual`: a start from the start sheet with "
+        "rotation chosen."
+    )
+    schedule_id: UUID | None
+
+
+class MowerAnglesOut(BaseModel):
+    """``GET /mowers/{mower_id}/angles``: where the angle rotation of a mower stands
+    (ADR 0061)."""
+
+    mower_id: UUID
+    manual_step_deg: float | None = Field(
+        description="The rotation step the start sheet offers for manual starts; null: off."
+    )
+    areas: list[AreaAngleOut] = Field(description="The last angle per area, by area id.")
+
+    @classmethod
+    def of(cls, angles: MowerAngles) -> "MowerAnglesOut":
+        """From the use case answer."""
+        return cls(
+            mower_id=angles.mower_id,
+            manual_step_deg=angles.manual_step_deg,
+            areas=[
+                AreaAngleOut(
+                    area_id=a.area_id,
+                    angle_deg=a.angle_deg,
+                    used_at=a.used_at,
+                    source="manual" if a.source == "manual" else "schedule",
+                    schedule_id=a.schedule_id,
+                )
+                for a in angles.areas
+            ],
+        )
+
+
+class RotationSettingsIn(In):
+    """``PUT /mowers/{mower_id}/angles/settings``: the step of manual starts."""
+
+    manual_step_deg: float | None = Field(
+        ge=STEP_RANGE[0],
+        le=STEP_RANGE[1],
+        description="Degrees the start sheet turns the last angle by; null: no rotation.",
+    )
+
+
+class ManualAngleIn(In):
+    """``POST /mowers/{mower_id}/angles``: a manual start chose rotation and sent this angle."""
+
+    area_ids: list[str] = Field(min_length=1, max_length=50)
+    angle_deg: float = Field(ge=0, le=180, description="Stored modulo 180.")

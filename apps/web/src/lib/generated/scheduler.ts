@@ -18,6 +18,54 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scheduler/mowers/{mower_id}/angles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mower Angles
+         * @description Where the mowing angle rotation of a mower stands (ADR 0061): the last angle per area
+         *     (from scheduled runs and manual starts with rotation chosen) and the step the start sheet
+         *     offers for manual starts. `can_view` on the mower.
+         */
+        get: operations["mower_angles_api_v1_scheduler_mowers__mower_id__angles_get"];
+        put?: never;
+        /**
+         * Record Manual Angle
+         * @description A manual start with rotation chosen sent `angle_deg` for `area_ids`: the next run of
+         *     these areas continues from it. A start with an explicit angle is not reported.
+         *     `can_control` on the mower.
+         */
+        post: operations["record_manual_angle_api_v1_scheduler_mowers__mower_id__angles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scheduler/mowers/{mower_id}/angles/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Rotation Settings
+         * @description Set the rotation step of manual starts (null: off). `can_control` on the mower.
+         */
+        put: operations["set_rotation_settings_api_v1_scheduler_mowers__mower_id__angles_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scheduler/mowers/{mower_id}/widget": {
         parameters: {
             query?: never;
@@ -203,6 +251,32 @@ export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
         /**
+         * AreaAngleOut
+         * @description The last angle a job mowed one area with.
+         */
+        AreaAngleOut: {
+            /**
+             * Angle Deg
+             * @description 0 up to below 180 degrees.
+             */
+            angle_deg: number;
+            /** Area Id */
+            area_id: string;
+            /** Schedule Id */
+            schedule_id: string | null;
+            /**
+             * Source
+             * @description `schedule`: a schedule's run; `manual`: a start from the start sheet with rotation chosen.
+             * @enum {string}
+             */
+            source: "schedule" | "manual";
+            /**
+             * Used At
+             * Format: date-time
+             */
+            used_at: string;
+        };
+        /**
          * EventDef
          * @description An event type a module publishes.
          */
@@ -264,6 +338,19 @@ export type components = {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ManualAngleIn
+         * @description ``POST /mowers/{mower_id}/angles``: a manual start chose rotation and sent this angle.
+         */
+        ManualAngleIn: {
+            /**
+             * Angle Deg
+             * @description Stored modulo 180.
+             */
+            angle_deg: number;
+            /** Area Ids */
+            area_ids: string[];
+        };
+        /**
          * ModuleDescriptor
          * @description Self-description of a service, served at ``/.well-known/mowdeck-module``.
          */
@@ -280,6 +367,28 @@ export type components = {
             ui_areas?: components["schemas"]["UiAreaDef"][];
             /** Version */
             version: string;
+        };
+        /**
+         * MowerAnglesOut
+         * @description ``GET /mowers/{mower_id}/angles``: where the angle rotation of a mower stands
+         *     (ADR 0061).
+         */
+        MowerAnglesOut: {
+            /**
+             * Areas
+             * @description The last angle per area, by area id.
+             */
+            areas: components["schemas"]["AreaAngleOut"][];
+            /**
+             * Manual Step Deg
+             * @description The rotation step the start sheet offers for manual starts; null: off.
+             */
+            manual_step_deg: number | null;
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
         };
         /**
          * ObstacleDetection
@@ -325,6 +434,11 @@ export type components = {
          */
         PreviewItemOut: {
             /**
+             * Angle Deg
+             * @description The mowing angle this firing will use on `angle_mower_id` (rotation applied, assuming every earlier firing starts); null when skipped, for a pattern without direction or without a target mower.
+             */
+            angle_deg?: number | null;
+            /**
              * At
              * Format: date-time
              */
@@ -345,6 +459,11 @@ export type components = {
          * @description ``GET /schedules/{id}/preview``.
          */
         PreviewOut: {
+            /**
+             * Angle Mower Id
+             * @description The mower the angles are worked out for (a group: its first mower; each mower continues from its own last angle).
+             */
+            angle_mower_id?: string | null;
             /** Items */
             items: components["schemas"]["PreviewItemOut"][];
             /** @description The rain decision for the first firing that is not skipped, with today's forecast (null without a target mower). */
@@ -472,6 +591,17 @@ export type components = {
             run_when_unknown: boolean;
         };
         /**
+         * RotationSettingsIn
+         * @description ``PUT /mowers/{mower_id}/angles/settings``: the step of manual starts.
+         */
+        RotationSettingsIn: {
+            /**
+             * Manual Step Deg
+             * @description Degrees the start sheet turns the last angle by; null: no rotation.
+             */
+            manual_step_deg: number | null;
+        };
+        /**
          * RunList
          * @description ``GET /schedules/{id}/runs`` (newest first) and ``POST .../run-now``.
          */
@@ -486,6 +616,11 @@ export type components = {
          * @description One run of a schedule for one mower.
          */
         RunOut: {
+            /**
+             * Angle Deg
+             * @description For a started run: the mowing angle the start sent (0 up to below 180 degrees); null for a pattern without direction and for runs that did not start.
+             */
+            angle_deg?: number | null;
             /** Command Id */
             command_id: string | null;
             /** Details */
@@ -589,6 +724,11 @@ export type components = {
              */
             rotation_angles?: number[];
             /**
+             * Rotation Step Deg
+             * @description Step rotation (ADR 0061): each run turns the last angle the mower mowed its areas with by this many degrees (modulo 180); null: off. Excludes `rotation_angles`.
+             */
+            rotation_step_deg?: number | null;
+            /**
              * Speed Mps
              * @description Mowing speed in m/s sent before each start (`set_speed`); null keeps the mower's own. Must lie within every target mower's speed range.
              */
@@ -676,6 +816,11 @@ export type components = {
             rotation_angles: number[];
             /** Rotation Index */
             rotation_index: number;
+            /**
+             * Rotation Step Deg
+             * @description Step rotation (ADR 0061): degrees each run turns the mower's last angle on its areas by; null: off.
+             */
+            rotation_step_deg: number | null;
             /** Skip Until */
             skip_until: string | null;
             /** Speed Mps */
@@ -741,6 +886,11 @@ export type components = {
             /** Rotation Angles */
             rotation_angles?: number[] | null;
             /**
+             * Rotation Step Deg
+             * @description Step rotation (ADR 0061): each run turns the last angle the mower mowed its areas with by this many degrees (modulo 180); null: off. Excludes `rotation_angles`.
+             */
+            rotation_step_deg?: number | null;
+            /**
              * Speed Mps
              * @description Mowing speed in m/s sent before each start (`set_speed`); null keeps the mower's own. Must lie within every target mower's speed range.
              */
@@ -774,7 +924,7 @@ export type components = {
         SchedulePattern: {
             /**
              * Angle Deg
-             * @description Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run.
+             * @description Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run; with `rotation_step_deg` it is the angle of the first run, later runs turn the last angle by the step (ADR 0061).
              */
             angle_deg?: number | null;
             /** Border Laps */
@@ -808,7 +958,7 @@ export type components = {
         SchedulePatternIn: {
             /**
              * Angle Deg
-             * @description Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run.
+             * @description Base angle in degrees; null: the mow defaults'. A schedule's `rotation_angles` replace it run by run; with `rotation_step_deg` it is the angle of the first run, later runs turn the last angle by the step (ADR 0061).
              */
             angle_deg?: number | null;
             /** Border Laps */
@@ -993,6 +1143,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModuleDescriptor"];
+                };
+            };
+        };
+    };
+    mower_angles_api_v1_scheduler_mowers__mower_id__angles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowerAnglesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_manual_angle_api_v1_scheduler_mowers__mower_id__angles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualAngleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowerAnglesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_rotation_settings_api_v1_scheduler_mowers__mower_id__angles_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotationSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowerAnglesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

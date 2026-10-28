@@ -14,8 +14,11 @@ from mowdeck_service_kit.errors import NotFound
 from scheduler.adapters.api.deps import ServicesDep
 from scheduler.adapters.api.schemas import (
     DevWeatherIn,
+    ManualAngleIn,
+    MowerAnglesOut,
     PreviewOut,
     RainDecisionOut,
+    RotationSettingsIn,
     RunList,
     RunOut,
     ScheduleIn,
@@ -34,6 +37,10 @@ router = APIRouter(prefix="/scheduler", tags=["schedules"])
 
 ViewMower = Annotated[
     Principal, Depends(require_or_not_found(Relation.CAN_VIEW, path_object("mower", "mower_id")))
+]
+ControlMower = Annotated[
+    Principal,
+    Depends(require_or_not_found(Relation.CAN_CONTROL, path_object("mower", "mower_id"))),
 ]
 
 
@@ -80,6 +87,7 @@ async def create_schedule(
             blade_height_mm=body.blade_height_mm,
             speed_mps=body.speed_mps,
             rotation_angles=list(body.rotation_angles),
+            rotation_step_deg=body.rotation_step_deg,
             rain=body.rain_pause.settings().to_json(),
             pause_running_jobs_on_rain=body.pause_running_jobs_on_rain,
             return_to_dock_at_window_end=body.return_to_dock_at_window_end,
@@ -228,6 +236,46 @@ async def widget(
     overview = await services.schedules.widget_overview(principal, account_id, mower_id)
     response.headers["Cache-Control"] = "private, max-age=60"
     return WidgetScheduleOut.of(mower_id, services.schedules.clock(), overview)
+
+
+@router.get("/mowers/{mower_id}/angles")
+async def mower_angles(
+    mower_id: UUID, _: ViewMower, account_id: CurrentAccountId, services: ServicesDep
+) -> MowerAnglesOut:
+    """Where the mowing angle rotation of a mower stands (ADR 0061): the last angle per area
+    (from scheduled runs and manual starts with rotation chosen) and the step the start sheet
+    offers for manual starts. `can_view` on the mower."""
+    return MowerAnglesOut.of(await services.angles.get(account_id, mower_id))
+
+
+@router.put("/mowers/{mower_id}/angles/settings")
+async def set_rotation_settings(
+    mower_id: UUID,
+    body: RotationSettingsIn,
+    _: ControlMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> MowerAnglesOut:
+    """Set the rotation step of manual starts (null: off). `can_control` on the mower."""
+    changed = await services.angles.set_manual_step(account_id, mower_id, body.manual_step_deg)
+    return MowerAnglesOut.of(changed)
+
+
+@router.post("/mowers/{mower_id}/angles")
+async def record_manual_angle(
+    mower_id: UUID,
+    body: ManualAngleIn,
+    _: ControlMower,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+) -> MowerAnglesOut:
+    """A manual start with rotation chosen sent `angle_deg` for `area_ids`: the next run of
+    these areas continues from it. A start with an explicit angle is not reported.
+    `can_control` on the mower."""
+    recorded = await services.angles.record_manual(
+        account_id, mower_id, body.area_ids, body.angle_deg
+    )
+    return MowerAnglesOut.of(recorded)
 
 
 @router.put("/dev/weather", include_in_schema=False)
