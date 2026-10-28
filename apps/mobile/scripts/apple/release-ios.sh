@@ -147,7 +147,9 @@ echo "Signed $EXT_BUNDLE_ID"
 codesign -d --entitlements - --xml "$WIDGETS" > "$WORK/widgets-final.plist" 2> /dev/null
 plutil -extract get-task-allow raw -o - "$WORK/widgets-final.plist" | grep -qx false \
     || fail "the widget extension is signed with get-task-allow: not an App Store signature"
-plutil -extract com.apple.security.application-groups.0 raw -o - "$WORK/widgets-final.plist" \
+# PlistBuddy, not plutil -extract: plutil splits key paths at dots, so it cannot address
+# com.apple.security.application-groups.
+/usr/libexec/PlistBuddy -c "Print :com.apple.security.application-groups:0" "$WORK/widgets-final.plist" 2> /dev/null \
     | grep -qx group.app.mowdeck.mobile \
     || fail "the widget extension is not signed with the App Group group.app.mowdeck.mobile"
 echo "Signed $WIDGETS_BUNDLE_ID"
@@ -155,7 +157,7 @@ for bundle in "$WATCH_WIDGETS" "$WATCH"; do
     codesign -d --entitlements - --xml "$bundle" > "$WORK/watch-final.plist" 2> /dev/null
     plutil -extract get-task-allow raw -o - "$WORK/watch-final.plist" | grep -qx false \
         || fail "$(basename "$bundle") is signed with get-task-allow: not an App Store signature"
-    plutil -extract com.apple.security.application-groups.0 raw -o - "$WORK/watch-final.plist" \
+    /usr/libexec/PlistBuddy -c "Print :com.apple.security.application-groups:0" "$WORK/watch-final.plist" 2> /dev/null \
         | grep -qx group.app.mowdeck.mobile \
         || fail "$(basename "$bundle") is not signed with the App Group group.app.mowdeck.mobile"
 done
