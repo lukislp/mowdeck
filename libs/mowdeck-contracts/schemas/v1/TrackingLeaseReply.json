@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "TrackingLeaseCode": {
+      "description": "Why a gateway did not take a lease.",
+      "enum": [
+        "ok",
+        "not_found",
+        "not_connected"
+      ],
+      "title": "TrackingLeaseCode",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply to :class:`TrackingLeaseRequest`.",
+  "properties": {
+    "code": {
+      "$ref": "#/$defs/TrackingLeaseCode"
+    },
+    "detail": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    },
+    "interval_seconds": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The interval the adapter applies (it may clamp the request).",
+      "title": "Interval Seconds"
+    }
+  },
+  "required": [
+    "code"
+  ],
+  "title": "TrackingLeaseReply",
+  "type": "object"
+}

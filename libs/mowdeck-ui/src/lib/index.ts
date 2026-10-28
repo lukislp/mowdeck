@@ -29,6 +29,11 @@ export * from './drive/stick.js';
 export { default as MowerMap, type MapTiles, type MowerMapLabels } from './map/MowerMap.svelte';
 export type { MapAerial } from './map/aerial';
 export { default as FleetMap, type FleetMapLabels } from './map/FleetMap.svelte';
+export {
+  default as TrackMap,
+  type TrackMapLabels,
+  type TrackMapPoint,
+} from './map/TrackMap.svelte';
 export * from './map/geo.js';
 export * from './map/projection.js';
 export * from './map/layers.js';

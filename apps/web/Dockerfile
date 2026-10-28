@@ -37,6 +37,7 @@ RUN MOWDECK_WEB_AGORA_SDK="$WEB_AGORA_SDK" pnpm --filter web build
 FROM ${NGINX_IMAGE}
 COPY apps/web/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY apps/web/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
+COPY apps/web/nginx/security-headers-track.conf /etc/nginx/snippets/security-headers-track.conf
 COPY --from=build /repo/apps/web/build/csp.conf /etc/nginx/snippets/csp.conf
 # Renders /config.json and the final CSP from MOWDECK_WEB_MAP_* and MOWDECK_WEB_LEGAL_ENABLED
 # into /tmp at container start.

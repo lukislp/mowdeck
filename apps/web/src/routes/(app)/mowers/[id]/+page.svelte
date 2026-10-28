@@ -70,6 +70,7 @@
   import SpotSheet from '#lib/components/SpotSheet.svelte';
   import ToneBadge from '#lib/components/ToneBadge.svelte';
   import { loadConfig, type MapTilesConfig } from '#lib/config.js';
+  import { getTracking } from '#lib/tracking/api.js';
   import type { components as Fleet } from '#lib/generated/fleet.js';
   import {
     activityLabel,
@@ -598,6 +599,19 @@
     return () => clearInterval(refresh);
   });
   $effect(() => realtime.watch([id]));
+  // Theft tracking: is a session running? (only the state: asking for points after now returns none)
+  let trackingActive = $state(false);
+  $effect(() => {
+    const mowerId = id;
+    const check = () =>
+      void getTracking(mowerId, { after: new Date().toISOString() })
+        .then((status) => (trackingActive = status.session?.active === true))
+        .catch(() => undefined);
+    trackingActive = false;
+    check();
+    const refresh = setInterval(check, 30_000);
+    return () => clearInterval(refresh);
+  });
   $effect(() => {
     void loadConfig().then((config) => (tiles = config.mapTiles));
   });
@@ -1299,6 +1313,13 @@
             label={m.health_open()}
             testid="mower-health"
           />
+          <Button
+            href="/mowers/{id}/tracking"
+            variant={trackingActive ? 'danger' : 'ghost'}
+            icon="shield"
+            label={trackingActive ? m.tracking_card_active() : m.tracking_card_open()}
+            testid="mower-tracking"
+          />
           {#if canOpenDrive}
             <Button
               href="/mowers/{id}/drive"
@@ -1320,6 +1341,13 @@
         {/snippet}
       </TopBar>
       <PlanBanner />
+      {#if trackingActive}
+        <a class="tracking-banner" href="/mowers/{id}/tracking" data-testid="mower-tracking-banner">
+          <Icon name="shield" size={18} />
+          <strong>{m.tracking_card_active()}</strong>
+          <span>{m.tracking_card_open()}</span>
+        </a>
+      {/if}
     </div>
 
     <section
@@ -2774,5 +2802,27 @@
       border-inline-start: var(--md-hairline) solid var(--md-color-line);
       background: var(--md-color-surface);
     }
+  }
+
+  .tracking-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--md-space-2);
+    min-block-size: var(--md-target);
+    padding: 0 var(--md-gutter);
+    background: var(--md-state-error);
+    color: var(--md-color-ink-inverse);
+    font-size: var(--md-font-size-14);
+    text-decoration: none;
+  }
+
+  .tracking-banner span {
+    margin-inline-start: auto;
+    text-decoration: underline;
+  }
+
+  .tracking-banner:focus-visible {
+    outline: 3px solid var(--md-color-focus);
+    outline-offset: -3px;
   }
 </style>

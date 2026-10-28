@@ -61,4 +61,5 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0055](0055-deploy-maintenance-window.md) | Deploy maintenance window | Accepted |
 | [0056](0056-camera-photo-in-push-notifications.md) | Camera photo in push notifications for errors and theft alarms | Accepted |
 | [0057](0057-step-up-reauthentication.md) | Step-up re-authentication for critical actions | Accepted |
+| [0058](0058-theft-tracking-mode.md) | Theft tracking mode | Accepted |
 | [0059](0059-ios-widgets-and-live-activity.md) | iOS widgets and the mowing Live Activity | Accepted |

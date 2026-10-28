@@ -22,6 +22,7 @@ from mowdeck_control import (
     NotConnected,
     ReportRateCapable,
     SensorStop,
+    TrackingRateCapable,
 )
 from mowdeck_control.testing import ManualClock, ManualTimers
 from mowdeck_control_mammotion import base as mammotion_base
@@ -594,3 +595,48 @@ async def test_mammotion_client_port_runs_the_closer_when_stopping_is_cancelled(
     with pytest.raises(asyncio.CancelledError):
         await port.close()
     assert closed == ["proxy"]
+
+
+async def test_mammotion_ble_tracking_interval_asks_for_reports_and_backs_off() -> None:
+    """The theft tracking lease (TrackingRateCapable, ADR 0058): the loop switches to ``track``
+    mode with one undebounced request per interval, a mower that stays silent is asked less
+    often (never beyond the backoff cap), and releasing restores the normal rhythm."""
+    conn, port = ble()
+    assert isinstance(conn, TrackingRateCapable)
+    await conn.connect()
+    assert conn.set_tracking_interval(1.0) == mammotion_base.TRACKING_MIN_INTERVAL_S  # clamped
+    assert conn._mode() == "track"
+    assert conn._current_refresh_interval_s() == 5.0
+    await conn._track_poll()
+    assert port.refreshes >= 1
+    asked = port.refreshes
+    for _ in range(6):  # no report ever arrives: silent polls
+        conn._report_at = None
+        await conn._track_poll()
+    assert port.refreshes == asked + 6, "it keeps asking, only slower"
+    assert conn._tracking_silent_polls >= 6
+    assert conn._current_refresh_interval_s() == 20.0  # two doublings of 5 s
+    conn._tracking_silent_polls = 300
+    assert conn._current_refresh_interval_s() == mammotion_base.TRACKING_BACKOFF_MAX_S
+    conn._report_at = conn._clock_s() + 1  # a report arrived since the last request
+    await conn._track_poll()
+    assert conn._tracking_silent_polls == 0
+    assert conn.set_tracking_interval(30.0) == 30.0
+    assert conn._current_refresh_interval_s() == 30.0
+    assert conn.set_tracking_interval(None) is None
+    assert conn._mode() != "track"
+    await conn.disconnect()
+
+
+async def test_mammotion_ble_tracking_survives_a_failing_request() -> None:
+    conn, port = ble()
+    await conn.connect()
+    conn.set_tracking_interval(5.0)
+
+    async def broken() -> None:
+        raise ConnectionError("cloud said no")
+
+    port.refresh = broken  # type: ignore[method-assign]
+    await conn._track_poll()  # logged and counted, never raised
+    assert conn._tracking_silent_polls == 1
+    await conn.disconnect()

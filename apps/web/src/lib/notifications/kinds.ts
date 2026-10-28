@@ -31,6 +31,10 @@ export const USER_KINDS: NotificationKind[] = [
   'mower_lifted',
   'mower_left_dock_unexpectedly',
   'geofence_exit',
+  'tracking_started',
+  'tracking_moved',
+  'tracking_stale',
+  'tracking_ended',
   'blade_maintenance',
   'vision_proposal',
   'vision_auto_proposal',
@@ -86,6 +90,14 @@ export function kindLabel(kind: NotificationKind): string {
       return m.notif_kind_mower_left_dock_unexpectedly();
     case 'geofence_exit':
       return m.notif_kind_geofence_exit();
+    case 'tracking_started':
+      return m.notif_kind_tracking_started();
+    case 'tracking_moved':
+      return m.notif_kind_tracking_moved();
+    case 'tracking_stale':
+      return m.notif_kind_tracking_stale();
+    case 'tracking_ended':
+      return m.notif_kind_tracking_ended();
     case 'blade_maintenance':
       return m.notif_kind_blade_maintenance();
     case 'vision_proposal':
@@ -123,6 +135,14 @@ export function kindHint(kind: NotificationKind): string {
       return m.notif_kind_mower_left_dock_unexpectedly_hint();
     case 'geofence_exit':
       return m.notif_kind_geofence_exit_hint();
+    case 'tracking_started':
+      return m.notif_kind_tracking_started_hint();
+    case 'tracking_moved':
+      return m.notif_kind_tracking_moved_hint();
+    case 'tracking_stale':
+      return m.notif_kind_tracking_stale_hint();
+    case 'tracking_ended':
+      return m.notif_kind_tracking_ended_hint();
     case 'blade_maintenance':
       return m.notif_kind_blade_maintenance_hint();
     case 'vision_proposal':
@@ -143,6 +163,7 @@ export function kindHint(kind: NotificationKind): string {
 export function kindTone(kind: NotificationKind): NotificationTone {
   switch (kind) {
     case 'mowing_finished':
+    case 'tracking_ended':
     case 'firmware_update_finished':
       return 'docked';
     case 'job_started':
@@ -152,7 +173,10 @@ export function kindTone(kind: NotificationKind): NotificationTone {
     case 'mower_lifted':
     case 'mower_left_dock_unexpectedly':
     case 'geofence_exit':
+    case 'tracking_started':
+    case 'tracking_moved':
       return 'error';
+    case 'tracking_stale':
     case 'battery_low':
     case 'blade_maintenance':
     case 'vision_proposal':

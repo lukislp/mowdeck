@@ -420,6 +420,11 @@ class MammotionBase:
         """Loop time of the last report window request in drive mode."""
         self._drive_poll_override: float | None = None
         """Drive interval requested by a drive calibration (None: :data:`DRIVE_POLL_S`)."""
+        self._tracking_interval_s: float | None = None
+        """Interval of the theft tracking lease (ADR 0058); None: not tracking."""
+        self._tracking_silent_polls = 0
+        """Consecutive tracking polls that brought no report (the mower is out of reach)."""
+        self._tracking_polled_at: float | None = None
         self._refresh_wake = asyncio.Event()
         self._refresher: asyncio.Task[None] | None = None
         self._device_info_retry_s = device_info_retry_s
@@ -627,6 +632,27 @@ class MammotionBase:
             self._drive_poll_override = max(floor, min(max(DRIVE_POLL_S, floor), interval_s))
         self._refresh_wake.set()
 
+    def set_tracking_interval(self, interval_s: float | None) -> float | None:
+        """:class:`~mowdeck_control.TrackingRateCapable` (ADR 0058): ask the mower for a report
+        every ``interval_s`` seconds (at least :data:`TRACKING_MIN_INTERVAL_S`, one undebounced
+        request each, no report stream) until called with None. Returns the applied interval.
+        A mower that stays silent is asked less and less often (:meth:`_tracking_wait_s`)."""
+        if interval_s is None:
+            self._tracking_interval_s = None
+        else:
+            self._tracking_interval_s = max(TRACKING_MIN_INTERVAL_S, interval_s)
+            self._tracking_silent_polls = 0
+        self._refresh_wake.set()
+        return self._tracking_interval_s
+
+    def _tracking_wait_s(self) -> float:
+        """Seconds between tracking polls: the interval, doubled for every three polls that
+        brought no report, at most :data:`TRACKING_BACKOFF_MAX_S` (the vendor cloud is not
+        hammered for a mower that is offline)."""
+        base = self._tracking_interval_s or TRACKING_MIN_INTERVAL_S
+        doublings = self._tracking_silent_polls // 3
+        return max(base, min(TRACKING_BACKOFF_MAX_S, base * 2.0**doublings))
+
     @property
     def drive_poll_s(self) -> float:
         """The current drive interval: the calibration's request or :data:`DRIVE_POLL_S`."""
@@ -654,6 +680,8 @@ class MammotionBase:
         (one-shots at the activity's interval)."""
         if self._drive_active():
             return "drive"
+        if self._tracking_interval_s is not None:
+            return "track"
         if self._report_stream_s > 0 and self._is_active():
             return "stream"
         if self._boosted() and not self._is_active():
@@ -668,6 +696,8 @@ class MammotionBase:
         mode = self._mode()
         if mode == "drive":
             return self.drive_poll_s
+        if mode == "track":
+            return self._tracking_wait_s()
         if mode == "stream":
             return self._report_stream_s / 2
         if mode == "boost":
@@ -713,6 +743,9 @@ class MammotionBase:
                 if mode == "drive":
                     await self._drive_poll()
                     continue
+                if mode == "track":
+                    await self._track_poll()
+                    continue
                 if mode == "poll":
                     # Half the interval: the answer to the previous request lands a moment after
                     # it was sent, so its age at the next tick is a little under ``interval``.
@@ -735,6 +768,30 @@ class MammotionBase:
         if seen > self._report_seen:
             self._report_seen = seen
             self._publish()
+
+    async def _track_poll(self) -> None:
+        """One tick of the ``track`` mode: one undebounced report request. A tick that finds
+        no report since the previous request counts as silent (backoff, a warning every
+        tenth), a request that fails too; both are logged, never raised."""
+        now = self._clock_s()
+        previous = self._tracking_polled_at
+        self._tracking_polled_at = now
+        if previous is not None:
+            if self._report_at is None or self._report_at < previous:
+                self._tracking_silent_polls += 1
+                if self._tracking_silent_polls % 10 == 1:
+                    _log.warning(
+                        "tracking: no report from %s for %d requests, backing off",
+                        self._port.device_name,
+                        self._tracking_silent_polls,
+                    )
+            else:
+                self._tracking_silent_polls = 0
+        try:
+            await self._port.refresh()  # user path: no debounce, no queue
+        except Exception:
+            self._tracking_silent_polls += 1
+            _log.warning("tracking: report request failed", exc_info=True)
 
     async def _drive_poll(self) -> None:
         """One tick of the ``drive`` mode: renew the report window when half of it passed and
@@ -2043,6 +2100,7 @@ class MammotionBase:
             self._published_at is None
             or now - self._published_at >= UNCHANGED_REPUBLISH_S
             or self._drive_active()  # a control loop needs every report's observed_at
+            or self._tracking_interval_s is not None  # every report is a track point
         )
         if force or previous is None or stale or _changed(previous, state):
             self._broadcaster.publish(state)
@@ -2080,6 +2138,11 @@ MIN_DRIVE_POLL_S: Final = 0.5
 """Shortest drive interval a drive calibration may ask for: one undebounced report request
 per half second, about what a Bluetooth round trip through the bridge allows without queueing
 requests behind each other (to be confirmed on hardware)."""
+TRACKING_MIN_INTERVAL_S: Final = 5.0
+"""Shortest interval of a theft tracking lease (ADR 0058): one report request per five seconds
+at most, far below the drive rate the vendor cloud tolerates (ADR 0049)."""
+TRACKING_BACKOFF_MAX_S: Final = 120.0
+"""Longest wait between tracking polls of a mower that does not answer."""
 BOOST_MIN_S: Final = 30.0
 """Shortest boost, seconds (it lasts at least one report stream window)."""
 ACTIVE_ACTIVITIES: Final = frozenset(

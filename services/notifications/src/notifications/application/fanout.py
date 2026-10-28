@@ -53,6 +53,7 @@ from notifications.domain.messages import MessageCatalog
 from notifications.domain.models import (
     ALARM_KINDS,
     IMAGE_KINDS,
+    QUIET_HOURS_EXEMPT,
     SEVERITY,
     InboxItem,
     Message,
@@ -269,7 +270,7 @@ class Fanout:
                 mower_id=event.mower_id,
                 occurred_at=event.occurred_at,
                 dedupe_key=event.dedupe_key,
-                respect_quiet_hours=not alarm,
+                respect_quiet_hours=event.kind not in QUIET_HOURS_EXEMPT,
                 url=url,
                 image_id=image_id,
             )

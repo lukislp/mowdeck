@@ -9,6 +9,7 @@ from telemetry.application.ingest import Ingest
 from telemetry.application.ports import Clock, HealthEvents, Store
 from telemetry.application.queries import Queries
 from telemetry.application.retention import Retention, RetentionObserver
+from telemetry.application.tracking import Tracking
 from telemetry.application.widget import Widget
 
 
@@ -23,6 +24,7 @@ class Services:
     widget: Widget
     config: TelemetryConfig
     aerial: Aerial
+    tracking: Tracking | None = None
 
 
 def build_services(

@@ -23,6 +23,7 @@ from mowdeck_contracts.v1 import (
     MowerMapSnapshot,
     MowerRegistration,
     MowerState,
+    TrackingEvent,
     VisionProposalCreated,
     VisionProposalUpdated,
     drive_session_of,
@@ -43,6 +44,7 @@ from notifications.domain.rules import (
     observe_connection,
     observe_state,
     release_held_offline,
+    tracking_event,
     vision_no_photo_event,
     vision_proposal_event,
 )
@@ -196,6 +198,13 @@ class Watcher:
             updated, events = observe_blade_hours(watch, payload, now, self._config.rules)
             if updated is not None and updated != watch:
                 await tx.put_watch(updated)
+        await self._fanout.dispatch(events)
+        return events
+
+    async def on_tracking(self, event_type: str, payload: TrackingEvent) -> list[NotificationEvent]:
+        """A theft tracking milestone from Telemetry (ADR 0058): notify the mower's viewers."""
+        await self._check_account(payload.mower_id, payload.account_id, "event")
+        events = [tracking_event(event_type, payload)]
         await self._fanout.dispatch(events)
         return events
 
