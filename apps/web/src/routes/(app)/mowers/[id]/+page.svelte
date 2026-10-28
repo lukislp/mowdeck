@@ -47,6 +47,16 @@
   import CameraPanel from '#lib/components/CameraPanel.svelte';
   import HeatmapControls, { type HeatStatus } from '#lib/components/HeatmapControls.svelte';
   import HeatmapGaps from '#lib/components/HeatmapGaps.svelte';
+  import {
+    clampOpacity,
+    fetchAerialInfo,
+    loadAerialPrefs,
+    mapAerial,
+    saveAerialPrefs,
+    tileLoader,
+    type AerialInfo,
+    type AerialPrefs,
+  } from '#lib/map/aerial.js';
   import JobCard from '#lib/components/JobCard.svelte';
   import LightToggle from '#lib/components/LightToggle.svelte';
   import AssistSheet from '#lib/components/AssistSheet.svelte';
@@ -235,6 +245,10 @@
   let heatReload = $state(0);
   /** Index (in the answer's `gaps`) of the highlighted missed spot. */
   let heatGap = $state<number | null>(null);
+  // The aerial photo under the map (offered by Telemetry when the installation configures a
+  // source): shown or not and its opacity are remembered per browser.
+  let aerialPrefs = $state<AerialPrefs>(loadAerialPrefs());
+  let aerialInfo = $state.raw<AerialInfo | null>(null);
   // AI assist: the sheet, what a new request asks for, and the proposal a link opened.
   let assisting = $state(false);
   let assistTask = $state<VisionTask>('recover');
@@ -767,6 +781,28 @@
       clearTimeout(timer);
     };
   });
+
+  // --- aerial photo: what the installation offers for this map ---------------------------------
+
+  $effect(() => {
+    const mowerId = id;
+    if (!heatMapReady) return;
+    const abort = new AbortController();
+    fetchAerialInfo(apiFetch, mowerId, abort.signal)
+      .then((info) => (aerialInfo = info))
+      .catch(() => {
+        if (!abort.signal.aborted) aerialInfo = null;
+      });
+    return () => abort.abort();
+  });
+
+  function setAerial(next: Partial<AerialPrefs>): void {
+    aerialPrefs = { ...aerialPrefs, ...next };
+    saveAerialPrefs(aerialPrefs);
+  }
+
+  const aerialLoad = tileLoader(apiFetch);
+  const aerial = $derived(mapAerial(aerialInfo, aerialPrefs, aerialLoad));
 
   function setPathShown(shown: boolean): void {
     pathShown = shown;
@@ -1329,6 +1365,7 @@
             selectable={mapSelectable}
             {stale}
             {tiles}
+            {aerial}
             {labels}
             {heat}
             {highlightGap}
@@ -1415,6 +1452,11 @@
           {pathShown}
           {pathNote}
           onpath={setPathShown}
+          aerialOffered={!!aerialInfo?.enabled}
+          aerialShown={aerialPrefs.shown}
+          aerialOpacity={aerialPrefs.opacity}
+          onaerial={(shown) => setAerial({ shown })}
+          onaerialopacity={(opacity) => setAerial({ opacity: clampOpacity(opacity) })}
         />
         {#if heatLayer === 'coverage' && (heatStatus === 'ready' || heatStatus === 'empty')}
           <HeatmapGaps

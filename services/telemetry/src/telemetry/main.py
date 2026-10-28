@@ -18,6 +18,7 @@ import asyncio
 import contextlib
 import dataclasses
 from collections.abc import Awaitable, Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
@@ -30,6 +31,7 @@ from mowdeck_service_kit.bus import EventBus, Subscription
 from mowdeck_service_kit.db import create_engine, readiness_check_db
 from mowdeck_service_kit.health import ReadinessCheck
 
+from telemetry.adapters.aerial import DiskTileCache, HttpTileSource
 from telemetry.adapters.api.deps import install_error_mapping
 from telemetry.adapters.api.routes import router
 from telemetry.adapters.api.tracking_routes import router as tracking_router
@@ -45,6 +47,7 @@ from telemetry.adapters.db.store import SqlStore
 from telemetry.adapters.db.tracking_store import SqlTrackingStore
 from telemetry.adapters.memory_tracking import MemoryTrackingStore
 from telemetry.adapters.metrics import PrometheusRetentionObserver
+from telemetry.application.aerial import TileCache, TileSource
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
 from telemetry.application.tracking import Tracking
@@ -78,6 +81,8 @@ def build_app(
     clock: Clock | None = None,
     background_tasks: bool = True,
     seed_delay_seconds: float = 1.0,
+    aerial_source: TileSource | None = None,
+    aerial_cache: TileCache | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL and OpenFGA from the settings."""
     engine = None
@@ -96,6 +101,19 @@ def build_app(
         tracking_store = MemoryTrackingStore()  # only reached with an injected store (tests)
     tasks: list[asyncio.Task[Any]] = []
     store_ref: Store = store
+    aerial_config = settings.to_aerial_config()
+    http_source: HttpTileSource | None = None
+    if aerial_source is None and aerial_config.enabled:
+        http_source = HttpTileSource(settings.telemetry_aerial_timeout_seconds)
+        aerial_source = http_source
+        if aerial_cache is None:
+            aerial_cache = DiskTileCache(
+                Path(settings.telemetry_aerial_cache_dir),
+                settings.telemetry_aerial_cache_max_mb * 1_048_576,
+            )
+        _log.info(
+            "aerial photo layer on", wms=aerial_config.wms_url, xyz=bool(aerial_config.xyz_url)
+        )
 
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus
@@ -103,7 +121,14 @@ def build_app(
         registry = getattr(app.state, "metrics_registry", None)
         observer = PrometheusRetentionObserver(registry) if registry is not None else None
         services = build_services(
-            store_ref, settings.to_config(), active_clock, events, retention_observer=observer
+            store_ref,
+            settings.to_config(),
+            active_clock,
+            events,
+            aerial_config=aerial_config,
+            aerial_source=aerial_source,
+            aerial_cache=aerial_cache,
+            retention_observer=observer,
         )
         tracking = (
             Tracking(
@@ -151,6 +176,8 @@ def build_app(
             await tracking_uc.close()
         for subscription in getattr(app.state, "subscriptions", []):
             await subscription.unsubscribe()
+        if http_source is not None:
+            await http_source.close()
         if connection is not None:
             await connection.close()
         if engine is not None:

@@ -19,6 +19,8 @@ dependencies = [
   "mowdeck-patterns",
   "mowdeck-service-kit[db]",
   "alembic>=1.16.0",
+  # Aerial photo tiles: the source and the cache fetch them over HTTP.
+  "httpx>=0.28.1",
   # Heatmaps: Shapely (through mowdeck-patterns) and its array library.
   "numpy>=2.0",
   # Theft report (ADR 0058): pure Python PDF writer, LGPL-3.0, with Pillow for the photos.

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from telemetry.application.aerial import Aerial, AerialConfig, TileCache, TileSource
 from telemetry.application.context import TelemetryConfig
 from telemetry.application.health import Health
 from telemetry.application.ingest import Ingest
@@ -13,13 +14,14 @@ from telemetry.application.tracking import Tracking
 
 @dataclass(frozen=True, slots=True)
 class Services:
-    """Ingestion, reads, the health history and retention."""
+    """Ingestion, reads, the health history, retention and the aerial photo tiles."""
 
     ingest: Ingest
     queries: Queries
     health: Health
     retention: Retention
     config: TelemetryConfig
+    aerial: Aerial
     tracking: Tracking | None = None
 
 
@@ -28,10 +30,15 @@ def build_services(
     config: TelemetryConfig,
     clock: Clock,
     events: HealthEvents | None = None,
+    *,
+    aerial_config: AerialConfig | None = None,
+    aerial_source: TileSource | None = None,
+    aerial_cache: TileCache | None = None,
     retention_observer: RetentionObserver | None = None,
 ) -> Services:
     """Create the use cases over ``store``; ``events`` publishes the health events and
-    ``retention_observer`` receives the numbers of the retention rounds."""
+    ``retention_observer`` receives the numbers of the retention rounds. Without an
+    ``aerial_source`` the aerial photo layer is off."""
     queries = Queries(store, config, clock)
     return Services(
         ingest=Ingest(store, config, clock, events),
@@ -39,4 +46,5 @@ def build_services(
         health=Health(store, config, clock, queries),
         retention=Retention(store, config, clock, observer=retention_observer),
         config=config,
+        aerial=Aerial(aerial_config or AerialConfig(), queries, aerial_source, aerial_cache),
     )

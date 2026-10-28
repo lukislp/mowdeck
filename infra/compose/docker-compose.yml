@@ -521,6 +521,16 @@ services:
       MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS: ${TELEMETRY_RETENTION_POSITIONS_DAYS:-90}
       MOWDECK_TELEMETRY_RETENTION_COMMANDS_DAYS: ${TELEMETRY_RETENTION_COMMANDS_DAYS:-30}
       MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD: ${TELEMETRY_BLADE_HOURS_THRESHOLD:-50}
+      # Optional aerial photo under the map (ADR 0054); empty: off, no request to any third party.
+      MOWDECK_TELEMETRY_AERIAL_WMS_URL: ${AERIAL_WMS_URL:-}
+      MOWDECK_TELEMETRY_AERIAL_WMS_LAYER: ${AERIAL_WMS_LAYER:-}
+      MOWDECK_TELEMETRY_AERIAL_IMAGE_FORMAT: ${AERIAL_IMAGE_FORMAT:-image/jpeg}
+      MOWDECK_TELEMETRY_AERIAL_XYZ_URL: ${AERIAL_XYZ_URL:-}
+      MOWDECK_TELEMETRY_AERIAL_ATTRIBUTION: ${AERIAL_ATTRIBUTION:-}
+      MOWDECK_TELEMETRY_AERIAL_MAX_ZOOM: ${AERIAL_MAX_ZOOM:-19}
+      MOWDECK_TELEMETRY_AERIAL_CACHE_MAX_MB: ${AERIAL_CACHE_MAX_MB:-256}
+    volumes:
+      - aerial-cache:/var/cache/mowdeck/aerial
     labels:
       - traefik.enable=true
       - traefik.http.routers.telemetry.rule=PathPrefix(`/api/v1/telemetry`)
@@ -1283,3 +1293,4 @@ volumes:
   nats-data:
   postgres-data:
   notifications-data:
+  aerial-cache:

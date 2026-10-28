@@ -3222,6 +3222,7 @@ source = { editable = "services/telemetry" }
 dependencies = [
     { name = "alembic" },
     { name = "fpdf2" },
+    { name = "httpx" },
     { name = "mowdeck-auth" },
     { name = "mowdeck-authz", extra = ["fastapi"] },
     { name = "mowdeck-contracts" },
@@ -3235,6 +3236,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.16.0" },
     { name = "fpdf2", specifier = ">=2.8.5" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mowdeck-auth", editable = "libs/mowdeck-auth" },
     { name = "mowdeck-authz", extras = ["fastapi"], editable = "libs/mowdeck-authz" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
