@@ -84,6 +84,11 @@ class TokenOut(BaseModel):
     expires_at: datetime
     account_id: UUID | None
     session_id: UUID | None = None
+    auth_time: datetime | None = Field(
+        default=None,
+        description="When the user last authenticated interactively (login or step-up); critical "
+        "actions need this to be recent",
+    )
     refresh_token: str | None = None
     refresh_expires_at: datetime | None = None
 
@@ -96,6 +101,7 @@ class TokenOut(BaseModel):
             expires_at=pair.access.expires_at,
             account_id=pair.principal.account_id,
             session_id=pair.principal.session_id,
+            auth_time=pair.principal.auth_time,
             refresh_token=pair.refresh_token,
             refresh_expires_at=pair.refresh_expires_at,
         )
@@ -250,9 +256,9 @@ class AccountPatch(In):
 
 
 class AccountDeleteIn(In):
-    """``DELETE /accounts/{id}``: the owner's password."""
+    """``DELETE /accounts/{id}``: the owner's password, or none after a step-up confirmation."""
 
-    password: Password
+    password: Password | None = None
 
 
 class LevelIn(In):
@@ -595,6 +601,19 @@ class PasskeyOptionsOut(BaseModel):
     )
 
 
+class StepUpPasswordIn(In):
+    """``POST /me/step-up/password``: the caller's current password."""
+
+    password: Password
+
+
+class StepUpPasskeyIn(In):
+    """``POST /me/step-up/passkey``: the answer to a challenge of the options endpoint."""
+
+    ceremony_id: UUID
+    credential: WebAuthnResponse
+
+
 class PasskeyLoginIn(In):
     """``POST /passkeys/session``: the answer to a login challenge."""
 
@@ -637,9 +656,10 @@ class AppSessionIn(In):
 
 
 class PasskeyRegistrationOptionsIn(In):
-    """``POST /me/passkeys/options``: the current password (re-authentication)."""
+    """``POST /me/passkeys/options``: the current password (re-authentication), or none after a
+    step-up confirmation."""
 
-    password: Password
+    password: Password | None = None
 
 
 class PasskeyRegistrationIn(In):
@@ -705,9 +725,10 @@ class OAuthStartOut(BaseModel):
 
 
 class ExternalLinkIn(In):
-    """``POST /me/external-identities/{provider}/link``: the current password again."""
+    """``POST /me/external-identities/{provider}/link``: the current password again, or none
+    after a step-up confirmation."""
 
-    password: Password
+    password: Password | None = None
 
 
 class ExternalIdentityOut(BaseModel):

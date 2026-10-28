@@ -96,6 +96,7 @@ nav:
       - adr/0052-sign-in-with-apple.md
       - adr/0053-position-retention-and-downsampling.md
       - adr/0056-camera-photo-in-push-notifications.md
+      - adr/0057-step-up-reauthentication.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -129,4 +130,5 @@ nav:
       - guides/passkeys.md
       - guides/github-login.md
       - guides/apple-login.md
+      - guides/step-up.md
   - Original plan (German): plan/project-plan.de.md

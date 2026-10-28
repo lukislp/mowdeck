@@ -98,8 +98,11 @@ class PasskeyService:
                 user_id=principal.subject, order_by="created_at", descending=True
             )
 
-    async def start_registration(self, ctx: RequestContext, password: str) -> RegistrationStart:
-        """Check the password again, then hand out creation options for the caller."""
+    async def start_registration(
+        self, ctx: RequestContext, password: str | None
+    ) -> RegistrationStart:
+        """Check the password again (or a recent step-up confirmation), then hand out
+        creation options for the caller."""
         rp, ceremonies = self._rp()
         principal = self._user(ctx)
         found = await self.reauth.check(ctx, principal, password, action="passkey")

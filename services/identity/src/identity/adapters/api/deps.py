@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
+from mowdeck_auth.step_up import require_recent_auth
 from mowdeck_authz import ObjectRef, Relation, account
 from mowdeck_authz.fastapi import require_or_not_found
 from mowdeck_contracts.v1 import Principal
@@ -90,6 +91,11 @@ async def principal_context(
 
 PublicCtx = Annotated[RequestContext, Depends(public_context)]
 Ctx = Annotated[RequestContext, Depends(principal_context)]
+
+FreshAuth = Annotated[Principal, Depends(require_recent_auth())]
+"""A critical action (ADR 0057): 401 ``reauth-required`` unless the caller confirmed with a
+passkey or the password within the window, 403 for API tokens. Declare it **after** the
+permission dependency so a caller without the right never learns about the re-authentication."""
 
 
 async def path_account(request: Request) -> ObjectRef:

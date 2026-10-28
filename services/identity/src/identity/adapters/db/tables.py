@@ -134,6 +134,8 @@ sessions = Table(
     Column("revoke_reason", String(100)),
     Column("user_agent", String(200)),
     Column("ip", String(64)),
+    Column("auth_time", TS),
+    Column("auth_method", String(20)),
 )
 
 api_tokens = Table(

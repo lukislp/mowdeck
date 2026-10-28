@@ -27,6 +27,7 @@ from fleet.adapters.api.deps import (
     ActorDep,
     ControlMower,
     DriveMower,
+    FreshAuth,
     ManageMower,
     ServicesDep,
     ViewMower,
@@ -217,9 +218,15 @@ async def set_mow_defaults(
 
 @router.delete("/mowers/{mower_id}", status_code=204)
 async def delete_mower(
-    mower_id: UUID, principal: ManageMower, account_id: CurrentAccountId, services: ServicesDep
+    mower_id: UUID,
+    principal: ManageMower,
+    _: FreshAuth,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
 ) -> None:
-    """Remove the mower and its tuples; publishes ``mower.removed``."""
+    """Remove the mower and its tuples; publishes ``mower.removed``. Step-up: 401
+    ``reauth-required`` without a recent passkey or password confirmation, 403 for API tokens
+    (ADR 0057)."""
     await services.mowers.delete(actor_of(principal), account_id, mower_id)
 
 
