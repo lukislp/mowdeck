@@ -154,7 +154,9 @@ curl http://localhost/api/v1/fleet/commands/<command_id> -H "Authorization: Bear
 | --- | --- | --- |
 | `TELEMETRY_HEARTBEAT_HISTORY_SECONDS` | `300` | An unchanged state is stored in the history at most this often |
 | `TELEMETRY_RETENTION_HISTORY_DAYS` | `30` | History older than this is deleted |
-| `TELEMETRY_RETENTION_POSITIONS_DAYS` | `90` | Position track older than this is deleted |
+| `TELEMETRY_RETENTION_POSITIONS_DAYS` | `730` | Position track older than this is deleted (`0` keeps it forever) |
+| `TELEMETRY_POSITIONS_DETAIL_DAYS` | `90` | Positions younger than this keep every row; older ones are thinned |
+| `TELEMETRY_MAINTENANCE_TIMEZONE` | `UTC` | IANA zone of the nightly thinning window, for example `Europe/Berlin` |
 | `TELEMETRY_RETENTION_COMMANDS_DAYS` | `30` | Command timeline older than this is deleted |
 
 ```bash
