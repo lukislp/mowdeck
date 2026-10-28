@@ -1,0 +1,6 @@
+{
+  "pr": 178,
+  "de": "Neu: Mähwinkel drehen. Zeitpläne drehen den Winkel bei jedem Lauf um einen Schritt weiter, damit keine Fahrspuren entstehen; die Vorschau zeigt den Winkel jedes Laufs, im Startblatt geht das auch für manuelle Starts.",
+  "en": "New: mowing angle rotation. Schedules turn the angle by a step on every run so no tracks form; the preview shows each run's angle, and the start sheet can do the same for manual starts.",
+  "href": "/schedules"
+}
