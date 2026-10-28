@@ -104,6 +104,7 @@ nav:
       - adr/0060-apple-watch-app.md
       - adr/0061-mowing-angle-rotation.md
       - adr/0062-setup-tour.md
+      - adr/0063-matter-server.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -129,6 +130,7 @@ nav:
       - ops/aerial-photo.md
       - ops/apple-login.md
       - ops/theft-tracking.md
+      - ops/matter.md
       - ops/source-code.md
   - Spikes:
       - spikes/index.md
@@ -144,4 +146,5 @@ nav:
       - guides/ios-widgets.md
       - guides/apple-watch.md
       - guides/setup-tour.md
+      - guides/matter.md
   - Original plan (German): plan/project-plan.de.md

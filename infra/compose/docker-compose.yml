@@ -44,6 +44,10 @@ services:
       # Read-only socket for service discovery. In production, front the socket
       # with a restricted proxy or use the file/Kubernetes providers instead.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Containers on the host network (matter-server, profile matter) are routed to the host's
+    # address on Docker's bridge, which Traefik looks up as host.docker.internal.
+    extra_hosts:
+      - host.docker.internal:host-gateway
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 10s
@@ -243,7 +247,9 @@ services:
       MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY: ${IDENTITY_KEY_ENCRYPTION_KEY:?set IDENTITY_KEY_ENCRYPTION_KEY in infra/compose/.env}
       MOWDECK_IDENTITY_REGISTRATION: ${IDENTITY_REGISTRATION:-open}
       MOWDECK_IDENTITY_ARGON2_PROFILE: ${IDENTITY_ARGON2_PROFILE:-rfc9106_low}
-      MOWDECK_IDENTITY_MODULE_URLS: http://device-gateway:8000,http://fleet:8000,http://telemetry:8000,http://realtime:8000,http://notifications:8000,http://scheduler:8000,http://entitlements:8000,http://planner:8000,http://vision:8000
+      # Optional modules add their URL in IDENTITY_EXTRA_MODULE_URLS (comma separated), e.g. the
+      # Matter server on the host network: http://host.docker.internal:8790 (ADR 0063).
+      MOWDECK_IDENTITY_MODULE_URLS: http://device-gateway:8000,http://fleet:8000,http://telemetry:8000,http://realtime:8000,http://notifications:8000,http://scheduler:8000,http://entitlements:8000,http://planner:8000,http://vision:8000,${IDENTITY_EXTRA_MODULE_URLS:-}
       # Plans (ADR 0028): the token's plan claim comes from Entitlements; this switch only
       # decides the fallback while Entitlements does not answer.
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
@@ -273,6 +279,9 @@ services:
     volumes:
       - ./secrets/github:/run/secrets/github:ro
       - ./secrets/apple:/run/secrets/apple:ro
+    # The Matter server's descriptor (profile matter) is served on the host network.
+    extra_hosts:
+      - host.docker.internal:host-gateway
     labels:
       - traefik.enable=true
       - traefik.http.routers.identity.rule=PathPrefix(`/api/v1/identity`)
@@ -1243,6 +1252,49 @@ services:
         condition: service_completed_successfully
     networks: [mowdeck]
 
+  # Matter server (ADR 0063), only with `--profile matter`: every mower as its own Matter node
+  # (Robotic Vacuum Cleaner) for Apple Home, Google Home and Home Assistant: start, pause,
+  # return to the dock, state and battery; no emergency stop. It runs on the HOST network,
+  # because Matter needs mDNS and IPv6 link-local on the LAN: each mower node listens on its own
+  # UDP port from MATTER_PORT_BASE, the admin API (pairing codes for the web app) on
+  # MATTER_HTTP_PORT. Open both only to the LAN and Docker's bridge (docs/ops/matter.md).
+  # Traefik and Identity reach it through host.docker.internal. It calls MowDeck's API through
+  # Traefik on the host (MATTER_API_URL) with the API tokens in
+  # infra/compose/secrets/matter/api-tokens (git-ignored; one token per account, rights
+  # mower.view and mower.control only). Fabrics and pairing codes live in the matter-data volume.
+  matter-server:
+    image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/matter-server:${MOWDECK_VERSION:-dev}
+    profiles: [matter]
+    build:
+      context: ../..
+      dockerfile: services/matter-server/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-public.ecr.aws/docker/library/node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    network_mode: host
+    volumes:
+      - matter-data:/data
+      - ./secrets/matter:/run/secrets/matter:ro
+    environment:
+      <<: *source-code
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_MATTER_API_URL: ${MATTER_API_URL:-http://127.0.0.1:${GATEWAY_HTTP_PORT:-80}}
+      MOWDECK_MATTER_API_TOKENS_FILE: /run/secrets/matter/api-tokens
+      MOWDECK_MATTER_HTTP_PORT: ${MATTER_HTTP_PORT:-8790}
+      MOWDECK_MATTER_PORT_BASE: ${MATTER_PORT_BASE:-5540}
+      MOWDECK_MATTER_MAX_NODES: ${MATTER_MAX_NODES:-16}
+      MOWDECK_MATTER_LANGUAGE: ${MATTER_LANGUAGE:-de}
+      MOWDECK_MATTER_MDNS_INTERFACE: ${MATTER_MDNS_INTERFACE:-}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.matter.rule=PathPrefix(`/api/v1/matter`)
+      - traefik.http.routers.matter.entrypoints=web
+      - traefik.http.services.matter.loadbalancer.server.port=${MATTER_HTTP_PORT:-8790}
+    stop_grace_period: 20s
+
   # The web app (apps/web): a static SvelteKit PWA served by an unprivileged, read-only
   # nginx at / on the same origin as the API, so no CORS is needed and the refresh cookie
   # (SameSite=Strict) works as is. Priority 1 keeps every /api/v1 route ahead of it.
@@ -1296,3 +1348,5 @@ volumes:
   postgres-data:
   notifications-data:
   aerial-cache:
+  # Matter fabrics and the setup credentials of every mower node (profile matter).
+  matter-data:
