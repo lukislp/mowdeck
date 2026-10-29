@@ -240,6 +240,20 @@ class SessionService:
             await self._rehash(result.subject_id, password)
         return pair
 
+    async def login_demo(self, ctx: RequestContext) -> TokenPair:
+        """Public demo (ADR 0065): a session of the prepared demo user without any credential
+        ("Try the demo"). Not found outside demo mode or before the seed job created the user;
+        rate limited per address like a password login."""
+        username = self.deps.config.demo_username
+        if username is None:
+            raise NotFoundError("there is no demo on this installation")
+        self._limit_ip(ctx)
+        async with self.deps.store.transaction() as tx:
+            found = await tx.users.get(username_norm=normalize_username(username))
+        if found is None or found.status is not Status.ACTIVE:
+            raise NotFoundError("the demo is being prepared; try again in a minute")
+        return await self._start_session(found.id, None, ctx, method="demo")
+
     async def _start_session(
         self,
         user_id: UUID,

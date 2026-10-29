@@ -266,6 +266,19 @@ class Settings(ServiceSettings):
             raise ValueError(msg)
         return self
 
+    @model_validator(mode="after")
+    def _demo_sends_nothing(self) -> "Settings":
+        """Public demo (ADR 0065): no channel at all, whatever the variables say; every
+        notification stays in the in-app inbox and nothing leaves the server."""
+        if self.demo_mode:
+            self.notifications_channels = ""
+            self.notifications_ntfy_allowed_servers = ""
+            self.notifications_image_enabled = False
+            self.apns_key = None
+            self.notifications_vapid_private_key = None
+            self.notifications_vapid_key_path = None
+        return self
+
     @property
     def image_base_url(self) -> str | None:
         """The public origin of the push image URLs, None without one."""

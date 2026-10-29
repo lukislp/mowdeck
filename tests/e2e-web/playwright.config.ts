@@ -76,5 +76,21 @@ export default defineConfig({
       testMatch: /screens\.spec\.ts/,
       use: { browserName: 'chromium' },
     },
+    // The public demo (ADR 0065): only against a demo stack (CI job e2e-demo); the tests skip
+    // on every other stack. On a phone too, where the banner has its short text.
+    {
+      name: 'demo',
+      testMatch: /demo\.spec\.ts/,
+      use: { browserName: 'chromium', viewport: { width: 1280, height: 800 } },
+    },
+    {
+      name: 'demo-phone',
+      testMatch: /demo\.spec\.ts/,
+      use: {
+        ...devices['Pixel 7'],
+        browserName: 'chromium',
+        viewport: { width: 390, height: 844 },
+      },
+    },
   ],
 });

@@ -27,6 +27,7 @@ from mowdeck_service_kit import PrincipalResolver, create_app, get_logger, run
 from mowdeck_service_kit.bus import EventBus, Subscription
 from mowdeck_service_kit.db import create_engine, readiness_check_db
 
+from entitlements.adapters.api.demo import DEMO_POLICY
 from entitlements.adapters.api.deps import install_error_mapping
 from entitlements.adapters.api.routes import router
 from entitlements.adapters.bus.publisher import BusEventPublisher
@@ -148,6 +149,7 @@ def build_app(
         on_shutdown=[shutdown],
         bus=bus,
         principal_resolver=principal_resolver,
+        demo_policy=DEMO_POLICY,
     )
     if authorizer is None:
         assert connection is not None  # noqa: S101 - set above

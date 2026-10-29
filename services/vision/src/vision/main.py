@@ -38,6 +38,7 @@ from mowdeck_service_kit.entitlements import (
     client_from_settings,
 )
 
+from vision.adapters.api.demo import DEMO_POLICY
 from vision.adapters.api.deps import install_error_mapping
 from vision.adapters.api.routes import router
 from vision.adapters.authz import AuthzDriveChecker
@@ -282,6 +283,7 @@ def build_app(
         on_shutdown=[shutdown],
         bus=bus,
         principal_resolver=principal_resolver,
+        demo_policy=DEMO_POLICY,
     )
     if authorizer is None:
         assert connection is not None  # noqa: S101 - set above

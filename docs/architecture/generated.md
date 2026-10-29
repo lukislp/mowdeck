@@ -43,14 +43,14 @@ flowchart LR
   subgraph sg_billing["Profile billing (opt-in)"]
     billing["billing"]
   end
-  subgraph sg_demo["Profile demo (opt-in)"]
-    whoami["whoami"]
-  end
   subgraph sg_matter["Profile matter (opt-in)"]
     matter_server["matter-server"]
   end
   subgraph sg_relay["Profile relay (opt-in)"]
     mediamtx["mediamtx"]
+  end
+  subgraph sg_whoami["Profile whoami (opt-in)"]
+    whoami["whoami"]
   end
   traefik -->|"/api/v1/device-gateway"| device_gateway
   traefik -->|"/api/v1/entitlements"| entitlements
@@ -64,9 +64,9 @@ flowchart LR
   traefik -->|"/api/v1/vision"| vision
   traefik -->|"/"| web
   traefik -.->|"/api/v1/billing<br/>+1 exact path"| billing
-  traefik -.->|"/api/v1/whoami"| whoami
   traefik -.->|"/api/v1/matter"| matter_server
   traefik -.->|"/media/whep/r/"| mediamtx
+  traefik -.->|"/api/v1/whoami"| whoami
 ```
 
 | Service | Path prefixes | Exact paths | Profile |
@@ -85,7 +85,7 @@ flowchart LR
 | `telemetry` | `/api/v1/telemetry` | - | always |
 | `vision` | `/api/v1/vision` | - | always |
 | `web` | `/` | - | always |
-| `whoami` | `/api/v1/whoami` | - | demo |
+| `whoami` | `/api/v1/whoami` | - | whoami |
 
 Infrastructure containers: `mediamtx`, `nats`, `openfga`, `postgres`, `traefik`, `whoami`. One-shot jobs (migrations, bootstrap): `authz-bootstrap`, `billing-migrate`, `entitlements-migrate`, `fleet-migrate`, `identity-migrate`, `notifications-migrate`, `openfga-migrate`, `planner-migrate`, `scheduler-migrate`, `telemetry-migrate`, `vision-migrate`.
 
@@ -456,6 +456,7 @@ flowchart LR
   subgraph identity["identity"]
     direction TB
     identity_identity__accounts["identity: accounts<br/>28 operations"]
+    identity_identity__demo["identity: demo<br/>1 operation"]
     identity_identity__keys["identity: keys<br/>1 operation"]
     identity_identity__login_providers["identity: login providers<br/>5 operations"]
     identity_identity__passkeys["identity: passkeys<br/>11 operations"]
@@ -504,6 +505,7 @@ flowchart LR
 | `fleet` | `operations` | 1 | 1 |
 | `fleet` | `sites and groups` | 12 | 6 |
 | `identity` | `identity: accounts` | 28 | 19 |
+| `identity` | `identity: demo` | 1 | 1 |
 | `identity` | `identity: keys` | 1 | 1 |
 | `identity` | `identity: login providers` | 5 | 5 |
 | `identity` | `identity: passkeys` | 11 | 9 |

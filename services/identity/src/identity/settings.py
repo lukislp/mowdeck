@@ -167,6 +167,18 @@ class Settings(ServiceSettings):
     """Send the PKCE challenge and verifier to Apple (ADR 0052). Apple's documentation does not
     promise them; turn this off only if Apple refuses the requests because of them."""
 
+    identity_demo_username: str = Field(
+        default="demo", min_length=3, max_length=64, pattern=r"^[a-z][a-z0-9._-]*$"
+    )
+    """Public demo (``MOWDECK_DEMO_MODE``, ADR 0065): the user every visitor signs in as with
+    "Try the demo". The seed job creates it; it has no usable password."""
+
+    identity_demo_account_name: str = Field(default="MowDeck demo", min_length=1, max_length=100)
+    """Name of the demo account."""
+
+    identity_demo_display_name: str = Field(default="Demo visitor", min_length=1, max_length=100)
+    """Display name of the demo user."""
+
     identity_maintenance_seconds: float = Field(default=60, ge=1)
     """Interval of the maintenance loop (key rotation, key reload, attempt purge)."""
 
@@ -174,9 +186,10 @@ class Settings(ServiceSettings):
     """Interval of the full OpenFGA reconcile; 0 disables it."""
 
     def to_config(self) -> IdentityConfig:
-        """The use case configuration."""
+        """The use case configuration. In demo mode nobody registers (the seed job creates the
+        demo account past the mode) and passkeys are off."""
         return IdentityConfig(
-            registration=self.identity_registration,
+            registration=RegistrationMode.CLOSED if self.demo_mode else self.identity_registration,
             default_plan=self.identity_default_plan,
             access_token_ttl=timedelta(minutes=self.identity_access_token_minutes),
             refresh_idle=timedelta(days=self.identity_refresh_idle_days),
@@ -186,7 +199,8 @@ class Settings(ServiceSettings):
             login_failure_window=timedelta(seconds=self.identity_login_failure_window_seconds),
             login_max_failures=self.identity_login_max_failures,
             key_rotation=timedelta(days=self.identity_key_rotation_days),
-            passkey_rp=self.relying_party(),
+            passkey_rp=None if self.demo_mode else self.relying_party(),
+            demo_username=self.identity_demo_username if self.demo_mode else None,
         )
 
     def relying_party(self) -> RelyingParty | None:
@@ -210,6 +224,8 @@ class Settings(ServiceSettings):
     def github_login(self) -> GitHubLogin | None:
         """The GitHub login settings, or None (off). Logged once at startup: on with the callback
         URL to register, or why it is off; a wrong value never stops the service."""
+        if self.demo_mode:
+            return None  # the demo has no own accounts to sign in to (ADR 0065)
         client_id = self.identity_github_client_id.strip()
         secret = self.identity_github_client_secret
         secret_value = secret.get_secret_value().strip() if secret is not None else ""
@@ -243,6 +259,8 @@ class Settings(ServiceSettings):
         """The Apple login settings, or None (off). Logged once at startup: on with the callback
         URL to register at the Services ID, or why it is off; a wrong value (an unreadable or
         wrong key included) never stops the service."""
+        if self.demo_mode:
+            return None  # the demo has no own accounts to sign in to (ADR 0065)
         services_id = self.identity_apple_services_id.strip()
         team_id = self.identity_apple_team_id.strip()
         key_id = self.identity_apple_key_id.strip()

@@ -216,6 +216,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env.example config -q
       - run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml --env-file infra/compose/.env.example config -q
+      - run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.demo.yml --env-file infra/compose/.env.example --env-file tests/e2e-web/demo.env config -q
+      - run: bash -n infra/compose/demo/reset.sh
 
   # apps/mobile/android keeps the standard committed Gradle wrapper (gradle-wrapper.jar); this
   # job checks the jar against the checksums Gradle publishes for its releases, so a modified
@@ -810,6 +812,113 @@ jobs:
       - name: Stop the stack
         if: always()
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml down -v
+
+  # The public demo (ADR 0065): the test stack with docker-compose.demo.yml on top and the test
+  # secrets of tests/e2e-web/demo.env; the seed job prepares the demo account, then the demo specs
+  # (Playwright projects demo and demo-phone) run "Try the demo", the closed registration, the
+  # banner on every main page and the API refusals.
+  e2e-demo:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    needs: [web, docker]
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+      COMPOSE_FILES: -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml -f infra/compose/docker-compose.demo.yml
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter e2e-web
+      - *ghcr-login
+      - *mirror-env
+      - name: Pull the Playwright image
+        timeout-minutes: 10
+        run: docker pull "$PLAYWRIGHT_IMAGE"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build images (cached)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/identity/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/identity:dev
+          cache-from: type=gha,scope=identity
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/fleet/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/fleet:dev
+          cache-from: type=gha,scope=fleet
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/telemetry/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/telemetry:dev
+          cache-from: type=gha,scope=telemetry
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/device-gateway/Dockerfile
+          build-args: *python-build-args
+          load: true
+          tags: mowdeck/device-gateway:dev
+          cache-from: type=gha,scope=device-gateway
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          build-args: *web-build-args
+          load: true
+          tags: mowdeck/web:dev
+          cache-from: type=gha,scope=web
+      - name: Configure the stack
+        run: |
+          cp infra/compose/.env.example infra/compose/.env
+          sh infra/mirror-env.sh >> infra/compose/.env
+          grep '^[A-Z_]*=' tests/e2e-web/stack.env >> infra/compose/.env
+          grep '^[A-Z_]*=' tests/e2e-web/demo.env >> infra/compose/.env
+      - name: Start the demo stack
+        run: docker compose $COMPOSE_FILES up -d --build --wait --wait-timeout 600
+      - name: Seed job output
+        run: docker compose $COMPOSE_FILES logs --no-log-prefix demo-seed
+      - name: Demo specs (Playwright)
+        env:
+          MOWDECK_E2E_BASE_URL: http://localhost
+        run: |
+          docker run --rm --init --ipc=host --network=host \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/tests/e2e-web" \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$(command -v docker):/usr/local/bin/docker:ro" \
+            -e MOWDECK_E2E_BASE_URL \
+            "$PLAYWRIGHT_IMAGE" npm run demo
+      - name: Collect logs on failure
+        if: failure()
+        run: docker compose $COMPOSE_FILES logs --no-color --timestamps > e2e-demo-logs.txt
+      - name: Upload traces and logs on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-demo-failure
+          path: |
+            tests/e2e-web/test-results
+            e2e-demo-logs.txt
+          retention-days: 7
+      - name: Stop the stack
+        if: always()
+        run: docker compose $COMPOSE_FILES down -v
 
   # The required check `e2e-web` (branch ruleset): merges the shards' blob reports into one report
   # and fails when a shard failed, was cancelled or did not run.

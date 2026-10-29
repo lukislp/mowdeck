@@ -142,6 +142,16 @@ pnpm e2e:stack down      # delete it again (`pnpm e2e:stack run`: up, test, down
 
 More: [getting started](docs/dev/getting-started.md), [compose stack](infra/compose/README.md), [web app guide](docs/dev/web-app.md), [contributing](CONTRIBUTING.md).
 
+## Public demo
+
+A demo installation lets anybody try MowDeck without an account: **Try the demo** on the sign-in page opens a shared account with three simulated mowers in three gardens and a week of history (tracks, heatmaps, health). It runs as its own Compose project with the override `infra/compose/docker-compose.demo.yml`; every service then refuses registration, sign-in methods, tokens, account and security changes, manufacturer accounts and every outbound channel, labels each response with `X-MowDeck-Demo: 1`, and the web app shows a demo band on every page. `infra/compose/demo/reset.sh` deletes and reseeds it, run by a timer every few hours. Setup and the full list of guards: [docs/ops/demo.md](docs/ops/demo.md) and [ADR 0065](docs/adr/0065-public-demo-mode.md).
+
+```bash
+cd infra/compose
+cp demo/demo.env.example demo/demo.env   # then replace every change-me with a fresh secret
+demo/reset.sh                            # demo at http://127.0.0.1:8580
+```
+
 ## Licensing
 
 AGPL-3.0 for services, apps and tooling (see `LICENSE`); Apache-2.0 for the reusable libraries under `libs/`; GPL-3.0 for the Mammotion adapter because of its PyMammotion dependency. Details in [LICENSING.md](LICENSING.md).

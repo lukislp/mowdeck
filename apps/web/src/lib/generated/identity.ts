@@ -521,6 +521,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/demo/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Demo Session
+         * @description "Try the demo": a session of the prepared demo user without credentials (the same tokens
+         *     and cookie as ``POST /session``). 404 outside demo mode and while the demo is not seeded;
+         *     rate limited per address.
+         */
+        post: operations["demo_session_api_v1_identity_demo_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/login-methods": {
         parameters: {
             query?: never;
@@ -3491,6 +3513,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AppLoginStartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    demo_session_api_v1_identity_demo_session_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too. */
+                "X-Mowdeck-Refresh"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenOut"];
                 };
             };
             /** @description Validation Error */

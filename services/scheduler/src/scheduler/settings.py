@@ -7,12 +7,15 @@ with the ``MOWDECK_AUTH_*`` variables of ``mowdeck-auth``.
 """
 
 from datetime import timedelta
-from typing import Literal
+from typing import Literal, Self
 
 from mowdeck_service_kit import ServiceSettings
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from scheduler.application.context import SchedulerConfig
+
+DEMO_MAX_SCHEDULES = 30
+"""Schedules the demo account may have (visitors share it, ADR 0065)."""
 
 
 class Settings(ServiceSettings):
@@ -63,6 +66,18 @@ class Settings(ServiceSettings):
 
     scheduler_dev_endpoints: bool = False
     """Development only: ``PUT /api/v1/scheduler/dev/weather`` switches the static provider."""
+
+    @model_validator(mode="after")
+    def _demo_weather_is_static(self) -> Self:
+        """Public demo (ADR 0065): the static provider (no request to a weather service), no
+        development endpoints and at most 30 schedules, whatever the variables say."""
+        if self.demo_mode:
+            self.scheduler_weather_provider = "static"
+            self.scheduler_dev_endpoints = False
+            self.scheduler_max_schedules_per_account = min(
+                self.scheduler_max_schedules_per_account, DEMO_MAX_SCHEDULES
+            )
+        return self
 
     def to_config(self) -> SchedulerConfig:
         """The use case configuration."""

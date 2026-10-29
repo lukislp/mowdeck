@@ -47,6 +47,7 @@ from mowdeck_service_kit.entitlements import (
 )
 from mowdeck_service_kit.health import ReadinessCheck
 
+from notifications.adapters.api.demo import DEMO_POLICY
 from notifications.adapters.api.deps import install_error_mapping
 from notifications.adapters.api.routes import router
 from notifications.adapters.authz import AuthzViewChecker
@@ -278,6 +279,7 @@ def build_app(
         on_shutdown=[shutdown],
         bus=bus,
         principal_resolver=principal_resolver,
+        demo_policy=DEMO_POLICY,
     )
     if authorizer is None:
         assert connection is not None  # noqa: S101 - set above

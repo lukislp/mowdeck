@@ -40,6 +40,7 @@
   import AuthFrame from '#lib/components/AuthFrame.svelte';
   import GitHubMark from '#lib/components/GitHubMark.svelte';
   import { loadConfig } from '#lib/config.js';
+  import { demo } from '#lib/demo/state.svelte.js';
   import { problemMessage } from '#lib/i18n.js';
   import { appLoginRequest, callbackUrl, HandoffError } from '#lib/native/handoff.js';
   import { nativeShell } from '#lib/native/runtime.js';
@@ -55,6 +56,24 @@
   let usedPasskey = $state(false);
   let githubBusy = $state(false);
   let appleBusy = $state(false);
+  let demoBusy = $state(false);
+
+  /** "Try the demo" (ADR 0065): the prepared demo account, no registration, no password. */
+  async function tryDemo(): Promise<void> {
+    demoBusy = true;
+    problem = null;
+    notice = null;
+    try {
+      await session.tryDemo();
+      await finish();
+    } catch (error) {
+      const found = asProblem(error);
+      if (found.status === 404) notice = m.login_demo_unavailable();
+      else problem = found;
+    } finally {
+      demoBusy = false;
+    }
+  }
 
   /** The browser was opened by the app for this login. */
   const appRequest = $derived(appLoginRequest(page.url.searchParams));
@@ -144,6 +163,7 @@
   });
 
   onMount(() => {
+    if (!demo.loaded) void demo.load();
     void githubEnabled().then((on) => (githubOn = on));
     void appleEnabled().then((on) => (appleOn = on));
     if ((fromGitHub && 'error' in fromGitHub) || (fromApple && 'error' in fromApple)) {
@@ -338,120 +358,149 @@
 
 <svelte:head><title>{m.login_title()} · {m.app_name()}</title></svelte:head>
 
-<AuthFrame title={m.login_title()}>
-  {#if appRequest}
-    <p class="app-note" data-testid="login-app-notice">
-      <Icon name="phone" size={18} />
-      <span>{returnLink ? m.login_app_done() : m.login_app_notice()}</span>
-    </p>
-    {#if returnLink}
-      <Button href={returnLink} variant="primary" full icon="phone" testid="login-app-return"
-        >{m.login_app_return()}</Button
-      >
-    {:else if confirming}
-      <div class="confirm" data-testid="login-app-confirm">
-        <p>
-          {m.login_app_confirm({ name: session.me?.display_name || session.me?.username || '' })}
-        </p>
-        <Button
-          variant="primary"
-          full
-          icon="phone"
-          pending={handing}
-          testid="login-app-continue"
-          onclick={handOver}>{m.login_app_continue()}</Button
-        >
-        <Button variant="ghost" full disabled={handing} onclick={cancelHandOver}
-          >{m.cancel()}</Button
-        >
-      </div>
-    {/if}
-  {/if}
-  {#if session.ended === 'expired' && !problem && !appRequest}
-    <ProblemNotice tone="info" title={m.login_session_ended()} />
-  {/if}
-  {#if !returnLink && !confirming}
-    {#if passkeyButton || githubButton || appleButton}
-      <div class="passkey">
-        {#if passkeyButton}
-          <Button
-            variant="primary"
-            full
-            icon="key"
-            pending={passkeyBusy}
-            disabled={busy || githubBusy || appleBusy}
-            testid="login-passkey"
-            onclick={withPasskey}>{m.login_passkey()}</Button
-          >
-        {/if}
-        {#if githubButton}
-          <Button
-            variant={passkeyButton ? 'secondary' : 'primary'}
-            full
-            pending={githubBusy}
-            disabled={busy || passkeyBusy || appleBusy}
-            testid="login-github"
-            onclick={withGitHub}
-            ><span class="provider"><GitHubMark />{m.login_github()}</span></Button
-          >
-        {/if}
-        {#if appleButton}
-          <Button
-            variant={passkeyButton || githubButton ? 'secondary' : 'primary'}
-            full
-            pending={appleBusy}
-            disabled={busy || passkeyBusy || githubBusy}
-            testid="login-apple"
-            onclick={withApple}><span class="provider"><AppleMark />{m.login_apple()}</span></Button
-          >
-        {/if}
-        {#if waiting}
-          <p class="waiting" role="status">
-            <span>{m.login_app_waiting()}</span>
-            <button type="button" class="link" onclick={() => waiting?.abort()}>{m.cancel()}</button
-            >
-          </p>
-        {/if}
-      </div>
-      <p class="divider" aria-hidden="true"><span>{m.login_divider()}</span></p>
-    {/if}
-    <form class="form" onsubmit={submit} novalidate>
-      <Field
-        id="username"
-        label={m.login_username()}
-        autocomplete={passkeysOn ? 'username webauthn' : 'username'}
-        required
-        bind:value={username}
-      />
-      <Field
-        id="password"
-        type="password"
-        label={m.login_password()}
-        autocomplete="current-password"
-        required
-        bind:value={password}
-      />
-      {#if message && problem}
+<AuthFrame title={demo.config ? m.login_demo_title() : m.login_title()}>
+  {#if !demo.loaded}
+    <!-- the installation's config decides between the demo entry and the sign-in forms -->
+  {:else if demo.config}
+    <section class="demo" data-testid="login-demo">
+      <span class="badge" data-testid="login-demo-badge">{m.demo_badge()}</span>
+      <p class="lead">{m.login_demo_lead()}</p>
+      <ul class="points">
+        <li>{m.login_demo_point_drive()}</li>
+        <li>{m.login_demo_point_maps()}</li>
+        <li>{m.login_demo_point_plan()}</li>
+      </ul>
+      {#if problem}
         <ProblemNotice
-          title={message}
-          reference={problem.status === 401 ? null : problem.correlationId}
+          title={problemMessage(problem)}
+          reference={problem.correlationId}
           referenceLabel={m.problem_reference()}
         />
       {:else if notice}
         <ProblemNotice tone="info" title={notice} />
       {/if}
-      <Button
-        type="submit"
-        variant={passkeyButton || githubButton || appleButton ? 'secondary' : 'primary'}
-        full
-        pending={busy}
-        disabled={!username || !password || passkeyBusy || githubBusy || appleBusy}
-        testid="login-submit">{m.login_submit()}</Button
+      <Button variant="primary" full pending={demoBusy} testid="login-demo-start" onclick={tryDemo}
+        >{m.login_demo_button()}</Button
       >
-    </form>
-  {/if}
-  {#if !appRequest}
-    <a class="switch" href="/register">{m.login_register_link()}</a>
+      <p class="note">{m.login_demo_note({ hours: demo.config.resetHours })}</p>
+    </section>
+  {:else}
+    {#if appRequest}
+      <p class="app-note" data-testid="login-app-notice">
+        <Icon name="phone" size={18} />
+        <span>{returnLink ? m.login_app_done() : m.login_app_notice()}</span>
+      </p>
+      {#if returnLink}
+        <Button href={returnLink} variant="primary" full icon="phone" testid="login-app-return"
+          >{m.login_app_return()}</Button
+        >
+      {:else if confirming}
+        <div class="confirm" data-testid="login-app-confirm">
+          <p>
+            {m.login_app_confirm({ name: session.me?.display_name || session.me?.username || '' })}
+          </p>
+          <Button
+            variant="primary"
+            full
+            icon="phone"
+            pending={handing}
+            testid="login-app-continue"
+            onclick={handOver}>{m.login_app_continue()}</Button
+          >
+          <Button variant="ghost" full disabled={handing} onclick={cancelHandOver}
+            >{m.cancel()}</Button
+          >
+        </div>
+      {/if}
+    {/if}
+    {#if session.ended === 'expired' && !problem && !appRequest}
+      <ProblemNotice tone="info" title={m.login_session_ended()} />
+    {/if}
+    {#if !returnLink && !confirming}
+      {#if passkeyButton || githubButton || appleButton}
+        <div class="passkey">
+          {#if passkeyButton}
+            <Button
+              variant="primary"
+              full
+              icon="key"
+              pending={passkeyBusy}
+              disabled={busy || githubBusy || appleBusy}
+              testid="login-passkey"
+              onclick={withPasskey}>{m.login_passkey()}</Button
+            >
+          {/if}
+          {#if githubButton}
+            <Button
+              variant={passkeyButton ? 'secondary' : 'primary'}
+              full
+              pending={githubBusy}
+              disabled={busy || passkeyBusy || appleBusy}
+              testid="login-github"
+              onclick={withGitHub}
+              ><span class="provider"><GitHubMark />{m.login_github()}</span></Button
+            >
+          {/if}
+          {#if appleButton}
+            <Button
+              variant={passkeyButton || githubButton ? 'secondary' : 'primary'}
+              full
+              pending={appleBusy}
+              disabled={busy || passkeyBusy || githubBusy}
+              testid="login-apple"
+              onclick={withApple}
+              ><span class="provider"><AppleMark />{m.login_apple()}</span></Button
+            >
+          {/if}
+          {#if waiting}
+            <p class="waiting" role="status">
+              <span>{m.login_app_waiting()}</span>
+              <button type="button" class="link" onclick={() => waiting?.abort()}
+                >{m.cancel()}</button
+              >
+            </p>
+          {/if}
+        </div>
+        <p class="divider" aria-hidden="true"><span>{m.login_divider()}</span></p>
+      {/if}
+      <form class="form" onsubmit={submit} novalidate>
+        <Field
+          id="username"
+          label={m.login_username()}
+          autocomplete={passkeysOn ? 'username webauthn' : 'username'}
+          required
+          bind:value={username}
+        />
+        <Field
+          id="password"
+          type="password"
+          label={m.login_password()}
+          autocomplete="current-password"
+          required
+          bind:value={password}
+        />
+        {#if message && problem}
+          <ProblemNotice
+            title={message}
+            reference={problem.status === 401 ? null : problem.correlationId}
+            referenceLabel={m.problem_reference()}
+          />
+        {:else if notice}
+          <ProblemNotice tone="info" title={notice} />
+        {/if}
+        <Button
+          type="submit"
+          variant={passkeyButton || githubButton || appleButton ? 'secondary' : 'primary'}
+          full
+          pending={busy}
+          disabled={!username || !password || passkeyBusy || githubBusy || appleBusy}
+          testid="login-submit">{m.login_submit()}</Button
+        >
+      </form>
+    {/if}
+    {#if !appRequest}
+      <a class="switch" href="/register">{m.login_register_link()}</a>
+    {/if}
   {/if}
   {#if legal}
     <nav class="legal" aria-label={m.legal_nav()} data-testid="legal-links">
@@ -463,6 +512,64 @@
 </AuthFrame>
 
 <style>
+  /* The demo entry (ADR 0065): the tag of the demo band, three numbered facts, one button. */
+  .demo {
+    display: grid;
+    gap: var(--md-space-4);
+  }
+
+  .badge {
+    justify-self: start;
+    padding: var(--md-space-1) var(--md-space-3);
+    padding-inline-end: 30px;
+    background:
+      linear-gradient(var(--md-hud-lit), var(--md-hud-lit)) left / calc(100% - 22px) 100% no-repeat,
+      repeating-linear-gradient(-55deg, var(--md-hud-lit) 0 5px, transparent 5px 10px);
+    color: var(--md-hud-ink-inverse);
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-12);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+  }
+
+  .lead {
+    margin: 0;
+    font-size: var(--md-font-size-16);
+  }
+
+  .points {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border-top: var(--md-hairline) solid var(--md-color-line);
+    list-style: none;
+    counter-reset: point;
+  }
+
+  .points li {
+    display: grid;
+    grid-template-columns: 3ch 1fr;
+    gap: var(--md-space-3);
+    padding: var(--md-space-2) 0;
+    border-bottom: var(--md-hairline) solid var(--md-color-line);
+    font-size: var(--md-font-size-14);
+    counter-increment: point;
+  }
+
+  .points li::before {
+    content: counter(point, decimal-leading-zero);
+    color: var(--md-color-ink-muted);
+    font-family: var(--md-font-mono);
+  }
+
+  .note {
+    margin: 0;
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-13);
+  }
+
   .form {
     display: flex;
     flex-direction: column;

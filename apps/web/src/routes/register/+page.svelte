@@ -1,13 +1,19 @@
 <script lang="ts">
   import { Button, Field, ProblemNotice } from '@mowdeck/ui';
+  import { onMount } from 'svelte';
 
   import { goto } from '$app/navigation';
 
   import { asProblem, problemFromResponse, type ApiProblem } from '#lib/api/problem.js';
   import { IDENTITY, session } from '#lib/auth/session.svelte.js';
   import AuthFrame from '#lib/components/AuthFrame.svelte';
+  import { demo } from '#lib/demo/state.svelte.js';
   import { problemMessage } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
+
+  onMount(() => {
+    if (!demo.loaded) void demo.load();
+  });
 
   let username = $state('');
   let password = $state('');
@@ -54,61 +60,74 @@
 <svelte:head><title>{m.register_title()} · {m.app_name()}</title></svelte:head>
 
 <AuthFrame title={m.register_title()}>
-  <form class="form" onsubmit={submit} novalidate>
-    <Field
-      id="account_name"
-      label={m.register_account_name()}
-      autocomplete="organization"
-      required
-      bind:value={accountName}
-      error={problem?.fieldError('account_name') ?? null}
-    />
-    <Field
-      id="display_name"
-      label={m.register_display_name()}
-      autocomplete="name"
-      hint={m.optional()}
-      bind:value={displayName}
-    />
-    <Field
-      id="username"
-      label={m.login_username()}
-      autocomplete="username"
-      required
-      bind:value={username}
-      error={problem?.fieldError('username') ?? null}
-    />
-    <Field
-      id="password"
-      type="password"
-      label={m.login_password()}
-      autocomplete="new-password"
-      required
-      hint={m.password_hint()}
-      bind:value={password}
-      error={problem?.fieldError('password') ?? null}
-    />
-    {#if message && problem}
-      <ProblemNotice
-        title={message}
-        detail={problem.detail}
-        reference={problem.correlationId}
-        referenceLabel={m.problem_reference()}
-      />
-    {/if}
-    <Button
-      type="submit"
-      variant="primary"
-      full
-      pending={busy}
-      disabled={!username || !password || !accountName}
-      testid="register-submit">{m.register_submit()}</Button
+  {#if demo.config}
+    <!-- The public demo (ADR 0065) has no registration; Identity refuses it as well. -->
+    <p class="closed" data-testid="register-demo-closed">{m.register_demo_closed()}</p>
+    <Button href="/login" variant="primary" full testid="register-demo-login"
+      >{m.login_demo_button()}</Button
     >
-  </form>
-  <a class="switch" href="/login">{m.register_have_account()}</a>
+  {:else if demo.loaded}
+    <form class="form" onsubmit={submit} novalidate>
+      <Field
+        id="account_name"
+        label={m.register_account_name()}
+        autocomplete="organization"
+        required
+        bind:value={accountName}
+        error={problem?.fieldError('account_name') ?? null}
+      />
+      <Field
+        id="display_name"
+        label={m.register_display_name()}
+        autocomplete="name"
+        hint={m.optional()}
+        bind:value={displayName}
+      />
+      <Field
+        id="username"
+        label={m.login_username()}
+        autocomplete="username"
+        required
+        bind:value={username}
+        error={problem?.fieldError('username') ?? null}
+      />
+      <Field
+        id="password"
+        type="password"
+        label={m.login_password()}
+        autocomplete="new-password"
+        required
+        hint={m.password_hint()}
+        bind:value={password}
+        error={problem?.fieldError('password') ?? null}
+      />
+      {#if message && problem}
+        <ProblemNotice
+          title={message}
+          detail={problem.detail}
+          reference={problem.correlationId}
+          referenceLabel={m.problem_reference()}
+        />
+      {/if}
+      <Button
+        type="submit"
+        variant="primary"
+        full
+        pending={busy}
+        disabled={!username || !password || !accountName}
+        testid="register-submit">{m.register_submit()}</Button
+      >
+    </form>
+    <a class="switch" href="/login">{m.register_have_account()}</a>
+  {/if}
 </AuthFrame>
 
 <style>
+  .closed {
+    margin: 0;
+    font-size: var(--md-font-size-16);
+  }
+
   .form {
     display: flex;
     flex-direction: column;

@@ -2657,5 +2657,19 @@
   "firsttime_dismiss": "Verstanden",
   "firsttime_mower_map_text": "Tippe Flächen auf der Karte an, um nur diese zu mähen. Unten startest du den Mäher; der Not-Stopp ist immer erreichbar.",
   "firsttime_schedules_text": "Ein Mähplan startet den Mäher zu festen Zeiten. Mit dem Schalter pausierst du einen Plan, ohne ihn zu löschen.",
-  "onboarding_section_status": "Status"
+  "onboarding_section_status": "Status",
+  "demo_badge": "Demo",
+  "demo_banner": "Simulierte Mäher, geteilt mit allen Besuchern. Wird alle {hours} h zurückgesetzt.",
+  "demo_banner_short": "Simuliert · Reset alle {hours} h",
+  "demo_get": "MowDeck holen",
+  "login_demo_title": "MowDeck ausprobieren",
+  "login_demo_lead": "Drei simulierte Mäher in drei Gärten, mit einer Woche Verlauf. Ohne Konto, ohne Installation.",
+  "login_demo_point_drive": "Starten, pausieren, Spot-Mähen und manuelles Fahren",
+  "login_demo_point_maps": "Karten, Abdeckungs- und Signal-Heatmaps, Zustandsverlauf",
+  "login_demo_point_plan": "Zeitpläne, Benachrichtigungen und der KI-Assistent",
+  "login_demo_button": "Demo starten",
+  "login_demo_note": "Alle Besucher teilen sich diese Demo. Was du änderst, ist nach dem nächsten Reset (alle {hours} h) wieder weg.",
+  "login_demo_unavailable": "Die Demo wird gerade vorbereitet. Versuch es in einer Minute noch einmal.",
+  "register_demo_closed": "Diese Demo hat keine Registrierung. Nutze stattdessen „Demo starten“ auf der Anmeldeseite.",
+  "problem_demo_mode": "In der Demo nicht verfügbar: Sie läuft nur mit simulierten Mähern. Installiere MowDeck, um das zu nutzen."
 }

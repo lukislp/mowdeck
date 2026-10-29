@@ -17,12 +17,14 @@ The project name is `mowdeck` (`name:` in `docker-compose.yml`). A stack started
 
 This builds the MowDeck images from the checkout. To run a signed release from GHCR instead, set `MOWDECK_IMAGE_REGISTRY=ghcr.io/lukislp/mowdeck` and `MOWDECK_VERSION=<version>` in `.env`, run `./verify-release.sh <version>` and start with `docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait` ([Updating to a release](../../docs/ops/compose.md#updating-to-a-release)).
 
-Optional routing demo (a `whoami` container behind Traefik at `/api/v1/whoami`):
+Optional routing check (a `whoami` container behind Traefik at `/api/v1/whoami`):
 
 ```bash
-docker compose --profile demo up -d --wait
+docker compose --profile whoami up -d --wait
 curl http://localhost/api/v1/whoami
 ```
+
+A public demo with simulated mowers (one-click "Try the demo", reset every few hours) is a separate stack with the override `docker-compose.demo.yml`; see [docs/ops/demo.md](../../docs/ops/demo.md).
 
 ## What runs
 
@@ -34,7 +36,7 @@ curl http://localhost/api/v1/whoami
 | openfga-migrate | `ghcr.io/openfga/openfga:v1.22.0` | none | One-shot schema migration for OpenFGA |
 | openfga | `ghcr.io/openfga/openfga:v1.22.0` | 127.0.0.1:8080 (HTTP), 127.0.0.1:8081 (gRPC) | Authorization; playground off, pre-shared key auth |
 | authz-bootstrap | `mowdeck/authz-bootstrap:dev` (built from `infra/openfga/bootstrap`: OpenFGA CLI `v0.8.1`, busybox, jq) | none | One-shot: creates the store `mowdeck` and writes the authorization model when it changed |
-| whoami (profile `demo`) | `ghcr.io/traefik/whoami:v1.10.3` | via Traefik | Placeholder for routing checks |
+| whoami (profile `whoami`) | `ghcr.io/traefik/whoami:v1.10.3` | via Traefik | Placeholder for routing checks |
 | identity-migrate | `mowdeck/identity:dev` | none | One-shot: Alembic migrations of the `identity` database |
 | identity | `mowdeck/identity:dev` (built from `services/identity/Dockerfile`) | via Traefik at `/api/v1/identity` and `/.well-known/jwks.json` | Accounts, users, roles, sessions, API tokens; issues the access tokens |
 | fleet-migrate | `mowdeck/fleet:dev` | none | One-shot: Alembic migrations of the `fleet` database |

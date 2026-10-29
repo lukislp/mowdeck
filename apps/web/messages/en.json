@@ -2657,5 +2657,19 @@
   "firsttime_dismiss": "Got it",
   "firsttime_mower_map_text": "Tap areas on the map to mow only those. Start the mower at the bottom; the emergency stop is always within reach.",
   "firsttime_schedules_text": "A schedule starts the mower at fixed times. The switch pauses a schedule without deleting it.",
-  "onboarding_section_status": "Status"
+  "onboarding_section_status": "Status",
+  "demo_badge": "Demo",
+  "demo_banner": "Simulated mowers, shared with every visitor. Resets every {hours} h.",
+  "demo_banner_short": "Simulated · resets every {hours} h",
+  "demo_get": "Get MowDeck",
+  "login_demo_title": "Try MowDeck",
+  "login_demo_lead": "Three simulated mowers in three gardens, with a week of history. No account, nothing to install.",
+  "login_demo_point_drive": "Start, pause, spot mowing and manual driving",
+  "login_demo_point_maps": "Maps, coverage and signal heatmaps, health history",
+  "login_demo_point_plan": "Schedules, notifications and the AI assistant",
+  "login_demo_button": "Try the demo",
+  "login_demo_note": "Every visitor shares this demo. What you change is gone after the next reset (every {hours} h).",
+  "login_demo_unavailable": "The demo is being prepared. Try again in a minute.",
+  "register_demo_closed": "This demo has no registration. Use “Try the demo” on the sign-in page instead.",
+  "problem_demo_mode": "Not available in the demo: it runs simulated mowers only. Install MowDeck to use this."
 }

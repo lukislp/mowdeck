@@ -31,6 +31,16 @@ export interface RuntimeConfig {
   cameraEnabled: boolean;
   /** The build and where its source code is (AGPL-3.0 section 13, `#lib/legal/source.js`). */
   source: SourceInfo;
+  /**
+   * A public demo installation (ADR 0065, `MOWDECK_WEB_DEMO_MODE`): the banner, "Demo" in the
+   * title and "Try the demo" on the sign-in page. Absent on every other installation.
+   */
+  demo?: DemoConfig;
+}
+
+export interface DemoConfig {
+  /** Hours between two resets of the demo (shown in the banner). */
+  resetHours: number;
 }
 
 export const DEFAULT_CONFIG: RuntimeConfig = Object.freeze({
@@ -45,18 +55,37 @@ const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 /** Validate an untrusted config object; anything invalid becomes the default. */
 export function parseConfig(raw: unknown): RuntimeConfig {
   if (!raw || typeof raw !== 'object') return DEFAULT_CONFIG;
-  const { mapTiles, legalEnabled, cameraEnabled, source } = raw as {
+  const { mapTiles, legalEnabled, cameraEnabled, source, demo } = raw as {
     mapTiles?: unknown;
     legalEnabled?: unknown;
     cameraEnabled?: unknown;
     source?: unknown;
+    demo?: unknown;
   };
   const legal = legalEnabled === true;
   const camera = cameraEnabled === true;
   const tiles = parseMapTiles(mapTiles);
   const build = parseSource(source);
-  if (!tiles && !legal && !camera && build === DEFAULT_SOURCE) return DEFAULT_CONFIG;
-  return { mapTiles: tiles, legalEnabled: legal, cameraEnabled: camera, source: build };
+  const showcase = parseDemo(demo);
+  if (!tiles && !legal && !camera && build === DEFAULT_SOURCE && !showcase) return DEFAULT_CONFIG;
+  return {
+    mapTiles: tiles,
+    legalEnabled: legal,
+    cameraEnabled: camera,
+    source: build,
+    ...(showcase ? { demo: showcase } : {}),
+  };
+}
+
+/** The demo block: an object with whole reset hours from 1 to 168 (anything else: 6). */
+function parseDemo(demo: unknown): DemoConfig | null {
+  if (!demo || typeof demo !== 'object') return null;
+  const { resetHours } = demo as { resetHours?: unknown };
+  const hours =
+    typeof resetHours === 'number' && Number.isInteger(resetHours) && resetHours >= 1
+      ? Math.min(resetHours, 168)
+      : 6;
+  return { resetHours: hours };
 }
 
 function parseMapTiles(tiles: unknown): MapTilesConfig | null {

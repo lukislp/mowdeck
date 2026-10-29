@@ -247,3 +247,51 @@ def test_the_mediamtx_config_asks_the_relay_and_serves_nothing_else(repo_root: P
     assert config["rtspTransports"] == ["tcp"]
     assert list(config["paths"]) == ["~^r/[0-9a-f]{32}/[A-Za-z0-9_-]{1,64}(/src)?$"]
     assert "all_others" not in config["paths"]
+
+
+def test_demo_override_puts_every_service_in_demo_mode(repo_root: Path) -> None:
+    """The public demo (ADR 0065): every MowDeck service of the base stack runs with
+    MOWDECK_DEMO_MODE, Traefik keeps the base command plus the demo middlewares on both entry
+    points, the seed job runs before the Device-Gateway, and no optional profile is enabled."""
+    compose_dir = _compose_dir(repo_root)
+    base = yaml.safe_load((compose_dir / "docker-compose.yml").read_text("utf-8"))
+    text = (compose_dir / "docker-compose.demo.yml").read_text("utf-8")
+    demo = yaml.load(text, Loader=_ComposeLoader)  # noqa: S506 - a SafeLoader subclass
+    services = demo["services"]
+    mowdeck_services = {
+        name
+        for name, svc in base["services"].items()
+        if str(svc.get("image", "")).startswith("${MOWDECK_IMAGE_REGISTRY:-mowdeck}/")
+        and "profiles" not in svc
+        and not name.endswith("-migrate")
+        and name not in {"web", "authz-bootstrap"}
+    }
+    assert mowdeck_services, "no MowDeck services found in the base stack"
+    for name in sorted(mowdeck_services):
+        environment = services.get(name, {}).get("environment", {})
+        assert environment.get("MOWDECK_DEMO_MODE") == "true", name
+        assert "MOWDECK_DEMO_SEED_TOKEN" in environment, name
+    middlewares = "demo-headers@docker,demo-ratelimit@docker"
+    assert services["traefik"]["command"] == [
+        *base["services"]["traefik"]["command"][:8],
+        f"--entrypoints.web.http.middlewares={middlewares}",
+        f"--entrypoints.websecure.http.middlewares={middlewares}",
+        *base["services"]["traefik"]["command"][8:],
+    ]
+    labels = services["web"]["labels"]
+    assert (
+        "traefik.http.middlewares.demo-headers.headers.customresponseheaders.X-MowDeck-Demo=1"
+        in labels
+    )
+    assert (
+        "traefik.http.middlewares.demo-headers.headers.customrequestheaders.X-MowDeck-Demo-Seed="
+        in labels
+    )
+    assert services["web"]["environment"]["MOWDECK_WEB_DEMO_MODE"] == "true"
+    assert services["device-gateway"]["depends_on"] == {
+        "demo-seed": {"condition": "service_completed_successfully"}
+    }
+    assert services["fleet"]["environment"]["MOWDECK_ALLOWED_CONNECTION_KINDS"] == "simulated"
+    assert services["identity"]["volumes"] == {"!reset": []}
+    assert not any("profiles" in svc for svc in services.values())
+    assert (compose_dir / "demo" / "seed.py").is_file()

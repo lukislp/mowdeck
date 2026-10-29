@@ -469,6 +469,23 @@ Set a temporary password of a sub-user (must be changed at the next login). Step
 | 204 | Successful Response | no body |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
+### identity: demo
+
+#### POST /api/v1/identity/demo/session
+
+**Demo Session**
+
+"Try the demo": a session of the prepared demo user without credentials (the same tokens and cookie as `POST /session`). 404 outside demo mode and while the demo is not seeded; rate limited per address.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `X-Mowdeck-Refresh` | header | string or null | no | `cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too. |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [TokenOut](#tokenout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 ### identity: login providers
 
 #### GET /api/v1/identity/me/external-identities
