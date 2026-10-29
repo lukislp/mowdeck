@@ -61,8 +61,13 @@ Payload models live in `mowdeck_contracts.v1` (JSON Schemas in `libs/mowdeck-con
 | reply | `gateway.mower.<id>.bridge.scan` | core NATS request/reply, every instance (no queue group) | `BridgeScanRequest` / `BridgeScanReply` | only the instance whose shard holds the mower answers, each request in its own task; see [Bluetooth bridges and firmware](#bluetooth-bridges-and-firmware) |
 | reply | `gateway.mower.<id>.firmware.check` | core NATS request/reply, every instance (no queue group) | `FirmwareCheckRequest` / `FirmwareCheckReply` | only the instance whose shard holds the mower answers; see [Bluetooth bridges and firmware](#bluetooth-bridges-and-firmware) |
 | reply | `gateway.cloud.discover` | core NATS request/reply, queue group `device-gateway` (any instance answers) | `CloudDiscoverRequest` / `CloudDiscoverReply` | see [Cloud accounts](#cloud-accounts) |
+| reply | `gateway.errors.explain`, `gateway.errors.lexicons` | core NATS request/reply, queue group `device-gateway` (any instance answers) | `ErrorExplainRequest` / `ErrorExplainReply`, `ErrorLexiconListRequest` / `ErrorLexiconListReply` | see [Error lexicons](#error-lexicons) |
 | request | `fleet.mowers.credentials` | core NATS request/reply | `MowerCredentialsRequest` / `MowerCredentialsReply` | before every connect of a mower whose registration (or one of its links) says `credentials: "fleet"`; see [Credentials](#credentials) |
 | request | `fleet.mowers.list` | core NATS request/reply | `MowerListRequest` / `MowerListReply` | on start; retried with backoff (1 s doubling up to `MOWDECK_FLEET_RETRY_MAX_SECONDS`) while Fleet does not answer |
+
+### Error lexicons
+
+Vendor error codes in plain words ([ADR 0067](../../docs/adr/0067-error-code-lexicon.md)). The adapter packages installed in this image register their lexicons through the entry point group `mowdeck.error_lexicons` (`mowdeck-control`): today `simulated` (from `mowdeck-control`) and `mammotion` (663 codes from PyMammotion's table, 26 with curated texts in English and German). The gateway holds no table of its own; it answers `gateway.errors.explain` (up to 20 codes, picked by `vendor` or by the mower's `connection`, in `locale` with English as the fallback; an unknown code gets the generic advice of its `category`) and `gateway.errors.lexicons` (the summaries) from any instance. The lexicons are built at the first request, in a thread. Telemetry serves them to clients, Notifications puts them into the push texts.
 
 ### Map and capabilities snapshots
 

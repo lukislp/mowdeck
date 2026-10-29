@@ -31,6 +31,9 @@ Subject scheme:
 ``gateway.mower.<id>.tracking``       core NATS request: a lease for fast position reports
                                       (Telemetry to Device-Gateway, ADR 0058)
 ``gateway.cloud.discover``            core NATS request: devices of a vendor cloud account
+``gateway.errors.explain``            core NATS request: vendor error codes in plain words
+                                      (Device-Gateway, ADR 0067)
+``gateway.errors.lexicons``           core NATS request: the installed error lexicons
 ``relay.camera.attach``               core NATS request: a lease on the camera relay (ADR 0045)
 ``relay.camera.renew``                core NATS request: a lease's heartbeat, a fresh ticket
 ``relay.camera.detach``               core NATS request: end a lease
@@ -99,6 +102,13 @@ GATEWAY_CLOUD_DISCOVER = "gateway.cloud.discover"
 ``device-gateway``): ``CloudDiscoverRequest`` in, ``CloudDiscoverReply`` out. Logs in to a
 vendor cloud account (or reuses the open session) and lists its devices (ADR 0034).
 Not below ``device.`` for the same reason as the camera request."""
+GATEWAY_ERRORS_EXPLAIN = "gateway.errors.explain"
+"""Core NATS request subject (internal, Telemetry and Notifications to Device-Gateway, queue
+group ``device-gateway``): ``ErrorExplainRequest`` in, ``ErrorExplainReply`` out. Explains
+vendor error codes with the error lexicons of the installed adapters (ADR 0067)."""
+GATEWAY_ERRORS_LEXICONS = "gateway.errors.lexicons"
+"""Core NATS request subject (internal, queue group ``device-gateway``):
+``ErrorLexiconListRequest`` in, ``ErrorLexiconListReply`` out, the installed lexicons."""
 
 
 RELAY_CAMERA_ATTACH = "relay.camera.attach"

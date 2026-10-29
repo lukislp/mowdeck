@@ -69,4 +69,5 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0063](0063-matter-server.md) | Matter server: mowers in Apple Home and Google Home | Accepted |
 | [0064](0064-personal-access-tokens-and-public-api-docs.md) | Personal access tokens and the public API documentation | Accepted |
 | [0065](0065-security-center-and-new-login-alerts.md) | Security center and new-login alerts | Accepted |
+| [0067](0067-error-code-lexicon.md) | Error code lexicon, provider independent | Accepted |
 | [0068](0068-public-demo-mode.md) | Public demo mode | Proposed |

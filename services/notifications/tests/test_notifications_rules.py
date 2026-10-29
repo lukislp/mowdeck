@@ -8,6 +8,7 @@ from mowdeck_contracts.v1 import (
     FirmwareInfo,
     GeoReference,
     MowerActivity,
+    MowerErrorCategory,
     NotificationKind,
     NotificationSeverity,
     RtkFixStatus,
@@ -347,6 +348,29 @@ def test_notifications_theft_lift_by_configured_numeric_code() -> None:
     assert default.state(MowerActivity.ERROR, raw={"lifted": "yes"}) == ["mower_stuck"]
     moving = make_state(MOWER, ACCOUNT, activity=MowerActivity.MOWING, raw={"lifted": True})
     assert is_lift(moving, ALARMS) is False  # only an error state is a lift
+
+
+def test_notifications_theft_lift_by_lexicon_category() -> None:
+    """A vendor without a code list: its lexicon's category ``lift_tilt`` raises the alarm
+    (ADR 0067); configured codes keep working, an empty category list turns it off."""
+    run = Run(ALARMS)
+    run.state(MowerActivity.MOWING)
+    lifted = run.state(
+        MowerActivity.ERROR, error_code="H-37", error_category=MowerErrorCategory.LIFT_TILT
+    )
+    assert lifted == ["mower_lifted"]
+    assert run.state(MowerActivity.PAUSED) == []
+    stuck = run.state(
+        MowerActivity.ERROR, error_code="H-12", error_category=MowerErrorCategory.TRAPPED
+    )
+    assert stuck == ["mower_stuck"]
+    assert run.events[-1].params["error_connection"] == "simulated"
+    assert run.events[-1].params["error_category"] == "trapped"
+    codes_only = Run(RuleConfig(cooldown_seconds=0, lift_categories=frozenset()))
+    codes_only.state(MowerActivity.MOWING)
+    assert codes_only.state(
+        MowerActivity.ERROR, error_code="H-37", error_category=MowerErrorCategory.LIFT_TILT
+    ) == ["mower_stuck"]
 
 
 def test_notifications_theft_left_dock_without_command_alarms_after_confirm() -> None:

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
-from mowdeck_contracts.v1 import NotificationRaised, NotificationSent
+from mowdeck_contracts.v1 import ErrorExplanation, NotificationRaised, NotificationSent
 
 from notifications.domain.geofence import MowerFence
 from notifications.domain.live_activity import ActivityDevice, LiveActivity
@@ -89,6 +89,17 @@ class PhotoSource(Protocol):
     async def capture(self, mower_id: UUID, account_id: UUID) -> CapturedPhoto | None:
         """The image, None when none can be had (no camera, mower asleep, timeout, over the
         size limit); never raises for those."""
+        ...
+
+
+class ErrorExplainer(Protocol):
+    """Explains a vendor error code in plain words (the error lexicons at the Device-Gateway,
+    ADR 0067)."""
+
+    async def explain(
+        self, code: str, connection: str, language: str, category: str | None = None
+    ) -> ErrorExplanation | None:
+        """The explanation in ``language``; None when none can be had (never raises)."""
         ...
 
 
