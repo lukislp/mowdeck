@@ -9,6 +9,7 @@ from mowdeck_contracts.v1 import (
     CredentialField,
     CredentialFieldKind,
     ProviderDescriptor,
+    text_for,
 )
 from mowdeck_contracts.v1.subjects import GATEWAY_CLOUD_PROVIDERS, stream_for_subject
 from pydantic import ValidationError
@@ -88,7 +89,7 @@ def test_descriptor_rejects_bad_ids_links_and_patterns() -> None:
     with pytest.raises(ValidationError):
         _descriptor(links=[{"label": "Portal", "url": "http://example.com"}])
     with pytest.raises(ValidationError):
-        CredentialField(key="a", kind=CredentialFieldKind.TEXT, label="A", pattern="(")
+        CredentialField(key="a", kind=CredentialFieldKind.TEXT, label={"en": "A"}, pattern="(")
 
 
 def test_normalized_strips_shown_values_but_keeps_secrets() -> None:
@@ -173,3 +174,26 @@ def test_descriptor_guards_option_keys(changes: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
         _descriptor(**changes)
     assert "iot_id" in RESERVED_OPTION_KEYS
+
+
+def test_texts_are_localized_with_an_english_fallback() -> None:
+    found = _descriptor(
+        summary={"en": "Acme mowers", "de": "Acme-Mäher"},
+        setup_steps=["Plain English step", {"en": "Second", "de": "Zweiter"}],
+    )
+    assert found.summary == {"en": "Acme mowers", "de": "Acme-Mäher"}
+    assert found.setup_steps[0] == {"en": "Plain English step"}  # a string is English
+    assert text_for(found.summary, "de-DE") == "Acme-Mäher"
+    assert text_for(found.summary, "fr") == "Acme mowers"  # English fallback
+    assert text_for(found.setup_steps[0], "de") == "Plain English step"
+    assert text_for(None, "de") is None
+    places = dict(found.texts())
+    assert {"summary", "setup_steps[1]", "fields.email.label", "links[0].label"} <= set(places)
+    assert "fields.brand.choices.acme" in places
+
+
+def test_localized_texts_need_english() -> None:
+    with pytest.raises(ValidationError):
+        _descriptor(summary={"de": "Nur Deutsch"})
+    with pytest.raises(ValidationError):
+        _descriptor(setup_steps=[{"en": " "}])

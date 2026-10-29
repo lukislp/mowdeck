@@ -31,11 +31,23 @@
           "title": "Default"
         },
         "description": {
-          "default": "",
-          "description": "English help text.",
-          "maxLength": 400,
-          "title": "Description",
-          "type": "string"
+          "anyOf": [
+            {
+              "patternProperties": {
+                "^[a-z]{2}$": {
+                  "maxLength": 500,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Help text by locale.",
+          "title": "Description"
         },
         "examples": {
           "items": {
@@ -75,11 +87,15 @@
           "title": "Minimum"
         },
         "title": {
-          "description": "English title.",
-          "maxLength": 80,
-          "minLength": 1,
+          "description": "Title by locale.",
+          "patternProperties": {
+            "^[a-z]{2}$": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
           "title": "Title",
-          "type": "string"
+          "type": "object"
         },
         "type": {
           "enum": [
@@ -104,10 +120,14 @@
       "description": "One option of a ``choice`` field.",
       "properties": {
         "label": {
-          "maxLength": 80,
-          "minLength": 1,
+          "patternProperties": {
+            "^[a-z]{2}$": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
           "title": "Label",
-          "type": "string"
+          "type": "object"
         },
         "value": {
           "maxLength": 64,
@@ -137,15 +157,20 @@
         "help": {
           "anyOf": [
             {
-              "maxLength": 400,
-              "type": "string"
+              "patternProperties": {
+                "^[a-z]{2}$": {
+                  "maxLength": 500,
+                  "type": "string"
+                }
+              },
+              "type": "object"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "English hint under the input.",
+          "description": "Provider-specific hint under the input by locale.",
           "title": "Help"
         },
         "identity": {
@@ -163,11 +188,15 @@
           "$ref": "#/$defs/CredentialFieldKind"
         },
         "label": {
-          "description": "English label of the input.",
-          "maxLength": 80,
-          "minLength": 1,
+          "description": "Label of the input by locale.",
+          "patternProperties": {
+            "^[a-z]{2}$": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
           "title": "Label",
-          "type": "string"
+          "type": "object"
         },
         "max_length": {
           "default": 256,
@@ -193,8 +222,13 @@
         "placeholder": {
           "anyOf": [
             {
-              "maxLength": 100,
-              "type": "string"
+              "patternProperties": {
+                "^[a-z]{2}$": {
+                  "maxLength": 500,
+                  "type": "string"
+                }
+              },
+              "type": "object"
             },
             {
               "type": "null"
@@ -232,10 +266,14 @@
       "description": "A page of the vendor that explains where the credentials come from.",
       "properties": {
         "label": {
-          "maxLength": 80,
-          "minLength": 1,
+          "patternProperties": {
+            "^[a-z]{2}$": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
           "title": "Label",
-          "type": "string"
+          "type": "object"
         },
         "url": {
           "maxLength": 300,
@@ -300,20 +338,38 @@
       "type": "string"
     },
     "setup_steps": {
-      "description": "English, short: how the user gets the credentials, in order.",
+      "description": "Short steps by locale: how the user gets the credentials, in order.",
       "items": {
-        "type": "string"
+        "patternProperties": {
+          "^[a-z]{2}$": {
+            "maxLength": 500,
+            "type": "string"
+          }
+        },
+        "type": "object"
       },
       "maxItems": 8,
       "title": "Setup Steps",
       "type": "array"
     },
     "summary": {
-      "default": "",
-      "description": "English: which mowers and what MowDeck can do.",
-      "maxLength": 500,
-      "title": "Summary",
-      "type": "string"
+      "anyOf": [
+        {
+          "patternProperties": {
+            "^[a-z]{2}$": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Which mowers and what MowDeck can do, by locale.",
+      "title": "Summary"
     },
     "tested_on_hardware": {
       "default": false,

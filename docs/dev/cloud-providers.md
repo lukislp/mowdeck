@@ -29,7 +29,7 @@ MowDeck is the same for every provider; a mower shows what its adapter declares 
 
 1. **Package** `libs/mowdeck-control-<vendor>`: Apache-2.0, or GPL-3.0 with its own `LICENSE` when the SDK is GPL ([ADR 0011](../adr/0011-gpl-package-for-pymammotion-adapter.md); read the SDK's `LICENSE` file, not only PyPI). Pin the SDK exactly.
 2. **Connection**: a thin `MowerConnection` ([ADR 0012](../adr/0012-mower-control-interface-and-safety-rules.md)). Declare only what the mower does in `MowerCapabilities` (the defaults mean "not supported"; the controller refuses the rest); map the state, `raw.lifted` and `raw.blade_on` ([ADR 0027](../adr/0027-health-history-and-theft-alarm.md)), and `error_category` from your error lexicon.
-3. **Plugin**: a `CloudProviderPlugin` with its `descriptor` (credential fields, setup steps, links, `needs_developer_account`, `tested_on_hardware`, `mower_options` for the settings its mowers take), `discover`, `create_connection`, `close`, and a fake cloud for `ProviderContext.fake`.
+3. **Plugin**: a `CloudProviderPlugin` with its `descriptor` (credential fields, setup steps, links, `needs_developer_account`, `tested_on_hardware`, `mower_options` for the settings its mowers take), `discover`, `create_connection`, `close`, and a fake cloud for `ProviderContext.fake`. Write every user-visible text as `{"en": ..., "de": ...}` (the app's languages; `test_provider_texts.py` checks it) and leave generic hints such as "stored encrypted" to the web app.
 4. **Declarations** in `pyproject.toml`:
 
     ```toml

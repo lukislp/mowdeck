@@ -14,6 +14,7 @@ from mowdeck_service_kit import CurrentAccountId
 from mowdeck_service_kit.demo import demo_enabled
 
 from fleet.adapters.api.deps import ActorDep, FreshAuth, ServicesDep, to_service_error
+from fleet.adapters.api.locale import AcceptLanguage, LocaleQuery, request_locale
 from fleet.adapters.api.schemas import (
     LinkedAccountDetail,
     LinkedAccountIn,
@@ -27,6 +28,7 @@ from fleet.adapters.api.schemas import (
     LinkedMowersOut,
     MowerOut,
     ProviderList,
+    ProviderOut,
 )
 from fleet.application.linked_accounts import BulkItem, DeviceView, LinkedAccountView
 
@@ -62,16 +64,24 @@ def _detail(view: LinkedAccountView, devices: list[DeviceView]) -> LinkedAccount
     },
 )
 async def list_cloud_providers(
-    request: Request, actor: ActorDep, account_id: CurrentAccountId, services: ServicesDep
+    request: Request,
+    actor: ActorDep,
+    account_id: CurrentAccountId,
+    services: ServicesDep,
+    locale: LocaleQuery = None,
+    accept_language: AcceptLanguage = None,
 ) -> ProviderList:
     """The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the
     link form (with hints and links to where the vendor hands them out), whether the user needs
     a developer account at the vendor and whether the adapter was tested on real hardware.
     Disabled providers are not listed; the public demo (ADR 0068) lists none and refuses
-    every change under this path."""
+    every change under this path. Texts come in the language of ``locale`` (or the first of
+    ``Accept-Language``), else English."""
     if demo_enabled(request):
         return ProviderList(items=[])
-    return ProviderList(items=await services.linked_accounts.providers(actor, account_id))
+    lang = request_locale(locale, accept_language)
+    found = await services.linked_accounts.providers(actor, account_id)
+    return ProviderList(items=[ProviderOut.of(item, lang) for item in found])
 
 
 @router.get("", responses=_RESPONSES)
