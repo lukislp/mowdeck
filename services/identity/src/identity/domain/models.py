@@ -290,6 +290,10 @@ class ApiToken:
     revoked_at: datetime | None = None
     revoke_reason: str | None = None
     purpose: TokenPurpose = TokenPurpose.INTEGRATION
+    session_id: UUID | None = None
+    """The login session (family) an iOS widget credential was created in (ADR 0059): once
+    that session has ended (logout, revoked in the security center) the credential no longer
+    works. None for every other token and for widget credentials from before the binding."""
 
     def __post_init__(self) -> None:
         self.purpose = TokenPurpose(self.purpose)

@@ -7,6 +7,8 @@ struct MowerEntry: TimelineEntry {
     enum Problem: Equatable {
         /// No credential: the user has not enabled widgets in the app.
         case notSetUp
+        /// No credential because the user signed out in the app; no data is shown.
+        case signedOut
         /// No mower picked yet and none available.
         case noMower
         /// The server could not be reached; the last known data (if any) is shown, marked old.
@@ -72,7 +74,7 @@ struct MowerProvider: AppIntentTimelineProvider {
         guard let credential = try? KeychainSecretStore().load() else {
             return MowerEntry(
                 date: Date(), mower: nil, status: nil, schedule: nil, mapLight: nil, mapDark: nil,
-                problem: .notSetUp)
+                problem: state.signedOut ? .signedOut : .notSetUp)
         }
         guard let mower = configuration.mower?.ref ?? state.mowers.first else {
             return MowerEntry(

@@ -159,21 +159,27 @@ public struct WatchState: Codable, Equatable, Sendable {
     public var serverReachable: Bool
     public var snapshots: [MowerSnapshot]
     public var updatedAt: Date
+    /// Not configured because the user signed out in the app (absent from older iPhone builds).
+    public var signedOut: Bool?
 
     /// After this long without a new state the watch says the values may be out of date.
     public static let outdatedAfter: TimeInterval = 15 * 60
 
     public init(
-        configured: Bool, serverReachable: Bool, snapshots: [MowerSnapshot], updatedAt: Date
+        configured: Bool, serverReachable: Bool, snapshots: [MowerSnapshot], updatedAt: Date,
+        signedOut: Bool? = nil
     ) {
         self.configured = configured
         self.serverReachable = serverReachable
         self.snapshots = Array(snapshots.prefix(WatchLink.maxMowers))
         self.updatedAt = updatedAt
+        self.signedOut = signedOut
     }
 
-    public static func notConfigured(at now: Date) -> WatchState {
-        WatchState(configured: false, serverReachable: true, snapshots: [], updatedAt: now)
+    public static func notConfigured(at now: Date, signedOut: Bool = false) -> WatchState {
+        WatchState(
+            configured: false, serverReachable: true, snapshots: [], updatedAt: now,
+            signedOut: signedOut ? true : nil)
     }
 
     public func snapshot(for mowerId: String) -> MowerSnapshot? {

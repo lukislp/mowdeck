@@ -3,7 +3,8 @@
 Vendor error codes in plain words: title, description, likely cause, steps, severity and the
 manufacturer-neutral category, in the requested locale (``locale``, else the first language of
 ``Accept-Language``, else English). The mower routes need ``can_view`` on the mower (404
-otherwise) and pick the lexicon by the mower's connection; the vendor routes need any signed-in
+otherwise) and pick the lexicon by the mower's cloud provider, else its connection kind; the
+vendor routes need any signed-in
 principal. A code no lexicon knows, or a gateway that does not answer, still gets an answer
 (``known`` false, generic advice).
 """
@@ -157,7 +158,8 @@ async def browse_mower_lexicon(
     locale: LocaleQuery = None,
     accept_language: AcceptLanguage = None,
 ) -> ErrorLexiconSearchReply:
-    """Browse the error lexicon of this mower's vendor (picked by its connection): a page of
+    """Browse the error lexicon of this mower's vendor (picked by its cloud provider, else its
+    connection kind): a page of
     entries in plain words, ordered by code, filtered by text, category, severity and codes,
     with the counts per category and severity for filter chips. `lexicon` is null when no
     lexicon applies or the Device-Gateway does not answer. 404 "no telemetry yet" before the

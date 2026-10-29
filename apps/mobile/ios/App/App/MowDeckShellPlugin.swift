@@ -123,7 +123,7 @@ public class MowDeckShellPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func clearWidgets(_ call: CAPPluginCall) {
-        WidgetBridge.clear()
+        WidgetBridge.clear(signedOut: call.getBool("signedOut") ?? false)
         call.resolve()
     }
 

@@ -34,6 +34,10 @@ export interface NativeShellDeps {
   widgetsApi?: WidgetsApi;
   /** True when the user has an ntfy target (Android background channel). */
   ntfyConfigured: () => Promise<boolean>;
+  /** The signed-in user as `<user>@<account>` (widget credentials belong to one user). */
+  user?: () => string | null;
+  /** The app's login session (family id); a widget credential ends with it. */
+  session?: () => string | null;
 }
 
 type Display = 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale';
@@ -56,7 +60,8 @@ export class NativeShell {
   readonly #notifier: InboxNotifier;
   readonly #registration: ApnsRegistration | null;
   readonly #widgets: WidgetsRegistration | null;
-  #signedIn = false;
+  /** The user `signedIn` last ran for (null: signed out). */
+  #signedIn: string | null = null;
 
   constructor(deps: NativeShellDeps) {
     this.#deps = deps;
@@ -83,9 +88,13 @@ export class NativeShell {
             serverUrl: () => this.server,
             deviceName: 'MowDeck iOS',
             onChange: (state) => (this.widgets = state),
+            storage: deps.storage,
+            user: () => deps.user?.() ?? null,
+            session: () => deps.session?.() ?? null,
           })
         : null;
-    if (this.#widgets) this.widgets = 'off';
+    // Not known until `maintain` asked the shell after sign-in.
+    if (this.#widgets) this.widgets = 'pending';
   }
 
   get active(): boolean {
@@ -174,28 +183,36 @@ export class NativeShell {
     };
   }
 
-  /** After login (or a restored session): permissions, channels, APNs. */
+  /**
+   * After login (or a restored session): permissions, channels, APNs, and the widgets, which a
+   * device that wants them gets back by itself. Runs again when another user signs in.
+   */
   async signedIn(): Promise<void> {
-    if (!this.active || this.#signedIn) return;
-    this.#signedIn = true;
+    const user = this.#deps.user?.() ?? '';
+    if (!this.active || this.#signedIn === user) return;
+    this.#signedIn = user;
     if (this.platform === 'android') {
       this.ntfy = await this.#deps.ntfyConfigured().catch(() => false);
     }
     // iOS: the APNs prompt also grants local notifications, so it goes first.
-    if (this.#registration) await this.#registration.enable();
-    await this.#prepareLocal();
+    if (this.#registration) await this.#registration.enable().catch(() => undefined);
+    await this.#prepareLocal().catch(() => undefined);
+    // Always reached: until it answers the widgets show "setting up", never a stale "off".
     await this.#widgets?.maintain();
     await this.refreshWatch();
     // The mower list may have changed: the watch gets it with the next state (ADR 0060).
     if (this.watch === 'ready') await syncWatch(this.#plugin('MowDeckShell'));
   }
 
-  /** Before logout: remove this device's APNs token from the server, clear the badge. */
+  /**
+   * Before logout: remove this device's APNs token from the server, end the widget credential
+   * (the widgets show no data, and come back with the next sign-in), clear the badge.
+   */
   async signingOut(): Promise<void> {
     if (!this.active) return;
-    this.#signedIn = false;
+    this.#signedIn = null;
     await this.#registration?.disable();
-    await this.#widgets?.disable().catch(() => undefined);
+    await this.#widgets?.signOut().catch(() => undefined);
     await this.#plugin('Badge')
       ?.call('clear')
       .catch(() => undefined);
@@ -251,7 +268,7 @@ export class NativeShell {
 
   /** Every inbox refresh: badge, and local notifications for new items when wanted. */
   async inboxChanged(items: readonly InboxItem[], unread: number): Promise<void> {
-    if (!this.active || !this.#signedIn) return;
+    if (!this.active || this.#signedIn === null) return;
     void this.#plugin('Badge')
       ?.call('set', { count: unread })
       .catch(() => undefined);

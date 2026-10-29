@@ -37,6 +37,56 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder.mowdeck.decode(MowerStatus.self, from: stored), status)
     }
 
+    /// Builds stay installed while the server moves on: fields a newer server adds, and values
+    /// this build has never seen, must never fail the decoding of the state or of the credential.
+    func testANewerServerNeverBreaksTheDecoding() throws {
+        let json = """
+            {"mower_id":"m","stale":false,"activity":"a_new_activity","battery_percent":64,
+             "charging":false,"error_code":"9999","error_category":"a_new_category",
+             "error_severity":"a_new_severity","error_title":"Neu","job":{"progress_percent":5,
+             "a_new_job_field":[1,2]},"a_new_field":{"nested":true}}
+            """
+        let status = try JSONDecoder.mowdeck.decode(MowerStatus.self, from: Data(json.utf8))
+        XCTAssertEqual(status.activity, "a_new_activity")
+        XCTAssertEqual(status.errorCategory, "a_new_category")
+        XCTAssertEqual(status.job?.progressPercent, 5)
+        let credential = """
+            {"serverURL":"https://mow.example","secret":"mdk_x","credentialId":"c",
+             "expiresAt":"2027-01-25T12:00:00Z","deviceName":"iPhone","a_new_field":1}
+            """
+        let stored = try JSONDecoder.mowdeck.decode(
+            WidgetCredential.self, from: Data(credential.utf8))
+        XCTAssertEqual(stored.credentialId, "c")
+    }
+
+    /// A sign-out clears every stored state but leaves the signed-out mark for the widgets.
+    func testTheSignedOutMarkOutlivesTheClearedStates() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "test.signed-out.\(UUID())"))
+        let state = SharedState(defaults: defaults)
+        state.mowers = [MowerRef(id: "m", name: "Luba")]
+        state.clear()
+        state.signedOut = true
+        XCTAssertEqual(state.mowers, [])
+        XCTAssertTrue(state.signedOut)
+        state.signedOut = false
+        XCTAssertFalse(state.signedOut)
+    }
+
+    /// The watch decodes a state from an older iPhone build, which sends no signed-out mark.
+    func testAWatchStateWithoutTheSignedOutMarkDecodes() throws {
+        let state = WatchState.notConfigured(at: Date(timeIntervalSince1970: 0), signedOut: true)
+        XCTAssertEqual(state.signedOut, true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoder.encode(state)) as? [String: Any])
+        json.removeValue(forKey: "signedOut")
+        let older = try JSONDecoder.mowdeck.decode(
+            WatchState.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(older.signedOut)
+        XCTAssertFalse(older.configured)
+    }
+
     func testDecodesTheSchedulerOverviewAndToleratesAnUnknownVerdict() throws {
         let json = """
             {"mower_id":"m","at":"2026-10-27T12:00:00Z",

@@ -191,7 +191,9 @@ def build_app(
             active_bus, gateway, registry=app.state.metrics_registry
         )
         # error lexicons serve the demo too (the simulator has one, ADR 0067)
-        app.state.error_lexicons = await subscribe_error_lexicons(active_bus)
+        app.state.error_lexicons = await subscribe_error_lexicons(
+            active_bus, unqualified_cloud=providers.unqualified_cloud
+        )
         if not demo:  # a demo never logs in to a manufacturer cloud
             discovery = CloudDiscoveryService(
                 accounts,

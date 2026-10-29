@@ -1278,6 +1278,20 @@
           "title": "Charging",
           "type": "boolean"
         },
+        "cloud_provider": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "With connection `cloud`: the cloud provider (ADR 0066) of the mower's linked account, so consumers pick the vendor's error lexicon (ADR 0067) when several providers share the kind. Set by the Device-Gateway, never by an adapter; null for other kinds and in states from before the field.",
+          "title": "Cloud Provider"
+        },
         "connected": {
           "default": true,
           "description": "False in the state the Device-Gateway publishes right after its connection to the mower ended: the last known values, with `heartbeat_at` the last time the link was alive. Set by the gateway, never by an adapter.",

@@ -19,6 +19,7 @@ public final class SharedState: @unchecked Sendable {
         static let snapshotPrefix = "widgets.snapshot."
         static let pending = "widgets.pending-registrations"
         static let pushToStart = "widgets.push-to-start-token"
+        static let signedOut = "widgets.signed-out"
     }
 
     // MARK: Mowers
@@ -50,6 +51,19 @@ public final class SharedState: @unchecked Sendable {
     public var pushToStartToken: String? {
         get { defaults.string(forKey: Key.pushToStart) }
         set { defaults.set(newValue, forKey: Key.pushToStart) }
+    }
+
+    // MARK: Signed out
+
+    /// The user signed out in the app: the credential and the stored states are gone, and the
+    /// widgets and the watch say so instead of asking to turn widgets on (the app sets them up
+    /// again with the next sign-in).
+    public var signedOut: Bool {
+        get { defaults.bool(forKey: Key.signedOut) }
+        set {
+            if newValue { defaults.set(true, forKey: Key.signedOut) }
+            else { defaults.removeObject(forKey: Key.signedOut) }
+        }
     }
 
     public func clear() {

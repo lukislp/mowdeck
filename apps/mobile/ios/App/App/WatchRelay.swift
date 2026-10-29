@@ -139,7 +139,7 @@ final class WatchRelay: NSObject, WCSessionDelegate, @unchecked Sendable {
     private func readState() async -> WatchState {
         let now = Date()
         guard let credential = try? WidgetBridge.vault.load() else {
-            return .notConfigured(at: now)
+            return .notConfigured(at: now, signedOut: SharedState.shared.signedOut)
         }
         let client = MowDeckClient(credential: credential)
         var reachable = true

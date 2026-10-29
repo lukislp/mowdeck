@@ -1,7 +1,7 @@
 """Shared building blocks for all v1 contract models."""
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Final
 
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, StringConstraints
 
@@ -28,6 +28,11 @@ CorrelationId = Annotated[
     StringConstraints(pattern=r"^[A-Za-z0-9._:\-]{1,128}$"),
 ]
 """Opaque correlation identifier propagated through all services (header ``X-Correlation-ID``)."""
+
+PROVIDER_ID_PATTERN: Final = r"^[a-z][a-z0-9_-]{1,31}$"
+"""Provider ids: lower case, stable, used as the entry point name and stored with every linked
+account (``linked_accounts.provider``). Defined here so ``mower`` and ``error_lexicon`` use it
+without importing ``providers`` (which imports ``error_lexicon``)."""
 
 
 def utc_now() -> datetime:

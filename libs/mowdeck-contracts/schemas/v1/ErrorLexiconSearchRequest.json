@@ -45,7 +45,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Browse one lexicon (``gateway.errors.entries``): a page of its entries, explained in\n``locale``, filtered by text, category, severity and codes (all optional, combined with and).\n\nThe lexicon is picked like for :class:`ErrorExplainRequest`: by ``vendor``, else by\n``connection``.",
+  "description": "Browse one lexicon (``gateway.errors.entries``): a page of its entries, explained in\n``locale``, filtered by text, category, severity and codes (all optional, combined with and).\n\nThe lexicon is picked like for :class:`ErrorExplainRequest`: by ``vendor``, else by\n``cloud_provider``, else by ``connection``.",
   "properties": {
     "category": {
       "anyOf": [
@@ -57,6 +57,19 @@
         }
       ],
       "default": null
+    },
+    "cloud_provider": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cloud Provider"
     },
     "codes": {
       "description": "Only these codes (as the lexicon or the mower spells them); empty: all.",

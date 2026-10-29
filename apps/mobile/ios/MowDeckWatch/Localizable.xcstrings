@@ -736,6 +736,38 @@
           }
         }
       }
+    },
+    "Signed out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed out"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgemeldet"
+          }
+        }
+      }
+    },
+    "Open MowDeck on the iPhone to sign in.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open MowDeck on the iPhone to sign in."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffne MowDeck auf dem iPhone, um dich anzumelden."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

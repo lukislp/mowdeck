@@ -176,7 +176,7 @@ Explain codes of this mower (e.g. the error counts of its health page) with the 
 
 **Browse Mower Lexicon**
 
-Browse the error lexicon of this mower's vendor (picked by its connection): a page of entries in plain words, ordered by code, filtered by text, category, severity and codes, with the counts per category and severity for filter chips. `lexicon` is null when no lexicon applies or the Device-Gateway does not answer. 404 "no telemetry yet" before the first state.
+Browse the error lexicon of this mower's vendor (picked by its cloud provider, else its connection kind): a page of entries in plain words, ordered by code, filtered by text, category, severity and codes, with the counts per category and severity for filter chips. `lexicon` is null when no lexicon applies or the Device-Gateway does not answer. 404 "no telemetry yet" before the first state.
 
 | Parameter | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |
@@ -905,6 +905,7 @@ Summary of an installed lexicon (no entries).
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
+| `cloud_providers` | array of string | no | The cloud providers it serves (empty: `vendor`). |
 | `connection_kinds` | array of [ConnectionKind](#connectionkind) | no |  |
 | `entries` | integer | yes | Number of codes.; min 0.0 |
 | `locales` | array of string | no |  |
@@ -1328,6 +1329,7 @@ Two times: `observed_at` is when the mower reported the values, `heartbeat_at` w
 | `battery_percent` | integer | yes | min 0.0; max 100.0 |
 | `blade_height_mm` | integer or null | no |  |
 | `charging` | boolean | no | default `false` |
+| `cloud_provider` | string or null | no | With connection `cloud`: the cloud provider (ADR 0066) of the mower's linked account, so consumers pick the vendor's error lexicon (ADR 0067) when several providers share the kind. Set by the Device-Gateway, never by an adapter; null for other kinds and in states from before the field. |
 | `connected` | boolean | no | False in the state the Device-Gateway publishes right after its connection to the mower ended: the last known values, with `heartbeat_at` the last time the link was alive. Set by the gateway, never by an adapter.; default `true` |
 | `connection` | [ConnectionKind](#connectionkind) | yes |  |
 | `drive_calibration` | [DriveCalibrationStatus](#drivecalibrationstatus) or null | no | The drive calibration MowDeck runs on this mower (`DriveCalibrate`, ADR 0042), with its final state and result kept until the next one; null when there never was one. |
