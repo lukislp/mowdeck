@@ -359,6 +359,7 @@ class LiveActivities:
             state.connection.value,
             language,
             state.error_category.value if state.error_category is not None else None,
+            state.cloud_provider,
         )
         return error_title(explanation)
 

@@ -206,7 +206,7 @@ explain_error("stuck", "de", connection=ConnectionKind.SIMULATED).title
 default_error_lexicons().provider("simulated").category_of("lifted")  # MowerErrorCategory.LIFT_TILT
 ```
 
-`ErrorLexiconRegistry` picks a lexicon by vendor or by the mower's connection kind (the lexicon's `connection_kinds`), falls back to English for a missing locale and gives a generic explanation ("Unknown error E42 from Simulator") for a code it does not know; a broken entry point is logged and skipped. This package registers the simulator's lexicon (`stuck`, `lifted`). The guide for a new vendor: [Adding an error lexicon for a vendor](../../docs/dev/error-lexicon.md).
+`ErrorLexiconRegistry` picks a lexicon by vendor, else by the mower's cloud provider (`MowerState.cloud_provider`; the lexicon's `cloud_providers`, or its vendor key when it lists none; a provider no lexicon serves gets the generic explanation), else by its connection kind (the lexicon's `connection_kinds`), falls back to English for a missing locale and gives a generic explanation ("Unknown error E42 from Simulator") for a code it does not know; a broken entry point is logged and skipped. This package registers the simulator's lexicon (`stuck`, `lifted`). The guide for a new vendor: [Adding an error lexicon for a vendor](../../docs/dev/error-lexicon.md).
 
 ## Native jobs
 

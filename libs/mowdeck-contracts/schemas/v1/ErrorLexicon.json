@@ -186,6 +186,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "The error codes of one vendor, as an adapter package ships them.",
   "properties": {
+    "cloud_providers": {
+      "description": "The cloud providers (ADR 0066) whose mowers report codes of this vendor; a lookup by `MowerState.cloud_provider` finds the lexicon through them. Empty: the provider whose id equals `vendor`.",
+      "items": {
+        "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Cloud Providers",
+      "type": "array"
+    },
     "connection_kinds": {
       "description": "The connection kinds whose mowers report codes of this vendor; a lookup by `MowerState.connection` finds the lexicon through them.",
       "items": {

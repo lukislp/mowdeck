@@ -507,6 +507,7 @@ def observe_state(
                 error_message=state.error_message or "",
                 # the push text explains the code with the vendor's lexicon (ADR 0067)
                 error_connection=state.connection.value,
+                error_provider=state.cloud_provider or "",
                 error_category=state.error_category.value if state.error_category else "",
             )
             w, _ = _emit(w, stuck, now, config, events)

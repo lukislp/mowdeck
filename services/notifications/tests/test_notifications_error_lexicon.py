@@ -57,22 +57,20 @@ async def serve_lexicon(bus: InMemoryBus) -> list[ErrorExplainRequest]:
     return seen
 
 
-async def get_stuck(h: Harness, owner: Person, mower_id: Any, code: str) -> None:
+async def get_stuck(h: Harness, owner: Person, mower_id: Any, code: str, **state: object) -> None:
     h.clock.advance(10)
-    await h.publish_state(
-        make_state(mower_id, owner.account_id, at=h.clock.now, activity=MowerActivity.MOWING)
-    )
+    mowing = make_state(mower_id, owner.account_id, at=h.clock.now, activity=MowerActivity.MOWING)
+    await h.publish_state(mowing.model_copy(update=state))
     h.clock.advance(30)
-    await h.publish_state(
-        make_state(
-            mower_id,
-            owner.account_id,
-            at=h.clock.now,
-            activity=MowerActivity.ERROR,
-            error_code=code,
-            error_message="the mower is stuck on an obstacle",
-        )
+    error = make_state(
+        mower_id,
+        owner.account_id,
+        at=h.clock.now,
+        activity=MowerActivity.ERROR,
+        error_code=code,
+        error_message="the mower is stuck on an obstacle",
     )
+    await h.publish_state(error.model_copy(update=state))
 
 
 async def test_notifications_error_lexicon_explains_the_push_text() -> None:
@@ -111,3 +109,69 @@ async def test_notifications_error_lexicon_explainer_caches_and_survives_no_gate
     assert first is not None and first.title == "Stuck on an obstacle"
     assert second == first and len(seen) == 1
     assert await explainer.explain("stuck", "not-a-kind", "en") is None
+
+
+def _cloud_lexicon(vendor: str, title: str) -> ErrorLexicon:
+    """A lexicon on the shared ``cloud`` kind whose code ``7`` reads ``title``."""
+    return ErrorLexicon(
+        vendor=vendor,
+        vendor_name=vendor.title(),
+        connection_kinds=[ConnectionKind.CLOUD],
+        entries=[ErrorLexiconEntry(code="7", texts={"en": ErrorText(title=title)})],
+    )
+
+
+CLOUD_LEXICONS = {
+    "alpha": _cloud_lexicon("alpha", "Alpha jammed"),
+    "bravo": _cloud_lexicon("bravo", "Bravo jammed"),
+}
+
+
+async def serve_cloud_lexicons(bus: InMemoryBus) -> list[ErrorExplainRequest]:
+    """Answer like the Device-Gateway: by the mower's provider, else by the connection kind."""
+    seen: list[ErrorExplainRequest] = []
+
+    async def explain(message: BusMessage) -> None:
+        request = message.model(ErrorExplainRequest)
+        seen.append(request)
+        lexicon = (
+            CLOUD_LEXICONS.get(request.cloud_provider)
+            if request.cloud_provider
+            else lexicon_for_connection(CLOUD_LEXICONS.values(), request.connection)
+        )
+        explanations = [explain_code(lexicon, code, request.locale) for code in request.codes]
+        await message.respond(ErrorExplainReply(explanations=explanations))
+
+    await bus.subscribe(GATEWAY_ERRORS_EXPLAIN, explain, queue="device-gateway")
+    return seen
+
+
+async def test_notifications_error_lexicon_push_uses_the_mowers_provider() -> None:
+    """Two providers share the kind ``cloud`` (ADR 0066): each mower's push carries the words
+    of its own vendor's lexicon."""
+    async with harness() as h:
+        seen = await serve_cloud_lexicons(h.bus)
+        owner = await h.owner()
+        await h.subscribe_all(owner, language="en")
+        alpha, bravo = await h.add_mower(owner), await h.add_mower(owner)
+        cloud = {"connection": ConnectionKind.CLOUD}
+        await get_stuck(h, owner, alpha, "7", **cloud, cloud_provider="alpha")
+        await get_stuck(h, owner, bravo, "7", **cloud, cloud_provider="bravo")
+        items = await h.inbox(owner)
+    bodies = {i["mower_id"]: i["body"] for i in items if i["kind"] == "mower_stuck"}
+    assert bodies == {str(alpha): "Error 7. Alpha jammed", str(bravo): "Error 7. Bravo jammed"}
+    assert {r.cloud_provider for r in seen} == {"alpha", "bravo"}
+
+
+async def test_notifications_error_lexicon_explainer_caches_per_provider() -> None:
+    bus = InMemoryBus()
+    seen = await serve_cloud_lexicons(bus)
+    explainer = BusErrorExplainer(bus, timeout_seconds=0.2)
+    alpha = await explainer.explain("7", "cloud", "en", cloud_provider="alpha")
+    bravo = await explainer.explain("7", "cloud", "en", cloud_provider="bravo")
+    again = await explainer.explain("7", "cloud", "en", cloud_provider="bravo")
+    legacy = await explainer.explain("7", "cloud", "en")
+    assert alpha is not None and alpha.title == "Alpha jammed"
+    assert bravo is not None and bravo.title == "Bravo jammed" and again == bravo
+    assert legacy is not None and legacy.vendor == "alpha"  # no provider: by connection kind
+    assert [r.cloud_provider for r in seen] == ["alpha", "bravo", None]

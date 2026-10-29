@@ -1,9 +1,10 @@
 """Explains vendor error codes for the push texts (ADR 0067).
 
 Core NATS request/reply on ``gateway.errors.explain`` (queue group ``device-gateway``): the
-Device-Gateway answers from the error lexicons of the installed adapter packages. Answers are
-kept for an hour per (connection, code, language); a gateway that does not answer gives None,
-so the push keeps the vendor's own message.
+Device-Gateway answers from the error lexicons of the installed adapter packages, picking the
+lexicon by the mower's cloud provider (``MowerState.cloud_provider``), else by its connection
+kind. Answers are kept for an hour per (provider, connection, code, language); a gateway that
+does not answer gives None, so the push keeps the vendor's own message.
 """
 
 import time
@@ -40,13 +41,19 @@ class BusErrorExplainer:
         self._bus = bus
         self._timeout = timeout_seconds
         self._clock = clock
-        self._cache: dict[tuple[str, str, str], tuple[float, ErrorExplanation]] = {}
+        self._cache: dict[tuple[str, str, str, str], tuple[float, ErrorExplanation]] = {}
 
     async def explain(
-        self, code: str, connection: str, language: str, category: str | None = None
+        self,
+        code: str,
+        connection: str,
+        language: str,
+        category: str | None = None,
+        cloud_provider: str | None = None,
     ) -> ErrorExplanation | None:
-        """The explanation of ``code`` for a mower on ``connection``; None when unavailable."""
-        key = (connection, code, language)
+        """The explanation of ``code`` for a mower of ``cloud_provider`` (else on
+        ``connection``); None when unavailable."""
+        key = (cloud_provider or "", connection, code, language)
         hit = self._cache.get(key)
         if hit is not None and self._clock() - hit[0] <= CACHE_SECONDS:
             return hit[1]
@@ -55,6 +62,7 @@ class BusErrorExplainer:
         try:
             request = ErrorExplainRequest(
                 codes=[code],
+                cloud_provider=cloud_provider or None,
                 connection=ConnectionKind(connection) if connection else None,
                 locale=language,
                 category=MowerErrorCategory(category) if category else None,

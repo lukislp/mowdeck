@@ -164,6 +164,9 @@ class TestProvider:
     def latest(self, mower_id: UUID) -> MowerConnection:
         return self.created[mower_id][-1]
 
+    def cloud_provider(self, registration: MowerRegistration) -> str | None:
+        return self._registry.cloud_provider(registration)
+
     def background_jobs(self, connection: MowerConnection) -> Sequence[BackgroundJob]:
         if self._tick is None:
             return []

@@ -165,10 +165,16 @@ class LoadedProviders:
         """The descriptors, sorted by display name."""
         return sorted((p.descriptor for p in self.plugins.values()), key=lambda d: d.name.lower())
 
+    def provider_of(self, options: Mapping[str, object]) -> str | None:
+        """The provider id of a ``cloud`` registration with these options: its
+        ``cloud_provider`` option, else the provider that claims unqualified registrations
+        (None: neither)."""
+        named = options.get(CLOUD_PROVIDER_OPTION)
+        return named if isinstance(named, str) and named else self.unqualified_cloud
+
     def for_registration(self, options: Mapping[str, object]) -> CloudProviderPlugin | None:
         """The plugin of a ``cloud`` registration with these options (None: no plugin)."""
-        named = options.get(CLOUD_PROVIDER_OPTION)
-        key = named if isinstance(named, str) and named else self.unqualified_cloud
+        key = self.provider_of(options)
         return self.plugins.get(key) if key is not None else None
 
     async def close(self) -> None:

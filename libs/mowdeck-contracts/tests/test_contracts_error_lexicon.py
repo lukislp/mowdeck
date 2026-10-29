@@ -157,3 +157,19 @@ def test_contracts_error_lexicon_search_filters_orders_and_pages() -> None:
     assert reply.severities == {ErrorSeverity.CRITICAL: 1, ErrorSeverity.WARNING: 3}
     with pytest.raises(ValidationError):
         ErrorLexiconSearchRequest(limit=101)
+
+
+def test_contracts_error_lexicon_serves_cloud_providers() -> None:
+    plain = _lexicon()
+    assert plain.serves_cloud_provider("acme") and not plain.serves_cloud_provider("acme-eu")
+    listed = plain.model_copy(update={"cloud_providers": ["acme-eu", "acme-us"]})
+    assert listed.serves_cloud_provider("acme-us") and not listed.serves_cloud_provider("acme")
+    assert listed.info().cloud_providers == ["acme-eu", "acme-us"]
+    request = ErrorExplainRequest(
+        codes=["7"], cloud_provider="acme-eu", connection=ConnectionKind.CLOUD
+    )
+    assert request.cloud_provider == "acme-eu"
+    with pytest.raises(ValidationError):
+        ErrorExplainRequest(codes=["7"], cloud_provider="Not A Provider")
+    with pytest.raises(ValidationError):
+        ErrorLexiconSearchRequest(cloud_provider="x")  # too short for a provider id

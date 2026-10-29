@@ -153,6 +153,12 @@ class ConnectionProvider(Protocol):
         """Create a new, not yet connected link for ``registration``."""
         ...
 
+    def cloud_provider(self, registration: MowerRegistration) -> str | None:
+        """The cloud provider (ADR 0066) that serves ``registration``; None for other kinds or
+        when no provider claims it. The session stamps it on every published state
+        (``MowerState.cloud_provider``) for the error lexicon lookups (ADR 0067)."""
+        ...
+
     def background_jobs(self, connection: MowerConnection) -> Sequence[BackgroundJob]:
         """Jobs that must run while ``connection`` is up (the simulator's clock, for example)."""
         ...
