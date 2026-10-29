@@ -40,7 +40,7 @@ class GeoReference(ContractModel):
 class MapArea(ContractModel):
     """A mowable area (a "zone" in the Mammotion app)."""
 
-    id: MapElementId = Field(description="Stable id; for Mammotion the zone hash.")
+    id: MapElementId = Field(description="Stable id, e.g. the vendor's zone hash.")
     name: str | None = Field(default=None, max_length=200)
     boundary: Polygon
 
@@ -81,7 +81,7 @@ class MowerMap(ContractModel):
     paths: list[MapPath] = Field(default_factory=list)
     dock: DockPose | None = None
     revision: str | None = Field(
-        default=None, max_length=128, description="Map version; for Mammotion the map hash."
+        default=None, max_length=128, description="Map version, e.g. the vendor's map hash."
     )
 
     @model_validator(mode="after")

@@ -79,8 +79,13 @@ config:
   FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS: "85"
 
   # --- Device-Gateway ---
-  # Development only: the fake Mammotion cloud (refused with MOWDECK_ENVIRONMENT=prod).
-  GATEWAY_FAKE_MAMMOTION_CLOUD: "false"
+  # Cloud providers (ADR 0066): untested adapters stay off until listed (comma separated
+  # provider ids); DISABLE wins.
+  GATEWAY_CLOUD_PROVIDERS_ENABLE: ""
+  GATEWAY_CLOUD_PROVIDERS_DISABLE: ""
+  # Development only: the fake clouds of the enabled providers (refused with
+  # MOWDECK_ENVIRONMENT=prod).
+  GATEWAY_FAKE_CLOUDS: "false"
   # Longest time the gateway lets a mower plan a path preview; keep it below Fleet's
   # FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS (75 < 85 < the web app's 90 s), so Fleet gets
   # the gateway's "timeout" reply instead of running into its own.

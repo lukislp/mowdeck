@@ -28,6 +28,7 @@
     type ConnectionState,
     type FieldIssue,
     type KindSchema,
+    withProviderOptions,
   } from '#lib/connection/form.js';
   import { loadKinds } from '#lib/connection/kinds.js';
   import { kindTitle } from '#lib/connection/text.js';
@@ -113,7 +114,13 @@
   /** The mower's error counts by code (Telemetry health), for the error codes section. */
   let errorCounts = $state.raw<Record<string, number> | null>(null);
 
-  const schema = $derived(kinds.find((k) => k.kind === kind) ?? null);
+  const schema = $derived.by(() => {
+    const found = kinds.find((k) => k.kind === kind) ?? null;
+    // A cloud mower's further options are the ones its provider declares (ADR 0066).
+    return found && mower && kind === mower.connection_kind
+      ? withProviderOptions(found, mower.connection_options)
+      : found;
+  });
   const issues = $derived(
     tried && schema ? { ...serverFound, ...validate(schema, connection) } : serverFound,
   );
@@ -317,7 +324,8 @@
     kind = next;
     const found = kinds.find((k) => k.kind === next);
     const options = mower && next === mower.connection_kind ? mower.connection_options : null;
-    connection = found ? initialState(found, options) : EMPTY;
+    // A cloud mower's provider options belong to the state too (ADR 0066).
+    connection = found ? initialState(withProviderOptions(found, options), options) : EMPTY;
     tried = false;
     serverFound = {};
   }

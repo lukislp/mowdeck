@@ -18,6 +18,7 @@ import {
   actor,
   createMowerByApi,
   loginByUi,
+  pickProvider,
   registerByApi,
   waitForMap,
   watchCsp,
@@ -90,6 +91,7 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     expect(cloud.options.filter((o) => o.managed).map((o) => o.key)).toEqual([
       'device_name',
       'iot_id',
+      'cloud_provider',
       'drive_full_speed_mps',
       'drive_full_yaw_rate_dps',
       'drive_dead_zone',
@@ -113,6 +115,7 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     await expect(page.getByTestId('linked-flow')).toBeVisible();
     await expect(page.locator('#name')).toHaveCount(0);
     await expect(page.getByTestId('linked-connect')).toBeVisible();
+    await pickProvider(page, 'mammotion');
 
     // A wrong password is refused by the (fake) cloud and lands on the password field.
     await page.locator('#linked-email').fill(email);
@@ -121,9 +124,7 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     await expect(page.locator('#linked-password')).toHaveAttribute('aria-invalid', 'true', {
       timeout: 60_000,
     });
-    await expect(
-      page.getByText('E-Mail oder Passwort wurde von Mammotion abgelehnt.'),
-    ).toBeVisible();
+    await expect(page.getByText('Der Hersteller hat diese Zugangsdaten abgelehnt.')).toBeVisible();
     await expect(page.locator('#linked-password')).toHaveValue(''); // write-only
 
     // The right one links the account and shows its devices.
@@ -210,7 +211,10 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     // Another MowDeck account linking the same cloud sees the mowers as registered elsewhere.
     const linked = await request.post(`${FLEET}/linked-accounts`, {
       headers: { Authorization: `Bearer ${other.token}` },
-      data: { email: `conn-other-${RUN}@fake.mowdeck.test`, password: FAKE_PASSWORD },
+      data: {
+        provider: 'mammotion',
+        credentials: { email: `conn-other-${RUN}@fake.mowdeck.test`, password: FAKE_PASSWORD },
+      },
       timeout: 90_000,
     });
     expect(linked.status(), await linked.text()).toBe(201);

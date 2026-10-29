@@ -153,7 +153,6 @@ flowchart LR
   subgraph mowdeck[MowDeck]
     agora_bridge["agora-bridge"]
     billing["billing"]
-    device_gateway["device-gateway"]
     identity["identity"]
     notifications["notifications"]
     scheduler["scheduler"]
@@ -163,22 +162,20 @@ flowchart LR
     x0(["Agora (live camera)"])
     x1(["Apple Push Notification service"])
     x2(["GitHub OAuth"])
-    x3(["Mammotion cloud and mower links"])
-    x4(["Sign in with Apple"])
-    x5(["Stripe"])
-    x6(["Vision model provider"])
-    x7(["Weather provider (default Open-Meteo)"])
-    x8(["Web Push services of the browsers"])
+    x3(["Sign in with Apple"])
+    x4(["Stripe"])
+    x5(["Vision model provider"])
+    x6(["Weather provider (default Open-Meteo)"])
+    x7(["Web Push services of the browsers"])
   end
   agora_bridge --> x0
-  billing --> x5
-  device_gateway --> x3
+  billing --> x4
   identity --> x2
-  identity --> x4
+  identity --> x3
   notifications --> x1
-  notifications --> x8
-  scheduler --> x7
-  vision --> x6
+  notifications --> x7
+  scheduler --> x6
+  vision --> x5
 ```
 
 ## Messaging
@@ -337,7 +334,7 @@ flowchart LR
   q_camera_relay["camera-relay"]
   q_camera_relay -->|"gateway.mower.*.camera.release<br/>gateway.mower.*.camera.session"| r_device_gateway
   q_fleet["fleet"]
-  q_fleet -->|"gateway.cloud.discover<br/>gateway.mower.*.bridge.scan<br/>gateway.mower.*.camera.session<br/>+3 more"| r_device_gateway
+  q_fleet -->|"gateway.mower.*.bridge.scan<br/>gateway.mower.*.camera.session<br/>gateway.mower.*.firmware.check<br/>+2 more"| r_device_gateway
   q_notifications["notifications"]
   q_notifications -->|"gateway.errors.explain<br/>gateway.mower.*.photo"| r_device_gateway
   q_telemetry["telemetry"]
@@ -412,7 +409,8 @@ flowchart LR
 | `fleet.mowers.credentials` | core | device-gateway | fleet |
 | `fleet.mowers.list` | core | device-gateway, notifications, telemetry | fleet |
 | `fleet.targets.resolve` | core | - | fleet |
-| `gateway.cloud.discover` | core | fleet | device-gateway |
+| `gateway.cloud.discover` | core | - | device-gateway |
+| `gateway.cloud.providers` | core | - | device-gateway |
 | `gateway.errors.entries` | core | telemetry | device-gateway |
 | `gateway.errors.explain` | core | notifications, telemetry | device-gateway |
 | `gateway.errors.lexicons` | core | telemetry | device-gateway |
@@ -452,7 +450,7 @@ flowchart LR
   subgraph fleet["fleet"]
     direction TB
     fleet_base_stations["base-stations<br/>8 operations"]
-    fleet_linked_accounts["linked-accounts<br/>7 operations"]
+    fleet_linked_accounts["linked-accounts<br/>8 operations"]
     fleet_mowers["mowers<br/>28 operations"]
     fleet_sites_and_groups["sites and groups<br/>12 operations"]
   end
@@ -504,7 +502,7 @@ flowchart LR
 | `entitlements` | `entitlements` | 8 | 7 |
 | `entitlements` | `operations` | 1 | 1 |
 | `fleet` | `base-stations` | 8 | 5 |
-| `fleet` | `linked-accounts` | 7 | 5 |
+| `fleet` | `linked-accounts` | 8 | 6 |
 | `fleet` | `mowers` | 28 | 21 |
 | `fleet` | `operations` | 1 | 1 |
 | `fleet` | `sites and groups` | 12 | 6 |
@@ -554,7 +552,7 @@ flowchart LR
   subgraph pg[PostgreSQL]
     db_billing[("billing<br/>2 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
-    db_fleet[("fleet<br/>12 migrations")]
+    db_fleet[("fleet<br/>13 migrations")]
     db_identity[("identity<br/>8 migrations")]
     db_notifications[("notifications<br/>9 migrations")]
     db_planner[("planner<br/>2 migrations")]

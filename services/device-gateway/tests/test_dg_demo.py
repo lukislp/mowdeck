@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 from mowdeck_contracts.v1 import ConnectionKind, MowerRegistration
-from mowdeck_control import SimulatedMower
+from mowdeck_control import LoadedProviders, SimulatedMower
 
 from device_gateway.adapters.control.connections import (
     RegistryConnectionProvider,
@@ -26,10 +26,13 @@ def _registration(kind: ConnectionKind) -> MowerRegistration:
     "kind", [ConnectionKind.CLOUD, ConnectionKind.BLE_BRIDGE, ConnectionKind.WIFI]
 )
 def test_a_demo_gateway_refuses_every_real_mower(kind: ConnectionKind) -> None:
-    def never(_: object) -> None:
-        raise AssertionError("the cloud factory must not be called")
+    class Never(LoadedProviders):
+        def for_registration(self, options: object) -> None:
+            raise AssertionError("no cloud provider plugin may be asked")
 
-    provider = RegistryConnectionProvider(simulated_only=True, cloud_factory=never)  # type: ignore[arg-type]
+    provider = RegistryConnectionProvider(
+        simulated_only=True, cloud_providers=Never(plugins={}, unqualified_cloud=None)
+    )
     with pytest.raises(SimulatedOnlyError, match="demo mode"):
         provider.create(_registration(kind))
 

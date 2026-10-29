@@ -1,14 +1,15 @@
 """Creates mower connections through the ``mowdeck-control`` registry.
 
-Adapters come from the registry (``simulated`` is built in; the GPL package
-``mowdeck-control-mammotion`` adds ``ble_bridge`` and ``cloud`` through entry points).
-Simulated mowers get their clock here: :meth:`SimulatedMower.run` ticks in real time with the
-configured time scale.
+Adapters come from the registry (``simulated`` is built in; adapter packages add their kinds
+through the entry point group ``mowdeck.connections``). Simulated mowers get their clock here:
+:meth:`SimulatedMower.run` ticks in real time with the configured time scale.
 
-Cloud mowers (ADR 0034): with a ``cloud_factory`` (``main`` passes the one of
-:mod:`device_gateway.adapters.control.cloud_accounts`) every ``cloud`` connection borrows the
-shared session of its Mammotion account from one pool instead of logging in per mower; each
-mower still gets its own connection, port and controller.
+Cloud mowers (ADR 0034, ADR 0066): with ``cloud_providers`` (``main`` passes the loaded plugins
+of :mod:`device_gateway.adapters.control.providers`) a ``cloud`` registration goes to the plugin
+of its linked account's provider (option ``cloud_provider``; registrations without it go to the
+provider that claims them), so the mowers of one vendor account share that plugin's session;
+each mower still gets its own connection and controller. Without a plugin the registry's
+``cloud`` factory is used.
 """
 
 from collections.abc import Sequence
@@ -16,13 +17,15 @@ from typing import Any
 
 from mowdeck_contracts.v1 import BASE_STATION_OPTION, ConnectionKind, MowerRegistration
 from mowdeck_control import (
+    CLOUD_PROVIDER_OPTION,
     ConnectionConfig,
-    ConnectionFactory,
     ConnectionRegistry,
+    LoadedProviders,
     MowerConnection,
     SimulatedMower,
     default_registry,
 )
+from mowdeck_control.errors import UnknownConnectionKind
 
 from device_gateway.application.ports import BackgroundJob
 
@@ -40,13 +43,13 @@ class RegistryConnectionProvider:
         sim_time_scale: float = 1.0,
         sim_tick_seconds: float = 1.0,
         registry: ConnectionRegistry | None = None,
-        cloud_factory: ConnectionFactory | None = None,
+        cloud_providers: LoadedProviders | None = None,
         simulated_only: bool = False,
     ) -> None:
         self._sim_time_scale = sim_time_scale
         self._sim_tick_seconds = sim_tick_seconds
         self._registry = registry or default_registry()
-        self._cloud_factory = cloud_factory
+        self._cloud_providers = cloud_providers
         self._simulated_only = simulated_only
         """Public demo (ADR 0068): any other kind is refused before an adapter is touched."""
 
@@ -73,8 +76,15 @@ class RegistryConnectionProvider:
         config = ConnectionConfig(
             mower_id=registration.mower_id, account_id=registration.account_id, options=options
         )
-        if registration.connection_kind is ConnectionKind.CLOUD and self._cloud_factory:
-            return self._cloud_factory(config)
+        if registration.connection_kind is ConnectionKind.CLOUD and self._cloud_providers:
+            plugin = self._cloud_providers.for_registration(options)
+            if plugin is not None:
+                return plugin.create_connection(config)
+        named = options.get(CLOUD_PROVIDER_OPTION)
+        if registration.connection_kind is ConnectionKind.CLOUD and named:
+            # Never hand one vendor's credentials to another vendor's adapter.
+            msg = f"the cloud provider {named} is not enabled in this Device-Gateway"
+            raise UnknownConnectionKind(msg)
         return self._registry.create(registration.connection_kind, config)
 
     def background_jobs(self, connection: MowerConnection) -> Sequence[BackgroundJob]:

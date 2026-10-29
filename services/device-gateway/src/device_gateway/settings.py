@@ -116,22 +116,50 @@ class Settings(ServiceSettings):
     """Vendor logins of discoveries that may run at once on this instance (more wait)."""
 
     cloud_session_cache_dir: Path | None = None
-    """Directory for the PyMammotion credential caches of the shared cloud sessions, one file
-    per account (live tokens: a private, writable volume). Unset: no cache, a password login
-    on every new session."""
+    """Directory for the session caches of the cloud providers (credential caches of the shared
+    cloud sessions, live tokens: a private, writable volume). Unset: no cache, a login on every
+    new session."""
+
+    cloud_providers_enable: str = ""
+    """Comma separated cloud provider ids to enable in addition to the providers that are on by
+    default (those tested on real hardware), e.g. ``husqvarna``. Providers that were never tested
+    on real hardware are off until listed here (ADR 0066)."""
+
+    cloud_providers_disable: str = ""
+    """Comma separated cloud provider ids to switch off (wins over the enable list and the
+    defaults)."""
+
+    fake_clouds: bool = False
+    """**Development only.** Every enabled cloud provider answers discoveries and connects its
+    ``cloud`` mowers through the fake cloud of its adapter package (fixed test accounts, see the
+    package READMEs) instead of the vendor's; refused with ``MOWDECK_ENVIRONMENT=prod``."""
 
     fake_mammotion_cloud: bool = False
-    """**Development only.** Answer discoveries and connect ``cloud`` mowers through the fake
-    Mammotion cloud (accounts ``*@fake.mowdeck.test``, password ``fake-cloud-password``)
-    instead of the real one; refused with ``MOWDECK_ENVIRONMENT=prod``."""
+    """Deprecated name of ``fake_clouds`` (``MOWDECK_FAKE_MAMMOTION_CLOUD``), still honoured; it
+    will be removed with the first release after 2026-12-31 (use ``MOWDECK_FAKE_CLOUDS``)."""
+
+    @property
+    def use_fake_clouds(self) -> bool:
+        """``fake_clouds`` or its deprecated name."""
+        return self.fake_clouds or self.fake_mammotion_cloud
+
+    @property
+    def enabled_cloud_providers(self) -> tuple[str, ...]:
+        """``cloud_providers_enable`` as ids."""
+        return _ids(self.cloud_providers_enable)
+
+    @property
+    def disabled_cloud_providers(self) -> tuple[str, ...]:
+        """``cloud_providers_disable`` as ids."""
+        return _ids(self.cloud_providers_disable)
 
     @model_validator(mode="after")
     def _shard_in_range(self) -> Self:
         if self.shard_index >= self.shard_count:
             msg = "MOWDECK_SHARD_INDEX must be smaller than MOWDECK_SHARD_COUNT"
             raise ValueError(msg)
-        if self.fake_mammotion_cloud and self.environment == "prod":
-            msg = "MOWDECK_FAKE_MAMMOTION_CLOUD is for development only (not with environment prod)"
+        if self.use_fake_clouds and self.environment == "prod":
+            msg = "MOWDECK_FAKE_CLOUDS is for development only (not with environment prod)"
             raise ValueError(msg)
         return self
 
@@ -139,3 +167,7 @@ class Settings(ServiceSettings):
     def command_consumer(self) -> str:
         """Durable JetStream consumer of this shard for ``command.mower.*``."""
         return f"device-gateway-{self.shard_index}"
+
+
+def _ids(value: str) -> tuple[str, ...]:
+    return tuple(sorted({p.strip().lower() for p in value.split(",") if p.strip()}))

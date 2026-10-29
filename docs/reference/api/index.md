@@ -9,7 +9,7 @@ Every MowDeck service publishes an HTTP API under `/api/v1/<service>` on the sam
 | [billing](billing.md) | `/api/v1/billing` | 6 | Plans, checkout and the Stripe webhook (only with billing enabled). |
 | [device-gateway](device-gateway.md) | `/api/v1/device-gateway` | 1 | Mower links of the installation (operator view). |
 | [entitlements](entitlements.md) | `/api/v1/entitlements` | 8 | What the account's plan allows; usage and limits. |
-| [fleet](fleet.md) | `/api/v1/fleet` | 54 | Mowers, sites, groups, linked cloud accounts, base stations and commands. |
+| [fleet](fleet.md) | `/api/v1/fleet` | 55 | Mowers, sites, groups, linked cloud accounts, base stations and commands. |
 | [identity](identity.md) | `/api/v1/identity` | 75 | Accounts, users, roles, sessions, API tokens and personal access tokens. |
 | [notifications](notifications.md) | `/api/v1/notifications` | 22 | Inbox, rules, channels and push devices. |
 | [planner](planner.md) | `/api/v1/planner` | 8 | Mowing patterns, spot paths and plans. |

@@ -98,9 +98,7 @@ class CameraEncryption(ContractModel):
     """Channel encryption the client must configure before joining (Agora
     ``setEncryptionConfig``)."""
 
-    mode: str = Field(
-        max_length=32, description="Agora encryption mode, for Mammotion `aes-256-gcm2`."
-    )
+    mode: str = Field(max_length=32, description="Agora encryption mode, e.g. `aes-256-gcm2`.")
     key: str = Field(
         repr=False, min_length=1, max_length=256, description="The secret, used verbatim."
     )

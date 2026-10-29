@@ -70,3 +70,26 @@ async def test_visitors_drive_but_do_not_reconfigure_the_demo_mowers() -> None:
         assert refused.status_code == 403, refused.text
         assert refused.json()["type"] == DEMO_PROBLEM
     assert command.status_code == 202, command.text
+
+
+async def test_no_cloud_provider_is_offered_or_linked_in_the_demo() -> None:
+    """ADR 0066: the demo lists no provider, and linking any provider and a
+    re-authentication are refused before a gateway is asked."""
+    async with harness(**DEMO) as h:
+        owner = await h.owner()
+        base = f"{API}/linked-accounts"
+        body = {"provider": "acme", "credentials": {"email": "a@x.test", "password": "secret"}}
+        listed = await h.client.get(f"{base}/providers", headers=owner.headers)
+        refused = [
+            await h.client.post(base, headers=owner.headers, json=body),
+            await h.client.post(
+                f"{base}/00000000-0000-0000-0000-000000000001/sync",
+                headers=owner.headers,
+                json={"credentials": {"password": "new"}},
+            ),
+        ]
+    assert listed.status_code == 200 and listed.json() == {"items": []}
+    for response in refused:
+        assert response.status_code == 403, response.text
+        assert response.json()["type"] == DEMO_PROBLEM
+        assert "secret" not in response.text

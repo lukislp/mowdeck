@@ -55,7 +55,7 @@ async function cloudMower(
   const headers = { Authorization: `Bearer ${owner.token}` };
   const linked = await request.post(`${FLEET}/linked-accounts`, {
     headers,
-    data: { email, password: FAKE_PASSWORD },
+    data: { provider: 'mammotion', credentials: { email, password: FAKE_PASSWORD } },
     timeout: 60_000,
   });
   expect(linked.status(), await linked.text()).toBe(201);

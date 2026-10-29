@@ -149,7 +149,9 @@ export type paths = {
          * List Connection Kinds
          * @description The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with
          *     the option schema of each: required, optional, secret and alternative options. The web app
-         *     generates its connection forms from it, so a new adapter kind needs no UI change.
+         *     generates its connection forms from it, so a new adapter kind needs no UI change. For cloud
+         *     mowers the options of each enabled provider come from its descriptor (``provider_options``,
+         *     ADR 0066); without an answering gateway that map is empty.
          */
         get: operations["list_connection_kinds_api_v1_fleet_connection_kinds_get"];
         put?: never;
@@ -241,16 +243,16 @@ export type paths = {
         };
         /**
          * List Linked Accounts
-         * @description The linked Mammotion accounts of the caller's account (no passwords).
+         * @description The linked vendor accounts of the caller's account (no secrets).
          */
         get: operations["list_linked_accounts_api_v1_fleet_linked_accounts_get"];
         put?: never;
         /**
          * Create Linked Account
-         * @description Link a Mammotion account: Fleet asks the Device-Gateway to log in and list the devices
-         *     (``gateway.cloud.discover``) and stores the account with its password encrypted. Use a
-         *     second Mammotion account the mowers are shared with: a login with the main account logs
-         *     the phone app out.
+         * @description Link a vendor account: Fleet checks the credentials against the provider's fields (422
+         *     with one problem per field, ``credentials/<key>``), asks the Device-Gateway to log in and
+         *     list the devices (``gateway.cloud.discover``) and stores the account with its secret fields
+         *     encrypted. An unknown or disabled provider is 422 (field ``provider``).
          */
         post: operations["create_linked_account_api_v1_fleet_linked_accounts_post"];
         delete?: never;
@@ -339,11 +341,36 @@ export type paths = {
         put?: never;
         /**
          * Sync Linked Account
-         * @description Read the device list again ("Konto neu einlesen"), optionally with a new password. The
-         *     gateway answers from the session the account's connected mowers share when there is one
-         *     (a second login would log them out). A failure is kept in ``last_sync_error``.
+         * @description Read the device list again ("Konto neu einlesen"), optionally with new secret fields (a
+         *     re-authentication). The gateway answers from the session the account's connected mowers
+         *     share when there is one (a second login would log them out). A failure is kept in
+         *     ``last_sync_error``.
          */
         post: operations["sync_linked_account_api_v1_fleet_linked_accounts__linked_account_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fleet/linked-accounts/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Cloud Providers
+         * @description The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the
+         *     link form (with hints and links to where the vendor hands them out), whether the user needs
+         *     a developer account at the vendor and whether the adapter was tested on real hardware.
+         *     Disabled providers are not listed; the public demo (ADR 0068) lists none and refuses
+         *     every change under this path.
+         */
+        get: operations["list_cloud_providers_api_v1_fleet_linked_accounts_providers_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1249,7 +1276,7 @@ export type components = {
             key: string;
             /**
              * Mode
-             * @description Agora encryption mode, for Mammotion `aes-256-gcm2`.
+             * @description Agora encryption mode, e.g. `aes-256-gcm2`.
              */
             mode: string;
             /**
@@ -1560,6 +1587,13 @@ export type components = {
             linked_account: boolean;
             /** Options */
             options: components["schemas"]["ConnectionOptionOut"][];
+            /**
+             * Provider Options
+             * @description For a kind with `linked_account`: the further options a mower takes, by its provider (the option `cloud_provider`), as the enabled providers declare them (ADR 0066). A provider without settings has an empty list.
+             */
+            provider_options?: {
+                [key: string]: components["schemas"]["ConnectionOptionOut"][];
+            };
             /** Title */
             title: string;
         };
@@ -1618,6 +1652,108 @@ export type components = {
              */
             type: "string" | "integer" | "number" | "boolean";
         };
+        /**
+         * ConnectionOptionSpec
+         * @description One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).
+         *
+         *     Fleet validates a cloud mower's options against the options its provider declares and the
+         *     web app renders them on the mower's settings page; only declared options exist, so a vendor
+         *     with few settings shows few.
+         */
+        ConnectionOptionSpec: {
+            /**
+             * Advanced
+             * @description Rarely needed; shown under 'advanced'.
+             * @default false
+             */
+            advanced: boolean;
+            /** Default */
+            default?: string | number | boolean | null;
+            /**
+             * Description
+             * @description English help text.
+             * @default
+             */
+            description: string;
+            /** Examples */
+            examples?: string[];
+            /** Key */
+            key: string;
+            /** Maximum */
+            maximum?: number | null;
+            /** Minimum */
+            minimum?: number | null;
+            /**
+             * Title
+             * @description English title.
+             */
+            title: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "string" | "integer" | "number" | "boolean";
+        };
+        /**
+         * CredentialChoice
+         * @description One option of a ``choice`` field.
+         */
+        CredentialChoice: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * CredentialField
+         * @description One input of a provider's link form.
+         */
+        CredentialField: {
+            /** Choices */
+            choices?: components["schemas"]["CredentialChoice"][];
+            /**
+             * Help
+             * @description English hint under the input.
+             */
+            help?: string | null;
+            /**
+             * Identity
+             * @description The field that names the vendor account (exactly one per provider): shown as the linked account's title and unique per provider and MowDeck account, compared without case.
+             * @default false
+             */
+            identity: boolean;
+            /** Key */
+            key: string;
+            kind: components["schemas"]["CredentialFieldKind"];
+            /**
+             * Label
+             * @description English label of the input.
+             */
+            label: string;
+            /**
+             * Max Length
+             * @default 256
+             */
+            max_length: number;
+            /**
+             * Pattern
+             * @description Regular expression the value must match.
+             */
+            pattern?: string | null;
+            /** Placeholder */
+            placeholder?: string | null;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+        };
+        /**
+         * CredentialFieldKind
+         * @description How a credential field is entered and stored.
+         * @enum {string}
+         */
+        CredentialFieldKind: "text" | "email" | "secret" | "choice";
         /**
          * DeviceType
          * @description What a discovered device is (ADR 0047).
@@ -1939,13 +2075,21 @@ export type components = {
             device_count: number;
             /** Devices */
             devices: components["schemas"]["LinkedDeviceOut"][];
-            /** Email */
+            /**
+             * Email
+             * @description Deprecated: the same as `identity`.
+             */
             email: string;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /**
+             * Identity
+             * @description The value of the provider's identity field (an e-mail or an application key): the account's title.
+             */
+            identity: string;
             /**
              * Last Sync Error
              * @description Why the last re-read failed, if it did.
@@ -1964,6 +2108,13 @@ export type components = {
             /** Provider */
             provider: string;
             /**
+             * Public Credentials
+             * @description The non-secret credential fields as entered (identity included).
+             */
+            public_credentials?: {
+                [key: string]: string;
+            };
+            /**
              * Updated At
              * Format: date-time
              */
@@ -1971,14 +2122,22 @@ export type components = {
         };
         /**
          * LinkedAccountIn
-         * @description ``POST /linked-accounts``: the Mammotion account to link (the only provider so far).
-         *     The password is write-only.
+         * @description ``POST /linked-accounts``: the vendor account to link, with the credential fields of its
+         *     provider (``GET /linked-accounts/providers``). Secret fields are write-only.
          */
         LinkedAccountIn: {
-            /** Email */
-            email: string;
-            /** Password */
-            password: string;
+            /**
+             * Credentials
+             * @description Every field of the provider's descriptor by key.
+             */
+            credentials: {
+                [key: string]: string;
+            };
+            /**
+             * Provider
+             * @description The provider id.
+             */
+            provider: string;
         };
         /**
          * LinkedAccountList
@@ -1990,7 +2149,7 @@ export type components = {
         };
         /**
          * LinkedAccountOut
-         * @description A linked account; the password is never returned.
+         * @description A linked account; secret fields are never returned.
          */
         LinkedAccountOut: {
             /**
@@ -2000,13 +2159,21 @@ export type components = {
             created_at: string;
             /** Device Count */
             device_count: number;
-            /** Email */
+            /**
+             * Email
+             * @description Deprecated: the same as `identity`.
+             */
             email: string;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /**
+             * Identity
+             * @description The value of the provider's identity field (an e-mail or an application key): the account's title.
+             */
+            identity: string;
             /**
              * Last Sync Error
              * @description Why the last re-read failed, if it did.
@@ -2025,6 +2192,13 @@ export type components = {
             /** Provider */
             provider: string;
             /**
+             * Public Credentials
+             * @description The non-secret credential fields as entered (identity included).
+             */
+            public_credentials?: {
+                [key: string]: string;
+            };
+            /**
              * Updated At
              * Format: date-time
              */
@@ -2032,10 +2206,21 @@ export type components = {
         };
         /**
          * LinkedAccountSyncIn
-         * @description ``POST /linked-accounts/{id}/sync``: optionally a new password (write-only).
+         * @description ``POST /linked-accounts/{id}/sync``: optionally new secret fields (write-only), e.g. after
+         *     the vendor revoked a password or a key; the stored values stay for the missing ones.
          */
         LinkedAccountSyncIn: {
-            /** Password */
+            /**
+             * Credentials
+             * @description New values of secret fields of the provider by key.
+             */
+            credentials?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Password
+             * @description Deprecated: the same as `credentials: {password: ...}`.
+             */
             password?: string | null;
         };
         /**
@@ -2259,7 +2444,7 @@ export type components = {
          * MowerIn
          * @description ``POST /mowers``: without ``site_id`` the mower goes to the account's default site.
          *
-         *     A ``cloud`` mower comes from a linked Mammotion account: ``linked_account_id`` and the
+         *     A ``cloud`` mower comes from a linked vendor account: ``linked_account_id`` and the
          *     ``device_name`` of its device list (``connection_options`` then hold only adapter extras
          *     such as ``refresh_seconds``); ``name`` defaults to the device name and ``model`` to the
          *     listed model.
@@ -2642,6 +2827,71 @@ export type components = {
              * @description Token id (JWT `jti`), if known.
              */
             token_id?: string | null;
+        };
+        /**
+         * ProviderDescriptor
+         * @description A cloud provider as its adapter declares it: the link form, the guidance and the options
+         *     of its mowers.
+         */
+        ProviderDescriptor: {
+            /** Fields */
+            fields: components["schemas"]["CredentialField"][];
+            /** Links */
+            links?: components["schemas"]["ProviderLink"][];
+            /**
+             * Mower Options
+             * @description The options a mower of this provider takes (none: the provider has no settings beyond the linked account).
+             */
+            mower_options?: components["schemas"]["ConnectionOptionSpec"][];
+            /**
+             * Name
+             * @description Display name of the vendor cloud.
+             */
+            name: string;
+            /**
+             * Needs Developer Account
+             * @description The user creates an application in the vendor's developer portal (with their own vendor account) to get the credentials.
+             * @default false
+             */
+            needs_developer_account: boolean;
+            /** Provider */
+            provider: string;
+            /**
+             * Setup Steps
+             * @description English, short: how the user gets the credentials, in order.
+             */
+            setup_steps?: string[];
+            /**
+             * Summary
+             * @description English: which mowers and what MowDeck can do.
+             * @default
+             */
+            summary: string;
+            /**
+             * Tested On Hardware
+             * @description False: built and tested against recorded fixtures and fakes only; the web app labels such providers as untested on real hardware.
+             * @default false
+             */
+            tested_on_hardware: boolean;
+        };
+        /**
+         * ProviderLink
+         * @description A page of the vendor that explains where the credentials come from.
+         */
+        ProviderLink: {
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * ProviderList
+         * @description ``GET /linked-accounts/providers``: the cloud providers enabled in the Device-Gateway,
+         *     each with its credential fields and guidance (the web app renders the link form from it).
+         */
+        ProviderList: {
+            /** Items */
+            items: components["schemas"]["ProviderDescriptor"][];
         };
         /**
          * ProxyInfo
@@ -3959,7 +4209,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Too many failed logins for this e-mail (`Retry-After`). */
+            /** @description Too many failed logins for this vendor account (`Retry-After`). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4214,7 +4464,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Too many failed logins for this e-mail (`Retry-After`). */
+            /** @description Too many failed logins for this vendor account (`Retry-After`). */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4222,6 +4472,40 @@ export interface operations {
                 content?: never;
             };
             /** @description No credential encryption key, or no Device-Gateway or vendor cloud answered. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_cloud_providers_api_v1_fleet_linked_accounts_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderList"];
+                };
+            };
+            /** @description The caller lacks `can_manage_mowers` on the account. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No Device-Gateway listed the providers. */
             503: {
                 headers: {
                     [name: string]: unknown;

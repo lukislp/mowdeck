@@ -153,7 +153,7 @@ class DeviceGateway:
         ):
             self._warned_sharded_cloud = True
             _log.warning(
-                "linked Mammotion accounts are unsupported with several shards: mowers of one "
+                "linked cloud accounts are unsupported with several shards: mowers of one "
                 "account may hold separate cloud sessions that log each other out (ADR 0034)",
                 shard_count=self.shard.count,
             )
