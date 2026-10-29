@@ -20,8 +20,9 @@ Kind                   Fires when
                        ``disconnect_grace_seconds``
 ``mower_online``       the first state or connect after a notified ``mower_offline``
 ``mower_lifted``       the activity is ``error`` and the state indicates a lift
-                       (``raw["lifted"] is True`` or the error code is in ``lift_error_codes``),
-                       once per occurrence until the error clears
+                       (``raw["lifted"] is True``, the error category is in ``lift_categories``
+                       or, as an override, the error code is in ``lift_error_codes``), once per
+                       occurrence until the error clears
 ``mower_left_dock_``   the activity changes from ``docked``/``charging`` to anything but
 ``unexpectedly``       ``docked``, ``charging``, ``offline`` or ``unknown`` while no command was
                        seen from ``dock_command_window_seconds`` before the departure up to
@@ -222,8 +223,9 @@ def _come_online(
 
 
 def is_lift(state: MowerState, config: RuleConfig) -> bool:
-    """True when the state reports a lift: ``raw["lifted"]``, a configured error code or a
-    configured error category (``lift_tilt`` of the vendor's error lexicon, ADR 0067)."""
+    """True when the state reports a lift: ``raw["lifted"]`` or a configured error category
+    (``lift_tilt`` of the vendor's error lexicon, ADR 0067), both provider neutral, or an error
+    code an operator listed in ``lift_error_codes`` (empty by default)."""
     if state.activity is not MowerActivity.ERROR:
         return False
     if state.raw.get("lifted") is True:

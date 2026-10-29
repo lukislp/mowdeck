@@ -9,6 +9,7 @@ from mowdeck_contracts.v1 import (
     ConnectionKind,
     MowerActivity,
     MowerCapabilities,
+    MowerErrorCategory,
     MowerState,
     MowPattern,
     PositionSource,
@@ -480,6 +481,62 @@ def test_mammotion_lift_error_codes_set_the_raw_lifted_flag(code: str) -> None:
     device.errors.err_code_list = [int(code), 0]
     device.report_data.dev.sys_status = int(WorkMode.MODE_READY)
     assert "lifted" not in _state(device).raw  # the code in the log alone is no lift
+
+
+THEFT_ALARM_CODES = ("1004", "1030", "2502", "2801", "11131", "11133")
+"""The Mammotion codes Notifications listed in ``NOTIFICATIONS_LIFT_ERROR_CODES`` until the
+theft alarm became provider neutral (ADR 0067): it now relies on ``error_category`` and
+``raw.lifted`` alone, so the adapter must set both for exactly these codes."""
+
+
+def test_mammotion_theft_alarm_codes_carry_the_neutral_lift_signal() -> None:
+    assert frozenset(THEFT_ALARM_CODES) == mapping.LIFT_ERROR_CODES
+    for code in THEFT_ALARM_CODES:
+        for reported in (int(code), -int(code)):  # the firmware sends faults negative
+            device = sample_device()
+            device.report_data.dev.sys_status = int(WorkMode.MODE_SYSTEM_ERROR)
+            device.errors.err_code_list = [reported, 0]
+            state = _state(device)
+            # what Notifications receives: the state through the bus (JSON round trip)
+            received = MowerState.model_validate_json(state.model_dump_json())
+            assert received.activity is MowerActivity.ERROR
+            assert received.error_category is MowerErrorCategory.LIFT_TILT, code
+            assert received.raw["lifted"] is True, code
+            assert received.drive_recoverable is False
+
+
+VISION_AUTO_CODES = [
+    "1032",
+    "1100",
+    "1145",
+    "1201",
+    "1206",
+    "1214",
+    "1218",
+    "1411",
+    "1421",
+    "1422",
+    "11112",
+    "11113",
+    "11121",
+    "11122",
+    "11132",
+    "11134",
+    "2000701",
+]
+"""The Mammotion codes Vision listed in ``VISION_AUTO_ERROR_CODES`` until the automatic analysis
+became provider neutral: it now starts on ``drive_recoverable`` alone."""
+
+
+def test_mammotion_vision_auto_codes_are_drive_recoverable() -> None:
+    for code in VISION_AUTO_CODES:
+        device = sample_device()
+        device.report_data.dev.sys_status = int(WorkMode.MODE_SYSTEM_ERROR)
+        device.errors.err_code_list = [-int(code), 0]
+        received = MowerState.model_validate_json(_state(device).model_dump_json())
+        assert received.activity is MowerActivity.ERROR
+        assert received.drive_recoverable is True, code
+        assert "lifted" not in received.raw
 
 
 @pytest.mark.parametrize(

@@ -3,6 +3,7 @@
 from datetime import timedelta
 from uuid import uuid4
 
+import pytest
 from mowdeck_contracts.v1 import (
     BladeHoursThreshold,
     FirmwareInfo,
@@ -314,10 +315,16 @@ def at_local(x: float, y: float) -> tuple[float, float]:
     return to_wgs84(SIM_MAP, x, y)
 
 
+LIFT = MowerErrorCategory.LIFT_TILT
+
+
 def test_notifications_theft_lift_by_simulator_code_raw_flag_and_cooldown() -> None:
     run = Run(ALARMS)
     run.state(MowerActivity.MOWING, position=(48.1, 11.5))
-    kinds = run.state(MowerActivity.ERROR, error_code="lifted", position=(48.1234567, 11.5))
+    # the simulator's lift: code ``lifted`` with its lexicon category ``lift_tilt``
+    kinds = run.state(
+        MowerActivity.ERROR, error_code="lifted", error_category=LIFT, position=(48.1234567, 11.5)
+    )
     assert kinds == ["mower_lifted"]  # no mower_stuck for the same error
     lifted = run.events[-1]
     assert lifted.severity is NotificationSeverity.CRITICAL
@@ -325,7 +332,8 @@ def test_notifications_theft_lift_by_simulator_code_raw_flag_and_cooldown() -> N
     assert lifted.params["lat"] == "48.123457" and lifted.params["lon"] == "11.500000"
     assert lifted.link == f"/mowers/{MOWER}/map?lat=48.123457&lon=11.500000"
     assert lifted.silence_key == f"mower_lifted:{MOWER}"
-    assert run.state(MowerActivity.ERROR, error_code="lifted") == []  # same occurrence
+    same = run.state(MowerActivity.ERROR, error_code="lifted", error_category=LIFT)
+    assert same == []  # same occurrence
     assert run.state(MowerActivity.PAUSED) == []  # cleared
     # back within the alarm cooldown: suppressed, and still no mower_stuck
     assert run.state(MowerActivity.ERROR, error_code="X9", raw={"lifted": True}) == []
@@ -344,10 +352,26 @@ def test_notifications_theft_lift_by_configured_numeric_code() -> None:
     assert run.state(MowerActivity.ERROR, error_code="77") == ["mower_lifted"]
     default = Run(ALARMS)
     default.state(MowerActivity.MOWING)
-    assert default.state(MowerActivity.ERROR, error_code="2801") == ["mower_lifted"]
+    # no vendor codes in the core: a bare code without category or flag is no lift
+    assert default.state(MowerActivity.ERROR, error_code="2801") == ["mower_stuck"]
+    assert default.state(MowerActivity.PAUSED) == []
+    assert default.state(MowerActivity.ERROR, error_code="lifted") == ["mower_stuck"]
+    assert default.state(MowerActivity.PAUSED) == []
     assert default.state(MowerActivity.ERROR, raw={"lifted": "yes"}) == ["mower_stuck"]
     moving = make_state(MOWER, ACCOUNT, activity=MowerActivity.MOWING, raw={"lifted": True})
     assert is_lift(moving, ALARMS) is False  # only an error state is a lift
+
+
+@pytest.mark.parametrize("code", ["1004", "1030", "2502", "2801", "11131", "11133", "-2801"])
+def test_notifications_theft_lift_for_mammotion_codes_without_a_code_list(code: str) -> None:
+    """The six Mammotion lift and tilt codes left the default code list: the adapter reports
+    each with ``error_category`` ``lift_tilt`` and ``raw.lifted`` (its own tests check that), and
+    either signal alone raises the alarm with the defaults."""
+    assert RuleConfig().lift_error_codes == frozenset()
+    for signal in ({"error_category": LIFT}, {"raw": {"lifted": True}}):
+        run = Run(ALARMS)
+        run.state(MowerActivity.MOWING)
+        assert run.state(MowerActivity.ERROR, error_code=code, **signal) == ["mower_lifted"]
 
 
 def test_notifications_theft_lift_by_lexicon_category() -> None:

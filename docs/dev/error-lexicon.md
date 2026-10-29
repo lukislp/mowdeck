@@ -121,7 +121,7 @@ from mowdeck_control_acme.lexicon import acme_lexicon
 category = acme_lexicon().category_of(raw_code)  # None for a code the lexicon does not know
 ```
 
-`MowerState.raw["lifted"] = True` stays the generic lift flag where the vendor reports one directly. With `error_category` set, nobody has to add your codes to `MOWDECK_NOTIFICATIONS_LIFT_ERROR_CODES`.
+`MowerState.raw["lifted"] = True` stays the generic lift flag where the vendor reports one directly. With `error_category` set the theft alarm works for your mower; the core holds no code lists (`MOWDECK_NOTIFICATIONS_LIFT_ERROR_CODES` and `MOWDECK_VISION_AUTO_ERROR_CODES` are empty operator overrides). Set `drive_recoverable` for the recoverable categories, or Vision's automatic analysis never starts for your mower.
 
 ## 4. Test it
 

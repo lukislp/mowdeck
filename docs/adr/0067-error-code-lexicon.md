@@ -62,7 +62,9 @@ The mower page shows the explanation as a card (severity and category, vendor an
 
 ### Categories for the theft alarm
 
-Notifications counts a state as lifted when `raw.lifted` is true, **or its `error_category` is in `MOWDECK_NOTIFICATIONS_LIFT_CATEGORIES` (default `lift_tilt`)**, or its code is in `MOWDECK_NOTIFICATIONS_LIFT_ERROR_CODES`. The categories complement the code list rather than replace it: for Mammotion the `lift_tilt` category holds exactly the six default codes, so nothing changes for existing installations; a new vendor's adapter only has to set `error_category` (from its lexicon) and needs no codes in a core setting. The code list stays for adapters that set no category; it can be emptied once all do.
+Notifications counts a state as lifted when `raw.lifted` is true **or its `error_category` is in `MOWDECK_NOTIFICATIONS_LIFT_CATEGORIES` (default `lift_tilt`)**. Both signals are provider neutral: a vendor's adapter sets `error_category` from its lexicon and needs no codes in a core setting. `MOWDECK_NOTIFICATIONS_LIFT_ERROR_CODES` stays as an optional operator override (a code listed there counts too) and is **empty by default**; it used to list the simulator's `lifted` and Mammotion's lift and tilt codes 1004, 1030, 2502, 2801, 11131 and 11133. The Mammotion adapter reports exactly these codes with `error_category` `lift_tilt` and `raw.lifted` (its tests check it on the state as it travels over the bus), so the alarm fires for the same states as before.
+
+The automatic AI analysis on errors ([ADR 0035](0035-server-side-camera-frames-and-automatic-analysis.md)) follows the same rule: it starts on `drive_recoverable`, which the adapters set for the recoverable categories (trapped, obstacle, outside, wheel slip); `MOWDECK_VISION_AUTO_ERROR_CODES` is an optional override, empty by default (it used to list Mammotion's recoverable codes, which the adapter marks `drive_recoverable`). The architecture test fails when a core service's settings default to an error code list again.
 
 ### Alternatives
 
@@ -77,4 +79,4 @@ Notifications counts a state as lifted when `raw.lifted` is true, **or its `erro
 - Explanations depend on the Device-Gateway being up; without it the app shows the generic advice and the push the vendor's message.
 - The Mammotion texts follow PyMammotion's table: upgrading PyMammotion (deliberately, ADR 0019) refreshes them; the curated codes are checked by the adapter's tests.
 - `MowerErrorCategory` has three new values: clients with an exhaustive list (the Home Assistant integration's enum sensor) must accept them.
-- The widgets endpoint keeps `error_code` and `error_message`; widgets that want the words use `/mowers/{id}/error`.
+- The widgets endpoint (`GET /mowers/{id}/widget`) keeps `error_code` and `error_message` and adds `error_title`, `error_category` and `error_severity`, resolved through the lexicon in the requested locale, so the iOS widgets, the Live Activity and the watch show the plain-language title from their stored snapshot without a second request. The Live Activity's final `error` update carries `errorTitle` in each recipient's notification language. All new fields are optional; older app builds ignore them.

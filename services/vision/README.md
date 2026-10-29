@@ -82,7 +82,7 @@ Dark photos (users mow at night): when the service takes the photo itself (the r
 
 [ADR 0035](../../docs/adr/0035-server-side-camera-frames-and-automatic-analysis.md). Users opt in on the AI provider page ("Automatische KI-Analyse bei Fehlern", `PUT /vision/me/preferences {"auto_analysis": true}`, plan feature `ai_recover`). The durable consumer `vision-auto` hands every state to `AutoAnalysis` (`application/auto.py`):
 
-1. A recoverable error (`domain/auto.py`): activity `error`, not `raw.lifted`, and the normalised code (lower case, a leading minus dropped) in `VISION_AUTO_ERROR_CODES`, or `drive_recoverable`. Default codes: stuck or trapped (`stuck`, 1201, 1421, 11112, 2000701), blocked by an obstacle (1206, 1214 channel or recharge route obstructed, 11113, 11121, 11122), outside the work area (1100, 1145, 1411, 1422), wheel slip (1032, 1218, 11132, 11134). Never lift or tilt stops, low battery, blade or motor errors.
+1. A recoverable error (`domain/auto.py`): activity `error`, not `raw.lifted`, and `drive_recoverable`, the provider-neutral signal the adapters set for the recoverable categories of their error lexicon (stuck or trapped, blocked by an obstacle, outside the work area, wheel slip; ADR 0067). An operator can add codes in `VISION_AUTO_ERROR_CODES` (normalised: lower case, a leading minus dropped; empty by default, the core ships no vendor codes). Never lift or tilt stops, low battery, blade or motor errors.
 2. Only entering an error counts: the shared watch `auto_watch` (one row per mower, swapped under a row lock) holds the current recoverable code; a replica skips the database for non-error states while it believes the mower is fine (refreshed every 60 s).
 3. In a background task: states older than `VISION_AUTO_MAX_STATE_AGE_SECONDS` are ignored; no analysis when any proposal of the mower was created within `VISION_AUTO_COOLDOWN_MINUTES` or one is open; at most `VISION_AUTO_DAILY_PER_MOWER` automatic analyses per mower and UTC day; the plan needs `ai_recover`.
 4. The opted-in users, longest opted in first: the first with `can_drive` on the mower (OpenFGA), a usable provider (own or the installation's) and daily quota left is the requester. The round is a normal one with the gateway's photo and the dark-frame light, recorded with `trigger = error`. Nothing is executed without an approval.
@@ -142,7 +142,7 @@ The kit settings (`MOWDECK_DATABASE_URL`, `MOWDECK_NATS_URL`, ...), OpenFGA (`MO
 | `MOWDECK_VISION_AUTO_ENABLED` | `true` | Allow automatic analyses for users who opted in; false switches them off for the installation (the opt-ins stay stored). |
 | `MOWDECK_VISION_AUTO_COOLDOWN_MINUTES` | `10` | No automatic analysis for a mower within this time after the previous analysis (manual ones count). |
 | `MOWDECK_VISION_AUTO_DAILY_PER_MOWER` | `20` | Automatic analyses per mower and UTC day (0: none); the per-user cap applies on top. |
-| `MOWDECK_VISION_AUTO_ERROR_CODES` | see above | Comma separated error codes that start an automatic analysis (besides `drive_recoverable`). |
+| `MOWDECK_VISION_AUTO_ERROR_CODES` | (empty) | Optional comma separated extra error codes that start an automatic analysis (besides `drive_recoverable`). |
 | `MOWDECK_VISION_AUTO_MAX_STATE_AGE_SECONDS` | `120.0` | Older states (a backlog after a restart) start nothing. |
 | `MOWDECK_VISION_AUTO_PHOTO_ATTEMPTS` | `3` | Photo requests of an automatic analysis before it records "no photo". |
 | `MOWDECK_VISION_AUTO_PHOTO_RETRY_SECONDS` | `15.0` | Pause between two photo requests of an automatic analysis. |

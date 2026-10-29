@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from mowdeck_contracts.v1 import MowerActivity
+from mowdeck_contracts.v1 import MowerActivity, MowerErrorCategory
 from notifications_support import T0, harness, make_state, seconds
 
 from notifications import cli
@@ -212,6 +212,7 @@ async def test_maintenance_theft_alarm_and_errors_are_never_held() -> None:
             at=h.clock.now,
             activity=MowerActivity.ERROR,
             error_code="lifted",
+            error_category=MowerErrorCategory.LIFT_TILT,
         )
         events = await h.services.watcher.on_state(lifted)
     assert "mower_lifted" in [e.kind.value for e in events]
