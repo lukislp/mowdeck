@@ -301,6 +301,13 @@ class MowerCapabilities(ContractModel):
         "detection, laps around no-go zones, path order, start progress; ADR 0030). Clients "
         "show only what is declared here.",
     )
+    dock_keeps_job: bool = Field(
+        default=False,
+        description="`ReturnToDock` with `end_job: false` keeps the running job paused, so a "
+        "later `ResumeMow` continues it. Without it a client offers no 'keep the job' choice and "
+        "the controller refuses `end_job: false`; the mower ends (or forgets) its job on the way "
+        "home.",
+    )
     start_plans: list[StartPlan] = Field(
         default_factory=list,
         max_length=16,

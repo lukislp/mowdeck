@@ -121,15 +121,24 @@ test('worx: link with warnings, start a mower without map areas by its plans', a
     await expect(page.getByTestId('start-plan-choice')).toBeVisible();
     await expect(page.getByTestId('start-plan-now')).toBeVisible();
     await expect(page.getByTestId('start-plan-edge')).toBeVisible();
-    const sent = page.waitForResponse(
-      (r) => /\/mowers\/[^/]+\/commands$/.test(r.url()) && r.request().method() === 'POST',
-    );
     await page.getByTestId('start-plan-zone-2').click();
-    const command = (await (await sent).request().postDataJSON()) as {
-      kind: string;
-      plan_ref?: string;
-    };
-    expect(command).toMatchObject({ kind: 'start_mow', plan_ref: 'zone:2' });
+    // The fake mower starts at the zone it was sent to (a zone, then a start).
+    await expect
+      .poll(
+        async () => {
+          const state = await request.get(`${TELEMETRY}/mowers/${mower!.id}/state`, { headers });
+          if (!state.ok()) return null;
+          const body = (await state.json()) as {
+            activity?: string;
+            raw?: { zone?: number };
+            state?: { activity?: string; raw?: { zone?: number } };
+          };
+          const current = body.state ?? body;
+          return `${current.activity}:${current.raw?.zone}`;
+        },
+        { timeout: 60_000 },
+      )
+      .toBe('mowing:2');
     await expect(page.locator('[data-command="pause"]').first()).toBeEnabled({ timeout: 60_000 });
     csp.assertNone();
   } finally {

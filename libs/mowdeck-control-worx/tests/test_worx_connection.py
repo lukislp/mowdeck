@@ -232,6 +232,8 @@ async def test_through_the_controller(pool: AccountPool) -> None:
         assert setting.status is CommandStatus.REJECTED  # outside 0..1440
         unknown = await send(SetSetting(key="night_light", value=True))
         assert unknown.status is CommandStatus.REJECTED
+        keep = await send(ReturnToDock(end_job=False))
+        assert keep.status is CommandStatus.REJECTED  # Worx home always ends the job
         delay = await send(SetSetting(key="rain_delay", value=30))
         assert delay.status is CommandStatus.ACCEPTED
         stop = await send(EmergencyStop())

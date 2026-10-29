@@ -414,11 +414,18 @@ class ResumeMow(ContractModel):
 
 
 class ReturnToDock(ContractModel):
-    """Pause or end the job and drive back to the charging station."""
+    """Drive back to the charging station; what happens to a running job depends on ``end_job``.
+
+    ``end_job`` true ends the job, so it does not resume later. False keeps it paused, so a later
+    ``ResumeMow`` continues it: only on mowers that declare
+    ``MowerCapabilities.dock_keeps_job`` (the controller refuses it elsewhere). None (the
+    default) leaves it to the mower: it keeps the job where it can, else it ends it.
+    """
 
     kind: Literal["return_to_dock"] = "return_to_dock"
-    end_job: bool = False
-    """Also end the running or paused job, so it does not resume later."""
+    end_job: bool | None = None
+    """True: end the job; False: keep it to resume later (``dock_keeps_job``); None: the
+    mower's own behaviour."""
 
 
 class EmergencyStop(ContractModel):

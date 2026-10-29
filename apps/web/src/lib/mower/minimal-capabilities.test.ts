@@ -12,6 +12,7 @@ import { offerOf } from '#lib/schedules/mow-options.js';
 import { settingSpecs } from './device-settings';
 import { lightCapable } from './light';
 import { bladeRange, speedRange } from './limits';
+import { dockChoiceOffered } from './dock-choice';
 import { offeredActions } from './maintenance';
 import { startPlans } from './start-plans';
 
@@ -38,6 +39,7 @@ describe('a mower with minimal capabilities', () => {
     expect(settingSpecs(MINIMAL)).toEqual([]);
     expect(offeredActions(MINIMAL)).toEqual([]);
     expect(startPlans(MINIMAL)).toEqual([]);
+    expect(dockChoiceOffered(MINIMAL, true)).toBe(false); // a plain return, no keep-job choice
   });
 
   it('offers no mowing patterns, spacing or job options to start with', () => {

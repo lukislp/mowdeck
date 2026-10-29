@@ -35,7 +35,7 @@ No developer account is needed.
 | Rain sensor | shown; the **rain delay** is a setting on the mower's settings page (where the mower reports one) |
 | GPS position | models with the GPS module or an RTK position |
 | Start | **Start now**, **Start in zone 1 to 4** (wire models with zones set up in the app) and **Cut the edge** (models with the one-time schedule), offered behind the Start button |
-| Pause, resume, return to the station | yes (returning always ends the job; the mower's own schedule picks up) |
+| Pause, resume, return to the station | yes; returning always ends the job (the mower's own schedule picks up), so MowDeck does not ask whether to keep it |
 | Cutting height | models with the electronic height adjustment, 30 to 60 mm in 5 mm steps |
 | Emergency stop | a pause sent at once (the cloud has no hard stop) |
 

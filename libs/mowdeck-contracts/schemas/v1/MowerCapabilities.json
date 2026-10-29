@@ -379,6 +379,12 @@
       "description": "Width of the cut swath in millimetres, if known (coverage heatmaps).",
       "title": "Cutting Width Mm"
     },
+    "dock_keeps_job": {
+      "default": false,
+      "description": "`ReturnToDock` with `end_job: false` keeps the running job paused, so a later `ResumeMow` continues it. Without it a client offers no 'keep the job' choice and the controller refuses `end_job: false`; the mower ends (or forgets) its job on the way home.",
+      "title": "Dock Keeps Job",
+      "type": "boolean"
+    },
     "drive_reverse": {
       "default": false,
       "description": "The drive link that carries the joystick frames can drive backwards (a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and a spot run's `multi_point` turns fall back to `arc` (ADR 0043).",

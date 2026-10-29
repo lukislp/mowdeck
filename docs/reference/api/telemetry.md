@@ -1183,6 +1183,7 @@ All fields default to "not supported", so an adapter only declares what it reall
 | `connection_kinds` | array of [ConnectionKind](#connectionkind) | no | Connection kinds this mower can use. |
 | `custom_paths` | boolean | no | The mower can follow an arbitrary path or boundary.; default `false` |
 | `cutting_width_mm` | integer or null | no | Width of the cut swath in millimetres, if known (coverage heatmaps). |
+| `dock_keeps_job` | boolean | no | `ReturnToDock` with `end_job: false` keeps the running job paused, so a later `ResumeMow` continues it. Without it a client offers no 'keep the job' choice and the controller refuses `end_job: false`; the mower ends (or forgets) its job on the way home.; default `false` |
 | `drive_reverse` | boolean | no | The drive link that carries the joystick frames can drive backwards (a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and a spot run's `multi_point` turns fall back to `arc` (ADR 0043).; default `false` |
 | `drive_speed_setting` | [DriveSpeedSetting](#drivespeedsetting) or null | no | The vendor's speed setting for manual driving can be read (`MowerState.drive_speed_mps`) and changed (`set_drive_speed`) within this range; null when the connection cannot (ADR 0042). |
 | `firmware_update` | boolean | no | The connection can ask the manufacturer's firmware service for updates and install them (`firmware_check`, `firmware_update`).; default `false` |

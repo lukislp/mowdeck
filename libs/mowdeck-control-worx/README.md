@@ -87,7 +87,7 @@ Commands go over MQTT and the mower confirms them through its next report, so a 
 | `StartMow` with areas or a spot plan, or an undeclared plan | rejected |
 | `PauseMow` | `pause` |
 | `ResumeMow` | `start` (continues the paused job) |
-| `ReturnToDock` | `home`; the job ends either way, the next one follows the mower's own schedule |
+| `ReturnToDock` | `home`: the job ends, the next one follows the mower's own schedule. `dock_keeps_job` is not declared, so the app offers no "keep the job" choice and the controller refuses `end_job: false` |
 | `EmergencyStop` | `pause` at once. **The cloud has no hard stop**: the mower stops its blades and wheels as for a pause |
 | `SetBladeHeight` | `set_cutting_height` (models with the cutting height module, 30 to 60 mm in 5 mm steps) |
 | `SetSetting` `rain_delay` | `raindelay` |

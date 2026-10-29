@@ -2961,14 +2961,16 @@ export type components = {
         };
         /**
          * ReturnToDock
-         * @description Pause or end the job and drive back to the charging station.
+         * @description Drive back to the charging station; what happens to a running job depends on ``end_job``.
+         *
+         *     ``end_job`` true ends the job, so it does not resume later. False keeps it paused, so a later
+         *     ``ResumeMow`` continues it: only on mowers that declare
+         *     ``MowerCapabilities.dock_keeps_job`` (the controller refuses it elsewhere). None (the
+         *     default) leaves it to the mower: it keeps the job where it can, else it ends it.
          */
         ReturnToDock: {
-            /**
-             * End Job
-             * @default false
-             */
-            end_job: boolean;
+            /** End Job */
+            end_job?: boolean | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}

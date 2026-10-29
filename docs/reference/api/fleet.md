@@ -1983,11 +1983,13 @@ Read the RTK origin and the dock pose again; the map is rebuilt with what the mo
 
 ### ReturnToDock
 
-Pause or end the job and drive back to the charging station.
+Drive back to the charging station; what happens to a running job depends on `end_job`.
+
+`end_job` true ends the job, so it does not resume later. False keeps it paused, so a later `ResumeMow` continues it: only on mowers that declare `MowerCapabilities.dock_keeps_job` (the controller refuses it elsewhere). None (the default) leaves it to the mower: it keeps the job where it can, else it ends it.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `end_job` | boolean | no | default `false` |
+| `end_job` | boolean or null | no |  |
 | `kind` | `"return_to_dock"` | no | default `"return_to_dock"` |
 
 ### ScannedDevice

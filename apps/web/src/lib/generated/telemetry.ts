@@ -1961,6 +1961,12 @@ export type components = {
              */
             cutting_width_mm?: number | null;
             /**
+             * Dock Keeps Job
+             * @description `ReturnToDock` with `end_job: false` keeps the running job paused, so a later `ResumeMow` continues it. Without it a client offers no 'keep the job' choice and the controller refuses `end_job: false`; the mower ends (or forgets) its job on the way home.
+             * @default false
+             */
+            dock_keeps_job: boolean;
+            /**
              * Drive Reverse
              * @description The drive link that carries the joystick frames can drive backwards (a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and a spot run's `multi_point` turns fall back to `arc` (ADR 0043).
              * @default false

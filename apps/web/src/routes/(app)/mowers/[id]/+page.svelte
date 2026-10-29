@@ -148,6 +148,7 @@
   } from '#lib/mower/route.js';
   import { SpotSheetFlow } from '#lib/mower/spot-sheet.svelte.js';
   import { StartSheetFlow } from '#lib/mower/start-sheet.svelte.js';
+  import { dockChoiceOffered } from '#lib/mower/dock-choice.js';
   import {
     planCommand,
     planLabel,
@@ -1152,7 +1153,7 @@
       sheet.open();
       return;
     }
-    if (action === 'dock' && jobActive(activity)) {
+    if (action === 'dock' && dockChoiceOffered(caps, jobActive(activity))) {
       sheet.dockChoice = true;
       return;
     }

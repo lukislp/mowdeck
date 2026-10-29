@@ -1262,3 +1262,8 @@ def test_self_check_blocked_names_the_reason() -> None:
     state = _state(device)
     assert state.self_check is not None and state.self_check.result is SelfCheckResult.BLOCKED
     assert state.self_check.detail == "rain" and state.raw["self_check"] == "rain"
+
+
+def test_mammotion_keeps_its_job_on_the_way_home() -> None:
+    """Without cancel_job the mower pauses its job at the dock; the web offers the choice."""
+    assert _caps().dock_keeps_job

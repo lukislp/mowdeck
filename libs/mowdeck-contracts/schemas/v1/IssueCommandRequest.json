@@ -380,12 +380,19 @@
       "type": "object"
     },
     "ReturnToDock": {
-      "description": "Pause or end the job and drive back to the charging station.",
+      "description": "Drive back to the charging station; what happens to a running job depends on ``end_job``.\n\n``end_job`` true ends the job, so it does not resume later. False keeps it paused, so a later\n``ResumeMow`` continues it: only on mowers that declare\n``MowerCapabilities.dock_keeps_job`` (the controller refuses it elsewhere). None (the\ndefault) leaves it to the mower: it keeps the job where it can, else it ends it.",
       "properties": {
         "end_job": {
-          "default": false,
-          "title": "End Job",
-          "type": "boolean"
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Job"
         },
         "kind": {
           "const": "return_to_dock",
