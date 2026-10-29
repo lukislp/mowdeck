@@ -145,5 +145,8 @@ class Settings(ServiceSettings):
 
     @property
     def connection_kinds(self) -> frozenset[str]:
-        """``allowed_connection_kinds`` as a set."""
+        """``allowed_connection_kinds`` as a set; only ``simulated`` in demo mode (ADR 0068),
+        whatever the variable says."""
+        if self.demo_mode:
+            return frozenset({"simulated"})
         return frozenset(k.strip() for k in self.allowed_connection_kinds.split(",") if k.strip())

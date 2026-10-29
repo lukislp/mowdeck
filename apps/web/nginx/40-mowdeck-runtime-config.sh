@@ -21,6 +21,11 @@
 #                                then connects to Agora (*.agora.io, *.sd-rtn.com, any port) and plays the
 #                                video from blob: URLs; the video goes through Agora's and the
 #                                vendor's servers. Anything else keeps them out of the CSP.
+#   MOWDECK_WEB_DEMO_MODE        true: a public demo installation (ADR 0068): the app shows the
+#                                demo banner, "Demo" in the title and "Try the demo" on the
+#                                sign-in page (the services enforce the demo themselves)
+#   MOWDECK_WEB_DEMO_RESET_HOURS hours between two resets of the demo, shown in the banner
+#                                (1 to 168, default 6)
 #
 # The build and its source code (AGPL-3.0 section 13, LICENSING.md), baked into the image by the
 # release build and overridable here; the app shows them on the sign-in page and under Settings:
@@ -119,7 +124,20 @@ case "${MOWDECK_WEB_CAMERA_ENABLED:-false}" in
     ;;
 esac
 
-printf '{"mapTiles":%s,"legalEnabled":%s,"cameraEnabled":%s,"source":%s}\n' "$map_tiles" "$legal_enabled" "$camera_enabled" "$source_json" > "$out/config.json"
+demo_json=""
+case "$(printf '%s' "${MOWDECK_WEB_DEMO_MODE:-false}" | tr '[:upper:]' '[:lower:]')" in
+  true | 1 | yes | on)
+    reset_hours="${MOWDECK_WEB_DEMO_RESET_HOURS:-6}"
+    case "$reset_hours" in
+      '' | *[!0-9]*) reset_hours=6 ;;
+    esac
+    if [ "$reset_hours" -lt 1 ] || [ "$reset_hours" -gt 168 ]; then reset_hours=6; fi
+    demo_json=",\"demo\":{\"resetHours\":$reset_hours}"
+    echo "mowdeck: PUBLIC DEMO (banner on every page, reset every $reset_hours h)"
+    ;;
+esac
+
+printf '{"mapTiles":%s,"legalEnabled":%s,"cameraEnabled":%s,"source":%s%s}\n' "$map_tiles" "$legal_enabled" "$camera_enabled" "$source_json" "$demo_json" > "$out/config.json"
 sed -e "s#img-src 'self' data: blob:#img-src 'self' data: blob:${img_extra}#" \
   -e "s#connect-src 'self'#connect-src 'self'${connect_extra}#" \
   -e "s#style-src 'self'#style-src 'self'${style_extra}#" \

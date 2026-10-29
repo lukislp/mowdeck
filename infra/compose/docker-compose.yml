@@ -85,10 +85,11 @@ services:
 
   # Placeholder for routing: proves that label-based /api/v1 routing works.
   # Real services replace it with their own labels. Only started with
-  # `--profile demo`; try `curl http://localhost/api/v1/whoami`.
+  # `--profile whoami`; try `curl http://localhost/api/v1/whoami`. (The public demo is the
+  # override docker-compose.demo.yml, not a profile.)
   whoami:
     image: ${WHOAMI_IMAGE:-ghcr.io/traefik/whoami:v1.10.3}
-    profiles: [demo]
+    profiles: [whoami]
     labels:
       - traefik.enable=true
       - traefik.http.routers.whoami.rule=PathPrefix(`/api/v1/whoami`)

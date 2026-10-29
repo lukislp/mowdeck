@@ -250,6 +250,20 @@ class SessionService:
             await self._rehash(result.subject_id, password)
         return pair
 
+    async def login_demo(self, ctx: RequestContext) -> TokenPair:
+        """Public demo (ADR 0068): a session of the prepared demo user without any credential
+        ("Try the demo"). Not found outside demo mode or before the seed job created the user;
+        rate limited per address like a password login."""
+        username = self.deps.config.demo_username
+        if username is None:
+            raise NotFoundError("there is no demo on this installation")
+        self._limit_ip(ctx)
+        async with self.deps.store.transaction() as tx:
+            found = await tx.users.get(username_norm=normalize_username(username))
+        if found is None or found.status is not Status.ACTIVE:
+            raise NotFoundError("the demo is being prepared; try again in a minute")
+        return await self._start_session(found.id, None, ctx, method="demo")
+
     async def _start_session(
         self,
         user_id: UUID,
@@ -325,8 +339,10 @@ class SessionService:
                 found.display_name,
             )
             await tx.audit.add(entry)
-            seen = await remember_device(tx, found, ctx, now, method)
-            if seen.new_device:
+            # The public demo (ADR 0068): every visitor would be a "new device" of the one shared
+            # user, so demo sign-ins remember no device and raise no new-login alert.
+            seen = None if method == "demo" else await remember_device(tx, found, ctx, now, method)
+            if seen is not None and seen.new_device:
                 await self._new_device(work, ctx, found, acct, session, seen, method, entry)
             if method == "passkey" and details and "via" not in details:
                 used = ctx.audit_entry(
@@ -344,7 +360,11 @@ class SessionService:
                 )
                 await tx.audit.add(used)
         return TokenPair(
-            access, principal, refresh, session.idle_expires_at, device_token=seen.token
+            access,
+            principal,
+            refresh,
+            session.idle_expires_at,
+            device_token=seen.token if seen is not None else None,
         )
 
     async def _new_device(

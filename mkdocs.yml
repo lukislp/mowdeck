@@ -109,6 +109,7 @@ nav:
       - adr/0063-matter-server.md
       - adr/0064-personal-access-tokens-and-public-api-docs.md
       - adr/0065-security-center-and-new-login-alerts.md
+      - adr/0068-public-demo-mode.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -136,6 +137,7 @@ nav:
       - ops/theft-tracking.md
       - ops/matter.md
       - ops/source-code.md
+      - ops/demo.md
   - Spikes:
       - spikes/index.md
       - spikes/0001-ble-bridge-and-pymammotion.md
