@@ -1,6 +1,6 @@
 # Public demo
 
-A demo installation lets anybody try MowDeck without an account: a click on **Try the demo** signs the visitor in to a prepared account with three simulated mowers and a week of history. No real mower, manufacturer account, push service or AI provider is reachable, nothing can be registered, and the whole demo is deleted and rebuilt every few hours. Design and the complete list of what the demo refuses: [ADR 0065](../adr/0065-public-demo-mode.md).
+A demo installation lets anybody try MowDeck without an account: a click on **Try the demo** signs the visitor in to a prepared account with three simulated mowers and a week of history. No real mower, manufacturer account, push service or AI provider is reachable, nothing can be registered, and the whole demo is deleted and rebuilt every few hours. Design and the complete list of what the demo refuses: [ADR 0068](../adr/0068-public-demo-mode.md).
 
 Run a demo only as its **own stack**: its own host or VM if possible, its own Compose project, database, volumes, network and secrets. Never on top of, next to the data of, or with the secrets of an installation with real mowers.
 
@@ -18,7 +18,7 @@ All visitors share the one demo account: they see each other's commands live.
 
 Every service enforces this itself (403, problem type `urn:mowdeck:problem:demo-mode`), whatever the web app shows:
 
-- registration, password, passkey, GitHub and Apple sign-in, the app hand-off, every change of the account, its users, roles and security settings, logout everywhere;
+- registration, password, passkey, GitHub and Apple sign-in, the app hand-off, every change of the account, its users, roles and security settings (the security center's alert switch, ending one or all other sessions; the overview stays readable), logout everywhere;
 - personal access tokens, account API tokens, widget credentials, token exchange;
 - linking manufacturer accounts, adding, renaming, reconfiguring or removing mowers, Bluetooth bridge links, adding base stations;
 - Web Push, APNs, Live Activities, ntfy and test notifications (the demo has no delivery channel at all);

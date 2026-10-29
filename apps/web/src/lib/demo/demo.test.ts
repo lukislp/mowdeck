@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * The public demo (ADR 0065) in the runtime config: the `demo` block of /config.json as
+ * The public demo (ADR 0068) in the runtime config: the `demo` block of /config.json as
  * nginx/40-mowdeck-runtime-config.sh renders it, and as the app reads it.
  */
 import { spawnSync } from 'node:child_process';

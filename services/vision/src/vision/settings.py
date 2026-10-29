@@ -206,7 +206,7 @@ class Settings(ServiceSettings):
 
     @model_validator(mode="after")
     def _demo_uses_the_fake_model(self) -> Self:
-        """Public demo (ADR 0065): the installation default is the rule based fake model and
+        """Public demo (ADR 0068): the installation default is the rule based fake model and
         users cannot point the service at any provider, whatever the variables say; no model
         provider is ever called."""
         if self.demo_mode:

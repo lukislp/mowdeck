@@ -68,7 +68,7 @@ def create_app(
         bus: Event bus to use. When None and ``settings.nats_enabled`` is true, a
             :class:`JetStreamBus` is connected on startup. A given bus is closed on shutdown.
         principal_resolver: Resolves the principal of a request; defaults to denying all.
-        demo_policy: What the service refuses with ``settings.demo_mode`` (ADR 0065); without
+        demo_policy: What the service refuses with ``settings.demo_mode`` (ADR 0068); without
             it a demo service only marks its responses.
 
     State on ``app.state``: ``settings``, ``descriptor``, ``bus``, ``metrics_registry``,

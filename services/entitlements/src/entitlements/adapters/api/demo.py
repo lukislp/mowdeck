@@ -1,4 +1,4 @@
-"""What Entitlements refuses in the public demo (ADR 0065): every change of plans and account
+"""What Entitlements refuses in the public demo (ADR 0068): every change of plans and account
 plans (operator actions; the demo account keeps its plan)."""
 
 from mowdeck_service_kit.demo import DemoPolicy

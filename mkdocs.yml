@@ -108,7 +108,8 @@ nav:
       - adr/0062-setup-tour.md
       - adr/0063-matter-server.md
       - adr/0064-personal-access-tokens-and-public-api-docs.md
-      - adr/0065-public-demo-mode.md
+      - adr/0065-security-center-and-new-login-alerts.md
+      - adr/0068-public-demo-mode.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -148,6 +149,7 @@ nav:
       - guides/aerial-photo.md
       - guides/apple-login.md
       - guides/step-up.md
+      - guides/security.md
       - guides/ios-widgets.md
       - guides/apple-watch.md
       - guides/setup-tour.md

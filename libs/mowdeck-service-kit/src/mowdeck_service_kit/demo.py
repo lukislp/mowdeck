@@ -1,4 +1,4 @@
-"""Public demo mode (ADR 0065): labels every response and refuses the unsafe actions.
+"""Public demo mode (ADR 0068): labels every response and refuses the unsafe actions.
 
 A demo installation (``MOWDECK_DEMO_MODE=true``) is a showcase with simulated mowers that anybody
 may open without an account. Every service then

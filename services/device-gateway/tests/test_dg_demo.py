@@ -1,4 +1,4 @@
-"""Public demo (ADR 0065): the gateway connects simulated mowers only."""
+"""Public demo (ADR 0068): the gateway connects simulated mowers only."""
 
 from uuid import uuid4
 

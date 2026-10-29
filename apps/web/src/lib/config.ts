@@ -32,7 +32,7 @@ export interface RuntimeConfig {
   /** The build and where its source code is (AGPL-3.0 section 13, `#lib/legal/source.js`). */
   source: SourceInfo;
   /**
-   * A public demo installation (ADR 0065, `MOWDECK_WEB_DEMO_MODE`): the banner, "Demo" in the
+   * A public demo installation (ADR 0068, `MOWDECK_WEB_DEMO_MODE`): the banner, "Demo" in the
    * title and "Try the demo" on the sign-in page. Absent on every other installation.
    */
   demo?: DemoConfig;

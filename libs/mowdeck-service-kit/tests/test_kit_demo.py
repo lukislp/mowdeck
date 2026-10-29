@@ -1,4 +1,4 @@
-"""Public demo mode (ADR 0065): the response label, the policy and the seed secret."""
+"""Public demo mode (ADR 0068): the response label, the policy and the seed secret."""
 
 from typing import Annotated
 

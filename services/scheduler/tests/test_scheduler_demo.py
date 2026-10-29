@@ -1,4 +1,4 @@
-"""Public demo (ADR 0065): static weather, no development endpoints, a schedule cap."""
+"""Public demo (ADR 0068): static weather, no development endpoints, a schedule cap."""
 
 from scheduler_support import make_settings
 

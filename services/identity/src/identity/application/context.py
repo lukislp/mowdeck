@@ -50,7 +50,7 @@ class IdentityConfig:
     app_handoff_login_age: timedelta = timedelta(minutes=5)
     """Only a browser login session younger than this can be handed to the app."""
     demo_username: str | None = None
-    """Public demo (ADR 0065): the prepared user every visitor signs in as with one click.
+    """Public demo (ADR 0068): the prepared user every visitor signs in as with one click.
     None outside demo mode, where the one-click sign-in does not exist."""
 
 

@@ -7,7 +7,8 @@
   ``mower.connected``/``disconnected`` feed the offline rule.
 * ``event.identity.>`` (JetStream ``EVENTS``, durable ``notifications-identity``):
   ``identity.user.disabled`` and ``identity.user.deleted`` delete the user's preferences,
-  targets, inbox and deliveries; other identity events are acknowledged and ignored.
+  targets, inbox and deliveries; ``identity.session.new_device`` becomes ``security_new_login``
+  for that user alone (ADR 0065); other identity events are acknowledged and ignored.
 * ``command.mower.*`` (JetStream ``COMMANDS``, durable and queue group
   ``notifications-commands``): the time of the newest command per mower (any kind, manual drive
   frames separately), which explains a departure from the dock and suspends the geofence while
@@ -39,6 +40,7 @@ from typing import Any
 from mowdeck_authz.events import subscribe_cache_invalidation
 from mowdeck_authz.writer import SupportsInvalidate
 from mowdeck_contracts.v1 import (
+    IDENTITY_SESSION_NEW_DEVICE,
     IDENTITY_USER_DELETED,
     IDENTITY_USER_DISABLED,
     MOWER_CONNECTED,
@@ -60,6 +62,7 @@ from mowdeck_contracts.v1 import (
     MowerMapSnapshot,
     MowerRegistration,
     MowerState,
+    NewDeviceLogin,
     TrackingEvent,
     UserChanged,
     VisionProposalCreated,
@@ -295,13 +298,23 @@ def vision_event_handler(watcher: Watcher) -> MessageHandler:
 
 
 def identity_handler(accounts: Accounts) -> MessageHandler:
-    """Forget users that were disabled or deleted."""
+    """Forget users that were disabled or deleted; tell a user about a login from a new device
+    (ADR 0065)."""
 
     async def handle(message: BusMessage) -> None:
         try:
             event = message.model(EventEnvelope[dict[str, Any]])
         except ValidationError as exc:
             raise DropMessage("invalid event envelope") from exc
+        if event.type == IDENTITY_SESSION_NEW_DEVICE:
+            try:
+                alert = NewDeviceLogin.model_validate(event.payload)
+            except ValidationError as exc:
+                raise DropMessage(f"invalid {event.type} payload") from exc
+            if event.account_id is not None and event.account_id != alert.account_id:
+                raise DropMessage("envelope and payload name different accounts")
+            await accounts.new_login(alert)
+            return
         if event.type not in _USER_REMOVED:
             return
         try:

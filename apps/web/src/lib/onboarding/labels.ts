@@ -76,7 +76,7 @@ export function stepHref(key: StepKey, facts: Pick<Facts, 'firstMowerId'>): stri
       return '/settings#notifications';
     case 'passkey':
     case 'sign-in-links':
-      return '/settings#profile';
+      return '/settings#security';
     case 'schedule':
       return '/schedules/new';
   }

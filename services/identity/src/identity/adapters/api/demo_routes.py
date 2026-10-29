@@ -1,4 +1,4 @@
-"""Public demo (ADR 0065): the one-click sign-in, the seed call and the demo policy.
+"""Public demo (ADR 0068): the one-click sign-in, the seed call and the demo policy.
 
 Both endpoints answer 404 outside demo mode (``MOWDECK_DEMO_MODE``). In demo mode Identity
 refuses every mutating request that :data:`DEMO_POLICY` does not allow: no registration, no

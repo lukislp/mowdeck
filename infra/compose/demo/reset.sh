@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# (Re)creates the public demo stack (ADR 0065, docs/ops/demo.md): deletes the previous demo with
+# (Re)creates the public demo stack (ADR 0068, docs/ops/demo.md): deletes the previous demo with
 # all its volumes, starts a fresh one and lets the seed job prepare it. Nothing a visitor did
 # survives a reset. Run it by hand or from the timer of docs/ops/demo.md every DEMO_RESET_HOURS.
 #

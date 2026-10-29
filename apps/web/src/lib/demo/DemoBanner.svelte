@@ -1,5 +1,5 @@
 <!--
-  The demo band (ADR 0065): pinned above every page of a demo installation, in the browser and
+  The demo band (ADR 0068): pinned above every page of a demo installation, in the browser and
   inside the app shells, and never dismissible. It sits in the strip the page frame reserves at
   the top (`--md-safe-top` grows by the band's height while `<html>` has the demo class), so no
   layout below has to know about it. A hatched "calibration tape" tag, as on a test rig.

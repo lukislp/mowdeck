@@ -36,7 +36,7 @@ MIRROR_SCRIPT = "infra/mirror-env.sh"
 # the job pulls them from their own registry, pinned by digest.
 UNMIRRORED = {
     ("ci.yml", "e2e-web-shard", "PLAYWRIGHT_IMAGE"): "mcr.microsoft.com/playwright:",
-    # The public demo's specs (ADR 0065) in the same image.
+    # The public demo's specs (ADR 0068) in the same image.
     ("ci.yml", "e2e-demo", "PLAYWRIGHT_IMAGE"): "mcr.microsoft.com/playwright:",
 }
 

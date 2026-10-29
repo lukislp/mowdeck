@@ -135,7 +135,7 @@ class ServiceSettings(BaseSettings):
     a test build. Empty: ``v<version>`` when the version is a semantic version."""
 
     demo_mode: bool = False
-    """Public demo installation (ADR 0065): simulated mowers only, every response marked with
+    """Public demo installation (ADR 0068): simulated mowers only, every response marked with
     ``X-MowDeck-Demo: 1`` and the actions of the service's demo policy refused with 403. Never
     on an installation with real mowers or accounts."""
 

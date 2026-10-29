@@ -1,5 +1,5 @@
 /**
- * Whether this installation is the public demo (ADR 0065), from `/config.json`. The root layout
+ * Whether this installation is the public demo (ADR 0068), from `/config.json`. The root layout
  * loads it once; the sign-in and registration pages read it.
  */
 

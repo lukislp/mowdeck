@@ -1,4 +1,4 @@
-"""Public demo (ADR 0065): nothing leaves the server; the inbox keeps working."""
+"""Public demo (ADR 0068): nothing leaves the server; the inbox keeps working."""
 
 from typing import Any
 

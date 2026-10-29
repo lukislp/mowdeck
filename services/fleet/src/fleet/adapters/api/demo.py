@@ -1,4 +1,4 @@
-"""What Fleet refuses in the public demo (ADR 0065).
+"""What Fleet refuses in the public demo (ADR 0068).
 
 The visitor drives the prepared simulated mowers: commands, camera, manual drive, spot runs,
 area names, mowing defaults, sites and groups all work. Refused: linking manufacturer accounts,

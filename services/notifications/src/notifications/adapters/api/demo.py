@@ -1,4 +1,4 @@
-"""What Notifications refuses in the public demo (ADR 0065).
+"""What Notifications refuses in the public demo (ADR 0068).
 
 The demo keeps every notification in the in-app inbox and sends nothing out: no Web Push
 subscription (its endpoint is a third-party push service), no APNs device or Live Activity, no

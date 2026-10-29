@@ -21,7 +21,7 @@
 #                                then connects to Agora (*.agora.io, *.sd-rtn.com, any port) and plays the
 #                                video from blob: URLs; the video goes through Agora's and the
 #                                vendor's servers. Anything else keeps them out of the CSP.
-#   MOWDECK_WEB_DEMO_MODE        true: a public demo installation (ADR 0065): the app shows the
+#   MOWDECK_WEB_DEMO_MODE        true: a public demo installation (ADR 0068): the app shows the
 #                                demo banner, "Demo" in the title and "Try the demo" on the
 #                                sign-in page (the services enforce the demo themselves)
 #   MOWDECK_WEB_DEMO_RESET_HOURS hours between two resets of the demo, shown in the banner

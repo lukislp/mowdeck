@@ -1,4 +1,4 @@
-"""Public demo (ADR 0065): past mowing days for the freshly seeded demo mowers.
+"""Public demo (ADR 0068): past mowing days for the freshly seeded demo mowers.
 
 Only the demo seed job calls this (404 outside demo mode, 403 without the seed secret), before
 the Device-Gateway starts: the simulated days run offline (``mowdeck_control.history``) and go

@@ -37,7 +37,7 @@ if (!Number.isInteger(port) || port < 1024 || port > 65_000 || port === 80) {
   fail(`invalid MOWDECK_E2E_PORT ${process.env.MOWDECK_E2E_PORT}`);
 }
 
-// MOWDECK_E2E_DEMO=1: the public demo (ADR 0065) on top, with the test secrets of demo.env;
+// MOWDECK_E2E_DEMO=1: the public demo (ADR 0068) on top, with the test secrets of demo.env;
 // `pnpm e2e:stack demo` runs its specs. A demo stack is only for the demo specs.
 const demo = process.env.MOWDECK_E2E_DEMO === '1';
 

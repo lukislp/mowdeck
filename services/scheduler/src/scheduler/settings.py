@@ -15,7 +15,7 @@ from pydantic import Field, model_validator
 from scheduler.application.context import SchedulerConfig
 
 DEMO_MAX_SCHEDULES = 30
-"""Schedules the demo account may have (visitors share it, ADR 0065)."""
+"""Schedules the demo account may have (visitors share it, ADR 0068)."""
 
 
 class Settings(ServiceSettings):
@@ -69,7 +69,7 @@ class Settings(ServiceSettings):
 
     @model_validator(mode="after")
     def _demo_weather_is_static(self) -> Self:
-        """Public demo (ADR 0065): the static provider (no request to a weather service), no
+        """Public demo (ADR 0068): the static provider (no request to a weather service), no
         development endpoints and at most 30 schedules, whatever the variables say."""
         if self.demo_mode:
             self.scheduler_weather_provider = "static"

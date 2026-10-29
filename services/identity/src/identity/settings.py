@@ -170,7 +170,7 @@ class Settings(ServiceSettings):
     identity_demo_username: str = Field(
         default="demo", min_length=3, max_length=64, pattern=r"^[a-z][a-z0-9._-]*$"
     )
-    """Public demo (``MOWDECK_DEMO_MODE``, ADR 0065): the user every visitor signs in as with
+    """Public demo (``MOWDECK_DEMO_MODE``, ADR 0068): the user every visitor signs in as with
     "Try the demo". The seed job creates it; it has no usable password."""
 
     identity_demo_account_name: str = Field(default="MowDeck demo", min_length=1, max_length=100)
@@ -225,7 +225,7 @@ class Settings(ServiceSettings):
         """The GitHub login settings, or None (off). Logged once at startup: on with the callback
         URL to register, or why it is off; a wrong value never stops the service."""
         if self.demo_mode:
-            return None  # the demo has no own accounts to sign in to (ADR 0065)
+            return None  # the demo has no own accounts to sign in to (ADR 0068)
         client_id = self.identity_github_client_id.strip()
         secret = self.identity_github_client_secret
         secret_value = secret.get_secret_value().strip() if secret is not None else ""
@@ -260,7 +260,7 @@ class Settings(ServiceSettings):
         URL to register at the Services ID, or why it is off; a wrong value (an unreadable or
         wrong key included) never stops the service."""
         if self.demo_mode:
-            return None  # the demo has no own accounts to sign in to (ADR 0065)
+            return None  # the demo has no own accounts to sign in to (ADR 0068)
         services_id = self.identity_apple_services_id.strip()
         team_id = self.identity_apple_team_id.strip()
         key_id = self.identity_apple_key_id.strip()

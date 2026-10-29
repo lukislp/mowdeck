@@ -1,6 +1,7 @@
-"""Public demo (ADR 0065): the one-click sign-in, the seed call and what the demo refuses."""
+"""Public demo (ADR 0068): the one-click sign-in, the seed call and what the demo refuses."""
 
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from identity_support import API, PASSWORD, bearer, harness, make_settings
@@ -85,6 +86,10 @@ async def test_no_demo_outside_demo_mode() -> None:
         ("POST", "/me/step-up/password", {"password": PASSWORD}),
         ("POST", "/me/passkeys/options", None),
         ("POST", "/session/logout-all", None),
+        # Security center (ADR 0065): alerts and other visitors' sessions stay as they are.
+        ("PUT", "/me/security/alerts", {"new_login_alerts": False}),
+        ("DELETE", f"/me/sessions/{uuid4()}", None),
+        ("POST", "/me/sessions/revoke-others", None),
     ],
 )
 async def test_the_demo_refuses_sign_in_methods_tokens_and_security(
@@ -117,6 +122,31 @@ async def test_the_demo_refuses_account_users_and_roles() -> None:
         read = await h.client.get(base, headers=headers)
     assert [c.status_code for c in calls] == [403] * len(calls)
     assert read.status_code == 200, read.text
+
+
+async def test_the_demo_shows_the_security_center_read_only() -> None:
+    async with harness(**DEMO) as h:
+        await _seed(h.client)
+        headers = bearer((await h.client.post(f"{API}/demo/session")).json()["access_token"])
+        reads = [
+            await h.client.get(f"{API}/me/security", headers=headers),
+            await h.client.get(f"{API}/me/sessions", headers=headers),
+            await h.client.get(f"{API}/me/security-events", headers=headers),
+        ]
+    assert [r.status_code for r in reads] == [200, 200, 200], [r.text for r in reads]
+
+
+async def test_demo_sign_ins_remember_no_device_and_alert_nobody() -> None:
+    async with harness(**DEMO) as h:
+        await _seed(h.client)
+        first = await h.client.post(f"{API}/demo/session")
+        second = await h.client.post(f"{API}/demo/session")
+        headers = bearer(second.json()["access_token"])
+        overview = await h.client.get(f"{API}/me/security", headers=headers)
+        events = await h.client.get(f"{API}/me/security-events", headers=headers)
+    assert "mowdeck_device" not in first.cookies
+    assert overview.json()["known_devices"] == 0
+    assert "security.new_device" not in events.text
 
 
 async def test_the_demo_keeps_the_session_and_the_tour() -> None:

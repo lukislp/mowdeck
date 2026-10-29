@@ -423,7 +423,7 @@ The stored activity (tokens are not echoed).
 
 What a notification is about.
 
-Type: `"mowing_finished"` \| `"mower_stuck"` \| `"battery_low"` \| `"mower_offline"` \| `"mower_online"` \| `"job_started"` \| `"mower_lifted"` \| `"mower_left_dock_unexpectedly"` \| `"geofence_exit"` \| `"blade_maintenance"` \| `"vision_proposal"` \| `"vision_auto_proposal"` \| `"firmware_update_available"` \| `"firmware_update_finished"` \| `"firmware_update_failed"` \| `"tracking_started"` \| `"tracking_moved"` \| `"tracking_stale"` \| `"tracking_ended"` \| `"test"`
+Type: `"mowing_finished"` \| `"mower_stuck"` \| `"battery_low"` \| `"mower_offline"` \| `"mower_online"` \| `"job_started"` \| `"mower_lifted"` \| `"mower_left_dock_unexpectedly"` \| `"geofence_exit"` \| `"blade_maintenance"` \| `"vision_proposal"` \| `"vision_auto_proposal"` \| `"firmware_update_available"` \| `"firmware_update_finished"` \| `"firmware_update_failed"` \| `"tracking_started"` \| `"tracking_moved"` \| `"tracking_stale"` \| `"tracking_ended"` \| `"security_new_login"` \| `"test"`
 
 ### NotificationSeverity
 

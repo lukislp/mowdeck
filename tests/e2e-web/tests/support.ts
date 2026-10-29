@@ -27,7 +27,16 @@ export async function registerByApi(request: APIRequestContext, who: Actor): Pro
     data: { username: who.username, password: who.password, account_name: `${who.username} home` },
   });
   expect(registered.status(), await registered.text()).toBe(201);
-  return loginByApi(request, who);
+  const ready = await loginByApi(request, who);
+  // The API login and the browser login of a test are two devices: without this every UI login
+  // would add a "new sign-in" notification (ADR 0065) to inboxes the tests count. The security
+  // spec turns the alerts back on.
+  const quiet = await request.put(`${IDENTITY}/me/security/alerts`, {
+    headers: { Authorization: `Bearer ${ready.token}` },
+    data: { new_login_alerts: false },
+  });
+  expect(quiet.status(), await quiet.text()).toBe(200);
+  return ready;
 }
 
 export async function loginByApi(request: APIRequestContext, who: Actor): Promise<Actor> {

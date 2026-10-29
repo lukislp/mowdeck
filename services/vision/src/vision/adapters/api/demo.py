@@ -1,4 +1,4 @@
-"""What Vision refuses in the public demo (ADR 0065).
+"""What Vision refuses in the public demo (ADR 0068).
 
 The demo's AI assistant is the installation default with the rule based fake model
 (``fake/recover``), so "AI recover" works without any model provider. Refused: setting, testing

@@ -394,7 +394,7 @@ async def test_link_then_sign_in_with_apple_then_unlink(
         )
         audit = await h.audit(lukas)
     assert methods["apple"] is True and methods["github"] is False
-    assert where(linked) == ("/settings#profile", {"linked": "apple"})
+    assert where(linked) == ("/settings#security", {"linked": "apple"})
     assert [(x["provider"], x["display_name"]) for x in links] == [("apple", "Apple ID")]
     assert where(login) == ("/login", {"next": "/schedules", "signed_in_with": "apple"})
     cookie = login.headers["set-cookie"]

@@ -1,4 +1,4 @@
-"""Public demo (ADR 0065): only simulated mowers, no manufacturer accounts, the demo mowers
+"""Public demo (ADR 0068): only simulated mowers, no manufacturer accounts, the demo mowers
 stay as the seed job made them; commands and the rest work."""
 
 from typing import Any

@@ -130,7 +130,7 @@ export class SessionManager {
     await this.signIn(`${IDENTITY}/session`, { username, password });
   }
 
-  /** "Try the demo" (ADR 0065): a session of the public demo's prepared user, no credentials. */
+  /** "Try the demo" (ADR 0068): a session of the public demo's prepared user, no credentials. */
   async tryDemo(): Promise<void> {
     await this.signIn(`${IDENTITY}/demo/session`, {});
   }

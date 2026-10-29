@@ -268,7 +268,7 @@ class Settings(ServiceSettings):
 
     @model_validator(mode="after")
     def _demo_sends_nothing(self) -> "Settings":
-        """Public demo (ADR 0065): no channel at all, whatever the variables say; every
+        """Public demo (ADR 0068): no channel at all, whatever the variables say; every
         notification stays in the in-app inbox and nothing leaves the server."""
         if self.demo_mode:
             self.notifications_channels = ""

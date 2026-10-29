@@ -1,4 +1,4 @@
-# Public demo of MowDeck (ADR 0065, docs/ops/demo.md). Use it on top of docker-compose.yml as its
+# Public demo of MowDeck (ADR 0068, docs/ops/demo.md). Use it on top of docker-compose.yml as its
 # own Compose project with its own database, volumes, network and secrets, never next to or
 # instead of an installation with real mowers:
 #
@@ -13,7 +13,7 @@
 # - Every MowDeck service runs with MOWDECK_DEMO_MODE=true: every response carries
 #   X-MowDeck-Demo: 1 and each service refuses what its demo policy names (registration, sign-in
 #   methods, tokens, account and security changes, manufacturer accounts, push channels, own AI
-#   providers; the list is in ADR 0065).
+#   providers; the list is in ADR 0068).
 # - Traefik labels every response, removes the seed secret header from every outside request and
 #   rate limits every client address; "Try the demo" has the login limit.
 # - The seed job (demo/seed.py) prepares the demo account, three simulated mowers in three
@@ -49,7 +49,7 @@ services:
   identity:
     environment:
       <<: *demo
-      # Forced by demo mode anyway (ADR 0065): nobody registers, no other sign-in method.
+      # Forced by demo mode anyway (ADR 0068): nobody registers, no other sign-in method.
       MOWDECK_IDENTITY_REGISTRATION: closed
       MOWDECK_IDENTITY_PUBLIC_URL: ""
       MOWDECK_IDENTITY_GITHUB_CLIENT_ID: ""

@@ -58,7 +58,7 @@
   let appleBusy = $state(false);
   let demoBusy = $state(false);
 
-  /** "Try the demo" (ADR 0065): the prepared demo account, no registration, no password. */
+  /** "Try the demo" (ADR 0068): the prepared demo account, no registration, no password. */
   async function tryDemo(): Promise<void> {
     demoBusy = true;
     problem = null;
@@ -512,7 +512,7 @@
 </AuthFrame>
 
 <style>
-  /* The demo entry (ADR 0065): the tag of the demo band, three numbered facts, one button. */
+  /* The demo entry (ADR 0068): the tag of the demo band, three numbered facts, one button. */
   .demo {
     display: grid;
     gap: var(--md-space-4);

@@ -1,4 +1,4 @@
-"""What the Scheduler refuses in the public demo (ADR 0065): only the development weather
+"""What the Scheduler refuses in the public demo (ADR 0068): only the development weather
 switch. Schedules, skip, run now and the mowing angles work; the weather is the static provider
 (no request to a weather service)."""
 

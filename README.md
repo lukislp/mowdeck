@@ -144,7 +144,7 @@ More: [getting started](docs/dev/getting-started.md), [compose stack](infra/comp
 
 ## Public demo
 
-A demo installation lets anybody try MowDeck without an account: **Try the demo** on the sign-in page opens a shared account with three simulated mowers in three gardens and a week of history (tracks, heatmaps, health). It runs as its own Compose project with the override `infra/compose/docker-compose.demo.yml`; every service then refuses registration, sign-in methods, tokens, account and security changes, manufacturer accounts and every outbound channel, labels each response with `X-MowDeck-Demo: 1`, and the web app shows a demo band on every page. `infra/compose/demo/reset.sh` deletes and reseeds it, run by a timer every few hours. Setup and the full list of guards: [docs/ops/demo.md](docs/ops/demo.md) and [ADR 0065](docs/adr/0065-public-demo-mode.md).
+A demo installation lets anybody try MowDeck without an account: **Try the demo** on the sign-in page opens a shared account with three simulated mowers in three gardens and a week of history (tracks, heatmaps, health). It runs as its own Compose project with the override `infra/compose/docker-compose.demo.yml`; every service then refuses registration, sign-in methods, tokens, account and security changes, manufacturer accounts and every outbound channel, labels each response with `X-MowDeck-Demo: 1`, and the web app shows a demo band on every page. `infra/compose/demo/reset.sh` deletes and reseeds it, run by a timer every few hours. Setup and the full list of guards: [docs/ops/demo.md](docs/ops/demo.md) and [ADR 0068](docs/adr/0068-public-demo-mode.md).
 
 ```bash
 cd infra/compose

@@ -1,4 +1,4 @@
-# ADR 0065: Public demo mode
+# ADR 0068: Public demo mode
 
 ## Status
 
@@ -36,7 +36,7 @@ What each service refuses, and what it forces regardless of its variables:
 
 | Service | Refused in demo mode | Forced in demo mode |
 | --- | --- | --- |
-| Identity | everything but `POST /demo/session`, `POST /demo/seed` (seed secret), refresh, logout, the permission check and the setup tour: registration, password, passkey, GitHub and Apple sign-in, the app hand-off, token exchange, personal access tokens, widget credentials, password and passkey changes, step-up, logout everywhere, account, users, roles, API tokens, platform | registration `closed`, passkeys, GitHub and Apple off |
+| Identity | everything but `POST /demo/session`, `POST /demo/seed` (seed secret), refresh, logout, the permission check and the setup tour: registration, password, passkey, GitHub and Apple sign-in, the app hand-off, token exchange, personal access tokens, widget credentials, password and passkey changes, step-up, logout everywhere, the security center's alert switch and ending sessions ([ADR 0065](0065-security-center-and-new-login-alerts.md); its overview, sessions and events stay readable), account, users, roles, API tokens, platform | registration `closed`, passkeys, GitHub and Apple off; demo sign-ins remember no device and raise no new-login alert |
 | Fleet | linking manufacturer accounts, adding, renaming, reconfiguring or removing mowers, the Bluetooth bridge link, adding or removing base stations | `allowed_connection_kinds = {simulated}` |
 | Device-Gateway | (no API) | only simulated connections are created (`SimulatedOnlyError` for any other kind), no cloud factory, no cloud discovery |
 | Notifications | Web Push subscriptions, APNs devices, Live Activities, ntfy, the test message | no channel at all (the inbox only), no ntfy servers, no push photos |

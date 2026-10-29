@@ -1,4 +1,4 @@
-"""The demo gardens and the offline history of a simulated mower (ADR 0065)."""
+"""The demo gardens and the offline history of a simulated mower (ADR 0068)."""
 
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4

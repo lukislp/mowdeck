@@ -30,7 +30,7 @@
     if (session.status === 'unknown' && !/^\/track\/?$/.test(location.pathname)) {
       void session.restore().catch(() => undefined);
     }
-    // The public demo (ADR 0065): the band above every page and "Demo" in front of every title.
+    // The public demo (ADR 0068): the band above every page and "Demo" in front of every title.
     let stopTitle: (() => void) | null = null;
     let stopped = false;
     void demo.load().then((config) => {

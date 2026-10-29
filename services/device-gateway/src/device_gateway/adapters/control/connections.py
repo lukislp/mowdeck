@@ -28,7 +28,7 @@ from device_gateway.application.ports import BackgroundJob
 
 
 class SimulatedOnlyError(ValueError):
-    """A real mower in a demo installation (ADR 0065): it is never connected."""
+    """A real mower in a demo installation (ADR 0068): it is never connected."""
 
 
 class RegistryConnectionProvider:
@@ -48,7 +48,7 @@ class RegistryConnectionProvider:
         self._registry = registry or default_registry()
         self._cloud_factory = cloud_factory
         self._simulated_only = simulated_only
-        """Public demo (ADR 0065): any other kind is refused before an adapter is touched."""
+        """Public demo (ADR 0068): any other kind is refused before an adapter is touched."""
 
     def create(self, registration: MowerRegistration) -> MowerConnection:
         """Create the connection; simulated mowers default to the configured time scale.

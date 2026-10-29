@@ -76,7 +76,7 @@ export default defineConfig({
       testMatch: /screens\.spec\.ts/,
       use: { browserName: 'chromium' },
     },
-    // The public demo (ADR 0065): only against a demo stack (CI job e2e-demo); the tests skip
+    // The public demo (ADR 0068): only against a demo stack (CI job e2e-demo); the tests skip
     // on every other stack. On a phone too, where the banner has its short text.
     {
       name: 'demo',

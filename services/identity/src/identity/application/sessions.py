@@ -22,7 +22,12 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from mowdeck_auth.issuer import IssuedToken, TokenIssuer
-from mowdeck_contracts.v1 import Principal, PrincipalKind
+from mowdeck_contracts.v1 import (
+    IDENTITY_SESSION_NEW_DEVICE,
+    NewDeviceLogin,
+    Principal,
+    PrincipalKind,
+)
 
 from identity.application.access import token_principal, user_principal
 from identity.application.authenticators import (
@@ -36,9 +41,11 @@ from identity.application.authenticators import (
 )
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
+from identity.application.devices import DeviceSeen, remember_device
 from identity.application.ports import Ge, Tx
 from identity.application.ratelimit import TokenBucketLimiter
 from identity.application.reauth import Reauthenticator
+from identity.application.work import Work
 from identity.domain.credentials import (
     clean_return_query,
     new_app_code,
@@ -56,6 +63,7 @@ from identity.domain.models import (
     ApiToken,
     AppLoginCode,
     AppLoginRequest,
+    AuditEntry,
     LoginAttempt,
     Membership,
     RedirectPurpose,
@@ -76,6 +84,8 @@ class TokenPair:
     principal: Principal
     refresh_token: str | None = None
     refresh_expires_at: datetime | None = None
+    device_token: str | None = None
+    """For logins: the device id for the ``mowdeck_device`` cookie (ADR 0065)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,7 +251,7 @@ class SessionService:
         return pair
 
     async def login_demo(self, ctx: RequestContext) -> TokenPair:
-        """Public demo (ADR 0065): a session of the prepared demo user without any credential
+        """Public demo (ADR 0068): a session of the prepared demo user without any credential
         ("Try the demo"). Not found outside demo mode or before the seed job created the user;
         rate limited per address like a password login."""
         username = self.deps.config.demo_username
@@ -329,6 +339,11 @@ class SessionService:
                 found.display_name,
             )
             await tx.audit.add(entry)
+            # The public demo (ADR 0068): every visitor would be a "new device" of the one shared
+            # user, so demo sign-ins remember no device and raise no new-login alert.
+            seen = None if method == "demo" else await remember_device(tx, found, ctx, now, method)
+            if seen is not None and seen.new_device:
+                await self._new_device(work, ctx, found, acct, session, seen, method, entry)
             if method == "passkey" and details and "via" not in details:
                 used = ctx.audit_entry(
                     at=now,
@@ -344,7 +359,68 @@ class SessionService:
                     entry.actor_name,
                 )
                 await tx.audit.add(used)
-        return TokenPair(access, principal, refresh, session.idle_expires_at)
+        return TokenPair(
+            access,
+            principal,
+            refresh,
+            session.idle_expires_at,
+            device_token=seen.token if seen is not None else None,
+        )
+
+    async def _new_device(
+        self,
+        work: Work,
+        ctx: RequestContext,
+        found: User,
+        acct: Account,
+        session: Session,
+        seen: DeviceSeen,
+        method: str,
+        login: AuditEntry,
+    ) -> None:
+        """Audit a login from a new device (``security.new_device``, the user as the actor like
+        the login) and, when the user wants alerts, publish ``identity.session.new_device``."""
+        entry = ctx.audit_entry(
+            at=login.at,
+            action="security.new_device",
+            account_id=acct.id,
+            target_type="user",
+            target_id=str(found.id),
+            details={
+                "session": str(session.family_id),
+                "device": seen.device.label,
+                "client": seen.info.client.value,
+                "browser": seen.info.browser,
+                "os": seen.info.os,
+                "ip_prefix": seen.ip_prefix,
+                "method": method,
+                "alerted": seen.alert,
+            },
+        )
+        entry.actor_subject, entry.actor_kind, entry.actor_name = (
+            login.actor_subject,
+            login.actor_kind,
+            login.actor_name,
+        )
+        await work.tx.audit.add(entry)
+        if seen.alert:
+            work.emit(
+                IDENTITY_SESSION_NEW_DEVICE,
+                acct.id,
+                NewDeviceLogin(
+                    user_id=found.id,
+                    account_id=acct.id,
+                    session_id=session.family_id,
+                    device=seen.device.label,
+                    client=seen.info.client.value,
+                    browser=seen.info.browser,
+                    os=seen.info.os,
+                    ip_prefix=seen.ip_prefix,
+                    network=seen.network.value,
+                    method=method[:20],
+                    at=login.at,
+                ),
+            )
 
     # --- passkeys (ADR 0050) --------------------------------------------------------------------
 
@@ -1005,6 +1081,7 @@ class SessionService:
             if fresh is None:
                 raise AuthenticationFailed("user vanished")
             fresh.password_hash, fresh.must_change_password = new_hash, False
+            fresh.password_changed_at = now
             await work.tx.users.update(fresh)
             ended = 0
             for session in await work.tx.sessions.find(user_id=found.id, revoked_at=None):

@@ -24,6 +24,7 @@ from identity.domain.models import (
     AuditEntry,
     CatalogueEntry,
     ExternalIdentity,
+    KnownDevice,
     LoginAttempt,
     Membership,
     OAuthState,
@@ -204,6 +205,11 @@ class Tx(Protocol):
     @property
     def onboarding(self) -> Table[OnboardingProgress]:
         """The setup tour progress table (one row per user)."""
+        ...
+
+    @property
+    def known_devices(self) -> Table[KnownDevice]:
+        """The devices users signed in from (ADR 0065)."""
         ...
 
 

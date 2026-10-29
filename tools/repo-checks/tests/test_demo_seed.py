@@ -1,4 +1,4 @@
-"""The seed job of the public demo (infra/compose/demo/seed.py, ADR 0065) against a recorded API."""
+"""The seed job of the public demo (infra/compose/demo/seed.py, ADR 0068) against a recorded API."""
 
 import importlib.util
 from pathlib import Path

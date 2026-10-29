@@ -1,4 +1,4 @@
-"""Public demo (ADR 0065): the seed job's past mowing days and the response label."""
+"""Public demo (ADR 0068): the seed job's past mowing days and the response label."""
 
 from typing import Any
 from uuid import uuid4

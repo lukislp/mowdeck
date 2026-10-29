@@ -1,4 +1,4 @@
-"""Past mowing days of a simulated mower, for the public demo (ADR 0065).
+"""Past mowing days of a simulated mower, for the public demo (ADR 0068).
 
 :func:`simulated_history` runs a :class:`~mowdeck_control.simulator.SimulatedMower` offline on a
 manual clock: one job over every area of its garden per day, from the dock and back to the dock

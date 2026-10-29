@@ -61,7 +61,7 @@
 
 <AuthFrame title={m.register_title()}>
   {#if demo.config}
-    <!-- The public demo (ADR 0065) has no registration; Identity refuses it as well. -->
+    <!-- The public demo (ADR 0068) has no registration; Identity refuses it as well. -->
     <p class="closed" data-testid="register-demo-closed">{m.register_demo_closed()}</p>
     <Button href="/login" variant="primary" full testid="register-demo-login"
       >{m.login_demo_button()}</Button

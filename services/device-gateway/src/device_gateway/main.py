@@ -101,7 +101,7 @@ def build_app(
         _log.warning(
             "using the FAKE Mammotion cloud (MOWDECK_FAKE_MAMMOTION_CLOUD is for development only)"
         )
-    # Public demo (ADR 0065): simulated mowers only, no manufacturer cloud at all.
+    # Public demo (ADR 0068): simulated mowers only, no manufacturer cloud at all.
     demo = settings.demo_mode
     provider = connection_provider or RegistryConnectionProvider(
         sim_time_scale=settings.sim_time_scale,

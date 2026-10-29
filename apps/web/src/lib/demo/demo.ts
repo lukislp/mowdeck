@@ -1,5 +1,5 @@
 /**
- * The public demo (ADR 0065) in the web app. The services enforce the demo; the app only labels
+ * The public demo (ADR 0068) in the web app. The services enforce the demo; the app only labels
  * it, so nobody mistakes it for a real installation: the banner on every page (also inside the
  * iOS/Android app shells, which load these pages), "Demo" in front of every title, and
  * "Try the demo" instead of the sign-in forms. Nothing here can be dismissed.

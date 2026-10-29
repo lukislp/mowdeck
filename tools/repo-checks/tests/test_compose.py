@@ -250,7 +250,7 @@ def test_the_mediamtx_config_asks_the_relay_and_serves_nothing_else(repo_root: P
 
 
 def test_demo_override_puts_every_service_in_demo_mode(repo_root: Path) -> None:
-    """The public demo (ADR 0065): every MowDeck service of the base stack runs with
+    """The public demo (ADR 0068): every MowDeck service of the base stack runs with
     MOWDECK_DEMO_MODE, Traefik keeps the base command plus the demo middlewares on both entry
     points, the seed job runs before the Device-Gateway, and no optional profile is enabled."""
     compose_dir = _compose_dir(repo_root)
