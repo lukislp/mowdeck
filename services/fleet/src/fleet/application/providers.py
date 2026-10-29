@@ -10,7 +10,7 @@ against the provider's descriptor before any vendor login.
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 
-from mowdeck_contracts.v1 import ProviderDescriptor
+from mowdeck_contracts.v1 import ProviderDescriptor, text_for
 from mowdeck_service_kit import get_logger
 
 from fleet.application.ports import Clock, CloudDiscovery
@@ -75,14 +75,17 @@ class ProviderCatalog:
         return found
 
 
-def option_specs(descriptor: ProviderDescriptor) -> tuple[OptionSpec, ...]:
-    """The mower options a provider declares, as Fleet's option schema entries."""
+def option_specs(
+    descriptor: ProviderDescriptor, locale: str | None = None
+) -> tuple[OptionSpec, ...]:
+    """The mower options a provider declares, as Fleet's option schema entries, with their
+    texts in ``locale`` (English fallback)."""
     return tuple(
         OptionSpec(
             key=o.key,
             type=o.type,
-            title=o.title,
-            description=o.description,
+            title=text_for(o.title, locale) or o.key,
+            description=text_for(o.description, locale) or "",
             advanced=o.advanced,
             minimum=o.minimum,
             maximum=o.maximum,
