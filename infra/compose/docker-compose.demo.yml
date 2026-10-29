@@ -132,12 +132,13 @@ services:
     labels:
       # Entry point middlewares of the demo (Traefik command above): every response is labelled,
       # the seed secret header never comes in from outside (an empty value removes it), and every
-      # client address is limited.
+      # client address is limited. The limit counts every request, the web app's files too: a
+      # first visit loads a few hundred (the burst), later pages come from the browser cache.
       - traefik.http.middlewares.demo-headers.headers.customresponseheaders.X-MowDeck-Demo=1
       - traefik.http.middlewares.demo-headers.headers.customrequestheaders.X-MowDeck-Demo-Seed=
-      - traefik.http.middlewares.demo-ratelimit.ratelimit.average=${DEMO_RATE_PER_MINUTE:-300}
+      - traefik.http.middlewares.demo-ratelimit.ratelimit.average=${DEMO_RATE_PER_MINUTE:-1200}
       - traefik.http.middlewares.demo-ratelimit.ratelimit.period=1m
-      - traefik.http.middlewares.demo-ratelimit.ratelimit.burst=${DEMO_RATE_BURST:-150}
+      - traefik.http.middlewares.demo-ratelimit.ratelimit.burst=${DEMO_RATE_BURST:-600}
 
   # One-shot job: the demo account, its mowers, schedules and history (demo/seed.py, standard
   # library only) in the identity image, which the stack builds anyway. Talks to the services

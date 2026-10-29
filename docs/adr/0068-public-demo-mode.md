@@ -68,7 +68,7 @@ Calls the policy refuses to visitors (registering mowers, the seed endpoints) ca
 `infra/compose/docker-compose.demo.yml` on top of `docker-compose.yml`, as its own Compose project (`mowdeck-demo`) with its own database, volumes, network and secrets (`infra/compose/demo/demo.env`, from `demo.env.example`); it never shares a stack, database or secret with an installation with real mowers. It:
 
 - sets `MOWDECK_DEMO_MODE=true` on every service and the forced values above;
-- adds two Traefik entry point middlewares: `demo-headers` (labels every response, the web app included, and empties `X-MowDeck-Demo-Seed`) and `demo-ratelimit` (per client address, default 300 requests a minute, burst 150); "Try the demo" also has Identity's login limit;
+- adds two Traefik entry point middlewares: `demo-headers` (labels every response, the web app included, and empties `X-MowDeck-Demo-Seed`) and `demo-ratelimit` (per client address, default 1200 requests a minute, burst 600, the web app's files included); "Try the demo" also has Identity's login limit;
 - runs the seed job and the live simulation a little faster than real time (`DEMO_SIM_TIME_SCALE`, default 3);
 - leaves map tiles, aerial photos, the street map, the camera relay, Agora, Matter and Billing off. `demo/reset.sh` refuses `COMPOSE_PROFILES`.
 

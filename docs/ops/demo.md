@@ -60,7 +60,7 @@ In `infra/compose/demo/demo.env` (read after `../.env.example`):
 | `DEMO_RESET_HOURS` | `6` | Shown in the banner; run the timer below at the same interval |
 | `DEMO_HISTORY_DAYS` | `7` | Days of simulated history per mower (1 to 31) |
 | `DEMO_SIM_TIME_SCALE` | `3` | Simulated seconds per real second of the live mowers |
-| `DEMO_RATE_PER_MINUTE`, `DEMO_RATE_BURST` | `300`, `150` | Requests per client address at the gateway |
+| `DEMO_RATE_PER_MINUTE`, `DEMO_RATE_BURST` | `1200`, `600` | Requests per client address at the gateway; the web app's files count too, so the burst must hold a first visit with an empty cache (a few hundred requests) |
 | `DEMO_USERNAME` | `demo` | The shared demo user |
 
 `MOWDECK_DEMO_MODE` (every service) and `MOWDECK_WEB_DEMO_MODE` (web app) are set by `docker-compose.demo.yml`; they are not meant for an installation with real mowers.
