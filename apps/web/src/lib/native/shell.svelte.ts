@@ -83,9 +83,11 @@ export class NativeShell {
             serverUrl: () => this.server,
             deviceName: 'MowDeck iOS',
             onChange: (state) => (this.widgets = state),
+            storage: deps.storage,
           })
         : null;
-    if (this.#widgets) this.widgets = 'off';
+    // Not known until `maintain` asked the shell after sign-in.
+    if (this.#widgets) this.widgets = 'pending';
   }
 
   get active(): boolean {
@@ -182,8 +184,9 @@ export class NativeShell {
       this.ntfy = await this.#deps.ntfyConfigured().catch(() => false);
     }
     // iOS: the APNs prompt also grants local notifications, so it goes first.
-    if (this.#registration) await this.#registration.enable();
-    await this.#prepareLocal();
+    if (this.#registration) await this.#registration.enable().catch(() => undefined);
+    await this.#prepareLocal().catch(() => undefined);
+    // Always reached: until it answers the widgets show "setting up", never a stale "off".
     await this.#widgets?.maintain();
     await this.refreshWatch();
     // The mower list may have changed: the watch gets it with the next state (ADR 0060).

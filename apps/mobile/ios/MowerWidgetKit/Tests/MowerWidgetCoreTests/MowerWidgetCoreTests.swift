@@ -37,6 +37,28 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder.mowdeck.decode(MowerStatus.self, from: stored), status)
     }
 
+    /// Builds stay installed while the server moves on: fields a newer server adds, and values
+    /// this build has never seen, must never fail the decoding of the state or of the credential.
+    func testANewerServerNeverBreaksTheDecoding() throws {
+        let json = """
+            {"mower_id":"m","stale":false,"activity":"a_new_activity","battery_percent":64,
+             "charging":false,"error_code":"9999","error_category":"a_new_category",
+             "error_severity":"a_new_severity","error_title":"Neu","job":{"progress_percent":5,
+             "a_new_job_field":[1,2]},"a_new_field":{"nested":true}}
+            """
+        let status = try JSONDecoder.mowdeck.decode(MowerStatus.self, from: Data(json.utf8))
+        XCTAssertEqual(status.activity, "a_new_activity")
+        XCTAssertEqual(status.errorCategory, "a_new_category")
+        XCTAssertEqual(status.job?.progressPercent, 5)
+        let credential = """
+            {"serverURL":"https://mow.example","secret":"mdk_x","credentialId":"c",
+             "expiresAt":"2027-01-25T12:00:00Z","deviceName":"iPhone","a_new_field":1}
+            """
+        let stored = try JSONDecoder.mowdeck.decode(
+            WidgetCredential.self, from: Data(credential.utf8))
+        XCTAssertEqual(stored.credentialId, "c")
+    }
+
     func testDecodesTheSchedulerOverviewAndToleratesAnUnknownVerdict() throws {
         let json = """
             {"mower_id":"m","at":"2026-10-27T12:00:00Z",

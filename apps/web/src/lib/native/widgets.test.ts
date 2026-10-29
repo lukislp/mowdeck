@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { NativePlugin } from './capacitor';
-import { WidgetsRegistration, wholeSeconds, type WidgetsApi } from './widgets';
+import {
+  CREDENTIAL_KEY,
+  REVOKE_KEY,
+  WidgetsRegistration,
+  wholeSeconds,
+  type WidgetsApi,
+} from './widgets';
 
 function fakeShell(status: Record<string, unknown> = { supported: true, configured: false }) {
   const calls: { method: string; options?: object }[] = [];
@@ -202,5 +208,130 @@ describe('WidgetsRegistration', () => {
     };
     const widgets = registration(shell, fakeApi());
     expect(await widgets.refresh()).toBe('unsupported');
+  });
+});
+
+function memoryStorage(initial: Record<string, string> = {}) {
+  const data = new Map(Object.entries(initial));
+  return {
+    data,
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => void data.set(key, value),
+    removeItem: (key: string) => void data.delete(key),
+  };
+}
+
+function problem(status: number): Error & { status: number } {
+  return Object.assign(new Error(String(status)), { status });
+}
+
+function remembering(
+  shell: ReturnType<typeof fakeShell>,
+  api: WidgetsApi,
+  storage: ReturnType<typeof memoryStorage>,
+) {
+  return new WidgetsRegistration({
+    shell: shell.plugin,
+    api,
+    serverUrl: () => 'https://mow.example',
+    deviceName: 'MowDeck iOS',
+    storage,
+    retryMs: 5,
+  });
+}
+
+describe('WidgetsRegistration after a sign-out with an ended session (ADR 0065)', () => {
+  it('remembers a revocation the server refused and retries it after the next sign-in', async () => {
+    const storage = memoryStorage();
+    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-old' });
+    const api = fakeApi({
+      revokeCredential: vi.fn(async () => {
+        throw problem(401);
+      }),
+    });
+    await remembering(shell, api, storage).disable();
+    expect(shell.calls.some((c) => c.method === 'clearWidgets')).toBe(true);
+    expect(JSON.parse(storage.getItem(REVOKE_KEY) ?? '[]')).toEqual(['cred-old']);
+
+    const signedInAgain = fakeApi();
+    await remembering(fakeShell(), signedInAgain, storage).maintain();
+    expect(signedInAgain.revokeCredential).toHaveBeenCalledWith('cred-old');
+    expect(storage.getItem(REVOKE_KEY)).toBeNull();
+  });
+
+  it('treats a credential the server no longer knows as revoked', async () => {
+    const storage = memoryStorage({ [REVOKE_KEY]: JSON.stringify(['gone']) });
+    const api = fakeApi({
+      revokeCredential: vi.fn(async () => {
+        throw problem(404);
+      }),
+    });
+    await remembering(fakeShell(), api, storage).maintain();
+    expect(storage.getItem(REVOKE_KEY)).toBeNull();
+  });
+
+  it('turning widgets on again replaces the credential the shell lost, never adds a second', async () => {
+    const storage = memoryStorage({ [CREDENTIAL_KEY]: 'cred-old' });
+    const shell = fakeShell({ supported: true, configured: false });
+    const api = fakeApi();
+    expect(await remembering(shell, api, storage).enable()).toBe('on');
+    expect(api.createCredential).toHaveBeenCalledWith('MowDeck iOS', 'cred-old');
+    expect(storage.getItem(CREDENTIAL_KEY)).toBe('cred-1');
+  });
+
+  it('creates a fresh credential when the one to replace is already gone', async () => {
+    const storage = memoryStorage({ [CREDENTIAL_KEY]: 'purged' });
+    const create = vi
+      .fn<WidgetsApi['createCredential']>()
+      .mockRejectedValueOnce(problem(404))
+      .mockResolvedValueOnce({ id: 'cred-2', token: 'mdk_x', expires_at: '2027-01-25T12:00:00Z' });
+    const api = fakeApi({ createCredential: create });
+    expect(await remembering(fakeShell(), api, storage).enable()).toBe('on');
+    expect(create).toHaveBeenNthCalledWith(1, 'MowDeck iOS', 'purged');
+    expect(create).toHaveBeenNthCalledWith(2, 'MowDeck iOS', null);
+  });
+
+  it('disable forgets the remembered credential once it is revoked', async () => {
+    const storage = memoryStorage({ [CREDENTIAL_KEY]: 'cred-9' });
+    const api = fakeApi();
+    await remembering(fakeShell({ supported: true, configured: false }), api, storage).disable();
+    expect(api.revokeCredential).toHaveBeenCalledWith('cred-9');
+    expect(storage.getItem(CREDENTIAL_KEY)).toBeNull();
+    expect(storage.getItem(REVOKE_KEY)).toBeNull();
+  });
+});
+
+describe('WidgetsRegistration never shows "off" while this device holds a credential', () => {
+  it('maintain remembers the credential of a configured shell', async () => {
+    const storage = memoryStorage();
+    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-7' });
+    await remembering(shell, fakeApi(), storage).maintain();
+    expect(storage.getItem(CREDENTIAL_KEY)).toBe('cred-7');
+  });
+
+  it('is error, not off, when the shell lost a credential this device still holds', async () => {
+    const storage = memoryStorage({ [CREDENTIAL_KEY]: 'cred-7' });
+    const widgets = remembering(
+      fakeShell({ supported: true, configured: false }),
+      fakeApi(),
+      storage,
+    );
+    await widgets.maintain();
+    expect(widgets.state).toBe('error');
+  });
+
+  it('is error when the shell cannot report its state, and asks again', async () => {
+    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-7' });
+    const real = shell.plugin.call;
+    let failures = 1;
+    shell.plugin.call = async (method, options) => {
+      if (method === 'getWidgetStatus' && failures-- > 0) throw new Error('bridge busy');
+      return real(method, options);
+    };
+    const widgets = remembering(shell, fakeApi(), memoryStorage());
+    await widgets.maintain();
+    expect(widgets.state).toBe('error');
+    await vi.waitFor(() => expect(widgets.state).toBe('on'));
+    widgets.stop();
   });
 });

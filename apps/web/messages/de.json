@@ -651,7 +651,7 @@
   "native_widgets_enable": "Widgets aktivieren",
   "native_widgets_disable": "Widgets deaktivieren",
   "native_widgets_hint": "Widgets für Home- und Sperrbildschirm und die Live Activity eines Mähjobs nutzen einen eigenen Zugang: ein Schlüssel, der Mäher nur ansehen und steuern kann, 90 Tage gültig und automatisch erneuert. Er steht unter API-Tokens und endet, wenn du die Widgets ausschaltest oder dich abmeldest.",
-  "native_widgets_error_hint": "Die Widgets konnten nicht eingerichtet werden. Prüfe die Verbindung und versuche es erneut; deine Rolle braucht das Recht, alle Mäher des Kontos zu sehen.",
+  "native_widgets_error_hint": "Die Widgets funktionieren auf diesem Gerät gerade nicht. Prüfe die Verbindung und aktiviere sie erneut (das ersetzt den Schlüssel dieses Geräts, es kommt kein zweiter hinzu); deine Rolle braucht das Recht, alle Mäher des Kontos zu sehen.",
   "native_watch": "Apple Watch",
   "native_watch_ready": "bereit",
   "native_watch_needs_widgets": "braucht Widgets",
