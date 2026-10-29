@@ -1,5 +1,5 @@
 """Error lexicon lookups over the bus (ADR 0067): the gateway answers from the lexicons the
-installed adapter packages register (simulator and Mammotion in this image)."""
+installed adapter packages register (simulator, Mammotion and Husqvarna in this image)."""
 
 from mowdeck_contracts.v1 import (
     GATEWAY_ERRORS_ENTRIES,
@@ -45,7 +45,7 @@ async def test_dg_error_lexicons_explain_with_the_installed_lexicons() -> None:
     listed = (await bus.request(GATEWAY_ERRORS_LEXICONS, ErrorLexiconListRequest())).model(
         ErrorLexiconListReply
     )
-    assert [info.vendor for info in listed.lexicons] == ["mammotion", "simulated"]
+    assert [info.vendor for info in listed.lexicons] == ["husqvarna", "mammotion", "simulated"]
     for subscription in subscriptions:
         await subscription.unsubscribe()
 

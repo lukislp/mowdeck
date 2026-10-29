@@ -1,0 +1,48 @@
+[project]
+name = "mowdeck-control-husqvarna"
+version = "0.1.0"
+description = "Husqvarna Automower adapter for mowdeck-control on top of aioautomower (Automower Connect API, websocket push). Untested on real hardware."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "mowdeck-contracts",
+  "mowdeck-control",
+  # aioautomower (MIT) wraps the official Automower Connect API; exact pin, upgraded deliberately.
+  "aioautomower==3.1.0",
+  # The real HTTP and websocket transport (transport.py); aioautomower depends on it as well.
+  "aiohttp>=3.9.3,<4",
+]
+
+# Linked Husqvarna accounts (application key and secret) and their mowers (ADR 0066). Off by
+# default until tested on real hardware: MOWDECK_CLOUD_PROVIDERS_ENABLE=husqvarna.
+[project.entry-points."mowdeck.cloud_providers"]
+husqvarna = "mowdeck_control_husqvarna.plugin:SPEC"
+
+# Husqvarna's error codes in plain words (ADR 0067), built from aioautomower's table.
+[project.entry-points."mowdeck.error_lexicons"]
+husqvarna = "mowdeck_control_husqvarna.lexicon:husqvarna_lexicon"
+
+# Vendor isolation (ADR 0066, tools/repo-checks/tests/test_vendor_isolation.py): no core code
+# may import this package or the vendor modules it wraps.
+[tool.mowdeck.adapter]
+vendor-modules = ["aioautomower"]
+# Brand words that must not appear in core strings or web texts (the vendor name is implied).
+brand-names = ["automower", "gardena"]
+
+[tool.uv.sources]
+mowdeck-contracts = { workspace = true }
+mowdeck-control = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mowdeck_control_husqvarna"]
