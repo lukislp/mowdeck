@@ -1124,6 +1124,66 @@
         "title": "ErrorLexiconList",
         "type": "object"
       },
+      "ErrorLexiconSearchReply": {
+        "description": "A page of a lexicon's entries, ordered by code (numbers numerically).",
+        "properties": {
+          "categories": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Entries per category in the whole lexicon (for filter chips).",
+            "propertyNames": {
+              "$ref": "#/components/schemas/MowerErrorCategory"
+            },
+            "title": "Categories",
+            "type": "object"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorExplanation"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "lexicon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorLexiconInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The lexicon searched; null when none applies (or none answered)."
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "severities": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Entries per severity in the whole lexicon.",
+            "propertyNames": {
+              "$ref": "#/components/schemas/ErrorSeverity"
+            },
+            "title": "Severities",
+            "type": "object"
+          },
+          "total": {
+            "default": 0,
+            "description": "Entries matching the filters.",
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "title": "ErrorLexiconSearchReply",
+        "type": "object"
+      },
       "ErrorLink": {
         "description": "Further reading for an entry (the vendor's help page, a manual chapter).",
         "properties": {
@@ -5609,6 +5669,162 @@
           }
         },
         "summary": "Explain Mower Codes",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/error-lexicon": {
+      "get": {
+        "description": "Browse the error lexicon of this mower's vendor (picked by its connection): a page of\nentries in plain words, ordered by code, filtered by text, category, severity and codes,\nwith the counts per category and severity for filter chips. `lexicon` is null when no\nlexicon applies or the Device-Gateway does not answer. 404 \"no telemetry yet\" before the\nfirst state.",
+        "operationId": "browse_mower_lexicon_api_v1_telemetry_mowers__mower_id__error_lexicon_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Search the code and the texts (every word must match); empty: all.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Search the code and the texts (every word must match); empty: all.",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MowerErrorCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ErrorSeverity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "description": "Only these codes (e.g. the ones this mower reported); repeatable.",
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 200,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these codes (e.g. the ones this mower reported); repeatable.",
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 100000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z]{2}([-_][A-Za-z0-9]{1,8})?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+              "title": "Locale"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorLexiconSearchReply"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Browse Mower Lexicon",
         "tags": [
           "telemetry"
         ]

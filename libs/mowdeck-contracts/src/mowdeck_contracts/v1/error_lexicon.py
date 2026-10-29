@@ -13,9 +13,11 @@ all, gives an explanation with ``known`` false and generic advice for the catego
 known.
 
 The Device-Gateway, where the adapters are installed, answers lookups on the core NATS subjects
-``gateway.errors.explain`` (:class:`ErrorExplainRequest` / :class:`ErrorExplainReply`) and
-``gateway.errors.lexicons`` (:class:`ErrorLexiconListRequest` / :class:`ErrorLexiconListReply`),
-queue group ``device-gateway``.
+``gateway.errors.explain`` (:class:`ErrorExplainRequest` / :class:`ErrorExplainReply`),
+``gateway.errors.lexicons`` (:class:`ErrorLexiconListRequest` / :class:`ErrorLexiconListReply`)
+and ``gateway.errors.entries`` (:class:`ErrorLexiconSearchRequest` /
+:class:`ErrorLexiconSearchReply`, a searchable page of one lexicon), queue group
+``device-gateway``.
 """
 
 from collections.abc import Iterable, Mapping
@@ -27,7 +29,11 @@ from pydantic import Field, StringConstraints, model_validator
 from mowdeck_contracts.v1._base import ContractModel
 from mowdeck_contracts.v1.mower import ConnectionKind
 from mowdeck_contracts.v1.mower_status import MowerErrorCategory
-from mowdeck_contracts.v1.subjects import GATEWAY_ERRORS_EXPLAIN, GATEWAY_ERRORS_LEXICONS
+from mowdeck_contracts.v1.subjects import (
+    GATEWAY_ERRORS_ENTRIES,
+    GATEWAY_ERRORS_EXPLAIN,
+    GATEWAY_ERRORS_LEXICONS,
+)
 
 DEFAULT_LOCALE: Final = "en"
 """The locale every lexicon entry has and every lookup falls back to."""
@@ -35,6 +41,10 @@ LEXICON_LOCALES: Final = ("en", "de")
 """The locales MowDeck shows; a lexicon may carry more."""
 MAX_EXPLAIN_CODES: Final = 20
 """Most codes one :class:`ErrorExplainRequest` may ask for."""
+MAX_SEARCH_PAGE: Final = 100
+"""Most entries one :class:`ErrorLexiconSearchReply` carries."""
+MAX_SEARCH_CODES: Final = 200
+"""Most codes one :class:`ErrorLexiconSearchRequest` may filter by."""
 
 VendorKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
 """Lower-case key of a vendor (``mammotion``, ``simulated``); the entry point name."""
@@ -225,6 +235,52 @@ class ErrorLexiconListReply(ContractModel):
     """The installed lexicons, sorted by vendor."""
 
     lexicons: list[ErrorLexiconInfo] = Field(default_factory=list)
+
+
+class ErrorLexiconSearchRequest(ContractModel):
+    """Browse one lexicon (``gateway.errors.entries``): a page of its entries, explained in
+    ``locale``, filtered by text, category, severity and codes (all optional, combined with and).
+
+    The lexicon is picked like for :class:`ErrorExplainRequest`: by ``vendor``, else by
+    ``connection``.
+    """
+
+    vendor: VendorKey | None = None
+    connection: ConnectionKind | None = None
+    locale: LocaleKey = DEFAULT_LOCALE
+    query: str = Field(
+        default="",
+        max_length=100,
+        description="Matches the code, its aliases and the texts in `locale` and English (case "
+        "insensitive, every word must match); empty: everything.",
+    )
+    category: MowerErrorCategory | None = None
+    severity: ErrorSeverity | None = None
+    codes: list[ErrorCodeText] = Field(
+        default_factory=list,
+        max_length=MAX_SEARCH_CODES,
+        description="Only these codes (as the lexicon or the mower spells them); empty: all.",
+    )
+    offset: int = Field(default=0, ge=0, le=100_000)
+    limit: int = Field(default=50, ge=1, le=MAX_SEARCH_PAGE)
+
+
+class ErrorLexiconSearchReply(ContractModel):
+    """A page of a lexicon's entries, ordered by code (numbers numerically)."""
+
+    lexicon: ErrorLexiconInfo | None = Field(
+        default=None, description="The lexicon searched; null when none applies (or none answered)."
+    )
+    total: int = Field(default=0, ge=0, description="Entries matching the filters.")
+    offset: int = Field(default=0, ge=0)
+    entries: list[ErrorExplanation] = Field(default_factory=list)
+    categories: dict[MowerErrorCategory, int] = Field(
+        default_factory=dict,
+        description="Entries per category in the whole lexicon (for filter chips).",
+    )
+    severities: dict[ErrorSeverity, int] = Field(
+        default_factory=dict, description="Entries per severity in the whole lexicon."
+    )
 
 
 # --- Lookup ----------------------------------------------------------------------------------
@@ -518,6 +574,63 @@ def explain_code(
     )
 
 
+def _code_order(code: str) -> tuple[int, int, str]:
+    """Numbers first, numerically (``2`` before ``10``), then the rest alphabetically."""
+    stripped = code.lstrip("-")
+    if stripped.isdigit():
+        return (0, int(stripped), code)
+    return (1, 0, code.lower())
+
+
+def _haystack(entry: ErrorLexiconEntry, locale: str) -> str:
+    parts = [entry.code, *entry.aliases]
+    for lang in {locale, DEFAULT_LOCALE}:
+        text = entry.texts.get(lang)
+        if text is not None:
+            parts.extend([text.title, text.description, text.cause or "", *text.steps])
+    return " ".join(parts).casefold()
+
+
+def search_lexicon(
+    lexicon: ErrorLexicon,
+    request: ErrorLexiconSearchRequest,
+    *,
+    index: Mapping[str, ErrorLexiconEntry] | None = None,
+) -> ErrorLexiconSearchReply:
+    """A page of the entries of ``lexicon`` that match ``request`` (its vendor and connection
+    are not checked here). ``request.codes`` are looked up in ``index`` (code and aliases), so a
+    caller normalises the mower's spelling first."""
+    entries = index if index is not None else lexicon.index()
+    lang = normalise_locale(request.locale)
+    words = request.query.casefold().split()
+    wanted: set[str] | None = None
+    if request.codes:
+        wanted = {e.code for c in request.codes if (e := entries.get(c.strip())) is not None}
+    matching = [
+        entry
+        for entry in lexicon.entries
+        if (wanted is None or entry.code in wanted)
+        and (request.category is None or entry.category is request.category)
+        and (request.severity is None or entry.severity is request.severity)
+        and all(word in _haystack(entry, lang) for word in words)
+    ]
+    matching.sort(key=lambda entry: _code_order(entry.code))
+    page = matching[request.offset : request.offset + request.limit]
+    categories: dict[MowerErrorCategory, int] = {}
+    severities: dict[ErrorSeverity, int] = {}
+    for entry in lexicon.entries:
+        categories[entry.category] = categories.get(entry.category, 0) + 1
+        severities[entry.severity] = severities.get(entry.severity, 0) + 1
+    return ErrorLexiconSearchReply(
+        lexicon=lexicon.info(),
+        total=len(matching),
+        offset=request.offset,
+        entries=[explain_code(lexicon, entry.code, lang, index=entries) for entry in page],
+        categories=categories,
+        severities=severities,
+    )
+
+
 def lexicon_for_connection(
     lexicons: Iterable[ErrorLexicon], connection: ConnectionKind | str | None
 ) -> ErrorLexicon | None:
@@ -532,11 +645,14 @@ def lexicon_for_connection(
 
 __all__ = [
     "DEFAULT_LOCALE",
+    "GATEWAY_ERRORS_ENTRIES",
     "GATEWAY_ERRORS_EXPLAIN",
     "GATEWAY_ERRORS_LEXICONS",
     "GENERIC_SEVERITY",
     "LEXICON_LOCALES",
     "MAX_EXPLAIN_CODES",
+    "MAX_SEARCH_CODES",
+    "MAX_SEARCH_PAGE",
     "ErrorCodeText",
     "ErrorExplainReply",
     "ErrorExplainRequest",
@@ -546,6 +662,8 @@ __all__ = [
     "ErrorLexiconInfo",
     "ErrorLexiconListReply",
     "ErrorLexiconListRequest",
+    "ErrorLexiconSearchReply",
+    "ErrorLexiconSearchRequest",
     "ErrorLink",
     "ErrorSeverity",
     "ErrorText",
@@ -555,5 +673,6 @@ __all__ = [
     "generic_text",
     "lexicon_for_connection",
     "normalise_locale",
+    "search_lexicon",
     "unknown_explanation",
 ]

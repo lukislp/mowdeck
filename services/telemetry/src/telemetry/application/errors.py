@@ -22,6 +22,9 @@ from mowdeck_contracts.v1 import (
     ErrorExplainRequest,
     ErrorExplanation,
     ErrorLexiconInfo,
+    ErrorLexiconSearchReply,
+    ErrorLexiconSearchRequest,
+    ErrorSeverity,
     MowerActivity,
     MowerErrorCategory,
     normalise_locale,
@@ -45,6 +48,10 @@ class ErrorLexiconGateway(Protocol):
 
     async def lexicons(self) -> list[ErrorLexiconInfo] | None:
         """The installed lexicons."""
+        ...
+
+    async def search(self, request: ErrorLexiconSearchRequest) -> ErrorLexiconSearchReply | None:
+        """A page of one lexicon."""
         ...
 
 
@@ -185,6 +192,43 @@ class ErrorExplanations:
             category=_category(state.get("error_category")),
         )
         return explanation
+
+    async def browse_for_mower(
+        self,
+        account_id: UUID,
+        mower_id: UUID,
+        locale: str | None,
+        *,
+        query: str = "",
+        category: MowerErrorCategory | None = None,
+        severity: ErrorSeverity | None = None,
+        codes: Sequence[str] = (),
+        offset: int = 0,
+        limit: int = 50,
+    ) -> ErrorLexiconSearchReply:
+        """A page of the lexicon of the mower's connection (its latest state; 404 before the
+        first state). Not cached (a settings page, filtered per request); an empty reply
+        (``lexicon`` null) when the gateway does not answer or no lexicon applies."""
+        row = await self._queries.state(account_id, mower_id)
+        connection = _connection(row.state.get("connection"))
+        request = ErrorLexiconSearchRequest(
+            connection=connection,
+            locale=normalise_locale(locale),
+            query=query.strip(),
+            category=category,
+            severity=severity,
+            codes=list(dict.fromkeys(codes)),
+            offset=offset,
+            limit=limit,
+        )
+        if connection is None:
+            return ErrorLexiconSearchReply(offset=offset)
+        try:
+            reply = await self._gateway.search(request)
+        except Exception as exc:
+            _log.warning("error lexicon search failed", error=repr(exc))
+            reply = None
+        return reply if reply is not None else ErrorLexiconSearchReply(offset=offset)
 
     async def lexicons(self) -> list[ErrorLexiconInfo]:
         """The installed lexicons; empty when the gateway does not answer."""

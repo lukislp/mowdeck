@@ -341,7 +341,7 @@ flowchart LR
   q_notifications["notifications"]
   q_notifications -->|"gateway.errors.explain<br/>gateway.mower.*.photo"| r_device_gateway
   q_telemetry["telemetry"]
-  q_telemetry -->|"gateway.errors.explain<br/>gateway.errors.lexicons<br/>gateway.mower.*.photo<br/>+1 more"| r_device_gateway
+  q_telemetry -->|"gateway.errors.entries<br/>gateway.errors.explain<br/>gateway.errors.lexicons<br/>+2 more"| r_device_gateway
   q_vision["vision"]
   q_vision -->|"gateway.mower.*.photo"| r_device_gateway
 ```
@@ -413,6 +413,7 @@ flowchart LR
 | `fleet.mowers.list` | core | device-gateway, notifications, telemetry | fleet |
 | `fleet.targets.resolve` | core | - | fleet |
 | `gateway.cloud.discover` | core | fleet | device-gateway |
+| `gateway.errors.entries` | core | telemetry | device-gateway |
 | `gateway.errors.explain` | core | notifications, telemetry | device-gateway |
 | `gateway.errors.lexicons` | core | telemetry | device-gateway |
 | `gateway.mower.*.bridge.scan` | core | fleet | device-gateway |
@@ -485,7 +486,7 @@ flowchart LR
   subgraph telemetry["telemetry"]
     direction TB
     telemetry_public["public<br/>2 operations"]
-    telemetry_telemetry["telemetry<br/>25 operations"]
+    telemetry_telemetry["telemetry<br/>26 operations"]
     telemetry_tracking["tracking<br/>13 operations"]
   end
   subgraph vision["vision"]
@@ -526,7 +527,7 @@ flowchart LR
 | `scheduler` | `schedules` | 14 | 10 |
 | `telemetry` | `operations` | 1 | 1 |
 | `telemetry` | `public` | 2 | 2 |
-| `telemetry` | `telemetry` | 25 | 25 |
+| `telemetry` | `telemetry` | 26 | 26 |
 | `telemetry` | `tracking` | 13 | 11 |
 | `vision` | `operations` | 1 | 1 |
 | `vision` | `vision` | 16 | 13 |

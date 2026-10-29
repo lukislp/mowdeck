@@ -172,6 +172,28 @@ Explain codes of this mower (e.g. the error counts of its health page) with the 
 | 200 | Successful Response | `application/json` [ErrorExplanationList](#errorexplanationlist) |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
+#### GET /api/v1/telemetry/mowers/{mower_id}/error-lexicon
+
+**Browse Mower Lexicon**
+
+Browse the error lexicon of this mower's vendor (picked by its connection): a page of entries in plain words, ordered by code, filtered by text, category, severity and codes, with the counts per category and severity for filter chips. `lexicon` is null when no lexicon applies or the Device-Gateway does not answer. 404 "no telemetry yet" before the first state.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+| `q` | query | string | no | Search the code and the texts (every word must match); empty: all.; max length 100; default `""` |
+| `category` | query | [MowerErrorCategory](#mowererrorcategory) or null | no |  |
+| `severity` | query | [ErrorSeverity](#errorseverity) or null | no |  |
+| `code` | query | array of string or null | no | Only these codes (e.g. the ones this mower reported); repeatable. |
+| `offset` | query | integer | no | min 0; max 100000; default `0` |
+| `limit` | query | integer | no | min 1; max 100; default `50` |
+| `locale` | query | string or null | no | Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ErrorLexiconSearchReply](#errorlexiconsearchreply) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 #### GET /api/v1/telemetry/mowers/{mower_id}/health
 
 **Get Health**
@@ -898,6 +920,19 @@ The installed error lexicons, one per vendor.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `lexicons` | array of [ErrorLexiconInfo](#errorlexiconinfo) | yes |  |
+
+### ErrorLexiconSearchReply
+
+A page of a lexicon's entries, ordered by code (numbers numerically).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `categories` | map of integer | no | Entries per category in the whole lexicon (for filter chips). |
+| `entries` | array of [ErrorExplanation](#errorexplanation) | no |  |
+| `lexicon` | [ErrorLexiconInfo](#errorlexiconinfo) or null | no | The lexicon searched; null when none applies (or none answered). |
+| `offset` | integer | no | min 0.0; default `0` |
+| `severities` | map of integer | no | Entries per severity in the whole lexicon. |
+| `total` | integer | no | Entries matching the filters.; min 0.0; default `0` |
 
 ### ErrorLink
 

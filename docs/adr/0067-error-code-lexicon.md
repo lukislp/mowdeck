@@ -51,6 +51,7 @@ Telemetry is the public API (it already serves the mower state to the web app, t
 | --- | --- | --- |
 | `GET /api/v1/telemetry/mowers/{id}/error?locale=de` | `can_view` | `MowerErrorOut`: the current error explained (`error` null without one) |
 | `GET /api/v1/telemetry/mowers/{id}/error-codes?code=..&code=..` | `can_view` | explanations with the mower's lexicon (the health page's error counts) |
+| `GET /api/v1/telemetry/mowers/{id}/error-lexicon?q=..&category=..&severity=..&code=..` | `can_view` | a page of the lexicon of the mower's vendor (added 2026-10-29, see below) |
 | `GET /api/v1/telemetry/error-codes/{vendor}/{code}` | signed in | one code of a vendor |
 | `GET /api/v1/telemetry/error-lexicons` | signed in | the installed lexicons (counts, unverified, locales) |
 
@@ -59,6 +60,10 @@ The locale comes from `locale`, else `Accept-Language`, else English. Telemetry 
 ### The app and the push texts
 
 The mower page shows the explanation as a card (severity and category, vendor and code, title, description, likely cause, the steps as a numbered ladder; a hazard stripe for critical errors; unknown and unverified entries are marked) and keeps the old one-line notice while it loads or when Telemetry cannot answer. The health page puts each counted code's title next to it. The push text of `mower_stuck` ("Fehler 1201. {error_detail}") carries the lexicon's title and first step in the recipient's language; without an answer it keeps the vendor's message as before. The web app only translates the frame (severity names, labels); the vendor words come from the lexicon.
+
+### Browsing a lexicon (added 2026-10-29)
+
+The mower's settings page has an **Error codes** section: the whole lexicon of the mower's vendor, searchable by code or text (every word must match, in the chosen language and English), filtered by category and severity, a page of 50 at a time, a row opening to the full explanation. Codes the mower has reported (its health counts) carry their count, the current error is pinned and marked, unverified entries are marked. A third core NATS request, `gateway.errors.entries` (`ErrorLexiconSearchRequest` / `ErrorLexiconSearchReply`), returns one page with the counts per category and severity of the whole lexicon; the search itself is the pure `search_lexicon` of the contract, so every vendor's lexicon behaves alike, and the registry normalises the mower's spelling of a requested code (`-1201`) first. Telemetry serves it as `GET /mowers/{id}/error-lexicon`, picking the lexicon by the mower's connection; it does not cache the pages (a settings page, filtered per request). The web app stays vendor neutral: it maps the mower's reported codes to the lexicon's spelling through the explanations the server returns, never by its own rules. The section is read-only.
 
 ### Categories for the theft alarm
 

@@ -4,7 +4,8 @@
  * it in German from the simulator's error lexicon (registered by mowdeck-control through the
  * entry point group `mowdeck.error_lexicons`, served by the Device-Gateway and Telemetry):
  * severity, category, vendor and code, title, cause and the numbered steps. The same error
- * through the API in English, and an unknown vendor code gets the generic answer.
+ * through the API in English, and an unknown vendor code gets the generic answer. The mower's
+ * settings list the simulator's error codes with the current error pinned and counted.
  */
 import { expect, test } from '@playwright/test';
 
@@ -57,6 +58,36 @@ test('error lexicon: a stuck simulated mower is explained in German on its page'
   await expect(card.getByText('Wahrscheinliche Ursache')).toBeVisible();
   await expect(card.getByTestId('error-steps').getByRole('listitem')).toHaveCount(2);
   await expect(card.getByTestId('error-steps')).toContainText('Joystick');
+
+  // The mower's settings list its vendor's error codes: the current error pinned and marked,
+  // the code it reported counted, a search narrows the list and a row opens to the steps.
+  await page.goto(`/mowers/${mowerId}/settings`);
+  const lexicon = page.getByTestId('error-codes-section').getByTestId('error-lexicon');
+  await expect(lexicon.getByTestId('lexicon-summary')).toContainText('2 Codes', {
+    timeout: 30_000,
+  });
+  await expect(lexicon.getByTestId('lexicon-current')).toContainText(
+    'Steckt an einem Hindernis fest',
+  );
+  const stuckRow = lexicon.locator('[data-testid="lexicon-entry"][data-code="stuck"]');
+  await expect(stuckRow).toHaveAttribute('data-current', 'true');
+  await expect(stuckRow.getByTestId('lexicon-seen')).toContainText('bei diesem Mäher', {
+    timeout: 30_000,
+  });
+  await lexicon.getByTestId('lexicon-search').fill('angehoben');
+  await expect(lexicon.getByTestId('lexicon-entry')).toHaveCount(1);
+  const liftedRow = lexicon.locator('[data-testid="lexicon-entry"][data-code="lifted"]');
+  await liftedRow.locator('summary').click();
+  await expect(liftedRow.getByTestId('error-steps')).toBeVisible();
+  await lexicon.getByTestId('lexicon-reset').click();
+  await expect(lexicon.getByTestId('lexicon-entry')).toHaveCount(2);
+  const browsed = await request.get(`/api/v1/telemetry/mowers/${mowerId}/error-lexicon`, {
+    headers: auth,
+    params: { severity: 'critical', locale: 'en' },
+  });
+  expect(browsed.status(), await browsed.text()).toBe(200);
+  const browsedBody = (await browsed.json()) as { entries: { code: string }[] };
+  expect(browsedBody.entries.map((e) => e.code)).toEqual(['lifted']);
 
   // The API: the same error in English, and a code the vendor's lexicon does not know.
   const english = await request.get(`/api/v1/telemetry/mowers/${mowerId}/error`, {
