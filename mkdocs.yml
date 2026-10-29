@@ -109,11 +109,13 @@ nav:
       - adr/0063-matter-server.md
       - adr/0064-personal-access-tokens-and-public-api-docs.md
       - adr/0065-security-center-and-new-login-alerts.md
+      - adr/0067-error-code-lexicon.md
       - adr/0068-public-demo-mode.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
       - dev/libraries.md
+      - "Adding an error lexicon for a vendor": dev/error-lexicon.md
       - "Design: identity and authorization": dev/design-identity-authz.md
       - "Design: fleet, telemetry, realtime": dev/design-fleet-telemetry-realtime.md
       - "Design: web app": dev/design-web-app.md

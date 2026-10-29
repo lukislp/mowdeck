@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from telemetry.application.aerial import Aerial, AerialConfig, TileCache, TileSource
 from telemetry.application.context import TelemetryConfig
+from telemetry.application.errors import ErrorExplanations
 from telemetry.application.health import Health
 from telemetry.application.ingest import Ingest
 from telemetry.application.ports import Clock, HealthEvents, Store
@@ -25,6 +26,8 @@ class Services:
     config: TelemetryConfig
     aerial: Aerial
     tracking: Tracking | None = None
+    errors: ErrorExplanations | None = None
+    """Vendor error codes in plain words (ADR 0067), wired at startup."""
 
 
 def build_services(

@@ -5,7 +5,7 @@
   "job_started.title": "{mower} mäht",
   "job_started.body": "Der Mähauftrag läuft. Akku {battery} %.",
   "mower_stuck.title": "{mower} braucht Hilfe",
-  "mower_stuck.body_error": "Fehler {error_code}. {error_message}",
+  "mower_stuck.body_error": "Fehler {error_code}. {error_detail}",
   "mower_stuck.body_no_movement": "Seit {minutes} Min. keine Bewegung beim Mähen.",
   "battery_low.title": "{mower}: Akku schwach",
   "battery_low.body": "Akku bei {battery} %.",
