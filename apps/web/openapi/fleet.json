@@ -1537,115 +1537,14 @@
         "title": "ConnectionOptionOut",
         "type": "object"
       },
-      "ConnectionOptionSpec": {
-        "description": "One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).\n\nFleet validates a cloud mower's options against the options its provider declares and the\nweb app renders them on the mower's settings page; only declared options exist, so a vendor\nwith few settings shows few.",
-        "properties": {
-          "advanced": {
-            "default": false,
-            "description": "Rarely needed; shown under 'advanced'.",
-            "title": "Advanced",
-            "type": "boolean"
-          },
-          "default": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Default"
-          },
-          "description": {
-            "default": "",
-            "description": "English help text.",
-            "maxLength": 400,
-            "title": "Description",
-            "type": "string"
-          },
-          "examples": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 5,
-            "title": "Examples",
-            "type": "array"
-          },
-          "key": {
-            "pattern": "^[a-z][a-z0-9_]{0,39}$",
-            "title": "Key",
-            "type": "string"
-          },
-          "maximum": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Maximum"
-          },
-          "minimum": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minimum"
-          },
-          "title": {
-            "description": "English title.",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "string",
-              "integer",
-              "number",
-              "boolean"
-            ],
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "type",
-          "title"
-        ],
-        "title": "ConnectionOptionSpec",
-        "type": "object"
-      },
-      "CredentialChoice": {
-        "description": "One option of a ``choice`` field.",
+      "CredentialChoiceOut": {
+        "description": "One option of a choice field, its label in the caller's language.",
         "properties": {
           "label": {
-            "maxLength": 80,
-            "minLength": 1,
             "title": "Label",
             "type": "string"
           },
           "value": {
-            "maxLength": 64,
-            "minLength": 1,
             "title": "Value",
             "type": "string"
           }
@@ -1654,98 +1553,7 @@
           "value",
           "label"
         ],
-        "title": "CredentialChoice",
-        "type": "object"
-      },
-      "CredentialField": {
-        "description": "One input of a provider's link form.",
-        "properties": {
-          "choices": {
-            "items": {
-              "$ref": "#/components/schemas/CredentialChoice"
-            },
-            "maxItems": 20,
-            "title": "Choices",
-            "type": "array"
-          },
-          "help": {
-            "anyOf": [
-              {
-                "maxLength": 400,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "English hint under the input.",
-            "title": "Help"
-          },
-          "identity": {
-            "default": false,
-            "description": "The field that names the vendor account (exactly one per provider): shown as the linked account's title and unique per provider and MowDeck account, compared without case.",
-            "title": "Identity",
-            "type": "boolean"
-          },
-          "key": {
-            "pattern": "^[a-z][a-z0-9_]{0,39}$",
-            "title": "Key",
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/CredentialFieldKind"
-          },
-          "label": {
-            "description": "English label of the input.",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Label",
-            "type": "string"
-          },
-          "max_length": {
-            "default": 256,
-            "maximum": 4096.0,
-            "minimum": 1.0,
-            "title": "Max Length",
-            "type": "integer"
-          },
-          "pattern": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Regular expression the value must match.",
-            "title": "Pattern"
-          },
-          "placeholder": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Placeholder"
-          },
-          "required": {
-            "default": true,
-            "title": "Required",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "key",
-          "kind",
-          "label"
-        ],
-        "title": "CredentialField",
+        "title": "CredentialChoiceOut",
         "type": "object"
       },
       "CredentialFieldKind": {
@@ -1758,6 +1566,89 @@
         ],
         "title": "CredentialFieldKind",
         "type": "string"
+      },
+      "CredentialFieldOut": {
+        "description": "One input of a provider's link form, its texts in the caller's language.",
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialChoiceOut"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Provider-specific hint; generic hints are the app's.",
+            "title": "Help"
+          },
+          "identity": {
+            "title": "Identity",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CredentialFieldKind"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_length": {
+            "title": "Max Length",
+            "type": "integer"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "placeholder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placeholder"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "label",
+          "help",
+          "placeholder",
+          "required",
+          "identity",
+          "choices",
+          "pattern",
+          "max_length"
+        ],
+        "title": "CredentialFieldOut",
+        "type": "object"
       },
       "DeviceType": {
         "description": "What a discovered device is (ADR 0047).",
@@ -3967,96 +3858,14 @@
         "title": "PrincipalRef",
         "type": "object"
       },
-      "ProviderDescriptor": {
-        "description": "A cloud provider as its adapter declares it: the link form, the guidance and the options\nof its mowers.",
-        "properties": {
-          "fields": {
-            "items": {
-              "$ref": "#/components/schemas/CredentialField"
-            },
-            "maxItems": 10,
-            "minItems": 1,
-            "title": "Fields",
-            "type": "array"
-          },
-          "links": {
-            "items": {
-              "$ref": "#/components/schemas/ProviderLink"
-            },
-            "maxItems": 5,
-            "title": "Links",
-            "type": "array"
-          },
-          "mower_options": {
-            "description": "The options a mower of this provider takes (none: the provider has no settings beyond the linked account).",
-            "items": {
-              "$ref": "#/components/schemas/ConnectionOptionSpec"
-            },
-            "maxItems": 30,
-            "title": "Mower Options",
-            "type": "array"
-          },
-          "name": {
-            "description": "Display name of the vendor cloud.",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "needs_developer_account": {
-            "default": false,
-            "description": "The user creates an application in the vendor's developer portal (with their own vendor account) to get the credentials.",
-            "title": "Needs Developer Account",
-            "type": "boolean"
-          },
-          "provider": {
-            "pattern": "^[a-z][a-z0-9_-]{1,31}$",
-            "title": "Provider",
-            "type": "string"
-          },
-          "setup_steps": {
-            "description": "English, short: how the user gets the credentials, in order.",
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 8,
-            "title": "Setup Steps",
-            "type": "array"
-          },
-          "summary": {
-            "default": "",
-            "description": "English: which mowers and what MowDeck can do.",
-            "maxLength": 500,
-            "title": "Summary",
-            "type": "string"
-          },
-          "tested_on_hardware": {
-            "default": false,
-            "description": "False: built and tested against recorded fixtures and fakes only; the web app labels such providers as untested on real hardware.",
-            "title": "Tested On Hardware",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "provider",
-          "name",
-          "fields"
-        ],
-        "title": "ProviderDescriptor",
-        "type": "object"
-      },
-      "ProviderLink": {
-        "description": "A page of the vendor that explains where the credentials come from.",
+      "ProviderLinkOut": {
+        "description": "A vendor page that explains where the credentials come from.",
         "properties": {
           "label": {
-            "maxLength": 80,
-            "minLength": 1,
             "title": "Label",
             "type": "string"
           },
           "url": {
-            "maxLength": 300,
-            "pattern": "^https://\\S+$",
             "title": "Url",
             "type": "string"
           }
@@ -4065,15 +3874,15 @@
           "label",
           "url"
         ],
-        "title": "ProviderLink",
+        "title": "ProviderLinkOut",
         "type": "object"
       },
       "ProviderList": {
-        "description": "``GET /linked-accounts/providers``: the cloud providers enabled in the Device-Gateway,\neach with its credential fields and guidance (the web app renders the link form from it).",
+        "description": "``GET /linked-accounts/providers``: the cloud providers enabled in the Device-Gateway,\neach with its credential fields and guidance in the caller's language (the web app renders\nthe link form from it).",
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ProviderDescriptor"
+              "$ref": "#/components/schemas/ProviderOut"
             },
             "title": "Items",
             "type": "array"
@@ -4083,6 +3892,72 @@
           "items"
         ],
         "title": "ProviderList",
+        "type": "object"
+      },
+      "ProviderOut": {
+        "description": "A cloud provider with every text in the caller's language (English fallback).",
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialFieldOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderLinkOut"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "name": {
+            "description": "The vendor's brand, not translated.",
+            "title": "Name",
+            "type": "string"
+          },
+          "needs_developer_account": {
+            "title": "Needs Developer Account",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "setup_steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Setup Steps",
+            "type": "array"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "tested_on_hardware": {
+            "title": "Tested On Hardware",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "name",
+          "summary",
+          "fields",
+          "setup_steps",
+          "links",
+          "needs_developer_account",
+          "tested_on_hardware"
+        ],
+        "title": "ProviderOut",
         "type": "object"
       },
       "ProxyInfo": {
@@ -5612,8 +5487,29 @@
     },
     "/api/v1/fleet/connection-kinds": {
       "get": {
-        "description": "The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with\nthe option schema of each: required, optional, secret and alternative options. The web app\ngenerates its connection forms from it, so a new adapter kind needs no UI change. For cloud\nmowers the options of each enabled provider come from its descriptor (``provider_options``,\nADR 0066); without an answering gateway that map is empty.",
+        "description": "The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with\nthe option schema of each: required, optional, secret and alternative options. The web app\ngenerates its connection forms from it, so a new adapter kind needs no UI change. For cloud\nmowers the options of each enabled provider come from its descriptor (``provider_options``,\nADR 0066, their texts in the language of ``locale`` or ``Accept-Language``); without an\nanswering gateway that map is empty.",
         "operationId": "list_connection_kinds_api_v1_fleet_connection_kinds_get",
+        "parameters": [
+          {
+            "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z]{2}([-_][A-Za-z0-9]{1,8})?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+              "title": "Locale"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5624,6 +5520,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Connection Kinds",
@@ -5986,8 +5892,29 @@
     },
     "/api/v1/fleet/linked-accounts/providers": {
       "get": {
-        "description": "The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the\nlink form (with hints and links to where the vendor hands them out), whether the user needs\na developer account at the vendor and whether the adapter was tested on real hardware.\nDisabled providers are not listed; the public demo (ADR 0068) lists none and refuses\nevery change under this path.",
+        "description": "The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the\nlink form (with hints and links to where the vendor hands them out), whether the user needs\na developer account at the vendor and whether the adapter was tested on real hardware.\nDisabled providers are not listed; the public demo (ADR 0068) lists none and refuses\nevery change under this path. Texts come in the language of ``locale`` (or the first of\n``Accept-Language``), else English.",
         "operationId": "list_cloud_providers_api_v1_fleet_linked_accounts_providers_get",
+        "parameters": [
+          {
+            "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z]{2}([-_][A-Za-z0-9]{1,8})?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+              "title": "Locale"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6001,6 +5928,16 @@
           },
           "403": {
             "description": "The caller lacks `can_manage_mowers` on the account."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           },
           "503": {
             "description": "No Device-Gateway listed the providers."

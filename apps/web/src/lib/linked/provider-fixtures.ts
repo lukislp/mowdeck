@@ -9,7 +9,16 @@ type FieldInput = Pick<CredentialField, 'key' | 'kind' | 'label'> & Partial<Cred
 
 /** A field with Fleet's defaults (required, not the identity, at most 256 characters). */
 export function field(input: FieldInput): CredentialField {
-  return { required: true, identity: false, max_length: 256, choices: [], ...input };
+  return {
+    required: true,
+    identity: false,
+    max_length: 256,
+    choices: [],
+    help: null,
+    placeholder: null,
+    pattern: null,
+    ...input,
+  };
 }
 
 export const ACME: ProviderDescriptor = {
@@ -18,7 +27,7 @@ export const ACME: ProviderDescriptor = {
   summary: 'Acme mowers through the Acme cloud.',
   fields: [
     field({ key: 'email', kind: 'email', label: 'E-mail address', identity: true }),
-    field({ key: 'password', kind: 'secret', label: 'Password', help: 'Stored encrypted.' }),
+    field({ key: 'password', kind: 'secret', label: 'Password' }),
   ],
   setup_steps: ['Create a second account.', 'Share the mowers with it.'],
   links: [{ label: 'Acme app', url: 'https://acme.test/app' }],

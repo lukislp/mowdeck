@@ -33,6 +33,7 @@ from fleet.adapters.api.deps import (
     ViewMower,
     actor_of,
 )
+from fleet.adapters.api.locale import AcceptLanguage, LocaleQuery, request_locale
 from fleet.adapters.api.schemas import (
     AreaNameIn,
     AreaNamesOut,
@@ -57,16 +58,24 @@ router = APIRouter(prefix="/fleet", tags=["mowers"])
 
 
 @router.get("/connection-kinds")
-async def list_connection_kinds(_: ActorDep, services: ServicesDep) -> ConnectionKindList:
+async def list_connection_kinds(
+    _: ActorDep,
+    services: ServicesDep,
+    locale: LocaleQuery = None,
+    accept_language: AcceptLanguage = None,
+) -> ConnectionKindList:
     """The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with
     the option schema of each: required, optional, secret and alternative options. The web app
     generates its connection forms from it, so a new adapter kind needs no UI change. For cloud
     mowers the options of each enabled provider come from its descriptor (``provider_options``,
-    ADR 0066); without an answering gateway that map is empty."""
+    ADR 0066, their texts in the language of ``locale`` or ``Accept-Language``); without an
+    answering gateway that map is empty."""
     allowed = services.mowers.config.allowed_connection_kinds
     known = [kind for kind in SCHEMAS if kind in allowed]
     others = sorted(allowed - set(SCHEMAS))
-    providers = await services.linked_accounts.provider_options()
+    providers = await services.linked_accounts.provider_options(
+        request_locale(locale, accept_language)
+    )
     return ConnectionKindList(
         items=[ConnectionKindOut.of(kind, providers) for kind in known + others]
     )
