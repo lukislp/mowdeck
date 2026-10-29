@@ -33,6 +33,8 @@ husqvarna = "mowdeck_control_husqvarna.lexicon:husqvarna_lexicon"
 # may import this package or the vendor modules it wraps.
 [tool.mowdeck.adapter]
 vendor-modules = ["aioautomower"]
+# Brand words that must not appear in core strings or web texts (the vendor name is implied).
+brand-names = ["automower", "gardena"]
 
 [tool.uv.sources]
 mowdeck-contracts = { workspace = true }

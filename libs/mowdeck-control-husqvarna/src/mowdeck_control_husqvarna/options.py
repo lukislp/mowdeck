@@ -9,14 +9,15 @@ ignored.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Final, Self
+from typing import Any, Self
 
-from mowdeck_control_husqvarna.descriptor import APP_KEY, APP_SECRET
-
-DEFAULT_START_MINUTES: Final = 60
-"""How long a start without a duration lets the mower mow."""
-MAX_START_MINUTES: Final = 7 * 24 * 60
-"""Longest start MowDeck sends (a week)."""
+from mowdeck_control_husqvarna.descriptor import (
+    APP_KEY,
+    APP_SECRET,
+    DEFAULT_START_MINUTES,
+    MAX_START_MINUTES,
+    START_MINUTES,
+)
 
 
 def _text(options: Mapping[str, Any], key: str) -> str | None:
@@ -59,7 +60,7 @@ class HusqvarnaOptions:
         if mower_id is None and device_name is None:
             msg = "iot_id or device_name is needed to pick the mower"
             raise ValueError(msg)
-        minutes = options.get("start_minutes", DEFAULT_START_MINUTES)
+        minutes = options.get(START_MINUTES, DEFAULT_START_MINUTES)
         if isinstance(minutes, bool) or not isinstance(minutes, int):
             msg = "option start_minutes must be a whole number"
             raise ValueError(msg)

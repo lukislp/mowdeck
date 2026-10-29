@@ -109,3 +109,36 @@ async def test_gateway_loads_it_only_when_enabled() -> None:
     assert on.for_registration({"cloud_provider": "husqvarna"}) is on.plugins["husqvarna"]
     assert on.for_registration({}) is None
     await on.close()
+
+
+def test_descriptor_declares_every_option_the_connection_takes() -> None:
+    """Fleet stores only what the descriptor declares (ADR 0066): every option the parser reads,
+    except the credentials and the keys Fleet manages, is declared with its range."""
+    import inspect
+    import re
+
+    from mowdeck_contracts.v1 import RESERVED_OPTION_KEYS
+    from mowdeck_control_husqvarna import options as module
+
+    source = inspect.getsource(module.HusqvarnaOptions.parse)
+    parsed = set(re.findall(r'_text\(options, "([a-z_]+)"\)', source)) | {
+        k for k in ("start_minutes",) if "START_MINUTES" in source
+    }
+    managed = {"device_name", "iot_id"}
+    declared = {o.key for o in DESCRIPTOR.mower_options}
+    assert parsed - managed == declared == {"start_minutes"}
+    assert not declared & RESERVED_OPTION_KEYS
+    assert not {f.key for f in DESCRIPTOR.fields} & RESERVED_OPTION_KEYS
+    [start] = DESCRIPTOR.mower_options
+    assert (start.type, start.minimum, start.maximum, start.default) == ("integer", 1, 10080, 60)
+    parsed_options = module.HusqvarnaOptions.parse(
+        {
+            APP_KEY: FAKE_APP_KEY,
+            APP_SECRET: FAKE_APP_SECRET,
+            "iot_id": "x",
+            "cloud_provider": "husqvarna",
+            "linked_account_id": "y",
+            "drive_dead_zone": 0.1,
+        }
+    )
+    assert parsed_options.start_minutes == 60

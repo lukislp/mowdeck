@@ -87,7 +87,7 @@ The API accepts actions and the state confirms them later, so a sent command is 
 
 A start or resume while the mower reports an error raises `SensorStop` (a lift is never cleared by a command); a command for a mower that is not connected to the Husqvarna cloud is rejected (the emergency stop is sent anyway). Vendor answers: 403 and 400 are `rejected`, 429 is `failed` ("rate limit reached"), a refused token `failed` ("re-authenticate the linked account"), network and server errors `failed`.
 
-Connection options (`ConnectionConfig.options`): the account's `app_key` and `app_secret` (merged by the gateway), `iot_id` (the Husqvarna mower id) or `device_name` (the mower's name; the serial number is added when two mowers of the account share a name), and `start_minutes` (1 to 10080). Other options of the `cloud` kind are ignored. `start_minutes` is not in Fleet's option catalogue yet (per-provider mower options are a follow-up of ADR 0066), so it stays at 60 for now.
+Connection options (`ConnectionConfig.options`): the account's `app_key` and `app_secret` (merged by the gateway), `iot_id` (the Husqvarna mower id) or `device_name` (the mower's name; the serial number is added when two mowers of the account share a name), and `start_minutes` (1 to 10080). Other options of the `cloud` kind are ignored. `start_minutes` is the one mower option the descriptor declares (`mower_options`: integer, 1 to 10080, default 60), so Fleet stores it and the mower's settings page shows it; Fleet refuses any other option for a Husqvarna mower. The REST refresh interval is not a mower option: it belongs to the account session shared by all mowers of an application key (30 minutes).
 
 ## Known gaps
 

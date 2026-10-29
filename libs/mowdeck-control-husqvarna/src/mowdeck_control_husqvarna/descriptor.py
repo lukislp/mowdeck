@@ -10,6 +10,7 @@ account. The key is shown on the linked account; the secret is stored encrypted 
 from typing import Final
 
 from mowdeck_contracts.v1 import (
+    ConnectionOptionSpec,
     CredentialField,
     CredentialFieldKind,
     ProviderDescriptor,
@@ -22,6 +23,11 @@ APP_KEY: Final = "app_key"
 """Credential field: the application key (the OAuth2 client id), the account's identity."""
 APP_SECRET: Final = "app_secret"  # noqa: S105 - a field key, not a secret
 """Credential field: the application secret (the OAuth2 client secret)."""
+
+START_MINUTES: Final = "start_minutes"
+"""Mower option: how long a start without a duration lets the mower mow."""
+DEFAULT_START_MINUTES: Final = 60
+MAX_START_MINUTES: Final = 7 * 24 * 60
 
 APP_KEY_PATTERN: Final = r"^[A-Za-z0-9][A-Za-z0-9-]{7,63}$"
 """Husqvarna hands out keys as UUIDs; letters, digits and dashes are accepted."""
@@ -66,5 +72,17 @@ DESCRIPTOR: Final = ProviderDescriptor(
     links=[ProviderLink(label="Husqvarna Developer Portal", url=DEVELOPER_PORTAL)],
     needs_developer_account=True,
     tested_on_hardware=False,
+    mower_options=[
+        ConnectionOptionSpec(
+            key=START_MINUTES,
+            type="integer",
+            title="Start duration (min)",
+            description="How long the mower mows after a start that names no duration (a "
+            "start for a time or in a work area).",
+            minimum=1,
+            maximum=MAX_START_MINUTES,
+            default=DEFAULT_START_MINUTES,
+        ),
+    ],
 )
 """The provider descriptor served to Fleet and the web app."""
