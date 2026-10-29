@@ -48,6 +48,23 @@ struct BatteryRing: View {
     }
 }
 
+/// The error in plain words (the lexicon's title, else the vendor's message) under the state.
+struct ErrorLine: View {
+    let status: MowerStatus?
+    var lines = 2
+
+    var body: some View {
+        if let line = Presentation.errorLine(status) {
+            Text(line)
+                .font(.caption)
+                .fontWeight(Presentation.isCriticalError(status) ? .semibold : .regular)
+                .foregroundStyle(DisplayState.error.tint)
+                .lineLimit(lines)
+                .minimumScaleFactor(0.85)
+        }
+    }
+}
+
 struct StateLabel: View {
     let state: DisplayState
     var body: some View {
@@ -118,6 +135,7 @@ struct StatusWidgetView: View {
             if let percent = entry.status?.job?.progressPercent, entry.state.isJob {
                 Text("\(percent) %").font(.caption.monospacedDigit())
             }
+            if entry.state == .error { ErrorLine(status: entry.status) }
             if entry.problem == .offline { staleNote }
         }
     }
@@ -136,6 +154,7 @@ struct StatusWidgetView: View {
                 }
                 Text(entry.mower?.name ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 Text(entry.state.title).font(.headline).foregroundStyle(entry.state.tint)
+                if entry.state == .error { ErrorLine(status: entry.status) }
                 if entry.problem == .offline { staleNote }
                 Spacer(minLength: 0)
                 details
@@ -234,7 +253,9 @@ struct LockScreenWidgetView: View {
                 Image(systemName: entry.state.symbolName)
             }
             .font(.headline).lineLimit(1)
-            if let area = entry.status?.job?.areaName ?? entry.mower?.name {
+            if entry.state == .error, let line = Presentation.errorLine(entry.status) {
+                Text(line).font(.caption).lineLimit(2)
+            } else if let area = entry.status?.job?.areaName ?? entry.mower?.name {
                 Text(area).font(.caption).lineLimit(1)
             }
             if let fraction = Presentation.progressFraction(entry.status), entry.state.isJob {
@@ -253,6 +274,8 @@ struct LockScreenWidgetView: View {
             Label("Rain pause", systemImage: "cloud.rain")
         case .nextRun(let date):
             Label("Next run \(date, style: .time)", systemImage: "calendar")
+        case .state(.error) where Presentation.errorLine(entry.status) != nil:
+            Label(Presentation.errorLine(entry.status) ?? "", systemImage: DisplayState.error.symbolName)
         case .state(let state):
             Label {
                 Text(state.title)
@@ -289,6 +312,9 @@ struct MapWidgetView: View {
                 }
                 if let fraction = Presentation.progressFraction(entry.status), entry.state.isJob {
                     ProgressView(value: fraction).tint(entry.state.tint)
+                }
+                if entry.state == .error {
+                    ErrorLine(status: entry.status, lines: 1).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let area = entry.status?.job?.areaName {
                     Text(area).font(.caption).foregroundStyle(.secondary)

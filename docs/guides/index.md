@@ -7,6 +7,7 @@
 - [Signing in with Apple](apple-login.md): the same with your Apple ID.
 - [Confirming critical actions](step-up.md): why MowDeck asks for your passkey or password again.
 - [Your security page](security.md): signed-in devices, signing one out, alerts about new sign-ins and the security events.
+- [Error codes in plain words](error-codes.md): what an error code means, where MowDeck explains it, and the searchable list of your mower's codes in its settings.
 - [Aerial photo under the map](aerial-photo.md): lay a photo of your garden under the mower map, with an opacity slider.
 - [iPhone widgets and the mowing Live Activity](ios-widgets.md): home and lock screen widgets, the map widget and the Live Activity of a job.
 - [Apple Watch](apple-watch.md): the mower's state on the wrist and on the watch face, Start, Pause, Station and the emergency stop.

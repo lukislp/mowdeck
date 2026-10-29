@@ -21,7 +21,8 @@ unit tests excluded) and messages. These checks fail when the core
 
 and when a service other than the Device-Gateway depends on an adapter, or an adapter
 registers neither a connection nor a provider, ships no error lexicon, declares no vendor
-modules, points an entry point into another package or imports another adapter.
+modules, points an entry point into another package or imports another adapter; and when a
+core service's settings default to vendor error codes.
 """
 
 import ast
@@ -344,6 +345,31 @@ def test_vendor_isolation_adapters_do_not_import_each_other(repo_root: Path) -> 
         for path in sorted((adapter.path / "src").rglob("*.py")):
             hits = imported_modules(ast.parse(path.read_text("utf-8"))) & others
             assert not hits, f"{path.relative_to(repo_root).as_posix()} imports {hits}"
+
+
+def _code_list_defaults(source: Path) -> Iterator[tuple[str, object]]:
+    """``(name, default)`` of every class field of ``source`` whose name holds ``error_codes``."""
+    tree = ast.parse(source.read_text("utf-8"), filename=str(source))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and "error_codes" in node.target.id
+            and node.value is not None
+        ):
+            yield node.target.id, ast.literal_eval(node.value)
+
+
+def test_vendor_isolation_core_settings_hold_no_vendor_codes(repo_root: Path) -> None:
+    """Rules in the core match the neutral signals (``error_category``, ``raw.lifted``,
+    ``drive_recoverable``, ADR 0067); error code lists stay optional operator overrides whose
+    defaults are empty."""
+    checked = 0
+    for settings in sorted((repo_root / "services").glob("*/src/*/settings.py")):
+        for name, default in _code_list_defaults(settings):
+            checked += 1
+            assert default == "", f"{settings.relative_to(repo_root)}: {name} = {default!r}"
+    assert checked >= 2  # notifications_lift_error_codes, vision_auto_error_codes
 
 
 def test_vendor_isolation_core_ships_no_vendor_code_table(repo_root: Path) -> None:

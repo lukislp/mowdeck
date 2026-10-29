@@ -46,12 +46,20 @@ public struct MowerStatus: Codable, Equatable, Sendable {
     public var rainDetected: Bool?
     public var errorCode: String?
     public var errorMessage: String?
+    /// The error in plain words from the vendor's error lexicon, in the language the widget asked
+    /// for (ADR 0067). Absent from older servers.
+    public var errorTitle: String?
+    /// `MowerErrorCategory` (`lift_tilt`, `trapped`, ...).
+    public var errorCategory: String?
+    /// `info`, `warning`, `error` or `critical`.
+    public var errorSeverity: String?
     public var job: JobInfo?
 
     public init(
         mowerId: String, stale: Bool = false, activity: String, batteryPercent: Int,
         charging: Bool = false, rainDetected: Bool? = nil, errorCode: String? = nil,
-        errorMessage: String? = nil, job: JobInfo? = nil
+        errorMessage: String? = nil, errorTitle: String? = nil, errorCategory: String? = nil,
+        errorSeverity: String? = nil, job: JobInfo? = nil
     ) {
         self.mowerId = mowerId
         self.stale = stale
@@ -61,6 +69,9 @@ public struct MowerStatus: Codable, Equatable, Sendable {
         self.rainDetected = rainDetected
         self.errorCode = errorCode
         self.errorMessage = errorMessage
+        self.errorTitle = errorTitle
+        self.errorCategory = errorCategory
+        self.errorSeverity = errorSeverity
         self.job = job
     }
 
@@ -73,6 +84,9 @@ public struct MowerStatus: Codable, Equatable, Sendable {
         case rainDetected = "rain_detected"
         case errorCode = "error_code"
         case errorMessage = "error_message"
+        case errorTitle = "error_title"
+        case errorCategory = "error_category"
+        case errorSeverity = "error_severity"
         case job
     }
 }

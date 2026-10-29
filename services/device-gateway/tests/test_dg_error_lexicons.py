@@ -2,6 +2,7 @@
 installed adapter packages register (simulator, Mammotion and Husqvarna in this image)."""
 
 from mowdeck_contracts.v1 import (
+    GATEWAY_ERRORS_ENTRIES,
     GATEWAY_ERRORS_EXPLAIN,
     GATEWAY_ERRORS_LEXICONS,
     ConnectionKind,
@@ -11,6 +12,8 @@ from mowdeck_contracts.v1 import (
     ErrorLexiconEntry,
     ErrorLexiconListReply,
     ErrorLexiconListRequest,
+    ErrorLexiconSearchReply,
+    ErrorLexiconSearchRequest,
     ErrorText,
     MowerErrorCategory,
 )
@@ -65,3 +68,24 @@ async def test_dg_error_lexicons_unknown_vendor_gets_the_generic_advice() -> Non
     assert explanation.known is False and explanation.vendor is None
     assert explanation.description == "Rain detected" and explanation.user_action is False
     assert (await _explain(bus, codes=["1"], vendor="acme")).explanations[0].title == "One"
+
+
+async def test_dg_error_lexicons_search_a_page_of_the_mowers_lexicon() -> None:
+    bus = InMemoryBus()
+    await subscribe_error_lexicons(bus)
+
+    async def search(**values: object) -> ErrorLexiconSearchReply:
+        request = ErrorLexiconSearchRequest.model_validate(values)
+        return (await bus.request(GATEWAY_ERRORS_ENTRIES, request)).model(ErrorLexiconSearchReply)
+
+    mammotion = await search(connection="cloud", locale="de", codes=["-1201", "-2801"])
+    assert mammotion.lexicon is not None and mammotion.lexicon.vendor == "mammotion"
+    assert [e.code for e in mammotion.entries] == ["1201", "2801"]  # the mower's spelling works
+    assert mammotion.entries[0].title == "Steckt fest"
+    assert sum(mammotion.categories.values()) == mammotion.lexicon.entries
+    lifts = await search(connection="cloud", category="lift_tilt", limit=100)
+    assert {"1004", "1030", "2502", "2801", "11131", "11133"} <= {e.code for e in lifts.entries}
+    simulated = await search(connection="simulated", query="lifted")
+    assert [e.code for e in simulated.entries] == ["lifted"]
+    nobody = await search(vendor="nobody")
+    assert nobody.lexicon is None and nobody.entries == [] and nobody.total == 0

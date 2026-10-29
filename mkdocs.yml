@@ -150,6 +150,7 @@ nav:
       - guides/esp32-bridge-purchase-and-setup.md
       - guides/passkeys.md
       - guides/github-login.md
+      - guides/error-codes.md
       - guides/aerial-photo.md
       - guides/apple-login.md
       - guides/step-up.md

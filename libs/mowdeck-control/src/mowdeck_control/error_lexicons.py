@@ -30,8 +30,11 @@ from mowdeck_contracts.v1 import (
     ErrorLexicon,
     ErrorLexiconEntry,
     ErrorLexiconInfo,
+    ErrorLexiconSearchReply,
+    ErrorLexiconSearchRequest,
     MowerErrorCategory,
     explain_code,
+    search_lexicon,
     unknown_explanation,
 )
 
@@ -80,6 +83,14 @@ class ErrorLexiconProvider:
         """Explain ``raw`` in ``locale`` (see :func:`~mowdeck_contracts.v1.explain_code`)."""
         return explain_code(
             self.lexicon, self.code_of(raw), locale, category=category, index=self._index
+        )
+
+    def search(self, request: ErrorLexiconSearchRequest) -> ErrorLexiconSearchReply:
+        """A page of this lexicon (see :func:`~mowdeck_contracts.v1.search_lexicon`); the
+        requested codes are normalised first, so the mower's spelling (``-1201``) works."""
+        codes = [self.code_of(code) for code in request.codes]
+        return search_lexicon(
+            self.lexicon, request.model_copy(update={"codes": codes}), index=self._index
         )
 
     def category_of(self, raw: str) -> MowerErrorCategory | None:
@@ -199,6 +210,14 @@ class ErrorLexiconRegistry:
         if provider is None:
             return [unknown_explanation(code, locale, category=category) for code in codes]
         return [provider.explain(code, locale, category=category) for code in codes]
+
+    def search(self, request: ErrorLexiconSearchRequest) -> ErrorLexiconSearchReply:
+        """Browse the lexicon of ``request.vendor`` (or ``request.connection``); an empty reply
+        (``lexicon`` null) when none applies."""
+        provider = self.provider(request.vendor, request.connection)
+        if provider is None:
+            return ErrorLexiconSearchReply(offset=request.offset)
+        return provider.search(request)
 
     def _ensure_entry_points(self) -> None:
         if not self._entry_points_loaded:

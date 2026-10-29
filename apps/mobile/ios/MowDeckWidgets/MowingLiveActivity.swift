@@ -28,8 +28,12 @@ struct MowingLiveActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(ActivityPresentation.title(context.state.state))
-                        .font(.subheadline)
+                    if let error = ActivityPresentation.errorTitle(context.state) {
+                        Text(error).font(.subheadline).lineLimit(1)
+                    } else {
+                        Text(ActivityPresentation.title(context.state.state))
+                            .font(.subheadline)
+                    }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -86,6 +90,12 @@ enum ActivityPresentation {
     static func title(_ state: String) -> LocalizedStringKey {
         state == "finished" ? LocalizedStringKey("state.finished") : display(state).title
     }
+
+    /// The final error in plain words (the server's `errorTitle`, ADR 0067), nil otherwise.
+    static func errorTitle(_ state: MowingContentState) -> String? {
+        guard state.state == "error", let title = state.errorTitle, !title.isEmpty else { return nil }
+        return title
+    }
 }
 
 /// "12 min left" as a countdown the device runs by itself.
@@ -120,7 +130,12 @@ struct LockScreenActivityView: View {
                     .font(.subheadline)
                     .foregroundStyle(ActivityPresentation.tint(state.state))
             }
-            if let fraction = state.progressFraction {
+            if let error = ActivityPresentation.errorTitle(state) {
+                Text(error)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(ActivityPresentation.tint(state.state))
+                    .lineLimit(2)
+            } else if let fraction = state.progressFraction {
                 ProgressView(value: fraction).tint(ActivityPresentation.tint(state.state))
             }
             HStack {

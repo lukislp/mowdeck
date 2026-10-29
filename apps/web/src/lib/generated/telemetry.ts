@@ -251,6 +251,30 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/mowers/{mower_id}/error-lexicon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse Mower Lexicon
+         * @description Browse the error lexicon of this mower's vendor (picked by its connection): a page of
+         *     entries in plain words, ordered by code, filtered by text, category, severity and codes,
+         *     with the counts per category and severity for filter chips. `lexicon` is null when no
+         *     lexicon applies or the Device-Gateway does not answer. 404 "no telemetry yet" before the
+         *     first state.
+         */
+        get: operations["browse_mower_lexicon_api_v1_telemetry_mowers__mower_id__error_lexicon_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/mowers/{mower_id}/health": {
         parameters: {
             query?: never;
@@ -689,7 +713,8 @@ export type paths = {
         /**
          * Get Widget State
          * @description A compact state for the iOS widgets and the Live Activity (ADR 0059): activity (`offline`
-         *     when stale), battery, rain sensor, error and the job with progress, area name and remaining
+         *     when stale), battery, rain sensor, error (code, vendor message and, from the error lexicon,
+         *     title, category and severity, ADR 0067) and the job with progress, area name and remaining
          *     time. 404 "no telemetry yet" before the first state.
          */
         get: operations["get_widget_state_api_v1_telemetry_mowers__mower_id__widget_get"];
@@ -1350,6 +1375,41 @@ export type components = {
         ErrorLexiconList: {
             /** Lexicons */
             lexicons: components["schemas"]["ErrorLexiconInfo"][];
+        };
+        /**
+         * ErrorLexiconSearchReply
+         * @description A page of a lexicon's entries, ordered by code (numbers numerically).
+         */
+        ErrorLexiconSearchReply: {
+            /**
+             * Categories
+             * @description Entries per category in the whole lexicon (for filter chips).
+             */
+            categories?: {
+                [key: string]: number;
+            };
+            /** Entries */
+            entries?: components["schemas"]["ErrorExplanation"][];
+            /** @description The lexicon searched; null when none applies (or none answered). */
+            lexicon?: components["schemas"]["ErrorLexiconInfo"] | null;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Severities
+             * @description Entries per severity in the whole lexicon.
+             */
+            severities?: {
+                [key: string]: number;
+            };
+            /**
+             * Total
+             * @description Entries matching the filters.
+             * @default 0
+             */
+            total: number;
         };
         /**
          * ErrorLink
@@ -3223,10 +3283,25 @@ export type components = {
             battery_percent: number;
             /** Charging */
             charging: boolean;
+            /**
+             * Error Category
+             * @description With activity `error`: the manufacturer-neutral `MowerErrorCategory`.
+             */
+            error_category?: string | null;
             /** Error Code */
             error_code: string | null;
             /** Error Message */
             error_message: string | null;
+            /**
+             * Error Severity
+             * @description With activity `error`: `info`, `warning`, `error` or `critical`.
+             */
+            error_severity?: string | null;
+            /**
+             * Error Title
+             * @description With activity `error`: the error in plain words from the vendor's error lexicon in the requested locale (ADR 0067); for a code no lexicon knows the generic title of its category; null when neither is known (show `error_message`).
+             */
+            error_title?: string | null;
             job: components["schemas"]["WidgetJobOut"] | null;
             /**
              * Mower Id
@@ -3595,6 +3670,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorExplanationList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_mower_lexicon_api_v1_telemetry_mowers__mower_id__error_lexicon_get: {
+        parameters: {
+            query?: {
+                category?: components["schemas"]["MowerErrorCategory"] | null;
+                /** @description Only these codes (e.g. the ones this mower reported); repeatable. */
+                code?: string[] | null;
+                limit?: number;
+                /** @description Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. */
+                locale?: string | null;
+                offset?: number;
+                /** @description Search the code and the texts (every word must match); empty: all. */
+                q?: string;
+                severity?: components["schemas"]["ErrorSeverity"] | null;
+            };
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorLexiconSearchReply"];
                 };
             };
             /** @description Validation Error */
@@ -4363,7 +4480,10 @@ export interface operations {
     };
     get_widget_state_api_v1_telemetry_mowers__mower_id__widget_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Language of `error_title` (`de`, `en`). Default: the first language of `Accept-Language`, else `en`. */
+                locale?: string | null;
+            };
             header?: never;
             path: {
                 mower_id: string;

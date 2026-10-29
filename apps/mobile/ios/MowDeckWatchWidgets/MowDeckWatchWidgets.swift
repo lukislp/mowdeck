@@ -143,7 +143,7 @@ struct ComplicationView: View {
             if display.isJob, let progress = Presentation.progressFraction(entry.snapshot?.status) {
                 ProgressView(value: progress)
                     .tint(.green)
-            } else if display == .error, let message = entry.snapshot?.status?.errorMessage {
+            } else if display == .error, let message = Presentation.errorLine(entry.snapshot?.status) {
                 Text(message)
                     .font(.caption2)
                     .lineLimit(1)

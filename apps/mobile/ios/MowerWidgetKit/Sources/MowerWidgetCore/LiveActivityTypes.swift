@@ -14,10 +14,13 @@ public struct MowingContentState: Codable, Hashable, Sendable {
     /// When the job is expected to end, epoch seconds (a countdown the device runs on its own).
     public var endsAt: Int?
     public var updatedAt: Int
+    /// With the final `error`: the error in plain words (the vendor's error lexicon in the user's
+    /// language, ADR 0067). Optional, so older servers and older payloads still decode.
+    public var errorTitle: String?
 
     public init(
         state: String, batteryPercent: Int, progressPercent: Int? = nil, areaName: String? = nil,
-        remainingSeconds: Int? = nil, endsAt: Int? = nil, updatedAt: Int
+        remainingSeconds: Int? = nil, endsAt: Int? = nil, updatedAt: Int, errorTitle: String? = nil
     ) {
         self.state = state
         self.batteryPercent = batteryPercent
@@ -26,6 +29,7 @@ public struct MowingContentState: Codable, Hashable, Sendable {
         self.remainingSeconds = remainingSeconds
         self.endsAt = endsAt
         self.updatedAt = updatedAt
+        self.errorTitle = errorTitle
     }
 
     /// From a status read by the app itself (a Live Activity started from the app).
@@ -37,7 +41,8 @@ public struct MowingContentState: Codable, Hashable, Sendable {
             areaName: status.job?.areaName,
             remainingSeconds: status.job?.remainingSeconds,
             endsAt: status.job?.remainingSeconds.map { Int(now.timeIntervalSince1970) + $0 },
-            updatedAt: Int(now.timeIntervalSince1970))
+            updatedAt: Int(now.timeIntervalSince1970),
+            errorTitle: status.activity == "error" ? Presentation.errorLine(status) : nil)
     }
 
     public var progressFraction: Double? {

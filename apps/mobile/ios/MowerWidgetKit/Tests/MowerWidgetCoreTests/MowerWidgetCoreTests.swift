@@ -18,6 +18,23 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(status.job?.progressPercent, 42)
         XCTAssertEqual(status.job?.areaName, "Großer Garten")
         XCTAssertEqual(status.job?.remainingSeconds, 1800)
+        XCTAssertNil(status.errorTitle)  // an older server sends no error_title
+    }
+
+    func testDecodesTheErrorTitleOfTheLexicon() throws {
+        let json = """
+            {"mower_id":"m","observed_at":"2026-10-27T12:00:00Z","stale":false,"activity":"error",
+             "battery_percent":64,"charging":false,"rain_detected":null,"error_code":"2801",
+             "error_message":"Lift sensor triggered","error_title":"Angehoben",
+             "error_category":"lift_tilt","error_severity":"critical","job":null}
+            """
+        let status = try JSONDecoder.mowdeck.decode(MowerStatus.self, from: Data(json.utf8))
+        XCTAssertEqual(status.errorTitle, "Angehoben")
+        XCTAssertEqual(status.errorCategory, "lift_tilt")
+        XCTAssertEqual(status.errorSeverity, "critical")
+        // the snapshot the widgets keep for offline use round-trips the new fields
+        let stored = try JSONEncoder().encode(status)
+        XCTAssertEqual(try JSONDecoder.mowdeck.decode(MowerStatus.self, from: stored), status)
     }
 
     func testDecodesTheSchedulerOverviewAndToleratesAnUnknownVerdict() throws {
@@ -54,6 +71,11 @@ final class ModelTests: XCTestCase {
             from: Data(#"{"state":"finished","batteryPercent":50,"updatedAt":1}"#.utf8))
         XCTAssertTrue(minimal.isFinal)
         XCTAssertNil(minimal.endsAt)
+        XCTAssertNil(minimal.errorTitle)
+        let failed = try JSONDecoder().decode(
+            MowingContentState.self,
+            from: Data(#"{"state":"error","batteryPercent":50,"updatedAt":1,"errorTitle":"Lifted"}"#.utf8))
+        XCTAssertEqual(failed.errorTitle, "Lifted")
     }
 
     func testPushTokensAreLowerCaseHex() {
@@ -123,6 +145,29 @@ final class PresentationTests: XCTestCase {
         XCTAssertEqual(Presentation.batteryFraction(status("docked")), 0.8, accuracy: 0.0001)
         XCTAssertNil(Presentation.progressFraction(status("docked")))
         XCTAssertEqual(Presentation.batteryFraction(nil), 0)
+    }
+
+    func testTheErrorLinePrefersTheLexiconTitle() {
+        var failed = status("error")
+        XCTAssertNil(Presentation.errorLine(failed))
+        failed.errorCode = "2801"
+        XCTAssertEqual(Presentation.errorLine(failed), "2801")
+        failed.errorMessage = "Lift sensor triggered"
+        XCTAssertEqual(Presentation.errorLine(failed), "Lift sensor triggered")
+        failed.errorTitle = "Angehoben"
+        XCTAssertEqual(Presentation.errorLine(failed), "Angehoben")
+        XCTAssertFalse(Presentation.isCriticalError(failed))
+        failed.errorCategory = "lift_tilt"
+        XCTAssertTrue(Presentation.isCriticalError(failed))
+        failed.stale = true
+        XCTAssertNil(Presentation.errorLine(failed))  // offline: the last error may be over
+        var docked = status("docked")
+        docked.errorTitle = "Angehoben"
+        XCTAssertNil(Presentation.errorLine(docked))
+        XCTAssertNil(Presentation.errorLine(nil))
+        var lifted = status("error")
+        lifted.errorTitle = "Lifted"
+        XCTAssertEqual(MowingContentState(status: lifted, now: Date()).errorTitle, "Lifted")
     }
 
     func testRefreshIsFasterWhileMowing() {
@@ -203,6 +248,21 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(reads.count, 2)
         XCTAssertEqual(reads[0].value(forHTTPHeaderField: "Authorization"), "Bearer access-1")
         XCTAssertEqual(reads[0].url!.path, "/base/api/v1/telemetry/mowers/m/widget")
+    }
+
+    func testAsksForTheErrorTitleInTheAppsLanguage() async throws {
+        let transport = FakeTransport()
+        transport.handler = { request in
+            if request.url!.path.hasSuffix("/identity/token") { return (200, self.exchange()) }
+            return (200, Data(#"{"mower_id":"m","stale":false,"activity":"docked","battery_percent":90,"charging":true,"job":null}"#.utf8))
+        }
+        let client = MowDeckClient(credential: credential, transport: transport, locale: "de-DE")
+        _ = try await client.status(mowerId: "m")
+        let read = transport.requests.first { $0.url!.path.hasSuffix("/widget") }
+        XCTAssertEqual(read?.url?.query, "locale=de")
+        XCTAssertEqual(MowDeckClient.languageCode("en_GB"), "en")
+        XCTAssertEqual(MowDeckClient.languageCode("Base"), "en")
+        XCTAssertEqual(MowDeckClient.languageCode(""), "en")
     }
 
     func testRetriesOnceWithAFreshTokenOn401ThenGivesUp() async throws {

@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "ConnectionKind": {
+      "description": "How the Device-Gateway is connected to the mower.",
+      "enum": [
+        "ble_bridge",
+        "wifi",
+        "cloud",
+        "simulated"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "ErrorSeverity": {
+      "description": "How bad an error is for the user, manufacturer neutral.",
+      "enum": [
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "title": "ErrorSeverity",
+      "type": "string"
+    },
+    "MowerErrorCategory": {
+      "description": "What kind of fault ``MowerState.error_code`` names, manufacturer neutral.\n\nThe same words classify the entries of an error lexicon (ADR 0067), so rules such as the\ntheft alarm can match a category instead of vendor codes.",
+      "enum": [
+        "trapped",
+        "obstacle",
+        "outside",
+        "wheel_slip",
+        "lift_tilt",
+        "collision",
+        "battery",
+        "blade_motor",
+        "rain",
+        "positioning",
+        "communication",
+        "docking",
+        "firmware",
+        "other"
+      ],
+      "title": "MowerErrorCategory",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Browse one lexicon (``gateway.errors.entries``): a page of its entries, explained in\n``locale``, filtered by text, category, severity and codes (all optional, combined with and).\n\nThe lexicon is picked like for :class:`ErrorExplainRequest`: by ``vendor``, else by\n``connection``.",
+  "properties": {
+    "category": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MowerErrorCategory"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "codes": {
+      "description": "Only these codes (as the lexicon or the mower spells them); empty: all.",
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Codes",
+      "type": "array"
+    },
+    "connection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConnectionKind"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "limit": {
+      "default": 50,
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "locale": {
+      "default": "en",
+      "pattern": "^[a-z]{2}$",
+      "title": "Locale",
+      "type": "string"
+    },
+    "offset": {
+      "default": 0,
+      "maximum": 100000,
+      "minimum": 0,
+      "title": "Offset",
+      "type": "integer"
+    },
+    "query": {
+      "default": "",
+      "description": "Matches the code, its aliases and the texts in `locale` and English (case insensitive, every word must match); empty: everything.",
+      "maxLength": 100,
+      "title": "Query",
+      "type": "string"
+    },
+    "severity": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ErrorSeverity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "vendor": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Vendor"
+    }
+  },
+  "title": "ErrorLexiconSearchRequest",
+  "type": "object"
+}

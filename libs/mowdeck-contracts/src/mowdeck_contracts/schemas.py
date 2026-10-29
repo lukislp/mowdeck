@@ -128,6 +128,8 @@ V1_MODELS: Mapping[str, type[BaseModel]] = {
     "ErrorExplainReply": v1.ErrorExplainReply,
     "ErrorLexiconListRequest": v1.ErrorLexiconListRequest,
     "ErrorLexiconListReply": v1.ErrorLexiconListReply,
+    "ErrorLexiconSearchRequest": v1.ErrorLexiconSearchRequest,
+    "ErrorLexiconSearchReply": v1.ErrorLexiconSearchReply,
     "RealtimeClientMessage": realtime.RealtimeClientMessage,
     "RealtimeServerMessage": realtime.RealtimeServerMessage,
     **{model.__name__: model for model in v1.COMMAND_MODELS},

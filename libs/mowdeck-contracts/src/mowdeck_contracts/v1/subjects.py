@@ -34,6 +34,7 @@ Subject scheme:
 ``gateway.errors.explain``            core NATS request: vendor error codes in plain words
                                       (Device-Gateway, ADR 0067)
 ``gateway.errors.lexicons``           core NATS request: the installed error lexicons
+``gateway.errors.entries``            core NATS request: a searchable page of one lexicon
 ``relay.camera.attach``               core NATS request: a lease on the camera relay (ADR 0045)
 ``relay.camera.renew``                core NATS request: a lease's heartbeat, a fresh ticket
 ``relay.camera.detach``               core NATS request: end a lease
@@ -113,6 +114,9 @@ vendor error codes with the error lexicons of the installed adapters (ADR 0067).
 GATEWAY_ERRORS_LEXICONS = "gateway.errors.lexicons"
 """Core NATS request subject (internal, queue group ``device-gateway``):
 ``ErrorLexiconListRequest`` in, ``ErrorLexiconListReply`` out, the installed lexicons."""
+GATEWAY_ERRORS_ENTRIES = "gateway.errors.entries"
+"""Core NATS request (queue group ``device-gateway``): ``ErrorLexiconSearchRequest`` in,
+``ErrorLexiconSearchReply`` out, a searchable page of one lexicon's entries."""
 
 
 RELAY_CAMERA_ATTACH = "relay.camera.attach"

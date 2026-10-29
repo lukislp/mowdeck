@@ -133,7 +133,7 @@ def build_services(
     camera photo from, None for none; ``image_links``: the signed push image URLs; ``errors``:
     explains vendor error codes in the push texts, None keeps the vendor's message)."""
     fanout = Fanout(store, channels, views, publisher, catalog, config, clock, photos, errors)
-    live = LiveActivities(store, channels, views, clock)
+    live = LiveActivities(store, channels, views, clock, errors)
     return Services(
         watcher=Watcher(store, fanout, config, clock, live),
         fanout=fanout,
