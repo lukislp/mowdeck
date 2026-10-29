@@ -60,6 +60,7 @@ V1_MODELS: Mapping[str, type[BaseModel]] = {
     "UserChanged": v1.UserChanged,
     "GrantsChanged": v1.GrantsChanged,
     "ApiTokenRevoked": v1.ApiTokenRevoked,
+    "NewDeviceLogin": v1.NewDeviceLogin,
     "NotificationSent": v1.NotificationSent,
     "NotificationRaised": v1.NotificationRaised,
     "WebPushPayload": v1.WebPushPayload,

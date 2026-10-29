@@ -24,6 +24,7 @@ from mowdeck_service_kit.errors import (
 from mowdeck_service_kit.tenancy import current_principal
 
 from identity.application.context import RequestContext
+from identity.application.devices import DEVICE_KEY
 from identity.application.services import Services
 from identity.domain.errors import (
     AuthenticationFailed,
@@ -68,12 +69,20 @@ def client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
+DEVICE_COOKIE = "mowdeck_device"
+"""The device id of a browser or app installation (ADR 0065): HttpOnly, ``SameSite=Lax`` (it
+must come along on a provider's redirect back), path ``/api/v1/identity``, about 400 days."""
+DEVICE_COOKIE_PATH = "/api/v1/identity"
+
+
 def _context(request: Request, principal: Principal | None) -> RequestContext:
+    device = request.cookies.get(DEVICE_COOKIE)
     return RequestContext(
         principal=principal,
         ip=client_ip(request),
         correlation_id=get_correlation_id(),
         user_agent=request.headers.get("user-agent"),
+        extra={DEVICE_KEY: device[:64]} if device else {},
     )
 
 
@@ -85,7 +94,11 @@ async def public_context(request: Request) -> RequestContext:
 async def principal_context(
     request: Request, principal: Annotated[Principal, Depends(current_principal)]
 ) -> RequestContext:
-    """Context of a protected endpoint (401 without a valid token)."""
+    """Context of a protected endpoint (401 without a valid token, and for an access token of a
+    login session that has ended: revoked in the security center, logged out, handed to the
+    app; ADR 0065)."""
+    if await get_services(request).security.session_ended(principal):
+        raise Unauthorized("this login session has ended")
     return _context(request, principal)
 
 

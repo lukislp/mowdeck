@@ -2198,6 +2198,323 @@
         "title": "RolePatch",
         "type": "object"
       },
+      "SecurityAlertsIn": {
+        "additionalProperties": false,
+        "description": "``PUT /me/security/alerts``.",
+        "properties": {
+          "new_login_alerts": {
+            "title": "New Login Alerts",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "new_login_alerts"
+        ],
+        "title": "SecurityAlertsIn",
+        "type": "object"
+      },
+      "SecurityAlertsOut": {
+        "description": "The alert setting after the change.",
+        "properties": {
+          "new_login_alerts": {
+            "title": "New Login Alerts",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "new_login_alerts"
+        ],
+        "title": "SecurityAlertsOut",
+        "type": "object"
+      },
+      "SecurityEventOut": {
+        "description": "One of the caller's own security events.",
+        "properties": {
+          "action": {
+            "description": "The audit action, e.g. `session.login`, `passkey.added`",
+            "title": "Action",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "description": "A safe subset of the audit details",
+            "title": "Details",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "ip_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The address of the request, shortened",
+            "title": "Ip Prefix"
+          },
+          "network": {
+            "enum": [
+              "local",
+              "public",
+              "unknown"
+            ],
+            "title": "Network",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "`success`, `failure` or `denied`",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "action",
+          "outcome",
+          "target_type",
+          "details",
+          "ip_prefix",
+          "network"
+        ],
+        "title": "SecurityEventOut",
+        "type": "object"
+      },
+      "SecurityOverviewOut": {
+        "description": "The top of the security page: password status, alert setting and counts.",
+        "properties": {
+          "known_devices": {
+            "title": "Known Devices",
+            "type": "integer"
+          },
+          "must_change_password": {
+            "title": "Must Change Password",
+            "type": "boolean"
+          },
+          "new_login_alerts": {
+            "description": "Notify on a login from a device not seen before (in-app and push)",
+            "title": "New Login Alerts",
+            "type": "boolean"
+          },
+          "passkeys": {
+            "title": "Passkeys",
+            "type": "integer"
+          },
+          "password_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last change; null when unknown (set before the security center existed)",
+            "title": "Password Changed At"
+          },
+          "password_set": {
+            "title": "Password Set",
+            "type": "boolean"
+          },
+          "personal_tokens": {
+            "description": "Active personal access tokens in this account",
+            "title": "Personal Tokens",
+            "type": "integer"
+          },
+          "providers": {
+            "description": "Linked login providers (`github`, `apple`)",
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "sessions": {
+            "description": "Live login sessions in all accounts",
+            "title": "Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "password_set",
+          "password_changed_at",
+          "must_change_password",
+          "new_login_alerts",
+          "passkeys",
+          "providers",
+          "personal_tokens",
+          "sessions",
+          "known_devices"
+        ],
+        "title": "SecurityOverviewOut",
+        "type": "object"
+      },
+      "SessionOut": {
+        "description": "One of the caller's live login sessions (a browser or an app installation).",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "browser": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Browser family from the user agent, no version",
+            "title": "Browser"
+          },
+          "client": {
+            "enum": [
+              "browser",
+              "app",
+              "script",
+              "unknown"
+            ],
+            "title": "Client",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "When the session started (the login)",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current": {
+            "description": "The session of this request",
+            "title": "Current",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "description": "When the session ends unless it is used again",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "description": "The login session (the `sid` of its access tokens)",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ip_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The address shortened to its network (`203.0.113.x`, an IPv6 /48); MowDeck asks no location service",
+            "title": "Ip Prefix"
+          },
+          "label": {
+            "description": "`Firefox on Windows`, `MowDeck app on iOS` (English)",
+            "title": "Label",
+            "type": "string"
+          },
+          "last_used_at": {
+            "description": "The last refresh (about every 10 minutes)",
+            "format": "date-time",
+            "title": "Last Used At",
+            "type": "string"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How it started: `pwd`, `passkey`, `github`, `apple`",
+            "title": "Method"
+          },
+          "network": {
+            "description": "`local`: a private, loopback or link-local address (the home network)",
+            "enum": [
+              "local",
+              "public",
+              "unknown"
+            ],
+            "title": "Network",
+            "type": "string"
+          },
+          "os": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Operating system from the user agent",
+            "title": "Os"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "current",
+          "client",
+          "browser",
+          "os",
+          "label",
+          "ip_prefix",
+          "network",
+          "created_at",
+          "last_used_at",
+          "expires_at",
+          "method"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
+      "SessionsRevokedOut": {
+        "description": "``POST /me/sessions/revoke-others``.",
+        "properties": {
+          "revoked": {
+            "description": "How many sessions ended",
+            "title": "Revoked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "title": "SessionsRevokedOut",
+        "type": "object"
+      },
       "StepUpPasskeyIn": {
         "additionalProperties": false,
         "description": "``POST /me/step-up/passkey``: the answer to a challenge of the options endpoint.",
@@ -5085,6 +5402,217 @@
         "summary": "My Platform",
         "tags": [
           "identity: sessions"
+        ]
+      }
+    },
+    "/api/v1/identity/me/security": {
+      "get": {
+        "description": "Password status, the new-login alert setting and how many passkeys, linked providers,\npersonal access tokens, sessions and known devices the caller has.",
+        "operationId": "security_overview_api_v1_identity_me_security_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityOverviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Security Overview",
+        "tags": [
+          "identity: security"
+        ]
+      }
+    },
+    "/api/v1/identity/me/security-events": {
+      "get": {
+        "description": "The caller's own security events of the last `days` (default 30), newest first: logins\nand failed logins, new devices, passkeys, linked providers, password changes, personal\naccess tokens, ended sessions. Addresses are shortened to their network.",
+        "operationId": "my_security_events_api_v1_identity_me_security_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SecurityEventOut"
+                  },
+                  "title": "Response My Security Events Api V1 Identity Me Security Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "My Security Events",
+        "tags": [
+          "identity: security"
+        ]
+      }
+    },
+    "/api/v1/identity/me/security/alerts": {
+      "put": {
+        "description": "Turn the notification about a login from a new device on or off. Turning it off needs a\nrecent step-up (401 `reauth-required`): a stolen session must not silence it.",
+        "operationId": "set_security_alerts_api_v1_identity_me_security_alerts_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecurityAlertsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityAlertsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Security Alerts",
+        "tags": [
+          "identity: security"
+        ]
+      }
+    },
+    "/api/v1/identity/me/sessions": {
+      "get": {
+        "description": "The caller's live login sessions (browsers and app installations, all accounts), the\ncurrent one first (`current`), then by last use.",
+        "operationId": "my_sessions_api_v1_identity_me_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionOut"
+                  },
+                  "title": "Response My Sessions Api V1 Identity Me Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Sessions",
+        "tags": [
+          "identity: security"
+        ]
+      }
+    },
+    "/api/v1/identity/me/sessions/revoke-others": {
+      "post": {
+        "description": "Sign out everywhere else: every login session of the caller except this one ends (as\n`DELETE /me/sessions/{id}` does for one). Needs a recent step-up.",
+        "operationId": "revoke_other_sessions_api_v1_identity_me_sessions_revoke_others_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionsRevokedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Revoke Other Sessions",
+        "tags": [
+          "identity: security"
+        ]
+      }
+    },
+    "/api/v1/identity/me/sessions/{session_id}": {
+      "delete": {
+        "description": "End one of the caller's login sessions: its refresh token fails at once, its access\ntokens are refused by Identity at once and by the other services when they expire (at most\n10 minutes). Idempotent; 404 for any other session. Needs a recent step-up.",
+        "operationId": "revoke_session_api_v1_identity_me_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Session",
+        "tags": [
+          "identity: security"
         ]
       }
     },

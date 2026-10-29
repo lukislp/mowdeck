@@ -9,7 +9,7 @@
  *   `/login?…&signed_in_with=<provider>` (or `&sign_in_error=<code>`); the page restores the
  *   session from the cookie as on every load.
  * - Link (settings): the current password again, then the same round trip; Identity redirects
- *   to `/settings?linked=<provider>#profile` or `?link_error=<code>`.
+ *   to `/settings?linked=<provider>#security` or `?link_error=<code>` (the security section).
  * - Only accounts linked in the settings can sign in; nothing is matched by e-mail address. The
  *   installation's provider settings never reach the browser: `GET /login-methods` says only
  *   whether a provider is on.

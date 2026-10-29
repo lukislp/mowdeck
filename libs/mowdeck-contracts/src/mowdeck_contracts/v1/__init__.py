@@ -189,6 +189,7 @@ from mowdeck_contracts.v1.identity import (
     IDENTITY_API_TOKEN_REVOKED,
     IDENTITY_EVENT_TYPES,
     IDENTITY_GRANTS_CHANGED,
+    IDENTITY_SESSION_NEW_DEVICE,
     IDENTITY_USER_CREATED,
     IDENTITY_USER_DELETED,
     IDENTITY_USER_DISABLED,
@@ -196,6 +197,7 @@ from mowdeck_contracts.v1.identity import (
     AccountKind,
     ApiTokenRevoked,
     GrantsChanged,
+    NewDeviceLogin,
     UserChanged,
 )
 from mowdeck_contracts.v1.links import (
@@ -482,6 +484,7 @@ __all__ = [
     "IDENTITY_API_TOKEN_REVOKED",
     "IDENTITY_EVENT_TYPES",
     "IDENTITY_GRANTS_CHANGED",
+    "IDENTITY_SESSION_NEW_DEVICE",
     "IDENTITY_USER_CREATED",
     "IDENTITY_USER_DELETED",
     "IDENTITY_USER_DISABLED",
@@ -690,6 +693,7 @@ __all__ = [
     "MowerRegistration",
     "MowerState",
     "NetworkKind",
+    "NewDeviceLogin",
     "NotificationKind",
     "NotificationRaised",
     "NotificationSent",

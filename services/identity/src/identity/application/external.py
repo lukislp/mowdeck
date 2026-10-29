@@ -69,6 +69,16 @@ class RedirectOutcome:
     return_query: str | None = None
 
 
+async def login_methods_left(tx: Tx, user_id: UUID, *, without: UUID | None = None) -> int:
+    """How many ways in the user keeps: the password, each passkey and each linked provider
+    account except ``without``."""
+    found = await tx.users.get(id=user_id)
+    password = 1 if found is not None and found.password_hash is not None else 0
+    passkeys = await tx.passkeys.count(user_id=user_id)
+    links = await tx.external_identities.find(user_id=user_id)
+    return password + passkeys + sum(1 for link in links if link.id != without)
+
+
 class ExternalIdentityService:
     """Use cases around linked provider accounts and the provider callback."""
 
@@ -121,7 +131,9 @@ class ExternalIdentityService:
         return await redirector.start(RedirectPurpose.LINK, user_id=principal.subject)
 
     async def unlink(self, ctx: RequestContext, provider: str) -> None:
-        """Remove the caller's link to ``provider`` (always allowed; the password stays)."""
+        """Remove the caller's link to ``provider``. Refused (409) when it is the last way in:
+        no password, no passkey and no other linked provider (ADR 0065; users created today
+        always have a password, the guard keeps it that way if that ever changes)."""
         principal = self._user(ctx)
         name = self._provider(provider)
         async with self.deps.uow() as work:
@@ -129,6 +141,9 @@ class ExternalIdentityService:
             if link is None:
                 msg = "no account of this provider is linked"
                 raise NotFoundError(msg)
+            if await login_methods_left(work.tx, principal.subject, without=link.id) == 0:
+                msg = "this is your only way to sign in; add a passkey or a password first"
+                raise ConflictError(msg)
             await work.tx.external_identities.delete(id=link.id)
             await work.audit(
                 ctx,

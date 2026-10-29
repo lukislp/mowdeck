@@ -1630,6 +1630,7 @@
         "tracking_moved",
         "tracking_stale",
         "tracking_ended",
+        "security_new_login",
         "test"
       ],
       "title": "NotificationKind",

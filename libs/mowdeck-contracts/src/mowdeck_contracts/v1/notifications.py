@@ -76,6 +76,8 @@ class NotificationKind(StrEnum):
     """The tracked mower has not reported for a while; its last position stays on the map."""
     TRACKING_ENDED = "tracking_ended"
     """Theft tracking ended (false alarm, stopped, or the maximum duration)."""
+    SECURITY_NEW_LOGIN = "security_new_login"
+    """A login from a device the user never used before (ADR 0065); opens the security page."""
     TEST = "test"
     """A test notification requested by the user."""
 

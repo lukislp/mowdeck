@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``identity.session.new_device`` (ADR 0065).\n\nPublished only when the user has new-login alerts on and already had a known device (the\nvery first login, and the first one after the feature arrived, record the device silently).\nNothing in it is a secret: the device is described by its user agent, the address only by\nits network (``203.0.113.x``).",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "browser": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Browser"
+    },
+    "client": {
+      "default": "unknown",
+      "pattern": "^(browser|app|script|unknown)$",
+      "title": "Client",
+      "type": "string"
+    },
+    "device": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Device",
+      "type": "string"
+    },
+    "ip_prefix": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ip Prefix"
+    },
+    "method": {
+      "maxLength": 20,
+      "minLength": 1,
+      "title": "Method",
+      "type": "string"
+    },
+    "network": {
+      "default": "unknown",
+      "pattern": "^(local|public|unknown)$",
+      "title": "Network",
+      "type": "string"
+    },
+    "os": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Os"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "title": "User Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "account_id",
+    "session_id",
+    "device",
+    "method",
+    "at"
+  ],
+  "title": "NewDeviceLogin",
+  "type": "object"
+}

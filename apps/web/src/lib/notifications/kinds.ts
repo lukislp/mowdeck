@@ -110,6 +110,8 @@ export function kindLabel(kind: NotificationKind): string {
       return m.notif_kind_firmware_update_finished();
     case 'firmware_update_failed':
       return m.notif_kind_firmware_update_failed();
+    case 'security_new_login':
+      return m.notif_kind_security_new_login();
     case 'test':
       return m.notif_kind_test();
   }
@@ -155,6 +157,8 @@ export function kindHint(kind: NotificationKind): string {
       return m.notif_kind_firmware_update_finished_hint();
     case 'firmware_update_failed':
       return m.notif_kind_firmware_update_failed_hint();
+    case 'security_new_login':
+      return m.notif_kind_security_new_login_hint();
     case 'test':
       return '';
   }
@@ -186,6 +190,8 @@ export function kindTone(kind: NotificationKind): NotificationTone {
       return 'paused';
     case 'mower_offline':
       return 'offline';
+    case 'security_new_login':
+      return 'paused';
     case 'test':
       return 'unknown';
   }
