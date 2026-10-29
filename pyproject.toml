@@ -43,6 +43,7 @@ dev = [
   "mowdeck-authz[fastapi]",
   "mowdeck-contracts",
   "mowdeck-control",
+  "mowdeck-control-husqvarna",
   "mowdeck-control-mammotion[esphome]",
   "mowdeck-patterns",
   "mowdeck-service-kit[db,otel,testing]",
@@ -70,6 +71,7 @@ mowdeck-auth = { workspace = true }
 mowdeck-authz = { workspace = true }
 mowdeck-contracts = { workspace = true }
 mowdeck-control = { workspace = true }
+mowdeck-control-husqvarna = { workspace = true }
 mowdeck-control-mammotion = { workspace = true }
 mowdeck-patterns = { workspace = true }
 mowdeck-service-kit = { workspace = true }
@@ -116,6 +118,7 @@ files = [
   "libs/mowdeck-authz",
   "libs/mowdeck-contracts",
   "libs/mowdeck-control",
+  "libs/mowdeck-control-husqvarna",
   "libs/mowdeck-control-mammotion",
   "libs/mowdeck-patterns",
   "libs/mowdeck-service-kit",
