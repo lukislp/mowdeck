@@ -2,9 +2,11 @@
 
 import asyncio
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from mowdeck_control import CloudLoginRefused, CloudUnavailable
+from mowdeck_control_worx import pool as pool_module
 from mowdeck_control_worx.fake_cloud import FAKE_CLOUD_PASSWORD, FakeWorxCloud
 from mowdeck_control_worx.pool import (
     MIN_LOGIN_INTERVAL_S,
@@ -14,7 +16,8 @@ from mowdeck_control_worx.pool import (
     AccountPool,
     LoginGuard,
     PoolClosedError,
-    pool_key,
+    account_of,
+    same_password,
 )
 from mowdeck_control_worx.session import LoginRateLimited, WorxLogin, WorxSession
 
@@ -154,12 +157,17 @@ async def test_a_new_password_stops_the_idle_session_of_the_old_one() -> None:
     await pool.close()
 
 
-def test_pool_keys_hide_the_credentials() -> None:
-    account, secret = pool_key(GOOD)
-    assert GOOD.email not in account and FAKE_CLOUD_PASSWORD not in secret
-    assert pool_key(GOOD) != pool_key(WRONG)
-    assert pool_key(GOOD)[0] == pool_key(WRONG)[0]  # the same account
-    assert FAKE_CLOUD_PASSWORD not in repr(GOOD)
+def test_sessions_are_keyed_by_account_and_nothing_is_derived_from_the_password() -> None:
+    assert account_of(GOOD) == account_of(WRONG) == "worx:garden@fake.mowdeck.test"
+    assert account_of(WorxLogin("kress", GOOD.email, GOOD.password)) != account_of(GOOD)
+    assert same_password(GOOD.password, FAKE_CLOUD_PASSWORD)
+    assert not same_password(GOOD.password, WRONG.password)
+    assert FAKE_CLOUD_PASSWORD not in repr(GOOD) and FAKE_CLOUD_PASSWORD not in account_of(GOOD)
+    source = (Path(pool_module.__file__)).read_text("utf-8")
+    assert "hashlib" not in source and "sha256" not in source.lower()
+    guard = LoginGuard()
+    guard.failed(WRONG, CloudLoginRefused("refused"))
+    assert "wrong" not in repr(guard)
 
 
 async def test_lingering_sessions_stop_after_the_linger_time() -> None:

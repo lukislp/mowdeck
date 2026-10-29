@@ -8,12 +8,14 @@ account, share one client: :class:`CloudSessionPool` logs in once, hands out ref
 ``linger_seconds``, so a discovery followed by the registration of the listed mowers needs one
 login, not two).
 
-The pool key is an HMAC (with a random key of this process) of the lower-case e-mail and one of
-the password: the same credentials share one session, a changed password opens a new one, and
-neither the address nor the password is kept in the key or written to the log (the log shows a
-short tag of the address). When a login with a new password succeeds, unused sessions of the
-old password for the same address are stopped at once, and an old session still in use is
-stopped as soon as its last lease is released (no linger). A session whose login died
+The pool key is the lower-case e-mail and a random slot id per password: the pool compares a
+password with the ones it already holds (``hmac.compare_digest``, constant time) and gives each
+distinct one its own slot, so the same credentials share one session and a changed password
+opens a new one. No hash or other derivative of a password is computed or kept, and neither the
+address nor the password is written to the log (the log shows a short tag of the address).
+When a login with a new password succeeds, unused sessions of the old password for the same
+address are stopped at once, and an old session still in use is stopped as soon as its last
+lease is released (no linger). A session whose login died
 (``reauth_required``) is replaced on the next :meth:`CloudSessionPool.acquire`; the leases that
 still point at it see ``is_open`` False and are released by their connections' reconnects.
 
@@ -30,7 +32,7 @@ import contextlib
 import hashlib
 import hmac
 import logging
-import os
+import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,9 +44,7 @@ DEFAULT_LINGER_SECONDS = 120.0
 """How long an unused session stays open (discovery, then registering the listed mowers)."""
 
 SessionKey = tuple[str, str]
-"""``(HMAC of the lower-case e-mail, HMAC of the password)`` as hex."""
-
-_PROCESS_KEY = os.urandom(32)
+"""``(lower-case e-mail, random slot id of the password)``."""
 
 
 class PooledClient(Protocol):
@@ -64,13 +64,9 @@ LoginFunction = Callable[[str, str, Path | None], Awaitable[PooledClient]]
 """``login(account, password, cache_path)``: a logged-in client; raises on failure."""
 
 
-def _tag(value: str) -> str:
-    return hmac.new(_PROCESS_KEY, value.encode("utf-8"), hashlib.sha256).hexdigest()
-
-
-def session_key(account: str, password: str) -> SessionKey:
-    """The pool key of a set of credentials (neither value is kept in it)."""
-    return _tag("account:" + account.strip().lower()), _tag("password:" + password)
+def same_password(a: str, b: str) -> bool:
+    """Constant-time comparison of two passwords (nothing is derived from them)."""
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
 def address_tag(account: str) -> str:
@@ -134,18 +130,48 @@ class CloudSessionPool:
         self._cache_dir = cache_dir
         self._entries: dict[SessionKey, _Entry] = {}
         self._locks: dict[SessionKey, asyncio.Lock] = {}
+        self._slots: dict[str, list[tuple[str, str]]] = {}
+        """Per lower-case address: (password, slot id) of the passwords seen (never logged)."""
         self._closed = False
         self.logins = 0
         """Number of logins so far (metrics and tests)."""
 
+    def session_key(self, account: str, password: str, *, create: bool = True) -> SessionKey | None:
+        """The pool key of a set of credentials: the lower-case address and the slot of the
+        password (a new slot for a password not seen yet; None for one with ``create`` False)."""
+        address = account.strip().lower()
+        slots = self._slots.setdefault(address, [])
+        for known, slot in slots:
+            if same_password(known, password):
+                return address, slot
+        if not create:
+            return None
+        slot = secrets.token_hex(8)
+        slots.append((password, slot))
+        return address, slot
+
+    def _entry_of(self, account: str, password: str) -> _Entry | None:
+        key = self.session_key(account, password, create=False)
+        return self._entries.get(key) if key is not None else None
+
+    def _prune(self, address: str) -> None:
+        """Forget the passwords of an address that no session and no login waits for."""
+        used = {k[1] for k in self._entries if k[0] == address}
+        used |= {k[1] for k, lock in self._locks.items() if k[0] == address and lock.locked()}
+        kept = [(p, s) for p, s in self._slots.get(address, []) if s in used]
+        if kept:
+            self._slots[address] = kept
+        else:
+            self._slots.pop(address, None)
+
     def is_open(self, account: str, password: str) -> bool:
         """True while a live session for these credentials exists."""
-        entry = self._entries.get(session_key(account, password))
+        entry = self._entry_of(account, password)
         return entry is not None and entry.alive
 
     def users(self, account: str, password: str) -> int:
         """Number of leases on the session of these credentials (0 when none is open)."""
-        entry = self._entries.get(session_key(account, password))
+        entry = self._entry_of(account, password)
         return entry.refs if entry is not None else 0
 
     @property
@@ -167,8 +193,17 @@ class CloudSessionPool:
         """
         if self._closed:
             raise PoolClosedError("the cloud session pool is closed")
-        key = session_key(account, password)
+        key = self.session_key(account, password)
+        assert key is not None  # noqa: S101 - created on demand
         lock = self._locks.setdefault(key, asyncio.Lock())
+        try:
+            return await self._acquire_locked(key, lock, account, password)
+        finally:
+            self._prune(key[0])
+
+    async def _acquire_locked(
+        self, key: SessionKey, lock: asyncio.Lock, account: str, password: str
+    ) -> SessionLease:
         async with lock:
             entry = self._entries.get(key)
             if entry is not None and not entry.alive:
@@ -214,6 +249,7 @@ class CloudSessionPool:
         lock = self._locks.get(entry.key)
         if entry.key not in self._entries and lock is not None and not lock.locked():
             self._locks.pop(entry.key, None)
+        self._prune(entry.key[0])
 
     async def _release(self, entry: _Entry) -> None:
         entry.refs = max(0, entry.refs - 1)
@@ -255,6 +291,7 @@ class CloudSessionPool:
         entries = list(self._entries.values())
         self._entries.clear()
         self._locks.clear()
+        self._slots.clear()
         for entry in entries:
             if entry.linger is not None:
                 entry.linger.cancel()

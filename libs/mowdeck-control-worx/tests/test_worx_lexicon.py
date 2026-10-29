@@ -108,3 +108,16 @@ def test_the_lexicon_is_installed_as_an_entry_point() -> None:
         "mowdeck_control_worx.lexicon:worx_lexicon"
     )
     assert explain_error("11", "en", vendor="worx").title == "Upside down"
+
+
+def test_the_lexicon_is_picked_by_the_mowers_cloud_provider() -> None:
+    """ADR 0067 after #205: a Worx mower's state names ``cloud_provider: worx``; Telemetry and
+    Notifications look up by it, never by the ``cloud`` kind other vendors share."""
+    registry = ErrorLexiconRegistry(lambda: [])
+    registry.register(lexicon.worx_lexicon())
+    [lifted] = registry.explain(["2"], "de", connection=ConnectionKind.CLOUD, cloud_provider="worx")
+    assert lifted.known and lifted.vendor == "worx" and lifted.title == "Angehoben"
+    found = registry.provider(connection=ConnectionKind.CLOUD, cloud_provider="worx")
+    assert found is not None and found.lexicon.vendor == "worx"
+    assert registry.provider(connection=ConnectionKind.CLOUD, cloud_provider="acme") is None
+    assert explain_error("11", "en", cloud_provider="worx").title == "Upside down"
