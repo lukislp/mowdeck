@@ -141,7 +141,7 @@ def test_release_workflow_attaches_the_signed_offer(repo_root: Path) -> None:
     runs = "\n".join(step.get("run", "") for step in steps)
     offer_at = runs.index("source_offer.py")
     sums_at = runs.index("SHA256SUMS")
-    sign_at = runs.index("cosign sign-blob")
+    sign_at = runs.index("cosign_sign_blob_verified")
     # Written before the checksums and the signatures, so both cover it.
     assert offer_at < sums_at < sign_at
     assert "assets/SOURCE-OFFER.md" in runs
