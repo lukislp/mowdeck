@@ -81,7 +81,7 @@ def reverse_problem(steps: Sequence[ProposedStep], *, reverse: bool) -> str | No
         if step.linear < 0:
             return (
                 f"step {index} drives backwards, but the mower's drive link cannot reverse "
-                "(Mammotion cloud driving)"
+                "(e.g. driving over a vendor cloud)"
             )
     return None
 

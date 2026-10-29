@@ -266,7 +266,11 @@ async def test_fleet_cloud_mower_from_a_linked_account() -> None:
     mower = created.json()
     assert mower["name"] == "Luba-VPA" and mower["model"] == "LUBA 2 AWD 5000X"
     assert mower["linked_account_id"] == linked["id"] and mower["iot_id"] == SHARED_IOT
-    assert mower["connection_options"] == {"device_name": "Luba-VPA", "iot_id": SHARED_IOT}
+    assert mower["connection_options"] == {
+        "device_name": "Luba-VPA",
+        "iot_id": SHARED_IOT,
+        "cloud_provider": "acme",
+    }
     assert (
         "account" not in stored.connection_options and "password" not in stored.connection_options
     )

@@ -50,7 +50,7 @@ class DiscoveredDevice(ContractModel):
     device_name: str = Field(
         min_length=1,
         max_length=100,
-        description="The device name the vendor app shows, e.g. `Luba-VP12345678`; the key a "
+        description="The device name the vendor app shows; the key a "
         "mower registration selects the device by.",
     )
     iot_id: str | None = Field(default=None, max_length=100, description="Vendor IoT id.")
@@ -58,8 +58,7 @@ class DiscoveredDevice(ContractModel):
     model: str | None = Field(
         default=None,
         max_length=100,
-        description="Model name as far as the vendor cloud reported it at login, e.g. "
-        "`LUBA 2 AWD 5000X` or `Automower 430X NERA`.",
+        description="Model name as far as the vendor cloud reported it at login.",
     )
     online: bool | None = Field(
         default=None, description="Online flag the cloud reported at login; null when unknown."

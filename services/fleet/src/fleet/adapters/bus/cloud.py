@@ -15,9 +15,18 @@ from mowdeck_service_kit.bus import BusNotConnectedError, EventBus
 class BusCloudDiscovery:
     """``CloudDiscovery`` port over ``gateway.cloud.discover`` and ``gateway.cloud.providers``."""
 
-    def __init__(self, bus: EventBus | None, *, timeout_seconds: float) -> None:
+    def __init__(
+        self,
+        bus: EventBus | None,
+        *,
+        timeout_seconds: float,
+        providers_timeout_seconds: float = 3.0,
+    ) -> None:
         self.bus = bus
         self.timeout_seconds = timeout_seconds
+        self.providers_timeout_seconds = min(providers_timeout_seconds, timeout_seconds)
+        """The provider list needs no vendor login: a short wait, so the connection-kind schema
+        does not hang when no gateway answers."""
 
     def _connected(self) -> EventBus:
         if self.bus is None or not self.bus.is_connected:
@@ -35,6 +44,6 @@ class BusCloudDiscovery:
     async def providers(self) -> CloudProvidersReply:
         """Ask for the enabled providers; raises the bus errors."""
         reply = await self._connected().request(
-            GATEWAY_CLOUD_PROVIDERS, CloudProvidersRequest(), self.timeout_seconds
+            GATEWAY_CLOUD_PROVIDERS, CloudProvidersRequest(), self.providers_timeout_seconds
         )
         return reply.model(CloudProvidersReply)

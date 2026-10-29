@@ -79,7 +79,7 @@
           "type": "array"
         },
         "id": {
-          "description": "Stable id; for Mammotion the zone hash.",
+          "description": "Stable id, e.g. the vendor's zone hash.",
           "maxLength": 128,
           "minLength": 1,
           "title": "Id",
@@ -259,7 +259,7 @@
         }
       ],
       "default": null,
-      "description": "Map version; for Mammotion the map hash.",
+      "description": "Map version, e.g. the vendor's map hash.",
       "title": "Revision"
     }
   },

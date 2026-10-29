@@ -60,11 +60,16 @@ router = APIRouter(prefix="/fleet", tags=["mowers"])
 async def list_connection_kinds(_: ActorDep, services: ServicesDep) -> ConnectionKindList:
     """The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with
     the option schema of each: required, optional, secret and alternative options. The web app
-    generates its connection forms from it, so a new adapter kind needs no UI change."""
+    generates its connection forms from it, so a new adapter kind needs no UI change. For cloud
+    mowers the options of each enabled provider come from its descriptor (``provider_options``,
+    ADR 0066); without an answering gateway that map is empty."""
     allowed = services.mowers.config.allowed_connection_kinds
     known = [kind for kind in SCHEMAS if kind in allowed]
     others = sorted(allowed - set(SCHEMAS))
-    return ConnectionKindList(items=[ConnectionKindOut.of(kind) for kind in known + others])
+    providers = await services.linked_accounts.provider_options()
+    return ConnectionKindList(
+        items=[ConnectionKindOut.of(kind, providers) for kind in known + others]
+    )
 
 
 @router.get("/mowers")

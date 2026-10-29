@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from mowdeck_contracts.v1 import (
+    RESERVED_OPTION_KEYS,
     CloudProvidersReply,
     CredentialField,
     CredentialFieldKind,
@@ -133,3 +134,42 @@ def test_reply_and_subject() -> None:
     assert CloudProvidersReply().providers == []
     assert GATEWAY_CLOUD_PROVIDERS == "gateway.cloud.providers"
     assert stream_for_subject(GATEWAY_CLOUD_PROVIDERS) is None
+
+
+def test_descriptor_declares_mower_options() -> None:
+    options = [
+        {"key": "refresh_seconds", "type": "number", "title": "Refresh", "minimum": 10},
+        {"key": "night_mode", "type": "boolean", "title": "Night mode", "default": False},
+    ]
+    found = _descriptor(mower_options=options)
+    assert [o.key for o in found.mower_options] == ["refresh_seconds", "night_mode"]
+    assert _descriptor().mower_options == []  # a provider without settings
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        # a credential field with a key MowDeck manages on every cloud mower
+        {
+            "fields": [
+                {"key": "device_name", "kind": "text", "label": "A", "identity": True},
+                {"key": "p", "kind": "secret", "label": "P"},
+            ]
+        },
+        # a mower option with a reserved key
+        {"mower_options": [{"key": "cloud_provider", "type": "string", "title": "X"}]},
+        # a mower option with the key of a credential field
+        {"mower_options": [{"key": "password", "type": "string", "title": "X"}]},
+        # duplicate options
+        {
+            "mower_options": [
+                {"key": "a", "type": "string", "title": "A"},
+                {"key": "a", "type": "number", "title": "B"},
+            ]
+        },
+    ],
+)
+def test_descriptor_guards_option_keys(changes: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):
+        _descriptor(**changes)
+    assert "iot_id" in RESERVED_OPTION_KEYS

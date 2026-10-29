@@ -269,3 +269,49 @@ async def test_fleet_sync_of_a_disabled_provider_is_unavailable() -> None:
         listed = await h.client.get(f"{API}/linked-accounts", headers=owner.headers)
     assert synced.status_code == 503
     assert [i["provider"] for i in listed.json()["items"]] == ["zeta"]  # still listed
+
+
+async def test_fleet_cloud_mower_options_are_the_ones_its_provider_declares() -> None:
+    """ADR 0066: zeta declares no mower options, acme a refresh interval (fleet_cloud)."""
+    async with harness(**_settings()) as h:
+        clouds, providers = await _gateway(h.bus)
+        clouds.secrets["acme"] = PASSWORD
+        owner = await h.owner()
+        zeta = (await _post(h, owner, _zeta())).json()["id"]
+
+        async def add(linked: str, device: str, **options: object) -> Any:
+            return await h.client.post(
+                f"{API}/mowers",
+                headers=owner.headers,
+                json={
+                    "connection_kind": "cloud",
+                    "linked_account_id": linked,
+                    "device_name": device,
+                    "connection_options": options,
+                },
+            )
+
+        refused = await add(zeta, "Zeta-1", refresh_seconds=30)
+        plain = await add(zeta, "Zeta-1")
+        assert plain.status_code == 201, plain.text
+        kinds = await h.client.get(f"{API}/connection-kinds", headers=owner.headers)
+        providers.descriptors = [ACME]  # the operator switched zeta off
+        h.app.state.fleet.linked_accounts.catalog._cached = None
+        unchecked = await h.client.patch(
+            f"{API}/mowers/{plain.json()['id']}",
+            headers=owner.headers,
+            json={"connection_options": {"night_mode": True}},
+        )
+    assert refused.status_code == 422
+    assert {e["pointer"] for e in refused.json()["errors"]} == {
+        "#/connection_options/refresh_seconds"
+    }
+    assert plain.status_code == 201, plain.text
+    assert plain.json()["connection_options"]["cloud_provider"] == "zeta"
+    cloud = next(k for k in kinds.json()["items"] if k["kind"] == "cloud")
+    assert cloud["provider_options"]["zeta"] == []
+    assert [o["key"] for o in cloud["provider_options"]["acme"]][:2] == [
+        "session_cache_path",
+        "refresh_seconds",
+    ]
+    assert unchecked.status_code == 503

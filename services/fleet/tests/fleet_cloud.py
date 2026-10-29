@@ -19,6 +19,42 @@ ACME = ProviderDescriptor.model_validate(
             {"key": "password", "kind": "secret", "label": "Password"},
         ],
         "tested_on_hardware": True,
+        # The options its mowers take (ADR 0066), as an adapter declares them.
+        "mower_options": [
+            {
+                "key": "session_cache_path",
+                "type": "string",
+                "title": "Session cache file",
+                "advanced": True,
+            },
+            {
+                "key": "refresh_seconds",
+                "type": "number",
+                "title": "State refresh (s)",
+                "advanced": True,
+                "minimum": 10,
+                "maximum": 300,
+                "default": 20,
+            },
+            {
+                "key": "refresh_seconds_active",
+                "type": "number",
+                "title": "State refresh while mowing (s)",
+                "advanced": True,
+                "minimum": 2,
+                "maximum": 60,
+                "default": 5,
+            },
+            {
+                "key": "report_stream_seconds",
+                "type": "number",
+                "title": "Live reports while mowing (s)",
+                "advanced": True,
+                "minimum": 0,
+                "maximum": 300,
+                "default": 60,
+            },
+        ],
     }
 )
 ZETA = ProviderDescriptor.model_validate(

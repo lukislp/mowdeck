@@ -90,6 +90,7 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     expect(cloud.options.filter((o) => o.managed).map((o) => o.key)).toEqual([
       'device_name',
       'iot_id',
+      'cloud_provider',
       'drive_full_speed_mps',
       'drive_full_yaw_rate_dps',
       'drive_dead_zone',

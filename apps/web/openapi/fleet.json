@@ -658,7 +658,7 @@
             "type": "string"
           },
           "mode": {
-            "description": "Agora encryption mode, for Mammotion `aes-256-gcm2`.",
+            "description": "Agora encryption mode, e.g. `aes-256-gcm2`.",
             "maxLength": 32,
             "title": "Mode",
             "type": "string"
@@ -1361,6 +1361,17 @@
             "title": "Options",
             "type": "array"
           },
+          "provider_options": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/ConnectionOptionOut"
+              },
+              "type": "array"
+            },
+            "description": "For a kind with `linked_account`: the further options a mower takes, by its provider (the option `cloud_provider`), as the enabled providers declare them (ADR 0066). A provider without settings has an empty list.",
+            "title": "Provider Options",
+            "type": "object"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -1524,6 +1535,103 @@
           "examples"
         ],
         "title": "ConnectionOptionOut",
+        "type": "object"
+      },
+      "ConnectionOptionSpec": {
+        "description": "One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).\n\nFleet validates a cloud mower's options against the options its provider declares and the\nweb app renders them on the mower's settings page; only declared options exist, so a vendor\nwith few settings shows few.",
+        "properties": {
+          "advanced": {
+            "default": false,
+            "description": "Rarely needed; shown under 'advanced'.",
+            "title": "Advanced",
+            "type": "boolean"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "description": {
+            "default": "",
+            "description": "English help text.",
+            "maxLength": 400,
+            "title": "Description",
+            "type": "string"
+          },
+          "examples": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Examples",
+            "type": "array"
+          },
+          "key": {
+            "pattern": "^[a-z][a-z0-9_]{0,39}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "title": {
+            "description": "English title.",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "string",
+              "integer",
+              "number",
+              "boolean"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "title"
+        ],
+        "title": "ConnectionOptionSpec",
         "type": "object"
       },
       "CredentialChoice": {
@@ -3860,7 +3968,7 @@
         "type": "object"
       },
       "ProviderDescriptor": {
-        "description": "A cloud provider as its adapter declares it: the link form and the guidance.",
+        "description": "A cloud provider as its adapter declares it: the link form, the guidance and the options\nof its mowers.",
         "properties": {
           "fields": {
             "items": {
@@ -3877,6 +3985,15 @@
             },
             "maxItems": 5,
             "title": "Links",
+            "type": "array"
+          },
+          "mower_options": {
+            "description": "The options a mower of this provider takes (none: the provider has no settings beyond the linked account).",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionOptionSpec"
+            },
+            "maxItems": 30,
+            "title": "Mower Options",
             "type": "array"
           },
           "name": {
@@ -5495,7 +5612,7 @@
     },
     "/api/v1/fleet/connection-kinds": {
       "get": {
-        "description": "The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with\nthe option schema of each: required, optional, secret and alternative options. The web app\ngenerates its connection forms from it, so a new adapter kind needs no UI change.",
+        "description": "The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with\nthe option schema of each: required, optional, secret and alternative options. The web app\ngenerates its connection forms from it, so a new adapter kind needs no UI change. For cloud\nmowers the options of each enabled provider come from its descriptor (``provider_options``,\nADR 0066); without an answering gateway that map is empty.",
         "operationId": "list_connection_kinds_api_v1_fleet_connection_kinds_get",
         "responses": {
           "200": {

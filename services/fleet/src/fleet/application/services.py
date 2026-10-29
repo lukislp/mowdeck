@@ -49,6 +49,7 @@ from fleet.application.ports import (
     SecretCipher,
     Store,
 )
+from fleet.application.providers import ProviderCatalog
 from fleet.application.sites import SiteService
 from fleet.application.throttle import LoginThrottle
 from fleet.application.work import UnitOfWork
@@ -102,10 +103,13 @@ def build_services(
     vault = CredentialVault(cipher or DisabledCipher())
     command_service = CommandService(store, access, commands, config, clock, entitlements)
     firmware = firmware_check_gateway or _NoFirmwareCheckGateway()
+    # One provider list for linking and for the options of cloud mowers (ADR 0066).
+    discovery = cloud_discovery or _NoCloudDiscovery()
+    catalog = ProviderCatalog(discovery, clock)
     return Services(
         sites=sites,
         groups=GroupService(uow, store, access, clock, entitlements),
-        mowers=MowerService(uow, store, access, sites, config, clock, entitlements, vault),
+        mowers=MowerService(uow, store, access, sites, config, clock, entitlements, vault, catalog),
         area_names=AreaNameService(uow, store, clock),
         commands=command_service,
         drive=DriveService(store, access, clock),
@@ -126,9 +130,10 @@ def build_services(
             store,
             access,
             vault,
-            cloud_discovery or _NoCloudDiscovery(),
+            discovery,
             clock,
             LoginThrottle(clock),
+            catalog,
         ),
         links=LinkService(
             uow,

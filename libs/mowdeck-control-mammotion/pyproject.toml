@@ -44,6 +44,8 @@ mammotion = "mowdeck_control_mammotion.provider:SPEC"
 # import this package or the vendor modules it wraps.
 [tool.mowdeck.adapter]
 vendor-modules = ["pymammotion"]
+# Words that name the vendor or its products: core code and the web app must not use them.
+brand-names = ["luba", "yuka"]
 
 [tool.uv.sources]
 mowdeck-contracts = { workspace = true }

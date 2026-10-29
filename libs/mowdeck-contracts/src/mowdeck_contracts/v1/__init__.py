@@ -319,8 +319,10 @@ from mowdeck_contracts.v1.problem import (
 )
 from mowdeck_contracts.v1.providers import (
     PROVIDER_ID_PATTERN,
+    RESERVED_OPTION_KEYS,
     CloudProvidersReply,
     CloudProvidersRequest,
+    ConnectionOptionSpec,
     CredentialChoice,
     CredentialField,
     CredentialFieldKind,
@@ -535,6 +537,7 @@ __all__ = [
     "RELAY_HEARTBEAT_SECONDS",
     "RELAY_LEASE_TTL_SECONDS",
     "RELAY_TICKET_SECONDS",
+    "RESERVED_OPTION_KEYS",
     "SCHEDULER_RUN_RECORDED",
     "SCHEDULER_SCHEDULE_DISABLED",
     "SCHEDULE_PATTERN_KEYS",
@@ -615,6 +618,7 @@ __all__ = [
     "CommandStatus",
     "CommandView",
     "ConnectionKind",
+    "ConnectionOptionSpec",
     "ContractModel",
     "CredentialChoice",
     "CredentialField",

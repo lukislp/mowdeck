@@ -213,7 +213,7 @@ A mowable area (a "zone" in the Mammotion app).
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `boundary` | array of array of any | yes | min items 3 |
-| `id` | string | yes | Stable id; for Mammotion the zone hash.; min length 1; max length 128 |
+| `id` | string | yes | Stable id, e.g. the vendor's zone hash.; min length 1; max length 128 |
 | `name` | string or null | no |  |
 
 ### MapPath
@@ -248,7 +248,7 @@ The map of one mower: areas, no-go zones, obstacles, paths and the dock.
 | `obstacles` | array of [MapZone](#mapzone) | no |  |
 | `paths` | array of [MapPath](#mappath) | no |  |
 | `reference` | [GeoReference](#georeference) | yes |  |
-| `revision` | string or null | no | Map version; for Mammotion the map hash. |
+| `revision` | string or null | no | Map version, e.g. the vendor's map hash. |
 
 ### MowerSpecIn
 

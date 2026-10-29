@@ -1,6 +1,7 @@
 """Request and response bodies of the Fleet API (resource views stay in the service's
 OpenAPI; the command bodies are shared contracts in ``mowdeck_contracts.v1.commands``)."""
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -506,12 +507,26 @@ class ConnectionKindOut(BaseModel):
         description="Mowers of this kind come from a linked vendor account "
         "(`/linked-accounts`): register them with `linked_account_id` and `device_name`.",
     )
+    provider_options: dict[str, list[ConnectionOptionOut]] = Field(
+        default_factory=dict,
+        description="For a kind with `linked_account`: the further options a mower takes, by "
+        "its provider (the option `cloud_provider`), as the enabled providers declare them "
+        "(ADR 0066). A provider without settings has an empty list.",
+    )
 
     @classmethod
-    def of(cls, kind: str) -> "ConnectionKindOut":
-        """The schema of ``kind`` (a kind without one accepts any options)."""
+    def of(
+        cls, kind: str, providers: Mapping[str, Sequence[OptionSpec]] | None = None
+    ) -> "ConnectionKindOut":
+        """The schema of ``kind`` (a kind without one accepts any options); ``providers``: the
+        options of each enabled cloud provider, for a kind of linked accounts."""
         schema = SCHEMAS.get(kind) or KindSchema(
             kind=kind, title=kind, description="", extra_options=True
+        )
+        provider_options = (
+            {p: [ConnectionOptionOut.of(o) for o in specs] for p, specs in providers.items()}
+            if schema.linked_account and providers
+            else {}
         )
         return cls(
             kind=schema.kind,
@@ -521,6 +536,7 @@ class ConnectionKindOut(BaseModel):
             groups=[ConnectionGroupOut(key=k, title=t) for k, t in schema.groups.items()],
             extra_options=schema.extra_options,
             linked_account=schema.linked_account,
+            provider_options=provider_options,
         )
 
 
