@@ -189,12 +189,26 @@ async def get_widget_state(
     account_id: CurrentAccountId,
     services: ServicesDep,
     response: Response,
+    locale: Annotated[
+        str | None,
+        Query(
+            pattern=r"^[A-Za-z]{2}([-_][A-Za-z0-9]{1,8})?$",
+            description="Language of `error_title` (`de`, `en`). Default: the first language "
+            "of `Accept-Language`, else `en`.",
+        ),
+    ] = None,
+    accept_language: Annotated[str | None, Header(include_in_schema=False)] = None,
 ) -> WidgetStateOut:
     """A compact state for the iOS widgets and the Live Activity (ADR 0059): activity (`offline`
-    when stale), battery, rain sensor, error and the job with progress, area name and remaining
+    when stale), battery, rain sensor, error (code, vendor message and, from the error lexicon,
+    title, category and severity, ADR 0067) and the job with progress, area name and remaining
     time. 404 "no telemetry yet" before the first state."""
     response.headers["Cache-Control"] = "private, max-age=15"
-    return WidgetStateOut.of(await services.widget.state(account_id, mower_id))
+    response.headers["Vary"] = "Accept-Language"
+    if not locale and accept_language:
+        locale = accept_language.split(",", 1)[0].split(";", 1)[0].strip() or None
+    state = await services.widget.state(account_id, mower_id, locale=locale, errors=services.errors)
+    return WidgetStateOut.of(state)
 
 
 @router.get(

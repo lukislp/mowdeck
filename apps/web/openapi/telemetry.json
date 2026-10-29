@@ -4875,6 +4875,18 @@
             "title": "Charging",
             "type": "boolean"
           },
+          "error_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With activity `error`: the manufacturer-neutral `MowerErrorCategory`.",
+            "title": "Error Category"
+          },
           "error_code": {
             "anyOf": [
               {
@@ -4896,6 +4908,30 @@
               }
             ],
             "title": "Error Message"
+          },
+          "error_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With activity `error`: `info`, `warning`, `error` or `critical`.",
+            "title": "Error Severity"
+          },
+          "error_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With activity `error`: the error in plain words from the vendor's error lexicon in the requested locale (ADR 0067); for a code no lexicon knows the generic title of its category; null when neither is known (show `error_message`).",
+            "title": "Error Title"
           },
           "job": {
             "anyOf": [
@@ -6964,7 +7000,7 @@
     },
     "/api/v1/telemetry/mowers/{mower_id}/widget": {
       "get": {
-        "description": "A compact state for the iOS widgets and the Live Activity (ADR 0059): activity (`offline`\nwhen stale), battery, rain sensor, error and the job with progress, area name and remaining\ntime. 404 \"no telemetry yet\" before the first state.",
+        "description": "A compact state for the iOS widgets and the Live Activity (ADR 0059): activity (`offline`\nwhen stale), battery, rain sensor, error (code, vendor message and, from the error lexicon,\ntitle, category and severity, ADR 0067) and the job with progress, area name and remaining\ntime. 404 \"no telemetry yet\" before the first state.",
         "operationId": "get_widget_state_api_v1_telemetry_mowers__mower_id__widget_get",
         "parameters": [
           {
@@ -6975,6 +7011,25 @@
               "format": "uuid",
               "title": "Mower Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Language of `error_title` (`de`, `en`). Default: the first language of `Accept-Language`, else `en`.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z]{2}([-_][A-Za-z0-9]{1,8})?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Language of `error_title` (`de`, `en`). Default: the first language of `Accept-Language`, else `en`.",
+              "title": "Locale"
             }
           }
         ],

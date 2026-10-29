@@ -9,7 +9,9 @@ widgets. While a mower is in a job the service
 * **updates** the activities the app reported (their update tokens), at most every
   :data:`~notifications.domain.live_activity.UPDATE_MIN_INTERVAL_SECONDS` and only when what the
   user sees changed, and
-* **ends** them when the job is over (finished, docked, error, offline).
+* **ends** them when the job is over (finished, docked, error, offline); an error carries its
+  title in plain words (``errorTitle``, the vendor's error lexicon in each user's language,
+  ADR 0067).
 
 Independently, a change of the mower's activity (mowing, docked, error, ...) sends one silent
 background push per widget installation (at most every
@@ -31,7 +33,13 @@ from uuid import UUID
 from mowdeck_contracts.v1 import MowerState
 from mowdeck_service_kit import get_logger
 
-from notifications.application.ports import Channels, Clock, Store, ViewChecker
+from notifications.application.ports import (
+    Channels,
+    Clock,
+    ErrorExplainer,
+    Store,
+    ViewChecker,
+)
 from notifications.domain.errors import InvalidInputError, NotFoundError
 from notifications.domain.live_activity import (
     ATTRIBUTES_TYPE,
@@ -45,6 +53,7 @@ from notifications.domain.live_activity import (
     attributes,
     content_hash,
     content_state,
+    error_title,
     final_kind,
     is_job,
 )
@@ -75,11 +84,19 @@ class ActivityPusher(Protocol):
 class LiveActivities:
     """Registration and the push logic."""
 
-    def __init__(self, store: Store, channels: Channels, views: ViewChecker, clock: Clock) -> None:
+    def __init__(
+        self,
+        store: Store,
+        channels: Channels,
+        views: ViewChecker,
+        clock: Clock,
+        errors: ErrorExplainer | None = None,
+    ) -> None:
         self._store = store
         self._channels = channels
         self._views = views
         self._clock = clock
+        self._errors = errors
         self._last: dict[UUID, str] = {}
         self._active: set[UUID] = set()
         self._checked: set[UUID] = set()
@@ -302,16 +319,24 @@ class LiveActivities:
         kind = final_kind(state)
         content = content_state(state, area_name=self._area_name(state), now=now, final=kind)
         stamp = int(now.timestamp())
-        payload = {
-            "aps": {
-                "timestamp": stamp,
-                "event": "end",
-                "content-state": content,
-                "dismissal-date": stamp + DISMISS_AFTER_SECONDS[kind],
-            }
-        }
+        titles: dict[str, str | None] = {}
         for row in rows:
             if row.state is not ActivityRun.DISMISSED and row.update_token is not None:
+                final = dict(content)
+                if kind == "error":
+                    language = await self._language(row.user_id, row.account_id)
+                    if language not in titles:
+                        titles[language] = await self._error_title(state, language)
+                    if titles[language] is not None:
+                        final["errorTitle"] = titles[language]
+                payload = {
+                    "aps": {
+                        "timestamp": stamp,
+                        "event": "end",
+                        "content-state": final,
+                        "dismissal-date": stamp + DISMISS_AFTER_SECONDS[kind],
+                    }
+                }
                 await pusher.push(
                     row.update_token,
                     payload,
@@ -320,6 +345,22 @@ class LiveActivities:
                     expiration=stamp + 3600,
                 )
             await self._store.delete_live_activity(row.user_id, row.installation_id, row.mower_id)
+
+    async def _language(self, user_id: UUID, account_id: UUID) -> str:
+        preferences = await self._store.preferences(user_id, account_id)
+        return preferences.language if preferences is not None else "en"
+
+    async def _error_title(self, state: MowerState, language: str) -> str | None:
+        """The error in plain words in ``language``; None without a code or an explainer."""
+        if self._errors is None or not state.error_code:
+            return None
+        explanation = await self._errors.explain(
+            state.error_code,
+            state.connection.value,
+            language,
+            state.error_category.value if state.error_category is not None else None,
+        )
+        return error_title(explanation)
 
     async def _reload_widgets(
         self, pusher: ActivityPusher, state: MowerState, now: datetime

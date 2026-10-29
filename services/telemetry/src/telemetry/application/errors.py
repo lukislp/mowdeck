@@ -10,10 +10,10 @@ the next request asks again.
 
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
@@ -163,23 +163,28 @@ class ErrorExplanations:
         counts too: the state carries it because it holds the mower.
         """
         row = await self._queries.state(account_id, mower_id)
-        state = row.state
-        code = state.get("error_code")
-        activity = str(state.get("activity") or MowerActivity.UNKNOWN)
-        explanation: ErrorExplanation | None = None
-        if code:
-            [explanation] = await self.explain(
-                [str(code)],
-                locale,
-                connection=_connection(state.get("connection")),
-                category=_category(state.get("error_category")),
-            )
         return MowerError(
             mower_id=mower_id,
             observed_at=row.observed_at,
-            activity=activity,
-            explanation=explanation,
+            activity=str(row.state.get("activity") or MowerActivity.UNKNOWN),
+            explanation=await self.for_state(row.state, locale),
         )
+
+    async def for_state(
+        self, state: Mapping[str, Any], locale: str | None
+    ) -> ErrorExplanation | None:
+        """The error code of a stored state explained with the lexicon of its connection and
+        its category; None when the state carries no code."""
+        code = state.get("error_code")
+        if not code:
+            return None
+        [explanation] = await self.explain(
+            [str(code)],
+            locale,
+            connection=_connection(state.get("connection")),
+            category=_category(state.get("error_category")),
+        )
+        return explanation
 
     async def lexicons(self) -> list[ErrorLexiconInfo]:
         """The installed lexicons; empty when the gateway does not answer."""
