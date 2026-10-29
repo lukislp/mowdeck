@@ -223,10 +223,20 @@ class ApiTokenAuthenticator:
         async with self.store.transaction() as tx:
             token = await tx.api_tokens.get(id=token_id)
             acct = await tx.accounts.get(id=token.account_id) if token else None
+            # A widget credential ends with the login session it was created in (ADR 0059):
+            # the session family exists and none of its sessions is live any more.
+            session_ended = (
+                token is not None
+                and token.session_id is not None
+                and not await tx.sessions.count(family_id=token.session_id, revoked_at=None)
+                and await tx.sessions.count(family_id=token.session_id) > 0
+            )
         if token is None or not same_hash(token.secret_hash, secret):
             return AuthResult(False, method=self.name, reason="unknown token")
         if not token.is_usable(self.clock()):
             return AuthResult(False, token.id, self.name, "token revoked or expired")
+        if session_ended:
+            return AuthResult(False, token.id, self.name, "login session ended")
         if acct is None or acct.status is not AccountStatus.ACTIVE:
             return AuthResult(False, token.id, self.name, "account not active")
         return AuthResult(True, token.id, self.name)

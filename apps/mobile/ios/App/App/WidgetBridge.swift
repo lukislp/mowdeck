@@ -21,6 +21,7 @@ enum WidgetBridge {
 
     static func configure(_ credential: WidgetCredential, mowers: [MowerRef]) throws {
         try vault.save(credential)
+        SharedState.shared.signedOut = false
         SharedState.shared.mowers = mowers
         WidgetCenter.shared.reloadAllTimelines()
         Task { await WatchRelay.shared.pushState(reason: .configuration) }
@@ -31,9 +32,12 @@ enum WidgetBridge {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    static func clear() {
+    /// Forget the credential and every stored mower state. `signedOut`: the user signed out
+    /// (the widgets say so); otherwise widgets were turned off.
+    static func clear(signedOut: Bool = false) {
         try? vault.delete()
         SharedState.shared.clear()
+        SharedState.shared.signedOut = signedOut
         WidgetCenter.shared.reloadAllTimelines()
         // The watch relays through this credential (ADR 0060): it now shows the set-up hint.
         Task { await WatchRelay.shared.pushState(reason: .configuration) }

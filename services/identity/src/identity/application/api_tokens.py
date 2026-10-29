@@ -260,6 +260,9 @@ class ApiTokenService:
                 grants=[grant.to_json()],
                 created_at=now,
                 expires_at=now + WIDGET_LIFETIME,
+                # ends with the app's login: a sign-out leaves no usable credential behind,
+                # even when the app could not revoke it (its session already ended)
+                session_id=actor.session_id,
             )
             await tx.api_tokens.add(token)
             work.touch(api_token(token.id))
