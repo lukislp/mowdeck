@@ -46,5 +46,6 @@ export * from './map/spot.js';
 export * from './map/fleet.js';
 export * from './map/scale.js';
 export * from './map/viewport.js';
+export * from './map/trackView.js';
 export * from './types.js';
 export * from './styles/tokens.js';

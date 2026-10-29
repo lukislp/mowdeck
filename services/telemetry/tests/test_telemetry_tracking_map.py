@@ -132,6 +132,8 @@ async def test_owner_gets_street_and_aerial_tiles_around_the_track_only() -> Non
             "min_zoom": 8,
             "max_zoom": 19,
             "covers_last": True,
+            "coverage": None,
+            "margin_m": 2000.0,
         },
         {
             "id": "aerial",
@@ -139,6 +141,8 @@ async def test_owner_gets_street_and_aerial_tiles_around_the_track_only() -> Non
             "min_zoom": 14,
             "max_zoom": 19,
             "covers_last": True,
+            "coverage": None,
+            "margin_m": 2000.0,
         },
     ]
     assert street.status_code == 200 and street.content == JPEG
@@ -189,6 +193,8 @@ async def test_share_link_gets_tiles_of_its_track_and_nothing_else() -> None:
             "min_zoom": 8,
             "max_zoom": 19,
             "covers_last": True,
+            "coverage": None,
+            "margin_m": 2000.0,
         }
     ]
     assert ok.status_code == 200 and ok.content == JPEG
@@ -369,6 +375,15 @@ async def test_layer_outside_its_coverage_is_flagged_and_refused() -> None:
         flags = {layer["id"]: layer["covers_last"] for layer in status.json()["map_layers"]}
         assert flags == {"map": True, "aerial": covered}
         assert [layer["covers_last"] for layer in view.json()["map_layers"]] == [True, covered]
+        # The client keeps its view inside the box it gets tiles for.
+        boxes = {layer["id"]: layer["coverage"] for layer in view.json()["map_layers"]}
+        south, west, north, east = (
+            float(part) for part in coverage["telemetry_aerial_coverage"].split(",")
+        )
+        assert boxes == {
+            "map": None,
+            "aerial": {"south": south, "west": west, "north": north, "east": east},
+        }
         assert aerial.status_code == (200 if covered else 404)
 
 

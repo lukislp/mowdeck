@@ -973,8 +973,10 @@ A base map layer offered under the track: `map` (street map) or `aerial` (photo)
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `attribution` | string | yes | Credit line to show while the layer is visible. |
+| `coverage` | [AerialBounds](#aerialbounds) or null | no | The box the source has data in (null: the whole world). Tiles are served only where it overlaps the tracked positions plus `margin_m`. |
 | `covers_last` | boolean | no | Whether the source has data at the last known position (false: show another layer; e.g. an aerial photo of one state only).; default `true` |
 | `id` | `"map"` \| `"aerial"` | yes |  |
+| `margin_m` | number | no | Metres around the tracked positions where tiles are served; the map keeps its view inside that box (0: no limit known).; default `0` |
 | `max_zoom` | integer | yes | Highest zoom with real detail; deeper zooms scale it. |
 | `min_zoom` | integer | yes |  |
 

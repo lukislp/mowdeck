@@ -629,6 +629,12 @@ class Tracking:
         """The base map layers offered under a track (empty without a configured source)."""
         return self._basemap.layers if self._basemap is not None else []
 
+    @property
+    def map_margin_m(self) -> float:
+        """Metres around the positions where base map tiles are served (0 without a base map);
+        the map uses it to keep the view inside the served area."""
+        return self._basemap.margin_m if self._basemap is not None else 0.0
+
     async def map_tile(
         self,
         account_id: UUID,
