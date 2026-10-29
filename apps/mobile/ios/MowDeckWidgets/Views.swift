@@ -87,6 +87,8 @@ struct ProblemView: View {
             switch problem {
             case .notSetUp:
                 Text("Open MowDeck and turn on widgets in the settings.")
+            case .signedOut:
+                Text("Signed out. Open MowDeck to sign in.")
             case .noMower:
                 Text("Choose a mower in the widget settings.")
             case .offline:
@@ -261,7 +263,7 @@ struct LockScreenWidgetView: View {
             if let fraction = Presentation.progressFraction(entry.status), entry.state.isJob {
                 ProgressView(value: fraction)
             } else if let problem = entry.problem {
-                Text(problem == .notSetUp ? "Set up in the app" : "Offline").font(.caption2)
+                Text(problem.shortText).font(.caption2)
             }
         }
     }
@@ -407,6 +409,17 @@ struct ScheduleWidgetView: View {
             } else {
                 Text("No rain expected").font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+extension MowerEntry.Problem {
+    /// The one-line form for small widgets.
+    var shortText: LocalizedStringKey {
+        switch self {
+        case .notSetUp: return "Set up in the app"
+        case .signedOut: return "Signed out"
+        case .noMower, .offline: return "Offline"
         }
     }
 }
