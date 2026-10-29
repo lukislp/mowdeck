@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
+from mowdeck_contracts.v1._base import PROVIDER_ID_PATTERN, ContractModel, UtcDateTime
 from mowdeck_contracts.v1.base_station import BaseStationState
 from mowdeck_contracts.v1.calibration import (
     DEFAULT_CALIBRATION_STEP_S,
@@ -35,7 +35,6 @@ from mowdeck_contracts.v1.mower_status import (
     SelfCheck,
     SignalStatus,
 )
-from mowdeck_contracts.v1.providers import PROVIDER_ID_PATTERN
 from mowdeck_contracts.v1.settings import SettingKey, SettingValue
 from mowdeck_contracts.v1.spot import (
     MAX_SPOT_MOW_SPEED_MPS,

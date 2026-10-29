@@ -26,10 +26,9 @@ from typing import Annotated, Final, Self
 
 from pydantic import Field, StringConstraints, model_validator
 
-from mowdeck_contracts.v1._base import ContractModel
+from mowdeck_contracts.v1._base import PROVIDER_ID_PATTERN, ContractModel
 from mowdeck_contracts.v1.mower import ConnectionKind
 from mowdeck_contracts.v1.mower_status import MowerErrorCategory
-from mowdeck_contracts.v1.providers import PROVIDER_ID_PATTERN
 from mowdeck_contracts.v1.subjects import (
     GATEWAY_ERRORS_ENTRIES,
     GATEWAY_ERRORS_EXPLAIN,
