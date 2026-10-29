@@ -134,6 +134,7 @@ class UserService:
                 status=Status.ACTIVE,
                 created_at=now,
                 password_hash=password_hash,
+                password_changed_at=now,
                 email=data.email.strip() if data.email and email_norm else None,
                 email_norm=email_norm,
                 owner_account_id=account_id,
@@ -312,6 +313,7 @@ class UserService:
                 msg = "user not found"
                 raise NotFoundError(msg)
             fresh.password_hash, fresh.must_change_password = new_hash, True
+            fresh.password_changed_at = self.deps.clock()
             await work.tx.users.update(fresh)
             for session in await work.tx.sessions.find(user_id=user_id, revoked_at=None):
                 session.revoked_at, session.revoke_reason = now, "password reset"

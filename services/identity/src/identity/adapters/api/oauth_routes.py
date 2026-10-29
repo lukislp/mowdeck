@@ -10,8 +10,8 @@ Sign-in (public):
 
   - sign-in: ``/login?<query>&signed_in_with=github`` with the refresh cookie (the same session
     as after a password login), or ``/login?<query>&sign_in_error=<code>&provider=github``;
-  - link: ``/settings?linked=github#profile`` or
-    ``/settings?link_error=<code>&provider=github#profile``.
+  - link: ``/settings?linked=github#security`` or
+    ``/settings?link_error=<code>&provider=github#security`` (ADR 0065).
 
 Own links (signed-in users): ``GET /me/external-identities``, ``POST
 /me/external-identities/{provider}/link`` (the current password again, then the round trip) and
@@ -66,8 +66,8 @@ def _target(outcome: RedirectOutcome) -> str:
     provider = outcome.provider
     if outcome.purpose is RedirectPurpose.LINK:
         if outcome.failure:
-            return f"/settings?link_error={outcome.failure}&provider={provider}#profile"
-        return f"/settings?linked={provider}#profile"
+            return f"/settings?link_error={outcome.failure}&provider={provider}#security"
+        return f"/settings?linked={provider}#security"
     base = f"{outcome.return_query}&" if outcome.return_query else ""
     if outcome.failure:
         return f"/login?{base}sign_in_error={outcome.failure}&provider={provider}"

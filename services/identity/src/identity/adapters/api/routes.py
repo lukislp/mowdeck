@@ -6,8 +6,16 @@ from identity.adapters.api.auth_routes import router as auth_router
 from identity.adapters.api.oauth_routes import router as oauth_router
 from identity.adapters.api.passkey_routes import router as passkey_router
 from identity.adapters.api.platform_routes import router as platform_router
+from identity.adapters.api.security_routes import router as security_router
 
-ROUTERS = [auth_router, passkey_router, oauth_router, account_router, platform_router]
+ROUTERS = [
+    auth_router,
+    passkey_router,
+    oauth_router,
+    security_router,
+    account_router,
+    platform_router,
+]
 """Mounted under ``/api/v1`` by the kit."""
 
 __all__ = ["ROUTERS", "jwks_document"]
