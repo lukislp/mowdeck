@@ -35,6 +35,7 @@ from mowdeck_contracts.v1 import (
 
 from mowdeck_service_kit.app import LifecycleHook, create_app
 from mowdeck_service_kit.bus import EventBus, InMemoryBus
+from mowdeck_service_kit.demo import DemoPolicy
 from mowdeck_service_kit.errors import Unauthorized
 from mowdeck_service_kit.health import CheckFunction, ReadinessCheck
 from mowdeck_service_kit.settings import ServiceSettings
@@ -182,6 +183,7 @@ def make_test_app(
     readiness_checks: Sequence[ReadinessCheck | CheckFunction] = (),
     on_startup: Sequence[LifecycleHook] = (),
     on_shutdown: Sequence[LifecycleHook] = (),
+    demo_policy: DemoPolicy | None = None,
 ) -> FastAPI:
     """Build an app for tests with an :class:`InMemoryBus` and a static principal."""
     return create_app(
@@ -193,6 +195,7 @@ def make_test_app(
         on_shutdown=on_shutdown,
         bus=bus if bus is not None else InMemoryBus(),
         principal_resolver=principal_resolver or StaticPrincipalResolver(principal),
+        demo_policy=demo_policy,
     )
 
 

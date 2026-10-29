@@ -296,6 +296,8 @@ export function problemMessage(problem: ApiProblem): string {
     case 'plan-limit':
     case 'feature-not-in-plan':
       return planProblemText(problem)?.title ?? m.problem_generic();
+    case 'demo-mode':
+      return m.problem_demo_mode();
     default:
       break;
   }

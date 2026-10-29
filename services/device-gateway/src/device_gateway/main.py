@@ -102,10 +102,13 @@ def build_app(
         _log.warning(
             "using the FAKE Mammotion cloud (MOWDECK_FAKE_MAMMOTION_CLOUD is for development only)"
         )
+    # Public demo (ADR 0068): simulated mowers only, no manufacturer cloud at all.
+    demo = settings.demo_mode
     provider = connection_provider or RegistryConnectionProvider(
         sim_time_scale=settings.sim_time_scale,
         sim_tick_seconds=settings.sim_tick_seconds,
-        cloud_factory=backend.factory,
+        cloud_factory=None if demo else backend.factory,
+        simulated_only=demo,
     )
     accounts: CloudAccounts = cloud_accounts or backend.accounts
     # Photos of mowers without an own photo function come from the camera relay (ADR 0045).
@@ -176,16 +179,18 @@ def build_app(
         app.state.tracking_leases = await subscribe_tracking_leases(
             active_bus, gateway, registry=app.state.metrics_registry
         )
+        # error lexicons serve the demo too (the simulator has one, ADR 0067)
         app.state.error_lexicons = await subscribe_error_lexicons(active_bus)
-        app.state.cloud_discovery = await subscribe_cloud_discovery(
-            active_bus,
-            CloudDiscoveryService(
-                accounts,
-                timeout_seconds=settings.cloud_discovery_timeout_seconds,
-                count=DiscoveryMetrics(app.state.metrics_registry).count,
-                concurrency=settings.cloud_discovery_concurrency,
-            ),
-        )
+        if not demo:  # a demo never logs in to a manufacturer cloud
+            app.state.cloud_discovery = await subscribe_cloud_discovery(
+                active_bus,
+                CloudDiscoveryService(
+                    accounts,
+                    timeout_seconds=settings.cloud_discovery_timeout_seconds,
+                    count=DiscoveryMetrics(app.state.metrics_registry).count,
+                    concurrency=settings.cloud_discovery_concurrency,
+                ),
+            )
         gateway.start_fleet_sync(
             fleet
             or BusFleetDirectory(

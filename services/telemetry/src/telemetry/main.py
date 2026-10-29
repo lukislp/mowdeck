@@ -32,6 +32,7 @@ from mowdeck_service_kit.db import create_engine, readiness_check_db
 from mowdeck_service_kit.health import ReadinessCheck
 
 from telemetry.adapters.aerial import DiskTileCache, HttpTileSource
+from telemetry.adapters.api.demo_routes import router as demo_router
 from telemetry.adapters.api.deps import install_error_mapping
 from telemetry.adapters.api.error_routes import router as error_router
 from telemetry.adapters.api.routes import router
@@ -206,7 +207,7 @@ def build_app(
     app = create_app(
         settings,
         DESCRIPTOR,
-        routers=[router, tracking_router, error_router],
+        routers=[router, tracking_router, error_router, demo_router],
         readiness_checks=[
             *([readiness_check_db(engine)] if engine is not None else []),
             ReadinessCheck(name="subscriptions", check=subscriptions_active),

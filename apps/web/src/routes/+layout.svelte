@@ -8,6 +8,9 @@
 
   import { session } from '#lib/auth/session.svelte.js';
   import StepUpSheet from '#lib/components/StepUpSheet.svelte';
+  import { DEMO_ROOT_CLASS, keepDemoTitle } from '#lib/demo/demo.js';
+  import DemoBanner from '#lib/demo/DemoBanner.svelte';
+  import { demo } from '#lib/demo/state.svelte.js';
   import { startLive } from '#lib/live.svelte.js';
   import { nativeShell } from '#lib/native/runtime.js';
   import { navigatePath } from '#lib/navigate.js';
@@ -27,10 +30,27 @@
     if (session.status === 'unknown' && !/^\/track\/?$/.test(location.pathname)) {
       void session.restore().catch(() => undefined);
     }
+    // The public demo (ADR 0068): the band above every page and "Demo" in front of every title.
+    let stopTitle: (() => void) | null = null;
+    let stopped = false;
+    void demo.load().then((config) => {
+      if (!config || stopped) return;
+      document.documentElement.classList.add(DEMO_ROOT_CLASS);
+      stopTitle = keepDemoTitle(document, m.demo_badge());
+    });
     // Inside the iOS/Android app shell: deep links and notification taps (inert in a browser).
-    return nativeShell.start((path) => void navigatePath(path));
+    const stopShell = nativeShell.start((path) => void navigatePath(path));
+    return () => {
+      stopped = true;
+      stopTitle?.();
+      stopShell();
+    };
   });
 </script>
+
+{#if demo.config}
+  <DemoBanner resetHours={demo.config.resetHours} href={demo.sourceUrl} />
+{/if}
 
 {#if appUpdate.waiting && !install.native}
   <div class="update" role="status">

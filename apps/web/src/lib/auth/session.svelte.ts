@@ -130,6 +130,11 @@ export class SessionManager {
     await this.signIn(`${IDENTITY}/session`, { username, password });
   }
 
+  /** "Try the demo" (ADR 0068): a session of the public demo's prepared user, no credentials. */
+  async tryDemo(): Promise<void> {
+    await this.signIn(`${IDENTITY}/demo/session`, {});
+  }
+
   /**
    * A login of any kind whose endpoint answers like `POST /session` (password, passkey, the
    * native app's code): token into memory, refresh token only as the cookie, then `/me`.

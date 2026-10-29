@@ -10,6 +10,7 @@ from mowdeck_contracts.v1 import ModuleDescriptor
 
 from mowdeck_service_kit.bus import EventBus, JetStreamBus
 from mowdeck_service_kit.correlation import CorrelationIdMiddleware
+from mowdeck_service_kit.demo import EMPTY_POLICY, DemoModeMiddleware, DemoPolicy
 from mowdeck_service_kit.errors import (
     ServiceUnavailable,
     UnhandledErrorMiddleware,
@@ -52,6 +53,7 @@ def create_app(
     on_shutdown: Sequence[LifecycleHook] = (),
     bus: EventBus | None = None,
     principal_resolver: PrincipalResolver | None = None,
+    demo_policy: DemoPolicy | None = None,
 ) -> FastAPI:
     """Build the FastAPI app of a service.
 
@@ -66,6 +68,8 @@ def create_app(
         bus: Event bus to use. When None and ``settings.nats_enabled`` is true, a
             :class:`JetStreamBus` is connected on startup. A given bus is closed on shutdown.
         principal_resolver: Resolves the principal of a request; defaults to denying all.
+        demo_policy: What the service refuses with ``settings.demo_mode`` (ADR 0068); without
+            it a demo service only marks its responses.
 
     State on ``app.state``: ``settings``, ``descriptor``, ``bus``, ``metrics_registry``,
     ``readiness_checks``, ``principal_resolver``, ``permission_checker`` (None until a library
@@ -138,6 +142,12 @@ def create_app(
     # Added last = outermost: correlation id is set before errors are logged and rendered. The
     # source code address (AGPL-3.0 section 13) is on every response, errors included.
     app.add_middleware(UnhandledErrorMiddleware)
+    if settings.demo_mode:
+        # Inside the correlation id (a refusal carries it), outside the routes and their errors
+        # (every response is marked).
+        seed = settings.demo_seed_token.get_secret_value() if settings.demo_seed_token else None
+        app.add_middleware(DemoModeMiddleware, policy=demo_policy or EMPTY_POLICY, seed_token=seed)
+        _log.warning("DEMO MODE: simulated mowers only, unsafe actions are refused")
     app.add_middleware(CorrelationIdMiddleware)
     app.add_middleware(SourceCodeMiddleware, url=settings.source_code_url)
 

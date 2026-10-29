@@ -191,6 +191,8 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE` | empty | Path of the Sign in with Apple key (`.p8`). Apple is on only with all four, a readable EC P-256 key and a usable `MOWDECK_IDENTITY_PUBLIC_URL` (the return URL is `<public URL>/api/v1/identity/oauth/apple/callback`); the startup log says `Apple login is on` with that URL, or why it is off |
 | `MOWDECK_IDENTITY_APPLE_PKCE` | `true` | Send the PKCE challenge and verifier to Apple (Apple's support is unconfirmed; `false` only if Apple refuses the request) |
 | `MOWDECK_IDENTITY_APPLE_AUTHORIZE_URL`, `_TOKEN_URL`, `_KEYS_URL`, `_ISSUER` | appleid.apple.com | Apple's endpoints; other values only for tests |
+| `MOWDECK_IDENTITY_DEMO_USERNAME` | `demo` | Public demo (`MOWDECK_DEMO_MODE`, [ADR 0068](../../docs/adr/0068-public-demo-mode.md)): the user every visitor signs in as with `POST /demo/session` ("Try the demo"); the seed job creates it with `POST /demo/seed`. Demo mode also closes registration and turns passkeys, GitHub and Apple off, and Identity then refuses every mutation but the demo sign-in, refresh, logout, the permission check and the setup tour |
+| `MOWDECK_IDENTITY_DEMO_ACCOUNT_NAME`, `_DEMO_DISPLAY_NAME` | `MowDeck demo`, `Demo visitor` | Names of the demo account and its user |
 | `MOWDECK_IDENTITY_MAINTENANCE_SECONDS` | `60` | Key rotation, key reload, purge of login attempts older than 30 days and of expired passkey challenges, app login requests and codes, and GitHub round trips |
 | `MOWDECK_IDENTITY_RECONCILE_SECONDS` | `3600` | Full reconcile interval, 0 disables |
 
