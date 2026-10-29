@@ -10,17 +10,53 @@ GATEWAY_CLOUD_PROVIDERS`, validates a link request against the descriptor
 (:meth:`ProviderDescriptor.problems`) and serves the descriptors to the web app, which renders
 the link form from them. No core service knows a vendor by name.
 
+Every text a user reads (summary, setup steps, link labels, field labels and help, choice
+labels, option titles and help) is a :data:`LocalizedText`: a map of locale to text with at
+least English; a plain string is taken as English. Fleet resolves the texts for the caller's
+language (:func:`text_for`, English fallback). The display ``name`` is the vendor's brand and
+is not translated. Generic texts (that a secret is stored encrypted, the untested label) come
+from the web app's own messages, not from each provider.
+
 Descriptors never hold credentials; they are public data.
 """
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from enum import StrEnum
 from typing import Annotated, Final, Literal, Self
 
-from pydantic import Field, StringConstraints, model_validator
+from pydantic import AfterValidator, BeforeValidator, Field, StringConstraints, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel
+from mowdeck_contracts.v1.error_lexicon import DEFAULT_LOCALE, LocaleKey, normalise_locale
+
+
+def _as_localized(value: object) -> object:
+    return {DEFAULT_LOCALE: value} if isinstance(value, str) else value
+
+
+def _with_english(value: dict[str, str]) -> dict[str, str]:
+    if not value.get(DEFAULT_LOCALE, "").strip():
+        msg = f"a localized text needs a non-empty {DEFAULT_LOCALE!r} text"
+        raise ValueError(msg)
+    return value
+
+
+LocalizedText = Annotated[
+    dict[LocaleKey, Annotated[str, StringConstraints(max_length=500)]],
+    BeforeValidator(_as_localized),
+    AfterValidator(_with_english),
+]
+"""A user-visible text by locale (``{"en": ..., "de": ...}``); English is required, a plain
+string is taken as English."""
+
+
+def text_for(value: Mapping[str, str] | None, locale: str | None) -> str | None:
+    """``value`` in ``locale`` (``de-DE`` gives ``de``), else English; None for no text."""
+    if not value:
+        return None
+    return value.get(normalise_locale(locale)) or value.get(DEFAULT_LOCALE)
+
 
 PROVIDER_ID_PATTERN: Final = r"^[a-z][a-z0-9_-]{1,31}$"
 """Provider ids: lower case, stable, used as the entry point name and stored with every linked
@@ -49,7 +85,7 @@ class CredentialChoice(ContractModel):
     """One option of a ``choice`` field."""
 
     value: str = Field(min_length=1, max_length=64)
-    label: str = Field(min_length=1, max_length=80)
+    label: LocalizedText
 
 
 class CredentialField(ContractModel):
@@ -57,11 +93,11 @@ class CredentialField(ContractModel):
 
     key: str = Field(pattern=CREDENTIAL_KEY_PATTERN)
     kind: CredentialFieldKind
-    label: str = Field(min_length=1, max_length=80, description="English label of the input.")
-    help: str | None = Field(
-        default=None, max_length=400, description="English hint under the input."
+    label: LocalizedText = Field(description="Label of the input by locale.")
+    help: LocalizedText | None = Field(
+        default=None, description="Provider-specific hint under the input by locale."
     )
-    placeholder: str | None = Field(default=None, max_length=100)
+    placeholder: LocalizedText | None = None
     required: bool = True
     identity: bool = Field(
         default=False,
@@ -100,7 +136,7 @@ class CredentialField(ContractModel):
 class ProviderLink(ContractModel):
     """A page of the vendor that explains where the credentials come from."""
 
-    label: str = Field(min_length=1, max_length=80)
+    label: LocalizedText
     url: str = Field(pattern=r"^https://\S+$", max_length=300)
 
 
@@ -148,8 +184,8 @@ class ConnectionOptionSpec(ContractModel):
 
     key: str = Field(pattern=CREDENTIAL_KEY_PATTERN)
     type: OptionType
-    title: str = Field(min_length=1, max_length=80, description="English title.")
-    description: str = Field(default="", max_length=400, description="English help text.")
+    title: LocalizedText = Field(description="Title by locale.")
+    description: LocalizedText | None = Field(default=None, description="Help text by locale.")
     advanced: bool = Field(default=False, description="Rarely needed; shown under 'advanced'.")
     minimum: float | None = None
     maximum: float | None = None
@@ -163,14 +199,14 @@ class ProviderDescriptor(ContractModel):
 
     provider: str = Field(pattern=PROVIDER_ID_PATTERN)
     name: str = Field(min_length=1, max_length=80, description="Display name of the vendor cloud.")
-    summary: str = Field(
-        default="", max_length=500, description="English: which mowers and what MowDeck can do."
+    summary: LocalizedText | None = Field(
+        default=None, description="Which mowers and what MowDeck can do, by locale."
     )
     fields: list[CredentialField] = Field(min_length=1, max_length=10)
-    setup_steps: list[str] = Field(
+    setup_steps: list[LocalizedText] = Field(
         default_factory=list,
         max_length=8,
-        description="English, short: how the user gets the credentials, in order.",
+        description="Short steps by locale: how the user gets the credentials, in order.",
     )
     links: list[ProviderLink] = Field(default_factory=list, max_length=5)
     needs_developer_account: bool = Field(
@@ -183,10 +219,10 @@ class ProviderDescriptor(ContractModel):
         description="False: built and tested against recorded fixtures and fakes only; the web "
         "app labels such providers as untested on real hardware.",
     )
-    warnings: list[Annotated[str, StringConstraints(min_length=1, max_length=400)]] = Field(
+    warnings: list[LocalizedText] = Field(
         default_factory=list,
         max_length=4,
-        description="English, short: risks the user should know before linking an account (an "
+        description="Short, by locale: risks the user should know before linking an account (an "
         "unofficial vendor API, an account the vendor may block, ...). The web app shows them "
         "prominently in the link form.",
     )
@@ -221,6 +257,29 @@ class ProviderDescriptor(ContractModel):
             msg = "a provider needs at least one secret field"
             raise ValueError(msg)
         return self
+
+    def texts(self) -> Iterator[tuple[str, Mapping[str, str]]]:
+        """Every user-visible text with where it is (for checks that each has a locale)."""
+        if self.summary:
+            yield "summary", self.summary
+        for index, step in enumerate(self.setup_steps):
+            yield f"setup_steps[{index}]", step
+        for index, warning in enumerate(self.warnings):
+            yield f"warnings[{index}]", warning
+        for index, link in enumerate(self.links):
+            yield f"links[{index}].label", link.label
+        for field in self.fields:
+            yield f"fields.{field.key}.label", field.label
+            if field.help:
+                yield f"fields.{field.key}.help", field.help
+            if field.placeholder:
+                yield f"fields.{field.key}.placeholder", field.placeholder
+            for choice in field.choices:
+                yield f"fields.{field.key}.choices.{choice.value}", choice.label
+        for option in self.mower_options:
+            yield f"mower_options.{option.key}.title", option.title
+            if option.description:
+                yield f"mower_options.{option.key}.description", option.description
 
     @property
     def identity_field(self) -> CredentialField:

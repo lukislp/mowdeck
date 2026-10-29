@@ -315,3 +315,35 @@ async def test_fleet_cloud_mower_options_are_the_ones_its_provider_declares() ->
         "refresh_seconds",
     ]
     assert unchecked.status_code == 503
+
+
+async def test_fleet_resolves_provider_texts_for_the_callers_language() -> None:
+    """ADR 0066: descriptors carry texts by locale; Fleet answers them resolved."""
+    localized = ZETA.model_copy(
+        update={
+            "summary": {"en": "Zeta mowers", "de": "Zeta-Mäher"},
+            "setup_steps": [{"en": "Create an app", "de": "Lege eine Anwendung an"}],
+            "warnings": [{"en": "Unofficial API", "de": "Inoffizielle API"}],
+        }
+    )
+    async with harness(**_settings()) as h:
+        await _gateway(h.bus, ACME, localized)
+        owner = await h.owner()
+        url = f"{API}/linked-accounts/providers"
+        german = await h.client.get(url, headers=owner.headers, params={"locale": "de-DE"})
+        header = await h.client.get(
+            url, headers={**owner.headers, "Accept-Language": "de,en;q=0.5"}
+        )
+        french = await h.client.get(url, headers=owner.headers, params={"locale": "fr"})
+    zeta = next(i for i in german.json()["items"] if i["provider"] == "zeta")
+    assert zeta["summary"] == "Zeta-Mäher" and zeta["setup_steps"] == ["Lege eine Anwendung an"]
+    assert zeta["warnings"] == ["Inoffizielle API"]
+    assert next(i for i in german.json()["items"] if i["provider"] == "acme")["warnings"] == []
+    assert zeta["fields"][0]["label"] == "Application key"  # no German text: English
+    assert zeta["fields"][2]["choices"][0] == {"value": "eu", "label": "Europe"}
+    assert next(i for i in header.json()["items"] if i["provider"] == "zeta")["summary"] == (
+        "Zeta-Mäher"
+    )
+    assert next(i for i in french.json()["items"] if i["provider"] == "zeta")["summary"] == (
+        "Zeta mowers"
+    )

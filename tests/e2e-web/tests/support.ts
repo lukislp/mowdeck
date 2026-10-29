@@ -162,6 +162,21 @@ export async function loginByUi(page: Page, who: Actor): Promise<void> {
   await page.waitForURL(/\/mowers/);
 }
 
+/**
+ * Pick `provider` in the vendor rail of the visible link form (ADR 0066). The rail is shown only
+ * when several cloud providers are enabled (the test stack enables untested ones as well, see
+ * stack.env), and the first tile in display-name order is preselected, so a test that fills one
+ * provider's fields picks it first.
+ */
+export async function pickProvider(page: Page, provider: string): Promise<void> {
+  await expect(page.getByTestId('linked-connect')).toBeVisible();
+  const tile = page.getByTestId(`provider-option-${provider}`);
+  if ((await tile.count()) > 0) {
+    await tile.click();
+    await expect(tile).toHaveAttribute('aria-checked', 'true');
+  }
+}
+
 /** Collect CSP violations reported on the console; `assertNone` fails the test with them. */
 export function watchCsp(page: Page): { assertNone(): void } {
   const violations: string[] = [];

@@ -17,6 +17,9 @@ dependencies = [
   "mowdeck-control",
   # GPL-3.0 adapter for Mammotion mowers (cloud and BLE bridge), see ADR 0011 and ADR 0019.
   "mowdeck-control-mammotion[esphome]",
+  # Apache-2.0 adapter for Husqvarna Automower (Automower Connect API), off by default until
+  # tested on real hardware (ADR 0066).
+  "mowdeck-control-husqvarna",
   # GPL-3.0 adapter for Worx Landroid, Kress and LandXcape (unofficial cloud API), off by default
   # until tested on real hardware (ADR 0066).
   "mowdeck-control-worx",
@@ -32,6 +35,7 @@ device-gateway = "device_gateway.main:main"
 mowdeck-auth = { workspace = true }
 mowdeck-contracts = { workspace = true }
 mowdeck-control = { workspace = true }
+mowdeck-control-husqvarna = { workspace = true }
 mowdeck-control-mammotion = { workspace = true }
 mowdeck-control-worx = { workspace = true }
 mowdeck-service-kit = { workspace = true }

@@ -43,59 +43,90 @@ MAX_COMMAND_TIMEOUT_S: Final = 120.0
 OFFER_ZONES: Final = "offer_zones"
 """Mower option: list the mower's zones (starting points) as start choices."""
 
-WARNING_UNOFFICIAL: Final = (
-    "Unofficial API: MowDeck talks to the cloud the way the brand's app does. The vendor does "
-    "not document or support this interface; it can change or stop working at any time."
-)
-WARNING_BAN: Final = (
-    "Account block risk: the vendor has temporarily blocked accounts that logged in or polled "
-    "too often. MowDeck logs in once per account, lives on push updates and waits after a "
-    "refused login, but cannot rule a block out. Prefer a second account the mower is shared "
-    "with."
-)
+WARNING_UNOFFICIAL: Final = {
+    "en": "Unofficial API: MowDeck talks to the cloud the way the brand's app does. The vendor "
+    "does not document or support this interface; it can change or stop working at any time.",
+    "de": "Inoffizielle API: MowDeck spricht mit der Cloud so wie die App der Marke. Der "
+    "Hersteller dokumentiert und unterstützt diese Schnittstelle nicht; sie kann sich jederzeit "
+    "ändern oder ausfallen.",
+}
+WARNING_BAN: Final = {
+    "en": "Account block risk: the vendor has temporarily blocked accounts that logged in or "
+    "polled too often. MowDeck logs in once per account, lives on push updates and waits after "
+    "a refused login, but cannot rule a block out. Prefer a second account the mower is shared "
+    "with.",
+    "de": "Risiko einer Kontosperre: Der Hersteller hat Konten zeitweise gesperrt, die sich zu "
+    "oft angemeldet oder abgefragt haben. MowDeck meldet sich je Konto einmal an, lebt von "
+    "Push-Meldungen und wartet nach einer abgelehnten Anmeldung, kann eine Sperre aber nicht "
+    "ausschließen. Nimm am besten ein zweites Konto, mit dem der Mäher geteilt ist.",
+}
 
 DESCRIPTOR: Final = ProviderDescriptor(
     provider=PROVIDER,
     name="Worx Landroid, Kress, LandXcape",
-    summary=(
-        "Worx Landroid, Kress and LandXcape mowers through their shared cloud (unofficial API, "
-        "push over MQTT): state, battery, errors with lift alarms, rain sensor, GPS position on "
-        "models with a GPS module; start now, in a zone or along the edge, pause, send home; "
+    summary={
+        "en": "Worx Landroid, Kress and LandXcape mowers through their shared cloud (unofficial "
+        "API, push over MQTT): state, battery, errors with lift alarms, rain sensor, GPS position "
+        "on models with a GPS module; start now, in a zone or along the edge, pause, send home; "
         "rain delay and cutting height where the mower has them. No maps, patterns or manual "
-        "driving."
-    ),
+        "driving.",
+        "de": "Worx-Landroid-, Kress- und LandXcape-Mäher über ihre gemeinsame Cloud (inoffizielle "
+        "API, Push über MQTT): Zustand, Akku, Fehler mit Hebealarm, Regensensor, GPS-Position bei "
+        "Modellen mit GPS-Modul; jetzt, in einer Zone oder an der Kante starten, pausieren, nach "
+        "Hause schicken; Regenverzögerung und Schnitthöhe, wo der Mäher sie hat. Keine Karten, "
+        "Muster oder manuelles Fahren.",
+    },
     fields=[
         CredentialField(
             key=BRAND,
             kind=CredentialFieldKind.CHOICE,
-            label="Brand",
-            help="The app the mower is registered in.",
-            choices=[CredentialChoice(value=v, label=label) for v, label in BRANDS.items()],
+            label={"en": "Brand", "de": "Marke"},
+            help={
+                "en": "The app the mower is registered in.",
+                "de": "Die App, in der der Mäher registriert ist.",
+            },
+            choices=[
+                CredentialChoice(value=v, label={"en": label, "de": label})
+                for v, label in BRANDS.items()
+            ],
             max_length=16,
         ),
         CredentialField(
             key=EMAIL,
             kind=CredentialFieldKind.EMAIL,
-            label="E-mail",
+            label={"en": "E-mail", "de": "E-Mail"},
             identity=True,
-            help="The e-mail address you sign in to the app with.",
-            placeholder="name@example.com",
+            help={
+                "en": "The e-mail address you sign in to the app with.",
+                "de": "Die E-Mail-Adresse, mit der du dich in der App anmeldest.",
+            },
+            placeholder={"en": "name@example.com", "de": "name@example.com"},
             max_length=254,
         ),
         CredentialField(
             key=PASSWORD,
             kind=CredentialFieldKind.SECRET,
-            label="Password",
-            help="The password of the same account. Stored encrypted and never shown again.",
+            label={"en": "Password", "de": "Passwort"},
             max_length=256,
         ),
     ],
     setup_steps=[
-        "Pick the brand of the app your mower is registered in (Worx Landroid, Kress or "
-        "LandXcape).",
-        "If the app can share the mower with a second account, create one for MowDeck: it keeps "
-        "your phone signed in and limits what a block would affect.",
-        "Enter the e-mail address and the password of that account.",
+        {
+            "en": "Pick the brand of the app your mower is registered in (Worx Landroid, Kress "
+            "or LandXcape).",
+            "de": "Wähle die Marke der App, in der dein Mäher registriert ist (Worx Landroid, "
+            "Kress oder LandXcape).",
+        },
+        {
+            "en": "If the app can share the mower with a second account, create one for MowDeck: "
+            "it keeps your phone signed in and limits what a block would affect.",
+            "de": "Kann die App den Mäher mit einem zweiten Konto teilen, lege eines für MowDeck "
+            "an: Dein Handy bleibt angemeldet, und eine Sperre träfe weniger.",
+        },
+        {
+            "en": "Enter the e-mail address and the password of that account.",
+            "de": "Gib die E-Mail-Adresse und das Passwort dieses Kontos ein.",
+        },
     ],
     needs_developer_account=False,
     tested_on_hardware=False,
@@ -104,17 +135,24 @@ DESCRIPTOR: Final = ProviderDescriptor(
         ConnectionOptionSpec(
             key=OFFER_ZONES,
             type="boolean",
-            title="Offer zones",
-            description="List the mower's zones (the starting points set in the app) as start "
-            "choices next to 'start now'.",
+            title={"en": "Offer zones", "de": "Zonen anbieten"},
+            description={
+                "en": "List the mower's zones (the starting points set in the app) as start "
+                "choices next to 'start now'.",
+                "de": "Die Zonen des Mähers (die in der App gesetzten Startpunkte) neben "
+                "„Jetzt starten“ zur Auswahl anbieten.",
+            },
             default=True,
         ),
         ConnectionOptionSpec(
             key=COMMAND_TIMEOUT,
             type="number",
-            title="Command timeout (s)",
-            description="How long a command waits for the mower's answer before it counts as "
-            "failed.",
+            title={"en": "Command timeout (s)", "de": "Befehls-Zeitlimit (s)"},
+            description={
+                "en": "How long a command waits for the mower's answer before it counts as failed.",
+                "de": "Wie lange ein Befehl auf die Antwort des Mähers wartet, bevor er als "
+                "fehlgeschlagen gilt.",
+            },
             advanced=True,
             minimum=MIN_COMMAND_TIMEOUT_S,
             maximum=MAX_COMMAND_TIMEOUT_S,

@@ -340,8 +340,10 @@ from mowdeck_contracts.v1.providers import (
     CredentialField,
     CredentialFieldKind,
     CredentialProblem,
+    LocalizedText,
     ProviderDescriptor,
     ProviderLink,
+    text_for,
 )
 from mowdeck_contracts.v1.relay import (
     CAMERA_RELAY_EVENT_TYPES,
@@ -706,6 +708,7 @@ __all__ = [
     "LimitKey",
     "LinkStatus",
     "LocalPoint",
+    "LocalizedText",
     "MaintenanceAction",
     "ManualDrive",
     "MapArea",
@@ -871,6 +874,7 @@ __all__ = [
     "resolve_turn_style",
     "search_lexicon",
     "spot_plan_hash",
+    "text_for",
     "unknown_explanation",
     "utc_now",
 ]

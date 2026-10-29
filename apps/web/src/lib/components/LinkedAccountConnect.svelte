@@ -230,7 +230,7 @@
             required={field.required !== false}
             disabled={pending}
             placeholder={field.placeholder ?? undefined}
-            hint={field.help ?? undefined}
+            hint={field.help ?? (isSecret(field) ? m.linked_password_hint() : undefined)}
             mono={field.kind === 'text'}
             maxlength={field.max_length}
             error={errors[field.key] ?? null}

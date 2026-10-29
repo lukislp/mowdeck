@@ -10,11 +10,13 @@ from mowdeck_contracts.v1 import (
     PROVIDER_ID_PATTERN,
     CameraTransport,
     ConnectionKind,
+    CredentialFieldKind,
     DeviceType,
     DriveCalibration,
     MowPattern,
     ProviderDescriptor,
     ProxyInfo,
+    text_for,
 )
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -587,11 +589,94 @@ class LinkedAccountSyncIn(In):
         return merged or None
 
 
+class CredentialChoiceOut(BaseModel):
+    """One option of a choice field, its label in the caller's language."""
+
+    value: str
+    label: str
+
+
+class CredentialFieldOut(BaseModel):
+    """One input of a provider's link form, its texts in the caller's language."""
+
+    key: str
+    kind: CredentialFieldKind
+    label: str
+    help: str | None = Field(description="Provider-specific hint; generic hints are the app's.")
+    placeholder: str | None
+    required: bool
+    identity: bool
+    choices: list[CredentialChoiceOut]
+    pattern: str | None
+    max_length: int
+
+
+class ProviderLinkOut(BaseModel):
+    """A vendor page that explains where the credentials come from."""
+
+    label: str
+    url: str
+
+
+class ProviderOut(BaseModel):
+    """A cloud provider with every text in the caller's language (English fallback)."""
+
+    provider: str
+    name: str = Field(description="The vendor's brand, not translated.")
+    summary: str | None
+    fields: list[CredentialFieldOut]
+    setup_steps: list[str]
+    links: list[ProviderLinkOut]
+    needs_developer_account: bool
+    tested_on_hardware: bool
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Risks the provider warns of before an account is linked (an unofficial "
+        "API, a possible account block); the web app shows them prominently.",
+    )
+
+    @classmethod
+    def of(cls, item: ProviderDescriptor, locale: str | None) -> "ProviderOut":
+        """``item`` resolved for ``locale``."""
+
+        def text(value: Mapping[str, str]) -> str:
+            return text_for(value, locale) or ""
+
+        return cls(
+            provider=item.provider,
+            name=item.name,
+            summary=text_for(item.summary, locale),
+            fields=[
+                CredentialFieldOut(
+                    key=f.key,
+                    kind=f.kind,
+                    label=text(f.label),
+                    help=text_for(f.help, locale),
+                    placeholder=text_for(f.placeholder, locale),
+                    required=f.required,
+                    identity=f.identity,
+                    choices=[
+                        CredentialChoiceOut(value=c.value, label=text(c.label)) for c in f.choices
+                    ],
+                    pattern=f.pattern,
+                    max_length=f.max_length,
+                )
+                for f in item.fields
+            ],
+            setup_steps=[text(s) for s in item.setup_steps],
+            links=[ProviderLinkOut(label=text(link.label), url=link.url) for link in item.links],
+            needs_developer_account=item.needs_developer_account,
+            tested_on_hardware=item.tested_on_hardware,
+            warnings=[text(w) for w in item.warnings],
+        )
+
+
 class ProviderList(BaseModel):
     """``GET /linked-accounts/providers``: the cloud providers enabled in the Device-Gateway,
-    each with its credential fields and guidance (the web app renders the link form from it)."""
+    each with its credential fields and guidance in the caller's language (the web app renders
+    the link form from it)."""
 
-    items: list[ProviderDescriptor]
+    items: list[ProviderOut]
 
 
 class LinkedAccountOut(BaseModel):

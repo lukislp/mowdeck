@@ -1198,6 +1198,7 @@ All fields default to "not supported", so an adapter only declares what it reall
 | `rtk_sources` | array of [RtkSource](#rtksource) | no | RTK correction sources the mower can report. |
 | `settings` | array of [SettingSpec](#settingspec) | no | The mower's own settings this connection can read and change with `set_setting` (ADR 0046), each with its type and range or options; current values in `MowerState.settings`. Empty when the connection offers none.; max items 32 |
 | `start_options` | [StartOptions](#startoptions) | no | Job options a native start may carry besides the pattern (obstacle detection, laps around no-go zones, path order, start progress; ADR 0030). Clients show only what is declared here. |
+| `start_plans` | array of [StartPlan](#startplan) | no | Starts the mower offers without map areas (ADR 0066 amendment), in the order a client lists them; each is sent as `StartMow.plan_ref`. Empty for mowers that start on their map areas.; max items 16 |
 | `undock` | boolean | no | The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).; default `false` |
 
 ### MowerCapabilitiesList
@@ -1621,6 +1622,24 @@ Everything defaults to "not offered": a client shows an option only when it is d
 | `obstacle_laps_range` | array of any or null | no | Inclusive (min, max) laps around each no-go zone (`MowPattern.obstacle_laps`), if settable. |
 | `orders` | array of [PathOrder](#pathorder) | no | Path orders the mower offers (`MowPattern.order`); empty when it offers no choice.; max items 2 |
 | `start_progress_range_pct` | array of any or null | no | Inclusive (min, max) progress in percent a job may start at (`MowPattern.start_progress_pct`), if settable. |
+
+### StartPlan
+
+One way to start a mower that has no map areas to choose (ADR 0066 amendment).
+
+A mower whose connection knows no area geometry (its vendor keeps the garden to itself) cannot be started by tapping areas. Its connection declares the starts it offers instead; a client sends `StartMow {plan_ref: ref}` for the one the user picks and labels it by `kind` (plus `name` for a zone).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `kind` | [StartPlanKind](#startplankind) | yes |  |
+| `name` | string or null | no | The mower's own name of a zone, shown as is; null for the other kinds. |
+| `ref` | string | yes | Sent as `StartMow.plan_ref` to start this.; pattern `^[a-z][a-z0-9_]{0,31}(:[A-Za-z0-9_.-]{1,64})?$` |
+
+### StartPlanKind
+
+What a start plan does, so a client can label it without knowing the vendor.
+
+Type: `"now"` \| `"zone"` \| `"edge"` \| `"schedule"`
 
 ### StateHistory
 

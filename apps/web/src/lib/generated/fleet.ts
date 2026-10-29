@@ -151,7 +151,8 @@ export type paths = {
          *     the option schema of each: required, optional, secret and alternative options. The web app
          *     generates its connection forms from it, so a new adapter kind needs no UI change. For cloud
          *     mowers the options of each enabled provider come from its descriptor (``provider_options``,
-         *     ADR 0066); without an answering gateway that map is empty.
+         *     ADR 0066, their texts in the language of ``locale`` or ``Accept-Language``); without an
+         *     answering gateway that map is empty.
          */
         get: operations["list_connection_kinds_api_v1_fleet_connection_kinds_get"];
         put?: never;
@@ -366,7 +367,8 @@ export type paths = {
          *     link form (with hints and links to where the vendor hands them out), whether the user needs
          *     a developer account at the vendor and whether the adapter was tested on real hardware.
          *     Disabled providers are not listed; the public demo (ADR 0068) lists none and refuses
-         *     every change under this path.
+         *     every change under this path. Texts come in the language of ``locale`` (or the first of
+         *     ``Accept-Language``), else English.
          */
         get: operations["list_cloud_providers_api_v1_fleet_linked_accounts_providers_get"];
         put?: never;
@@ -1653,100 +1655,14 @@ export type components = {
             type: "string" | "integer" | "number" | "boolean";
         };
         /**
-         * ConnectionOptionSpec
-         * @description One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).
-         *
-         *     Fleet validates a cloud mower's options against the options its provider declares and the
-         *     web app renders them on the mower's settings page; only declared options exist, so a vendor
-         *     with few settings shows few.
+         * CredentialChoiceOut
+         * @description One option of a choice field, its label in the caller's language.
          */
-        ConnectionOptionSpec: {
-            /**
-             * Advanced
-             * @description Rarely needed; shown under 'advanced'.
-             * @default false
-             */
-            advanced: boolean;
-            /** Default */
-            default?: string | number | boolean | null;
-            /**
-             * Description
-             * @description English help text.
-             * @default
-             */
-            description: string;
-            /** Examples */
-            examples?: string[];
-            /** Key */
-            key: string;
-            /** Maximum */
-            maximum?: number | null;
-            /** Minimum */
-            minimum?: number | null;
-            /**
-             * Title
-             * @description English title.
-             */
-            title: string;
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "string" | "integer" | "number" | "boolean";
-        };
-        /**
-         * CredentialChoice
-         * @description One option of a ``choice`` field.
-         */
-        CredentialChoice: {
+        CredentialChoiceOut: {
             /** Label */
             label: string;
             /** Value */
             value: string;
-        };
-        /**
-         * CredentialField
-         * @description One input of a provider's link form.
-         */
-        CredentialField: {
-            /** Choices */
-            choices?: components["schemas"]["CredentialChoice"][];
-            /**
-             * Help
-             * @description English hint under the input.
-             */
-            help?: string | null;
-            /**
-             * Identity
-             * @description The field that names the vendor account (exactly one per provider): shown as the linked account's title and unique per provider and MowDeck account, compared without case.
-             * @default false
-             */
-            identity: boolean;
-            /** Key */
-            key: string;
-            kind: components["schemas"]["CredentialFieldKind"];
-            /**
-             * Label
-             * @description English label of the input.
-             */
-            label: string;
-            /**
-             * Max Length
-             * @default 256
-             */
-            max_length: number;
-            /**
-             * Pattern
-             * @description Regular expression the value must match.
-             */
-            pattern?: string | null;
-            /** Placeholder */
-            placeholder?: string | null;
-            /**
-             * Required
-             * @default true
-             */
-            required: boolean;
         };
         /**
          * CredentialFieldKind
@@ -1754,6 +1670,34 @@ export type components = {
          * @enum {string}
          */
         CredentialFieldKind: "text" | "email" | "secret" | "choice";
+        /**
+         * CredentialFieldOut
+         * @description One input of a provider's link form, its texts in the caller's language.
+         */
+        CredentialFieldOut: {
+            /** Choices */
+            choices: components["schemas"]["CredentialChoiceOut"][];
+            /**
+             * Help
+             * @description Provider-specific hint; generic hints are the app's.
+             */
+            help: string | null;
+            /** Identity */
+            identity: boolean;
+            /** Key */
+            key: string;
+            kind: components["schemas"]["CredentialFieldKind"];
+            /** Label */
+            label: string;
+            /** Max Length */
+            max_length: number;
+            /** Pattern */
+            pattern: string | null;
+            /** Placeholder */
+            placeholder: string | null;
+            /** Required */
+            required: boolean;
+        };
         /**
          * DeviceType
          * @description What a discovered device is (ADR 0047).
@@ -2829,61 +2773,10 @@ export type components = {
             token_id?: string | null;
         };
         /**
-         * ProviderDescriptor
-         * @description A cloud provider as its adapter declares it: the link form, the guidance and the options
-         *     of its mowers.
+         * ProviderLinkOut
+         * @description A vendor page that explains where the credentials come from.
          */
-        ProviderDescriptor: {
-            /** Fields */
-            fields: components["schemas"]["CredentialField"][];
-            /** Links */
-            links?: components["schemas"]["ProviderLink"][];
-            /**
-             * Mower Options
-             * @description The options a mower of this provider takes (none: the provider has no settings beyond the linked account).
-             */
-            mower_options?: components["schemas"]["ConnectionOptionSpec"][];
-            /**
-             * Name
-             * @description Display name of the vendor cloud.
-             */
-            name: string;
-            /**
-             * Needs Developer Account
-             * @description The user creates an application in the vendor's developer portal (with their own vendor account) to get the credentials.
-             * @default false
-             */
-            needs_developer_account: boolean;
-            /** Provider */
-            provider: string;
-            /**
-             * Setup Steps
-             * @description English, short: how the user gets the credentials, in order.
-             */
-            setup_steps?: string[];
-            /**
-             * Summary
-             * @description English: which mowers and what MowDeck can do.
-             * @default
-             */
-            summary: string;
-            /**
-             * Tested On Hardware
-             * @description False: built and tested against recorded fixtures and fakes only; the web app labels such providers as untested on real hardware.
-             * @default false
-             */
-            tested_on_hardware: boolean;
-            /**
-             * Warnings
-             * @description English, short: risks the user should know before linking an account (an unofficial vendor API, an account the vendor may block, ...). The web app shows them prominently in the link form.
-             */
-            warnings?: string[];
-        };
-        /**
-         * ProviderLink
-         * @description A page of the vendor that explains where the credentials come from.
-         */
-        ProviderLink: {
+        ProviderLinkOut: {
             /** Label */
             label: string;
             /** Url */
@@ -2892,11 +2785,42 @@ export type components = {
         /**
          * ProviderList
          * @description ``GET /linked-accounts/providers``: the cloud providers enabled in the Device-Gateway,
-         *     each with its credential fields and guidance (the web app renders the link form from it).
+         *     each with its credential fields and guidance in the caller's language (the web app renders
+         *     the link form from it).
          */
         ProviderList: {
             /** Items */
-            items: components["schemas"]["ProviderDescriptor"][];
+            items: components["schemas"]["ProviderOut"][];
+        };
+        /**
+         * ProviderOut
+         * @description A cloud provider with every text in the caller's language (English fallback).
+         */
+        ProviderOut: {
+            /** Fields */
+            fields: components["schemas"]["CredentialFieldOut"][];
+            /** Links */
+            links: components["schemas"]["ProviderLinkOut"][];
+            /**
+             * Name
+             * @description The vendor's brand, not translated.
+             */
+            name: string;
+            /** Needs Developer Account */
+            needs_developer_account: boolean;
+            /** Provider */
+            provider: string;
+            /** Setup Steps */
+            setup_steps: string[];
+            /** Summary */
+            summary: string | null;
+            /** Tested On Hardware */
+            tested_on_hardware: boolean;
+            /**
+             * Warnings
+             * @description Risks the provider warns of before an account is linked (an unofficial API, a possible account block); the web app shows them prominently.
+             */
+            warnings?: string[];
         };
         /**
          * ProxyInfo
@@ -3918,7 +3842,10 @@ export interface operations {
     };
     list_connection_kinds_api_v1_fleet_connection_kinds_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. */
+                locale?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3932,6 +3859,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConnectionKindList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -4487,7 +4423,10 @@ export interface operations {
     };
     list_cloud_providers_api_v1_fleet_linked_accounts_providers_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. */
+                locale?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4509,6 +4448,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
             /** @description No Device-Gateway listed the providers. */
             503: {

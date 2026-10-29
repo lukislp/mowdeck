@@ -20,6 +20,7 @@ import {
   commandByApi,
   createMowerByApi,
   loginByUi,
+  pickProvider,
   registerByApi,
   waitForMap,
 } from './support';
@@ -250,6 +251,7 @@ for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
     if (size === 'phone') {
       // Cloud mowers come from a linked account: the connect form, nothing is sent.
       await page.locator('#connection_kind').selectOption('cloud');
+      await pickProvider(page, 'mammotion');
       await page.locator('#linked-email').fill('second-account@example.com');
       await page.getByTestId('linked-connect-submit').click(); // shows the missing password
       await expect(page.locator('#linked-password')).toHaveAttribute('aria-invalid', 'true');

@@ -81,7 +81,8 @@ def test_descriptor_asks_for_brand_email_and_password() -> None:
     assert [c.value for c in brand.choices] == list(BRANDS) == ["worx", "kress", "landxcape"]
     assert not DESCRIPTOR.needs_developer_account and not DESCRIPTOR.tested_on_hardware
     assert DESCRIPTOR.warnings == [WARNING_UNOFFICIAL, WARNING_BAN]
-    assert "Unofficial API" in WARNING_UNOFFICIAL and "block" in WARNING_BAN
+    assert "Unofficial API" in WARNING_UNOFFICIAL["en"] and "block" in WARNING_BAN["en"]
+    assert "Inoffizielle API" in WARNING_UNOFFICIAL["de"] and "Kontosperre" in WARNING_BAN["de"]
 
 
 def test_descriptor_validates_the_credentials() -> None:

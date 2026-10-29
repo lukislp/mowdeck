@@ -15,6 +15,7 @@ members = [
     "mowdeck-authz",
     "mowdeck-contracts",
     "mowdeck-control",
+    "mowdeck-control-husqvarna",
     "mowdeck-control-mammotion",
     "mowdeck-control-worx",
     "mowdeck-patterns",
@@ -35,6 +36,24 @@ overrides = [{ name = "filelock", specifier = ">=4.2.1" }]
 name = "agora-bridge"
 version = "0.1.0"
 source = { editable = "integrations/agora-bridge" }
+
+[[package]]
+name = "aioautomower"
+version = "3.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "ical" },
+    { name = "mashumaro" },
+    { name = "orjson" },
+    { name = "pyjwt" },
+    { name = "python-dateutil" },
+    { name = "tzlocal" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ae/71/fbfefaf48398570fee656e6b61f984f818665aa5d1b09fb547a16308c53e/aioautomower-3.1.0.tar.gz", hash = "sha256:1c1ccf747bbeab94d9d1904076e34a1798dee3dd690743baf574b3d2345994e8", size = 177856, upload-time = "2026-10-08T16:38:51.701Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fd/11/1c6b56a76b9303ae109c6708adb47b9e067ac2286c9da17ffcb3666c4c3f/aioautomower-3.1.0-py3-none-any.whl", hash = "sha256:e54c523c7e06c8052e5c409cbd769ce5469198428bb001a61b909ff74aa574ac", size = 38215, upload-time = "2026-10-08T16:38:50.335Z" },
+]
 
 [[package]]
 name = "aioesphomeapi"
@@ -900,6 +919,7 @@ dependencies = [
     { name = "mowdeck-auth" },
     { name = "mowdeck-contracts" },
     { name = "mowdeck-control" },
+    { name = "mowdeck-control-husqvarna" },
     { name = "mowdeck-control-mammotion", extra = ["esphome"] },
     { name = "mowdeck-control-worx" },
     { name = "mowdeck-service-kit" },
@@ -911,6 +931,7 @@ requires-dist = [
     { name = "mowdeck-auth", editable = "libs/mowdeck-auth" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
+    { name = "mowdeck-control-husqvarna", editable = "libs/mowdeck-control-husqvarna" },
     { name = "mowdeck-control-mammotion", extras = ["esphome"], editable = "libs/mowdeck-control-mammotion" },
     { name = "mowdeck-control-worx", editable = "libs/mowdeck-control-worx" },
     { name = "mowdeck-service-kit", editable = "libs/mowdeck-service-kit" },
@@ -1343,6 +1364,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/02/e7/94f8232d4a74cc99514c13a9f995811485a6903d48e5d952771ef6322e30/hyperframe-6.1.0.tar.gz", hash = "sha256:f630908a00854a7adeabd6382b43923a4c4cd4b821fcb527e6ab9e15382a3b08", size = 26566, upload-time = "2025-01-22T21:41:49.302Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/48/30/47d0bf6072f7252e6521f3447ccfa40b421b6824517f82854703d0f5a98b/hyperframe-6.1.0-py3-none-any.whl", hash = "sha256:b03380493a519fce58ea5af42e4a42317bf9bd425596f7a0835ffce80f1a42e5", size = 13007, upload-time = "2025-01-22T21:41:47.295Z" },
+]
+
+[[package]]
+name = "ical"
+version = "14.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "python-dateutil" },
+    { name = "tzdata" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/c8/e5a94d5da640a71958d3033f0ff4a1fd9c39e599e1033b3c5c59c49b259c/ical-14.3.1.tar.gz", hash = "sha256:2a6ea215effa6a1c9cae93570b648f105fcaeba9677d0f7b3b7d63d0a18085b1", size = 163140, upload-time = "2026-10-20T15:13:53.894Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/50/79753d726ea6c28ca728c60be0b426681931be286ad459ca2f31389d0e39/ical-14.3.1-py3-none-any.whl", hash = "sha256:a70435a53d8c1adfaa6a74a3417d79b3cd871b7e090f27fb0bb83f5e089e2009", size = 147233, upload-time = "2026-10-20T15:13:52.148Z" },
 ]
 
 [[package]]
@@ -1800,6 +1835,25 @@ requires-dist = [
 provides-extras = ["photo"]
 
 [[package]]
+name = "mowdeck-control-husqvarna"
+version = "0.1.0"
+source = { editable = "libs/mowdeck-control-husqvarna" }
+dependencies = [
+    { name = "aioautomower" },
+    { name = "aiohttp" },
+    { name = "mowdeck-contracts" },
+    { name = "mowdeck-control" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aioautomower", specifier = "==3.1.0" },
+    { name = "aiohttp", specifier = ">=3.9.3,<4" },
+    { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
+    { name = "mowdeck-control", editable = "libs/mowdeck-control" },
+]
+
+[[package]]
 name = "mowdeck-control-mammotion"
 version = "0.1.0"
 source = { editable = "libs/mowdeck-control-mammotion" }
@@ -1951,6 +2005,7 @@ dev = [
     { name = "mowdeck-authz", extra = ["fastapi"] },
     { name = "mowdeck-contracts" },
     { name = "mowdeck-control" },
+    { name = "mowdeck-control-husqvarna" },
     { name = "mowdeck-control-mammotion", extra = ["esphome"] },
     { name = "mowdeck-control-worx" },
     { name = "mowdeck-patterns" },
@@ -1994,6 +2049,7 @@ dev = [
     { name = "mowdeck-authz", extras = ["fastapi"], editable = "libs/mowdeck-authz" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
+    { name = "mowdeck-control-husqvarna", editable = "libs/mowdeck-control-husqvarna" },
     { name = "mowdeck-control-mammotion", extras = ["esphome"], editable = "libs/mowdeck-control-mammotion" },
     { name = "mowdeck-control-worx", editable = "libs/mowdeck-control-worx" },
     { name = "mowdeck-patterns", editable = "libs/mowdeck-patterns" },

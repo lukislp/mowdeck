@@ -43,6 +43,11 @@ describe('LinkedAccountConnect', () => {
     expect(screen.queryByTestId('provider-warning')).toBeNull();
   });
 
+  it('gives secret fields the generic hint of the app, not a provider text', () => {
+    render(LinkedAccountConnect, { props: { providers: [ACME], onconnect: vi.fn() } });
+    expect(screen.getByText(m.linked_password_hint())).toBeInTheDocument();
+  });
+
   it('says so when no provider is enabled', () => {
     render(LinkedAccountConnect, { props: { providers: [], onconnect: vi.fn() } });
     expect(screen.getByTestId('linked-no-providers')).toHaveTextContent(m.provider_none());

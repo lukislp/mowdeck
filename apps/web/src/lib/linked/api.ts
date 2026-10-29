@@ -3,6 +3,7 @@
  * the client with the longer deadline; the rest is ordinary.
  */
 import { fleetApi, fleetSlowApi, unwrap } from '#lib/api/client.js';
+import { getLocale } from '#lib/paraglide/runtime.js';
 import type { components } from '#lib/generated/fleet.js';
 
 import type {
@@ -15,9 +16,16 @@ import type { CredentialValues, ProviderDescriptor } from './providers';
 
 type DeviceList = components['schemas']['LinkedDeviceList'];
 
-/** The cloud providers enabled in the Device-Gateway (disabled ones are not listed). */
+/** The cloud providers enabled in the Device-Gateway (disabled ones are not listed), with
+ * their texts in the UI language. */
 export async function listProviders(): Promise<ProviderDescriptor[]> {
-  return (await unwrap(fleetApi.GET('/api/v1/fleet/linked-accounts/providers'))).items;
+  return (
+    await unwrap(
+      fleetApi.GET('/api/v1/fleet/linked-accounts/providers', {
+        params: { query: { locale: getLocale() } },
+      }),
+    )
+  ).items;
 }
 
 export async function listLinkedAccounts(): Promise<LinkedAccount[]> {
