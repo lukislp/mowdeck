@@ -70,7 +70,8 @@ def test_publish_selects_and_checks_before_the_upload(workflow: dict[str, Any]) 
     # The checksums follow the selection in the same step.
     assert runs[sums].index("release_assets.py select") < runs[sums].index("sha256sum")
     # Signatures and provenance are written before the check runs.
-    assert runs[check].index("cosign sign-blob") < runs[check].index("release_assets.py check")
+    signed_at = runs[check].index("cosign_sign_blob_verified")
+    assert signed_at < runs[check].index("release_assets.py check")
     assert 'gh release upload "$tag" -R "$REPOSITORY" --clobber assets/*' in runs[upload]
 
 
