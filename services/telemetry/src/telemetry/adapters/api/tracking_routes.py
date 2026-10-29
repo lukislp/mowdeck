@@ -7,6 +7,7 @@ it travels in the body (never in a URL, so no access log, referrer or history ho
 answer carries only the allowed fields.
 """
 
+import dataclasses
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
@@ -18,6 +19,7 @@ from mowdeck_service_kit.errors import NotFound
 from pydantic import BaseModel, Field
 
 from telemetry.adapters.api.deps import ControlMower, ServicesDep, ViewMower
+from telemetry.adapters.api.schemas import AerialBounds
 from telemetry.application.tracking import PublicTrack, Tracking, TrackingView, TrackPoint
 from telemetry.application.tracking_map import BaseLayer
 from telemetry.domain.errors import NoTrackingError
@@ -149,10 +151,24 @@ class MapLayerOut(BaseModel):
         description="Whether the source has data at the last known position (false: show "
         "another layer; e.g. an aerial photo of one state only).",
     )
+    coverage: AerialBounds | None = Field(
+        default=None,
+        description="The box the source has data in (null: the whole world). Tiles are served "
+        "only where it overlaps the tracked positions plus `margin_m`.",
+    )
+    margin_m: float = Field(
+        default=0,
+        description="Metres around the tracked positions where tiles are served; the map keeps "
+        "its view inside that box (0: no limit known).",
+    )
 
     @classmethod
     def all(
-        cls, layers: Sequence[BaseLayer], lat: float | None = None, lon: float | None = None
+        cls,
+        layers: Sequence[BaseLayer],
+        lat: float | None = None,
+        lon: float | None = None,
+        margin_m: float = 0.0,
     ) -> list["MapLayerOut"]:
         """From the offered layers, judged at the last known position."""
         return [
@@ -162,6 +178,12 @@ class MapLayerOut(BaseModel):
                 min_zoom=layer.min_zoom,
                 max_zoom=layer.max_zoom,
                 covers_last=layer.covers(lat, lon),
+                coverage=(
+                    AerialBounds(**dataclasses.asdict(layer.coverage))
+                    if layer.coverage is not None
+                    else None
+                ),
+                margin_m=margin_m,
             )
             for layer in layers
         ]
@@ -184,7 +206,11 @@ class TrackingStatus(BaseModel):
 
     @classmethod
     def of(
-        cls, view: TrackingView | None, now: datetime, layers: Sequence[BaseLayer] = ()
+        cls,
+        view: TrackingView | None,
+        now: datetime,
+        layers: Sequence[BaseLayer] = (),
+        margin_m: float = 0.0,
     ) -> "TrackingStatus":
         """From a view (None: no session yet)."""
         if view is None:
@@ -195,7 +221,9 @@ class TrackingStatus(BaseModel):
             truncated=view.truncated,
             links=[TrackingLinkOut.of(link, now) for link in view.links],
             photos=view.photos,
-            map_layers=MapLayerOut.all(layers, view.session.last_lat, view.session.last_lon),
+            map_layers=MapLayerOut.all(
+                layers, view.session.last_lat, view.session.last_lon, margin_m
+            ),
             server_time=now,
         )
 
@@ -245,11 +273,13 @@ class PublicTrackOut(BaseModel):
     server_time: datetime
 
     @classmethod
-    def of(cls, p: PublicTrack, layers: Sequence[BaseLayer] = ()) -> "PublicTrackOut":
+    def of(
+        cls, p: PublicTrack, layers: Sequence[BaseLayer] = (), margin_m: float = 0.0
+    ) -> "PublicTrackOut":
         """From the public view."""
         return cls(
             map_layers=MapLayerOut.all(
-                layers, p.last.lat if p.last else None, p.last.lon if p.last else None
+                layers, p.last.lat if p.last else None, p.last.lon if p.last else None, margin_m
             ),
             mower_name=p.mower_name,
             mower_model=p.mower_model,
@@ -278,7 +308,9 @@ async def get_tracking_status(
     """The active tracking session of the mower, else the newest one, with its track and
     links; ``after`` returns only newer positions."""
     view = await tracking.view(account_id, mower_id, session_id=session_id, after=after)
-    return TrackingStatus.of(view, tracking_now(tracking), tracking.map_layers)
+    return TrackingStatus.of(
+        view, tracking_now(tracking), tracking.map_layers, tracking.map_margin_m
+    )
 
 
 def tracking_now(tracking: Tracking) -> datetime:
@@ -350,7 +382,10 @@ async def take_tracking_photo(
         raise NoTrackingError("no active tracking session")
     await tracking.take_photo(account_id, mower_id, view.session.id)
     return TrackingStatus.of(
-        await tracking.view(account_id, mower_id), tracking_now(tracking), tracking.map_layers
+        await tracking.view(account_id, mower_id),
+        tracking_now(tracking),
+        tracking.map_layers,
+        tracking.map_margin_m,
     )
 
 
@@ -444,7 +479,7 @@ async def public_tracking_view(
     view = await tracking.public_view(body.token, _client_key(request))
     if view is None:
         raise PublicNotFound("not found")
-    return PublicTrackOut.of(view, tracking.map_layers)
+    return PublicTrackOut.of(view, tracking.map_layers, tracking.map_margin_m)
 
 
 class PublicTileIn(BaseModel):

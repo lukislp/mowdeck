@@ -10,11 +10,19 @@
   a plain grid backdrop with `labels.noTiles`. A layer without data at the position (`covered:
   false`, or a whole round of tiles failing) is skipped for the next one, with `labels.uncovered`.
 
-  The view fits the track until the user pans or zooms (the fit control turns it back on).
-  `follow` (bindable) keeps the last position in the centre; a drag ends it. Leaflet is loaded
-  lazily; `onfail` reports a failed load. The page owns the texts (`labels`).
+  The view fits the track until the user pans or zooms in any way (drag, pinch, wheel, double
+  tap, keys, the buttons); from then on new positions never change the view, until the fit
+  control ("show the whole track") turns fitting back on. `follow` (bindable) keeps the last
+  position in the centre at the user's zoom (pinching zooms around it); a drag ends it. A layer
+  with a `margin` and/or `coverage` limits the view to where it serves tiles: no panning out of
+  that box, no zooming out further than the box fills the view (`trackView.ts`), no zooming in
+  beyond the layer's `maxZoom`. The limits follow a growing track and a layer switch without
+  moving a view that is still valid. Leaflet is loaded lazily; `onfail` reports a failed load.
+  The page owns the texts (`labels`).
 -->
 <script lang="ts" module>
+  import type { GeoBox } from './trackView';
+
   /** A position on the map. */
   export interface TrackMapPoint {
     lat: number;
@@ -37,6 +45,10 @@
     load: (url: string, signal: AbortSignal) => Promise<Blob>;
     /** False when the source has no data at the last position (then another layer is shown). */
     covered?: boolean;
+    /** Metres around the positions where tiles are served (the view stays inside; 0: no limit). */
+    margin?: number;
+    /** `[south, west, north, east]`: where the source has data at all (null: everywhere). */
+    coverage?: GeoBox | null;
   }
 
   /** Translated texts of the map controls and markers. */
@@ -68,6 +80,7 @@
 
   import { createAerialLayer } from './aerial';
   import type { MapTiles } from './MowerMap.svelte';
+  import { fillZoom, servedBox } from './trackView';
 
   type LeafletModule = typeof import('leaflet');
 
@@ -112,6 +125,17 @@
   let group: Leaflet.LayerGroup | null = null;
   /** Fit the whole track on every change until the user pans or zooms. */
   let autoFit = true;
+  /** Above zero while this component moves the map itself (any other move is the user's). */
+  let ownMoves = 0;
+  /** The background tile layer on the map (its request box follows the served area). */
+  let shownTiles: Leaflet.TileLayer | null = null;
+  /** The current zoom and limits, as data attributes (tests and e2e read them). */
+  let zoomNow = $state<number | null>(null);
+  let limits = $state.raw<{ min: number; max: number; box: GeoBox | null } | null>(null);
+
+  const MIN_ZOOM = 2;
+  const MAX_ZOOM = 22;
+  const ZOOM_SNAP = 0.25;
 
   const head = $derived(last ?? (track.length ? track[track.length - 1]! : null));
   /** Layers whose tiles kept failing here (no single tile loaded): treated as uncovered. */
@@ -134,6 +158,23 @@
   );
   const attributionUrl = $derived(chosen?.attributionUrl ?? null);
   const bare = $derived(!chosen && !rasterUrl);
+  /** Where the shown layer serves tiles: positions plus margin, cut to its coverage. */
+  const served = $derived.by(() => {
+    if (!chosen) return null;
+    const points = head ? [...track, head] : track;
+    return servedBox(points, chosen.margin, chosen.coverage);
+  });
+  const servedKey = $derived(served ? served.map((v) => v.toFixed(6)).join(',') : '');
+
+  /** Run a map change of this component, so its move events are not taken for the user's. */
+  function own(action: () => void): void {
+    ownMoves += 1;
+    try {
+      action();
+    } finally {
+      ownMoves -= 1;
+    }
+  }
 
   $effect(() => {
     let cancelled = false;
@@ -163,10 +204,15 @@
         zoomControl: false,
         attributionControl: false,
         boxZoom: false,
-        zoomSnap: 0.25,
+        // Smooth zooming: quarter steps for pinch and wheel, half steps for the buttons, a
+        // gentler wheel, a hard stop at the limits (no rubber band past the served area).
+        zoomSnap: ZOOM_SNAP,
         zoomDelta: 0.5,
-        minZoom: 2,
-        maxZoom: 22,
+        wheelPxPerZoomLevel: 90,
+        bounceAtZoomLimits: false,
+        maxBoundsViscosity: 1,
+        minZoom: MIN_ZOOM,
+        maxZoom: MAX_ZOOM,
         fadeAnimation: false,
         center: [0, 0],
         zoom: 2,
@@ -176,11 +222,20 @@
       return;
     }
     instance.createPane('md-track').style.zIndex = '450';
-    // Only a drag of the user ends the automatic view; our own fit and pan do not.
+    // Any move that is not this component's own (drag, pinch, wheel, double tap, keys) is the
+    // user's: from then on new positions never change the view. Pinching fires no drag and no
+    // wheel event, which is why the view used to jump back to the whole track on the next poll.
+    const byUser = () => {
+      if (ownMoves === 0) autoFit = false;
+    };
+    instance.on('movestart', byUser);
+    instance.on('zoomstart', byUser);
+    // Only a drag ends following; a pinch zooms around the followed position.
     instance.on('dragstart', () => {
       follow = false;
       autoFit = false;
     });
+    instance.on('zoomend', () => (zoomNow = instance.getZoom()));
     group = lib.layerGroup().addTo(instance);
     lmap = instance;
     autoFit = true;
@@ -190,7 +245,10 @@
       typeof ResizeObserver === 'undefined'
         ? null
         : new ResizeObserver(() => {
-            instance.invalidateSize({ pan: false });
+            // A phone's address bar or keyboard coming and going resizes the map: keep the
+            // user's view, only re-apply the limits (they depend on the size).
+            own(() => instance.invalidateSize({ pan: false }));
+            untrack(applyLimits);
             if (autoFit && !untrack(() => follow)) untrack(refit);
           });
     resize?.observe(el);
@@ -246,11 +304,61 @@
         className: 'md-map-tiles',
       });
     }
+    if (background) untrack(() => clipTiles(lib, background!, served));
     background?.addTo(instance);
+    shownTiles = background;
     return () => {
       background?.remove();
+      if (shownTiles === background) shownTiles = null;
     };
   });
+
+  // The view limits of the shown layer. Leaflet moves the view only when it is outside the new
+  // limits (a zoom below the new minimum, a centre outside the box); a valid view stays.
+  $effect(() => {
+    void generation;
+    void servedKey;
+    void chosenKey;
+    void chosen?.minZoom;
+    void chosen?.maxZoom;
+    untrack(applyLimits);
+  });
+
+  function applyLimits(): void {
+    const lib = L;
+    const instance = lmap;
+    if (!lib || !instance) return;
+    const layer = chosen;
+    const box = served;
+    let min = MIN_ZOOM;
+    let max = MAX_ZOOM;
+    if (layer) {
+      max = layer.maxZoom ?? 19;
+      min = layer.minZoom ?? MIN_ZOOM;
+      if (box) {
+        const size = instance.getSize();
+        // Leaflet snaps to whole zooms without 3D transforms; the limit must be a snap level.
+        const fill = fillZoom(box, size.x, size.y, lib.Browser.any3d ? ZOOM_SNAP : 1);
+        if (fill !== null) min = Math.max(min, fill);
+      }
+      min = Math.min(min, max);
+    }
+    const bounds = box ? lib.latLngBounds([box[0], box[1]], [box[2], box[3]]) : null;
+    own(() => {
+      instance.setMaxZoom(max);
+      instance.setMinZoom(min);
+      // Leaflet's typings lack the documented null that removes the box.
+      instance.setMaxBounds(bounds as Leaflet.LatLngBounds);
+    });
+    if (shownTiles) clipTiles(lib, shownTiles, layer ? box : null);
+    limits = { min, max, box };
+    zoomNow = instance.getZoom();
+  }
+
+  /** Ask only for tiles inside the served box (Leaflet reads the option per tile). */
+  function clipTiles(lib: LeafletModule, tiles: Leaflet.TileLayer, box: GeoBox | null): void {
+    tiles.options.bounds = box ? lib.latLngBounds([box[0], box[1]], [box[2], box[3]]) : undefined;
+  }
 
   function dot(lib: LeafletModule, kind: 'start' | 'last', hollow: boolean, name: string) {
     const safe = name.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -321,9 +429,10 @@
     untrack(() => {
       if (!current) return;
       if (follow) {
-        instance.setView([current.lat, current.lon], Math.max(instance.getZoom(), 17), {
-          animate: false,
-        });
+        // Follow at the user's zoom: only the centre moves.
+        own(() =>
+          instance.setView([current.lat, current.lon], instance.getZoom(), { animate: false }),
+        );
       } else if (autoFit) {
         fit(instance, lib, latlngs.length ? latlngs : [[current.lat, current.lon]]);
       }
@@ -335,15 +444,18 @@
     lib: LeafletModule,
     latlngs: readonly Leaflet.LatLngTuple[],
   ): void {
-    if (latlngs.length === 1) {
-      instance.setView(latlngs[0]!, 18, { animate: false });
-      return;
-    }
-    instance.fitBounds(lib.latLngBounds(latlngs as Leaflet.LatLngTuple[]), {
-      padding: [48, 48],
-      maxZoom: 19,
-      animate: false,
+    own(() => {
+      if (latlngs.length === 1) {
+        instance.setView(latlngs[0]!, 18, { animate: false });
+        return;
+      }
+      instance.fitBounds(lib.latLngBounds(latlngs as Leaflet.LatLngTuple[]), {
+        padding: [48, 48],
+        maxZoom: 19,
+        animate: false,
+      });
     });
+    zoomNow = instance.getZoom();
   }
 
   function refit(): void {
@@ -368,10 +480,24 @@
 
   function toggleFollow(): void {
     follow = !follow;
-    if (follow && head && lmap) {
-      lmap.setView([head.lat, head.lon], Math.max(lmap.getZoom(), 17), { animate: false });
+    const map = lmap;
+    if (follow && head && map) {
+      own(() => map.setView([head.lat, head.lon], Math.max(map.getZoom(), 17), { animate: false }));
+      zoomNow = map.getZoom();
     }
   }
+
+  // While following, pinch, wheel and double tap zoom around the followed position, so a zoom
+  // never pulls it off centre (Leaflet reads these options at the start of every gesture).
+  $effect(() => {
+    void generation;
+    const map = lmap;
+    if (!map) return;
+    const around = follow ? 'center' : true;
+    map.options.touchZoom = around;
+    map.options.scrollWheelZoom = around;
+    map.options.doubleClickZoom = around;
+  });
 </script>
 
 <div
@@ -379,6 +505,10 @@
   class:bare
   data-testid={testid}
   data-layer={chosen?.id ?? (rasterUrl ? 'tiles' : 'grid')}
+  data-zoom={zoomNow ?? undefined}
+  data-min-zoom={limits?.min}
+  data-max-zoom={limits?.max}
+  data-bounds={limits?.box ? limits.box.map((v) => v.toFixed(5)).join(',') : undefined}
 >
   <div
     class="canvas"
@@ -455,6 +585,11 @@
     position: absolute;
     inset: 0;
     background: var(--md-color-surface-sunken);
+
+    /* All gestures on the map belong to Leaflet: no page scroll, page zoom or pull to refresh
+       fighting a pinch. */
+    touch-action: none;
+    overscroll-behavior: contain;
   }
 
   /* Without any base map: a survey grid, so the track never sits on a featureless (in dark mode

@@ -23,8 +23,18 @@ const OFFERED: MapLayer[] = [
     min_zoom: 8,
     max_zoom: 19,
     covers_last: true,
+    coverage: null,
+    margin_m: 2000,
   },
-  { id: 'aerial', attribution: '', min_zoom: 14, max_zoom: 19, covers_last: false },
+  {
+    id: 'aerial',
+    attribution: '',
+    min_zoom: 14,
+    max_zoom: 19,
+    covers_last: false,
+    coverage: { south: 47.27, west: 8.97, north: 50.57, east: 13.84 },
+    margin_m: 2000,
+  },
 ];
 
 function memoryStore(initial: Record<string, string> = {}) {
@@ -106,7 +116,7 @@ describe('publicTileLoader', () => {
 });
 
 describe('mapLayers', () => {
-  it('maps the offered layers with labels, zooms and credits', () => {
+  it('maps the offered layers with labels, zooms, credits and the served area', () => {
     const load = vi.fn();
     const layers = mapLayers(OFFERED, publicTileUrl, load, (id) => id.toUpperCase());
     expect(layers).toEqual([
@@ -119,6 +129,8 @@ describe('mapLayers', () => {
         minZoom: 8,
         maxZoom: 19,
         covered: true,
+        margin: 2000,
+        coverage: null,
         load,
       },
       {
@@ -130,6 +142,8 @@ describe('mapLayers', () => {
         minZoom: 14,
         maxZoom: 19,
         covered: false,
+        margin: 2000,
+        coverage: [47.27, 8.97, 50.57, 13.84],
         load,
       },
     ]);
