@@ -3,8 +3,11 @@ name: fuzzing
 # Continuous fuzzing with ClusterFuzzLite (docs/dev/fuzzing.md): the Atheris targets in fuzz/,
 # built by .clusterfuzzlite/build.sh.
 #
-# * pull requests: code-change fuzzing for a few minutes; a crash fails the check and its input
-#   is uploaded as an artifact (and as a code scanning alert);
+# * pull requests that change fuzzed code (the paths below: the targets, the build, the Python
+#   workspace and its lock file): code-change fuzzing for a few minutes; a crash fails the check
+#   and its input is uploaded as an artifact (and as a code scanning alert). Not a required check;
+#   other pull requests skip it, because every run pages through all artifacts of the repository
+#   per target to find the corpus and so costs hundreds of calls of GITHUB_TOKEN's hourly quota;
 # * daily: batch fuzzing for an hour, which grows the corpus;
 # * weekly: corpus pruning and a coverage report.
 #
@@ -12,6 +15,15 @@ name: fuzzing
 # default store without a storage repository), so no extra secret or repository is needed.
 on:
   pull_request:
+    paths:
+      - "fuzz/**"
+      - ".clusterfuzzlite/**"
+      - "libs/**"
+      - "services/**"
+      - "integrations/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/fuzzing.yml"
   schedule:
     - cron: "23 3 * * *" # batch fuzzing
     - cron: "47 4 * * 0" # corpus pruning and coverage

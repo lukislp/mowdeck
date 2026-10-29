@@ -36,11 +36,13 @@ One module per target in `fuzz/`, each with the properties it checks in its docs
 
 | Trigger | Mode | Budget |
 | --- | --- | --- |
-| every pull request | `code-change`: the targets the change can reach | 8 minutes over all targets |
+| pull requests that change `fuzz/`, `.clusterfuzzlite/`, `libs/`, `services/`, `integrations/`, `pyproject.toml`, `uv.lock` or the workflow | `code-change`: the targets the change can reach | 8 minutes over all targets |
 | daily | `batch`: grows the corpus | 1 hour |
 | weekly (Sunday) | `prune` (minimises the corpus), then `coverage` (report) | 10 minutes each |
 
 A crash fails the run; the crashing input (`crash-<sha1>`) and the fuzzer output are uploaded as artifacts of the run, and the crash is uploaded to code scanning (SARIF). Corpora and coverage reports are kept as GitHub Actions artifacts (ClusterFuzzLite's default without a storage repository), so the setup needs no token or repository besides this one. `workflow_dispatch` starts a batch, prune or coverage run by hand.
+
+The artifact store has a price: to find the latest corpus, ClusterFuzzLite pages through all artifacts of the repository (100 per API call) for every target, so one pull request run costs a few hundred calls of `GITHUB_TOKEN`'s 1,000 per hour, and a lookup refused by the rate limit makes the run fuzz silently without its corpus. Hence the path filter above (the check is not required; a pull request that touches no fuzzed code skips it) and the effort to keep the artifact count low: no Docker build record artifacts (`DOCKER_BUILD_RECORD_UPLOAD: "false"` in every workflow that builds images) and seven days or less for CI logs and reports. ClusterFuzzLite's own uploads (corpus, coverage, crashes) keep the repository's default retention (14 days), so the weekly coverage report and the corpus always outlive the gap between two scheduled runs; do not set the default below 8 days. `tools/repo-checks/tests/test_workflow_api_quota.py` guards these settings.
 
 To update the toolchain: edit `.clusterfuzzlite/requirements.in` and compile it again (Linux x86-64 wheels, as in the image):
 
