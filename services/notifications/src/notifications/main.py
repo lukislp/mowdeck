@@ -50,6 +50,7 @@ from mowdeck_service_kit.health import ReadinessCheck
 from notifications.adapters.api.deps import install_error_mapping
 from notifications.adapters.api.routes import router
 from notifications.adapters.authz import AuthzViewChecker
+from notifications.adapters.bus.errors import BusErrorExplainer
 from notifications.adapters.bus.fleet import seed_directory
 from notifications.adapters.bus.photo import BusPhotoSource
 from notifications.adapters.bus.publisher import BusPublisher
@@ -215,6 +216,7 @@ def build_app(
                 else None
             ),
             image_links=image_links,
+            errors=BusErrorExplainer(active_bus) if active_bus is not None else None,
         )
         app.state.notifications = services
         app.state.directory_seeded = False

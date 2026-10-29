@@ -11,7 +11,9 @@ Pure, no I/O. Every code of PyMammotion's error table (``pymammotion/data/error_
 * never recoverable: ``lift_tilt`` (:data:`LIFT_TILT_CODES` and the lift, tilt or turned over
   texts), ``collision`` (bumper), ``blade_motor`` (blade, cutter, wheel and other motor faults,
   also the cutting height lift motor), ``battery``, ``rain``, ``positioning`` (RTK, satellites,
-  visual positioning), ``other``.
+  visual positioning), ``docking`` (the charging station and the way back to it),
+  ``communication`` (Wi-Fi, 4G, Bluetooth, the vendor's servers), ``firmware`` (updates),
+  ``other``.
 
 The non-recoverable categories come from the English text and the module column of the table, in
 the order above, so a lift sensor that stopped the blade is ``lift_tilt``, not ``blade_motor``.
@@ -42,6 +44,9 @@ class ErrorCategory(StrEnum):
     BLADE_MOTOR = "blade_motor"
     RAIN = "rain"
     POSITIONING = "positioning"
+    COMMUNICATION = "communication"
+    DOCKING = "docking"
+    FIRMWARE = "firmware"
     OTHER = "other"
 
 
@@ -110,11 +115,27 @@ _KEYWORD_RULES: Final[tuple[tuple[ErrorCategory, re.Pattern[str]], ...]] = (
         ErrorCategory.POSITIONING,
         re.compile(r"\brtk\b|gnss|gps|satellite|positioning|reference station|base station", re.I),
     ),
+    (
+        ErrorCategory.DOCKING,
+        re.compile(
+            r"charging station|charging area|recharg|\bdock|infrared|charging error|return home",
+            re.I,
+        ),
+    ),
+    (
+        ErrorCategory.COMMUNICATION,
+        re.compile(
+            r"wi-?fi|\b4g\b|bluetooth|network|server|connection|\blora\b|service (timeout|exc)",
+            re.I,
+        ),
+    ),
+    (ErrorCategory.FIRMWARE, re.compile(r"firmware|upgrad|version mismatch", re.I)),
 )
 _MODULE_RULES: Final[Mapping[str, ErrorCategory]] = {
     "motor": ErrorCategory.BLADE_MOTOR,
     "power": ErrorCategory.BATTERY,
     "position": ErrorCategory.POSITIONING,
+    "upgrade": ErrorCategory.FIRMWARE,
 }
 
 

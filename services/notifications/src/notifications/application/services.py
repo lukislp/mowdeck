@@ -10,6 +10,7 @@ from notifications.application.outbox import DeliveryObserver, Outbox
 from notifications.application.ports import (
     Channels,
     Clock,
+    ErrorExplainer,
     EventPublisher,
     PhotoSource,
     Store,
@@ -61,10 +62,12 @@ def build_services(
     observer: DeliveryObserver | None = None,
     photos: PhotoSource | None = None,
     image_links: ImageLinks | None = None,
+    errors: ErrorExplainer | None = None,
 ) -> Services:
     """Create the use cases over ``store`` (``photos``: where error and theft events get their
-    camera photo from, None for none; ``image_links``: the signed push image URLs)."""
-    fanout = Fanout(store, channels, views, publisher, catalog, config, clock, photos)
+    camera photo from, None for none; ``image_links``: the signed push image URLs; ``errors``:
+    explains vendor error codes in the push texts, None keeps the vendor's message)."""
+    fanout = Fanout(store, channels, views, publisher, catalog, config, clock, photos, errors)
     live = LiveActivities(store, channels, views, clock)
     return Services(
         watcher=Watcher(store, fanout, config, clock, live),

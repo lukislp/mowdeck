@@ -33,6 +33,9 @@ esphome = [
 cloud = "mowdeck_control_mammotion:create_cloud_connection"
 ble_bridge = "mowdeck_control_mammotion:create_ble_bridge_connection"
 
+[project.entry-points."mowdeck.error_lexicons"]
+mammotion = "mowdeck_control_mammotion.lexicon:mammotion_lexicon"
+
 [tool.uv.sources]
 mowdeck-contracts = { workspace = true }
 mowdeck-control = { workspace = true }

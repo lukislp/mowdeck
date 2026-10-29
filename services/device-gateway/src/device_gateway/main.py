@@ -33,6 +33,7 @@ from device_gateway.adapters.api.routes import router
 from device_gateway.adapters.bus.bridge import subscribe_bridge_scans
 from device_gateway.adapters.bus.camera import subscribe_camera_releases, subscribe_camera_requests
 from device_gateway.adapters.bus.cloud import DiscoveryMetrics, subscribe_cloud_discovery
+from device_gateway.adapters.bus.errors import subscribe_error_lexicons
 from device_gateway.adapters.bus.firmware import subscribe_firmware_checks
 from device_gateway.adapters.bus.fleet import BusCredentialSource, BusFleetDirectory
 from device_gateway.adapters.bus.path_preview import subscribe_path_previews
@@ -175,6 +176,7 @@ def build_app(
         app.state.tracking_leases = await subscribe_tracking_leases(
             active_bus, gateway, registry=app.state.metrics_registry
         )
+        app.state.error_lexicons = await subscribe_error_lexicons(active_bus)
         app.state.cloud_discovery = await subscribe_cloud_discovery(
             active_bus,
             CloudDiscoveryService(
@@ -215,6 +217,8 @@ def build_app(
             subscription: Subscription | None = getattr(app.state, name, None)
             if subscription is not None:
                 await subscription.unsubscribe()
+        for lexicons in getattr(app.state, "error_lexicons", []):
+            await lexicons.unsubscribe()
         cloud_discovery: Subscription | None = getattr(app.state, "cloud_discovery", None)
         if cloud_discovery is not None:
             await cloud_discovery.unsubscribe()

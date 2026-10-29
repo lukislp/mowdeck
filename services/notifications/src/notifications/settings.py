@@ -80,7 +80,13 @@ class Settings(ServiceSettings):
 
     notifications_lift_error_codes: str = "lifted,1004,1030,2502,2801,11131,11133"
     """Comma separated error codes that mean the mower was lifted or tilted (``mower_lifted``);
-    a state with ``raw.lifted = true`` counts as lifted regardless."""
+    a state with ``raw.lifted = true`` counts as lifted regardless. Kept for adapters that do not
+    set ``error_category``; the default lists Mammotion's lift and tilt codes."""
+
+    notifications_lift_categories: str = "lift_tilt"
+    """Comma separated manufacturer-neutral error categories (``MowerState.error_category``, the
+    categories of the error lexicons, ADR 0065) that mean lifted or tilted; empty: codes only.
+    Complements ``notifications_lift_error_codes``: a state matching either list alarms."""
 
     notifications_dock_command_window_seconds: float = Field(default=600, ge=0)
     """A command seen this long before the mower leaves the dock explains the departure (no
@@ -297,6 +303,11 @@ class Settings(ServiceSettings):
         return frozenset(_split(self.notifications_lift_error_codes))
 
     @property
+    def lift_categories(self) -> frozenset[str]:
+        """``notifications_lift_categories`` as a set."""
+        return frozenset(_split(self.notifications_lift_categories))
+
+    @property
     def webpush_hosts(self) -> tuple[str, ...]:
         """``notifications_webpush_allowed_hosts`` as a tuple."""
         return _split(self.notifications_webpush_allowed_hosts)
@@ -320,6 +331,7 @@ class Settings(ServiceSettings):
                 maintenance_lead_seconds=self.notifications_maintenance_lead_seconds,
                 alarm_cooldown_seconds=self.notifications_alarm_cooldown_seconds,
                 lift_error_codes=self.lift_error_codes,
+                lift_categories=self.lift_categories,
                 dock_command_window_seconds=self.notifications_dock_command_window_seconds,
                 dock_confirm_seconds=self.notifications_dock_confirm_seconds,
                 geofence_margin_meters=self.notifications_geofence_margin_meters,

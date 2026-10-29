@@ -49,6 +49,7 @@
   import { formatDateTime, formatNumber, problemMessage } from '#lib/i18n.js';
   import { permissions, revoked } from '#lib/live.svelte.js';
   import { m } from '#lib/paraglide/messages.js';
+  import { explainMowerCodes, type ErrorExplanation } from '#lib/mower/error-explain.js';
   import { getLocale } from '#lib/paraglide/runtime.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
   import type { components as Telemetry } from '#lib/generated/telemetry.js';
@@ -193,6 +194,34 @@
   };
   const extremes = $derived(batteryExtremes(battery));
   const errors = $derived(totals ? errorRows(totals.errors) : []);
+  /** What each counted code means, from the vendor's error lexicon (ADR 0065); a code stays
+   * bare until the answer arrives or when Telemetry cannot give one. */
+  let meanings = $state<Record<string, ErrorExplanation>>({});
+  const meaningCodes = $derived(
+    errors
+      .map((row) => row.code)
+      .filter((code) => code !== 'unknown')
+      .join('\n'),
+  );
+  $effect(() => {
+    const codes = meaningCodes ? meaningCodes.split('\n') : [];
+    const lang = locale;
+    if (!id || codes.length === 0) {
+      meanings = {};
+      return;
+    }
+    let current = true;
+    explainMowerCodes(id, codes, lang)
+      .then((found) => {
+        if (current) meanings = Object.fromEntries(found.map((e, i) => [codes[i]!, e]));
+      })
+      .catch(() => {
+        if (current) meanings = {};
+      });
+    return () => {
+      current = false;
+    };
+  });
   const lifetime = $derived(totals ? lifetimeTotals(totals) : null);
 
   /** A distance readout: metres below one kilometre, kilometres above. */
@@ -499,8 +528,20 @@
         {#if errors.length}
           <ul class="rows">
             {#each errors as row (row.code)}
+              {@const meaning = meanings[row.code]}
               <li>
                 <span class="code mono"><Icon name="alert" size={16} />{errorLabel(row.code)}</span>
+                {#if meaning?.known}
+                  <span
+                    class="meaning"
+                    data-testid="health-error-meaning"
+                    data-severity={meaning.severity}
+                    title={meaning.steps?.[0] ?? ''}
+                  >
+                    <span class="md-visually-hidden">{m.health_errors_explain()}: </span>
+                    {meaning.title}
+                  </span>
+                {/if}
                 <span class="count mono">{formatNumber(row.count)}×</span>
               </li>
             {/each}
@@ -765,6 +806,24 @@
 
   .count {
     color: var(--md-color-ink);
+  }
+
+  .meaning {
+    flex: 1 1 12rem;
+    min-width: 0;
+    padding-left: var(--md-space-2);
+    border-left: 2px solid var(--md-color-line);
+    color: var(--md-color-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .meaning[data-severity='critical'],
+  .meaning[data-severity='error'] {
+    border-left-color: var(--md-state-error);
+  }
+
+  .meaning[data-severity='warning'] {
+    border-left-color: var(--md-state-paused);
   }
 
   .note {

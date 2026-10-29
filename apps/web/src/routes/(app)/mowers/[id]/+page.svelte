@@ -45,6 +45,7 @@
   import AreaPlan from '#lib/components/AreaPlan.svelte';
   import AreaRenameForm from '#lib/components/AreaRenameForm.svelte';
   import CameraPanel from '#lib/components/CameraPanel.svelte';
+  import ErrorExplainer from '#lib/components/ErrorExplainer.svelte';
   import HeatmapControls, { type HeatStatus } from '#lib/components/HeatmapControls.svelte';
   import HeatmapGaps from '#lib/components/HeatmapGaps.svelte';
   import {
@@ -98,6 +99,7 @@
   import { rainNow, readoutBars, stripBars } from '#lib/mower/rain.js';
   import { hasReception } from '#lib/mower/reception.js';
   import { errorCategoryLabel } from '#lib/mower/reception-labels.js';
+  import { explainKey, getMowerError, type ErrorExplanation } from '#lib/mower/error-explain.js';
   import type { RainDecision } from '#lib/schedules/types.js';
   import {
     availability,
@@ -1031,6 +1033,29 @@
     const text = `${ms.error_code} ${ms.error_message ?? ''}`.trim();
     return ms.error_category ? `${errorCategoryLabel(ms.error_category)} · ${text}` : text;
   });
+  /** The error in plain words from the vendor's lexicon (ADR 0065); until it arrives, or when
+   * Telemetry cannot answer, the notice above stands in. Asked again only for a new code. */
+  let errorExplained = $state<ErrorExplanation | null>(null);
+  const errorKey = $derived(explainKey(id, ms?.error_code, locale));
+  $effect(() => {
+    const key = errorKey;
+    const code = untrack(() => ms?.error_code);
+    if (key === null || !code) {
+      errorExplained = null;
+      return;
+    }
+    let current = true;
+    getMowerError(id, locale)
+      .then((answer) => {
+        if (current) errorExplained = answer.error?.code ? answer.error : null;
+      })
+      .catch(() => {
+        if (current) errorExplained = null;
+      });
+    return () => {
+      current = false;
+    };
+  });
   const renamingArea = $derived(
     renaming ? ((mowerMap?.areas ?? []).find((a) => a.id === renaming) ?? null) : null,
   );
@@ -1537,7 +1562,11 @@
         </div>
         {#if errorTitle}
           <div class="error-notice" data-testid="mower-error" data-category={ms?.error_category}>
-            <ProblemNotice title={errorTitle} />
+            {#if errorExplained}
+              <ErrorExplainer explanation={errorExplained} vendorMessage={ms?.error_message} />
+            {:else}
+              <ProblemNotice title={errorTitle} />
+            {/if}
           </div>
         {/if}
         {#if job}

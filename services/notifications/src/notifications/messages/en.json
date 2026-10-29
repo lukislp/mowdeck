@@ -5,7 +5,7 @@
   "job_started.title": "{mower} started mowing",
   "job_started.body": "The mowing job is running. Battery {battery} %.",
   "mower_stuck.title": "{mower} needs help",
-  "mower_stuck.body_error": "Error {error_code}. {error_message}",
+  "mower_stuck.body_error": "Error {error_code}. {error_detail}",
   "mower_stuck.body_no_movement": "No movement for {minutes} min while mowing.",
   "battery_low.title": "{mower}: battery low",
   "battery_low.body": "Battery at {battery} %.",

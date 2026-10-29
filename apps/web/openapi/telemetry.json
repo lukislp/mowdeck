@@ -920,6 +920,244 @@
         "title": "DriveSpeedSetting",
         "type": "object"
       },
+      "ErrorExplanation": {
+        "description": "A vendor code in plain words, in one locale.",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/MowerErrorCategory"
+          },
+          "cause": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "known": {
+            "description": "The lexicon knows the code.",
+            "title": "Known",
+            "type": "boolean"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorLink"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "locale": {
+            "description": "The locale of the texts (after fallback).",
+            "pattern": "^[a-z]{2}$",
+            "title": "Locale",
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/ErrorSeverity"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          },
+          "user_action": {
+            "title": "User Action",
+            "type": "boolean"
+          },
+          "vendor": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The lexicon that explained the code; null when none applied.",
+            "title": "Vendor"
+          },
+          "vendor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Name"
+          },
+          "verified": {
+            "default": true,
+            "description": "False for an entry whose meaning is not verified.",
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "known",
+          "locale",
+          "title",
+          "severity",
+          "category",
+          "user_action"
+        ],
+        "title": "ErrorExplanation",
+        "type": "object"
+      },
+      "ErrorExplanationList": {
+        "description": "Explanations in the order of the requested codes.",
+        "properties": {
+          "explanations": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorExplanation"
+            },
+            "title": "Explanations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "explanations"
+        ],
+        "title": "ErrorExplanationList",
+        "type": "object"
+      },
+      "ErrorLexiconInfo": {
+        "description": "Summary of an installed lexicon (no entries).",
+        "properties": {
+          "connection_kinds": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionKind"
+            },
+            "title": "Connection Kinds",
+            "type": "array"
+          },
+          "entries": {
+            "description": "Number of codes.",
+            "minimum": 0.0,
+            "title": "Entries",
+            "type": "integer"
+          },
+          "locales": {
+            "items": {
+              "pattern": "^[a-z]{2}$",
+              "type": "string"
+            },
+            "title": "Locales",
+            "type": "array"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "unverified": {
+            "description": "Codes whose meaning could not be verified.",
+            "minimum": 0.0,
+            "title": "Unverified",
+            "type": "integer"
+          },
+          "vendor": {
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "title": "Vendor",
+            "type": "string"
+          },
+          "vendor_name": {
+            "title": "Vendor Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vendor",
+          "vendor_name",
+          "entries",
+          "unverified"
+        ],
+        "title": "ErrorLexiconInfo",
+        "type": "object"
+      },
+      "ErrorLexiconList": {
+        "description": "The installed error lexicons, one per vendor.",
+        "properties": {
+          "lexicons": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorLexiconInfo"
+            },
+            "title": "Lexicons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lexicons"
+        ],
+        "title": "ErrorLexiconList",
+        "type": "object"
+      },
+      "ErrorLink": {
+        "description": "Further reading for an entry (the vendor's help page, a manual chapter).",
+        "properties": {
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 500,
+            "pattern": "^https://",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ],
+        "title": "ErrorLink",
+        "type": "object"
+      },
+      "ErrorSeverity": {
+        "description": "How bad an error is for the user, manufacturer neutral.",
+        "enum": [
+          "info",
+          "warning",
+          "error",
+          "critical"
+        ],
+        "title": "ErrorSeverity",
+        "type": "string"
+      },
       "EventDef": {
         "description": "An event type a module publishes.",
         "properties": {
@@ -2389,7 +2627,7 @@
         "type": "object"
       },
       "MowerErrorCategory": {
-        "description": "What kind of fault ``MowerState.error_code`` names, manufacturer neutral.",
+        "description": "What kind of fault ``MowerState.error_code`` names, manufacturer neutral.\n\nThe same words classify the entries of an error lexicon (ADR 0065), so rules such as the\ntheft alarm can match a category instead of vendor codes.",
         "enum": [
           "trapped",
           "obstacle",
@@ -2401,10 +2639,53 @@
           "blade_motor",
           "rain",
           "positioning",
+          "communication",
+          "docking",
+          "firmware",
           "other"
         ],
         "title": "MowerErrorCategory",
         "type": "string"
+      },
+      "MowerErrorOut": {
+        "description": "``GET /mowers/{id}/error``: the mower's current error in plain words.",
+        "properties": {
+          "activity": {
+            "description": "`MowerActivity` of the state.",
+            "title": "Activity",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorExplanation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The current error explained; null while the mower reports none."
+          },
+          "mower_id": {
+            "format": "uuid",
+            "title": "Mower Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "description": "When the mower reported the state.",
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mower_id",
+          "observed_at",
+          "activity",
+          "error"
+        ],
+        "title": "MowerErrorOut",
+        "type": "object"
       },
       "MowerHealthOut": {
         "description": "Running health totals of a mower (since the first state Telemetry received).",
@@ -4741,6 +5022,102 @@
         ]
       }
     },
+    "/api/v1/telemetry/error-codes/{vendor}/{code}": {
+      "get": {
+        "description": "Explain one code of a vendor (the lexicon's key, see `GET /error-lexicons`), e.g.\n`/error-codes/mammotion/1201?locale=de`. An unknown vendor or code answers 200 with `known`\nfalse.",
+        "operationId": "explain_vendor_code_api_v1_telemetry_error_codes__vendor___code__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vendor",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "title": "Vendor",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z]{2}([-_][A-Za-z0-9]{1,8})?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+              "title": "Locale"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorExplanation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explain Vendor Code",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/error-lexicons": {
+      "get": {
+        "description": "The installed error lexicons (vendor key and name, connection kinds, number of codes and\nof unverified ones, locales); empty while the Device-Gateway does not answer.",
+        "operationId": "list_error_lexicons_api_v1_telemetry_error_lexicons_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorLexiconList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Error Lexicons",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
     "/api/v1/telemetry/mowers/{mower_id}/aerial": {
       "get": {
         "description": "Whether an aerial photo can be laid under the mower's map, with its credit line, zoom\nrange and the box where tiles are served; `enabled: false` without a configured source.\n404 `no-map-yet` before the gateway published a map.",
@@ -5052,6 +5429,150 @@
           }
         },
         "summary": "Get Commands",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/error": {
+      "get": {
+        "description": "The mower's current error (`MowerState.error_code`) in plain words, with the lexicon of\nits vendor; `error` is null while it reports none. 404 \"no telemetry yet\" before the first\nstate.",
+        "operationId": "get_mower_error_api_v1_telemetry_mowers__mower_id__error_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z]{2}([-_][A-Za-z0-9]{1,8})?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+              "title": "Locale"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MowerErrorOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Mower Error",
+        "tags": [
+          "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/error-codes": {
+      "get": {
+        "description": "Explain codes of this mower (e.g. the error counts of its health page) with the lexicon of\nits vendor. 404 \"no telemetry yet\" before the first state.",
+        "operationId": "explain_mower_codes_api_v1_telemetry_mowers__mower_id__error_codes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Codes as the mower reports them; repeat the parameter for more.",
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "description": "Codes as the mower reports them; repeat the parameter for more.",
+              "items": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "title": "Code",
+              "type": "array"
+            }
+          },
+          {
+            "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z]{2}([-_][A-Za-z0-9]{1,8})?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`.",
+              "title": "Locale"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorExplanationList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explain Mower Codes",
         "tags": [
           "telemetry"
         ]

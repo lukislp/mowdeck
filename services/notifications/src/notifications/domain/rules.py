@@ -222,10 +222,13 @@ def _come_online(
 
 
 def is_lift(state: MowerState, config: RuleConfig) -> bool:
-    """True when the state reports a lift (``raw["lifted"]`` or a configured error code)."""
+    """True when the state reports a lift: ``raw["lifted"]``, a configured error code or a
+    configured error category (``lift_tilt`` of the vendor's error lexicon, ADR 0065)."""
     if state.activity is not MowerActivity.ERROR:
         return False
     if state.raw.get("lifted") is True:
+        return True
+    if state.error_category is not None and state.error_category.value in config.lift_categories:
         return True
     return state.error_code is not None and state.error_code in config.lift_error_codes
 
@@ -500,6 +503,9 @@ def observe_state(
                 reason="error",
                 error_code=state.error_code or "unknown",
                 error_message=state.error_message or "",
+                # the push text explains the code with the vendor's lexicon (ADR 0065)
+                error_connection=state.connection.value,
+                error_category=state.error_category.value if state.error_category else "",
             )
             w, _ = _emit(w, stuck, now, config, events)
             w = w.evolve(error_notified=key)

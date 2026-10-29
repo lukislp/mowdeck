@@ -44,6 +44,7 @@ from notifications.application.ports import (
     CapturedPhoto,
     Channels,
     Clock,
+    ErrorExplainer,
     EventPublisher,
     PhotoSource,
     Store,
@@ -102,7 +103,9 @@ class Fanout:
         config: NotificationsConfig,
         clock: Clock,
         photos: PhotoSource | None = None,
+        errors: ErrorExplainer | None = None,
     ) -> None:
+        self._errors = errors
         self._store = store
         self._channels = channels
         self._views = views
@@ -294,10 +297,28 @@ class Fanout:
         values = dict(params)
         if not values.get("mower"):
             values["mower"] = self._catalog.render(language, "mower.unnamed", {})
+        values.setdefault("error_detail", values.get("error_message") or "")
         return (
             self._catalog.render(language, title_key, values)[:200],
             self._catalog.render(language, body_key, values)[:1000],
         )
+
+    async def explained(self, language: str, params: dict[str, Any]) -> dict[str, Any]:
+        """``params`` with ``error_detail``: the vendor error code in plain words (the lexicon's
+        title and first step, ADR 0065) when the lexicon knows it; otherwise unchanged, and
+        :meth:`render` falls back to the vendor's own ``error_message``."""
+        code, connection = params.get("error_code"), params.get("error_connection")
+        if self._errors is None or not code or code == "unknown" or not connection:
+            return params
+        explanation = await self._errors.explain(
+            str(code), str(connection), language, params.get("error_category") or None
+        )
+        if explanation is None or not explanation.known:
+            return params
+        detail = explanation.title
+        if explanation.steps:
+            detail = f"{detail}. {explanation.steps[0]}"
+        return {**params, "error_detail": detail}
 
     def url_for(self, mower_id: UUID | None, link: str | None = None) -> str | None:
         """The app page of a mower, or ``link`` (an app path such as ``/mowers/<id>/map?...``),
@@ -329,6 +350,7 @@ class Fanout:
         this notification (same ``dedupe_key``).
         """
         now = self._clock()
+        params = await self.explained(preferences.language, params)
         title, body = self.render(preferences.language, title_key, body_key, params)
         severity: NotificationSeverity = SEVERITY[kind]
         item = InboxItem(
@@ -402,7 +424,7 @@ class Fanout:
         if self._publisher is None:
             return
         try:
-            params = {**event.params, "mower": mower_name}
+            params = await self.explained(ACCOUNT_LANGUAGE, {**event.params, "mower": mower_name})
             title, body = self.render(ACCOUNT_LANGUAGE, event.title_key, event.body_key, params)
             relation: Literal["can_view", "can_drive"] = (
                 "can_drive" if event.relation == "can_drive" else "can_view"

@@ -30,6 +30,33 @@ Latest state of every mower of the caller's account that the caller may view.
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [MowerStateList](#mowerstatelist) |
 
+#### GET /api/v1/telemetry/error-codes/{vendor}/{code}
+
+**Explain Vendor Code**
+
+Explain one code of a vendor (the lexicon's key, see `GET /error-lexicons`), e.g. `/error-codes/mammotion/1201?locale=de`. An unknown vendor or code answers 200 with `known` false.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `vendor` | path | string | yes | pattern `^[a-z][a-z0-9_]{0,31}$` |
+| `code` | path | string | yes | min length 1; max length 64 |
+| `locale` | query | string or null | no | Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ErrorExplanation](#errorexplanation) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### GET /api/v1/telemetry/error-lexicons
+
+**List Error Lexicons**
+
+The installed error lexicons (vendor key and name, connection kinds, number of codes and of unverified ones, locales); empty while the Device-Gateway does not answer.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ErrorLexiconList](#errorlexiconlist) |
+
 #### GET /api/v1/telemetry/mowers/{mower_id}/aerial
 
 **Get Aerial**
@@ -110,6 +137,39 @@ Status transitions of the mower's commands (accepted, executed, ...), newest fir
 | Status | Meaning | Body |
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [CommandTimeline](#commandtimeline) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### GET /api/v1/telemetry/mowers/{mower_id}/error
+
+**Get Mower Error**
+
+The mower's current error (`MowerState.error_code`) in plain words, with the lexicon of its vendor; `error` is null while it reports none. 404 "no telemetry yet" before the first state.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+| `locale` | query | string or null | no | Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [MowerErrorOut](#mowererrorout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### GET /api/v1/telemetry/mowers/{mower_id}/error-codes
+
+**Explain Mower Codes**
+
+Explain codes of this mower (e.g. the error counts of its health page) with the lexicon of its vendor. 404 "no telemetry yet" before the first state.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+| `code` | query | array of string | yes | Codes as the mower reports them; repeat the parameter for more.; min items 1; max items 20 |
+| `locale` | query | string or null | no | Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ErrorExplanationList](#errorexplanationlist) |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
 #### GET /api/v1/telemetry/mowers/{mower_id}/health
@@ -787,6 +847,72 @@ The vendor's speed setting for manual driving, as far as the connection can chan
 | `min_mps` | number | yes | max 5.0; greater than 0.0 |
 | `step_mps` | number | no | max 1.0; greater than 0.0; default `0.1` |
 
+### ErrorExplanation
+
+A vendor code in plain words, in one locale.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `category` | [MowerErrorCategory](#mowererrorcategory) | yes |  |
+| `cause` | string or null | no |  |
+| `code` | string | yes | min length 1; max length 64 |
+| `description` | string | no | max length 2000; default `""` |
+| `known` | boolean | yes | The lexicon knows the code. |
+| `links` | array of [ErrorLink](#errorlink) | no |  |
+| `locale` | string | yes | The locale of the texts (after fallback).; pattern `^[a-z]{2}$` |
+| `severity` | [ErrorSeverity](#errorseverity) | yes |  |
+| `steps` | array of string | no |  |
+| `title` | string | yes | max length 200 |
+| `user_action` | boolean | yes |  |
+| `vendor` | string or null | no | The lexicon that explained the code; null when none applied. |
+| `vendor_name` | string or null | no |  |
+| `verified` | boolean | no | False for an entry whose meaning is not verified.; default `true` |
+
+### ErrorExplanationList
+
+Explanations in the order of the requested codes.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `explanations` | array of [ErrorExplanation](#errorexplanation) | yes |  |
+
+### ErrorLexiconInfo
+
+Summary of an installed lexicon (no entries).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `connection_kinds` | array of [ConnectionKind](#connectionkind) | no |  |
+| `entries` | integer | yes | Number of codes.; min 0.0 |
+| `locales` | array of string | no |  |
+| `source` | string or null | no |  |
+| `unverified` | integer | yes | Codes whose meaning could not be verified.; min 0.0 |
+| `vendor` | string | yes | pattern `^[a-z][a-z0-9_]{0,31}$` |
+| `vendor_name` | string | yes |  |
+
+### ErrorLexiconList
+
+The installed error lexicons, one per vendor.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `lexicons` | array of [ErrorLexiconInfo](#errorlexiconinfo) | yes |  |
+
+### ErrorLink
+
+Further reading for an entry (the vendor's help page, a manual chapter).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `label` | string | yes | min length 1; max length 120 |
+| `url` | string | yes | max length 500; pattern `^https://` |
+
+### ErrorSeverity
+
+How bad an error is for the user, manufacturer neutral.
+
+Type: `"info"` \| `"warning"` \| `"error"` \| `"critical"`
+
 ### FirmwareInfo
 
 The firmware state of a mower (`MowerState.firmware_info`).
@@ -1062,7 +1188,20 @@ What the mower can do over its current connection (blade height range, speed, ..
 
 What kind of fault `MowerState.error_code` names, manufacturer neutral.
 
-Type: `"trapped"` \| `"obstacle"` \| `"outside"` \| `"wheel_slip"` \| `"lift_tilt"` \| `"collision"` \| `"battery"` \| `"blade_motor"` \| `"rain"` \| `"positioning"` \| `"other"`
+The same words classify the entries of an error lexicon (ADR 0065), so rules such as the theft alarm can match a category instead of vendor codes.
+
+Type: `"trapped"` \| `"obstacle"` \| `"outside"` \| `"wheel_slip"` \| `"lift_tilt"` \| `"collision"` \| `"battery"` \| `"blade_motor"` \| `"rain"` \| `"positioning"` \| `"communication"` \| `"docking"` \| `"firmware"` \| `"other"`
+
+### MowerErrorOut
+
+`GET /mowers/{id}/error`: the mower's current error in plain words.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `activity` | string | yes | `MowerActivity` of the state. |
+| `error` | [ErrorExplanation](#errorexplanation) or null | yes | The current error explained; null while the mower reports none. |
+| `mower_id` | string (uuid) | yes |  |
+| `observed_at` | string (date-time) | yes | When the mower reported the state. |
 
 ### MowerHealthOut
 

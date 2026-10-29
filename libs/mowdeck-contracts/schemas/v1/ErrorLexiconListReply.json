@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "ConnectionKind": {
+      "description": "How the Device-Gateway is connected to the mower.",
+      "enum": [
+        "ble_bridge",
+        "wifi",
+        "cloud",
+        "simulated"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "ErrorLexiconInfo": {
+      "description": "Summary of an installed lexicon (no entries).",
+      "properties": {
+        "connection_kinds": {
+          "items": {
+            "$ref": "#/$defs/ConnectionKind"
+          },
+          "title": "Connection Kinds",
+          "type": "array"
+        },
+        "entries": {
+          "description": "Number of codes.",
+          "minimum": 0,
+          "title": "Entries",
+          "type": "integer"
+        },
+        "locales": {
+          "items": {
+            "pattern": "^[a-z]{2}$",
+            "type": "string"
+          },
+          "title": "Locales",
+          "type": "array"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "unverified": {
+          "description": "Codes whose meaning could not be verified.",
+          "minimum": 0,
+          "title": "Unverified",
+          "type": "integer"
+        },
+        "vendor": {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "title": "Vendor",
+          "type": "string"
+        },
+        "vendor_name": {
+          "title": "Vendor Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "vendor_name",
+        "entries",
+        "unverified"
+      ],
+      "title": "ErrorLexiconInfo",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The installed lexicons, sorted by vendor.",
+  "properties": {
+    "lexicons": {
+      "items": {
+        "$ref": "#/$defs/ErrorLexiconInfo"
+      },
+      "title": "Lexicons",
+      "type": "array"
+    }
+  },
+  "title": "ErrorLexiconListReply",
+  "type": "object"
+}

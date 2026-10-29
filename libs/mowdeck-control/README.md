@@ -168,6 +168,26 @@ cloud = "mowdeck_control_mammotion:create_cloud_connection"
 
 Entry points are loaded lazily on the first lookup. Broken or unknown entry points are logged and skipped.
 
+### Error lexicons
+
+Vendor error codes in plain words ([ADR 0065](../../docs/adr/0065-error-code-lexicon.md)). Every adapter package ships the lexicon of its vendor (`ErrorLexicon` from `mowdeck-contracts`: per code the category, severity, whether the user has to act and English and German texts) and registers it under the entry point group `mowdeck.error_lexicons`; the name is the vendor key. The object is an `ErrorLexicon`, an `ErrorLexiconProvider` (the lexicon plus an optional `normalise(raw) -> code`) or a callable without arguments returning either:
+
+```toml
+[project.entry-points."mowdeck.error_lexicons"]
+simulated = "mowdeck_control.simulator_lexicon:SIMULATED_LEXICON"
+```
+
+```python
+from mowdeck_contracts.v1 import ConnectionKind
+from mowdeck_control import default_error_lexicons, explain_error
+
+explain_error("stuck", "de", connection=ConnectionKind.SIMULATED).title
+# 'Steckt an einem Hindernis fest'
+default_error_lexicons().provider("simulated").category_of("lifted")  # MowerErrorCategory.LIFT_TILT
+```
+
+`ErrorLexiconRegistry` picks a lexicon by vendor or by the mower's connection kind (the lexicon's `connection_kinds`), falls back to English for a missing locale and gives a generic explanation ("Unknown error E42 from Simulator") for a code it does not know; a broken entry point is logged and skipped. This package registers the simulator's lexicon (`stuck`, `lifted`). The guide for a new vendor: [Adding an error lexicon for a vendor](../../docs/dev/error-lexicon.md).
+
 ## Native jobs
 
 `plan_to_native_job(MowRequest, capabilities)` turns a neutral request (areas, pattern name, angle, spacing, border laps and the job options obstacle detection, laps around no-go zones, order and start progress, each checked against `capabilities.start_options`) into a `NativeJob` (areas, stripe passes, spacing, border laps, order), or raises `UnsupportedPattern` when the mower cannot run the pattern itself. `MowRequest.from_start_mow(StartMow)` reads the `pattern` settings `name`, `angle_deg`, `spacing_m`, `border_laps` and `order`. The Planner (`mowdeck-patterns`, [ADR 0030](../../docs/adr/0030-mowing-patterns-and-planner.md)) attaches such a native job to a spot plan when the chain is one native pattern on a whole map area. Every other plan needs `custom_paths`: the simulator has it (it follows the segments of `StartMow.spot_plan` with the blades and speed of each segment; `SimulationConfig(custom_paths=False)` behaves like a LUBA), the Mammotion adapter does not.
@@ -183,7 +203,7 @@ Entry points are loaded lazily on the first lookup. Broken or unknown entry poin
 7. Raise `CommandRejected` for refusals, `NotConnected` without a link, `SensorStop` while a safety sensor holds the mower; never clear a sensor stop from a command.
 8. Implement `DriveSession`; `stop()` and `close()` are idempotent and work after link loss. Do not add your own dead-man timer: the controller owns it (a device side timeout is an extra safety net, not a replacement).
 9. Do not de-duplicate, check expiry or validate limits in the adapter; the controller does it.
-10. Provide a factory `(ConnectionConfig) -> MowerConnection` and register it under `mowdeck.connections`.
+10. Provide a factory `(ConnectionConfig) -> MowerConnection` and register it under `mowdeck.connections`; ship the vendor's error lexicon under `mowdeck.error_lexicons` and set `MowerState.error_category` from it ([guide](../../docs/dev/error-lexicon.md)).
 11. Run the controller test scenarios against the adapter with a fake transport.
 12. Optional capabilities (ADR 0038): if the manufacturer has a firmware service, implement `FirmwarePort` and set `capabilities.firmware_update` (only the vendor calls and the `FirmwareInfo` bookkeeping; the preconditions and the lock-out are the controller's). If the connection can open additional links, list their kinds in `capabilities.links_supported`, read them from the `links` option (`{kind: options}`, the registration's links with their secrets merged by the Device-Gateway), report each in `MowerState.links`, set `MowerState.connection` to the link in use and publish a state on every link change; for a Bluetooth bridge also implement `BridgeScanCapable`. A drive frame must never fall back to a slower link when the fast one drops.
 

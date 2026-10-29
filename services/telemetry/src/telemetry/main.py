@@ -33,8 +33,10 @@ from mowdeck_service_kit.health import ReadinessCheck
 
 from telemetry.adapters.aerial import DiskTileCache, HttpTileSource
 from telemetry.adapters.api.deps import install_error_mapping
+from telemetry.adapters.api.error_routes import router as error_router
 from telemetry.adapters.api.routes import router
 from telemetry.adapters.api.tracking_routes import router as tracking_router
+from telemetry.adapters.bus.errors import BusErrorLexicons
 from telemetry.adapters.bus.fleet import seed_directory
 from telemetry.adapters.bus.health_events import BusHealthEvents
 from telemetry.adapters.bus.subscriptions import subscribe_all
@@ -48,6 +50,7 @@ from telemetry.adapters.db.tracking_store import SqlTrackingStore
 from telemetry.adapters.memory_tracking import MemoryTrackingStore
 from telemetry.adapters.metrics import PrometheusRetentionObserver
 from telemetry.application.aerial import TileCache, TileSource
+from telemetry.application.errors import ErrorExplanations, ErrorLexiconGateway
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
 from telemetry.application.tracking import Tracking
@@ -84,6 +87,7 @@ def build_app(
     seed_delay_seconds: float = 1.0,
     aerial_source: TileSource | None = None,
     aerial_cache: TileCache | None = None,
+    error_lexicons: ErrorLexiconGateway | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL and OpenFGA from the settings."""
     engine = None
@@ -154,7 +158,11 @@ def build_app(
             if tracking_store is not None
             else None
         )
-        services = dataclasses.replace(services, tracking=tracking)
+        explanations = ErrorExplanations(
+            error_lexicons or BusErrorLexicons(lambda: getattr(app.state, "bus", None)),
+            services.queries,
+        )
+        services = dataclasses.replace(services, tracking=tracking, errors=explanations)
         app.state.telemetry = services
         app.state.directory_seeded = False
         subscriptions: list[Subscription] = []
@@ -198,7 +206,7 @@ def build_app(
     app = create_app(
         settings,
         DESCRIPTOR,
-        routers=[router, tracking_router],
+        routers=[router, tracking_router, error_router],
         readiness_checks=[
             *([readiness_check_db(engine)] if engine is not None else []),
             ReadinessCheck(name="subscriptions", check=subscriptions_active),

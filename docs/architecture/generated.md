@@ -339,9 +339,9 @@ flowchart LR
   q_fleet["fleet"]
   q_fleet -->|"gateway.cloud.discover<br/>gateway.mower.*.bridge.scan<br/>gateway.mower.*.camera.session<br/>+3 more"| r_device_gateway
   q_notifications["notifications"]
-  q_notifications -->|"gateway.mower.*.photo"| r_device_gateway
+  q_notifications -->|"gateway.errors.explain<br/>gateway.mower.*.photo"| r_device_gateway
   q_telemetry["telemetry"]
-  q_telemetry -->|"gateway.mower.*.photo<br/>gateway.mower.*.tracking"| r_device_gateway
+  q_telemetry -->|"gateway.errors.explain<br/>gateway.errors.lexicons<br/>gateway.mower.*.photo<br/>+1 more"| r_device_gateway
   q_vision["vision"]
   q_vision -->|"gateway.mower.*.photo"| r_device_gateway
 ```
@@ -413,6 +413,8 @@ flowchart LR
 | `fleet.mowers.list` | core | device-gateway, notifications, telemetry | fleet |
 | `fleet.targets.resolve` | core | - | fleet |
 | `gateway.cloud.discover` | core | fleet | device-gateway |
+| `gateway.errors.explain` | core | notifications, telemetry | device-gateway |
+| `gateway.errors.lexicons` | core | telemetry | device-gateway |
 | `gateway.mower.*.bridge.scan` | core | fleet | device-gateway |
 | `gateway.mower.*.camera.release` | core | camera-relay | device-gateway |
 | `gateway.mower.*.camera.session` | core | camera-relay, fleet | device-gateway |
@@ -481,7 +483,7 @@ flowchart LR
   subgraph telemetry["telemetry"]
     direction TB
     telemetry_public["public<br/>2 operations"]
-    telemetry_telemetry["telemetry<br/>21 operations"]
+    telemetry_telemetry["telemetry<br/>25 operations"]
     telemetry_tracking["tracking<br/>13 operations"]
   end
   subgraph vision["vision"]
@@ -520,7 +522,7 @@ flowchart LR
 | `scheduler` | `schedules` | 14 | 10 |
 | `telemetry` | `operations` | 1 | 1 |
 | `telemetry` | `public` | 2 | 2 |
-| `telemetry` | `telemetry` | 21 | 21 |
+| `telemetry` | `telemetry` | 25 | 25 |
 | `telemetry` | `tracking` | 13 | 11 |
 | `vision` | `operations` | 1 | 1 |
 | `vision` | `vision` | 16 | 13 |

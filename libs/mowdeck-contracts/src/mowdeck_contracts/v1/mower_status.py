@@ -118,7 +118,11 @@ class SelfCheck(ContractModel):
 
 
 class MowerErrorCategory(StrEnum):
-    """What kind of fault ``MowerState.error_code`` names, manufacturer neutral."""
+    """What kind of fault ``MowerState.error_code`` names, manufacturer neutral.
+
+    The same words classify the entries of an error lexicon (ADR 0065), so rules such as the
+    theft alarm can match a category instead of vendor codes.
+    """
 
     TRAPPED = "trapped"
     OBSTACLE = "obstacle"
@@ -130,4 +134,10 @@ class MowerErrorCategory(StrEnum):
     BLADE_MOTOR = "blade_motor"
     RAIN = "rain"
     POSITIONING = "positioning"
+    COMMUNICATION = "communication"
+    """Network, cloud or radio link of the mower itself (Wi-Fi, mobile, Bluetooth)."""
+    DOCKING = "docking"
+    """Charging station: leaving, finding or charging in it."""
+    FIRMWARE = "firmware"
+    """Firmware update or software state of the mower."""
     OTHER = "other"
