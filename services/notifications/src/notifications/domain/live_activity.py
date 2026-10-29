@@ -17,7 +17,13 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from mowdeck_contracts.v1 import MowerActivity, MowerState
+from mowdeck_contracts.v1 import (
+    ErrorExplanation,
+    MowerActivity,
+    MowerErrorCategory,
+    MowerState,
+    generic_text,
+)
 
 ACTIVE_ACTIVITIES = frozenset({MowerActivity.MOWING, MowerActivity.PAUSED, MowerActivity.RETURNING})
 """The mower is in a job."""
@@ -117,3 +123,16 @@ def attributes(mower_id: UUID, mower_name: str, now: datetime) -> dict[str, Any]
 def final_kind(state: MowerState) -> str:
     """``error`` for a stopped mower, else ``finished``."""
     return "error" if state.activity is MowerActivity.ERROR else "finished"
+
+
+def error_title(explanation: ErrorExplanation | None) -> str | None:
+    """The ``errorTitle`` of a final ``error`` update: the lexicon's title (ADR 0067), for a code
+    no lexicon knows MowDeck's generic title of its category, else None (the activity then shows
+    only "Error")."""
+    if explanation is None:
+        return None
+    if explanation.known:
+        return explanation.title[:200]
+    if explanation.category is MowerErrorCategory.OTHER:
+        return None
+    return generic_text(explanation.category, explanation.locale).title

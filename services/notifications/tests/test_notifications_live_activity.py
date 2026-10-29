@@ -3,8 +3,21 @@
 from typing import Any
 from uuid import UUID, uuid4
 
-from mowdeck_contracts.v1 import GeoReference, JobProgress, MapArea, MowerActivity, MowerMapSnapshot
+from mowdeck_contracts.v1 import (
+    GATEWAY_ERRORS_EXPLAIN,
+    ErrorExplainReply,
+    ErrorExplainRequest,
+    GeoReference,
+    JobProgress,
+    MapArea,
+    MowerActivity,
+    MowerErrorCategory,
+    MowerMapSnapshot,
+)
 from mowdeck_contracts.v1 import MowerMap as ContractMap
+from mowdeck_control import ErrorLexiconRegistry
+from mowdeck_control.simulator_lexicon import SIMULATED_LEXICON
+from mowdeck_service_kit.bus import BusMessage, InMemoryBus
 from notifications_support import API, T0, harness, make_state
 
 from notifications.domain.models import DeliveryOutcome, DeliveryResult
@@ -208,6 +221,90 @@ async def test_error_final_state_and_dead_tokens() -> None:
     assert end["payload"]["aps"]["content-state"]["state"] == "error"
     assert end["payload"]["aps"]["dismissal-date"] - end["payload"]["aps"]["timestamp"] == 1800
     assert devices[0].push_to_start_token is None
+
+
+async def serve_simulator_lexicon(bus: InMemoryBus) -> None:
+    """Answer ``gateway.errors.explain`` like the Device-Gateway, from the simulator's lexicon."""
+    registry = ErrorLexiconRegistry(lambda: [])
+    registry.register(SIMULATED_LEXICON)
+
+    async def explain(message: BusMessage) -> None:
+        request = message.model(ErrorExplainRequest)
+        explanations = registry.explain(
+            request.codes, request.locale, connection=request.connection, category=request.category
+        )
+        await message.respond(ErrorExplainReply(explanations=explanations))
+
+    await bus.subscribe(GATEWAY_ERRORS_EXPLAIN, explain, queue="device-gateway")
+
+
+async def test_an_error_end_carries_the_error_title_in_the_users_language() -> None:
+    recorder = ApnsRecorder()
+    async with harness(channels={"apns": recorder}) as h:
+        await serve_simulator_lexicon(h.bus)
+        owner = await h.owner()
+        await h.subscribe_all(owner, language="de")
+        mower_id = await h.add_mower(owner)
+        installation = uuid4()
+        await register(h, owner, installation)
+        watcher = h.services.watcher
+        await watcher.on_state(mowing(mower_id, owner.account_id, 1))
+        await h.client.put(
+            f"{ME}/mowers/{mower_id}",
+            json={
+                "installation_id": str(installation),
+                "activity_id": "A-1",
+                "push_token": UPDATE_TOKEN,
+            },
+            headers=owner.headers,
+        )
+        h.clock.advance(60)
+        await watcher.on_state(
+            make_state(
+                mower_id,
+                owner.account_id,
+                at=h.clock.now,
+                activity=MowerActivity.ERROR,
+                error_code="lifted",
+                error_category=MowerErrorCategory.LIFT_TILT,
+            )
+        )
+    end = recorder.pushes[-1]
+    assert end["event"] == "end"
+    content = end["payload"]["aps"]["content-state"]
+    assert content["state"] == "error" and content["errorTitle"] == "Angehoben"
+
+
+async def test_a_finished_job_or_an_unexplained_error_has_no_error_title() -> None:
+    recorder = ApnsRecorder()
+    async with harness(channels={"apns": recorder}) as h:  # nobody explains codes
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        installation = uuid4()
+        await register(h, owner, installation)
+        watcher = h.services.watcher
+        await watcher.on_state(mowing(mower_id, owner.account_id, 1))
+        await h.client.put(
+            f"{ME}/mowers/{mower_id}",
+            json={
+                "installation_id": str(installation),
+                "activity_id": "A-1",
+                "push_token": UPDATE_TOKEN,
+            },
+            headers=owner.headers,
+        )
+        h.clock.advance(60)
+        await watcher.on_state(
+            make_state(
+                mower_id,
+                owner.account_id,
+                at=h.clock.now,
+                activity=MowerActivity.ERROR,
+                error_code="E42",
+            )
+        )
+    content = recorder.pushes[-1]["payload"]["aps"]["content-state"]
+    assert content["state"] == "error" and "errorTitle" not in content
 
 
 async def test_only_users_who_may_view_the_mower_get_activities() -> None:

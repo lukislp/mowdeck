@@ -7,11 +7,14 @@ simulator's lexicon through ``mowdeck-control``'s registry, the same code the ga
 from datetime import UTC, datetime
 
 from mowdeck_contracts.v1 import (
+    GATEWAY_ERRORS_ENTRIES,
     GATEWAY_ERRORS_EXPLAIN,
     GATEWAY_ERRORS_LEXICONS,
     ErrorExplainReply,
     ErrorExplainRequest,
     ErrorLexiconListReply,
+    ErrorLexiconSearchReply,
+    ErrorLexiconSearchRequest,
     MowerActivity,
     MowerErrorCategory,
 )
@@ -45,7 +48,12 @@ async def gateway(bus: InMemoryBus) -> list[ErrorExplainRequest]:
         await message.respond(ErrorLexiconListReply(lexicons=registry.infos()))
 
     await bus.subscribe(GATEWAY_ERRORS_EXPLAIN, explain, queue="device-gateway")
+
+    async def entries(message: BusMessage) -> None:
+        await message.respond(registry.search(message.model(ErrorLexiconSearchRequest)))
+
     await bus.subscribe(GATEWAY_ERRORS_LEXICONS, lexicons, queue="device-gateway")
+    await bus.subscribe(GATEWAY_ERRORS_ENTRIES, entries, queue="device-gateway")
     return seen
 
 
@@ -167,6 +175,133 @@ async def test_telemetry_error_lexicon_without_gateway_falls_back() -> None:
     assert listed == {"lexicons": []}
 
 
+async def test_telemetry_error_lexicon_widget_carries_the_title() -> None:
+    """The widgets read one compact state (ADR 0059) and store it for offline use: it carries
+    the error's title, category and severity in the requested locale."""
+    async with harness() as h:
+        await _with_gateway(h)
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        url = f"{API}/mowers/{mower_id}/widget"
+
+        async def publish(activity: MowerActivity, code: str | None, **kw: object) -> None:
+            await h.publish_state(
+                make_state(
+                    mower_id,
+                    owner.account_id,
+                    at=datetime.now(UTC),
+                    activity=activity,
+                    error_code=code,
+                    **kw,  # type: ignore[arg-type]
+                )
+            )
+
+        await publish(MowerActivity.MOWING, None)
+        mowing = (await h.client.get(url, params={"locale": "de"}, headers=owner.headers)).json()
+        await publish(
+            MowerActivity.ERROR,
+            "lifted",
+            error_message="the mower was lifted",
+            error_category=MowerErrorCategory.LIFT_TILT,
+        )
+        german = await h.client.get(url, params={"locale": "de"}, headers=owner.headers)
+        english = await h.client.get(url, headers={**owner.headers, "Accept-Language": "en-GB"})
+        await publish(MowerActivity.ERROR, "E42", error_category=MowerErrorCategory.TRAPPED)
+        generic = (await h.client.get(url, params={"locale": "de"}, headers=owner.headers)).json()
+        await publish(MowerActivity.ERROR, "E43")
+        unknown = (await h.client.get(url, params={"locale": "de"}, headers=owner.headers)).json()
+    assert (mowing["error_title"], mowing["error_category"], mowing["error_severity"]) == (
+        None,
+        None,
+        None,
+    )
+    body = german.json()
+    assert body["error_code"] == "lifted" and body["error_message"] == "the mower was lifted"
+    assert body["error_title"] == "Angehoben"
+    assert (body["error_category"], body["error_severity"]) == ("lift_tilt", "critical")
+    assert german.headers["vary"] == "Accept-Language"
+    assert english.json()["error_title"] == "Lifted"
+    # a code no lexicon knows: the generic words of its category, else none (vendor message)
+    assert generic["error_title"] == "Der Mäher steckt fest"
+    assert generic["error_category"] == "trapped"
+    assert unknown["error_title"] is None and unknown["error_category"] == "other"
+
+
+async def test_telemetry_error_lexicon_widget_without_gateway_uses_the_category() -> None:
+    async with harness() as h:  # nobody answers on the bus
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        await h.publish_state(
+            make_state(
+                mower_id,
+                owner.account_id,
+                at=datetime.now(UTC),
+                activity=MowerActivity.ERROR,
+                error_code="lifted",
+                error_category=MowerErrorCategory.LIFT_TILT,
+            )
+        )
+        body = (
+            await h.client.get(
+                f"{API}/mowers/{mower_id}/widget", params={"locale": "en"}, headers=owner.headers
+            )
+        ).json()
+    assert body["error_title"] == "The mower was lifted or tilted"
+    assert (body["error_category"], body["error_severity"]) == ("lift_tilt", "critical")
+
+
+async def test_telemetry_error_lexicon_browse_the_mowers_lexicon() -> None:
+    async with harness() as h:
+        await _with_gateway(h)
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        url = f"{API}/mowers/{mower_id}/error-lexicon"
+        before = await h.client.get(url, headers=owner.headers)
+        await h.publish_state(
+            make_state(
+                mower_id, owner.account_id, at=datetime.now(UTC), activity=MowerActivity.DOCKED
+            )
+        )
+        everything = await h.client.get(url, params={"locale": "de"}, headers=owner.headers)
+        found = await h.client.get(
+            url, params={"q": "angehoben", "locale": "de"}, headers=owner.headers
+        )
+        trapped = await h.client.get(url, params={"category": "trapped"}, headers=owner.headers)
+        had = await h.client.get(
+            url, params=[("code", "stuck"), ("code", "nope"), ("limit", "1")], headers=owner.headers
+        )
+        bad = await h.client.get(url, params={"severity": "loud"}, headers=owner.headers)
+        foreign = await h.client.get(url, headers=(await h.owner()).headers)
+    assert before.status_code == 404
+    body = everything.json()
+    assert body["lexicon"]["vendor"] == "simulated" and body["total"] == 2
+    assert [e["code"] for e in body["entries"]] == ["lifted", "stuck"]
+    assert body["entries"][0]["title"] == "Angehoben"
+    assert body["categories"] == {"lift_tilt": 1, "trapped": 1}
+    assert body["severities"]["critical"] == 1
+    assert everything.headers["cache-control"] == "private, max-age=60"
+    assert [e["code"] for e in found.json()["entries"]] == ["lifted"]
+    assert [e["code"] for e in trapped.json()["entries"]] == ["stuck"]
+    assert [e["code"] for e in had.json()["entries"]] == ["stuck"]
+    assert bad.status_code == 422 and foreign.status_code == 404
+
+
+async def test_telemetry_error_lexicon_browse_without_gateway_is_empty() -> None:
+    async with harness() as h:  # nobody answers on the bus
+        owner = await h.owner()
+        mower_id = await h.add_mower(owner)
+        await h.publish_state(
+            make_state(
+                mower_id, owner.account_id, at=datetime.now(UTC), activity=MowerActivity.DOCKED
+            )
+        )
+        body = (
+            await h.client.get(f"{API}/mowers/{mower_id}/error-lexicon", headers=owner.headers)
+        ).json()
+    assert ErrorLexiconSearchReply.model_validate(body).lexicon is None
+    assert body["entries"] == [] and body["total"] == 0
+
+
 class _CountingGateway:
     def __init__(self) -> None:
         self.calls = 0
@@ -180,6 +315,9 @@ class _CountingGateway:
         )
 
     async def lexicons(self) -> None:
+        return None
+
+    async def search(self, request: ErrorLexiconSearchRequest) -> None:
         return None
 
 

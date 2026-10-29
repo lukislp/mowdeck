@@ -188,7 +188,7 @@ struct StatusSection: View {
                 .tint(.green)
             }
             if display == .error {
-                Text(status?.errorMessage ?? status?.errorCode ?? String(localized: "state.error"))
+                Text(Presentation.errorLine(status) ?? String(localized: "state.error"))
                     .font(.footnote)
                     .foregroundStyle(.red)
             }

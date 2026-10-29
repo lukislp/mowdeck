@@ -107,6 +107,21 @@ public enum Presentation {
         }
     }
 
+    /// The words for the mower's error: the lexicon's title (ADR 0067), else the vendor's own
+    /// message, else the code; nil while the mower reports no error.
+    public static func errorLine(_ status: MowerStatus?) -> String? {
+        guard let status, status.activity == "error", !status.stale else { return nil }
+        for text in [status.errorTitle, status.errorMessage, status.errorCode] {
+            if let text, !text.trimmingCharacters(in: .whitespaces).isEmpty { return text }
+        }
+        return nil
+    }
+
+    /// The error needs the user at once (a lift or tilt, `critical` in the lexicon).
+    public static func isCriticalError(_ status: MowerStatus?) -> Bool {
+        status?.errorSeverity == "critical" || status?.errorCategory == "lift_tilt"
+    }
+
     /// Remaining job time as a rounded number of minutes, nil when unknown.
     public static func remainingMinutes(_ status: MowerStatus?) -> Int? {
         guard let seconds = status?.job?.remainingSeconds else { return nil }

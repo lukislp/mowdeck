@@ -6,6 +6,7 @@ from mowdeck_contracts.v1 import (
     ErrorExplainRequest,
     ErrorLexicon,
     ErrorLexiconEntry,
+    ErrorLexiconSearchRequest,
     ErrorSeverity,
     ErrorText,
     MowerErrorCategory,
@@ -13,6 +14,7 @@ from mowdeck_contracts.v1 import (
     generic_text,
     lexicon_for_connection,
     normalise_locale,
+    search_lexicon,
     unknown_explanation,
 )
 from pydantic import ValidationError
@@ -119,3 +121,39 @@ def test_contracts_error_lexicon_request_limits() -> None:
         ErrorExplainRequest(codes=[])
     with pytest.raises(ValidationError):
         ErrorExplainRequest(codes=[str(n) for n in range(21)])
+
+
+def _search(lexicon: ErrorLexicon, **values: object) -> list[str]:
+    reply = search_lexicon(lexicon, ErrorLexiconSearchRequest.model_validate(values))
+    return [e.code for e in reply.entries]
+
+
+def test_contracts_error_lexicon_search_filters_orders_and_pages() -> None:
+    lexicon = _lexicon().model_copy(
+        update={
+            "entries": [
+                *_lexicon().entries,
+                ErrorLexiconEntry(code="10", texts={"en": ErrorText(title="Ten blocked")}),
+                ErrorLexiconEntry(code="E2", texts={"en": ErrorText(title="Letters")}),
+            ]
+        }
+    )
+    assert _search(lexicon) == ["7", "9", "10", "E2"]  # numbers numerically, then the rest
+    assert _search(lexicon, query="LIFTED") == ["7"]
+    assert _search(lexicon, query="angehoben", locale="de") == ["7"]  # the locale's words
+    assert _search(lexicon, query="someone", locale="de") == ["7"]  # and English
+    assert _search(lexicon, query="ten blocked") == ["10"]  # every word must match
+    assert _search(lexicon, query="ten lifted") == []
+    assert _search(lexicon, query="-7") == ["7"]  # aliases
+    assert _search(lexicon, category="lift_tilt") == ["7"]
+    assert _search(lexicon, severity="warning") == ["9", "10", "E2"]
+    assert _search(lexicon, codes=["-7", "10", "nope"]) == ["7", "10"]
+    reply = search_lexicon(lexicon, ErrorLexiconSearchRequest(offset=1, limit=2, locale="de"))
+    assert reply.total == 4 and reply.offset == 1
+    assert [e.code for e in reply.entries] == ["9", "10"]
+    assert reply.entries[0].verified is False and reply.entries[0].locale == "en"
+    assert reply.lexicon is not None and reply.lexicon.vendor == "acme"
+    assert reply.categories == {MowerErrorCategory.LIFT_TILT: 1, MowerErrorCategory.OTHER: 3}
+    assert reply.severities == {ErrorSeverity.CRITICAL: 1, ErrorSeverity.WARNING: 3}
+    with pytest.raises(ValidationError):
+        ErrorLexiconSearchRequest(limit=101)

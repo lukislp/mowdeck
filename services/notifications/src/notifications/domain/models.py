@@ -112,13 +112,12 @@ class RuleConfig:
     """At most one notification of one kind per mower within this time."""
     alarm_cooldown_seconds: float = 600
     """The cooldown of the theft alarms (:data:`ALARM_KINDS`), per kind and mower."""
-    lift_error_codes: frozenset[str] = frozenset(
-        {"lifted", "1004", "1030", "2502", "2801", "11131", "11133"}
-    )
-    """Error codes that mean "lifted" (besides ``raw["lifted"] is True``)."""
+    lift_error_codes: frozenset[str] = frozenset()
+    """Extra error codes that mean "lifted" (an operator override for an adapter that sets no
+    ``error_category``); empty by default, the core holds no vendor codes."""
     lift_categories: frozenset[str] = frozenset({"lift_tilt"})
     """Manufacturer-neutral error categories (``MowerState.error_category``, ADR 0067) that mean
-    "lifted", for every vendor whose codes are not in ``lift_error_codes``."""
+    "lifted"; together with ``raw["lifted"] is True`` the provider-neutral lift signal."""
     dock_command_window_seconds: float = 600
     """A command seen this long before the mower leaves the dock explains the departure."""
     dock_command_grace_seconds: float = 30

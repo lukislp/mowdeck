@@ -14,6 +14,7 @@
   import DeviceSettingsPanel from '#lib/components/DeviceSettingsPanel.svelte';
   import DriveCalibrationPanel from '#lib/components/DriveCalibrationPanel.svelte';
   import DriveSpeedControl from '#lib/components/DriveSpeedControl.svelte';
+  import ErrorLexiconPanel from '#lib/components/ErrorLexiconPanel.svelte';
   import FirmwarePanel from '#lib/components/FirmwarePanel.svelte';
   import MaintenancePanel from '#lib/components/MaintenancePanel.svelte';
   import MowerPlacement from '#lib/components/MowerPlacement.svelte';
@@ -110,6 +111,8 @@
   let origin = $state<{ origin_lat: number; origin_lon: number } | null>(null);
   let linkedAccount = $state<LinkedAccount | null>(null);
   let linkedUnreadable = $state(false);
+  /** The mower's error counts by code (Telemetry health), for the error codes section. */
+  let errorCounts = $state.raw<Record<string, number> | null>(null);
 
   const schema = $derived.by(() => {
     const found = kinds.find((k) => k.kind === kind) ?? null;
@@ -357,6 +360,10 @@
         void unwrap(telemetryApi.GET('/api/v1/telemetry/mowers/{mower_id}/state', path))
           .then((snapshot) => states.upsert(id, snapshot.state, 'rest'))
           .catch(() => undefined);
+        // The error codes section marks the codes this mower has reported (ADR 0067).
+        void unwrap(telemetryApi.GET('/api/v1/telemetry/mowers/{mower_id}/health', path))
+          .then((health) => (errorCounts = health.errors))
+          .catch(() => (errorCounts = null));
         void permissions
           .check(id, ['can_control', 'can_drive'])
           .then((result) => {
@@ -378,6 +385,7 @@
     void id;
     caps = null;
     checkedFirmware = null;
+    errorCounts = null;
   });
 
   async function focusFirstIssue(): Promise<void> {
@@ -596,6 +604,13 @@
         />
       </Panel>
     {/if}
+    <Panel label={m.lexi_title()} testid="error-codes-section">
+      <ErrorLexiconPanel
+        mowerId={id}
+        currentCode={ms?.activity === 'error' ? (ms.error_code ?? null) : null}
+        {errorCounts}
+      />
+    </Panel>
   </div>
   <BridgeLinkSheet flow={bridge} />
   <div class="site">

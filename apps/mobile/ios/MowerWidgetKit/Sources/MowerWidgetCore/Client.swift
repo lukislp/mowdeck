@@ -44,15 +44,20 @@ public actor MowDeckClient {
     private let credential: WidgetCredential
     private let transport: HTTPTransport
     private let now: @Sendable () -> Date
+    /// The language of server texts such as the error title: the app's own localization (`de` or
+    /// `en`), so the words match the rest of the widget.
+    private let locale: String
     private var token: (value: String, expiresAt: Date)?
 
     public init(
         credential: WidgetCredential, transport: HTTPTransport = URLSessionTransport(),
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        locale: String = Bundle.main.preferredLocalizations.first ?? "en"
     ) {
         self.credential = credential
         self.transport = transport
         self.now = now
+        self.locale = locale
     }
 
     // MARK: Requests
@@ -134,7 +139,9 @@ public actor MowDeckClient {
     }
 
     public func status(mowerId: String) async throws -> MowerStatus {
-        let data = try await call("GET", "/api/v1/telemetry/mowers/\(mowerId)/widget")
+        let data = try await call(
+            "GET", "/api/v1/telemetry/mowers/\(mowerId)/widget",
+            query: [URLQueryItem(name: "locale", value: Self.languageCode(locale))])
         return try JSONDecoder.mowdeck.decode(MowerStatus.self, from: data)
     }
 
@@ -171,6 +178,15 @@ public actor MowDeckClient {
         return MowerSnapshot(
             mower: mower, status: try? status.get(), schedule: try? schedule.get(),
             fetchedAt: now())
+    }
+
+    /// `de-DE` and `de_AT` give `de`; anything odd gives `en` (the server's pattern).
+    static func languageCode(_ identifier: String) -> String {
+        let base = identifier.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first
+        guard let base, base.count == 2, base.allSatisfy({ $0.isLetter && $0.isASCII }) else {
+            return "en"
+        }
+        return String(base)
     }
 
     // MARK: Commands (same rights as the user; none is step-up protected)
