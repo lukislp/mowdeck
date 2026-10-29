@@ -210,7 +210,10 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     // Another MowDeck account linking the same cloud sees the mowers as registered elsewhere.
     const linked = await request.post(`${FLEET}/linked-accounts`, {
       headers: { Authorization: `Bearer ${other.token}` },
-      data: { email: `conn-other-${RUN}@fake.mowdeck.test`, password: FAKE_PASSWORD },
+      data: {
+        provider: 'mammotion',
+        credentials: { email: `conn-other-${RUN}@fake.mowdeck.test`, password: FAKE_PASSWORD },
+      },
       timeout: 90_000,
     });
     expect(linked.status(), await linked.text()).toBe(201);
