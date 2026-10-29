@@ -79,7 +79,7 @@ config:
   FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS: "85"
 
   # --- Device-Gateway ---
-  # Cloud providers (ADR 0065): untested adapters stay off until listed (comma separated
+  # Cloud providers (ADR 0066): untested adapters stay off until listed (comma separated
   # provider ids); DISABLE wins.
   GATEWAY_CLOUD_PROVIDERS_ENABLE: ""
   GATEWAY_CLOUD_PROVIDERS_DISABLE: ""

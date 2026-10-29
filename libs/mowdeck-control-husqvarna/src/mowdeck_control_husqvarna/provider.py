@@ -1,4 +1,4 @@
-"""The Husqvarna cloud as a MowDeck cloud provider (ADR 0065).
+"""The Husqvarna cloud as a MowDeck cloud provider (ADR 0066).
 
 :class:`HusqvarnaProvider` owns one :class:`~mowdeck_control_husqvarna.pool.AccountPool` per
 gateway: the discovery of a linked account and the connections of all its mowers share one

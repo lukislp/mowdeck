@@ -1,4 +1,4 @@
-"""Cloud account discovery (ADR 0034, ADR 0065): ``gateway.cloud.discover`` and
+"""Cloud account discovery (ADR 0034, ADR 0066): ``gateway.cloud.discover`` and
 ``gateway.cloud.providers``, core NATS request/reply.
 
 Any gateway instance may answer (queue group ``device-gateway``): neither is tied to a mower.

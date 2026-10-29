@@ -219,10 +219,13 @@ export type DriveSpeedMps = (number | null)
 /**
  * What kind of fault ``MowerState.error_code`` names, manufacturer neutral.
  * 
+ * The same words classify the entries of an error lexicon (ADR 0067), so rules such as the
+ * theft alarm can match a category instead of vendor codes.
+ * 
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
  * via the `definition` "MowerErrorCategory".
  */
-export type MowerErrorCategory = ("trapped" | "obstacle" | "outside" | "wheel_slip" | "lift_tilt" | "collision" | "battery" | "blade_motor" | "rain" | "positioning" | "other")
+export type MowerErrorCategory = ("trapped" | "obstacle" | "outside" | "wheel_slip" | "lift_tilt" | "collision" | "battery" | "blade_motor" | "rain" | "positioning" | "communication" | "docking" | "firmware" | "other")
 export type ErrorCode = (string | null)
 export type ErrorMessage = (string | null)
 export type Firmware1 = (string | null)
@@ -494,7 +497,7 @@ export type Id = string
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema
  * via the `definition` "NotificationKind".
  */
-export type NotificationKind = ("mowing_finished" | "mower_stuck" | "battery_low" | "mower_offline" | "mower_online" | "job_started" | "mower_lifted" | "mower_left_dock_unexpectedly" | "geofence_exit" | "blade_maintenance" | "vision_proposal" | "vision_auto_proposal" | "firmware_update_available" | "firmware_update_finished" | "firmware_update_failed" | "tracking_started" | "tracking_moved" | "tracking_stale" | "tracking_ended" | "test")
+export type NotificationKind = ("mowing_finished" | "mower_stuck" | "battery_low" | "mower_offline" | "mower_online" | "job_started" | "mower_lifted" | "mower_left_dock_unexpectedly" | "geofence_exit" | "blade_maintenance" | "vision_proposal" | "vision_auto_proposal" | "firmware_update_available" | "firmware_update_finished" | "firmware_update_failed" | "tracking_started" | "tracking_moved" | "tracking_stale" | "tracking_ended" | "security_new_login" | "test")
 export type MowerId6 = (string | null)
 export type OccurredAt = string
 export type Read = boolean

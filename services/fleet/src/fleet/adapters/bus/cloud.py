@@ -1,5 +1,5 @@
 """Asks the Device-Gateway for the devices of a vendor cloud account and for the enabled cloud
-providers (core NATS request/reply, ADR 0034 and ADR 0065). Fleet never imports an adapter
+providers (core NATS request/reply, ADR 0034 and ADR 0066). Fleet never imports an adapter
 package: the gateway logs in through the provider plugins and answers."""
 
 from mowdeck_contracts.v1 import (

@@ -252,7 +252,7 @@ describe('step links', () => {
     expect(stepHref('schedule', NO_FACTS)).toBe('/schedules/new');
     expect(stepHref('cloud-account', NO_FACTS)).toBe('/settings#linked-accounts');
     expect(stepHref('notifications', NO_FACTS)).toBe('/settings#notifications');
-    expect(stepHref('passkey', NO_FACTS)).toBe('/settings#profile');
+    expect(stepHref('passkey', NO_FACTS)).toBe('/settings#security');
   });
 
   it('have a title, a text and an action for every step', () => {

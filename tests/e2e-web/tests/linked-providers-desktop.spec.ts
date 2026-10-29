@@ -1,5 +1,5 @@
 /**
- * Linking a vendor account in Settings (ADR 0065, desktop): the form is rendered from the
+ * Linking a vendor account in Settings (ADR 0066, desktop): the form is rendered from the
  * providers the Device-Gateway has enabled (`GET /api/v1/fleet/linked-accounts/providers`), so
  * the test reads them first and fills the fields the provider declares. The stack runs the
  * gateway with the fake clouds (`GATEWAY_FAKE_CLOUDS`, see stack.env): the test provider is the

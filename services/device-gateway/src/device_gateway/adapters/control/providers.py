@@ -1,4 +1,4 @@
-"""The cloud providers of the gateway (ADR 0065): plugins from ``mowdeck.cloud_providers``.
+"""The cloud providers of the gateway (ADR 0066): plugins from ``mowdeck.cloud_providers``.
 
 Every vendor whose mowers are reached through a cloud registers a ``ProviderSpec`` in its own
 adapter package; the gateway never imports a vendor package by name. :func:`cloud_providers`

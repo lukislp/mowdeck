@@ -27,7 +27,16 @@ export async function registerByApi(request: APIRequestContext, who: Actor): Pro
     data: { username: who.username, password: who.password, account_name: `${who.username} home` },
   });
   expect(registered.status(), await registered.text()).toBe(201);
-  return loginByApi(request, who);
+  const ready = await loginByApi(request, who);
+  // The API login and the browser login of a test are two devices: without this every UI login
+  // would add a "new sign-in" notification (ADR 0065) to inboxes the tests count. The security
+  // spec turns the alerts back on.
+  const quiet = await request.put(`${IDENTITY}/me/security/alerts`, {
+    headers: { Authorization: `Bearer ${ready.token}` },
+    data: { new_login_alerts: false },
+  });
+  expect(quiet.status(), await quiet.text()).toBe(200);
+  return ready;
 }
 
 export async function loginByApi(request: APIRequestContext, who: Actor): Promise<Actor> {
@@ -154,7 +163,7 @@ export async function loginByUi(page: Page, who: Actor): Promise<void> {
 }
 
 /**
- * Pick `provider` in the vendor rail of the visible link form (ADR 0065). The rail is shown only
+ * Pick `provider` in the vendor rail of the visible link form (ADR 0066). The rail is shown only
  * when several cloud providers are enabled (the test stack enables untested ones as well, see
  * stack.env), and the first tile in display-name order is preselected, so a test that fills one
  * provider's fields picks it first.

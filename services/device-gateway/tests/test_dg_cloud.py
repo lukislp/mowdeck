@@ -246,7 +246,7 @@ def test_dg_cloud_registrations_are_routed_by_provider() -> None:
     plugin = AcmeCloud()
     provider = RegistryConnectionProvider(cloud_providers=_loaded(plugin, claims=True))
     provider.create(_cloud_registration("Acme-1"))
-    # Without a provider option the claiming provider takes it (cloud mowers before ADR 0065).
+    # Without a provider option the claiming provider takes it (cloud mowers before ADR 0066).
     plain = _cloud_registration("Acme-2")
     options = {k: v for k, v in plain.connection_options.items() if k != CLOUD_PROVIDER_OPTION}
     provider.create(plain.model_copy(update={"connection_options": options}))

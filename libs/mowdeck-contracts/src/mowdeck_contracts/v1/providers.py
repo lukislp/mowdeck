@@ -1,4 +1,4 @@
-"""Cloud providers: what a vendor adapter declares about linking an account (ADR 0065).
+"""Cloud providers: what a vendor adapter declares about linking an account (ADR 0066).
 
 Every adapter package that connects mowers through a vendor cloud registers a provider plugin
 in the Device-Gateway (entry point group ``mowdeck.cloud_providers``, see

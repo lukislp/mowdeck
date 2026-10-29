@@ -175,7 +175,7 @@ class CloudDevices:
 
 
 class CloudAccounts(Protocol):
-    """The enabled cloud providers (ADR 0065): their descriptors, and a login to one vendor
+    """The enabled cloud providers (ADR 0066): their descriptors, and a login to one vendor
     account (or a reuse of its open session) that lists the account's devices."""
 
     def descriptors(self) -> list[ProviderDescriptor]:

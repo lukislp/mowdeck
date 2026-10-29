@@ -59,6 +59,49 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/error-codes/{vendor}/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Explain Vendor Code
+         * @description Explain one code of a vendor (the lexicon's key, see `GET /error-lexicons`), e.g.
+         *     `/error-codes/mammotion/1201?locale=de`. An unknown vendor or code answers 200 with `known`
+         *     false.
+         */
+        get: operations["explain_vendor_code_api_v1_telemetry_error_codes__vendor___code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/error-lexicons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Error Lexicons
+         * @description The installed error lexicons (vendor key and name, connection kinds, number of codes and
+         *     of unverified ones, locales); empty while the Device-Gateway does not answer.
+         */
+        get: operations["list_error_lexicons_api_v1_telemetry_error_lexicons_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/mowers/{mower_id}/aerial": {
         parameters: {
             query?: never;
@@ -157,6 +200,49 @@ export type paths = {
          * @description Status transitions of the mower's commands (accepted, executed, ...), newest first.
          */
         get: operations["get_commands_api_v1_telemetry_mowers__mower_id__commands_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/error": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Mower Error
+         * @description The mower's current error (`MowerState.error_code`) in plain words, with the lexicon of
+         *     its vendor; `error` is null while it reports none. 404 "no telemetry yet" before the first
+         *     state.
+         */
+        get: operations["get_mower_error_api_v1_telemetry_mowers__mower_id__error_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/error-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Explain Mower Codes
+         * @description Explain codes of this mower (e.g. the error counts of its health page) with the lexicon of
+         *     its vendor. 404 "no telemetry yet" before the first state.
+         */
+        get: operations["explain_mower_codes_api_v1_telemetry_mowers__mower_id__error_codes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1176,6 +1262,112 @@ export type components = {
             step_mps: number;
         };
         /**
+         * ErrorExplanation
+         * @description A vendor code in plain words, in one locale.
+         */
+        ErrorExplanation: {
+            category: components["schemas"]["MowerErrorCategory"];
+            /** Cause */
+            cause?: string | null;
+            /** Code */
+            code: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Known
+             * @description The lexicon knows the code.
+             */
+            known: boolean;
+            /** Links */
+            links?: components["schemas"]["ErrorLink"][];
+            /**
+             * Locale
+             * @description The locale of the texts (after fallback).
+             */
+            locale: string;
+            severity: components["schemas"]["ErrorSeverity"];
+            /** Steps */
+            steps?: string[];
+            /** Title */
+            title: string;
+            /** User Action */
+            user_action: boolean;
+            /**
+             * Vendor
+             * @description The lexicon that explained the code; null when none applied.
+             */
+            vendor?: string | null;
+            /** Vendor Name */
+            vendor_name?: string | null;
+            /**
+             * Verified
+             * @description False for an entry whose meaning is not verified.
+             * @default true
+             */
+            verified: boolean;
+        };
+        /**
+         * ErrorExplanationList
+         * @description Explanations in the order of the requested codes.
+         */
+        ErrorExplanationList: {
+            /** Explanations */
+            explanations: components["schemas"]["ErrorExplanation"][];
+        };
+        /**
+         * ErrorLexiconInfo
+         * @description Summary of an installed lexicon (no entries).
+         */
+        ErrorLexiconInfo: {
+            /** Connection Kinds */
+            connection_kinds?: components["schemas"]["ConnectionKind"][];
+            /**
+             * Entries
+             * @description Number of codes.
+             */
+            entries: number;
+            /** Locales */
+            locales?: string[];
+            /** Source */
+            source?: string | null;
+            /**
+             * Unverified
+             * @description Codes whose meaning could not be verified.
+             */
+            unverified: number;
+            /** Vendor */
+            vendor: string;
+            /** Vendor Name */
+            vendor_name: string;
+        };
+        /**
+         * ErrorLexiconList
+         * @description The installed error lexicons, one per vendor.
+         */
+        ErrorLexiconList: {
+            /** Lexicons */
+            lexicons: components["schemas"]["ErrorLexiconInfo"][];
+        };
+        /**
+         * ErrorLink
+         * @description Further reading for an entry (the vendor's help page, a manual chapter).
+         */
+        ErrorLink: {
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * ErrorSeverity
+         * @description How bad an error is for the user, manufacturer neutral.
+         * @enum {string}
+         */
+        ErrorSeverity: "info" | "warning" | "error" | "critical";
+        /**
          * EventDef
          * @description An event type a module publishes.
          */
@@ -1831,9 +2023,36 @@ export type components = {
         /**
          * MowerErrorCategory
          * @description What kind of fault ``MowerState.error_code`` names, manufacturer neutral.
+         *
+         *     The same words classify the entries of an error lexicon (ADR 0067), so rules such as the
+         *     theft alarm can match a category instead of vendor codes.
          * @enum {string}
          */
-        MowerErrorCategory: "trapped" | "obstacle" | "outside" | "wheel_slip" | "lift_tilt" | "collision" | "battery" | "blade_motor" | "rain" | "positioning" | "other";
+        MowerErrorCategory: "trapped" | "obstacle" | "outside" | "wheel_slip" | "lift_tilt" | "collision" | "battery" | "blade_motor" | "rain" | "positioning" | "communication" | "docking" | "firmware" | "other";
+        /**
+         * MowerErrorOut
+         * @description ``GET /mowers/{id}/error``: the mower's current error in plain words.
+         */
+        MowerErrorOut: {
+            /**
+             * Activity
+             * @description `MowerActivity` of the state.
+             */
+            activity: string;
+            /** @description The current error explained; null while the mower reports none. */
+            error: components["schemas"]["ErrorExplanation"] | null;
+            /**
+             * Mower Id
+             * Format: uuid
+             */
+            mower_id: string;
+            /**
+             * Observed At
+             * Format: date-time
+             * @description When the mower reported the state.
+             */
+            observed_at: string;
+        };
         /**
          * MowerHealthOut
          * @description Running health totals of a mower (since the first state Telemetry received).
@@ -3096,6 +3315,61 @@ export interface operations {
             };
         };
     };
+    explain_vendor_code_api_v1_telemetry_error_codes__vendor___code__get: {
+        parameters: {
+            query?: {
+                /** @description Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. */
+                locale?: string | null;
+            };
+            header?: never;
+            path: {
+                code: string;
+                vendor: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorExplanation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_error_lexicons_api_v1_telemetry_error_lexicons_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorLexiconList"];
+                };
+            };
+        };
+    };
     get_aerial_api_v1_telemetry_mowers__mower_id__aerial_get: {
         parameters: {
             query?: never;
@@ -3251,6 +3525,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommandTimeline"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_mower_error_api_v1_telemetry_mowers__mower_id__error_get: {
+        parameters: {
+            query?: {
+                /** @description Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. */
+                locale?: string | null;
+            };
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MowerErrorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    explain_mower_codes_api_v1_telemetry_mowers__mower_id__error_codes_get: {
+        parameters: {
+            query: {
+                /** @description Codes as the mower reports them; repeat the parameter for more. */
+                code: string[];
+                /** @description Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. */
+                locale?: string | null;
+            };
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorExplanationList"];
                 };
             };
             /** @description Validation Error */

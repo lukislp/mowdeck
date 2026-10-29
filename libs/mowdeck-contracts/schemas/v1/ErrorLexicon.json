@@ -1,0 +1,237 @@
+{
+  "$defs": {
+    "ConnectionKind": {
+      "description": "How the Device-Gateway is connected to the mower.",
+      "enum": [
+        "ble_bridge",
+        "wifi",
+        "cloud",
+        "simulated"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "ErrorLexiconEntry": {
+      "description": "One vendor code with its explanation.",
+      "properties": {
+        "aliases": {
+          "description": "Other spellings of the same code (e.g. with a sign or prefix).",
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Aliases",
+          "type": "array"
+        },
+        "category": {
+          "$ref": "#/$defs/MowerErrorCategory",
+          "default": "other"
+        },
+        "code": {
+          "description": "The code as `MowerState.error_code` carries it.",
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/ErrorLink"
+          },
+          "maxItems": 8,
+          "title": "Links",
+          "type": "array"
+        },
+        "severity": {
+          "$ref": "#/$defs/ErrorSeverity",
+          "default": "warning"
+        },
+        "texts": {
+          "description": "The words per locale; `en` is required, others are optional.",
+          "patternProperties": {
+            "^[a-z]{2}$": {
+              "$ref": "#/$defs/ErrorText"
+            }
+          },
+          "title": "Texts",
+          "type": "object"
+        },
+        "user_action": {
+          "default": true,
+          "description": "A person has to do something before the mower carries on.",
+          "title": "User Action",
+          "type": "boolean"
+        },
+        "verified": {
+          "default": true,
+          "description": "False when the meaning of the code could not be checked against a vendor source (e.g. a code only seen from mowers); clients mark such texts.",
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "texts"
+      ],
+      "title": "ErrorLexiconEntry",
+      "type": "object"
+    },
+    "ErrorLink": {
+      "description": "Further reading for an entry (the vendor's help page, a manual chapter).",
+      "properties": {
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 500,
+          "pattern": "^https://",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ],
+      "title": "ErrorLink",
+      "type": "object"
+    },
+    "ErrorSeverity": {
+      "description": "How bad an error is for the user, manufacturer neutral.",
+      "enum": [
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "title": "ErrorSeverity",
+      "type": "string"
+    },
+    "ErrorText": {
+      "description": "The words of one lexicon entry in one locale.",
+      "properties": {
+        "cause": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The likely cause; null when not known.",
+          "title": "Cause"
+        },
+        "description": {
+          "default": "",
+          "description": "What happened, in a sentence or two.",
+          "maxLength": 2000,
+          "title": "Description",
+          "type": "string"
+        },
+        "steps": {
+          "description": "What to do, in order; empty when there is nothing to do.",
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 12,
+          "title": "Steps",
+          "type": "array"
+        },
+        "title": {
+          "description": "Short headline.",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "ErrorText",
+      "type": "object"
+    },
+    "MowerErrorCategory": {
+      "description": "What kind of fault ``MowerState.error_code`` names, manufacturer neutral.\n\nThe same words classify the entries of an error lexicon (ADR 0067), so rules such as the\ntheft alarm can match a category instead of vendor codes.",
+      "enum": [
+        "trapped",
+        "obstacle",
+        "outside",
+        "wheel_slip",
+        "lift_tilt",
+        "collision",
+        "battery",
+        "blade_motor",
+        "rain",
+        "positioning",
+        "communication",
+        "docking",
+        "firmware",
+        "other"
+      ],
+      "title": "MowerErrorCategory",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The error codes of one vendor, as an adapter package ships them.",
+  "properties": {
+    "connection_kinds": {
+      "description": "The connection kinds whose mowers report codes of this vendor; a lookup by `MowerState.connection` finds the lexicon through them.",
+      "items": {
+        "$ref": "#/$defs/ConnectionKind"
+      },
+      "title": "Connection Kinds",
+      "type": "array"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/ErrorLexiconEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Where the entries come from (provenance).",
+      "title": "Source"
+    },
+    "vendor": {
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "title": "Vendor",
+      "type": "string"
+    },
+    "vendor_name": {
+      "description": "Shown to users.",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Vendor Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "vendor",
+    "vendor_name"
+  ],
+  "title": "ErrorLexicon",
+  "type": "object"
+}

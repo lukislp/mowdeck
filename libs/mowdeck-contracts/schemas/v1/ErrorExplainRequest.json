@@ -1,0 +1,97 @@
+{
+  "$defs": {
+    "ConnectionKind": {
+      "description": "How the Device-Gateway is connected to the mower.",
+      "enum": [
+        "ble_bridge",
+        "wifi",
+        "cloud",
+        "simulated"
+      ],
+      "title": "ConnectionKind",
+      "type": "string"
+    },
+    "MowerErrorCategory": {
+      "description": "What kind of fault ``MowerState.error_code`` names, manufacturer neutral.\n\nThe same words classify the entries of an error lexicon (ADR 0067), so rules such as the\ntheft alarm can match a category instead of vendor codes.",
+      "enum": [
+        "trapped",
+        "obstacle",
+        "outside",
+        "wheel_slip",
+        "lift_tilt",
+        "collision",
+        "battery",
+        "blade_motor",
+        "rain",
+        "positioning",
+        "communication",
+        "docking",
+        "firmware",
+        "other"
+      ],
+      "title": "MowerErrorCategory",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Ask the Device-Gateway to explain codes (``gateway.errors.explain``).\n\nThe lexicon is picked by ``vendor`` or, without it, by ``connection`` (the lexicon that lists\nthe kind). ``category`` is the state's ``error_category``: it shapes the generic advice for\na code no lexicon knows.",
+  "properties": {
+    "category": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MowerErrorCategory"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "codes": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Codes",
+      "type": "array"
+    },
+    "connection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConnectionKind"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "locale": {
+      "default": "en",
+      "pattern": "^[a-z]{2}$",
+      "title": "Locale",
+      "type": "string"
+    },
+    "vendor": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Vendor"
+    }
+  },
+  "required": [
+    "codes"
+  ],
+  "title": "ErrorExplainRequest",
+  "type": "object"
+}

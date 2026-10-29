@@ -1,4 +1,4 @@
-"""Credential fields of any cloud provider on linked accounts (ADR 0065).
+"""Credential fields of any cloud provider on linked accounts (ADR 0066).
 
 Additive: ``linked_accounts.public_credentials`` (JSONB, the non-secret credential fields of the
 provider's descriptor, identity included) and ``linked_accounts.secret_format`` (1: the sealed

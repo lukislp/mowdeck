@@ -5,7 +5,7 @@ stored (:func:`option_problems`), and ``GET /api/v1/fleet/connection-kinds``, fr
 app generates its connection forms. A new adapter kind therefore needs a schema here and no UI
 change (the app falls back to the English ``title`` and ``description`` for options it has no
 translation for). The option semantics follow the READMEs of the adapter packages; which
-vendor a ``cloud`` mower belongs to is its linked account's provider (ADR 0065).
+vendor a ``cloud`` mower belongs to is its linked account's provider (ADR 0066).
 """
 
 import re

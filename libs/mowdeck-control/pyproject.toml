@@ -20,6 +20,9 @@ photo = ["pillow>=11.0.0"]
 [project.entry-points."mowdeck.connections"]
 simulated = "mowdeck_control.simulator:create_simulated_connection"
 
+[project.entry-points."mowdeck.error_lexicons"]
+simulated = "mowdeck_control.simulator_lexicon:SIMULATED_LEXICON"
+
 [tool.uv.sources]
 mowdeck-contracts = { workspace = true }
 

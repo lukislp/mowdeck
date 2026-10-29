@@ -18,7 +18,7 @@ dependencies = [
   # GPL-3.0 adapter for Mammotion mowers (cloud and BLE bridge), see ADR 0011 and ADR 0019.
   "mowdeck-control-mammotion[esphome]",
   # Apache-2.0 adapter for Husqvarna Automower (Automower Connect API), off by default until
-  # tested on real hardware (ADR 0065).
+  # tested on real hardware (ADR 0066).
   "mowdeck-control-husqvarna",
   "mowdeck-service-kit",
   # Client of the camera relay's frame tap (still frames of a live camera, ADR 0045).

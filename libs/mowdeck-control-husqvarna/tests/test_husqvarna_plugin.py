@@ -1,4 +1,4 @@
-"""The provider spec, its descriptor and how the gateway loads it (ADR 0065)."""
+"""The provider spec, its descriptor and how the gateway loads it (ADR 0066)."""
 
 import subprocess
 import sys

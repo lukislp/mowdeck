@@ -1,5 +1,5 @@
 /**
- * Provider descriptors for the app's unit tests (ADR 0065): the app knows no vendor, so its
+ * Provider descriptors for the app's unit tests (ADR 0066): the app knows no vendor, so its
  * tests use two neutral ones, `acme` (e-mail and password, tested on hardware) and `zeta`
  * (application key and secret plus a region, untested, developer account needed).
  */

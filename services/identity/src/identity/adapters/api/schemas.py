@@ -8,8 +8,10 @@ from uuid import UUID
 from mowdeck_contracts.v1 import AccountKind, UiAreaDef
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
+from identity.application.security import SecurityOverview, SessionView
 from identity.application.sessions import MeView, TokenPair
 from identity.application.users import MemberView
+from identity.domain.devices import ip_prefix
 from identity.domain.models import (
     Account,
     ApiToken,
@@ -905,4 +907,152 @@ class WidgetCredentialOut(BaseModel):
             last_used_at=t.last_used_at,
             revoked_at=t.revoked_at,
             token=secret,
+        )
+
+
+# --- security center (ADR 0065) ------------------------------------------------------------------
+
+
+class SessionOut(BaseModel):
+    """One of the caller's live login sessions (a browser or an app installation)."""
+
+    id: UUID = Field(description="The login session (the `sid` of its access tokens)")
+    account_id: UUID
+    current: bool = Field(description="The session of this request")
+    client: Literal["browser", "app", "script", "unknown"]
+    browser: str | None = Field(description="Browser family from the user agent, no version")
+    os: str | None = Field(description="Operating system from the user agent")
+    label: str = Field(description="`Firefox on Windows`, `MowDeck app on iOS` (English)")
+    ip_prefix: str | None = Field(
+        description="The address shortened to its network (`203.0.113.x`, an IPv6 /48); "
+        "MowDeck asks no location service"
+    )
+    network: Literal["local", "public", "unknown"] = Field(
+        description="`local`: a private, loopback or link-local address (the home network)"
+    )
+    created_at: datetime = Field(description="When the session started (the login)")
+    last_used_at: datetime = Field(description="The last refresh (about every 10 minutes)")
+    expires_at: datetime = Field(description="When the session ends unless it is used again")
+    method: str | None = Field(description="How it started: `pwd`, `passkey`, `github`, `apple`")
+
+    @classmethod
+    def of(cls, v: SessionView) -> "SessionOut":
+        """From the view."""
+        return cls(
+            id=v.id,
+            account_id=v.account_id,
+            current=v.current,
+            client=v.device.client.value,
+            browser=v.device.browser,
+            os=v.device.os,
+            label=v.device.label,
+            ip_prefix=v.ip_prefix,
+            network=v.network.value,
+            created_at=v.created_at,
+            last_used_at=v.last_used_at,
+            expires_at=v.expires_at,
+            method=v.method,
+        )
+
+
+class SessionsRevokedOut(BaseModel):
+    """``POST /me/sessions/revoke-others``."""
+
+    revoked: int = Field(description="How many sessions ended")
+
+
+class SecurityOverviewOut(BaseModel):
+    """The top of the security page: password status, alert setting and counts."""
+
+    password_set: bool
+    password_changed_at: datetime | None = Field(
+        description="Last change; null when unknown (set before the security center existed)"
+    )
+    must_change_password: bool
+    new_login_alerts: bool = Field(
+        description="Notify on a login from a device not seen before (in-app and push)"
+    )
+    passkeys: int
+    providers: list[str] = Field(description="Linked login providers (`github`, `apple`)")
+    personal_tokens: int = Field(description="Active personal access tokens in this account")
+    sessions: int = Field(description="Live login sessions in all accounts")
+    known_devices: int
+
+    @classmethod
+    def of(cls, o: SecurityOverview) -> "SecurityOverviewOut":
+        """From the view."""
+        return cls(
+            password_set=o.password_set,
+            password_changed_at=o.password_changed_at,
+            must_change_password=o.must_change_password,
+            new_login_alerts=o.new_login_alerts,
+            passkeys=o.passkeys,
+            providers=o.providers,
+            personal_tokens=o.personal_tokens,
+            sessions=o.sessions,
+            known_devices=o.known_devices,
+        )
+
+
+class SecurityAlertsIn(In):
+    """``PUT /me/security/alerts``."""
+
+    new_login_alerts: bool
+
+
+class SecurityAlertsOut(BaseModel):
+    """The alert setting after the change."""
+
+    new_login_alerts: bool
+
+
+SECURITY_DETAIL_KEYS = frozenset(
+    {
+        "method",
+        "reason",
+        "device",
+        "client",
+        "browser",
+        "os",
+        "ip_prefix",
+        "provider",
+        "display_name",
+        "name",
+        "to",
+        "session",
+        "sessions",
+        "current",
+        "new_login_alerts",
+        "by_admin",
+        "via",
+    }
+)
+"""Details of an audit row a security event shows (never token ids, hashes or `jti`)."""
+
+
+class SecurityEventOut(BaseModel):
+    """One of the caller's own security events."""
+
+    id: int
+    at: datetime
+    action: str = Field(description="The audit action, e.g. `session.login`, `passkey.added`")
+    outcome: str = Field(description="`success`, `failure` or `denied`")
+    target_type: str | None
+    details: dict[str, Any] = Field(description="A safe subset of the audit details")
+    ip_prefix: str | None = Field(description="The address of the request, shortened")
+    network: Literal["local", "public", "unknown"]
+
+    @classmethod
+    def of(cls, e: AuditEntry) -> "SecurityEventOut":
+        """From the audit entry; the full address and internal ids stay in the audit log."""
+        prefix, network = ip_prefix(e.ip)
+        return cls(
+            id=e.id or 0,
+            at=e.at,
+            action=e.action,
+            outcome=e.outcome,
+            target_type=e.target_type,
+            details={k: v for k, v in e.details.items() if k in SECURITY_DETAIL_KEYS},
+            ip_prefix=prefix,
+            network=network.value,
         )

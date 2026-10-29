@@ -1,4 +1,4 @@
-"""What the Husqvarna provider asks the user for (ADR 0065): public data, no vendor SDK.
+"""What the Husqvarna provider asks the user for (ADR 0066): public data, no vendor SDK.
 
 The user creates an application in the Husqvarna Developer Portal with their own Husqvarna
 account (the one of the Automower Connect app), connects it to the Authentication API and the

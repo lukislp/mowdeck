@@ -442,7 +442,7 @@ async def test_github_links_and_round_trips_on_postgres(monkeypatch: pytest.Monk
         async with store.transaction() as tx:
             remaining = [x.subject for x in await tx.external_identities.find()]
             states = await tx.oauth_states.count()
-    assert linked.headers["location"] == "/settings?linked=github#profile"
+    assert linked.headers["location"] == "/settings?linked=github#security"
     assert login.headers["location"] == "/login?signed_in_with=github"
     assert link.subject == "583231" and link.display_name == "octocat"
     assert link.last_used_at is not None
@@ -515,7 +515,7 @@ async def test_apple_and_github_links_coexist_on_postgres(
                 ExternalIdentity(uuid4(), lukas.user_id, "github", "42", NOW)
             )
             providers = sorted(x.provider for x in await tx.external_identities.find())
-    assert linked.headers["location"] == "/settings?linked=apple#profile"
+    assert linked.headers["location"] == "/settings?linked=apple#security"
     assert login.headers["location"] == "/login?signed_in_with=apple"
     assert link.provider == "apple" and link.subject == sub and link.display_name == "Apple ID"
     assert link.last_used_at is not None
@@ -559,5 +559,51 @@ async def test_migration_0006_down_drops_only_the_tour(monkeypatch: pytest.Monke
             assert {"users", "passkeys", "external_identities"} <= tables
             await migrate(url, monkeypatch)
             assert "onboarding_progress" in await table_names(engine)
+        finally:
+            await engine.dispose()
+
+
+@needs_db
+async def test_security_center_on_postgres(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0065: devices per user, the session list, revocation and the events on PostgreSQL."""
+    me = "/api/v1/identity/me"
+    async with store_of("postgres", monkeypatch) as store, harness(store=store) as h:
+        lukas = await h.register("lukas")
+        h.client.cookies.clear()
+        other = (await h.login("lukas")).get("access_token")
+        sessions = (await h.client.get(f"{me}/sessions", headers=lukas.headers)).json()
+        target = next(s["id"] for s in sessions if not s["current"])
+        revoked = await h.client.delete(f"{me}/sessions/{target}", headers=lukas.headers)
+        ended = await h.client.get(me, headers={"Authorization": f"Bearer {other}"})
+        events = (await h.client.get(f"{me}/security-events", headers=lukas.headers)).json()
+        overview = (await h.client.get(f"{me}/security", headers=lukas.headers)).json()
+        async with store.transaction() as tx:
+            devices = await tx.known_devices.count(user_id=lukas.user_id)
+            found = await tx.users.get(id=lukas.user_id)
+    assert len(sessions) == 2
+    assert revoked.status_code == 204
+    assert ended.status_code == 401
+    assert {"session.revoked", "security.new_device", "session.login"} <= {
+        e["action"] for e in events
+    }
+    assert overview["sessions"] == 1 and overview["known_devices"] == 2
+    assert devices == 2
+    assert found is not None and found.password_changed_at is not None and found.new_login_alerts
+
+
+@needs_db
+async def test_migration_0008_down_drops_only_the_security_center(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with temporary_database() as url:
+        await migrate(url, monkeypatch)
+        await migrate(url, monkeypatch, "0007", down=True)
+        engine = create_async_engine(async_database_url(url))
+        try:
+            tables = await table_names(engine)
+            assert "known_devices" not in tables
+            assert {"users", "sessions", "audit_log", "onboarding_progress"} <= tables
+            await migrate(url, monkeypatch)
+            assert "known_devices" in await table_names(engine)
         finally:
             await engine.dispose()

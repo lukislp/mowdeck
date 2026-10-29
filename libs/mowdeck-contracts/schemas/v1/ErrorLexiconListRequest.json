@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Ask the Device-Gateway for its installed lexicons (``gateway.errors.lexicons``).",
+  "properties": {},
+  "title": "ErrorLexiconListRequest",
+  "type": "object"
+}

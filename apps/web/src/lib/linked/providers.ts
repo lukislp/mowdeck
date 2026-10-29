@@ -1,5 +1,5 @@
 /**
- * Cloud providers (Fleet's `GET /linked-accounts/providers`, ADR 0065): the link form of any
+ * Cloud providers (Fleet's `GET /linked-accounts/providers`, ADR 0066): the link form of any
  * vendor is rendered from the provider's descriptor, so the app names no vendor. Pure functions:
  * the form's starting values, the checks the server does again (required, e-mail, choice,
  * length, pattern), the bodies of link and re-authentication, and where a problem belongs.

@@ -1,6 +1,6 @@
-"""Cloud providers in Fleet (ADR 0065): the provider list, credential fields of any shape, their
+"""Cloud providers in Fleet (ADR 0066): the provider list, credential fields of any shape, their
 storage, the credentials a linked mower's connection gets, re-authentication, and accounts
-stored before ADR 0065.
+stored before ADR 0066.
 
 A fake Device-Gateway lists two neutral providers (:mod:`fleet_cloud`): ``acme`` (e-mail and
 password) and ``zeta`` (application key and secret plus a region).

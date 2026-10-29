@@ -26,6 +26,8 @@ apps/web/static/whats-new.json
 .env
 .env.*
 !.env.example
+# The public demo's secrets (copied from demo.env.example, docs/ops/demo.md)
+infra/compose/demo/demo.env
 # Written by infra/compose/verify-release.sh: the verified image digests of this installation
 infra/compose/docker-compose.release.yml
 *.pem

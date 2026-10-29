@@ -1,0 +1,6 @@
+{
+  "pr": 197,
+  "de": "Neu: Sicherheit in den Einstellungen. Alle angemeldeten Geräte, einzeln oder überall sonst abmelden, Passkeys und Zugangstokens an einem Ort, Sicherheitsereignisse und ein Hinweis bei Anmeldung von neuen Geräten.",
+  "en": "New: Security in the settings. Every signed-in device, sign one or all others out, passkeys and access tokens in one place, security events and an alert when someone signs in from a new device.",
+  "href": "/settings#security"
+}

@@ -128,6 +128,11 @@ class User:
     created_by: UUID | None = None
     must_change_password: bool = False
     last_login_at: datetime | None = None
+    password_changed_at: datetime | None = None
+    """When the password was last set (registration, change, reset by an admin); None for
+    users from before the column existed (ADR 0065)."""
+    new_login_alerts: bool = True
+    """Notify the user when a login comes from a device not seen before (ADR 0065)."""
 
     def __post_init__(self) -> None:
         self.kind = UserKind(self.kind)
@@ -221,6 +226,26 @@ class Session:
     (ADR 0057). ``None`` for sessions from before the column existed: they count as stale."""
     auth_method: str | None = None
     """How: ``pwd``, ``passkey``, ``github``, ``apple``."""
+
+
+@dataclass(slots=True)
+class KnownDevice:
+    """A browser or app installation a user has signed in from (ADR 0065).
+
+    The device carries a random identifier in the HttpOnly cookie ``mowdeck_device``; only its
+    SHA-256 is stored, per user (two users of one browser are two rows). A login from a device
+    without a row of the user is a login from a new device.
+    """
+
+    id: UUID
+    user_id: UUID
+    token_hash: str = field(repr=False)
+    label: str
+    """What the device was described as at its first login (``Firefox on Windows``)."""
+    first_seen_at: datetime
+    last_seen_at: datetime
+    last_ip_prefix: str | None = None
+    """The shortened address of the last login (``203.0.113.x``), never the full address."""
 
 
 @dataclass(frozen=True, slots=True)

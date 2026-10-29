@@ -123,7 +123,7 @@ class Settings(ServiceSettings):
     cloud_providers_enable: str = ""
     """Comma separated cloud provider ids to enable in addition to the providers that are on by
     default (those tested on real hardware), e.g. ``husqvarna``. Providers that were never tested
-    on real hardware are off until listed here (ADR 0065)."""
+    on real hardware are off until listed here (ADR 0066)."""
 
     cloud_providers_disable: str = ""
     """Comma separated cloud provider ids to switch off (wins over the enable list and the

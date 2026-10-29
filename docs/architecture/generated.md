@@ -43,14 +43,14 @@ flowchart LR
   subgraph sg_billing["Profile billing (opt-in)"]
     billing["billing"]
   end
-  subgraph sg_demo["Profile demo (opt-in)"]
-    whoami["whoami"]
-  end
   subgraph sg_matter["Profile matter (opt-in)"]
     matter_server["matter-server"]
   end
   subgraph sg_relay["Profile relay (opt-in)"]
     mediamtx["mediamtx"]
+  end
+  subgraph sg_whoami["Profile whoami (opt-in)"]
+    whoami["whoami"]
   end
   traefik -->|"/api/v1/device-gateway"| device_gateway
   traefik -->|"/api/v1/entitlements"| entitlements
@@ -64,9 +64,9 @@ flowchart LR
   traefik -->|"/api/v1/vision"| vision
   traefik -->|"/"| web
   traefik -.->|"/api/v1/billing<br/>+1 exact path"| billing
-  traefik -.->|"/api/v1/whoami"| whoami
   traefik -.->|"/api/v1/matter"| matter_server
   traefik -.->|"/media/whep/r/"| mediamtx
+  traefik -.->|"/api/v1/whoami"| whoami
 ```
 
 | Service | Path prefixes | Exact paths | Profile |
@@ -85,7 +85,7 @@ flowchart LR
 | `telemetry` | `/api/v1/telemetry` | - | always |
 | `vision` | `/api/v1/vision` | - | always |
 | `web` | `/` | - | always |
-| `whoami` | `/api/v1/whoami` | - | demo |
+| `whoami` | `/api/v1/whoami` | - | whoami |
 
 Infrastructure containers: `mediamtx`, `nats`, `openfga`, `postgres`, `traefik`, `whoami`. One-shot jobs (migrations, bootstrap): `authz-bootstrap`, `billing-migrate`, `entitlements-migrate`, `fleet-migrate`, `identity-migrate`, `notifications-migrate`, `openfga-migrate`, `planner-migrate`, `scheduler-migrate`, `telemetry-migrate`, `vision-migrate`.
 
@@ -336,9 +336,9 @@ flowchart LR
   q_fleet["fleet"]
   q_fleet -->|"gateway.mower.*.bridge.scan<br/>gateway.mower.*.camera.session<br/>gateway.mower.*.firmware.check<br/>+2 more"| r_device_gateway
   q_notifications["notifications"]
-  q_notifications -->|"gateway.mower.*.photo"| r_device_gateway
+  q_notifications -->|"gateway.errors.explain<br/>gateway.mower.*.photo"| r_device_gateway
   q_telemetry["telemetry"]
-  q_telemetry -->|"gateway.mower.*.photo<br/>gateway.mower.*.tracking"| r_device_gateway
+  q_telemetry -->|"gateway.errors.explain<br/>gateway.errors.lexicons<br/>gateway.mower.*.photo<br/>+1 more"| r_device_gateway
   q_vision["vision"]
   q_vision -->|"gateway.mower.*.photo"| r_device_gateway
 ```
@@ -411,6 +411,8 @@ flowchart LR
 | `fleet.targets.resolve` | core | - | fleet |
 | `gateway.cloud.discover` | core | - | device-gateway |
 | `gateway.cloud.providers` | core | - | device-gateway |
+| `gateway.errors.explain` | core | notifications, telemetry | device-gateway |
+| `gateway.errors.lexicons` | core | telemetry | device-gateway |
 | `gateway.mower.*.bridge.scan` | core | fleet | device-gateway |
 | `gateway.mower.*.camera.release` | core | camera-relay | device-gateway |
 | `gateway.mower.*.camera.session` | core | camera-relay, fleet | device-gateway |
@@ -454,11 +456,13 @@ flowchart LR
   subgraph identity["identity"]
     direction TB
     identity_identity__accounts["identity: accounts<br/>28 operations"]
+    identity_identity__demo["identity: demo<br/>1 operation"]
     identity_identity__keys["identity: keys<br/>1 operation"]
     identity_identity__login_providers["identity: login providers<br/>5 operations"]
     identity_identity__passkeys["identity: passkeys<br/>11 operations"]
     identity_identity__personal_access_tokens["identity: personal access tokens<br/>3 operations"]
     identity_identity__platform["identity: platform<br/>1 operation"]
+    identity_identity__security["identity: security<br/>6 operations"]
     identity_identity__sessions["identity: sessions<br/>23 operations"]
   end
   subgraph notifications["notifications"]
@@ -479,7 +483,7 @@ flowchart LR
   subgraph telemetry["telemetry"]
     direction TB
     telemetry_public["public<br/>2 operations"]
-    telemetry_telemetry["telemetry<br/>21 operations"]
+    telemetry_telemetry["telemetry<br/>25 operations"]
     telemetry_tracking["tracking<br/>13 operations"]
   end
   subgraph vision["vision"]
@@ -502,11 +506,13 @@ flowchart LR
 | `fleet` | `operations` | 1 | 1 |
 | `fleet` | `sites and groups` | 12 | 6 |
 | `identity` | `identity: accounts` | 28 | 19 |
+| `identity` | `identity: demo` | 1 | 1 |
 | `identity` | `identity: keys` | 1 | 1 |
 | `identity` | `identity: login providers` | 5 | 5 |
 | `identity` | `identity: passkeys` | 11 | 9 |
 | `identity` | `identity: personal access tokens` | 3 | 2 |
 | `identity` | `identity: platform` | 1 | 1 |
+| `identity` | `identity: security` | 6 | 6 |
 | `identity` | `identity: sessions` | 23 | 20 |
 | `identity` | `operations` | 1 | 1 |
 | `notifications` | `notifications` | 22 | 16 |
@@ -518,7 +524,7 @@ flowchart LR
 | `scheduler` | `schedules` | 14 | 10 |
 | `telemetry` | `operations` | 1 | 1 |
 | `telemetry` | `public` | 2 | 2 |
-| `telemetry` | `telemetry` | 21 | 21 |
+| `telemetry` | `telemetry` | 25 | 25 |
 | `telemetry` | `tracking` | 13 | 11 |
 | `vision` | `operations` | 1 | 1 |
 | `vision` | `vision` | 16 | 13 |
@@ -546,7 +552,7 @@ flowchart LR
     db_billing[("billing<br/>2 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>13 migrations")]
-    db_identity[("identity<br/>7 migrations")]
+    db_identity[("identity<br/>8 migrations")]
     db_notifications[("notifications<br/>9 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>4 migrations")]

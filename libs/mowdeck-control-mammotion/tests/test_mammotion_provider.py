@@ -1,4 +1,4 @@
-"""The Mammotion cloud provider plugin (ADR 0034, ADR 0065) on the fake cloud."""
+"""The Mammotion cloud provider plugin (ADR 0034, ADR 0066) on the fake cloud."""
 
 import sys
 from pathlib import Path

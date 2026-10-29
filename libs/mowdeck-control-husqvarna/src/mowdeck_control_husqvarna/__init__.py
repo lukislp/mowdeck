@@ -1,4 +1,4 @@
-"""Husqvarna Automower adapter for mowdeck-control (ADR 0065), untested on real hardware.
+"""Husqvarna Automower adapter for mowdeck-control (ADR 0066), untested on real hardware.
 
 The package plugs into the Device-Gateway only through the entry point group
 ``mowdeck.cloud_providers`` (:data:`~mowdeck_control_husqvarna.plugin.SPEC`). Importing it does
