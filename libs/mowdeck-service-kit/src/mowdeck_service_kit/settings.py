@@ -134,6 +134,16 @@ class ServiceSettings(BaseSettings):
     """Git ref of the build (``MOWDECK_SOURCE_REF``): ``v<version>`` for a release, a commit for
     a test build. Empty: ``v<version>`` when the version is a semantic version."""
 
+    demo_mode: bool = False
+    """Public demo installation (ADR 0068): simulated mowers only, every response marked with
+    ``X-MowDeck-Demo: 1`` and the actions of the service's demo policy refused with 403. Never
+    on an installation with real mowers or accounts."""
+
+    demo_seed_token: SecretStr | None = None
+    """Shared secret of the demo seed job (``MOWDECK_DEMO_SEED_TOKEN_FILE`` or the variable):
+    with it in ``X-MowDeck-Demo-Seed`` a request passes the demo policy and may call the seed
+    endpoints. Only in demo mode; the gateway strips the header from outside requests."""
+
     @field_validator("log_level", mode="before")
     @classmethod
     def _upper_log_level(cls, value: Any) -> Any:

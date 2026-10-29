@@ -126,8 +126,12 @@ All settings come from environment variables with the prefix `MOWDECK_`. Any set
 | `MOWDECK_VERSION` | unset | Version of the build; the release build bakes it into the image (unset: a development build) |
 | `MOWDECK_SOURCE_URL` | `https://github.com/lukislp/mowdeck` | Repository of the running code; a fork that runs modified code sets its own (AGPL-3.0 section 13). `{ref}` makes it a template for hosts other than GitHub |
 | `MOWDECK_SOURCE_REF` | unset | Git ref of the build (`v<version>` of a release, a commit of a test build); unset: `v<version>` for a semantic version |
+| `MOWDECK_DEMO_MODE` | `false` | Public demo ([ADR 0068](../../docs/adr/0068-public-demo-mode.md)): `X-MowDeck-Demo: 1` on every response and the service's demo policy refuses its unsafe actions (403 `demo-mode`). Never on an installation with real mowers |
+| `MOWDECK_DEMO_SEED_TOKEN` | unset | Secret of the demo seed job: with it in `X-MowDeck-Demo-Seed` a request passes the demo policy and may call the seed endpoints (only in demo mode) |
 
 ### Source code header (AGPL-3.0 section 13)
+
+In demo mode `create_app` adds `DemoModeMiddleware` (`mowdeck_service_kit.demo`) with the service's `demo_policy`: a `DemoPolicy` of refused paths (`blocked`) or of the only allowed mutations (`allow_only`); safe methods always pass. `require_demo` and `require_demo_seed` are the dependencies of demo-only endpoints.
 
 Every HTTP response carries `X-Source-Code` with the address of the source of the running build (`mowdeck_service_kit.source`): `<MOWDECK_SOURCE_URL>/tree/<ref>` with the ref from `MOWDECK_SOURCE_REF` or `v<MOWDECK_VERSION>`, and the repository itself for a development build. The web app shows the same link in its footer and under Settings, About (LICENSING.md).
 

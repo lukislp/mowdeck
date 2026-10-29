@@ -11,10 +11,10 @@ family (``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``, ``GEMINI_API_KEY``, ``MISTRAL
 LiteLLM reads them when ``MOWDECK_VISION_DEFAULT_API_KEY`` is empty.
 """
 
-from typing import Literal
+from typing import Literal, Self
 
 from mowdeck_service_kit import ServiceSettings
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 
 from vision.domain.families import DEFAULT_HOSTED_MODEL
 
@@ -203,3 +203,21 @@ class Settings(ServiceSettings):
 
     vision_sweep_seconds: float = Field(default=30.0, ge=1, le=3600)
     """Interval of the sweep (expiry, interrupted work, image purge)."""
+
+    @model_validator(mode="after")
+    def _demo_uses_the_fake_model(self) -> Self:
+        """Public demo (ADR 0068): the installation default is the rule based fake model and
+        users cannot point the service at any provider, whatever the variables say; no model
+        provider is ever called."""
+        if self.demo_mode:
+            self.vision_default_enabled = True
+            self.vision_default_model = DEMO_MODEL
+            self.vision_default_api_base = None
+            self.vision_default_api_key = None
+            self.vision_allow_fake_provider = True
+            self.vision_user_api_base_policy = "none"
+        return self
+
+
+DEMO_MODEL = "fake/recover"
+"""The model of the public demo: the rule based fake (``vision.adapters.providers.fake``)."""

@@ -69,7 +69,7 @@ While the window is open, `mower_offline` / `mower_online` are held back for a m
 | openfga-migrate | `ghcr.io/openfga/openfga:v1.22.0` | one-shot, no port |
 | openfga | `ghcr.io/openfga/openfga:v1.22.0` | 127.0.0.1:8080 (HTTP), 127.0.0.1:8081 (gRPC) |
 | authz-bootstrap | `mowdeck/authz-bootstrap:dev`, built from `infra/openfga/bootstrap` | one-shot, no port |
-| whoami (profile `demo`) | `ghcr.io/traefik/whoami:v1.10.3` | via Traefik at `/api/v1/whoami` |
+| whoami (profile `whoami`) | `ghcr.io/traefik/whoami:v1.10.3` | via Traefik at `/api/v1/whoami` |
 | identity-migrate | `mowdeck/identity:dev`, built from the repository | one-shot, no port |
 | identity | `mowdeck/identity:dev`, built from the repository | via Traefik at `/api/v1/identity` and `/.well-known/jwks.json` |
 | fleet-migrate | `mowdeck/fleet:dev`, built from the repository | one-shot, no port |

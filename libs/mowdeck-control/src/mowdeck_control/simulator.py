@@ -338,6 +338,59 @@ def default_map(origin: tuple[float, float] = DEFAULT_ORIGIN) -> MowerMap:
     )
 
 
+def family_map(origin: tuple[float, float] = DEFAULT_ORIGIN) -> MowerMap:
+    """A family garden: ``lawn`` (18 x 10 m) with a pond and a tree in it, ``side`` (5 x 12 m)
+    along the house, a path between both and the dock at the lawn's corner."""
+    return MowerMap(
+        reference=GeoReference(origin_lat=origin[0], origin_lon=origin[1], rotation_deg=-8.0),
+        areas=[
+            MapArea(id="lawn", name="Main lawn", boundary=[(0, 0), (18, 0), (18, 10), (0, 10)]),
+            MapArea(id="side", name="Side strip", boundary=[(21, 0), (26, 0), (26, 12), (21, 12)]),
+        ],
+        no_go_zones=[
+            MapZone(id="pond", name="Pond", boundary=[(3, 5), (6.5, 5), (6.5, 8.5), (3, 8.5)]),
+            MapZone(id="tree", name="Apple tree", boundary=[(13, 3), (15, 3), (15, 5), (13, 5)]),
+        ],
+        paths=[MapPath(id="garden-path", name="Garden path", points=[(18, 2), (21, 2)])],
+        dock=DockPose(x=-1.0, y=1.5, heading_deg=0.0),
+        revision="sim-family-1",
+    )
+
+
+def orchard_map(origin: tuple[float, float] = DEFAULT_ORIGIN) -> MowerMap:
+    """A large property: ``meadow`` (30 x 20 m) under fruit trees with beehives in a corner and
+    ``front`` (14 x 8 m) by the gate, a path between both and the dock left of the meadow."""
+    return MowerMap(
+        reference=GeoReference(origin_lat=origin[0], origin_lon=origin[1], rotation_deg=27.0),
+        areas=[
+            MapArea(
+                id="meadow", name="Orchard meadow", boundary=[(0, 0), (30, 0), (30, 20), (0, 20)]
+            ),
+            MapArea(id="front", name="Front lawn", boundary=[(0, 24), (14, 24), (14, 32), (0, 32)]),
+        ],
+        no_go_zones=[
+            MapZone(
+                id="beehives", name="Beehives", boundary=[(25, 15), (30, 15), (30, 20), (25, 20)]
+            ),
+            MapZone(id="pear", name="Pear tree", boundary=[(7, 6), (9.5, 6), (9.5, 8.5), (7, 8.5)]),
+            MapZone(
+                id="walnut", name="Walnut tree", boundary=[(16, 10), (19, 10), (19, 13), (16, 13)]
+            ),
+        ],
+        paths=[MapPath(id="gate-path", name="Gate path", points=[(2, 20), (2, 24)])],
+        dock=DockPose(x=-1.0, y=1.0, heading_deg=0.0),
+        revision="sim-orchard-1",
+    )
+
+
+GARDENS: Final[Mapping[str, Callable[[tuple[float, float]], MowerMap]]] = {
+    "default": default_map,
+    "family": family_map,
+    "orchard": orchard_map,
+}
+"""The simulated gardens by name (``SimulationConfig.garden``)."""
+
+
 @dataclass(frozen=True, slots=True)
 class SimulationConfig:
     """Tunable behaviour of the simulator. Rates are per simulated hour."""
@@ -468,6 +521,11 @@ class SimulationConfig:
     """A newer base station firmware the "manufacturer" offers; None: up to date. Installing
     it takes ``firmware_update_seconds`` simulated seconds."""
 
+    garden: str = "default"
+    """The simulated garden (:data:`GARDENS`): ``default`` (two small lawns), ``family`` (a
+    lawn with a pond and a tree, a side strip) or ``orchard`` (a large meadow with trees and
+    beehives, a front lawn), so several simulated mowers do not all show the same map."""
+
     @property
     def origin(self) -> tuple[float, float]:
         """The garden's WGS84 origin."""
@@ -476,6 +534,9 @@ class SimulationConfig:
         return (self.origin_lat, self.origin_lon)
 
     def __post_init__(self) -> None:
+        if self.garden not in GARDENS:
+            msg = f"unknown garden {self.garden!r} (known: {', '.join(sorted(GARDENS))})"
+            raise ValueError(msg)
         if self.time_scale <= 0:
             msg = "time_scale must be positive"
             raise ValueError(msg)
@@ -622,7 +683,7 @@ class SimulatedMower:
         carries no ``base_station``."""
         self.account_id = account_id
         self.config = config or SimulationConfig()
-        self._map = mower_map or default_map(self.config.origin)
+        self._map = mower_map or GARDENS[self.config.garden](self.config.origin)
         if self._map.dock is None:
             msg = "the simulated map needs a dock"
             raise ValueError(msg)

@@ -4778,6 +4778,58 @@
         ]
       }
     },
+    "/api/v1/identity/demo/session": {
+      "post": {
+        "description": "\"Try the demo\": a session of the prepared demo user without credentials (the same tokens\nand cookie as ``POST /session``). 404 outside demo mode and while the demo is not seeded;\nrate limited per address.",
+        "operationId": "demo_session_api_v1_identity_demo_session_post",
+        "parameters": [
+          {
+            "description": "`cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too.",
+            "in": "header",
+            "name": "X-Mowdeck-Refresh",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too.",
+              "title": "X-Mowdeck-Refresh"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Demo Session",
+        "tags": [
+          "identity: demo"
+        ]
+      }
+    },
     "/api/v1/identity/login-methods": {
       "get": {
         "description": "Which login methods the installation offers (public; the login page asks).",
