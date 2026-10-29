@@ -2037,6 +2037,11 @@ export type components = {
             /** @description Job options a native start may carry besides the pattern (obstacle detection, laps around no-go zones, path order, start progress; ADR 0030). Clients show only what is declared here. */
             start_options?: components["schemas"]["StartOptions"];
             /**
+             * Start Plans
+             * @description Starts the mower offers without map areas (ADR 0066 amendment), in the order a client lists them; each is sent as `StartMow.plan_ref`. Empty for mowers that start on their map areas.
+             */
+            start_plans?: components["schemas"]["StartPlan"][];
+            /**
              * Undock
              * @description The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).
              * @default false
@@ -2983,6 +2988,34 @@ export type components = {
                 number
             ] | null;
         };
+        /**
+         * StartPlan
+         * @description One way to start a mower that has no map areas to choose (ADR 0066 amendment).
+         *
+         *     A mower whose connection knows no area geometry (its vendor keeps the garden to itself)
+         *     cannot be started by tapping areas. Its connection declares the starts it offers instead; a
+         *     client sends ``StartMow {plan_ref: ref}`` for the one the user picks and labels it by
+         *     ``kind`` (plus ``name`` for a zone).
+         */
+        StartPlan: {
+            kind: components["schemas"]["StartPlanKind"];
+            /**
+             * Name
+             * @description The mower's own name of a zone, shown as is; null for the other kinds.
+             */
+            name?: string | null;
+            /**
+             * Ref
+             * @description Sent as `StartMow.plan_ref` to start this.
+             */
+            ref: string;
+        };
+        /**
+         * StartPlanKind
+         * @description What a start plan does, so a client can label it without knowing the vendor.
+         * @enum {string}
+         */
+        StartPlanKind: "now" | "zone" | "edge" | "schedule";
         /**
          * StateHistory
          * @description History of a mower in a time range.

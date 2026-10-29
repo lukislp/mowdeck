@@ -16,6 +16,7 @@ members = [
     "mowdeck-contracts",
     "mowdeck-control",
     "mowdeck-control-mammotion",
+    "mowdeck-control-worx",
     "mowdeck-patterns",
     "mowdeck-repo-checks",
     "mowdeck-service-kit",
@@ -900,6 +901,7 @@ dependencies = [
     { name = "mowdeck-contracts" },
     { name = "mowdeck-control" },
     { name = "mowdeck-control-mammotion", extra = ["esphome"] },
+    { name = "mowdeck-control-worx" },
     { name = "mowdeck-service-kit" },
 ]
 
@@ -910,6 +912,7 @@ requires-dist = [
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
     { name = "mowdeck-control-mammotion", extras = ["esphome"], editable = "libs/mowdeck-control-mammotion" },
+    { name = "mowdeck-control-worx", editable = "libs/mowdeck-control-worx" },
     { name = "mowdeck-service-kit", editable = "libs/mowdeck-service-kit" },
 ]
 
@@ -1829,6 +1832,23 @@ requires-dist = [
 provides-extras = ["esphome"]
 
 [[package]]
+name = "mowdeck-control-worx"
+version = "0.1.0"
+source = { editable = "libs/mowdeck-control-worx" }
+dependencies = [
+    { name = "mowdeck-contracts" },
+    { name = "mowdeck-control" },
+    { name = "pyworxcloud" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
+    { name = "mowdeck-control", editable = "libs/mowdeck-control" },
+    { name = "pyworxcloud", specifier = "==6.4.2" },
+]
+
+[[package]]
 name = "mowdeck-patterns"
 version = "0.1.0"
 source = { editable = "libs/mowdeck-patterns" }
@@ -1932,6 +1952,7 @@ dev = [
     { name = "mowdeck-contracts" },
     { name = "mowdeck-control" },
     { name = "mowdeck-control-mammotion", extra = ["esphome"] },
+    { name = "mowdeck-control-worx" },
     { name = "mowdeck-patterns" },
     { name = "mowdeck-service-kit", extra = ["db", "otel", "testing"] },
     { name = "mowdeck-wiki-sync" },
@@ -1974,6 +1995,7 @@ dev = [
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
     { name = "mowdeck-control-mammotion", extras = ["esphome"], editable = "libs/mowdeck-control-mammotion" },
+    { name = "mowdeck-control-worx", editable = "libs/mowdeck-control-worx" },
     { name = "mowdeck-patterns", editable = "libs/mowdeck-patterns" },
     { name = "mowdeck-service-kit", extras = ["db", "otel", "testing"], editable = "libs/mowdeck-service-kit" },
     { name = "mowdeck-wiki-sync", editable = "tools/wiki-sync" },
@@ -2907,6 +2929,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/54/ff/db9efe7454d329bfa6fe433e0f881eb9d28489fc4b8427ee2fbaedc5f42b/pywebpush-2.5.0.tar.gz", hash = "sha256:8260f8e42d70ed95a3bd00527ffcb43b5b3df8983a4a48b059fe29b06dc3d92c", size = 28565, upload-time = "2026-08-29T21:57:11.062Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/65/fc/32c8902ce796e8b21c229fa50478fd70e2be2fe7c3ac2259771cf1d5aa07/pywebpush-2.5.0-py3-none-any.whl", hash = "sha256:b5f5d45024223a04e73fe17f7a8e62540f35bbcc62b49e64d0a1080ff2dc26f2", size = 22520, upload-time = "2026-08-30T20:32:15.039Z" },
+]
+
+[[package]]
+name = "pyworxcloud"
+version = "6.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "paho-mqtt" },
+    { name = "requests" },
+    { name = "tzdata" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/f2/8150009db744697368091f0e072996a97831aa00bc009d925c234878925a/pyworxcloud-6.4.2.tar.gz", hash = "sha256:4d9e2a1ab4103b15ea5edfc0811452b216568013f585ef03ae08d2ddec6384cc", size = 66401, upload-time = "2026-07-12T12:16:46.946Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c9/a3/f42c4e7c68961375aea0866b4f2630ff0e2eddd086bb1a25e7c50252fac1/pyworxcloud-6.4.2-py3-none-any.whl", hash = "sha256:913b81a51dbf81325d5468995305cae7f5116573fdd3ce17c98449b9eb780a0e", size = 74766, upload-time = "2026-07-12T12:16:48.106Z" },
 ]
 
 [[package]]

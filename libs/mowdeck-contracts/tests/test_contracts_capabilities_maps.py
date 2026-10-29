@@ -12,6 +12,8 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerMap,
     RtkSource,
+    StartPlan,
+    StartPlanKind,
 )
 from pydantic import ValidationError
 
@@ -162,3 +164,38 @@ def test_capabilities_links_and_firmware_default_to_nothing() -> None:
     assert MowerCapabilities.model_validate_json(linked.model_dump_json()) == linked
     with pytest.raises(ValidationError):
         MowerCapabilities(links_supported=[f"kind{i}" for i in range(9)])
+
+
+def test_start_plans_for_mowers_without_map_areas() -> None:
+    caps = MowerCapabilities.model_validate(
+        {
+            "start_plans": [
+                {"ref": "now", "kind": "now"},
+                {"ref": "zone:2", "kind": "zone", "name": "Back lawn"},
+                {"ref": "edge", "kind": "edge"},
+            ]
+        }
+    )
+    assert [p.kind for p in caps.start_plans] == [
+        StartPlanKind.NOW,
+        StartPlanKind.ZONE,
+        StartPlanKind.EDGE,
+    ]
+    plan = caps.start_plan("zone:2")
+    assert plan is not None and plan.name == "Back lawn"
+    assert caps.start_plan("zone:9") is None
+    assert MowerCapabilities().start_plans == []
+    dumped = json.loads(caps.model_dump_json())
+    assert dumped["start_plans"][0] == {"ref": "now", "kind": "now", "name": None}
+
+
+@pytest.mark.parametrize("ref", ["", "Now", "zone:", "zone:a b", "x" * 40, "a:b:c"])
+def test_start_plan_refs_are_checked(ref: str) -> None:
+    with pytest.raises(ValidationError):
+        StartPlan(ref=ref, kind=StartPlanKind.NOW)
+
+
+def test_start_plan_refs_are_unique() -> None:
+    plan = {"ref": "now", "kind": "now"}
+    with pytest.raises(ValidationError, match="twice"):
+        MowerCapabilities.model_validate({"start_plans": [plan, plan]})

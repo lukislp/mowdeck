@@ -44,6 +44,7 @@ dev = [
   "mowdeck-contracts",
   "mowdeck-control",
   "mowdeck-control-mammotion[esphome]",
+  "mowdeck-control-worx",
   "mowdeck-patterns",
   "mowdeck-service-kit[db,otel,testing]",
   "mowdeck-wiki-sync",
@@ -71,6 +72,7 @@ mowdeck-authz = { workspace = true }
 mowdeck-contracts = { workspace = true }
 mowdeck-control = { workspace = true }
 mowdeck-control-mammotion = { workspace = true }
+mowdeck-control-worx = { workspace = true }
 mowdeck-patterns = { workspace = true }
 mowdeck-service-kit = { workspace = true }
 mowdeck-wiki-sync = { workspace = true }
@@ -117,6 +119,7 @@ files = [
   "libs/mowdeck-contracts",
   "libs/mowdeck-control",
   "libs/mowdeck-control-mammotion",
+  "libs/mowdeck-control-worx",
   "libs/mowdeck-patterns",
   "libs/mowdeck-service-kit",
   "services",
@@ -132,6 +135,12 @@ exclude = ["/migrations/"]
 # are unannotated; missing stubs never fail the build. Our own code stays strict.
 [[tool.mypy.overrides]]
 module = ["pymammotion.*"]
+ignore_missing_imports = true
+
+# pyworxcloud (GPL, used only by libs/mowdeck-control-worx) ships no type information; the
+# adapter keeps it behind its own typed session port.
+[[tool.mypy.overrides]]
+module = ["pyworxcloud", "pyworxcloud.*"]
 ignore_missing_imports = true
 
 # Atheris (the fuzzing engine of fuzz/) is installed only in the ClusterFuzzLite build image.

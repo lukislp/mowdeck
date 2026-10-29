@@ -152,6 +152,44 @@ class StartOptions(ContractModel):
         return None
 
 
+START_PLAN_REF_PATTERN = r"^[a-z][a-z0-9_]{0,31}(:[A-Za-z0-9_.-]{1,64})?$"
+"""A start plan reference: a lower case word, optionally ``:`` and an argument (a zone id)."""
+
+
+class StartPlanKind(StrEnum):
+    """What a start plan does, so a client can label it without knowing the vendor."""
+
+    NOW = "now"
+    """Mow now, wherever the mower itself decides (its whole garden)."""
+    ZONE = "zone"
+    """Mow one of the mower's own zones (a vendor zone or work area without map geometry)."""
+    EDGE = "edge"
+    """Cut along the boundary only."""
+    SCHEDULE = "schedule"
+    """Hand the mower back to its own schedule."""
+
+
+class StartPlan(ContractModel):
+    """One way to start a mower that has no map areas to choose (ADR 0066 amendment).
+
+    A mower whose connection knows no area geometry (its vendor keeps the garden to itself)
+    cannot be started by tapping areas. Its connection declares the starts it offers instead; a
+    client sends ``StartMow {plan_ref: ref}`` for the one the user picks and labels it by
+    ``kind`` (plus ``name`` for a zone).
+    """
+
+    ref: str = Field(
+        pattern=START_PLAN_REF_PATTERN, description="Sent as `StartMow.plan_ref` to start this."
+    )
+    kind: StartPlanKind
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        description="The mower's own name of a zone, shown as is; null for the other kinds.",
+    )
+
+
 class MowerCapabilities(ContractModel):
     """Feature flags and limits of one mower behind one connection.
 
@@ -263,6 +301,13 @@ class MowerCapabilities(ContractModel):
         "detection, laps around no-go zones, path order, start progress; ADR 0030). Clients "
         "show only what is declared here.",
     )
+    start_plans: list[StartPlan] = Field(
+        default_factory=list,
+        max_length=16,
+        description="Starts the mower offers without map areas (ADR 0066 amendment), in the "
+        "order a client lists them; each is sent as `StartMow.plan_ref`. Empty for mowers that "
+        "start on their map areas.",
+    )
 
     @model_validator(mode="after")
     def _check_ranges(self) -> Self:
@@ -290,7 +335,15 @@ class MowerCapabilities(ContractModel):
         if len(set(keys)) != len(keys):
             msg = "settings must not declare a key twice"
             raise ValueError(msg)
+        refs = [plan.ref for plan in self.start_plans]
+        if len(set(refs)) != len(refs):
+            msg = "start_plans must not declare a reference twice"
+            raise ValueError(msg)
         return self
+
+    def start_plan(self, ref: str) -> StartPlan | None:
+        """The declared start plan ``ref``; None when the connection does not offer it."""
+        return next((plan for plan in self.start_plans if plan.ref == ref), None)
 
     def setting(self, key: str) -> SettingSpec | None:
         """The declared setting ``key``; None when the connection does not offer it."""

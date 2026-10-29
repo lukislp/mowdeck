@@ -173,3 +173,15 @@ def test_descriptor_guards_option_keys(changes: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
         _descriptor(**changes)
     assert "iot_id" in RESERVED_OPTION_KEYS
+
+
+def test_descriptor_warnings_are_short_texts() -> None:
+    assert _descriptor().warnings == []
+    warned = _descriptor(warnings=["Unofficial API: the vendor may block the account."])
+    assert warned.warnings == ["Unofficial API: the vendor may block the account."]
+    with pytest.raises(ValidationError):
+        _descriptor(warnings=[""])
+    with pytest.raises(ValidationError):
+        _descriptor(warnings=["x" * 401])
+    with pytest.raises(ValidationError):
+        _descriptor(warnings=["a", "b", "c", "d", "e"])

@@ -63,7 +63,14 @@ from mowdeck_contracts.v1.camera import (
     RelayEndpoint,
     RelayTile,
 )
-from mowdeck_contracts.v1.capabilities import CameraAccess, MowerCapabilities, StartOptions
+from mowdeck_contracts.v1.capabilities import (
+    START_PLAN_REF_PATTERN,
+    CameraAccess,
+    MowerCapabilities,
+    StartOptions,
+    StartPlan,
+    StartPlanKind,
+)
 from mowdeck_contracts.v1.cloud import (
     CloudDiscoverError,
     CloudDiscoverErrorCode,
@@ -556,6 +563,7 @@ __all__ = [
     "SPOT_PRECISION",
     "SPOT_REASON_STALLED",
     "SPOT_RUN_FINAL_STATES",
+    "START_PLAN_REF_PATTERN",
     "TELEMETRY_BLADE_HOURS_THRESHOLD",
     "TRACKING_ENDED",
     "TRACKING_MOVED",
@@ -815,6 +823,8 @@ __all__ = [
     "SpotTarget",
     "StartMow",
     "StartOptions",
+    "StartPlan",
+    "StartPlanKind",
     "SubscriptionChanged",
     "SubscriptionStatus",
     "SyncMap",

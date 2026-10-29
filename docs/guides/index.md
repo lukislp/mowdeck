@@ -13,3 +13,4 @@
 - [Apple Watch](apple-watch.md): the mower's state on the wrist and on the watch face, Start, Pause, Station and the emergency stop.
 - [Apple Home and Google Home (Matter)](matter.md): pair each mower with the Home app, start, pause and send it home from there.
 - [Scripting MowDeck](scripting.md): personal access tokens, the API with examples in curl, Python and JavaScript, and the [API reference](../reference/api/index.md).
+- [Worx Landroid, Kress and LandXcape mowers](worx-landroid.md): switch the untested provider on, link the app account, what works and the risks of the unofficial API.

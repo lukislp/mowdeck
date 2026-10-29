@@ -2873,6 +2873,11 @@ export type components = {
              * @default false
              */
             tested_on_hardware: boolean;
+            /**
+             * Warnings
+             * @description English, short: risks the user should know before linking an account (an unofficial vendor API, an account the vendor may block, ...). The web app shows them prominently in the link form.
+             */
+            warnings?: string[];
         };
         /**
          * ProviderLink

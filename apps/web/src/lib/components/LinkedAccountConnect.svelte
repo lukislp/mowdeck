@@ -1,8 +1,9 @@
 <!--
   Link a vendor cloud account (ADR 0066). The form is rendered from the provider descriptors of
   Fleet's `GET /linked-accounts/providers`: a vendor rail when there are several, the chosen
-  vendor's guidance (what MowDeck can do, where the credentials come from, whether a developer
-  account is needed, whether it was ever tested on real hardware) and exactly its fields. The
+  vendor's guidance (what MowDeck can do, the risks the provider warns of, where the credentials
+  come from, whether a developer account is needed, whether it was ever tested on real hardware)
+  and exactly its fields. The
   login at the vendor can take close to a minute, so the pending state says so calmly. A refused
   login lands on the first secret field, "already linked" on the identity, an unreachable cloud
   above the form. `onconnect` does the request and throws the ApiProblem; secrets are cleared
@@ -38,6 +39,8 @@
 
   let chosen = $state<string | null>(null);
   const provider = $derived(providers.find((p) => p.provider === chosen) ?? providers[0] ?? null);
+  /** The provider's own warnings (an unofficial API, a possible account block), shown first. */
+  const warnings = $derived(provider?.warnings ?? []);
   let values = $state<CredentialValues>({});
   let tried = $state(false);
   let pending = $state(false);
@@ -157,8 +160,14 @@
         <h3>{provider.name}</h3>
       </header>
       {#if provider.summary}<p class="summary">{provider.summary}</p>{/if}
-      {#if !provider.tested_on_hardware || provider.needs_developer_account}
+      {#if !provider.tested_on_hardware || provider.needs_developer_account || warnings.length > 0}
         <ul class="badges">
+          {#each warnings as warning, index (index)}
+            <li class="badge warn" data-testid="provider-warning">
+              <Icon name="alert" size={16} />
+              <span>{warning}</span>
+            </li>
+          {/each}
           {#if !provider.tested_on_hardware}
             <li class="badge warn" data-testid="provider-untested">
               <Icon name="alert" size={16} />

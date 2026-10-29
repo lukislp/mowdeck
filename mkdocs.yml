@@ -159,6 +159,7 @@ nav:
       - guides/apple-watch.md
       - guides/setup-tour.md
       - guides/matter.md
+      - guides/worx-landroid.md
       - guides/scripting.md
   - API reference:
       - reference/api/index.md

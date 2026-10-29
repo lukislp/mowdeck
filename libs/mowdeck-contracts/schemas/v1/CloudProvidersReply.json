@@ -296,6 +296,17 @@
           "description": "False: built and tested against recorded fixtures and fakes only; the web app labels such providers as untested on real hardware.",
           "title": "Tested On Hardware",
           "type": "boolean"
+        },
+        "warnings": {
+          "description": "English, short: risks the user should know before linking an account (an unofficial vendor API, an account the vendor may block, ...). The web app shows them prominently in the link form.",
+          "items": {
+            "maxLength": 400,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Warnings",
+          "type": "array"
         }
       },
       "required": [

@@ -16,9 +16,9 @@ Descriptors never hold credentials; they are public data.
 import re
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Final, Literal, Self
+from typing import Annotated, Final, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel
 
@@ -182,6 +182,13 @@ class ProviderDescriptor(ContractModel):
         default=False,
         description="False: built and tested against recorded fixtures and fakes only; the web "
         "app labels such providers as untested on real hardware.",
+    )
+    warnings: list[Annotated[str, StringConstraints(min_length=1, max_length=400)]] = Field(
+        default_factory=list,
+        max_length=4,
+        description="English, short: risks the user should know before linking an account (an "
+        "unofficial vendor API, an account the vendor may block, ...). The web app shows them "
+        "prominently in the link form.",
     )
     mower_options: list[ConnectionOptionSpec] = Field(
         default_factory=list,
