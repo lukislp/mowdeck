@@ -105,6 +105,7 @@ Only the Device-Gateway talks to mowers. App, Home Assistant and bridges are equ
 | --- | --- | --- |
 | `mowdeck-control` | mower control without the platform (scripts, other projects): `MowerConnection`, safety controller, simulated mower | available (0.1.0) |
 | `mowdeck-control-mammotion` (GPL-3.0, [ADR 0011](../adr/0011-gpl-package-for-pymammotion-adapter.md)) | the real Mammotion adapter on PyMammotion: `cloud` and `ble_bridge` connections ([ADR 0019](../adr/0019-mammotion-adapter-transports.md)) | available (0.1.0), hardware run pending |
+| `mowdeck-control-husqvarna` | the Husqvarna Automower cloud provider on aioautomower (Automower Connect API, [ADR 0065](../adr/0065-cloud-provider-plugins-and-more-vendors.md)) | available (0.1.0), untested on real hardware, off by default |
 | `mowdeck-contracts` | all API and event formats | available (0.1.0) |
 | `mowdeck-auth` | verify access tokens against Identity's cached JWKS (EdDSA), the kit's principal resolver, token issuing and test helpers ([ADR 0015](../adr/0015-tokens-sessions-and-key-rotation.md)) | available (0.1.0) |
 | `mowdeck-authz` | thin OpenFGA client: one question, fail closed, decision cache, tuple writer, in-memory fake on the real model, FastAPI dependencies ([ADR 0014](../adr/0014-authorization-model-and-tuple-ownership.md)) | available (0.1.0) |

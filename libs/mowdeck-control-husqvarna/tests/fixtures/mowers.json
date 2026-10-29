@@ -1,0 +1,192 @@
+{
+  "data": [
+    {
+      "type": "mower",
+      "id": "5e1c0d2a-7b64-4f0e-9c1d-3a2b1c0d9e8f",
+      "attributes": {
+        "system": { "name": "Hugo", "model": "Automower 430X NERA", "serialNumber": 192411111 },
+        "battery": { "batteryPercent": 87, "remainingChargingTime": 0 },
+        "capabilities": {
+          "canConfirmError": true,
+          "headlights": true,
+          "position": true,
+          "stayOutZones": true,
+          "workAreas": true
+        },
+        "mower": {
+          "mode": "MAIN_AREA",
+          "activity": "MOWING",
+          "inactiveReason": "NONE",
+          "state": "IN_OPERATION",
+          "workAreaId": 123456,
+          "errorCode": 0,
+          "errorCodeTimestamp": 0,
+          "isErrorConfirmable": false
+        },
+        "calendar": {
+          "tasks": [
+            {
+              "start": 540,
+              "duration": 480,
+              "monday": true,
+              "tuesday": true,
+              "wednesday": true,
+              "thursday": true,
+              "friday": true,
+              "saturday": false,
+              "sunday": false,
+              "workAreaId": 123456
+            }
+          ]
+        },
+        "planner": {
+          "nextStartTimestamp": 0,
+          "override": { "action": "NOT_ACTIVE" },
+          "restrictedReason": "NONE"
+        },
+        "metadata": { "connected": true, "statusTimestamp": 1793606400000 },
+        "workAreas": [
+          {
+            "workAreaId": 123456,
+            "name": "Front lawn",
+            "type": "SYSTEMATIC",
+            "cuttingHeight": 50,
+            "enabled": true,
+            "progress": 40,
+            "lastTimeCompleted": 0,
+            "useGlobalCuttingHeight": true
+          },
+          {
+            "workAreaId": 0,
+            "name": "",
+            "type": "RANDOM",
+            "cuttingHeight": 40,
+            "enabled": false,
+            "useGlobalCuttingHeight": true
+          }
+        ],
+        "positions": [
+          { "latitude": 57.7086409, "longitude": 14.1678988 },
+          { "latitude": 57.7087,    "longitude": 14.1679 }
+        ],
+        "settings": { "cuttingHeight": 4, "headlight": { "mode": "EVENING_ONLY" } },
+        "statistics": {
+          "cuttingBladeUsageTime": 123456,
+          "downTime": 1200,
+          "numberOfChargingCycles": 421,
+          "numberOfCollisions": 11396,
+          "totalChargingTime": 81000,
+          "totalCuttingTime": 4334400,
+          "totalDriveDistance": 1780272,
+          "totalRunningTime": 4564800,
+          "totalSearchingTime": 370800,
+          "upTime": 1288000
+        },
+        "stayOutZones": {
+          "dirty": false,
+          "zones": [{ "id": "81C6EEA2-D139-4FEA-B134-F22A6B3EA403", "name": "Pond", "enabled": true }]
+        }
+      }
+    },
+    {
+      "type": "mower",
+      "id": "8f2a6c3e-1d4b-4e5f-a6b7-c8d9e0f1a2b3",
+      "attributes": {
+        "system": { "name": "Lisa", "model": "Automower 315 Mark II", "serialNumber": 182200001 },
+        "battery": { "batteryPercent": 42, "remainingChargingTime": 1800 },
+        "capabilities": {
+          "canConfirmError": false,
+          "headlights": false,
+          "position": false,
+          "stayOutZones": false,
+          "workAreas": false
+        },
+        "mower": {
+          "mode": "MAIN_AREA",
+          "activity": "CHARGING",
+          "inactiveReason": "NONE",
+          "state": "RESTRICTED",
+          "errorCode": 0,
+          "errorCodeTimestamp": 0
+        },
+        "calendar": { "tasks": [] },
+        "planner": {
+          "nextStartTimestamp": 1793628000000,
+          "override": { "action": "NOT_ACTIVE" },
+          "restrictedReason": "WEEK_SCHEDULE"
+        },
+        "metadata": { "connected": true, "statusTimestamp": 1793606300000 },
+        "positions": [],
+        "settings": { "cuttingHeight": null, "headlight": { "mode": null } },
+        "statistics": {}
+      }
+    },
+    {
+      "type": "mower",
+      "id": "2b7d9e1f-3c5a-4d6e-8f90-a1b2c3d4e5f6",
+      "attributes": {
+        "system": { "name": "Lisa", "model": "Automower 405X", "serialNumber": 222300002 },
+        "battery": { "batteryPercent": 71, "remainingChargingTime": 0 },
+        "capabilities": {
+          "canConfirmError": true,
+          "headlights": false,
+          "position": true,
+          "stayOutZones": false,
+          "workAreas": false
+        },
+        "mower": {
+          "mode": "MAIN_AREA",
+          "activity": "NOT_APPLICABLE",
+          "inactiveReason": "NONE",
+          "state": "ERROR",
+          "errorCode": 15,
+          "errorCodeTimestamp": 1793606200000,
+          "isErrorConfirmable": false
+        },
+        "calendar": { "tasks": [] },
+        "planner": {
+          "nextStartTimestamp": 0,
+          "override": { "action": "NOT_ACTIVE" },
+          "restrictedReason": "NONE"
+        },
+        "metadata": { "connected": true, "statusTimestamp": 1793606200000 },
+        "positions": [{ "latitude": 57.701, "longitude": 14.17 }],
+        "settings": { "cuttingHeight": 3, "headlight": { "mode": null } },
+        "statistics": { "numberOfChargingCycles": 12 }
+      }
+    },
+    {
+      "type": "mower",
+      "id": "0-0",
+      "attributes": {
+        "system": { "name": "Not a mower", "model": "Unknown", "serialNumber": 0 },
+        "battery": { "batteryPercent": 0, "remainingChargingTime": 0 },
+        "capabilities": {
+          "canConfirmError": false,
+          "headlights": false,
+          "position": false,
+          "stayOutZones": false,
+          "workAreas": false
+        },
+        "mower": {
+          "mode": "UNKNOWN",
+          "activity": "UNKNOWN",
+          "inactiveReason": "NONE",
+          "state": "UNKNOWN",
+          "errorCode": 0,
+          "errorCodeTimestamp": 0
+        },
+        "calendar": { "tasks": [] },
+        "planner": {
+          "nextStartTimestamp": 0,
+          "override": { "action": "NOT_ACTIVE" },
+          "restrictedReason": "NONE"
+        },
+        "metadata": { "connected": false, "statusTimestamp": 0 },
+        "positions": [],
+        "settings": { "cuttingHeight": null, "headlight": { "mode": null } },
+        "statistics": {}
+      }
+    }
+  ]
+}

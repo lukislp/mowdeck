@@ -18,6 +18,7 @@ import {
   actor,
   createMowerByApi,
   loginByUi,
+  pickProvider,
   registerByApi,
   waitForMap,
   watchCsp,
@@ -113,6 +114,7 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     await expect(page.getByTestId('linked-flow')).toBeVisible();
     await expect(page.locator('#name')).toHaveCount(0);
     await expect(page.getByTestId('linked-connect')).toBeVisible();
+    await pickProvider(page, 'mammotion');
 
     // A wrong password is refused by the (fake) cloud and lands on the password field.
     await page.locator('#linked-email').fill(email);

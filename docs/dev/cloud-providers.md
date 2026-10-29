@@ -61,5 +61,6 @@ Never log a credential, never put one into an exception message, and never answe
 | Provider | Package | Licence | User provides | Tested on hardware | On by default |
 | --- | --- | --- | --- | --- | --- |
 | `mammotion` | `mowdeck-control-mammotion` | GPL-3.0 | e-mail and password of a second Mammotion account | yes (LUBA 2 AWD X) | yes |
+| `husqvarna` | `mowdeck-control-husqvarna` | Apache-2.0 | application key and secret of their own application in the Husqvarna Developer Portal (free developer account) | no | no (`MOWDECK_CLOUD_PROVIDERS_ENABLE=husqvarna`) |
 
-The research behind further vendors (Husqvarna, Segway Navimow, Worx) is in [ADR 0065](../adr/0065-cloud-provider-plugins-and-more-vendors.md).
+The Husqvarna adapter's capabilities, state mapping, commands and rate limits are in `libs/mowdeck-control-husqvarna/README.md`. The research behind further vendors (Husqvarna, Segway Navimow, Worx) is in [ADR 0065](../adr/0065-cloud-provider-plugins-and-more-vendors.md).
