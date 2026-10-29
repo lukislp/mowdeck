@@ -260,7 +260,8 @@ export type paths = {
         };
         /**
          * Browse Mower Lexicon
-         * @description Browse the error lexicon of this mower's vendor (picked by its connection): a page of
+         * @description Browse the error lexicon of this mower's vendor (picked by its cloud provider, else its
+         *     connection kind): a page of
          *     entries in plain words, ordered by code, filtered by text, category, severity and codes,
          *     with the counts per category and severity for filter chips. `lexicon` is null when no
          *     lexicon applies or the Device-Gateway does not answer. 404 "no telemetry yet" before the
@@ -1347,6 +1348,11 @@ export type components = {
          * @description Summary of an installed lexicon (no entries).
          */
         ErrorLexiconInfo: {
+            /**
+             * Cloud Providers
+             * @description The cloud providers it serves (empty: `vendor`).
+             */
+            cloud_providers?: string[];
             /** Connection Kinds */
             connection_kinds?: components["schemas"]["ConnectionKind"][];
             /**
@@ -2361,6 +2367,11 @@ export type components = {
              * @default false
              */
             charging: boolean;
+            /**
+             * Cloud Provider
+             * @description With connection `cloud`: the cloud provider (ADR 0066) of the mower's linked account, so consumers pick the vendor's error lexicon (ADR 0067) when several providers share the kind. Set by the Device-Gateway, never by an adapter; null for other kinds and in states from before the field.
+             */
+            cloud_provider?: string | null;
             /**
              * Connected
              * @description False in the state the Device-Gateway publishes right after its connection to the mower ended: the last known values, with `heartbeat_at` the last time the link was alive. Set by the gateway, never by an adapter.

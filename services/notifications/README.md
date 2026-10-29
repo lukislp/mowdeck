@@ -157,7 +157,7 @@ Metrics: `mowdeck_notifications_deliveries_total{channel, status}` (`sent`, `ret
 | consumed | `event.tracking.>` | durable queue `notifications-tracking` | `tracking.started`, `.moved`, `.stale`, `.ended` (`TrackingEvent`): the four `tracking_*` kinds |
 | consumed | `event.identity.grants.changed` | every instance | drop cached authorization decisions |
 | request | `fleet.mowers.list` | at startup, retried | seeds the directory (`MowerListRequest` with one shard) |
-| request | `gateway.errors.explain` | core NATS, per rendered `mower_stuck` (cached an hour) | `ErrorExplainRequest` / `ErrorExplainReply`: the `error_detail` of the push text (ADR 0067) |
+| request | `gateway.errors.explain` | core NATS, per rendered `mower_stuck` (cached an hour) | `ErrorExplainRequest` / `ErrorExplainReply`: the `error_detail` of the push text, with the lexicon of the state's `cloud_provider`, else its `connection` (ADR 0067) |
 | produced | `event.notifications.sent` | | `NotificationSent`: one rendered notification for one user and the channels it was queued for, with `created_at` (the inbox item's) |
 | produced | `event.notifications.raised` | | `NotificationRaised`: every derived notification once per account, before the per-user fan-out (also without any subscriber), rendered in English, with `dedupe_key`, `required_relation` (`can_drive` for the AI assist kinds) and a `notification_id` derived from account and `dedupe_key` (also the event id, so a repeat is a JetStream duplicate). Realtime forwards it to API tokens |
 

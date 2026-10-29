@@ -15,7 +15,14 @@ flowchart LR
   tel --> web["web app, Home Assistant,<br/>widgets"]
 ```
 
-Only the Device-Gateway installs adapter packages. It answers lookups from every lexicon registered there; Telemetry and Notifications ask it over NATS and never import a vendor package. The lexicon is picked by the vendor key or by the mower's connection kind (`MowerState.connection`), so a lexicon lists the connection kinds its adapter registers.
+Only the Device-Gateway installs adapter packages. It answers lookups from every lexicon registered there; Telemetry and Notifications ask it over NATS and never import a vendor package. The lexicon of a mower is picked in this order:
+
+1. the vendor key, when the caller names one (`/error-codes/{vendor}/{code}`);
+2. the mower's cloud provider (`MowerState.cloud_provider`, which the gateway stamps on every state of a `cloud` mower from its registration, [ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md)): the lexicon that serves it. Several vendors share the kind `cloud`, so this is what keeps one vendor's texts off another vendor's mowers. A provider no lexicon serves gets the generic explanation;
+3. the mower's connection kind (`MowerState.connection`) through `connection_kinds`, for kinds that belong to one vendor (a Bluetooth bridge, the simulator) and for `cloud` states that name no provider (those go to the provider that claims unqualified cloud registrations);
+4. the generic explanation.
+
+So a lexicon lists the connection kinds its adapter registers and, when its cloud provider id differs from the vendor key, the provider ids it serves.
 
 ## 1. Write the lexicon
 
@@ -57,7 +64,9 @@ from mowdeck_control.error_lexicons import ErrorLexiconProvider
 LEXICON = ErrorLexicon(
     vendor="acme",  # the entry point name, lower case
     vendor_name="Acme",  # shown to users
-    connection_kinds=[ConnectionKind("acme_cloud")],
+    connection_kinds=[ConnectionKind.CLOUD],
+    # only when the provider id (`mowdeck.cloud_providers` entry point) differs from `vendor`:
+    cloud_providers=["acme-eu", "acme-us"],
     source="Acme service manual 2026, chapter 9",
     entries=[
         ErrorLexiconEntry(
@@ -129,7 +138,8 @@ In the adapter package's tests:
 
 - every code your mapping can produce is in the lexicon, and `category_of` matches what the mapping puts into `error_category`;
 - every entry has English, and German where you wrote it; curated entries have steps;
-- the entry point is declared (`tomllib` on `pyproject.toml`) and `mowdeck_control.explain_error("<code>", "de", vendor="acme")` finds it once the package is installed.
+- the entry point is declared (`tomllib` on `pyproject.toml`) and `mowdeck_control.explain_error("<code>", "de", vendor="acme")` finds it once the package is installed;
+- a cloud vendor: `explain_error("<code>", "de", cloud_provider="<provider id>")` finds your lexicon, not another one on `cloud`.
 
 `tools/repo-checks/tests/test_vendor_isolation.py` fails when an adapter package registers connections without a lexicon, when core code imports an adapter package or its vendor library, or when a service other than the Device-Gateway depends on an adapter package. Install the adapter only in the Device-Gateway image.
 

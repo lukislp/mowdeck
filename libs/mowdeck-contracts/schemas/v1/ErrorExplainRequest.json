@@ -34,7 +34,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Ask the Device-Gateway to explain codes (``gateway.errors.explain``).\n\nThe lexicon is picked by ``vendor`` or, without it, by ``connection`` (the lexicon that lists\nthe kind). ``category`` is the state's ``error_category``: it shapes the generic advice for\na code no lexicon knows.",
+  "description": "Ask the Device-Gateway to explain codes (``gateway.errors.explain``).\n\nThe lexicon is picked by ``vendor``; without it by ``cloud_provider`` (the mower's\n``MowerState.cloud_provider``: the lexicon that serves the provider, none when no lexicon\ndoes); without both by ``connection`` (the lexicon that lists the kind; for ``cloud`` the\ngateway prefers the provider that claims unqualified cloud registrations). ``category`` is\nthe state's ``error_category``: it shapes the generic advice for a code no lexicon knows.",
   "properties": {
     "category": {
       "anyOf": [
@@ -46,6 +46,19 @@
         }
       ],
       "default": null
+    },
+    "cloud_provider": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cloud Provider"
     },
     "codes": {
       "items": {

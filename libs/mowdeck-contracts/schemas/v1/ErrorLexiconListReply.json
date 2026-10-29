@@ -14,6 +14,15 @@
     "ErrorLexiconInfo": {
       "description": "Summary of an installed lexicon (no entries).",
       "properties": {
+        "cloud_providers": {
+          "description": "The cloud providers it serves (empty: `vendor`).",
+          "items": {
+            "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+            "type": "string"
+          },
+          "title": "Cloud Providers",
+          "type": "array"
+        },
         "connection_kinds": {
           "items": {
             "$ref": "#/$defs/ConnectionKind"

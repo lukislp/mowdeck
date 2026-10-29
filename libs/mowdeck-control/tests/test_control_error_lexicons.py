@@ -11,6 +11,7 @@ from mowdeck_contracts.v1 import (
     ConnectionKind,
     ErrorLexicon,
     ErrorLexiconEntry,
+    ErrorLexiconSearchRequest,
     ErrorText,
     MowerErrorCategory,
 )
@@ -84,6 +85,45 @@ def test_control_error_lexicons_find_the_lexicon_by_connection() -> None:
     [unknown] = registry.explain(["12"], "en", connection=ConnectionKind.SIMULATED)
     assert unknown.known is False and unknown.vendor is None
     assert registry.provider() is None
+
+
+def _cloud_lexicon(vendor: str, title: str, providers: list[str] | None = None) -> ErrorLexicon:
+    """A lexicon on the shared ``cloud`` kind whose code ``12`` reads ``title``."""
+    return ErrorLexicon(
+        vendor=vendor,
+        vendor_name=vendor.title(),
+        connection_kinds=[ConnectionKind.CLOUD],
+        cloud_providers=providers or [],
+        entries=[ErrorLexiconEntry(code="12", texts={"en": ErrorText(title=title)})],
+    )
+
+
+def test_control_error_lexicons_pick_the_lexicon_of_the_mowers_cloud_provider() -> None:
+    # Two vendors on the same connection kind (ADR 0066): the kind alone would give both mowers
+    # the first lexicon by vendor; the cloud provider tells them apart.
+    registry = ErrorLexiconRegistry(lambda: [])
+    registry.register(_cloud_lexicon("alpha", "Alpha battery"))
+    registry.register(_cloud_lexicon("bravo", "Bravo battery", providers=["bravo-eu"]))
+    cloud = ConnectionKind.CLOUD
+
+    def title(provider: str | None) -> tuple[str | None, str]:
+        [explanation] = registry.explain(["12"], "en", connection=cloud, cloud_provider=provider)
+        return explanation.vendor, explanation.title
+
+    assert title("alpha") == ("alpha", "Alpha battery")  # the provider id is the vendor key
+    assert title("bravo-eu") == ("bravo", "Bravo battery")  # listed in cloud_providers
+    # bravo lists its providers, so its vendor key alone no longer serves "bravo"
+    assert title("bravo") == (None, "Unknown error 12 from the mower")
+    # a provider without a lexicon gets the generic advice, never another vendor's words
+    assert title("charlie") == (None, "Unknown error 12 from the mower")
+    assert title(None) == ("alpha", "Alpha battery")  # no provider: by connection kind
+    # an explicit vendor still wins over the provider
+    [by_vendor] = registry.explain(["12"], "en", vendor="bravo", cloud_provider="alpha")
+    assert by_vendor.vendor == "bravo"
+    page = registry.search(ErrorLexiconSearchRequest(connection=cloud, cloud_provider="bravo-eu"))
+    assert page.lexicon is not None and page.lexicon.vendor == "bravo"
+    assert page.lexicon.cloud_providers == ["bravo-eu"]
+    assert explain_error("12", "en", cloud_provider="charlie").known is False
 
 
 def test_control_error_lexicons_skip_broken_and_misnamed_entry_points(

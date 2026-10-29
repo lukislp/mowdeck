@@ -5,18 +5,24 @@ A small responder on the in-memory bus stands in for the gateway: it answers fro
 simulator's lexicon through ``mowdeck-control``'s registry, the same code the gateway runs."""
 
 from datetime import UTC, datetime
+from uuid import UUID
 
 from mowdeck_contracts.v1 import (
     GATEWAY_ERRORS_ENTRIES,
     GATEWAY_ERRORS_EXPLAIN,
     GATEWAY_ERRORS_LEXICONS,
+    ConnectionKind,
     ErrorExplainReply,
     ErrorExplainRequest,
+    ErrorLexicon,
+    ErrorLexiconEntry,
     ErrorLexiconListReply,
     ErrorLexiconSearchReply,
     ErrorLexiconSearchRequest,
+    ErrorText,
     MowerActivity,
     MowerErrorCategory,
+    MowerState,
 )
 from mowdeck_control import ErrorLexiconRegistry
 from mowdeck_control.simulator_lexicon import SIMULATED_LEXICON
@@ -26,10 +32,11 @@ from telemetry_support import API, Harness, harness, make_state
 from telemetry.application.errors import ErrorExplanations
 
 
-async def gateway(bus: InMemoryBus) -> list[ErrorExplainRequest]:
+async def gateway(bus: InMemoryBus, *lexicons_: ErrorLexicon) -> list[ErrorExplainRequest]:
     """Answer lookups like the Device-Gateway; returns the requests it saw."""
     registry = ErrorLexiconRegistry(lambda: [])
-    registry.register(SIMULATED_LEXICON)
+    for lexicon in lexicons_ or (SIMULATED_LEXICON,):
+        registry.register(lexicon)
     seen: list[ErrorExplainRequest] = []
 
     async def explain(message: BusMessage) -> None:
@@ -40,6 +47,7 @@ async def gateway(bus: InMemoryBus) -> list[ErrorExplainRequest]:
             request.locale,
             vendor=request.vendor,
             connection=request.connection,
+            cloud_provider=request.cloud_provider,
             category=request.category,
         )
         await message.respond(ErrorExplainReply(explanations=explanations))
@@ -341,3 +349,71 @@ async def test_telemetry_error_lexicon_cache_expires_and_is_bounded() -> None:
     await explanations.explain(["stuck"], "de", vendor="simulated")
     assert fake.calls == 4
     assert await explanations.lexicons() == []
+
+
+def _cloud_lexicon(vendor: str, title: str) -> ErrorLexicon:
+    """A lexicon on the shared ``cloud`` kind whose code ``7`` reads ``title``."""
+    return ErrorLexicon(
+        vendor=vendor,
+        vendor_name=vendor.title(),
+        connection_kinds=[ConnectionKind.CLOUD],
+        entries=[ErrorLexiconEntry(code="7", texts={"en": ErrorText(title=title)})],
+    )
+
+
+def _cloud_state(mower_id: UUID, account_id: UUID, provider: str | None) -> MowerState:
+    state = make_state(
+        mower_id,
+        account_id,
+        at=datetime.now(UTC),
+        activity=MowerActivity.ERROR,
+        error_code="7",
+        error_category=MowerErrorCategory.TRAPPED,
+    )
+    return state.model_copy(update={"connection": ConnectionKind.CLOUD, "cloud_provider": provider})
+
+
+async def test_telemetry_error_lexicon_each_mower_gets_its_providers_texts() -> None:
+    """Two providers share the kind ``cloud`` (ADR 0066): the mower's ``cloud_provider`` picks
+    the lexicon in every route, so no mower gets the other vendor's words."""
+    async with harness() as h:
+        seen = await gateway(
+            h.bus, _cloud_lexicon("alpha", "Alpha jammed"), _cloud_lexicon("bravo", "Bravo jammed")
+        )
+        owner = await h.owner()
+        alpha, bravo, legacy = [await h.add_mower(owner) for _ in range(3)]
+        await h.publish_state(_cloud_state(alpha, owner.account_id, "alpha"))
+        await h.publish_state(_cloud_state(bravo, owner.account_id, "bravo"))
+        await h.publish_state(_cloud_state(legacy, owner.account_id, None))
+
+        async def title(mower_id: UUID, route: str) -> object:
+            body = (
+                await h.client.get(
+                    f"{API}/mowers/{mower_id}/{route}",
+                    params={"locale": "en", "code": "7"},
+                    headers=owner.headers,
+                )
+            ).json()
+            match route:
+                case "error":
+                    return body["error"]["title"]
+                case "widget":
+                    return body["error_title"]
+                case "error-codes":
+                    return body["explanations"][0]["title"]
+                case _:
+                    return body["lexicon"]["vendor"]
+
+        for route in ("error", "widget", "error-codes"):
+            assert await title(alpha, route) == "Alpha jammed"
+            assert await title(bravo, route) == "Bravo jammed"
+        assert await title(alpha, "error-lexicon") == "alpha"
+        assert await title(bravo, "error-lexicon") == "bravo"
+        legacy_error = await title(legacy, "error")
+    # a stored state from before the field asks by connection kind; the gateway decides
+    assert {(r.cloud_provider, r.connection) for r in seen} == {
+        ("alpha", None),
+        ("bravo", None),
+        (None, ConnectionKind.CLOUD),
+    }
+    assert legacy_error == "Alpha jammed"

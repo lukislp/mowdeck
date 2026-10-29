@@ -2,12 +2,15 @@
 
 Telemetry holds no code table: the lexicons ship with the adapter packages, which only the
 Device-Gateway installs, so every lookup asks the gateway (:class:`ErrorLexiconGateway`, core
-NATS ``gateway.errors.explain``). Answers are cached per (vendor or connection, code, locale,
-category) for ``cache_seconds``; a gateway that does not answer gives the generic explanation
-of :func:`~mowdeck_contracts.v1.unknown_explanation` (``known`` false), which is not cached, so
-the next request asks again.
+NATS ``gateway.errors.explain``). The lexicon is picked by the mower's cloud provider
+(``MowerState.cloud_provider``, ADR 0066), else by its connection kind; the gateway resolves
+both, Telemetry only reads them from the stored state. Answers are cached per (vendor,
+provider, connection, code, locale, category) for ``cache_seconds``; a gateway that does not
+answer gives the generic explanation of :func:`~mowdeck_contracts.v1.unknown_explanation`
+(``known`` false), which is not cached, so the next request asks again.
 """
 
+import re
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
@@ -17,6 +20,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    PROVIDER_ID_PATTERN,
     ConnectionKind,
     ErrorExplainReply,
     ErrorExplainRequest,
@@ -36,7 +40,8 @@ from telemetry.application.queries import Queries
 
 _log = get_logger("telemetry.errors")
 
-CacheKey = tuple[str | None, str | None, str, str, str | None]
+CacheKey = tuple[str | None, str | None, str | None, str, str, str | None]
+"""(vendor, cloud provider, connection, code, locale, category)."""
 
 
 class ErrorLexiconGateway(Protocol):
@@ -77,6 +82,12 @@ def _connection(value: object) -> ConnectionKind | None:
         return ConnectionKind(str(value)) if value else None
     except ValueError:
         return None
+
+
+def _cloud_provider(value: object) -> str | None:
+    if not isinstance(value, str) or not re.fullmatch(PROVIDER_ID_PATTERN, value):
+        return None
+    return value
 
 
 class ErrorExplanations:
@@ -120,16 +131,20 @@ class ErrorExplanations:
         locale: str | None = None,
         *,
         vendor: str | None = None,
+        cloud_provider: str | None = None,
         connection: ConnectionKind | None = None,
         category: MowerErrorCategory | None = None,
     ) -> list[ErrorExplanation]:
-        """One explanation per code, in order; never raises."""
+        """One explanation per code, in order; never raises. The lexicon is the one of
+        ``vendor``, else of ``cloud_provider``, else of ``connection``."""
         lang = normalise_locale(locale)
+        provider = None if vendor else cloud_provider
+        connection = None if vendor or provider else connection
         conn = connection.value if connection is not None else None
         cat = category.value if category is not None else None
-        keys = [(vendor, None if vendor else conn, code, lang, cat) for code in codes]
+        keys: list[CacheKey] = [(vendor, provider, conn, code, lang, cat) for code in codes]
         found = {key: hit for key in keys if (hit := self._cached(key)) is not None}
-        missing = list(dict.fromkeys(key[2] for key in keys if key not in found))
+        missing = list(dict.fromkeys(key[3] for key in keys if key not in found))
         if missing:
             reply: ErrorExplainReply | None = None
             try:
@@ -137,7 +152,8 @@ class ErrorExplanations:
                     ErrorExplainRequest(
                         codes=missing,
                         vendor=vendor,
-                        connection=None if vendor else connection,
+                        cloud_provider=provider,
+                        connection=connection,
                         locale=lang,
                         category=category,
                     )
@@ -146,21 +162,24 @@ class ErrorExplanations:
                 _log.warning("error lexicon lookup failed", error=repr(exc), codes=len(missing))
             if reply is not None and len(reply.explanations) == len(missing):
                 for code, explanation in zip(missing, reply.explanations, strict=True):
-                    key = (vendor, None if vendor else conn, code, lang, cat)
+                    key = (vendor, provider, conn, code, lang, cat)
                     self._store(key, explanation)
                     found[key] = explanation
         return [
-            found.get(key) or unknown_explanation(key[2], lang, vendor=vendor, category=category)
+            found.get(key) or unknown_explanation(key[3], lang, vendor=vendor, category=category)
             for key in keys
         ]
 
     async def explain_for_mower(
         self, account_id: UUID, mower_id: UUID, codes: Sequence[str], locale: str | None
     ) -> list[ErrorExplanation]:
-        """Explain ``codes`` with the lexicon of the mower's connection (its latest state)."""
+        """Explain ``codes`` with the lexicon of the mower's vendor (its latest state)."""
         row = await self._queries.state(account_id, mower_id)
         return await self.explain(
-            codes, locale, connection=_connection(row.state.get("connection"))
+            codes,
+            locale,
+            cloud_provider=_cloud_provider(row.state.get("cloud_provider")),
+            connection=_connection(row.state.get("connection")),
         )
 
     async def current(self, account_id: UUID, mower_id: UUID, locale: str | None) -> MowerError:
@@ -180,14 +199,15 @@ class ErrorExplanations:
     async def for_state(
         self, state: Mapping[str, Any], locale: str | None
     ) -> ErrorExplanation | None:
-        """The error code of a stored state explained with the lexicon of its connection and
-        its category; None when the state carries no code."""
+        """The error code of a stored state explained with the lexicon of its vendor (cloud
+        provider, else connection) and its category; None when the state carries no code."""
         code = state.get("error_code")
         if not code:
             return None
         [explanation] = await self.explain(
             [str(code)],
             locale,
+            cloud_provider=_cloud_provider(state.get("cloud_provider")),
             connection=_connection(state.get("connection")),
             category=_category(state.get("error_category")),
         )
@@ -206,13 +226,15 @@ class ErrorExplanations:
         offset: int = 0,
         limit: int = 50,
     ) -> ErrorLexiconSearchReply:
-        """A page of the lexicon of the mower's connection (its latest state; 404 before the
+        """A page of the lexicon of the mower's vendor (its latest state; 404 before the
         first state). Not cached (a settings page, filtered per request); an empty reply
         (``lexicon`` null) when the gateway does not answer or no lexicon applies."""
         row = await self._queries.state(account_id, mower_id)
         connection = _connection(row.state.get("connection"))
+        provider = _cloud_provider(row.state.get("cloud_provider"))
         request = ErrorLexiconSearchRequest(
-            connection=connection,
+            cloud_provider=provider,
+            connection=None if provider else connection,
             locale=normalise_locale(locale),
             query=query.strip(),
             category=category,

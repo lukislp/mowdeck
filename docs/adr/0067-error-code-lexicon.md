@@ -31,7 +31,7 @@ Forces:
 
 ### Lexicons register through an entry point (`mowdeck-control`)
 
-`mowdeck_control.error_lexicons` loads the entry point group **`mowdeck.error_lexicons`**: the name is the vendor key, the object an `ErrorLexicon` (plain data), an `ErrorLexiconProvider` (the data plus an optional `normalise(raw) -> code` function) or a callable without arguments that returns either (built at the first lookup). The registry picks a lexicon by vendor, or by the mower's connection kind (`MowerState.connection`) through `connection_kinds`. A broken or misnamed entry point is logged and skipped, like a broken connection adapter. Adapters can also call `provider.category_of(code)` to fill `MowerState.error_category`.
+`mowdeck_control.error_lexicons` loads the entry point group **`mowdeck.error_lexicons`**: the name is the vendor key, the object an `ErrorLexicon` (plain data), an `ErrorLexiconProvider` (the data plus an optional `normalise(raw) -> code` function) or a callable without arguments that returns either (built at the first lookup). The registry picks a lexicon by vendor, by the mower's cloud provider (`MowerState.cloud_provider`, see [Picking the lexicon by cloud provider](#picking-the-lexicon-by-cloud-provider-added-2026-10-29)) or by its connection kind (`MowerState.connection`) through `connection_kinds`. A broken or misnamed entry point is logged and skipped, like a broken connection adapter. Adapters can also call `provider.category_of(code)` to fill `MowerState.error_category`.
 
 ```toml
 [project.entry-points."mowdeck.error_lexicons"]
@@ -43,7 +43,7 @@ mammotion = "mowdeck_control_mammotion.lexicon:mammotion_lexicon"
 
 ### Who serves it
 
-The Device-Gateway is the only service with the adapters installed. It answers two core NATS requests, any instance (queue group `device-gateway`): `gateway.errors.explain` (`ErrorExplainRequest`: up to 20 codes, vendor or connection, locale, category) and `gateway.errors.lexicons`. It holds no table of its own.
+The Device-Gateway is the only service with the adapters installed. It answers two core NATS requests, any instance (queue group `device-gateway`): `gateway.errors.explain` (`ErrorExplainRequest`: up to 20 codes, vendor, cloud provider or connection, locale, category) and `gateway.errors.lexicons`. It holds no table of its own.
 
 Telemetry is the public API (it already serves the mower state to the web app, the Home Assistant integration and the widgets):
 
@@ -63,7 +63,20 @@ The mower page shows the explanation as a card (severity and category, vendor an
 
 ### Browsing a lexicon (added 2026-10-29)
 
-The mower's settings page has an **Error codes** section: the whole lexicon of the mower's vendor, searchable by code or text (every word must match, in the chosen language and English), filtered by category and severity, a page of 50 at a time, a row opening to the full explanation. Codes the mower has reported (its health counts) carry their count, the current error is pinned and marked, unverified entries are marked. A third core NATS request, `gateway.errors.entries` (`ErrorLexiconSearchRequest` / `ErrorLexiconSearchReply`), returns one page with the counts per category and severity of the whole lexicon; the search itself is the pure `search_lexicon` of the contract, so every vendor's lexicon behaves alike, and the registry normalises the mower's spelling of a requested code (`-1201`) first. Telemetry serves it as `GET /mowers/{id}/error-lexicon`, picking the lexicon by the mower's connection; it does not cache the pages (a settings page, filtered per request). The web app stays vendor neutral: it maps the mower's reported codes to the lexicon's spelling through the explanations the server returns, never by its own rules. The section is read-only.
+The mower's settings page has an **Error codes** section: the whole lexicon of the mower's vendor, searchable by code or text (every word must match, in the chosen language and English), filtered by category and severity, a page of 50 at a time, a row opening to the full explanation. Codes the mower has reported (its health counts) carry their count, the current error is pinned and marked, unverified entries are marked. A third core NATS request, `gateway.errors.entries` (`ErrorLexiconSearchRequest` / `ErrorLexiconSearchReply`), returns one page with the counts per category and severity of the whole lexicon; the search itself is the pure `search_lexicon` of the contract, so every vendor's lexicon behaves alike, and the registry normalises the mower's spelling of a requested code (`-1201`) first. Telemetry serves it as `GET /mowers/{id}/error-lexicon`, picking the lexicon by the mower's cloud provider, else its connection; it does not cache the pages (a settings page, filtered per request). The web app stays vendor neutral: it maps the mower's reported codes to the lexicon's spelling through the explanations the server returns, never by its own rules. The section is read-only.
+
+### Picking the lexicon by cloud provider (added 2026-10-29)
+
+Since the cloud provider plugins ([ADR 0066](0066-cloud-provider-plugins-and-more-vendors.md)) several vendors share the connection kind `cloud`, so the kind alone cannot tell their mowers apart: every `cloud` mower got the first lexicon (by vendor) that lists `cloud`, a Husqvarna mower Mammotion's texts (its category stayed right, the adapter fills it). The lexicon is now picked in this order, everywhere (`ErrorLexiconRegistry.provider`):
+
+1. an explicit `vendor` (the vendor routes);
+2. the mower's **cloud provider**: the lexicon that serves it (`ErrorLexicon.cloud_providers`, optional; empty means the provider whose id equals the vendor key, so a package whose provider and lexicon share a name declares nothing). When no installed lexicon serves the provider the answer is the generic explanation, never another vendor's lexicon on the same kind;
+3. the mower's connection kind through `connection_kinds`, as before (Bluetooth bridge, Wi-Fi, simulator, and `cloud` states that name no provider);
+4. the generic explanation.
+
+The mower → provider mapping stays where the registration is. Fleet sets the registration option `cloud_provider` from the linked account; the Device-Gateway resolves it per registration (the option, else the enabled provider whose spec claims `unqualified_cloud`, exactly like it picks the plugin) and **stamps it on every state it publishes** as `MowerState.cloud_provider` (gateway owned like `heartbeat_at`; null for other kinds). Telemetry and Notifications read it from the state they already receive and pass it in `ErrorExplainRequest.cloud_provider` and `ErrorLexiconSearchRequest.cloud_provider`; neither reads Fleet's database nor resolves anything itself. A `cloud` request without a provider (a state stored before the field) is treated by the gateway as a mower of the provider that claims unqualified cloud registrations, so existing Mammotion mowers keep their texts before and after their next state. Their caches are keyed by provider too.
+
+Alternatives: the gateway resolving the provider by mower id (an `ErrorExplainRequest.mower_id`) was rejected because any gateway instance answers lookups (queue group) while only the owning shard holds the registration; asking Fleet per lookup would add a round trip to every explanation.
 
 ### Categories for the theft alarm
 

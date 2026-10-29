@@ -389,6 +389,7 @@ def test_notifications_theft_lift_by_lexicon_category() -> None:
     )
     assert stuck == ["mower_stuck"]
     assert run.events[-1].params["error_connection"] == "simulated"
+    assert run.events[-1].params["error_provider"] == ""  # no cloud provider for the kind
     assert run.events[-1].params["error_category"] == "trapped"
     codes_only = Run(RuleConfig(cooldown_seconds=0, lift_categories=frozenset()))
     codes_only.state(MowerActivity.MOWING)

@@ -112,6 +112,10 @@ export type BatteryPercent = number
 export type BladeHeightMm = (number | null)
 export type Charging = boolean
 /**
+ * With connection `cloud`: the cloud provider (ADR 0066) of the mower's linked account, so consumers pick the vendor's error lexicon (ADR 0067) when several providers share the kind. Set by the Device-Gateway, never by an adapter; null for other kinds and in states from before the field.
+ */
+export type CloudProvider = (string | null)
+/**
  * False in the state the Device-Gateway publishes right after its connection to the mower ended: the last known values, with `heartbeat_at` the last time the link was alive. Set by the gateway, never by an adapter.
  */
 export type Connected = boolean
@@ -773,6 +777,7 @@ base_station?: (BaseStationState | null)
 battery_percent: BatteryPercent
 blade_height_mm?: BladeHeightMm
 charging?: Charging
+cloud_provider?: CloudProvider
 connected?: Connected
 connection: ConnectionKind
 /**

@@ -1050,6 +1050,15 @@
       "ErrorLexiconInfo": {
         "description": "Summary of an installed lexicon (no entries).",
         "properties": {
+          "cloud_providers": {
+            "description": "The cloud providers it serves (empty: `vendor`).",
+            "items": {
+              "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+              "type": "string"
+            },
+            "title": "Cloud Providers",
+            "type": "array"
+          },
           "connection_kinds": {
             "items": {
               "$ref": "#/components/schemas/ConnectionKind"
@@ -3187,6 +3196,19 @@
             "default": false,
             "title": "Charging",
             "type": "boolean"
+          },
+          "cloud_provider": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With connection `cloud`: the cloud provider (ADR 0066) of the mower's linked account, so consumers pick the vendor's error lexicon (ADR 0067) when several providers share the kind. Set by the Device-Gateway, never by an adapter; null for other kinds and in states from before the field.",
+            "title": "Cloud Provider"
           },
           "connected": {
             "default": true,
@@ -5676,7 +5698,7 @@
     },
     "/api/v1/telemetry/mowers/{mower_id}/error-lexicon": {
       "get": {
-        "description": "Browse the error lexicon of this mower's vendor (picked by its connection): a page of\nentries in plain words, ordered by code, filtered by text, category, severity and codes,\nwith the counts per category and severity for filter chips. `lexicon` is null when no\nlexicon applies or the Device-Gateway does not answer. 404 \"no telemetry yet\" before the\nfirst state.",
+        "description": "Browse the error lexicon of this mower's vendor (picked by its cloud provider, else its\nconnection kind): a page of\nentries in plain words, ordered by code, filtered by text, category, severity and codes,\nwith the counts per category and severity for filter chips. `lexicon` is null when no\nlexicon applies or the Device-Gateway does not answer. 404 \"no telemetry yet\" before the\nfirst state.",
         "operationId": "browse_mower_lexicon_api_v1_telemetry_mowers__mower_id__error_lexicon_get",
         "parameters": [
           {
