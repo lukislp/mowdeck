@@ -1,6 +1,6 @@
 <!--
   Adding mowers of a linked account (a connection kind with `linked_account`): pick a linked
-  Mammotion account or link one, choose the mowers from its device list, give each a display
+  vendor account or link one (any provider the Device-Gateway has enabled, ADR 0066), choose the mowers from its device list, give each a display
   name and a site (an existing one, the default site included, or one created in place), then
   add them all with one bulk request. Devices that fail stay selected with their reason.
 -->
@@ -38,9 +38,11 @@
     linkAccount,
     listDevices,
     listLinkedAccounts,
+    listProviders,
     registerMowers,
     syncAccount,
   } from '#lib/linked/api.js';
+  import { byId, type CredentialValues, type ProviderDescriptor } from '#lib/linked/providers.js';
   import { m } from '#lib/paraglide/messages.js';
   import { notifyPlanProblem } from '#lib/plan/problems.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
@@ -53,6 +55,8 @@
   const NEW_SITE = '__new__';
 
   let accounts = $state<LinkedAccount[] | null>(null);
+  let providers = $state<ProviderDescriptor[]>([]);
+  const providerOf = $derived(byId(providers));
   let accountsProblem = $state<ApiProblem | null>(null);
   let accountId = $state<string | null>(null);
   let connecting = $state(false);
@@ -89,6 +93,9 @@
   $effect(() => {
     void loadAccounts();
     void loadSites();
+    void listProviders()
+      .then((found) => (providers = found))
+      .catch(() => (providers = [])); // the connect form then says that none is enabled
   });
 
   async function loadAccounts(): Promise<void> {
@@ -140,8 +147,8 @@
       : [...list, next];
   }
 
-  async function connect(email: string, password: string): Promise<void> {
-    const linked: LinkedAccountDetail = await linkAccount(email, password);
+  async function connect(provider: string, credentials: CredentialValues): Promise<void> {
+    const linked: LinkedAccountDetail = await linkAccount(provider, credentials);
     upsert(linked);
     connecting = false;
     accountId = linked.id;
@@ -149,7 +156,7 @@
     devicesProblem = null;
     setSelected([]);
     showDevices(linked.devices, linked.last_synced_at);
-    toasts.push('ok', m.linked_connected({ email: linked.email }));
+    toasts.push('ok', m.linked_connected({ email: linked.identity }));
     await tick();
     document.getElementById('linked-devices')?.focus();
   }
@@ -306,7 +313,7 @@
                 class="account"
                 class:chosen={option.id === accountId}
                 data-testid="linked-account-option"
-                data-email={option.email}
+                data-email={option.identity}
               >
                 <input
                   type="radio"
@@ -316,7 +323,10 @@
                   onchange={() => void chooseAccount(option.id)}
                 />
                 <span class="who">
-                  <span class="email">{option.email}</span>
+                  <span class="vendor"
+                    >{providerOf.get(option.provider)?.name ?? option.provider}</span
+                  >
+                  <span class="email">{option.identity}</span>
                   <span class="facts">
                     <span
                       >{m.linked_last_sync()}
@@ -339,6 +349,7 @@
           <div class="connect">
             <h3>{m.linked_connect_title()}</h3>
             <LinkedAccountConnect
+              {providers}
               onconnect={connect}
               oncancel={accounts.length > 0 ? () => (connecting = false) : undefined}
             />
@@ -591,6 +602,14 @@
     flex-direction: column;
     gap: var(--md-space-1);
     min-width: 0;
+  }
+
+  .vendor {
+    color: var(--md-color-ink-muted);
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-12);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
   }
 
   .email {

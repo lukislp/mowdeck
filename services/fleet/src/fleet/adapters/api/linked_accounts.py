@@ -1,13 +1,17 @@
-"""Routes for linked vendor cloud accounts under ``/api/v1/fleet/linked-accounts`` (ADR 0034).
+"""Routes for linked vendor cloud accounts under ``/api/v1/fleet/linked-accounts`` (ADR 0034,
+ADR 0066).
 
 Every route needs ``can_manage_mowers`` on the caller's account (403 otherwise); a linked
-account of another account is 404. Passwords are write-only: no response ever contains one.
+account of another account is 404. Secret credential fields are write-only: no response ever
+contains one. Which providers exist and which fields they take comes from the Device-Gateway
+(``GET /providers``); this module names no vendor.
 """
 
 from uuid import UUID
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 from mowdeck_service_kit import CurrentAccountId
+from mowdeck_service_kit.demo import demo_enabled
 
 from fleet.adapters.api.deps import ActorDep, FreshAuth, ServicesDep, to_service_error
 from fleet.adapters.api.schemas import (
@@ -22,6 +26,7 @@ from fleet.adapters.api.schemas import (
     LinkedMowersIn,
     LinkedMowersOut,
     MowerOut,
+    ProviderList,
 )
 from fleet.application.linked_accounts import BulkItem, DeviceView, LinkedAccountView
 
@@ -34,7 +39,7 @@ _RESPONSES: dict[int | str, dict[str, str]] = {
 _CLOUD_RESPONSES: dict[int | str, dict[str, str]] = {
     **_RESPONSES,
     422: {"description": "`linked-account-login-failed`: the cloud refused the credentials."},
-    429: {"description": "Too many failed logins for this e-mail (`Retry-After`)."},
+    429: {"description": "Too many failed logins for this vendor account (`Retry-After`)."},
     503: {
         "description": "No credential encryption key, or no Device-Gateway or vendor cloud "
         "answered."
@@ -49,11 +54,31 @@ def _detail(view: LinkedAccountView, devices: list[DeviceView]) -> LinkedAccount
     )
 
 
+@router.get(
+    "/providers",
+    responses={
+        403: _RESPONSES[403],
+        503: {"description": "No Device-Gateway listed the providers."},
+    },
+)
+async def list_cloud_providers(
+    request: Request, actor: ActorDep, account_id: CurrentAccountId, services: ServicesDep
+) -> ProviderList:
+    """The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the
+    link form (with hints and links to where the vendor hands them out), whether the user needs
+    a developer account at the vendor and whether the adapter was tested on real hardware.
+    Disabled providers are not listed; the public demo (ADR 0068) lists none and refuses
+    every change under this path."""
+    if demo_enabled(request):
+        return ProviderList(items=[])
+    return ProviderList(items=await services.linked_accounts.providers(actor, account_id))
+
+
 @router.get("", responses=_RESPONSES)
 async def list_linked_accounts(
     actor: ActorDep, account_id: CurrentAccountId, services: ServicesDep
 ) -> LinkedAccountList:
-    """The linked Mammotion accounts of the caller's account (no passwords)."""
+    """The linked vendor accounts of the caller's account (no secrets)."""
     found = await services.linked_accounts.visible(actor, account_id)
     return LinkedAccountList(items=[LinkedAccountOut.of(v) for v in found])
 
@@ -66,12 +91,12 @@ async def create_linked_account(
     services: ServicesDep,
     response: Response,
 ) -> LinkedAccountDetail:
-    """Link a Mammotion account: Fleet asks the Device-Gateway to log in and list the devices
-    (``gateway.cloud.discover``) and stores the account with its password encrypted. Use a
-    second Mammotion account the mowers are shared with: a login with the main account logs
-    the phone app out."""
+    """Link a vendor account: Fleet checks the credentials against the provider's fields (422
+    with one problem per field, ``credentials/<key>``), asks the Device-Gateway to log in and
+    list the devices (``gateway.cloud.discover``) and stores the account with its secret fields
+    encrypted. An unknown or disabled provider is 422 (field ``provider``)."""
     view, devices = await services.linked_accounts.create(
-        actor, account_id, body.email, body.password
+        actor, account_id, body.provider, body.credentials
     )
     response.headers["Location"] = f"/api/v1/fleet/linked-accounts/{view.account.id}"
     return _detail(view, devices)
@@ -115,11 +140,12 @@ async def sync_linked_account(
     account_id: CurrentAccountId,
     services: ServicesDep,
 ) -> LinkedAccountDetail:
-    """Read the device list again ("Konto neu einlesen"), optionally with a new password. The
-    gateway answers from the session the account's connected mowers share when there is one
-    (a second login would log them out). A failure is kept in ``last_sync_error``."""
+    """Read the device list again ("Konto neu einlesen"), optionally with new secret fields (a
+    re-authentication). The gateway answers from the session the account's connected mowers
+    share when there is one (a second login would log them out). A failure is kept in
+    ``last_sync_error``."""
     view, devices = await services.linked_accounts.sync(
-        actor, account_id, linked_account_id, body.password
+        actor, account_id, linked_account_id, body.secrets()
     )
     return _detail(view, devices)
 

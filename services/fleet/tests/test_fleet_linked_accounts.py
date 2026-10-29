@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from fleet_cloud import link_body, login_of, serve_providers
 from fleet_support import API, Harness, Person, harness
 from mowdeck_authz import RelationshipTuple, account, principal_subject
 from mowdeck_contracts.v1 import (
@@ -76,8 +77,9 @@ class FakeCloud:
             error = CloudDiscoverError(code=CloudDiscoverErrorCode.UNAVAILABLE, detail="cloud down")
             await message.respond(CloudDiscoverReply(error=error))
             return
-        found = self.accounts.get(request.email.casefold())
-        if found is None or found[0] != request.password:
+        email, password = login_of(request)
+        found = self.accounts.get(email.casefold())
+        if found is None or found[0] != password:
             error = CloudDiscoverError(code=CloudDiscoverErrorCode.LOGIN_FAILED, detail="refused")
             await message.respond(CloudDiscoverReply(error=error))
             return
@@ -91,6 +93,7 @@ async def _cloud(
     table.update(accounts or {})
     cloud = FakeCloud(table)
     await bus.subscribe(GATEWAY_CLOUD_DISCOVER, cloud.handle, queue="device-gateway")
+    await serve_providers(bus)
     return cloud
 
 
@@ -104,7 +107,7 @@ def _settings(**overrides: Any) -> dict[str, Any]:
 
 async def _link(h: Harness, who: Person, email: str = EMAIL, password: str = PASSWORD) -> Any:
     return await h.client.post(
-        f"{API}/linked-accounts", headers=who.headers, json={"email": email, "password": password}
+        f"{API}/linked-accounts", headers=who.headers, json=link_body(email, password)
     )
 
 
@@ -147,7 +150,7 @@ async def test_fleet_link_an_account_lists_its_devices_and_never_returns_the_pas
         audit = [e.action for e in h.store.tables.audit.rows.values()]
     assert created.status_code == 201, created.text
     body = created.json()
-    assert body["email"] == "Garden@example.com" and body["provider"] == "mammotion"
+    assert body["email"] == "Garden@example.com" and body["provider"] == "acme"
     assert body["device_count"] == 3 and body["mower_count"] == 0
     assert body["last_synced_at"] is not None and body["last_sync_error"] is None
     devices = {d["device_name"]: d for d in body["devices"]}
@@ -158,9 +161,7 @@ async def test_fleet_link_an_account_lists_its_devices_and_never_returns_the_pas
     assert one.json()["id"] == body["id"]
     _no_secret(created.text, listed.text, one.text)
     assert PASSWORD.encode() not in stored.password_encrypted
-    assert (
-        cloud.requests[0].email == "Garden@example.com" and cloud.requests[0].password == PASSWORD
-    )
+    assert login_of(cloud.requests[0]) == ("Garden@example.com", PASSWORD)
     assert cloud.requests[0].linked_account_id is None
     assert "linked_account.created" in audit
 
@@ -178,7 +179,7 @@ async def test_fleet_link_refusals() -> None:
         rows = len(h.store.tables.linked_accounts.rows)
     assert refused.status_code == 422
     assert refused.json()["type"] == "urn:mowdeck:problem:linked-account-login-failed"
-    assert refused.json()["errors"][0]["pointer"] == "#/password"
+    assert refused.json()["errors"][0]["pointer"] == "#/credentials/password"
     assert not_mail.status_code == 422
     assert twice.status_code == 409
     assert down.status_code == 503
@@ -265,7 +266,11 @@ async def test_fleet_cloud_mower_from_a_linked_account() -> None:
     mower = created.json()
     assert mower["name"] == "Luba-VPA" and mower["model"] == "LUBA 2 AWD 5000X"
     assert mower["linked_account_id"] == linked["id"] and mower["iot_id"] == SHARED_IOT
-    assert mower["connection_options"] == {"device_name": "Luba-VPA", "iot_id": SHARED_IOT}
+    assert mower["connection_options"] == {
+        "device_name": "Luba-VPA",
+        "iot_id": SHARED_IOT,
+        "cloud_provider": "acme",
+    }
     assert (
         "account" not in stored.connection_options and "password" not in stored.connection_options
     )
@@ -276,7 +281,7 @@ async def test_fleet_cloud_mower_from_a_linked_account() -> None:
         assert options["linked_account_id"] == linked["id"]
         assert options["device_name"] == "Luba-VPA"
     assert secrets.found
-    assert secrets.secret_options == {"account": EMAIL, "password": PASSWORD}
+    assert secrets.secret_options == {"email": EMAIL, "password": PASSWORD}
     assert updated[0].connection_options["refresh_seconds"] == 30
     items = {d["device_name"]: d for d in devices.json()["items"]}
     assert items["Luba-VPA"]["registered"] and items["Luba-VPA"]["mower_id"] == mower["id"]
@@ -450,11 +455,9 @@ async def test_fleet_sync_rereads_and_records_failures() -> None:
     assert synced.status_code == 200, synced.text
     assert synced.json()["device_count"] == 4 and synced.json()["mower_count"] == 1
     assert cloud.requests[1].linked_account_id == UUID(linked)
-    assert cloud.requests[1].password == PASSWORD  # decrypted from the store
+    assert login_of(cloud.requests[1])[1] == PASSWORD  # decrypted from the store
     assert failed.status_code == 422
-    assert after_failure.json()["last_sync_error"] == (
-        "the Mammotion cloud refused the e-mail or password"
-    )
+    assert after_failure.json()["last_sync_error"] == "the vendor cloud refused the credentials"
     assert after_failure.json()["device_count"] == 4  # the cached devices stay
     assert repeated.status_code == 422 and asked == 3  # same wrong password: vendor not asked
     assert unavailable.status_code == 503
@@ -607,15 +610,15 @@ async def test_fleet_link_validates_the_email(email: str) -> None:
     assert cloud.requests == []
 
 
-async def test_fleet_link_refuses_the_provider_field() -> None:
+async def test_fleet_link_refuses_the_body_of_adr_0034() -> None:
     async with harness(**_settings()) as h:
         owner = await h.owner()
         refused = await h.client.post(
             f"{API}/linked-accounts",
             headers=owner.headers,
-            json={"provider": "mammotion", "email": EMAIL, "password": PASSWORD},
+            json={"email": EMAIL, "password": PASSWORD},
         )
-    assert refused.status_code == 422  # unknown fields are refused; mammotion is implied
+    assert refused.status_code == 422  # the provider and its credentials are required
 
 
 class MovableClock:

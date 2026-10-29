@@ -1,0 +1,332 @@
+{
+  "$defs": {
+    "ConnectionOptionSpec": {
+      "description": "One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).\n\nFleet validates a cloud mower's options against the options its provider declares and the\nweb app renders them on the mower's settings page; only declared options exist, so a vendor\nwith few settings shows few.",
+      "properties": {
+        "advanced": {
+          "default": false,
+          "description": "Rarely needed; shown under 'advanced'.",
+          "title": "Advanced",
+          "type": "boolean"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "description": {
+          "default": "",
+          "description": "English help text.",
+          "maxLength": 400,
+          "title": "Description",
+          "type": "string"
+        },
+        "examples": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Examples",
+          "type": "array"
+        },
+        "key": {
+          "pattern": "^[a-z][a-z0-9_]{0,39}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum"
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum"
+        },
+        "title": {
+          "description": "English title.",
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "type",
+        "title"
+      ],
+      "title": "ConnectionOptionSpec",
+      "type": "object"
+    },
+    "CredentialChoice": {
+      "description": "One option of a ``choice`` field.",
+      "properties": {
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "title": "CredentialChoice",
+      "type": "object"
+    },
+    "CredentialField": {
+      "description": "One input of a provider's link form.",
+      "properties": {
+        "choices": {
+          "items": {
+            "$ref": "#/$defs/CredentialChoice"
+          },
+          "maxItems": 20,
+          "title": "Choices",
+          "type": "array"
+        },
+        "help": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "English hint under the input.",
+          "title": "Help"
+        },
+        "identity": {
+          "default": false,
+          "description": "The field that names the vendor account (exactly one per provider): shown as the linked account's title and unique per provider and MowDeck account, compared without case.",
+          "title": "Identity",
+          "type": "boolean"
+        },
+        "key": {
+          "pattern": "^[a-z][a-z0-9_]{0,39}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CredentialFieldKind"
+        },
+        "label": {
+          "description": "English label of the input.",
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "max_length": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Length",
+          "type": "integer"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Regular expression the value must match.",
+          "title": "Pattern"
+        },
+        "placeholder": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Placeholder"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "label"
+      ],
+      "title": "CredentialField",
+      "type": "object"
+    },
+    "CredentialFieldKind": {
+      "description": "How a credential field is entered and stored.",
+      "enum": [
+        "text",
+        "email",
+        "secret",
+        "choice"
+      ],
+      "title": "CredentialFieldKind",
+      "type": "string"
+    },
+    "ProviderLink": {
+      "description": "A page of the vendor that explains where the credentials come from.",
+      "properties": {
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 300,
+          "pattern": "^https://\\S+$",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ],
+      "title": "ProviderLink",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A cloud provider as its adapter declares it: the link form, the guidance and the options\nof its mowers.",
+  "properties": {
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/CredentialField"
+      },
+      "maxItems": 10,
+      "minItems": 1,
+      "title": "Fields",
+      "type": "array"
+    },
+    "links": {
+      "items": {
+        "$ref": "#/$defs/ProviderLink"
+      },
+      "maxItems": 5,
+      "title": "Links",
+      "type": "array"
+    },
+    "mower_options": {
+      "description": "The options a mower of this provider takes (none: the provider has no settings beyond the linked account).",
+      "items": {
+        "$ref": "#/$defs/ConnectionOptionSpec"
+      },
+      "maxItems": 30,
+      "title": "Mower Options",
+      "type": "array"
+    },
+    "name": {
+      "description": "Display name of the vendor cloud.",
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "needs_developer_account": {
+      "default": false,
+      "description": "The user creates an application in the vendor's developer portal (with their own vendor account) to get the credentials.",
+      "title": "Needs Developer Account",
+      "type": "boolean"
+    },
+    "provider": {
+      "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+      "title": "Provider",
+      "type": "string"
+    },
+    "setup_steps": {
+      "description": "English, short: how the user gets the credentials, in order.",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "Setup Steps",
+      "type": "array"
+    },
+    "summary": {
+      "default": "",
+      "description": "English: which mowers and what MowDeck can do.",
+      "maxLength": 500,
+      "title": "Summary",
+      "type": "string"
+    },
+    "tested_on_hardware": {
+      "default": false,
+      "description": "False: built and tested against recorded fixtures and fakes only; the web app labels such providers as untested on real hardware.",
+      "title": "Tested On Hardware",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "provider",
+    "name",
+    "fields"
+  ],
+  "title": "ProviderDescriptor",
+  "type": "object"
+}

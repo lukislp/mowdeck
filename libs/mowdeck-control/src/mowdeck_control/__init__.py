@@ -20,6 +20,8 @@
 * :func:`plan_to_native_job`: neutral mowing request to a native mower job.
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
   through the entry point group ``mowdeck.connections``.
+* :class:`ProviderSpec` and :func:`load_providers`: vendor cloud providers (linked accounts and
+  their mowers), extended through the entry point group ``mowdeck.cloud_providers`` (ADR 0066).
 * :class:`ErrorLexiconRegistry` and :func:`explain_error`: vendor error codes in plain words,
   extended through the entry point group ``mowdeck.error_lexicons`` (ADR 0067).
 
@@ -103,6 +105,18 @@ from mowdeck_control.geo import (
     to_wgs84,
 )
 from mowdeck_control.photo import flat_png, render_scene
+from mowdeck_control.providers import (
+    CLOUD_PROVIDER_OPTION,
+    PROVIDER_ENTRY_POINT_GROUP,
+    CloudLoginRefused,
+    CloudProviderPlugin,
+    CloudUnavailable,
+    LoadedProviders,
+    ProviderContext,
+    ProviderDevices,
+    ProviderSpec,
+    load_providers,
+)
 from mowdeck_control.registry import (
     ENTRY_POINT_GROUP,
     ConnectionFactory,
@@ -165,9 +179,11 @@ __version__ = "0.1.0"
 register_connection(ConnectionKind.SIMULATED, create_simulated_connection)
 
 __all__ = [
+    "CLOUD_PROVIDER_OPTION",
     "ENTRY_POINT_GROUP",
     "FIRMWARE_MIN_BATTERY_PERCENT",
     "FIRMWARE_UPDATE_RUNNING",
+    "PROVIDER_ENTRY_POINT_GROUP",
     "STUCK_ERROR_CODE",
     "AsyncioTimerFactory",
     "BaseStationPort",
@@ -176,6 +192,9 @@ __all__ = [
     "CalibrationConfig",
     "CameraCapable",
     "CameraSessionRelease",
+    "CloudLoginRefused",
+    "CloudProviderPlugin",
+    "CloudUnavailable",
     "CommandRejected",
     "ConfirmFn",
     "ConnectionConfig",
@@ -194,6 +213,7 @@ __all__ = [
     "FrameDeadlineCapable",
     "Geofence",
     "JobCommand",
+    "LoadedProviders",
     "MaintenanceCapable",
     "MaintenanceCommand",
     "MapRebuildable",
@@ -213,6 +233,9 @@ __all__ = [
     "PhotoCapture",
     "PhotoUnavailable",
     "Pose",
+    "ProviderContext",
+    "ProviderDevices",
+    "ProviderSpec",
     "ReportRateCapable",
     "SensorStop",
     "SettingsCapable",
@@ -257,6 +280,7 @@ __all__ = [
     "flat_png",
     "frame_deadline_of",
     "from_wgs84",
+    "load_providers",
     "local_angle",
     "maintenance_port_of",
     "maintenance_problem",
