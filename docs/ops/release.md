@@ -48,6 +48,8 @@ One-time setup by the owner; the release job fails with a pointer to this sectio
 
 **A failed release.** When a job after `tag` fails, the tag and the GitHub release already exist; re-run the failed jobs of the same workflow run (`gh run rerun <run-id> --failed`), which builds from the same tag and fills in the assets. Do not delete or move a published tag.
 
+**API rate limit.** The workflows share `GITHUB_TOKEN`'s quota of 1,000 REST calls per hour for the repository. The workflow's own `gh` calls (the signing key check in `version`, "Check the signed tag and the release" in `tag`, the upload and the notes in `publish`, and the tag lookup of `apple-testflight.yml`) go through `tools/repo-checks/scripts/gh_retry.sh`: on HTTP 403 or 429 or a "rate limit" answer it waits 30, 60 and 120 seconds and tries again (four attempts), any other error fails the step at once. Only idempotent calls are wrapped (reads, `gh release upload --clobber`, `gh release edit` with the same notes); the tag and the release themselves are created by semantic-release, which waits for the quota on its own. The other workflows spend less of the quota for the same reason: no `*.dockerbuild` build record artifacts, short retention for CI logs and reports, pull request fuzzing only for changes to fuzzed code, and the OpenSSF Scorecard once a day instead of after every merge.
+
 **Test builds without a release:** `gh workflow run release.yml -f version=0.1.0-rc.1` (optionally `--ref <branch>`) builds, signs and pushes the images and the chart under that version, without a tag, a GitHub release or `:latest`.
 
 ## What the workflow publishes
