@@ -3,13 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ApiProblem, PROBLEM_PREFIX } from '#lib/api/problem.js';
 import type { LinkedAccount } from '#lib/linked/accounts.js';
+import { ACME, ZETA } from '#lib/linked/provider-fixtures.js';
 import { m } from '#lib/paraglide/messages.js';
 
 import LinkedAccountCard from './LinkedAccountCard.svelte';
 
 const ACCOUNT: LinkedAccount = {
   id: 'la-1',
-  provider: 'mammotion',
+  provider: 'acme',
+  identity: 'conn-1@fake.mowdeck.test',
+  public_credentials: { email: 'conn-1@fake.mowdeck.test' },
   email: 'conn-1@fake.mowdeck.test',
   created_at: '2026-10-11T08:00:00Z',
   updated_at: '2026-10-11T08:00:00Z',
@@ -22,6 +25,7 @@ const ACCOUNT: LinkedAccount = {
 function props(extra: Record<string, unknown> = {}) {
   return {
     account: ACCOUNT,
+    provider: ACME,
     onsync: vi.fn(() => Promise.resolve()),
     onremove: vi.fn(() => Promise.resolve()),
     ...extra,
@@ -29,11 +33,13 @@ function props(extra: Record<string, unknown> = {}) {
 }
 
 describe('LinkedAccountCard', () => {
-  it('shows e-mail, provider, counts and the last read', () => {
+  it('shows identity, vendor, status, counts and the last read', () => {
     render(LinkedAccountCard, { props: props() });
     const card = screen.getByTestId('linked-account');
     expect(card.dataset.email).toBe('conn-1@fake.mowdeck.test');
-    expect(card).toHaveTextContent('mammotion');
+    expect(card).toHaveTextContent('Acme Cloud');
+    expect(screen.getByTestId('linked-account-status')).toHaveTextContent(m.provider_status_ok());
+    expect(screen.queryByTestId('linked-account-untested')).toBeNull();
     expect(screen.getByTestId('linked-account-devices')).toHaveTextContent('3');
     expect(screen.getByTestId('linked-account-mowers')).toHaveTextContent('2');
     expect(screen.queryByTestId('linked-account-error')).toBeNull();
@@ -47,19 +53,47 @@ describe('LinkedAccountCard', () => {
     expect(error).toHaveAttribute('role', 'alert');
     expect(error).toHaveTextContent(m.linked_sync_error());
     expect(error).toHaveTextContent('login refused');
+    expect(screen.getByTestId('linked-account-status')).toHaveTextContent(
+      m.provider_status_failing(),
+    );
   });
 
-  it('reads again, with a new password only when one is typed', async () => {
+  it('shows the non-secret fields and the untested label of the provider', () => {
+    const account: LinkedAccount = {
+      ...ACCOUNT,
+      provider: 'zeta',
+      identity: 'key-1',
+      email: 'key-1',
+      public_credentials: { app_key: 'key-1', region: 'us' },
+    };
+    render(LinkedAccountCard, { props: props({ account, provider: ZETA }) });
+    expect(screen.getByTestId('linked-account')).toHaveTextContent('Zeta Connect');
+    expect(screen.getByText('Region').nextElementSibling).toHaveTextContent('United States');
+    expect(screen.getByTestId('linked-account-untested')).toHaveTextContent(m.provider_untested());
+  });
+
+  it('cannot read an account of a provider that is no longer enabled', () => {
+    render(LinkedAccountCard, { props: props({ provider: null }) });
+    expect(screen.getByTestId('linked-account')).toHaveTextContent('acme');
+    expect(screen.getByTestId('linked-account-status')).toHaveTextContent(
+      m.provider_status_disabled(),
+    );
+    expect(screen.getByTestId('linked-account-sync')).toBeDisabled();
+    expect(screen.getByTestId('linked-account-delete')).not.toBeDisabled();
+  });
+
+  it('reads again, with new secrets only when they are typed', async () => {
     const p = props();
     render(LinkedAccountCard, { props: p });
     await fireEvent.click(screen.getByTestId('linked-account-sync'));
     expect(p.onsync).toHaveBeenLastCalledWith(undefined);
     await fireEvent.click(screen.getByTestId('linked-account-password-toggle'));
-    const field = screen.getByLabelText(m.linked_new_password());
+    const field = screen.getByLabelText('Password');
     expect(field).toHaveValue(''); // never prefilled
+    expect(screen.queryByLabelText('E-mail address')).toBeNull(); // secrets only
     await fireEvent.input(field, { target: { value: 'new-secret' } });
     await fireEvent.click(screen.getByTestId('linked-account-sync'));
-    await waitFor(() => expect(p.onsync).toHaveBeenLastCalledWith('new-secret'));
+    await waitFor(() => expect(p.onsync).toHaveBeenLastCalledWith({ password: 'new-secret' }));
   });
 
   it('shows a refused new password at the field', async () => {
@@ -72,7 +106,7 @@ describe('LinkedAccountCard', () => {
     });
     render(LinkedAccountCard, { props: p });
     await fireEvent.click(screen.getByTestId('linked-account-password-toggle'));
-    const field = screen.getByLabelText(m.linked_new_password());
+    const field = screen.getByLabelText('Password');
     await fireEvent.input(field, { target: { value: 'wrong' } });
     await fireEvent.click(screen.getByTestId('linked-account-sync'));
     await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'));

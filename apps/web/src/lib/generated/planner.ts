@@ -362,7 +362,7 @@ export type components = {
             ][];
             /**
              * Id
-             * @description Stable id; for Mammotion the zone hash.
+             * @description Stable id, e.g. the vendor's zone hash.
              */
             id: string;
             /** Name */
@@ -433,7 +433,7 @@ export type components = {
             reference: components["schemas"]["GeoReference"];
             /**
              * Revision
-             * @description Map version; for Mammotion the map hash.
+             * @description Map version, e.g. the vendor's map hash.
              */
             revision?: string | null;
         };

@@ -11,8 +11,14 @@ import type {
   LinkedMowersIn,
   LinkedMowersOut,
 } from './accounts';
+import type { CredentialValues, ProviderDescriptor } from './providers';
 
 type DeviceList = components['schemas']['LinkedDeviceList'];
+
+/** The cloud providers enabled in the Device-Gateway (disabled ones are not listed). */
+export async function listProviders(): Promise<ProviderDescriptor[]> {
+  return (await unwrap(fleetApi.GET('/api/v1/fleet/linked-accounts/providers'))).items;
+}
 
 export async function listLinkedAccounts(): Promise<LinkedAccount[]> {
   return (await unwrap(fleetApi.GET('/api/v1/fleet/linked-accounts'))).items;
@@ -26,21 +32,26 @@ export function getLinkedAccount(id: string): Promise<LinkedAccount> {
   );
 }
 
-export function linkAccount(email: string, password: string): Promise<LinkedAccountDetail> {
+/** Link a vendor account with the credential fields of its provider. */
+export function linkAccount(
+  provider: string,
+  credentials: CredentialValues,
+): Promise<LinkedAccountDetail> {
   return unwrap(
-    fleetSlowApi.POST('/api/v1/fleet/linked-accounts', {
-      // The generated type still lists `provider`; Fleet no longer takes it.
-      body: { email: email.trim(), password } as components['schemas']['LinkedAccountIn'],
-    }),
+    fleetSlowApi.POST('/api/v1/fleet/linked-accounts', { body: { provider, credentials } }),
   );
 }
 
-/** Re-read the device list, optionally with a new password (write-only, never echoed). */
-export function syncAccount(id: string, password?: string): Promise<LinkedAccountDetail> {
+/** Re-read the device list, optionally with new secret fields (write-only, never echoed). */
+export function syncAccount(
+  id: string,
+  credentials?: CredentialValues,
+): Promise<LinkedAccountDetail> {
+  const secrets = credentials && Object.keys(credentials).length > 0 ? credentials : undefined;
   return unwrap(
     fleetSlowApi.POST('/api/v1/fleet/linked-accounts/{linked_account_id}/sync', {
       params: { path: { linked_account_id: id } },
-      body: password ? { password } : {},
+      body: secrets ? { credentials: secrets } : {},
     }),
   );
 }

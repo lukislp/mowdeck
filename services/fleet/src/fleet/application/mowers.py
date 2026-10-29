@@ -1,7 +1,7 @@
 """Mowers: register, list, read, change, move between groups, remove; the registry answer for
 the Device-Gateway.
 
-Cloud mowers (ADR 0034) come from a linked Mammotion account: a registration names the linked
+Cloud mowers (ADR 0034, ADR 0066) come from a linked vendor account: a registration names the linked
 account and the device; Fleet stores the device name and IoT id as options and merges the
 account's credentials into the registration the Device-Gateway receives. One physical mower
 (its IoT id) can be registered in one MowDeck account only, installation-wide."""
@@ -40,9 +40,17 @@ from fleet.application.linked_accounts import (
 )
 from fleet.application.plan import allow_all, require_limit
 from fleet.application.ports import Clock, In, Store, Tx
+from fleet.application.providers import ProviderCatalog, option_specs
 from fleet.application.sites import SiteService
 from fleet.application.work import UnitOfWork, Work
-from fleet.domain.connections import LEGACY_CLOUD_SCHEMA, SCHEMAS, links_supported
+from fleet.domain.connections import (
+    CLOUD_PROVIDER_KEY,
+    LEGACY_CLOUD_SCHEMA,
+    SCHEMAS,
+    OptionSpec,
+    links_supported,
+    with_provider_options,
+)
 from fleet.domain.errors import (
     ConflictError,
     FieldProblem,
@@ -50,6 +58,7 @@ from fleet.domain.errors import (
     InvalidInput,
     MowerAlreadyRegisteredError,
     NotFoundError,
+    Unavailable,
 )
 from fleet.domain.models import LinkedAccount, MowDefaults, Mower, MowerGroup, MowerLink
 from fleet.domain.rules import (
@@ -63,7 +72,7 @@ from fleet.domain.rules import (
 
 _SERIAL_EXISTS = "a mower with this serial number is registered in the account"
 _ELSEWHERE = "this mower is already registered in MowDeck"
-_CLOUD_MANAGED = frozenset({"device_name", "iot_id"})
+_CLOUD_MANAGED = frozenset({"device_name", "iot_id", CLOUD_PROVIDER_KEY})
 """Options of a linked cloud mower that Fleet sets from the device list."""
 _LINKED_FORBIDDEN = frozenset({"account", "password", "credential_ref", "linked_account_id"})
 """Options a linked cloud mower must not carry (the linked account holds them)."""
@@ -135,6 +144,7 @@ class MowerService:
         clock: Clock,
         entitlements: Entitlements | None = None,
         vault: CredentialVault | None = None,
+        catalog: ProviderCatalog | None = None,
     ) -> None:
         self.uow = uow
         self.store = store
@@ -144,6 +154,7 @@ class MowerService:
         self.clock = clock
         self.entitlements = entitlements if entitlements is not None else allow_all()
         self.vault = vault
+        self.catalog = catalog
 
     # --- validation ----------------------------------------------------------------------
 
@@ -164,6 +175,7 @@ class MowerService:
         options: Mapping[str, Any],
         *,
         linked: bool = False,
+        provider_options: tuple[OptionSpec, ...] = (),
     ) -> tuple[str, dict[str, Any]]:
         """Validate ``options`` for ``kind``. ``linked``: a cloud mower of a linked account
         (only the adapter extras; the managed keys are set by the caller). Otherwise a cloud
@@ -182,7 +194,19 @@ class MowerService:
                         for key in forbidden
                     ],
                 )
-            schema = SCHEMAS["cloud"]
+            schema = with_provider_options(SCHEMAS["cloud"], provider_options)
+            # Only what the provider declares exists (ADR 0066): a vendor with few settings
+            # has few options, and nothing else is stored for its mowers.
+            known = {o.key for o in schema.options}
+            unknown = sorted(set(options) - known)
+            if unknown:
+                msg = "the provider of this mower declares no such option"
+                raise InvalidInput(
+                    msg,
+                    fields=[
+                        FieldProblem(f"connection_options/{key}", msg, "unknown") for key in unknown
+                    ],
+                )
         elif kind == "cloud":
             schema = LEGACY_CLOUD_SCHEMA
         checked = validate_connection_options(
@@ -198,6 +222,35 @@ class MowerService:
             )
         return kind, checked
 
+    async def _provider_of(
+        self,
+        account_id: UUID,
+        linked_account_id: UUID,
+        options: Mapping[str, Any],
+        tx: Tx | None = None,
+    ) -> tuple[str | None, tuple[OptionSpec, ...]]:
+        """The provider of a linked account and the mower options it declares (ADR 0066).
+
+        An unknown linked account is left to the caller's checks. When the provider is not
+        enabled (or no gateway answers) its options cannot be checked: options are refused
+        (503), a mower without options passes.
+        """
+        if tx is not None:  # inside the caller's unit of work
+            linked = await tx.linked_accounts.get(id=linked_account_id, account_id=account_id)
+        else:
+            async with self.store.transaction() as own:
+                linked = await own.linked_accounts.get(id=linked_account_id, account_id=account_id)
+        if linked is None:
+            return None, ()
+        descriptor = await self.catalog.find(linked.provider) if self.catalog else None
+        if descriptor is None:
+            extras = set(options) - _CLOUD_MANAGED
+            if extras:
+                msg = f"the cloud provider {linked.provider} is not enabled; options not checked"
+                raise Unavailable(msg)
+            return linked.provider, ()
+        return linked.provider, option_specs(descriptor)
+
     @staticmethod
     def _legacy_cloud_patch(merged: Mapping[str, Any], stored: Mapping[str, Any]) -> None:
         """A cloud mower registered before linked accounts may keep its stored credentials,
@@ -205,7 +258,7 @@ class MowerService:
         (422)."""
         password = merged.get("password")
         if password not in (None, "") and password != stored.get("password"):
-            msg = "link the Mammotion account instead of storing its password with the mower"
+            msg = "link the vendor account instead of storing its password with the mower"
             raise InvalidInput(
                 msg,
                 fields=[FieldProblem("connection_options/password", msg, "use_linked_account")],
@@ -386,8 +439,14 @@ class MowerService:
             ]
             if missing:
                 raise InvalidInput("a cloud mower comes from a linked account", fields=missing)
+        provider: str | None = None
+        specs: tuple[OptionSpec, ...] = ()
+        if linked and data.linked_account_id is not None:
+            provider, specs = await self._provider_of(
+                account_id, data.linked_account_id, data.connection_options
+            )
         kind, options = self._connection(
-            data.connection_kind, data.connection_options, linked=linked
+            data.connection_kind, data.connection_options, linked=linked, provider_options=specs
         )
         group_ids = sorted(set(data.group_ids), key=str)
         await self._check_targets(actor, account_id, data.site_id, group_ids)
@@ -417,6 +476,8 @@ class MowerService:
                 )
                 iot_id = device.iot_id
                 options = {**options, "device_name": device.device_name}
+                if provider is not None:
+                    options[CLOUD_PROVIDER_KEY] = provider
                 if device.iot_id:
                     options["iot_id"] = device.iot_id
                 model = model or device.model
@@ -591,7 +652,12 @@ class MowerService:
                         for k, v in (new_options or item.connection_options).items()
                         if k not in _CLOUD_MANAGED
                     }
-                    item.connection_kind, checked = self._connection(kind, extras, linked=True)
+                    _, specs = await self._provider_of(
+                        account_id, item.linked_account_id, extras, work.tx
+                    )
+                    item.connection_kind, checked = self._connection(
+                        kind, extras, linked=True, provider_options=specs
+                    )
                     item.connection_options = {**checked, **managed}
                 else:
                     merged = (

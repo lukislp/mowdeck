@@ -156,7 +156,9 @@ docker compose exec identity python -m identity.cli list-keys
 | `FLEET_CREDENTIAL_ENCRYPTION_KEY` | a marked development value | 256-bit key (base64) that encrypts the passwords of linked Mammotion accounts ([ADR 0034](../../docs/adr/0034-linked-cloud-accounts-and-device-discovery.md)). Empty: Fleet starts, but linking a Mammotion account answers 503, so no cloud mower can be added. Fleet refuses the development value with `MOWDECK_ENVIRONMENT=prod`; generate your own and keep a backup |
 | `FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` | empty | Key rotation: earlier keys (comma separated) that still decrypt; the next re-read of a linked account re-encrypts with the current key |
 | `FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS` | `85` | How long Fleet waits for a path preview (504 after); keep `GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS` (75) < this < the web app's 90 s |
-| `GATEWAY_FAKE_MAMMOTION_CLOUD` | `false` | **Development only.** The Device-Gateway answers linked account logins and connects cloud mowers through the fake Mammotion cloud (`*@fake.mowdeck.test`, password `fake-cloud-password`); the browser tests switch it on |
+| `GATEWAY_CLOUD_PROVIDERS_ENABLE` | empty | Cloud providers to enable besides the default ones (those tested on real hardware), comma separated provider ids such as `husqvarna` ([ADR 0066](../../docs/adr/0066-cloud-provider-plugins-and-more-vendors.md)); disabled providers are not offered in the web app |
+| `GATEWAY_CLOUD_PROVIDERS_DISABLE` | empty | Cloud providers to switch off (wins over the defaults and the enable list) |
+| `GATEWAY_FAKE_CLOUDS` | `false` | **Development only.** The Device-Gateway answers linked account logins and connects cloud mowers through the fake cloud of every enabled provider (for example `*@fake.mowdeck.test`, password `fake-cloud-password`); the browser tests switch it on. The former name `GATEWAY_FAKE_MAMMOTION_CLOUD` still works |
 
 Register a simulated mower and start it (`<token>` from the login above; the simulator's default map has the areas `front` and `back`):
 

@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from fleet_cloud import serve_providers
 from fleet_support import API, harness
 from mowdeck_contracts.v1 import EventEnvelope, MowerCredentialsRequest, MowerRegistration
 
@@ -210,6 +211,7 @@ def test_fleet_option_errors_name_the_fields() -> None:
 
 async def test_fleet_api_lists_the_allowed_connection_kinds_with_their_schema() -> None:
     async with harness(allowed_connection_kinds="ble_bridge,simulated,wifi,cloud") as h:
+        await serve_providers(h.bus)
         owner = await h.owner()
         anonymous = await h.client.get(f"{API}/connection-kinds")
         response = await h.client.get(f"{API}/connection-kinds", headers=owner.headers)
@@ -230,19 +232,20 @@ async def test_fleet_api_lists_the_allowed_connection_kinds_with_their_schema() 
     assert simulated["options"] == [] and simulated["extra_options"] is True
     assert wifi["options"] == [] and wifi["extra_options"] is True
     options = {o["key"]: o for o in cloud["options"]}
-    # Cloud mowers come from a linked account: no credentials in the options any more.
+    # Cloud mowers come from a linked account: no credentials in the options any more, and
+    # only the keys Fleet manages; the rest is what the provider declares (ADR 0066).
     assert cloud["linked_account"] is True and simulated["linked_account"] is False
     assert not {"account", "password", "credential_ref"} & set(options)
-    assert options["device_name"]["managed"] is True and options["iot_id"]["managed"] is True
-    assert options["session_cache_path"]["advanced"] is True
-    assert options["session_cache_path"]["managed"] is False
-    refresh = options["refresh_seconds"]
+    assert all(o["managed"] for o in options.values())
+    assert {"device_name", "iot_id", "cloud_provider"} <= set(options)
+    assert ble["provider_options"] == {}
+    acme = {o["key"]: o for o in cloud["provider_options"]["acme"]}
+    assert acme["session_cache_path"]["advanced"] is True
+    assert acme["session_cache_path"]["managed"] is False
+    refresh = acme["refresh_seconds"]
     assert refresh["advanced"] is True and refresh["type"] == "number"
     assert (refresh["minimum"], refresh["maximum"], refresh["default"]) == (10, 300, 20)
-    active = options["refresh_seconds_active"]
-    assert active["advanced"] is True and active["type"] == "number"
-    assert (active["minimum"], active["maximum"], active["default"]) == (2, 60, 5)
-    stream = options["report_stream_seconds"]
+    stream = acme["report_stream_seconds"]
     assert (stream["minimum"], stream["maximum"], stream["default"]) == (0, 300, 60)
     assert cloud["groups"] == []
     ble_options = {o["key"]: o for o in ble["options"]}

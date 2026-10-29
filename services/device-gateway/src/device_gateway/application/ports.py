@@ -1,13 +1,12 @@
 """Ports: what the gateway's use cases need from the outside world, as protocols."""
 
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
-    CloudProvider,
     CommandResult,
     DiscoveredDevice,
     MowerCapabilitiesSnapshot,
@@ -16,6 +15,7 @@ from mowdeck_contracts.v1 import (
     MowerPathSnapshot,
     MowerRegistration,
     MowerState,
+    ProviderDescriptor,
 )
 from mowdeck_contracts.v1.relay import CameraSide, VisionDemand
 from mowdeck_control import MowerConnection, Photo
@@ -175,13 +175,18 @@ class CloudDevices:
 
 
 class CloudAccounts(Protocol):
-    """Logs in to a vendor cloud account (or reuses its open session) and lists its devices."""
+    """The enabled cloud providers (ADR 0066): their descriptors, and a login to one vendor
+    account (or a reuse of its open session) that lists the account's devices."""
 
-    def supports(self, provider: CloudProvider) -> bool:
-        """True when an adapter for ``provider`` is installed."""
+    def descriptors(self) -> list[ProviderDescriptor]:
+        """The enabled providers, sorted by display name."""
         ...
 
-    async def discover(self, provider: CloudProvider, email: str, password: str) -> CloudDevices:
+    def descriptor(self, provider: str) -> ProviderDescriptor | None:
+        """The descriptor of ``provider``; None when it is not installed or not enabled."""
+        ...
+
+    async def discover(self, provider: str, credentials: Mapping[str, str]) -> CloudDevices:
         """The devices; raises :class:`CloudLoginError` or :class:`CloudUnavailableError`."""
         ...
 

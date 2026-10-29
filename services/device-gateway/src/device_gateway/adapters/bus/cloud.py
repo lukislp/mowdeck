@@ -1,12 +1,13 @@
-"""Cloud account discovery (ADR 0034): ``gateway.cloud.discover``, core NATS request/reply.
+"""Cloud account discovery (ADR 0034, ADR 0066): ``gateway.cloud.discover`` and
+``gateway.cloud.providers``, core NATS request/reply.
 
-Any gateway instance may answer (queue group ``device-gateway``): the discovery is not tied to
-a mower. Counted per outcome in ``mowdeck_device_gateway_cloud_discoveries_total``. The request
-carries the password of the vendor account: it is used, never logged.
+Any gateway instance may answer (queue group ``device-gateway``): neither is tied to a mower.
+Discoveries are counted per outcome in ``mowdeck_device_gateway_cloud_discoveries_total``. A
+discovery request carries the credentials of the vendor account: they are used, never logged.
 """
 
 from mowdeck_contracts.v1 import CloudDiscoverRequest
-from mowdeck_contracts.v1.subjects import GATEWAY_CLOUD_DISCOVER
+from mowdeck_contracts.v1.subjects import GATEWAY_CLOUD_DISCOVER, GATEWAY_CLOUD_PROVIDERS
 from mowdeck_service_kit.bus import BusMessage, DropMessage, EventBus, Subscription
 from prometheus_client import CollectorRegistry, Counter
 from pydantic import ValidationError
@@ -47,8 +48,18 @@ class DiscoveryResponder:
             raise DropMessage(f"invalid discovery request: {exc.error_count()} errors") from exc
         await message.respond(await self._service.discover(request))
 
+    async def providers(self, message: BusMessage) -> None:
+        """Answer the enabled providers (the request has no fields)."""
+        await message.respond(self._service.providers())
+
 
 async def subscribe_cloud_discovery(bus: EventBus, service: CloudDiscoveryService) -> Subscription:
     """Subscribe to ``gateway.cloud.discover`` in the queue group ``device-gateway``."""
     responder = DiscoveryResponder(service)
     return await bus.subscribe(GATEWAY_CLOUD_DISCOVER, responder.handle, queue=QUEUE)
+
+
+async def subscribe_cloud_providers(bus: EventBus, service: CloudDiscoveryService) -> Subscription:
+    """Subscribe to ``gateway.cloud.providers`` in the queue group ``device-gateway``."""
+    responder = DiscoveryResponder(service)
+    return await bus.subscribe(GATEWAY_CLOUD_PROVIDERS, responder.providers, queue=QUEUE)

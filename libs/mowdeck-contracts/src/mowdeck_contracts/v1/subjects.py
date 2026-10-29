@@ -103,6 +103,10 @@ GATEWAY_CLOUD_DISCOVER = "gateway.cloud.discover"
 ``device-gateway``): ``CloudDiscoverRequest`` in, ``CloudDiscoverReply`` out. Logs in to a
 vendor cloud account (or reuses the open session) and lists its devices (ADR 0034).
 Not below ``device.`` for the same reason as the camera request."""
+GATEWAY_CLOUD_PROVIDERS = "gateway.cloud.providers"
+"""Core NATS request subject (internal, Fleet to Device-Gateway, queue group
+``device-gateway``): ``CloudProvidersRequest`` in, ``CloudProvidersReply`` out. The installed
+and enabled cloud providers with their credential fields (ADR 0066)."""
 GATEWAY_ERRORS_EXPLAIN = "gateway.errors.explain"
 """Core NATS request subject (internal, Telemetry and Notifications to Device-Gateway, queue
 group ``device-gateway``): ``ErrorExplainRequest`` in, ``ErrorExplainReply`` out. Explains

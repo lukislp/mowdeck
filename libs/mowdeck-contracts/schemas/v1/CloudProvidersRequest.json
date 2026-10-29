@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``gateway.cloud.providers`` (internal, Fleet to Device-Gateway).",
+  "properties": {},
+  "title": "CloudProvidersRequest",
+  "type": "object"
+}

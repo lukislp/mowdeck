@@ -10,6 +10,7 @@ import {
   issueFor,
   serverIssues,
   validate,
+  withProviderOptions,
   SECRET_MASK,
   type KindSchema,
   type OptionSchema,
@@ -226,5 +227,28 @@ describe('connection forms', () => {
     expect(issueFor(BLE, BLE.options[3]!, issues)).toEqual({ code: 'required' });
     expect(issueFor(BLE, BLE.options[0]!, issues)).toBeNull();
     expect(serverIssues(BLE, null)).toEqual({});
+  });
+});
+
+describe('withProviderOptions', () => {
+  const refresh = option('night_mode', { type: 'boolean' });
+  const withProviders: KindSchema = {
+    ...CLOUD,
+    provider_options: { acme: [refresh, option(CLOUD.options[0]!.key)], quiet: [] },
+  };
+
+  it('adds the options the mower provider declares, never twice', () => {
+    const merged = withProviderOptions(withProviders, { cloud_provider: 'acme' });
+    expect(merged.options.map((o) => o.key)).toEqual([
+      ...CLOUD.options.map((o) => o.key),
+      'night_mode',
+    ]);
+  });
+
+  it('adds nothing for a provider without settings, another kind or an unknown provider', () => {
+    expect(withProviderOptions(withProviders, { cloud_provider: 'quiet' })).toBe(withProviders);
+    expect(withProviderOptions(withProviders, { cloud_provider: 'gone' })).toBe(withProviders);
+    expect(withProviderOptions(withProviders, {})).toBe(withProviders);
+    expect(withProviderOptions(BLE, { cloud_provider: 'acme' })).toBe(BLE);
   });
 });

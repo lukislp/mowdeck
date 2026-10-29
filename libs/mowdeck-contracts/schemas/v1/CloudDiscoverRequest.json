@@ -1,14 +1,4 @@
 {
-  "$defs": {
-    "CloudProvider": {
-      "description": "Vendor clouds a linked account can belong to.",
-      "enum": [
-        "mammotion"
-      ],
-      "title": "CloudProvider",
-      "type": "string"
-    }
-  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Request on ``gateway.cloud.discover`` (internal, Fleet to Device-Gateway).",
   "properties": {
@@ -18,11 +8,29 @@
       "title": "Account Id",
       "type": "string"
     },
+    "credentials": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Every credential field of the provider's descriptor by key (secrets included).",
+      "maxProperties": 10,
+      "title": "Credentials",
+      "type": "object"
+    },
     "email": {
-      "maxLength": 254,
-      "minLength": 3,
-      "title": "Email",
-      "type": "string"
+      "anyOf": [
+        {
+          "maxLength": 254,
+          "minLength": 3,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Deprecated (ADR 0034 senders): the identity field when `credentials` is empty.",
+      "title": "Email"
     },
     "linked_account_id": {
       "anyOf": [
@@ -39,20 +47,30 @@
       "title": "Linked Account Id"
     },
     "password": {
-      "maxLength": 256,
-      "minLength": 1,
-      "title": "Password",
-      "type": "string"
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Deprecated (ADR 0034 senders): the only secret field when `credentials` is empty.",
+      "title": "Password"
     },
     "provider": {
-      "$ref": "#/$defs/CloudProvider",
-      "default": "mammotion"
+      "description": "The provider id.",
+      "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+      "title": "Provider",
+      "type": "string"
     }
   },
   "required": [
-    "account_id",
-    "email",
-    "password"
+    "provider",
+    "account_id"
   ],
   "title": "CloudDiscoverRequest",
   "type": "object"

@@ -230,7 +230,8 @@ StateCallback = Callable[[MowerState], Awaitable[None] | None]
 MAX_REASON_LENGTH = 500
 DEFAULT_DEDUP_SIZE = 1024
 NO_REVERSE_REASON = (
-    "this drive link cannot drive backwards (Mammotion cloud driving); drive forwards and turn, "
+    "this drive link cannot drive backwards (e.g. driving over a vendor cloud); drive forwards and "
+    "turn, "
     "or use the Bluetooth bridge"
 )
 """Result reason of a backwards frame without ``capabilities.drive_reverse``."""

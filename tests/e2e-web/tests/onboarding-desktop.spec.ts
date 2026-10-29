@@ -70,7 +70,7 @@ test('a new account sees the tour on the mower list', async ({ browser, request 
 
   const card = page.getByTestId('setup-card');
   await expect(card).toBeVisible();
-  await expect(card.getByRole('heading', { name: 'Mammotion-Konto verbinden' })).toBeVisible();
+  await expect(card.getByRole('heading', { name: 'Mäher-Konto verbinden' })).toBeVisible();
   await expect(card).toContainText('Willkommen bei MowDeck');
   await expect(card.getByTestId('setup-card-meter')).toHaveAttribute('data-done', '0');
   await expect(card.getByTestId('setup-card-action')).toHaveAttribute(

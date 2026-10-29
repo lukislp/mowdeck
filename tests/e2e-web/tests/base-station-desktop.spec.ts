@@ -131,7 +131,10 @@ test('base station: added from a linked Mammotion account', async ({ page, reque
   try {
     const linked = await request.post(`${FLEET}/linked-accounts`, {
       headers,
-      data: { email: `base-${RUN}@fake.mowdeck.test`, password: 'fake-cloud-password' },
+      data: {
+        provider: 'mammotion',
+        credentials: { email: `base-${RUN}@fake.mowdeck.test`, password: 'fake-cloud-password' },
+      },
       timeout: 60_000,
     });
     expect(linked.status(), await linked.text()).toBe(201);
@@ -144,7 +147,7 @@ test('base station: added from a linked Mammotion account', async ({ page, reque
     await device.getByTestId('bs-device-add').click();
     const base = page.locator('li[data-testid^="bs-"][data-name]');
     await expect(base).toHaveCount(1);
-    await expect(base).toContainText('Mammotion-Konto');
+    await expect(base).toContainText('Verknüpftes Konto');
     await expect(base).toContainText('RTK-FAKE0001');
     // No cloud mower is assigned: nothing to show yet, and the firmware needs a mower.
     await expect(base.getByTestId('bs-state-empty')).toBeVisible();
