@@ -1,0 +1,6 @@
+{
+  "pr": 197,
+  "de": "Neu: Sicherheit in den Einstellungen. Alle angemeldeten Geräte auf einen Blick, einzeln oder überall sonst abmelden, Passkeys, Anmeldedienste und Zugangstokens an einem Ort, die Sicherheitsereignisse der letzten 30 Tage, und eine Benachrichtigung, wenn sich jemand von einem neuen Gerät anmeldet.",
+  "en": "New: Security in the settings. Every signed-in device at a glance, sign one out or all others, passkeys, sign-in services and access tokens in one place, the security events of the last 30 days, and a notification when someone signs in from a new device.",
+  "href": "/settings#security"
+}
