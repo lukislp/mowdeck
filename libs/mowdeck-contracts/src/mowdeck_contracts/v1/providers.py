@@ -16,7 +16,7 @@ Descriptors never hold credentials; they are public data.
 import re
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Final, Self
+from typing import Final, Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -112,8 +112,54 @@ class CredentialProblem(ContractModel):
     message: str
 
 
+RESERVED_OPTION_KEYS: Final = frozenset(
+    {
+        "device_name",
+        "iot_id",
+        "cloud_provider",
+        "linked_account_id",
+        "credentials",
+        "credentials_rev",
+        "links",
+        "base_station",
+        "drive_full_speed_mps",
+        "drive_full_yaw_rate_dps",
+        "drive_dead_zone",
+        "drive_turn_dead_zone",
+        "drive_speed_setting",
+        "calibrated_at",
+    }
+)
+"""Option keys MowDeck sets on every cloud mower (the device of the linked account, its
+provider, the credential bookkeeping, links, the base station and the drive calibration). A
+provider's credential fields and mower options must not use them: the gateway merges the
+credentials into the connection options, so a collision would overwrite a managed value."""
+
+OptionType = Literal["string", "integer", "number", "boolean"]
+
+
+class ConnectionOptionSpec(ContractModel):
+    """One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).
+
+    Fleet validates a cloud mower's options against the options its provider declares and the
+    web app renders them on the mower's settings page; only declared options exist, so a vendor
+    with few settings shows few.
+    """
+
+    key: str = Field(pattern=CREDENTIAL_KEY_PATTERN)
+    type: OptionType
+    title: str = Field(min_length=1, max_length=80, description="English title.")
+    description: str = Field(default="", max_length=400, description="English help text.")
+    advanced: bool = Field(default=False, description="Rarely needed; shown under 'advanced'.")
+    minimum: float | None = None
+    maximum: float | None = None
+    default: str | int | float | bool | None = None
+    examples: list[str] = Field(default_factory=list, max_length=5)
+
+
 class ProviderDescriptor(ContractModel):
-    """A cloud provider as its adapter declares it: the link form and the guidance."""
+    """A cloud provider as its adapter declares it: the link form, the guidance and the options
+    of its mowers."""
 
     provider: str = Field(pattern=PROVIDER_ID_PATTERN)
     name: str = Field(min_length=1, max_length=80, description="Display name of the vendor cloud.")
@@ -137,12 +183,29 @@ class ProviderDescriptor(ContractModel):
         description="False: built and tested against recorded fixtures and fakes only; the web "
         "app labels such providers as untested on real hardware.",
     )
+    mower_options: list[ConnectionOptionSpec] = Field(
+        default_factory=list,
+        max_length=30,
+        description="The options a mower of this provider takes (none: the provider has no "
+        "settings beyond the linked account).",
+    )
 
     @model_validator(mode="after")
     def _one_identity(self) -> Self:
         keys = [f.key for f in self.fields]
         if len(set(keys)) != len(keys):
             msg = "credential field keys must be unique"
+            raise ValueError(msg)
+        options = [o.key for o in self.mower_options]
+        if len(set(options)) != len(options):
+            msg = "mower option keys must be unique"
+            raise ValueError(msg)
+        clash = (set(keys) | set(options)) & RESERVED_OPTION_KEYS
+        if clash:
+            msg = f"reserved option keys cannot be used: {', '.join(sorted(clash))}"
+            raise ValueError(msg)
+        if set(keys) & set(options):
+            msg = "a mower option cannot have the key of a credential field"
             raise ValueError(msg)
         if sum(1 for f in self.fields if f.identity) != 1:
             msg = "exactly one credential field must be the identity"

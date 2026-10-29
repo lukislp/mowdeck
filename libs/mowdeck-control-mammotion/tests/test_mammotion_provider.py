@@ -1,5 +1,6 @@
 """The Mammotion cloud provider plugin (ADR 0034, ADR 0066) on the fake cloud."""
 
+import re
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -97,3 +98,20 @@ def test_real_provider_never_loads_the_fake_cloud(tmp_path: Path) -> None:
     assert "mowdeck_control_mammotion.fake_cloud" not in sys.modules
     create_provider(ProviderContext(fake=True))
     assert "mowdeck_control_mammotion.fake_cloud" in sys.modules
+
+
+def test_descriptor_declares_every_option_the_cloud_connection_takes() -> None:
+    """Fleet stores only what the descriptor declares (ADR 0066): every option CloudOptions
+    parses, except credentials and the keys Fleet manages, is declared with its range."""
+    import inspect
+
+    from mowdeck_control_mammotion import options as module
+
+    source = inspect.getsource(module.CloudOptions.parse)
+    parsed = set(re.findall(r'^\s+"([a-z_]+)",$', source, re.M))
+    credentials = {"account", "password", "credential_ref"}
+    managed = {"device_name", "iot_id", "linked_account_id"}
+    declared = {o.key for o in DESCRIPTOR.mower_options}
+    assert parsed - credentials - managed == declared
+    refresh = next(o for o in DESCRIPTOR.mower_options if o.key == "refresh_seconds")
+    assert (refresh.minimum, refresh.maximum, refresh.default) == (10, 300, 20)

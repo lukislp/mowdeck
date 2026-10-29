@@ -1944,7 +1944,7 @@
             "type": "array"
           },
           "id": {
-            "description": "Stable id; for Mammotion the zone hash.",
+            "description": "Stable id, e.g. the vendor's zone hash.",
             "maxLength": 128,
             "minLength": 1,
             "title": "Id",
@@ -2385,7 +2385,7 @@
           },
           "custom_paths": {
             "default": false,
-            "description": "The mower can follow an arbitrary path or boundary (False for LUBA today).",
+            "description": "The mower can follow an arbitrary path or boundary.",
             "title": "Custom Paths",
             "type": "boolean"
           },
@@ -2428,7 +2428,7 @@
           },
           "light": {
             "default": false,
-            "description": "The mower's light (the camera's headlamp on Mammotion mowers) can be switched with `set_light`.",
+            "description": "The mower's light (e.g. the camera's headlamp) can be switched with `set_light`.",
             "title": "Light",
             "type": "boolean"
           },
@@ -3033,7 +3033,7 @@
                 "type": "null"
               }
             ],
-            "description": "Map version; for Mammotion the map hash.",
+            "description": "Map version, e.g. the vendor's map hash.",
             "title": "Revision"
           }
         },

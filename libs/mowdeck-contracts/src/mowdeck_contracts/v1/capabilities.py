@@ -190,13 +190,13 @@ class MowerCapabilities(ContractModel):
     )
     custom_paths: bool = Field(
         default=False,
-        description="The mower can follow an arbitrary path or boundary (False for LUBA today).",
+        description="The mower can follow an arbitrary path or boundary.",
     )
     camera: CameraAccess = CameraAccess.NONE
     light: bool = Field(
         default=False,
-        description="The mower's light (the camera's headlamp on Mammotion mowers) can be "
-        "switched with `set_light`.",
+        description="The mower's light (e.g. the camera's headlamp) can be switched with "
+        "`set_light`.",
     )
     rtk_sources: RtkSources = Field(
         default_factory=frozenset, description="RTK correction sources the mower can report."

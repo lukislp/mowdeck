@@ -1756,7 +1756,7 @@ export type components = {
             ][];
             /**
              * Id
-             * @description Stable id; for Mammotion the zone hash.
+             * @description Stable id, e.g. the vendor's zone hash.
              */
             id: string;
             /** Name */
@@ -1885,7 +1885,7 @@ export type components = {
             connection_kinds?: components["schemas"]["ConnectionKind"][];
             /**
              * Custom Paths
-             * @description The mower can follow an arbitrary path or boundary (False for LUBA today).
+             * @description The mower can follow an arbitrary path or boundary.
              * @default false
              */
             custom_paths: boolean;
@@ -1910,7 +1910,7 @@ export type components = {
             firmware_update: boolean;
             /**
              * Light
-             * @description The mower's light (the camera's headlamp on Mammotion mowers) can be switched with `set_light`.
+             * @description The mower's light (e.g. the camera's headlamp) can be switched with `set_light`.
              * @default false
              */
             light: boolean;
@@ -2242,7 +2242,7 @@ export type components = {
             reference: components["schemas"]["GeoReference"];
             /**
              * Revision
-             * @description Map version; for Mammotion the map hash.
+             * @description Map version, e.g. the vendor's map hash.
              */
             revision?: string | null;
         };

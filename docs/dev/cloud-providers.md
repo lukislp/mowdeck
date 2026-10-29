@@ -21,29 +21,34 @@ flowchart LR
 4. Linking: Fleet checks the credentials against the descriptor, asks the gateway to log in (`gateway.cloud.discover`), seals the secret fields (AES-256-GCM) and stores the rest. Secrets never leave Fleet except in two internal NATS replies and are never logged or returned.
 5. A mower registered from the account carries `cloud_provider` in its registration; the gateway hands it to that provider's plugin and merges the account's credential fields into the connection options when it connects.
 
+## The principle
+
+MowDeck is the same for every provider; a mower shows what its adapter declares and nothing more. Every feature is gated by `MowerCapabilities`, by capability-declared device settings ([ADR 0046](../adr/0046-device-settings-as-capabilities.md)) and by the mower options the provider declares, never by the vendor. An adapter that only connects, reports its state and starts, pauses and docks gets a clean MowDeck without dead buttons; declare more, get more.
+
 ## Checklist
 
-1. **Package.** Create `libs/mowdeck-control-<vendor>`: Apache-2.0 when the vendor SDK is permissive, GPL-3.0 with its own `LICENSE` when it is GPL ([ADR 0011](../adr/0011-gpl-package-for-pymammotion-adapter.md)); read the SDK's `LICENSE` file, not only its PyPI metadata. Depend on `mowdeck-contracts`, `mowdeck-control` and the SDK, pinned exactly.
-2. **Connection.** Implement `MowerConnection` as a thin translator ([ADR 0012](../adr/0012-mower-control-interface-and-safety-rules.md), checklist in `libs/mowdeck-control/README.md`): honest `MowerCapabilities` (default "not supported"), states mapped onto MowDeck's activities, `raw.lifted` and the lift code for the theft alarm ([ADR 0027](../adr/0027-health-history-and-theft-alarm.md)), `raw.blade_on`. The controller owns every safety rule; do not duplicate them.
-3. **Plugin.** Implement `CloudProviderPlugin`: the `descriptor` (credential fields with English labels and help, exactly one identity field, at least one secret; setup steps and links to the vendor's pages; `needs_developer_account`; `tested_on_hardware`), `discover(credentials)` raising `CloudLoginRefused` or `CloudUnavailable` with messages that never contain credentials or vendor payloads, `create_connection(config)` and `close()`. Share one vendor session per account between the account's mowers and the discovery when the vendor supersedes logins.
-4. **Fake cloud.** With `ProviderContext.fake` the plugin answers from a fake cloud in the package (fixed test accounts documented in the package README); the browser tests and local development use it (`MOWDECK_FAKE_CLOUDS=true`, refused in production). Import the fake only when it is selected.
-5. **Entry point and boundary.** Register the spec and declare the vendor modules:
+1. **Package** `libs/mowdeck-control-<vendor>`: Apache-2.0, or GPL-3.0 with its own `LICENSE` when the SDK is GPL ([ADR 0011](../adr/0011-gpl-package-for-pymammotion-adapter.md); read the SDK's `LICENSE` file, not only PyPI). Pin the SDK exactly.
+2. **Connection**: a thin `MowerConnection` ([ADR 0012](../adr/0012-mower-control-interface-and-safety-rules.md)). Declare only what the mower does in `MowerCapabilities` (the defaults mean "not supported"; the controller refuses the rest); map the state, `raw.lifted` and `raw.blade_on` ([ADR 0027](../adr/0027-health-history-and-theft-alarm.md)), and `error_category` from your error lexicon.
+3. **Plugin**: a `CloudProviderPlugin` with its `descriptor` (credential fields, setup steps, links, `needs_developer_account`, `tested_on_hardware`, `mower_options` for the settings its mowers take), `discover`, `create_connection`, `close`, and a fake cloud for `ProviderContext.fake`.
+4. **Declarations** in `pyproject.toml`:
 
     ```toml
     [project.entry-points."mowdeck.cloud_providers"]
     acme = "mowdeck_control_acme.plugin:SPEC"
 
+    [project.entry-points."mowdeck.error_lexicons"]
+    acme = "mowdeck_control_acme.lexicon:LEXICON"
+
     [tool.mowdeck.adapter]
     vendor-modules = ["acme_sdk"]
+    brand-names = ["acme"]
     ```
 
-    `tools/repo-checks/tests/test_vendor_isolation.py` fails when core code imports the package or `acme_sdk`.
-
-    Ship the vendor's error lexicon too (`[project.entry-points."mowdeck.error_lexicons"]`, see [Adding an error lexicon for a vendor](error-lexicon.md)); the same test requires it.
-6. **Tests.** Unit tests against recorded or handwritten payloads and a fake SDK client, no network: descriptor, credential handling, state and capability mapping, lift codes, command translation, errors, the fake cloud.
-7. **Image.** Add the package to the Device-Gateway's dependencies (`services/device-gateway/pyproject.toml`) and to the workspace (`pyproject.toml`: dev dependencies, `tool.uv.sources`, mypy files). That is packaging; no core module changes.
-8. **Docs.** A package README (what the user must provide, capabilities, limits, rate limits, the fake accounts, "untested on real hardware"), a line in the root README's supported mowers and, for a decision worth recording, an ADR.
-9. **Enable.** Leave `enabled_by_default` off until someone tested on real hardware; operators enable the provider with `MOWDECK_CLOUD_PROVIDERS_ENABLE=<id>` (Compose: `GATEWAY_CLOUD_PROVIDERS_ENABLE`).
+    `tools/repo-checks/tests/test_vendor_isolation.py` then keeps the vendor out of the core. The lexicon guide: [Adding an error lexicon for a vendor](error-lexicon.md).
+5. **Tests** against recorded or handwritten payloads and a fake SDK client, no network.
+6. **Image** (the one mechanical core step): add the package to `services/device-gateway/pyproject.toml` and to the workspace `pyproject.toml` (dev group, `tool.uv.sources`, mypy files), then `uv lock`.
+7. **Docs**: a package README (what the user provides, capabilities, limits, rate limits, the fake accounts, "untested on real hardware") and a row in the root README.
+8. **Enable**: off by default until tested on real hardware; operators set `MOWDECK_CLOUD_PROVIDERS_ENABLE=<id>` (Compose: `GATEWAY_CLOUD_PROVIDERS_ENABLE`).
 
 ## Credentials
 

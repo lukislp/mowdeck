@@ -1089,7 +1089,7 @@ A mowable area (a "zone" in the Mammotion app).
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `boundary` | array of array of any | yes | min items 3 |
-| `id` | string | yes | Stable id; for Mammotion the zone hash.; min length 1; max length 128 |
+| `id` | string | yes | Stable id, e.g. the vendor's zone hash.; min length 1; max length 128 |
 | `name` | string or null | no |  |
 
 ### MapLayerOut
@@ -1144,12 +1144,12 @@ All fields default to "not supported", so an adapter only declares what it reall
 | `blade_height_range_mm` | array of any or null | no | Inclusive (min, max) blade height in millimetres, if settable. |
 | `camera` | [CameraAccess](#cameraaccess) | no | default `"none"` |
 | `connection_kinds` | array of [ConnectionKind](#connectionkind) | no | Connection kinds this mower can use. |
-| `custom_paths` | boolean | no | The mower can follow an arbitrary path or boundary (False for LUBA today).; default `false` |
+| `custom_paths` | boolean | no | The mower can follow an arbitrary path or boundary.; default `false` |
 | `cutting_width_mm` | integer or null | no | Width of the cut swath in millimetres, if known (coverage heatmaps). |
 | `drive_reverse` | boolean | no | The drive link that carries the joystick frames can drive backwards (a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and a spot run's `multi_point` turns fall back to `arc` (ADR 0043).; default `false` |
 | `drive_speed_setting` | [DriveSpeedSetting](#drivespeedsetting) or null | no | The vendor's speed setting for manual driving can be read (`MowerState.drive_speed_mps`) and changed (`set_drive_speed`) within this range; null when the connection cannot (ADR 0042). |
 | `firmware_update` | boolean | no | The connection can ask the manufacturer's firmware service for updates and install them (`firmware_check`, `firmware_update`).; default `false` |
-| `light` | boolean | no | The mower's light (the camera's headlamp on Mammotion mowers) can be switched with `set_light`.; default `false` |
+| `light` | boolean | no | The mower's light (e.g. the camera's headlamp) can be switched with `set_light`.; default `false` |
 | `links_supported` | array of string | no | Additional link kinds this connection can open next to its primary one (e.g. `ble_bridge`); empty when the mower has only its primary connection.; max items 8 |
 | `maintenance` | array of `"restart_mower"` \| `"sync_map"` \| `"relocate_dock"` \| `"leave_dock"` \| `"resync_rtk"` | no | Maintenance commands this connection can send (ADR 0048): `restart_mower`, `sync_map`, `relocate_dock`, `leave_dock` (only together with `undock`), `resync_rtk`. Clients offer only these; empty when the connection has none. |
 | `manual_drive` | boolean | no | Joystick driving is supported.; default `false` |
@@ -1263,7 +1263,7 @@ The map of one mower: areas, no-go zones, obstacles, paths and the dock.
 | `obstacles` | array of [MapZone](#mapzone) | no |  |
 | `paths` | array of [MapPath](#mappath) | no |  |
 | `reference` | [GeoReference](#georeference) | yes |  |
-| `revision` | string or null | no | Map version; for Mammotion the map hash. |
+| `revision` | string or null | no | Map version, e.g. the vendor's map hash. |
 
 ### MowerMapOut
 

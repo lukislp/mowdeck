@@ -2,7 +2,7 @@ import { m } from '#lib/paraglide/messages.js';
 
 import type { AppModule } from '../types';
 
-/** Linked Mammotion accounts belong to the fleet area: shown with `fleet.manage` (Fleet checks
+/** Linked vendor accounts belong to the fleet area: shown with `fleet.manage` (Fleet checks
  * `can_manage_mowers` on the account again), no ui_area of their own. */
 export default {
   id: 'linked-accounts',

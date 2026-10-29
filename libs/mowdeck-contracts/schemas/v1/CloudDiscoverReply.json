@@ -43,7 +43,7 @@
       "description": "One device of a vendor cloud account as the discovery saw it.",
       "properties": {
         "device_name": {
-          "description": "The device name the vendor app shows, e.g. `Luba-VP12345678`; the key a mower registration selects the device by.",
+          "description": "The device name the vendor app shows; the key a mower registration selects the device by.",
           "maxLength": 100,
           "minLength": 1,
           "title": "Device Name",
@@ -84,7 +84,7 @@
             }
           ],
           "default": null,
-          "description": "Model name as far as the vendor cloud reported it at login, e.g. `LUBA 2 AWD 5000X` or `Automower 430X NERA`.",
+          "description": "Model name as far as the vendor cloud reported it at login.",
           "title": "Model"
         },
         "online": {

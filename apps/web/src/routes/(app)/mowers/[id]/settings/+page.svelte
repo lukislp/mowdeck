@@ -27,6 +27,7 @@
     type ConnectionState,
     type FieldIssue,
     type KindSchema,
+    withProviderOptions,
   } from '#lib/connection/form.js';
   import { loadKinds } from '#lib/connection/kinds.js';
   import { kindTitle } from '#lib/connection/text.js';
@@ -110,7 +111,13 @@
   let linkedAccount = $state<LinkedAccount | null>(null);
   let linkedUnreadable = $state(false);
 
-  const schema = $derived(kinds.find((k) => k.kind === kind) ?? null);
+  const schema = $derived.by(() => {
+    const found = kinds.find((k) => k.kind === kind) ?? null;
+    // A cloud mower's further options are the ones its provider declares (ADR 0066).
+    return found && mower && kind === mower.connection_kind
+      ? withProviderOptions(found, mower.connection_options)
+      : found;
+  });
   const issues = $derived(
     tried && schema ? { ...serverFound, ...validate(schema, connection) } : serverFound,
   );

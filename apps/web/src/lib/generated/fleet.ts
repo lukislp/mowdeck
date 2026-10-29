@@ -149,7 +149,9 @@ export type paths = {
          * List Connection Kinds
          * @description The connection kinds this installation accepts (``MOWDECK_ALLOWED_CONNECTION_KINDS``) with
          *     the option schema of each: required, optional, secret and alternative options. The web app
-         *     generates its connection forms from it, so a new adapter kind needs no UI change.
+         *     generates its connection forms from it, so a new adapter kind needs no UI change. For cloud
+         *     mowers the options of each enabled provider come from its descriptor (``provider_options``,
+         *     ADR 0066); without an answering gateway that map is empty.
          */
         get: operations["list_connection_kinds_api_v1_fleet_connection_kinds_get"];
         put?: never;
@@ -1274,7 +1276,7 @@ export type components = {
             key: string;
             /**
              * Mode
-             * @description Agora encryption mode, for Mammotion `aes-256-gcm2`.
+             * @description Agora encryption mode, e.g. `aes-256-gcm2`.
              */
             mode: string;
             /**
@@ -1585,6 +1587,13 @@ export type components = {
             linked_account: boolean;
             /** Options */
             options: components["schemas"]["ConnectionOptionOut"][];
+            /**
+             * Provider Options
+             * @description For a kind with `linked_account`: the further options a mower takes, by its provider (the option `cloud_provider`), as the enabled providers declare them (ADR 0066). A provider without settings has an empty list.
+             */
+            provider_options?: {
+                [key: string]: components["schemas"]["ConnectionOptionOut"][];
+            };
             /** Title */
             title: string;
         };
@@ -1635,6 +1644,48 @@ export type components = {
             /**
              * Title
              * @description English label; the app translates the options it knows.
+             */
+            title: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "string" | "integer" | "number" | "boolean";
+        };
+        /**
+         * ConnectionOptionSpec
+         * @description One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).
+         *
+         *     Fleet validates a cloud mower's options against the options its provider declares and the
+         *     web app renders them on the mower's settings page; only declared options exist, so a vendor
+         *     with few settings shows few.
+         */
+        ConnectionOptionSpec: {
+            /**
+             * Advanced
+             * @description Rarely needed; shown under 'advanced'.
+             * @default false
+             */
+            advanced: boolean;
+            /** Default */
+            default?: string | number | boolean | null;
+            /**
+             * Description
+             * @description English help text.
+             * @default
+             */
+            description: string;
+            /** Examples */
+            examples?: string[];
+            /** Key */
+            key: string;
+            /** Maximum */
+            maximum?: number | null;
+            /** Minimum */
+            minimum?: number | null;
+            /**
+             * Title
+             * @description English title.
              */
             title: string;
             /**
@@ -2779,13 +2830,19 @@ export type components = {
         };
         /**
          * ProviderDescriptor
-         * @description A cloud provider as its adapter declares it: the link form and the guidance.
+         * @description A cloud provider as its adapter declares it: the link form, the guidance and the options
+         *     of its mowers.
          */
         ProviderDescriptor: {
             /** Fields */
             fields: components["schemas"]["CredentialField"][];
             /** Links */
             links?: components["schemas"]["ProviderLink"][];
+            /**
+             * Mower Options
+             * @description The options a mower of this provider takes (none: the provider has no settings beyond the linked account).
+             */
+            mower_options?: components["schemas"]["ConnectionOptionSpec"][];
             /**
              * Name
              * @description Display name of the vendor cloud.

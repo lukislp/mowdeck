@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping
 from typing import Any, Final
 
 from mowdeck_contracts.v1 import (
+    ConnectionOptionSpec,
     CredentialField,
     CredentialFieldKind,
     ProviderDescriptor,
@@ -69,6 +70,119 @@ DESCRIPTOR: Final = ProviderDescriptor(
     ],
     links=[ProviderLink(label="Mammotion app", url="https://mammotion.com/pages/app")],
     tested_on_hardware=True,
+    mower_options=[
+        ConnectionOptionSpec(
+            key="session_cache_path",
+            type="string",
+            title="Session cache file",
+            description="File for the cloud session tokens on a private, writable volume; "
+            "avoids a password login on every reconnect.",
+            advanced=True,
+            examples=["/var/lib/device-gateway/mammotion-session.json"],
+        ),
+        ConnectionOptionSpec(
+            key="refresh_seconds",
+            type="number",
+            title="State refresh (s)",
+            description="How often the mower is asked for a fresh status report; the Mammotion "
+            "cloud sends reports only on request.",
+            advanced=True,
+            minimum=10,
+            maximum=300,
+            default=20,
+        ),
+        ConnectionOptionSpec(
+            key="refresh_seconds_active",
+            type="number",
+            title="State refresh while mowing (s)",
+            description="How often the mower is asked for a fresh status report while it mows, "
+            "returns or is paused away from the dock; more requests than the idle refresh, so "
+            "more 4G traffic while it works.",
+            advanced=True,
+            minimum=2,
+            maximum=60,
+            default=5,
+        ),
+        ConnectionOptionSpec(
+            key="report_stream_seconds",
+            type="number",
+            title="Live reports while mowing (s)",
+            description="Length of the continuous report window kept open while the mower works "
+            "(renewed every half window); about one report per second, which keeps the live "
+            "position smooth. 0 turns it off and uses the plain refresh. Only while mowing, so "
+            "no extra 4G traffic while docked.",
+            advanced=True,
+            minimum=0,
+            maximum=300,
+            default=60,
+        ),
+        ConnectionOptionSpec(
+            key="all_cameras",
+            type="boolean",
+            title="All cameras",
+            description="Ask the cloud for every camera of the mower (both front cameras of a "
+            "LUBA 2 AWD X, the rear one of a Yuka) instead of the front left one only; off when "
+            "a mower misbehaves with more than one stream.",
+            advanced=True,
+            default=True,
+        ),
+        ConnectionOptionSpec(
+            key="cloud_drive",
+            type="boolean",
+            title="Manual driving over the cloud",
+            description="Joystick, nudges, AI assist moves and spot runs over the Mammotion "
+            "cloud when no Bluetooth bridge is connected (forwards and turns only, about 0.3 s "
+            "delay). Needs the mower's owner account; off keeps driving to the bridge.",
+            default=True,
+        ),
+        ConnectionOptionSpec(
+            key="allow_manual_blades",
+            type="boolean",
+            title="Blades while driving manually",
+            description="Off keeps the blades off while the mower is driven manually over the "
+            "cloud.",
+            default=False,
+        ),
+        ConnectionOptionSpec(
+            key="manual_blade_height_mm",
+            type="integer",
+            title="Blade height for manual driving (mm)",
+            advanced=True,
+            minimum=20,
+            maximum=100,
+            default=60,
+        ),
+        ConnectionOptionSpec(
+            key="manual_drive_speed_mps",
+            type="number",
+            title="Manual driving speed limit (m/s)",
+            description="max_run_speed sent when a drive session opens; empty: the mower's own "
+            "speed setting, at most 1.0.",
+            advanced=True,
+            minimum=0.1,
+            maximum=1.0,
+        ),
+        ConnectionOptionSpec(
+            key="map_sync_timeout_s",
+            type="number",
+            title="Map sync timeout (s)",
+            description="How long to wait for the map after connecting.",
+            advanced=True,
+            minimum=1,
+            maximum=3600,
+            default=300,
+        ),
+        ConnectionOptionSpec(
+            key="confirm_timeout_s",
+            type="number",
+            title="Confirmation timeout (s)",
+            description="How long a command waits for the mower to confirm it.",
+            advanced=True,
+            minimum=1,
+            maximum=600,
+            default=30,
+        ),
+    ],
 )
 
 

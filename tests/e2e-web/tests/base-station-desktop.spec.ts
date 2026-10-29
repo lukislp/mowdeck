@@ -147,7 +147,7 @@ test('base station: added from a linked Mammotion account', async ({ page, reque
     await device.getByTestId('bs-device-add').click();
     const base = page.locator('li[data-testid^="bs-"][data-name]');
     await expect(base).toHaveCount(1);
-    await expect(base).toContainText('Mammotion-Konto');
+    await expect(base).toContainText('Verknüpftes Konto');
     await expect(base).toContainText('RTK-FAKE0001');
     // No cloud mower is assigned: nothing to show yet, and the firmware needs a mower.
     await expect(base.getByTestId('bs-state-empty')).toBeVisible();

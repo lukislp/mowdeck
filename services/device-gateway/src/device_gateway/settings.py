@@ -135,7 +135,8 @@ class Settings(ServiceSettings):
     package READMEs) instead of the vendor's; refused with ``MOWDECK_ENVIRONMENT=prod``."""
 
     fake_mammotion_cloud: bool = False
-    """Deprecated name of ``fake_clouds`` (``MOWDECK_FAKE_MAMMOTION_CLOUD``), still honoured."""
+    """Deprecated name of ``fake_clouds`` (``MOWDECK_FAKE_MAMMOTION_CLOUD``), still honoured; it
+    will be removed with the first release after 2026-12-31 (use ``MOWDECK_FAKE_CLOUDS``)."""
 
     @property
     def use_fake_clouds(self) -> bool:

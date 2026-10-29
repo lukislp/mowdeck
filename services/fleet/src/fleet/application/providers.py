@@ -14,12 +14,15 @@ from mowdeck_contracts.v1 import ProviderDescriptor
 from mowdeck_service_kit import get_logger
 
 from fleet.application.ports import Clock, CloudDiscovery
+from fleet.domain.connections import OptionSpec
 from fleet.domain.errors import FieldProblem, InvalidInput, Unavailable
 
 _log = get_logger("fleet.providers")
 
 PROVIDERS_UNAVAILABLE = "the Device-Gateway did not list the cloud providers"
 UNKNOWN_PROVIDER = "this cloud provider is not installed or not enabled"
+FAILURE_HOLD = timedelta(seconds=10)
+"""How long a failed provider list is answered from memory as unavailable."""
 
 
 class ProviderCatalog:
@@ -32,13 +35,20 @@ class ProviderCatalog:
         self.clock = clock
         self.ttl = ttl
         self._cached: tuple[datetime, list[ProviderDescriptor]] | None = None
+        self._failed_at: datetime | None = None
 
     async def _load(self) -> list[ProviderDescriptor]:
+        # A failed request is not repeated for a few seconds: every page that shows the
+        # connection kinds would wait for the gateway again.
+        if self._failed_at is not None and self.clock() - self._failed_at < FAILURE_HOLD:
+            raise Unavailable(PROVIDERS_UNAVAILABLE)
         try:
             reply = await self.discovery.providers()
         except Exception as exc:
             _log.warning("cloud provider list failed", error=type(exc).__name__)
+            self._failed_at = self.clock()
             raise Unavailable(PROVIDERS_UNAVAILABLE) from exc
+        self._failed_at = None
         self._cached = (self.clock(), list(reply.providers))
         return list(reply.providers)
 
@@ -63,6 +73,24 @@ class ProviderCatalog:
             problem = FieldProblem("provider", UNKNOWN_PROVIDER, "unknown_provider")
             raise InvalidInput(UNKNOWN_PROVIDER, fields=[problem])
         return found
+
+
+def option_specs(descriptor: ProviderDescriptor) -> tuple[OptionSpec, ...]:
+    """The mower options a provider declares, as Fleet's option schema entries."""
+    return tuple(
+        OptionSpec(
+            key=o.key,
+            type=o.type,
+            title=o.title,
+            description=o.description,
+            advanced=o.advanced,
+            minimum=o.minimum,
+            maximum=o.maximum,
+            default=o.default,
+            examples=tuple(o.examples),
+        )
+        for o in descriptor.mower_options
+    )
 
 
 def checked_credentials(

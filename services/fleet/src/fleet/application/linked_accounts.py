@@ -50,9 +50,10 @@ from mowdeck_service_kit import get_logger
 from fleet.application.access import Access
 from fleet.application.context import Actor
 from fleet.application.ports import Clock, CloudDiscovery, In, SecretCipher, Store, Tx
-from fleet.application.providers import ProviderCatalog, checked_credentials
+from fleet.application.providers import ProviderCatalog, checked_credentials, option_specs
 from fleet.application.throttle import LoginThrottle
 from fleet.application.work import UnitOfWork
+from fleet.domain.connections import OptionSpec
 from fleet.domain.errors import (
     ConflictError,
     FieldProblem,
@@ -440,6 +441,14 @@ class LinkedAccountService:
         """The cloud providers the caller can link accounts of (enabled in the gateway)."""
         await self._require_manage(actor, account_id)
         return await self.catalog.all()
+
+    async def provider_options(self) -> dict[str, tuple[OptionSpec, ...]]:
+        """The mower options of every enabled provider (empty when no gateway answers or in
+        the public demo, ADR 0068): the connection-kind schemas show them."""
+        try:
+            return {d.provider: option_specs(d) for d in await self.catalog.all()}
+        except Unavailable:
+            return {}
 
     async def visible(self, actor: Actor, account_id: UUID) -> list[LinkedAccountView]:
         """The linked accounts of the caller's account, by identity."""

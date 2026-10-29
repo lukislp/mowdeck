@@ -35,6 +35,22 @@ export interface FieldIssue {
   message?: string;
 }
 
+/**
+ * The schema of one mower: for a kind of linked accounts the managed options plus the options
+ * its provider declares (`provider_options`, keyed by the mower's managed `cloud_provider`,
+ * ADR 0066). A provider without settings adds none, so its mowers show no extra fields.
+ */
+export function withProviderOptions(
+  schema: KindSchema,
+  options: Readonly<Record<string, unknown>> | null | undefined,
+): KindSchema {
+  const provider = options?.['cloud_provider'];
+  const extra = typeof provider === 'string' ? (schema.provider_options?.[provider] ?? []) : [];
+  if (extra.length === 0) return schema;
+  const known = new Set(schema.options.map((o) => o.key));
+  return { ...schema, options: [...schema.options, ...extra.filter((o) => !known.has(o.key))] };
+}
+
 export function groupMembers(schema: KindSchema, group: string): OptionSchema[] {
   return schema.options.filter((o) => o.group === group);
 }

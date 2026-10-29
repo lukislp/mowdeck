@@ -308,7 +308,7 @@ One command record of the caller's account whose mower the caller may view (404 
 
 **List Connection Kinds**
 
-The connection kinds this installation accepts (`MOWDECK_ALLOWED_CONNECTION_KINDS`) with the option schema of each: required, optional, secret and alternative options. The web app generates its connection forms from it, so a new adapter kind needs no UI change.
+The connection kinds this installation accepts (`MOWDECK_ALLOWED_CONNECTION_KINDS`) with the option schema of each: required, optional, secret and alternative options. The web app generates its connection forms from it, so a new adapter kind needs no UI change. For cloud mowers the options of each enabled provider come from its descriptor (`provider_options`, ADR 0066); without an answering gateway that map is empty.
 
 | Status | Meaning | Body |
 | --- | --- | --- |
@@ -1132,7 +1132,7 @@ Channel encryption the client must configure before joining (Agora `setEncryptio
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `key` | string | yes | The secret, used verbatim.; min length 1; max length 256 |
-| `mode` | string | yes | Agora encryption mode, for Mammotion `aes-256-gcm2`.; max length 32 |
+| `mode` | string | yes | Agora encryption mode, e.g. `aes-256-gcm2`.; max length 32 |
 | `salt` | string or null | no | Base64 salt (32 bytes decoded) for the `gcm2` modes; null when not sent. |
 
 ### CameraInfo
@@ -1307,6 +1307,7 @@ A connection kind this installation accepts, with its option schema.
 | `kind` | string | yes |  |
 | `linked_account` | boolean | no | Mowers of this kind come from a linked vendor account (`/linked-accounts`): register them with `linked_account_id` and `device_name`.; default `false` |
 | `options` | array of [ConnectionOptionOut](#connectionoptionout) | yes |  |
+| `provider_options` | map of array of [ConnectionOptionOut](#connectionoptionout) | no | For a kind with `linked_account`: the further options a mower takes, by its provider (the option `cloud_provider`), as the enabled providers declare them (ADR 0066). A provider without settings has an empty list. |
 | `title` | string | yes |  |
 
 ### ConnectionOptionOut
@@ -1329,6 +1330,24 @@ One option of a connection kind (the web app builds its form from these).
 | `required` | boolean | yes |  |
 | `secret` | boolean | yes | Write-only: answered as `***`; sending `***` back keeps the stored value. |
 | `title` | string | yes | English label; the app translates the options it knows. |
+| `type` | `"string"` \| `"integer"` \| `"number"` \| `"boolean"` | yes |  |
+
+### ConnectionOptionSpec
+
+One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).
+
+Fleet validates a cloud mower's options against the options its provider declares and the web app renders them on the mower's settings page; only declared options exist, so a vendor with few settings shows few.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `advanced` | boolean | no | Rarely needed; shown under 'advanced'.; default `false` |
+| `default` | string or integer or number or boolean or null | no |  |
+| `description` | string | no | English help text.; max length 400; default `""` |
+| `examples` | array of string | no | max items 5 |
+| `key` | string | yes | pattern `^[a-z][a-z0-9_]{0,39}$` |
+| `maximum` | number or null | no |  |
+| `minimum` | number or null | no |  |
+| `title` | string | yes | English title.; min length 1; max length 80 |
 | `type` | `"string"` \| `"integer"` \| `"number"` \| `"boolean"` | yes |  |
 
 ### CredentialChoice
@@ -1870,12 +1889,13 @@ A compact reference to a principal, embedded in commands and audit records.
 
 ### ProviderDescriptor
 
-A cloud provider as its adapter declares it: the link form and the guidance.
+A cloud provider as its adapter declares it: the link form, the guidance and the options of its mowers.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `fields` | array of [CredentialField](#credentialfield) | yes | min items 1; max items 10 |
 | `links` | array of [ProviderLink](#providerlink) | no | max items 5 |
+| `mower_options` | array of [ConnectionOptionSpec](#connectionoptionspec) | no | The options a mower of this provider takes (none: the provider has no settings beyond the linked account).; max items 30 |
 | `name` | string | yes | Display name of the vendor cloud.; min length 1; max length 80 |
 | `needs_developer_account` | boolean | no | The user creates an application in the vendor's developer portal (with their own vendor account) to get the credentials.; default `false` |
 | `provider` | string | yes | pattern `^[a-z][a-z0-9_-]{1,31}$` |

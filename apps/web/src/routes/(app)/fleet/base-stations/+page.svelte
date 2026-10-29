@@ -1,5 +1,5 @@
 <!--
-  RTK base stations of the account (ADR 0047): register one from a linked Mammotion account's
+  RTK base stations of the account (ADR 0047): register one from a linked vendor account's
   device list (or the simulator's), assign and unassign the mowers that use it, see its state as
   a linked mower reports it (live over the socket), and check and install its firmware through a
   linked mower. Changes need `can_manage_mowers` on the account; Fleet decides again on every
