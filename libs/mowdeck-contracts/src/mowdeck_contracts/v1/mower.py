@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
+from mowdeck_contracts.v1._base import PROVIDER_ID_PATTERN, ContractModel, UtcDateTime
 from mowdeck_contracts.v1.base_station import BaseStationState
 from mowdeck_contracts.v1.calibration import (
     DEFAULT_CALIBRATION_STEP_S,
@@ -151,6 +151,14 @@ class MowerState(ContractModel):
         description="Where `position` comes from; `unknown` whenever `position` is null.",
     )
     connection: ConnectionKind
+    cloud_provider: str | None = Field(
+        default=None,
+        pattern=PROVIDER_ID_PATTERN,
+        description="With connection `cloud`: the cloud provider (ADR 0066) of the mower's "
+        "linked account, so consumers pick the vendor's error lexicon (ADR 0067) when several "
+        "providers share the kind. Set by the Device-Gateway, never by an adapter; null for "
+        "other kinds and in states from before the field.",
+    )
     blade_height_mm: int | None = Field(default=None, ge=0, le=200)
     speed_mps: float | None = Field(default=None, ge=0, le=5)
     error_code: str | None = Field(default=None, max_length=64)

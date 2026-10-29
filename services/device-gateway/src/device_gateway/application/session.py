@@ -895,6 +895,11 @@ class MowerSession:
         )
 
     async def _send_state(self, state: MowerState) -> None:
+        # The provider of the linked account, so consumers pick the right error lexicon when
+        # several providers share the kind (ADR 0066, ADR 0067); never taken from the adapter.
+        provider = self._provider.cloud_provider(self.registration)
+        if state.cloud_provider != provider:
+            state = state.model_copy(update={"cloud_provider": provider})
         try:
             await self._publisher.telemetry(state)
         except Exception as exc:

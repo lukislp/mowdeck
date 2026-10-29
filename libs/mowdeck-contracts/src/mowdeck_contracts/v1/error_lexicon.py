@@ -26,7 +26,7 @@ from typing import Annotated, Final, Self
 
 from pydantic import Field, StringConstraints, model_validator
 
-from mowdeck_contracts.v1._base import ContractModel
+from mowdeck_contracts.v1._base import PROVIDER_ID_PATTERN, ContractModel
 from mowdeck_contracts.v1.mower import ConnectionKind
 from mowdeck_contracts.v1.mower_status import MowerErrorCategory
 from mowdeck_contracts.v1.subjects import (
@@ -51,6 +51,8 @@ VendorKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
 LocaleKey = Annotated[str, StringConstraints(pattern=r"^[a-z]{2}$")]
 """A two-letter language code (``en``, ``de``)."""
 ErrorCodeText = Annotated[str, StringConstraints(min_length=1, max_length=64)]
+ProviderKey = Annotated[str, StringConstraints(pattern=PROVIDER_ID_PATTERN)]
+"""A cloud provider id (ADR 0066), as ``MowerState.cloud_provider`` carries it."""
 
 
 class ErrorSeverity(StrEnum):
@@ -132,10 +134,23 @@ class ErrorLexicon(ContractModel):
         description="The connection kinds whose mowers report codes of this vendor; a lookup by "
         "`MowerState.connection` finds the lexicon through them.",
     )
+    cloud_providers: list[ProviderKey] = Field(
+        default_factory=list,
+        max_length=16,
+        description="The cloud providers (ADR 0066) whose mowers report codes of this vendor; a "
+        "lookup by `MowerState.cloud_provider` finds the lexicon through them. Empty: the "
+        "provider whose id equals `vendor`.",
+    )
     source: str | None = Field(
         default=None, max_length=500, description="Where the entries come from (provenance)."
     )
     entries: list[ErrorLexiconEntry] = Field(default_factory=list)
+
+    def serves_cloud_provider(self, provider: str) -> bool:
+        """The mowers of ``provider`` report this vendor's codes (listed, or the vendor key)."""
+        return provider in self.cloud_providers or (
+            not self.cloud_providers and provider == self.vendor
+        )
 
     @model_validator(mode="after")
     def _unique_codes(self) -> Self:
@@ -164,6 +179,7 @@ class ErrorLexicon(ContractModel):
             vendor=self.vendor,
             vendor_name=self.vendor_name,
             connection_kinds=list(self.connection_kinds),
+            cloud_providers=list(self.cloud_providers),
             source=self.source,
             entries=len(self.entries),
             unverified=sum(1 for e in self.entries if not e.verified),
@@ -177,6 +193,9 @@ class ErrorLexiconInfo(ContractModel):
     vendor: VendorKey
     vendor_name: str
     connection_kinds: list[ConnectionKind] = Field(default_factory=list)
+    cloud_providers: list[ProviderKey] = Field(
+        default_factory=list, description="The cloud providers it serves (empty: `vendor`)."
+    )
     source: str | None = None
     entries: int = Field(ge=0, description="Number of codes.")
     unverified: int = Field(ge=0, description="Codes whose meaning could not be verified.")
@@ -209,13 +228,16 @@ class ErrorExplanation(ContractModel):
 class ErrorExplainRequest(ContractModel):
     """Ask the Device-Gateway to explain codes (``gateway.errors.explain``).
 
-    The lexicon is picked by ``vendor`` or, without it, by ``connection`` (the lexicon that lists
-    the kind). ``category`` is the state's ``error_category``: it shapes the generic advice for
-    a code no lexicon knows.
+    The lexicon is picked by ``vendor``; without it by ``cloud_provider`` (the mower's
+    ``MowerState.cloud_provider``: the lexicon that serves the provider, none when no lexicon
+    does); without both by ``connection`` (the lexicon that lists the kind; for ``cloud`` the
+    gateway prefers the provider that claims unqualified cloud registrations). ``category`` is
+    the state's ``error_category``: it shapes the generic advice for a code no lexicon knows.
     """
 
     codes: list[ErrorCodeText] = Field(min_length=1, max_length=MAX_EXPLAIN_CODES)
     vendor: VendorKey | None = None
+    cloud_provider: ProviderKey | None = None
     connection: ConnectionKind | None = None
     locale: LocaleKey = DEFAULT_LOCALE
     category: MowerErrorCategory | None = None
@@ -242,10 +264,11 @@ class ErrorLexiconSearchRequest(ContractModel):
     ``locale``, filtered by text, category, severity and codes (all optional, combined with and).
 
     The lexicon is picked like for :class:`ErrorExplainRequest`: by ``vendor``, else by
-    ``connection``.
+    ``cloud_provider``, else by ``connection``.
     """
 
     vendor: VendorKey | None = None
+    cloud_provider: ProviderKey | None = None
     connection: ConnectionKind | None = None
     locale: LocaleKey = DEFAULT_LOCALE
     query: str = Field(
@@ -668,6 +691,7 @@ __all__ = [
     "ErrorSeverity",
     "ErrorText",
     "LocaleKey",
+    "ProviderKey",
     "VendorKey",
     "explain_code",
     "generic_text",

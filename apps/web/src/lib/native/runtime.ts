@@ -3,6 +3,7 @@
  */
 import { fleetApi, identityApi, notificationsApi, unwrap } from '#lib/api/client.js';
 import { ApiProblem } from '#lib/api/problem.js';
+import { session } from '#lib/auth/session.svelte.js';
 
 import { nativeBridge } from './capacitor';
 import { NativeShell } from './shell.svelte';
@@ -18,6 +19,8 @@ function localStore(): Storage | null {
 export const nativeShell = new NativeShell({
   bridge: typeof window === 'undefined' ? null : nativeBridge(window),
   storage: localStore(),
+  user: () => (session.me ? `${session.me.subject}@${session.me.account_id ?? ''}` : null),
+  session: () => session.me?.session_id ?? null,
   apns: {
     add: (token, deviceName, installationId) =>
       unwrap(

@@ -311,7 +311,11 @@ class Fanout:
         if self._errors is None or not code or code == "unknown" or not connection:
             return params
         explanation = await self._errors.explain(
-            str(code), str(connection), language, params.get("error_category") or None
+            str(code),
+            str(connection),
+            language,
+            params.get("error_category") or None,
+            params.get("error_provider") or None,
         )
         if explanation is None or not explanation.known:
             return params

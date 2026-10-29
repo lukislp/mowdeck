@@ -9,7 +9,12 @@ struct ContentView: View {
         NavigationStack {
             Group {
                 if let state = model.state {
-                    if !state.configured {
+                    if !state.configured, state.signedOut == true {
+                        HintView(
+                            symbol: "person.crop.circle.badge.questionmark",
+                            title: "Signed out",
+                            message: "Open MowDeck on the iPhone to sign in.")
+                    } else if !state.configured {
                         HintView(
                             symbol: "iphone.gen3",
                             title: "Set up on the iPhone",

@@ -75,6 +75,51 @@ async def test_dg_error_lexicons_unknown_vendor_gets_the_generic_advice() -> Non
     assert (await _explain(bus, codes=["1"], vendor="acme")).explanations[0].title == "One"
 
 
+def _cloud_lexicon(vendor: str, title: str) -> ErrorLexicon:
+    return ErrorLexicon(
+        vendor=vendor,
+        vendor_name=vendor.title(),
+        connection_kinds=[ConnectionKind.CLOUD],
+        entries=[ErrorLexiconEntry(code="7", texts={"en": ErrorText(title=title)})],
+    )
+
+
+async def test_dg_error_lexicons_each_cloud_provider_gets_its_own_lexicon() -> None:
+    # Two providers share the kind `cloud` (ADR 0066); "alpha" sorts first, "zulu" claims the
+    # cloud registrations that name no provider (the mowers from before ADR 0066).
+    registry = ErrorLexiconRegistry(lambda: [])
+    registry.register(_cloud_lexicon("alpha", "Alpha jammed"))
+    registry.register(_cloud_lexicon("zulu", "Zulu jammed"))
+    bus = InMemoryBus()
+    await subscribe_error_lexicons(bus, registry, unqualified_cloud="zulu")
+
+    async def title(**values: object) -> tuple[str | None, str]:
+        [explanation] = (await _explain(bus, codes=["7"], **values)).explanations
+        return explanation.vendor, explanation.title
+
+    assert await title(connection="cloud", cloud_provider="alpha") == ("alpha", "Alpha jammed")
+    assert await title(connection="cloud", cloud_provider="zulu") == ("zulu", "Zulu jammed")
+    # a stored state without the provider: the provider that claims unqualified cloud mowers
+    assert await title(connection="cloud") == ("zulu", "Zulu jammed")
+    assert await title(connection="cloud", cloud_provider="nobody") == (
+        None,
+        "Unknown error 7 from the mower",
+    )
+
+    async def lexicon(**values: object) -> str | None:
+        request = ErrorLexiconSearchRequest.model_validate(values)
+        reply = (await bus.request(GATEWAY_ERRORS_ENTRIES, request)).model(ErrorLexiconSearchReply)
+        return reply.lexicon.vendor if reply.lexicon is not None else None
+
+    assert await lexicon(connection="cloud", cloud_provider="alpha") == "alpha"
+    assert await lexicon(connection="cloud") == "zulu"
+    # without a claiming provider the connection kind decides, as before
+    plain = InMemoryBus()
+    await subscribe_error_lexicons(plain, registry)
+    reply = await _explain(plain, codes=["7"], connection="cloud")
+    assert reply.explanations[0].vendor == "alpha"
+
+
 async def test_dg_error_lexicons_search_a_page_of_the_mowers_lexicon() -> None:
     bus = InMemoryBus()
     await subscribe_error_lexicons(bus)

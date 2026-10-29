@@ -87,6 +87,17 @@ class RegistryConnectionProvider:
             raise UnknownConnectionKind(msg)
         return self._registry.create(registration.connection_kind, config)
 
+    def cloud_provider(self, registration: MowerRegistration) -> str | None:
+        """The provider id of a ``cloud`` registration: its option ``cloud_provider``, else the
+        enabled provider that claims unqualified registrations; None for other kinds."""
+        if registration.connection_kind is not ConnectionKind.CLOUD:
+            return None
+        options = registration.connection_options
+        if self._cloud_providers is not None:
+            return self._cloud_providers.provider_of(options)
+        named = options.get(CLOUD_PROVIDER_OPTION)
+        return named if isinstance(named, str) and named else None
+
     def background_jobs(self, connection: MowerConnection) -> Sequence[BackgroundJob]:
         """The simulation clock for simulated mowers; nothing for real links."""
         if isinstance(connection, SimulatedMower):

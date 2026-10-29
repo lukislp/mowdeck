@@ -17,6 +17,12 @@ Example from ``mowdeck-control-mammotion``::
 This package registers the simulator's lexicon (``simulated``) the same way. Lookups never
 fail: an unknown vendor, an unknown code or a lexicon that cannot be loaded gives the generic
 explanation of :func:`~mowdeck_contracts.v1.unknown_explanation`.
+
+Which lexicon explains a mower's code (:meth:`ErrorLexiconRegistry.provider`): the one of an
+explicit ``vendor``; else the one that serves the mower's cloud provider
+(``MowerState.cloud_provider``, ADR 0066: several vendors share the connection kind ``cloud``,
+so the kind alone cannot tell them apart); else the first (by vendor) that lists the mower's
+connection kind; else none, and the generic explanation.
 """
 
 import logging
@@ -181,13 +187,27 @@ class ErrorLexiconRegistry:
         return [self._providers[v].lexicon.info() for v in self.vendors()]
 
     def provider(
-        self, vendor: str | None = None, connection: ConnectionKind | str | None = None
+        self,
+        vendor: str | None = None,
+        connection: ConnectionKind | str | None = None,
+        *,
+        cloud_provider: str | None = None,
     ) -> ErrorLexiconProvider | None:
-        """The lexicon of ``vendor`` or, without one, the first (by vendor) that lists
-        ``connection``; None when none applies."""
+        """The lexicon to explain a mower's codes with; None when none applies.
+
+        In order: the lexicon of ``vendor``; the first (by vendor) that serves ``cloud_provider``
+        (:meth:`~mowdeck_contracts.v1.ErrorLexicon.serves_cloud_provider`), and none when no
+        lexicon does: another vendor's lexicon on the same connection kind would explain the
+        codes wrongly; the first that lists ``connection``.
+        """
         self._ensure_entry_points()
         if vendor is not None:
             return self._providers.get(vendor)
+        if cloud_provider:
+            for key in sorted(self._providers):
+                if self._providers[key].lexicon.serves_cloud_provider(cloud_provider):
+                    return self._providers[key]
+            return None
         if connection is None:
             return None
         for key in sorted(self._providers):
@@ -203,18 +223,22 @@ class ErrorLexiconRegistry:
         *,
         vendor: str | None = None,
         connection: ConnectionKind | str | None = None,
+        cloud_provider: str | None = None,
         category: MowerErrorCategory | None = None,
     ) -> list[ErrorExplanation]:
-        """Explain every code with the lexicon of ``vendor`` (or ``connection``), in order."""
-        provider = self.provider(vendor, connection)
+        """Explain every code with the lexicon of ``vendor`` (else ``cloud_provider``, else
+        ``connection``, see :meth:`provider`), in order."""
+        provider = self.provider(vendor, connection, cloud_provider=cloud_provider)
         if provider is None:
             return [unknown_explanation(code, locale, category=category) for code in codes]
         return [provider.explain(code, locale, category=category) for code in codes]
 
     def search(self, request: ErrorLexiconSearchRequest) -> ErrorLexiconSearchReply:
-        """Browse the lexicon of ``request.vendor`` (or ``request.connection``); an empty reply
-        (``lexicon`` null) when none applies."""
-        provider = self.provider(request.vendor, request.connection)
+        """Browse the lexicon of ``request.vendor`` (else ``request.cloud_provider``, else
+        ``request.connection``); an empty reply (``lexicon`` null) when none applies."""
+        provider = self.provider(
+            request.vendor, request.connection, cloud_provider=request.cloud_provider
+        )
         if provider is None:
             return ErrorLexiconSearchReply(offset=request.offset)
         return provider.search(request)
@@ -243,9 +267,15 @@ def explain_error(
     *,
     vendor: str | None = None,
     connection: ConnectionKind | str | None = None,
+    cloud_provider: str | None = None,
     category: MowerErrorCategory | None = None,
 ) -> ErrorExplanation:
     """Explain one code with the default registry."""
     return _default_registry.explain(
-        [code], locale, vendor=vendor, connection=connection, category=category
+        [code],
+        locale,
+        vendor=vendor,
+        connection=connection,
+        cloud_provider=cloud_provider,
+        category=category,
     )[0]

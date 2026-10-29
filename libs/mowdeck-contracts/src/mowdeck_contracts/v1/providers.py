@@ -27,6 +27,7 @@ from typing import Annotated, Final, Literal, Self
 
 from pydantic import AfterValidator, BeforeValidator, Field, StringConstraints, model_validator
 
+from mowdeck_contracts.v1._base import PROVIDER_ID_PATTERN as PROVIDER_ID_PATTERN
 from mowdeck_contracts.v1._base import ContractModel
 from mowdeck_contracts.v1.error_lexicon import DEFAULT_LOCALE, LocaleKey, normalise_locale
 
@@ -58,9 +59,6 @@ def text_for(value: Mapping[str, str] | None, locale: str | None) -> str | None:
     return value.get(normalise_locale(locale)) or value.get(DEFAULT_LOCALE)
 
 
-PROVIDER_ID_PATTERN: Final = r"^[a-z][a-z0-9_-]{1,31}$"
-"""Provider ids: lower case, stable, used as the entry point name and stored with every linked
-account (``linked_accounts.provider``)."""
 CREDENTIAL_KEY_PATTERN: Final = r"^[a-z][a-z0-9_]{0,39}$"
 """Keys of credential fields (the names under which the values reach the adapter)."""
 

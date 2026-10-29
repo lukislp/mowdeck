@@ -97,9 +97,15 @@ class ErrorExplainer(Protocol):
     ADR 0067)."""
 
     async def explain(
-        self, code: str, connection: str, language: str, category: str | None = None
+        self,
+        code: str,
+        connection: str,
+        language: str,
+        category: str | None = None,
+        cloud_provider: str | None = None,
     ) -> ErrorExplanation | None:
-        """The explanation in ``language``; None when none can be had (never raises)."""
+        """The explanation in ``language`` with the lexicon of the mower's cloud provider, else
+        of its connection kind; None when none can be had (never raises)."""
         ...
 
 

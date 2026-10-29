@@ -240,6 +240,18 @@ async def test_dg_cloud_mowers_of_one_account_share_one_session() -> None:
         assert plugin.sessions[(ACCOUNT, PASSWORD)] == 2
         reply = await _ask(bus, _request())  # answered from the mowers' session
         assert reply.reused_session and plugin.logins == 1
+        # every state names the provider, for the error lexicon lookups (ADR 0067)
+        assert {s.cloud_provider for s in telemetry(bus, front.mower_id)} == {"acme"}
+
+
+async def test_dg_cloud_states_carry_the_provider_unqualified_ones_the_claiming_one() -> None:
+    bus = InMemoryBus()
+    plain = _cloud_registration("Acme-1")
+    options = {k: v for k, v in plain.connection_options.items() if k != CLOUD_PROVIDER_OPTION}
+    plain = plain.model_copy(update={"connection_options": options})
+    async with lifespan_client(_app(bus, _loaded(claims=True), plain)):
+        await wait_until(lambda: telemetry(bus, plain.mower_id))
+        assert {s.cloud_provider for s in telemetry(bus, plain.mower_id)} == {"acme"}
 
 
 def test_dg_cloud_registrations_are_routed_by_provider() -> None:
@@ -260,6 +272,28 @@ def test_dg_cloud_registrations_are_routed_by_provider() -> None:
         )
     )
     assert simulated.kind is ConnectionKind.SIMULATED
+
+
+def test_dg_cloud_provider_of_a_registration() -> None:
+    plain = _cloud_registration("Acme-2")
+    options = {k: v for k, v in plain.connection_options.items() if k != CLOUD_PROVIDER_OPTION}
+    plain = plain.model_copy(update={"connection_options": options})
+    zeta = _cloud_registration("Zeta-1", **{CLOUD_PROVIDER_OPTION: "zeta"})
+    simulated = MowerRegistration(
+        mower_id=uuid4(),
+        account_id=ACCOUNT_ID,
+        name="Sim",
+        connection_kind=ConnectionKind.SIMULATED,
+    )
+    claiming = RegistryConnectionProvider(cloud_providers=_loaded(claims=True))
+    assert claiming.cloud_provider(_cloud_registration("Acme-1")) == "acme"
+    assert claiming.cloud_provider(plain) == "acme"  # the provider that claims unqualified ones
+    assert claiming.cloud_provider(zeta) == "zeta"  # named, even when not enabled here
+    assert claiming.cloud_provider(simulated) is None
+    assert RegistryConnectionProvider(cloud_providers=_loaded()).cloud_provider(plain) is None
+    without_plugins = RegistryConnectionProvider()
+    assert without_plugins.cloud_provider(zeta) == "zeta"
+    assert without_plugins.cloud_provider(plain) is None
 
 
 def test_dg_cloud_mower_of_a_disabled_provider_is_never_handed_to_another() -> None:

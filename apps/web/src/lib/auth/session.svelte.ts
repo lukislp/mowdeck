@@ -45,6 +45,8 @@ export interface Me {
   roles: string[];
   permissions: string[];
   memberships?: Membership[];
+  /** The login session (family) of this sign-in; null for API tokens. */
+  session_id?: string | null;
 }
 
 type Broadcast =
