@@ -63,6 +63,12 @@ export function errorCategoryLabel(category: ErrorCategory): string {
       return m.errcat_rain();
     case 'positioning':
       return m.errcat_positioning();
+    case 'communication':
+      return m.errcat_communication();
+    case 'docking':
+      return m.errcat_docking();
+    case 'firmware':
+      return m.errcat_firmware();
     case 'other':
       return m.errcat_other();
   }

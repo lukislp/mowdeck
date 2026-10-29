@@ -1,4 +1,4 @@
-"""Cloud provider descriptors and their credential checks (ADR 0065)."""
+"""Cloud provider descriptors and their credential checks (ADR 0066)."""
 
 from typing import Any
 

@@ -101,7 +101,7 @@ linked_accounts = Table(
     Column("updated_at", TS, nullable=False),
     Column("last_synced_at", TS),
     Column("last_sync_error", String(500)),
-    # ADR 0065: the non-secret credential fields and the form of the sealed secrets.
+    # ADR 0066: the non-secret credential fields and the form of the sealed secrets.
     Column("public_credentials", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("secret_format", SmallInteger, nullable=False, server_default=text("1")),
     # One link per vendor account and MowDeck account, ignoring the case of the address.

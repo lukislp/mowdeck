@@ -1,6 +1,6 @@
 # Cloud providers: adding a vendor
 
-MowDeck talks to mowers through adapter packages. A vendor whose mowers are reached through its cloud (account linking, device list, cloud connections) plugs in as a **cloud provider** ([ADR 0065](../adr/0065-cloud-provider-plugins-and-more-vendors.md)). The core services never import a vendor package and never name a vendor: the Device-Gateway loads the providers through entry points, Fleet learns their credential fields from the gateway, and the web app renders the link form from those fields.
+MowDeck talks to mowers through adapter packages. A vendor whose mowers are reached through its cloud (account linking, device list, cloud connections) plugs in as a **cloud provider** ([ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md)). The core services never import a vendor package and never name a vendor: the Device-Gateway loads the providers through entry points, Fleet learns their credential fields from the gateway, and the web app renders the link form from those fields.
 
 ## How the pieces fit
 
@@ -37,7 +37,9 @@ flowchart LR
     vendor-modules = ["acme_sdk"]
     ```
 
-    `tools/repo-checks/tests/test_vendor_boundary.py` fails when core code imports the package or `acme_sdk`.
+    `tools/repo-checks/tests/test_vendor_isolation.py` fails when core code imports the package or `acme_sdk`.
+
+    Ship the vendor's error lexicon too (`[project.entry-points."mowdeck.error_lexicons"]`, see [Adding an error lexicon for a vendor](error-lexicon.md)); the same test requires it.
 6. **Tests.** Unit tests against recorded or handwritten payloads and a fake SDK client, no network: descriptor, credential handling, state and capability mapping, lift codes, command translation, errors, the fake cloud.
 7. **Image.** Add the package to the Device-Gateway's dependencies (`services/device-gateway/pyproject.toml`) and to the workspace (`pyproject.toml`: dev dependencies, `tool.uv.sources`, mypy files). That is packaging; no core module changes.
 8. **Docs.** A package README (what the user must provide, capabilities, limits, rate limits, the fake accounts, "untested on real hardware"), a line in the root README's supported mowers and, for a decision worth recording, an ADR.
@@ -62,4 +64,4 @@ Never log a credential, never put one into an exception message, and never answe
 | --- | --- | --- | --- | --- | --- |
 | `mammotion` | `mowdeck-control-mammotion` | GPL-3.0 | e-mail and password of a second Mammotion account | yes (LUBA 2 AWD X) | yes |
 
-The research behind further vendors (Husqvarna, Segway Navimow, Worx) is in [ADR 0065](../adr/0065-cloud-provider-plugins-and-more-vendors.md).
+The research behind further vendors (Husqvarna, Segway Navimow, Worx) is in [ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md).

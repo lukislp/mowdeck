@@ -12,6 +12,8 @@ Event type                      Payload                 Meaning
 ``identity.user.deleted``       :class:`UserChanged`     a sub-user was deleted or a member removed
 ``identity.grants.changed``     :class:`GrantsChanged`   authorization tuples of subjects changed
 ``identity.api_token.revoked``  :class:`ApiTokenRevoked`  an API token was revoked
+``identity.session.new_device``  :class:`NewDeviceLogin`  a login came from a device the user had
+                                                        not used before (ADR 0065)
 ==============================  ======================  ===========================================
 
 ``identity.grants.changed`` is the cache invalidation signal for ``mowdeck-authz``: every
@@ -19,6 +21,7 @@ service that caches authorization decisions drops the entries of the named subje
 (``mowdeck_authz.events.subscribe_cache_invalidation``).
 """
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Final
 from uuid import UUID
@@ -40,6 +43,10 @@ IDENTITY_GRANTS_CHANGED: Final = "identity.grants.changed"
 IDENTITY_API_TOKEN_REVOKED: Final = "identity.api_token.revoked"  # noqa: S105 - event type
 """Event type: an API token was revoked (payload :class:`ApiTokenRevoked`)."""
 
+IDENTITY_SESSION_NEW_DEVICE: Final = "identity.session.new_device"
+"""Event type: a login from a device the user never used before (payload :class:`NewDeviceLogin`,
+ADR 0065); Notifications tells the user."""
+
 IDENTITY_EVENT_TYPES: Final = (
     IDENTITY_ACCOUNT_CREATED,
     IDENTITY_USER_CREATED,
@@ -47,6 +54,7 @@ IDENTITY_EVENT_TYPES: Final = (
     IDENTITY_USER_DELETED,
     IDENTITY_GRANTS_CHANGED,
     IDENTITY_API_TOKEN_REVOKED,
+    IDENTITY_SESSION_NEW_DEVICE,
 )
 """Every event type Identity publishes."""
 
@@ -107,3 +115,31 @@ class ApiTokenRevoked(ContractModel):
     token_id: UUID
     account_id: UUID
     reason: str = Field(min_length=1, max_length=200)
+
+
+class NewDeviceLogin(ContractModel):
+    """Payload of ``identity.session.new_device`` (ADR 0065).
+
+    Published only when the user has new-login alerts on and already had a known device (the
+    very first login, and the first one after the feature arrived, record the device silently).
+    Nothing in it is a secret: the device is described by its user agent, the address only by
+    its network (``203.0.113.x``).
+    """
+
+    user_id: UUID
+    account_id: UUID
+    """The account the session was started in (the user's notification preferences of it)."""
+    session_id: UUID
+    """The login session (``sid``): the security page can end exactly this one."""
+    device: str = Field(min_length=1, max_length=100)
+    """``Firefox on Windows``, ``MowDeck app on iOS``."""
+    client: str = Field(default="unknown", pattern=r"^(browser|app|script|unknown)$")
+    browser: str | None = Field(default=None, max_length=40)
+    """Browser family without version (``Firefox``); None for the app and scripts."""
+    os: str | None = Field(default=None, max_length=40)
+    """Operating system (``Windows``, ``iOS``), when the user agent tells."""
+    ip_prefix: str | None = Field(default=None, max_length=64)
+    network: str = Field(default="unknown", pattern=r"^(local|public|unknown)$")
+    method: str = Field(min_length=1, max_length=20)
+    """How the user signed in: ``password``, ``passkey``, ``github``, ``apple``."""
+    at: datetime

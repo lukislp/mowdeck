@@ -37,6 +37,10 @@ if (!Number.isInteger(port) || port < 1024 || port > 65_000 || port === 80) {
   fail(`invalid MOWDECK_E2E_PORT ${process.env.MOWDECK_E2E_PORT}`);
 }
 
+// MOWDECK_E2E_DEMO=1: the public demo (ADR 0068) on top, with the test secrets of demo.env;
+// `pnpm e2e:stack demo` runs its specs. A demo stack is only for the demo specs.
+const demo = process.env.MOWDECK_E2E_DEMO === '1';
+
 const composeArgs = [
   'compose',
   '-p',
@@ -45,10 +49,12 @@ const composeArgs = [
   join(composeDir, 'docker-compose.yml'),
   '-f',
   join(composeDir, 'docker-compose.e2e.yml'),
+  ...(demo ? ['-f', join(composeDir, 'docker-compose.demo.yml')] : []),
   '--env-file',
   join(composeDir, '.env.example'),
   '--env-file',
   join(suiteDir, 'stack.env'),
+  ...(demo ? ['--env-file', join(suiteDir, 'demo.env')] : []),
   // Optional extra settings, e.g. image mirror lines (later files win).
   ...(process.env.MOWDECK_E2E_ENV_FILE ? ['--env-file', process.env.MOWDECK_E2E_ENV_FILE] : []),
 ];
@@ -124,6 +130,8 @@ const commands = {
   down,
   test: suite,
   screens: (args) => playwright(['--project=screens', ...args]),
+  // The public demo's specs (start the stack with MOWDECK_E2E_DEMO=1).
+  demo: (args) => playwright(['--project=demo', '--project=demo-phone', ...args]),
   // The Phase 1 acceptance test (pytest) against the same stack.
   acceptance: (args) => run('uv', ['run', 'poe', 'e2e', ...args], { cwd: repoRoot, env: suiteEnv }),
   // up, the Playwright suite, down (the stack stays with MOWDECK_E2E_KEEP=1).
@@ -151,6 +159,7 @@ if (!name || !(name in commands)) {
       '  up          build and start the throwaway stack, wait until healthy',
       '  test        Playwright projects phone and desktop (extra args go to playwright test)',
       '  screens     Playwright project screens (review screenshots)',
+      '  demo        the public demo specs (stack started with MOWDECK_E2E_DEMO=1)',
       '  acceptance  the Phase 1 acceptance test tests/e2e (uv run poe e2e)',
       '  down        stop the stack and delete its volumes',
       '  run         up, test, down (MOWDECK_E2E_KEEP=1 keeps the stack)',

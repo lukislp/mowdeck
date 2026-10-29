@@ -165,6 +165,7 @@ class AccountService:
                     status=Status.ACTIVE,
                     created_at=now,
                     password_hash=password_hash,
+                    password_changed_at=now,
                     email=data.email.strip() if data.email and email_norm else None,
                     email_norm=email_norm,
                 )

@@ -191,7 +191,7 @@ async def test_link_then_sign_in_with_github_then_unlink() -> None:
         )
         audit = await h.audit(lukas)
     assert methods["github"] is True
-    assert where(linked) == ("/settings#profile", {"linked": "github"})
+    assert where(linked) == ("/settings#security", {"linked": "github"})
     assert [(x["provider"], x["display_name"]) for x in links] == [("github", "octocat")]
     assert links[0]["last_used_at"] is None
     assert where(login) == ("/login", {"next": "/schedules", "signed_in_with": "github"})
@@ -293,7 +293,7 @@ async def test_a_github_account_belongs_to_one_user_and_a_user_has_one() -> None
             rows = await tx.external_identities.find(order_by="subject")
     assert where(first)[1] == {"linked": "github"}
     assert second_for_lukas.status_code == 409
-    assert where(taken) == ("/settings#profile", {"link_error": "taken", "provider": "github"})
+    assert where(taken) == ("/settings#security", {"link_error": "taken", "provider": "github"})
     assert where(bobs)[1] == {"linked": "github"}
     assert [(r.subject, r.user_id) for r in rows] == [
         (str(OCTO.id), lukas.user_id),

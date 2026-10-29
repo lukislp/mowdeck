@@ -17,12 +17,14 @@ The project name is `mowdeck` (`name:` in `docker-compose.yml`). A stack started
 
 This builds the MowDeck images from the checkout. To run a signed release from GHCR instead, set `MOWDECK_IMAGE_REGISTRY=ghcr.io/lukislp/mowdeck` and `MOWDECK_VERSION=<version>` in `.env`, run `./verify-release.sh <version>` and start with `docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait` ([Updating to a release](../../docs/ops/compose.md#updating-to-a-release)).
 
-Optional routing demo (a `whoami` container behind Traefik at `/api/v1/whoami`):
+Optional routing check (a `whoami` container behind Traefik at `/api/v1/whoami`):
 
 ```bash
-docker compose --profile demo up -d --wait
+docker compose --profile whoami up -d --wait
 curl http://localhost/api/v1/whoami
 ```
+
+A public demo with simulated mowers (one-click "Try the demo", reset every few hours) is a separate stack with the override `docker-compose.demo.yml`; see [docs/ops/demo.md](../../docs/ops/demo.md).
 
 ## What runs
 
@@ -34,7 +36,7 @@ curl http://localhost/api/v1/whoami
 | openfga-migrate | `ghcr.io/openfga/openfga:v1.22.0` | none | One-shot schema migration for OpenFGA |
 | openfga | `ghcr.io/openfga/openfga:v1.22.0` | 127.0.0.1:8080 (HTTP), 127.0.0.1:8081 (gRPC) | Authorization; playground off, pre-shared key auth |
 | authz-bootstrap | `mowdeck/authz-bootstrap:dev` (built from `infra/openfga/bootstrap`: OpenFGA CLI `v0.8.1`, busybox, jq) | none | One-shot: creates the store `mowdeck` and writes the authorization model when it changed |
-| whoami (profile `demo`) | `ghcr.io/traefik/whoami:v1.10.3` | via Traefik | Placeholder for routing checks |
+| whoami (profile `whoami`) | `ghcr.io/traefik/whoami:v1.10.3` | via Traefik | Placeholder for routing checks |
 | identity-migrate | `mowdeck/identity:dev` | none | One-shot: Alembic migrations of the `identity` database |
 | identity | `mowdeck/identity:dev` (built from `services/identity/Dockerfile`) | via Traefik at `/api/v1/identity` and `/.well-known/jwks.json` | Accounts, users, roles, sessions, API tokens; issues the access tokens |
 | fleet-migrate | `mowdeck/fleet:dev` | none | One-shot: Alembic migrations of the `fleet` database |
@@ -154,7 +156,7 @@ docker compose exec identity python -m identity.cli list-keys
 | `FLEET_CREDENTIAL_ENCRYPTION_KEY` | a marked development value | 256-bit key (base64) that encrypts the passwords of linked Mammotion accounts ([ADR 0034](../../docs/adr/0034-linked-cloud-accounts-and-device-discovery.md)). Empty: Fleet starts, but linking a Mammotion account answers 503, so no cloud mower can be added. Fleet refuses the development value with `MOWDECK_ENVIRONMENT=prod`; generate your own and keep a backup |
 | `FLEET_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS` | empty | Key rotation: earlier keys (comma separated) that still decrypt; the next re-read of a linked account re-encrypts with the current key |
 | `FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS` | `85` | How long Fleet waits for a path preview (504 after); keep `GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS` (75) < this < the web app's 90 s |
-| `GATEWAY_CLOUD_PROVIDERS_ENABLE` | empty | Cloud providers to enable besides the default ones (those tested on real hardware), comma separated provider ids such as `husqvarna` ([ADR 0065](../../docs/adr/0065-cloud-provider-plugins-and-more-vendors.md)); disabled providers are not offered in the web app |
+| `GATEWAY_CLOUD_PROVIDERS_ENABLE` | empty | Cloud providers to enable besides the default ones (those tested on real hardware), comma separated provider ids such as `husqvarna` ([ADR 0066](../../docs/adr/0066-cloud-provider-plugins-and-more-vendors.md)); disabled providers are not offered in the web app |
 | `GATEWAY_CLOUD_PROVIDERS_DISABLE` | empty | Cloud providers to switch off (wins over the defaults and the enable list) |
 | `GATEWAY_FAKE_CLOUDS` | `false` | **Development only.** The Device-Gateway answers linked account logins and connects cloud mowers through the fake cloud of every enabled provider (for example `*@fake.mowdeck.test`, password `fake-cloud-password`); the browser tests switch it on. The former name `GATEWAY_FAKE_MAMMOTION_CLOUD` still works |
 

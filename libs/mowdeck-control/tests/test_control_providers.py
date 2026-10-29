@@ -1,4 +1,4 @@
-"""Cloud provider plugins: loading, enabling and routing (ADR 0065)."""
+"""Cloud provider plugins: loading, enabling and routing (ADR 0066)."""
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field

@@ -3,7 +3,7 @@
 Every create and re-read of a linked account is a login at a vendor cloud. A user (or a
 stolen session) trying passwords would get the vendor account locked or the installation's
 address banned, so Fleet limits failed logins per MowDeck account and vendor account
-(provider and identity, ADR 0065):
+(provider and identity, ADR 0066):
 
 * at most :attr:`LoginThrottle.max_failures` failed logins within :attr:`LoginThrottle.window`
   (default 5 in 15 minutes); further attempts answer 429 with ``Retry-After`` until the oldest

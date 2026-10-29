@@ -85,10 +85,11 @@ services:
 
   # Placeholder for routing: proves that label-based /api/v1 routing works.
   # Real services replace it with their own labels. Only started with
-  # `--profile demo`; try `curl http://localhost/api/v1/whoami`.
+  # `--profile whoami`; try `curl http://localhost/api/v1/whoami`. (The public demo is the
+  # override docker-compose.demo.yml, not a profile.)
   whoami:
     image: ${WHOAMI_IMAGE:-ghcr.io/traefik/whoami:v1.10.3}
-    profiles: [demo]
+    profiles: [whoami]
     labels:
       - traefik.enable=true
       - traefik.http.routers.whoami.rule=PathPrefix(`/api/v1/whoami`)
@@ -448,7 +449,7 @@ services:
       # FLEET_PATH_PREVIEW_REQUEST_TIMEOUT_SECONDS (75 < 85 < the web app's 90 s), so Fleet
       # gets the gateway's "timeout" reply instead of running into its own.
       MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS: ${GATEWAY_PATH_PREVIEW_TIMEOUT_SECONDS:-75}
-      # Cloud providers (ADR 0065): untested adapters stay off until enabled here.
+      # Cloud providers (ADR 0066): untested adapters stay off until enabled here.
       MOWDECK_CLOUD_PROVIDERS_ENABLE: ${GATEWAY_CLOUD_PROVIDERS_ENABLE:-}
       MOWDECK_CLOUD_PROVIDERS_DISABLE: ${GATEWAY_CLOUD_PROVIDERS_DISABLE:-}
       # Development only: the fake clouds of the enabled providers (linked accounts and cloud

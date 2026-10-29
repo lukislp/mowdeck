@@ -1,4 +1,4 @@
-"""Device discovery of a linked vendor cloud account (ADR 0034, ADR 0065).
+"""Device discovery of a linked vendor cloud account (ADR 0034, ADR 0066).
 
 Fleet asks on ``gateway.cloud.discover`` when a user links a vendor account or re-reads it, and
 on ``gateway.cloud.providers`` which providers are enabled. The gateway logs in through the

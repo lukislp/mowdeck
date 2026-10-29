@@ -17,7 +17,7 @@ MowDeck is not tied to one manufacturer. The services never talk to a mower dire
 | Mammotion LUBA 2 / LUBA mini / YUKA | `libs/mowdeck-control-mammotion` (GPL-3.0, built on [PyMammotion](https://github.com/mikey0000/PyMammotion)) | Manufacturer cloud, plus an optional Bluetooth bridge (an ESPHome Bluetooth proxy, e.g. an ESP32 board) | In daily use on a LUBA 2 AWD X |
 | Simulator | `libs/mowdeck-control` | none | For development, tests and trying the app |
 
-What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extra links, firmware updates) is reported by its adapter as capabilities; the web app shows only what the connected mower supports. Adding a manufacturer means one adapter package that implements the interface (connection, state, commands, map, capabilities) and, if the manufacturer has a cloud with accounts, a cloud provider plugin: the fields a user enters to link an account, the device list and the cloud connections. The package plugs in through entry points only; the services and the web app need no change, and the link form in Settings is built from the provider's fields. Providers that were never tested on real hardware stay off until the operator enables them. See [Cloud providers: adding a vendor](docs/dev/cloud-providers.md), [libs/mowdeck-control/README.md](libs/mowdeck-control/README.md), [ADR 0012](docs/adr/0012-mower-control-interface-and-safety-rules.md) and [ADR 0065](docs/adr/0065-cloud-provider-plugins-and-more-vendors.md) (which also records the research on Husqvarna, Segway Navimow and Worx).
+What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extra links, firmware updates) is reported by its adapter as capabilities; the web app shows only what the connected mower supports. Adding a manufacturer means one adapter package that implements the interface (connection, state, commands, map, capabilities) and, if the manufacturer has a cloud with accounts, a cloud provider plugin: the fields a user enters to link an account, the device list and the cloud connections. The package plugs in through entry points only; the services and the web app need no change, and the link form in Settings is built from the provider's fields. Providers that were never tested on real hardware stay off until the operator enables them. See [Cloud providers: adding a vendor](docs/dev/cloud-providers.md), [libs/mowdeck-control/README.md](libs/mowdeck-control/README.md), [ADR 0012](docs/adr/0012-mower-control-interface-and-safety-rules.md) and [ADR 0066](docs/adr/0066-cloud-provider-plugins-and-more-vendors.md) (which also records the research on Husqvarna, Segway Navimow and Worx).
 
 ## Features
 
@@ -141,6 +141,16 @@ pnpm e2e:stack down      # delete it again (`pnpm e2e:stack run`: up, test, down
 ```
 
 More: [getting started](docs/dev/getting-started.md), [compose stack](infra/compose/README.md), [web app guide](docs/dev/web-app.md), [contributing](CONTRIBUTING.md).
+
+## Public demo
+
+A demo installation lets anybody try MowDeck without an account: **Try the demo** on the sign-in page opens a shared account with three simulated mowers in three gardens and a week of history (tracks, heatmaps, health). It runs as its own Compose project with the override `infra/compose/docker-compose.demo.yml`; every service then refuses registration, sign-in methods, tokens, account and security changes, manufacturer accounts and every outbound channel, labels each response with `X-MowDeck-Demo: 1`, and the web app shows a demo band on every page. `infra/compose/demo/reset.sh` deletes and reseeds it, run by a timer every few hours. Setup and the full list of guards: [docs/ops/demo.md](docs/ops/demo.md) and [ADR 0068](docs/adr/0068-public-demo-mode.md).
+
+```bash
+cd infra/compose
+cp demo/demo.env.example demo/demo.env   # then replace every change-me with a fresh secret
+demo/reset.sh                            # demo at http://127.0.0.1:8580
+```
 
 ## Licensing
 

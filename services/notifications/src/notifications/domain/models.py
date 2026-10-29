@@ -33,6 +33,7 @@ SEVERITY: dict[NotificationKind, NotificationSeverity] = {
     NotificationKind.FIRMWARE_UPDATE_AVAILABLE: NotificationSeverity.INFO,
     NotificationKind.FIRMWARE_UPDATE_FINISHED: NotificationSeverity.INFO,
     NotificationKind.FIRMWARE_UPDATE_FAILED: NotificationSeverity.WARNING,
+    NotificationKind.SECURITY_NEW_LOGIN: NotificationSeverity.WARNING,
 }
 """Severity of every kind (the contract has no "low" severity: the blade reminder is ``info``)."""
 
@@ -74,7 +75,14 @@ QUIET_HOURS_EXEMPT: frozenset[NotificationKind] = ALARM_KINDS | (
 )
 """Kinds delivered during quiet hours: the theft alarms and the live tracking notices."""
 
-RULE_KINDS: frozenset[NotificationKind] = frozenset(SEVERITY) - {NotificationKind.TEST}
+ACCOUNT_KINDS: frozenset[NotificationKind] = frozenset({NotificationKind.SECURITY_NEW_LOGIN})
+"""Notices about the user's own account, not about a mower (ADR 0065): sent to that one user
+only, never to the account (no ``notifications.raised``), not part of the per-kind preferences
+(Identity keeps the opt-out), delivered during quiet hours too."""
+
+RULE_KINDS: frozenset[NotificationKind] = (
+    frozenset(SEVERITY) - {NotificationKind.TEST} - ACCOUNT_KINDS
+)
 """Kinds the rules derive (a user may enable each of them)."""
 
 DEFAULT_KINDS: frozenset[NotificationKind] = RULE_KINDS - {NotificationKind.JOB_STARTED}
@@ -108,6 +116,9 @@ class RuleConfig:
         {"lifted", "1004", "1030", "2502", "2801", "11131", "11133"}
     )
     """Error codes that mean "lifted" (besides ``raw["lifted"] is True``)."""
+    lift_categories: frozenset[str] = frozenset({"lift_tilt"})
+    """Manufacturer-neutral error categories (``MowerState.error_category``, ADR 0067) that mean
+    "lifted", for every vendor whose codes are not in ``lift_error_codes``."""
     dock_command_window_seconds: float = 600
     """A command seen this long before the mower leaves the dock explains the departure."""
     dock_command_grace_seconds: float = 30

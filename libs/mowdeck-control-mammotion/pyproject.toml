@@ -33,11 +33,14 @@ esphome = [
 cloud = "mowdeck_control_mammotion:create_cloud_connection"
 ble_bridge = "mowdeck_control_mammotion:create_ble_bridge_connection"
 
-# Linked Mammotion accounts and their cloud mowers (ADR 0065).
+[project.entry-points."mowdeck.error_lexicons"]
+mammotion = "mowdeck_control_mammotion.lexicon:mammotion_lexicon"
+
+# Linked Mammotion accounts and their cloud mowers (ADR 0066).
 [project.entry-points."mowdeck.cloud_providers"]
 mammotion = "mowdeck_control_mammotion.provider:SPEC"
 
-# Vendor boundary (ADR 0065, tools/repo-checks/tests/test_vendor_boundary.py): no core code may
+# Vendor boundary (ADR 0066, tools/repo-checks/tests/test_vendor_isolation.py): no core code may
 # import this package or the vendor modules it wraps.
 [tool.mowdeck.adapter]
 vendor-modules = ["pymammotion"]

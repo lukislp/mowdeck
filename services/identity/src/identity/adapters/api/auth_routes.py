@@ -8,7 +8,14 @@ from mowdeck_authz import PLATFORM_OBJECT, CheckItem, ObjectRef, principal_subje
 from mowdeck_service_kit.errors import BadRequest, ValidationFailed
 from pydantic import BaseModel, Field
 
-from identity.adapters.api.deps import Ctx, FreshAuth, PublicCtx, ServicesDep
+from identity.adapters.api.deps import (
+    DEVICE_COOKIE,
+    DEVICE_COOKIE_PATH,
+    Ctx,
+    FreshAuth,
+    PublicCtx,
+    ServicesDep,
+)
 from identity.adapters.api.schemas import (
     AppCodeIn,
     AppCodeOut,
@@ -44,6 +51,8 @@ REFRESH_COOKIE_PATH = "/api/v1/identity/session"
 JWKS_CACHE_CONTROL = "public, max-age=300"
 UI_AREAS_CACHE_CONTROL = "private, max-age=300"
 REFRESH_TRANSPORT_HEADER = "X-Mowdeck-Refresh"
+DEVICE_COOKIE_MAX_AGE = 400 * 24 * 3600
+"""The longest lifetime browsers keep a cookie (Chrome caps at 400 days)."""
 COOKIE_ONLY = "cookie-only"
 """Value of :data:`REFRESH_TRANSPORT_HEADER` that keeps the refresh token out of the body."""
 
@@ -65,6 +74,18 @@ def token_out(pair: TokenPair, transport: str | None) -> TokenOut:
 
 
 def set_refresh_cookie(request: Request, response: Response, pair: TokenPair) -> None:
+    """The refresh cookie of a login or refresh, and after a login the device cookie."""
+    secure = getattr(request.app.state, "refresh_cookie_secure", True)
+    if pair.device_token is not None:
+        response.set_cookie(
+            DEVICE_COOKIE,
+            pair.device_token,
+            max_age=DEVICE_COOKIE_MAX_AGE,
+            path=DEVICE_COOKIE_PATH,
+            secure=secure,
+            httponly=True,
+            samesite="lax",
+        )
     if pair.refresh_token is None or pair.refresh_expires_at is None:
         return
     max_age = int((pair.refresh_expires_at - pair.access.issued_at).total_seconds())

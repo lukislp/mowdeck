@@ -469,6 +469,23 @@ Set a temporary password of a sub-user (must be changed at the next login). Step
 | 204 | Successful Response | no body |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
+### identity: demo
+
+#### POST /api/v1/identity/demo/session
+
+**Demo Session**
+
+"Try the demo": a session of the prepared demo user without credentials (the same tokens and cookie as `POST /session`). 404 outside demo mode and while the demo is not seeded; rate limited per address.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `X-Mowdeck-Refresh` | header | string or null | no | `cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too. |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [TokenOut](#tokenout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 ### identity: login providers
 
 #### GET /api/v1/identity/me/external-identities
@@ -705,6 +722,82 @@ Every account of the installation (operator admins; no mower data).
 | Status | Meaning | Body |
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [PlatformAccountPageOut](#platformaccountpageout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+### identity: security
+
+#### GET /api/v1/identity/me/security
+
+**Security Overview**
+
+Password status, the new-login alert setting and how many passkeys, linked providers, personal access tokens, sessions and known devices the caller has.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [SecurityOverviewOut](#securityoverviewout) |
+
+#### GET /api/v1/identity/me/security-events
+
+**My Security Events**
+
+The caller's own security events of the last `days` (default 30), newest first: logins and failed logins, new devices, passkeys, linked providers, password changes, personal access tokens, ended sessions. Addresses are shortened to their network.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `days` | query | integer | no | min 1; max 90; default `30` |
+| `limit` | query | integer | no | min 1; max 200; default `100` |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` array of [SecurityEventOut](#securityeventout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### PUT /api/v1/identity/me/security/alerts
+
+**Set Security Alerts**
+
+Turn the notification about a login from a new device on or off. Turning it off needs a recent step-up (401 `reauth-required`): a stolen session must not silence it.
+
+**Request body** (required): `application/json` [SecurityAlertsIn](#securityalertsin)
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [SecurityAlertsOut](#securityalertsout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### GET /api/v1/identity/me/sessions
+
+**My Sessions**
+
+The caller's live login sessions (browsers and app installations, all accounts), the current one first (`current`), then by last use.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` array of [SessionOut](#sessionout) |
+
+#### POST /api/v1/identity/me/sessions/revoke-others
+
+**Revoke Other Sessions**
+
+Sign out everywhere else: every login session of the caller except this one ends (as `DELETE /me/sessions/{id}` does for one). Needs a recent step-up.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [SessionsRevokedOut](#sessionsrevokedout) |
+
+#### DELETE /api/v1/identity/me/sessions/{session_id}
+
+**Revoke Session**
+
+End one of the caller's login sessions: its refresh token fails at once, its access tokens are refused by Identity at once and by the other services when they expire (at most 10 minutes). Idempotent; 404 for any other session. Needs a recent step-up.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `session_id` | path | string (uuid) | yes |  |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 204 | Successful Response | no body |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
 ### identity: sessions
@@ -1587,6 +1680,81 @@ A role.
 | `description` | string or null | no |  |
 | `name` | string or null | no |  |
 | `permissions` | array of string or null | no |  |
+
+### SecurityAlertsIn
+
+`PUT /me/security/alerts`.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `new_login_alerts` | boolean | yes |  |
+
+### SecurityAlertsOut
+
+The alert setting after the change.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `new_login_alerts` | boolean | yes |  |
+
+### SecurityEventOut
+
+One of the caller's own security events.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `action` | string | yes | The audit action, e.g. `session.login`, `passkey.added` |
+| `at` | string (date-time) | yes |  |
+| `details` | object | yes | A safe subset of the audit details |
+| `id` | integer | yes |  |
+| `ip_prefix` | string or null | yes | The address of the request, shortened |
+| `network` | `"local"` \| `"public"` \| `"unknown"` | yes |  |
+| `outcome` | string | yes | `success`, `failure` or `denied` |
+| `target_type` | string or null | yes |  |
+
+### SecurityOverviewOut
+
+The top of the security page: password status, alert setting and counts.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `known_devices` | integer | yes |  |
+| `must_change_password` | boolean | yes |  |
+| `new_login_alerts` | boolean | yes | Notify on a login from a device not seen before (in-app and push) |
+| `passkeys` | integer | yes |  |
+| `password_changed_at` | string (date-time) or null | yes | Last change; null when unknown (set before the security center existed) |
+| `password_set` | boolean | yes |  |
+| `personal_tokens` | integer | yes | Active personal access tokens in this account |
+| `providers` | array of string | yes | Linked login providers (`github`, `apple`) |
+| `sessions` | integer | yes | Live login sessions in all accounts |
+
+### SessionOut
+
+One of the caller's live login sessions (a browser or an app installation).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `account_id` | string (uuid) | yes |  |
+| `browser` | string or null | yes | Browser family from the user agent, no version |
+| `client` | `"browser"` \| `"app"` \| `"script"` \| `"unknown"` | yes |  |
+| `created_at` | string (date-time) | yes | When the session started (the login) |
+| `current` | boolean | yes | The session of this request |
+| `expires_at` | string (date-time) | yes | When the session ends unless it is used again |
+| `id` | string (uuid) | yes | The login session (the `sid` of its access tokens) |
+| `ip_prefix` | string or null | yes | The address shortened to its network (`203.0.113.x`, an IPv6 /48); MowDeck asks no location service |
+| `label` | string | yes | `Firefox on Windows`, `MowDeck app on iOS` (English) |
+| `last_used_at` | string (date-time) | yes | The last refresh (about every 10 minutes) |
+| `method` | string or null | yes | How it started: `pwd`, `passkey`, `github`, `apple` |
+| `network` | `"local"` \| `"public"` \| `"unknown"` | yes | `local`: a private, loopback or link-local address (the home network) |
+| `os` | string or null | yes | Operating system from the user agent |
+
+### SessionsRevokedOut
+
+`POST /me/sessions/revoke-others`.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `revoked` | integer | yes | How many sessions ended |
 
 ### StepUpPasskeyIn
 

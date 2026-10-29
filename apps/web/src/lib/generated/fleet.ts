@@ -363,7 +363,8 @@ export type paths = {
          * @description The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the
          *     link form (with hints and links to where the vendor hands them out), whether the user needs
          *     a developer account at the vendor and whether the adapter was tested on real hardware.
-         *     Disabled providers are not listed.
+         *     Disabled providers are not listed; the public demo (ADR 0068) lists none and refuses
+         *     every change under this path.
          */
         get: operations["list_cloud_providers_api_v1_fleet_linked_accounts_providers_get"];
         put?: never;

@@ -21,7 +21,9 @@
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
   through the entry point group ``mowdeck.connections``.
 * :class:`ProviderSpec` and :func:`load_providers`: vendor cloud providers (linked accounts and
-  their mowers), extended through the entry point group ``mowdeck.cloud_providers`` (ADR 0065).
+  their mowers), extended through the entry point group ``mowdeck.cloud_providers`` (ADR 0066).
+* :class:`ErrorLexiconRegistry` and :func:`explain_error`: vendor error codes in plain words,
+  extended through the entry point group ``mowdeck.error_lexicons`` (ADR 0067).
 
 The package depends only on ``mowdeck-contracts`` and the standard library (Pillow is an
 optional extra, ``photo``, for the simulator's still images).
@@ -78,6 +80,13 @@ from mowdeck_control.connection import (
     tracking_rate_port_of,
 )
 from mowdeck_control.controller import MowerController, StateCallback
+from mowdeck_control.error_lexicons import (
+    ErrorLexiconProvider,
+    ErrorLexiconRegistry,
+    default_error_lexicons,
+    explain_error,
+    register_error_lexicon,
+)
 from mowdeck_control.errors import (
     CommandRejected,
     ControlError,
@@ -197,6 +206,8 @@ __all__ = [
     "DriveCalibrationRun",
     "DriveSession",
     "DriveSpeedCapable",
+    "ErrorLexiconProvider",
+    "ErrorLexiconRegistry",
     "FirmwarePort",
     "FrameChannel",
     "FrameDeadlineCapable",
@@ -258,10 +269,12 @@ __all__ = [
     "current_map_of",
     "current_path_of",
     "decide_manual_blade",
+    "default_error_lexicons",
     "default_map",
     "default_registry",
     "dispatch_of",
     "drive_speed_port_of",
+    "explain_error",
     "firmware_port_of",
     "firmware_update_problem",
     "flat_png",
@@ -277,6 +290,7 @@ __all__ = [
     "pose_of",
     "refusal_reason",
     "register_connection",
+    "register_error_lexicon",
     "release_camera_session_of",
     "render_scene",
     "room_ahead_problem",

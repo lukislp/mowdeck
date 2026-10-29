@@ -1,5 +1,5 @@
 <!--
-  Link a vendor cloud account (ADR 0065). The form is rendered from the provider descriptors of
+  Link a vendor cloud account (ADR 0066). The form is rendered from the provider descriptors of
   Fleet's `GET /linked-accounts/providers`: a vendor rail when there are several, the chosen
   vendor's guidance (what MowDeck can do, where the credentials come from, whether a developer
   account is needed, whether it was ever tested on real hardware) and exactly its fields. The

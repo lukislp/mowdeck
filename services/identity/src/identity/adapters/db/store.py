@@ -25,6 +25,7 @@ from identity.domain.models import (
     AuditEntry,
     CatalogueEntry,
     ExternalIdentity,
+    KnownDevice,
     LoginAttempt,
     Membership,
     OAuthState,
@@ -176,6 +177,7 @@ class SqlTx:
     external_identities: SqlTable[ExternalIdentity]
     oauth_states: SqlTable[OAuthState]
     onboarding: SqlTable[OnboardingProgress]
+    known_devices: SqlTable[KnownDevice]
 
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
@@ -199,6 +201,7 @@ class SqlTx:
             external_identities=SqlTable(conn, tables.external_identities, ExternalIdentity, "id"),
             oauth_states=SqlTable(conn, tables.oauth_states, OAuthState, "id"),
             onboarding=SqlTable(conn, tables.onboarding_progress, OnboardingProgress, "user_id"),
+            known_devices=SqlTable(conn, tables.known_devices, KnownDevice, "id"),
         )
 
 

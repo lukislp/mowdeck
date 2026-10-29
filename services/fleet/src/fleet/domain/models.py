@@ -122,7 +122,7 @@ class BaseStation:
 
 @dataclass(slots=True)
 class LinkedAccount:
-    """A vendor cloud account linked to a MowDeck account (ADR 0034, ADR 0065).
+    """A vendor cloud account linked to a MowDeck account (ADR 0034, ADR 0066).
 
     ``provider`` is the id of the cloud provider plugin; ``email`` holds the value of the
     provider's identity field (an e-mail for most providers, an application key for others; the
@@ -163,7 +163,7 @@ class LinkedAccount:
 SECRET_FORMAT_PASSWORD: Final = 1
 """``LinkedAccount.secret_format`` of ADR 0034: the sealed value is the password itself."""
 SECRET_FORMAT_FIELDS: Final = 2
-"""``LinkedAccount.secret_format`` of ADR 0065: the sealed value is a JSON object of the secret
+"""``LinkedAccount.secret_format`` of ADR 0066: the sealed value is a JSON object of the secret
 fields by key."""
 
 

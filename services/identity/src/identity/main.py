@@ -33,7 +33,7 @@ from mowdeck_service_kit.db import readiness_check_db
 from mowdeck_service_kit.entitlements import Entitlements, EntitlementsClient
 
 from identity.adapters.api.deps import install_error_mapping
-from identity.adapters.api.routes import ROUTERS, jwks_document
+from identity.adapters.api.routes import DEMO_POLICY, ROUTERS, jwks_document
 from identity.adapters.bus.subscriptions import subscribe_all
 from identity.application.ports import Clock, Lt, ModuleSource, PasswordHasher, Store
 from identity.module import DESCRIPTOR
@@ -129,6 +129,7 @@ def build_app(
         on_shutdown=[shutdown],
         bus=bus,
         principal_resolver=principal_resolver or JwtPrincipalResolver(verifier),
+        demo_policy=DEMO_POLICY,
     )
     install_authz(app, runtime.ensure_authorizer(app.state.metrics_registry), token_prefilter=True)
     install_error_mapping(app)

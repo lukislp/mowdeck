@@ -1,0 +1,166 @@
+# Public demo of MowDeck (ADR 0068, docs/ops/demo.md). Use it on top of docker-compose.yml as its
+# own Compose project with its own database, volumes, network and secrets, never next to or
+# instead of an installation with real mowers:
+#
+#   cd infra/compose
+#   docker compose -p mowdeck-demo --env-file .env.example --env-file demo/demo.env \
+#     -f docker-compose.yml -f docker-compose.demo.yml up -d --build --wait
+#
+# demo/reset.sh does exactly this, after deleting the previous demo with its volumes; a timer
+# runs it every DEMO_RESET_HOURS (docs/ops/demo.md, "Periodic reset").
+#
+# What it changes:
+# - Every MowDeck service runs with MOWDECK_DEMO_MODE=true: every response carries
+#   X-MowDeck-Demo: 1 and each service refuses what its demo policy names (registration, sign-in
+#   methods, tokens, account and security changes, manufacturer accounts, push channels, own AI
+#   providers; the list is in ADR 0068).
+# - Traefik labels every response, removes the seed secret header from every outside request and
+#   rate limits every client address; "Try the demo" has the login limit.
+# - The seed job (demo/seed.py) prepares the demo account, three simulated mowers in three
+#   gardens, their schedules and a week of history before the Device-Gateway starts.
+# - The web app shows the demo banner, "Demo" in the title and "Try the demo" on the sign-in page.
+#
+# Do not add the profiles relay, agora, matter or billing to a demo: they talk to manufacturer
+# clouds, the local network or a payment provider. demo/reset.sh refuses COMPOSE_PROFILES.
+
+x-demo: &demo
+  MOWDECK_DEMO_MODE: "true"
+  MOWDECK_DEMO_SEED_TOKEN: ${DEMO_SEED_TOKEN:?set DEMO_SEED_TOKEN in demo/demo.env (openssl rand -hex 32)}
+
+services:
+  traefik:
+    # The base command plus the demo middlewares on both entry points (defined on the web
+    # service below). Keep the other flags in step with docker-compose.yml.
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=${MOWDECK_NETWORK:-mowdeck}
+      - --providers.docker.constraints=Label(`com.docker.compose.project`,`${MOWDECK_TRAEFIK_PROJECT:-mowdeck}`)
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.forwardedHeaders.trustedIPs=${GATEWAY_TRUSTED_PROXIES:-}
+      - --entrypoints.websecure.forwardedHeaders.trustedIPs=${GATEWAY_TRUSTED_PROXIES:-}
+      - --entrypoints.web.http.middlewares=demo-headers@docker,demo-ratelimit@docker
+      - --entrypoints.websecure.http.middlewares=demo-headers@docker,demo-ratelimit@docker
+      - --api.dashboard=false
+      - --ping=true
+      - --log.level=INFO
+
+  identity:
+    environment:
+      <<: *demo
+      # Forced by demo mode anyway (ADR 0068): nobody registers, no other sign-in method.
+      MOWDECK_IDENTITY_REGISTRATION: closed
+      MOWDECK_IDENTITY_PUBLIC_URL: ""
+      MOWDECK_IDENTITY_GITHUB_CLIENT_ID: ""
+      MOWDECK_IDENTITY_GITHUB_CLIENT_SECRET_FILE: ""
+      MOWDECK_IDENTITY_APPLE_SERVICES_ID: ""
+      MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE: ""
+      MOWDECK_IDENTITY_DEMO_USERNAME: ${DEMO_USERNAME:-demo}
+    # No provider secrets in a demo.
+    volumes: !reset []
+    labels:
+      # "Try the demo" has the per-address limit of a login.
+      - traefik.http.routers.identity-demo.rule=Path(`/api/v1/identity/demo/session`)
+      - traefik.http.routers.identity-demo.entrypoints=web
+      - traefik.http.routers.identity-demo.priority=100
+      - traefik.http.routers.identity-demo.middlewares=identity-ratelimit
+      - traefik.http.routers.identity-demo.service=identity
+
+  fleet:
+    environment:
+      <<: *demo
+      MOWDECK_ALLOWED_CONNECTION_KINDS: simulated
+      MOWDECK_CREDENTIAL_ENCRYPTION_KEY: ""
+      MOWDECK_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS: ""
+
+  device-gateway:
+    environment:
+      <<: *demo
+      MOWDECK_FAKE_MAMMOTION_CLOUD: "false"
+      MOWDECK_RELAY_URL: ""
+      # Live mowers a little faster than real time, so visitors see them move.
+      MOWDECK_SIM_TIME_SCALE: ${DEMO_SIM_TIME_SCALE:-3}
+    # The history is written before any live state exists (demo/seed.py).
+    depends_on:
+      demo-seed:
+        condition: service_completed_successfully
+
+  telemetry:
+    environment:
+      <<: *demo
+
+  realtime:
+    environment:
+      <<: *demo
+
+  notifications:
+    environment:
+      <<: *demo
+      # Forced by demo mode anyway: no channel, the inbox only.
+      MOWDECK_NOTIFICATIONS_CHANNELS: ""
+      MOWDECK_NOTIFICATIONS_NTFY_ALLOWED_SERVERS: ""
+      MOWDECK_APNS_KEY_FILE: ""
+
+  scheduler:
+    environment:
+      <<: *demo
+      MOWDECK_SCHEDULER_WEATHER_PROVIDER: static
+      MOWDECK_SCHEDULER_DEV_ENDPOINTS: "false"
+
+  entitlements:
+    environment:
+      <<: *demo
+
+  planner:
+    environment:
+      <<: *demo
+
+  vision:
+    environment:
+      <<: *demo
+      # Forced by demo mode anyway: the rule based fake model, no provider of any user.
+      MOWDECK_VISION_DEFAULT_ENABLED: "true"
+      MOWDECK_VISION_DEFAULT_MODEL: fake/recover
+      MOWDECK_VISION_DEFAULT_API_BASE: ""
+      MOWDECK_VISION_DEFAULT_API_KEY: ""
+
+  web:
+    environment:
+      MOWDECK_WEB_DEMO_MODE: "true"
+      MOWDECK_WEB_DEMO_RESET_HOURS: ${DEMO_RESET_HOURS:-6}
+    labels:
+      # Entry point middlewares of the demo (Traefik command above): every response is labelled,
+      # the seed secret header never comes in from outside (an empty value removes it), and every
+      # client address is limited. The limit counts every request, the web app's files too: a
+      # first visit loads a few hundred (the burst), later pages come from the browser cache.
+      - traefik.http.middlewares.demo-headers.headers.customresponseheaders.X-MowDeck-Demo=1
+      - traefik.http.middlewares.demo-headers.headers.customrequestheaders.X-MowDeck-Demo-Seed=
+      - traefik.http.middlewares.demo-ratelimit.ratelimit.average=${DEMO_RATE_PER_MINUTE:-1200}
+      - traefik.http.middlewares.demo-ratelimit.ratelimit.period=1m
+      - traefik.http.middlewares.demo-ratelimit.ratelimit.burst=${DEMO_RATE_BURST:-600}
+
+  # One-shot job: the demo account, its mowers, schedules and history (demo/seed.py, standard
+  # library only) in the identity image, which the stack builds anyway. Talks to the services
+  # inside the network only.
+  demo-seed:
+    image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/identity:${MOWDECK_VERSION:-dev}
+    pull_policy: never
+    command: ["python", "/seed/seed.py"]
+    read_only: true
+    restart: "no"
+    environment:
+      MOWDECK_DEMO_SEED_TOKEN: ${DEMO_SEED_TOKEN:?set DEMO_SEED_TOKEN in demo/demo.env}
+      DEMO_HISTORY_DAYS: ${DEMO_HISTORY_DAYS:-7}
+    volumes:
+      - ./demo/seed.py:/seed/seed.py:ro
+    depends_on:
+      identity:
+        condition: service_healthy
+      fleet:
+        condition: service_healthy
+      scheduler:
+        condition: service_healthy
+      telemetry:
+        condition: service_healthy
+    networks: [mowdeck]

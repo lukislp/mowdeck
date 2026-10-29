@@ -44,6 +44,7 @@ from mowdeck_service_kit.entitlements import (
     install_entitlements,
 )
 
+from fleet.adapters.api.demo import DEMO_POLICY
 from fleet.adapters.api.deps import install_error_mapping
 from fleet.adapters.api.routes import ROUTERS
 from fleet.adapters.bus.bridge import BusBridgeScanGateway
@@ -194,6 +195,7 @@ def build_app(
         on_shutdown=[shutdown],
         bus=bus,
         principal_resolver=principal_resolver,
+        demo_policy=DEMO_POLICY,
     )
     if authorizer is None:
         assert connection is not None  # noqa: S101 - set above

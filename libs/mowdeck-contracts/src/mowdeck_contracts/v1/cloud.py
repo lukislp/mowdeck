@@ -7,7 +7,7 @@ Device-Gateway. To check the credentials and list the devices of an account, Fle
 (core NATS request/reply, queue group ``device-gateway``: any instance answers) and gets a
 :class:`CloudDiscoverReply` with the devices or an error. Which providers exist and which
 credentials they take is the provider's :class:`~mowdeck_contracts.v1.providers.\
-ProviderDescriptor` (ADR 0065).
+ProviderDescriptor` (ADR 0066).
 
 ``credentials`` (and the deprecated ``password``) are secrets: excluded from ``repr``, never
 logged; the request travels only over the internal bus, like the credentials in a

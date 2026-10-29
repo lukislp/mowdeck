@@ -1,4 +1,4 @@
-"""The Mammotion cloud as a MowDeck cloud provider (ADR 0034, ADR 0065).
+"""The Mammotion cloud as a MowDeck cloud provider (ADR 0034, ADR 0066).
 
 Registered under the entry point group ``mowdeck.cloud_providers`` as ``mammotion``
 (:data:`SPEC`). The plugin owns one :class:`~mowdeck_control_mammotion.session.CloudSessionPool`
@@ -11,7 +11,7 @@ With ``ProviderContext.fake`` the plugin answers from :mod:`mowdeck_control_mamm
 only then, so a production gateway never loads it.
 
 The provider is enabled by default (tested on a LUBA 2 AWD X) and also serves ``cloud``
-registrations that name no provider: the cloud mowers registered before ADR 0065.
+registrations that name no provider: the cloud mowers registered before ADR 0066.
 """
 
 from collections.abc import Callable, Mapping

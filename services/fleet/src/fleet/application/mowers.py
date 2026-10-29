@@ -1,7 +1,7 @@
 """Mowers: register, list, read, change, move between groups, remove; the registry answer for
 the Device-Gateway.
 
-Cloud mowers (ADR 0034, ADR 0065) come from a linked vendor account: a registration names the linked
+Cloud mowers (ADR 0034, ADR 0066) come from a linked vendor account: a registration names the linked
 account and the device; Fleet stores the device name and IoT id as options and merges the
 account's credentials into the registration the Device-Gateway receives. One physical mower
 (its IoT id) can be registered in one MowDeck account only, installation-wide."""

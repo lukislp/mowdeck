@@ -1,4 +1,4 @@
-"""A neutral cloud provider for Fleet's tests (ADR 0065): Fleet knows no vendor, so its tests
+"""A neutral cloud provider for Fleet's tests (ADR 0066): Fleet knows no vendor, so its tests
 link accounts of ``acme`` (e-mail and password) and ``zeta`` (application key and secret plus a
 region), as a fake Device-Gateway lists them on ``gateway.cloud.providers``."""
 

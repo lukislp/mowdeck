@@ -38,6 +38,7 @@ from device_gateway.adapters.bus.cloud import (
     subscribe_cloud_discovery,
     subscribe_cloud_providers,
 )
+from device_gateway.adapters.bus.errors import subscribe_error_lexicons
 from device_gateway.adapters.bus.firmware import subscribe_firmware_checks
 from device_gateway.adapters.bus.fleet import BusCredentialSource, BusFleetDirectory
 from device_gateway.adapters.bus.path_preview import subscribe_path_previews
@@ -99,18 +100,26 @@ def build_app(
     ``connection_provider`` and ``fleet`` default to the control registry and the bus;
     ``cloud`` to the enabled cloud provider plugins (the fake clouds with ``fake_clouds``) and
     ``cloud_accounts`` to their discovery."""
-    providers = cloud or cloud_providers(
-        fake=settings.use_fake_clouds,
-        cache_dir=settings.cloud_session_cache_dir,
-        enable=settings.enabled_cloud_providers,
-        disable=settings.disabled_cloud_providers,
+    # Public demo (ADR 0068): simulated mowers only, no manufacturer cloud at all, so no vendor
+    # plugin is even loaded.
+    demo = settings.demo_mode
+    providers = cloud or (
+        LoadedProviders(plugins={})
+        if demo
+        else cloud_providers(
+            fake=settings.use_fake_clouds,
+            cache_dir=settings.cloud_session_cache_dir,
+            enable=settings.enabled_cloud_providers,
+            disable=settings.disabled_cloud_providers,
+        )
     )
-    if settings.use_fake_clouds:
+    if settings.use_fake_clouds and not demo:
         _log.warning("using the FAKE vendor clouds (MOWDECK_FAKE_CLOUDS is for development only)")
     provider = connection_provider or RegistryConnectionProvider(
         sim_time_scale=settings.sim_time_scale,
         sim_tick_seconds=settings.sim_tick_seconds,
-        cloud_providers=providers,
+        cloud_providers=None if demo else providers,
+        simulated_only=demo,
     )
     accounts: CloudAccounts = cloud_accounts or PluginCloudAccounts(providers)
     # Photos of mowers without an own photo function come from the camera relay (ADR 0045).
@@ -181,14 +190,17 @@ def build_app(
         app.state.tracking_leases = await subscribe_tracking_leases(
             active_bus, gateway, registry=app.state.metrics_registry
         )
-        discovery = CloudDiscoveryService(
-            accounts,
-            timeout_seconds=settings.cloud_discovery_timeout_seconds,
-            count=DiscoveryMetrics(app.state.metrics_registry).count,
-            concurrency=settings.cloud_discovery_concurrency,
-        )
-        app.state.cloud_discovery = await subscribe_cloud_discovery(active_bus, discovery)
-        app.state.cloud_providers = await subscribe_cloud_providers(active_bus, discovery)
+        # error lexicons serve the demo too (the simulator has one, ADR 0067)
+        app.state.error_lexicons = await subscribe_error_lexicons(active_bus)
+        if not demo:  # a demo never logs in to a manufacturer cloud
+            discovery = CloudDiscoveryService(
+                accounts,
+                timeout_seconds=settings.cloud_discovery_timeout_seconds,
+                count=DiscoveryMetrics(app.state.metrics_registry).count,
+                concurrency=settings.cloud_discovery_concurrency,
+            )
+            app.state.cloud_discovery = await subscribe_cloud_discovery(active_bus, discovery)
+            app.state.cloud_providers = await subscribe_cloud_providers(active_bus, discovery)
         gateway.start_fleet_sync(
             fleet
             or BusFleetDirectory(
@@ -220,6 +232,8 @@ def build_app(
             subscription: Subscription | None = getattr(app.state, name, None)
             if subscription is not None:
                 await subscription.unsubscribe()
+        for lexicons in getattr(app.state, "error_lexicons", []):
+            await lexicons.unsubscribe()
         for name in ("cloud_discovery", "cloud_providers"):
             cloud_subscription: Subscription | None = getattr(app.state, name, None)
             if cloud_subscription is not None:

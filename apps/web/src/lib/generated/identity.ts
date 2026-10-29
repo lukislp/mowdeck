@@ -521,6 +521,28 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/demo/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Demo Session
+         * @description "Try the demo": a session of the prepared demo user without credentials (the same tokens
+         *     and cookie as ``POST /session``). 404 outside demo mode and while the demo is not seeded;
+         *     rate limited per address.
+         */
+        post: operations["demo_session_api_v1_identity_demo_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/login-methods": {
         parameters: {
             query?: never;
@@ -826,6 +848,134 @@ export type paths = {
         get: operations["my_platform_api_v1_identity_me_platform_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Security Overview
+         * @description Password status, the new-login alert setting and how many passkeys, linked providers,
+         *     personal access tokens, sessions and known devices the caller has.
+         */
+        get: operations["security_overview_api_v1_identity_me_security_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/security-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Security Events
+         * @description The caller's own security events of the last `days` (default 30), newest first: logins
+         *     and failed logins, new devices, passkeys, linked providers, password changes, personal
+         *     access tokens, ended sessions. Addresses are shortened to their network.
+         */
+        get: operations["my_security_events_api_v1_identity_me_security_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/security/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Security Alerts
+         * @description Turn the notification about a login from a new device on or off. Turning it off needs a
+         *     recent step-up (401 `reauth-required`): a stolen session must not silence it.
+         */
+        put: operations["set_security_alerts_api_v1_identity_me_security_alerts_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Sessions
+         * @description The caller's live login sessions (browsers and app installations, all accounts), the
+         *     current one first (`current`), then by last use.
+         */
+        get: operations["my_sessions_api_v1_identity_me_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Session
+         * @description End one of the caller's login sessions: its refresh token fails at once, its access
+         *     tokens are refused by Identity at once and by the other services when they expire (at most
+         *     10 minutes). Idempotent; 404 for any other session. Needs a recent step-up.
+         */
+        delete: operations["revoke_session_api_v1_identity_me_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity/me/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Other Sessions
+         * @description Sign out everywhere else: every login session of the caller except this one ends (as
+         *     `DELETE /me/sessions/{id}` does for one). Needs a recent step-up.
+         */
+        post: operations["revoke_other_sessions_api_v1_identity_me_sessions_revoke_others_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2216,6 +2366,190 @@ export type components = {
             permissions?: string[] | null;
         };
         /**
+         * SecurityAlertsIn
+         * @description ``PUT /me/security/alerts``.
+         */
+        SecurityAlertsIn: {
+            /** New Login Alerts */
+            new_login_alerts: boolean;
+        };
+        /**
+         * SecurityAlertsOut
+         * @description The alert setting after the change.
+         */
+        SecurityAlertsOut: {
+            /** New Login Alerts */
+            new_login_alerts: boolean;
+        };
+        /**
+         * SecurityEventOut
+         * @description One of the caller's own security events.
+         */
+        SecurityEventOut: {
+            /**
+             * Action
+             * @description The audit action, e.g. `session.login`, `passkey.added`
+             */
+            action: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Details
+             * @description A safe subset of the audit details
+             */
+            details: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: number;
+            /**
+             * Ip Prefix
+             * @description The address of the request, shortened
+             */
+            ip_prefix: string | null;
+            /**
+             * Network
+             * @enum {string}
+             */
+            network: "local" | "public" | "unknown";
+            /**
+             * Outcome
+             * @description `success`, `failure` or `denied`
+             */
+            outcome: string;
+            /** Target Type */
+            target_type: string | null;
+        };
+        /**
+         * SecurityOverviewOut
+         * @description The top of the security page: password status, alert setting and counts.
+         */
+        SecurityOverviewOut: {
+            /** Known Devices */
+            known_devices: number;
+            /** Must Change Password */
+            must_change_password: boolean;
+            /**
+             * New Login Alerts
+             * @description Notify on a login from a device not seen before (in-app and push)
+             */
+            new_login_alerts: boolean;
+            /** Passkeys */
+            passkeys: number;
+            /**
+             * Password Changed At
+             * @description Last change; null when unknown (set before the security center existed)
+             */
+            password_changed_at: string | null;
+            /** Password Set */
+            password_set: boolean;
+            /**
+             * Personal Tokens
+             * @description Active personal access tokens in this account
+             */
+            personal_tokens: number;
+            /**
+             * Providers
+             * @description Linked login providers (`github`, `apple`)
+             */
+            providers: string[];
+            /**
+             * Sessions
+             * @description Live login sessions in all accounts
+             */
+            sessions: number;
+        };
+        /**
+         * SessionOut
+         * @description One of the caller's live login sessions (a browser or an app installation).
+         */
+        SessionOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Browser
+             * @description Browser family from the user agent, no version
+             */
+            browser: string | null;
+            /**
+             * Client
+             * @enum {string}
+             */
+            client: "browser" | "app" | "script" | "unknown";
+            /**
+             * Created At
+             * Format: date-time
+             * @description When the session started (the login)
+             */
+            created_at: string;
+            /**
+             * Current
+             * @description The session of this request
+             */
+            current: boolean;
+            /**
+             * Expires At
+             * Format: date-time
+             * @description When the session ends unless it is used again
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description The login session (the `sid` of its access tokens)
+             */
+            id: string;
+            /**
+             * Ip Prefix
+             * @description The address shortened to its network (`203.0.113.x`, an IPv6 /48); MowDeck asks no location service
+             */
+            ip_prefix: string | null;
+            /**
+             * Label
+             * @description `Firefox on Windows`, `MowDeck app on iOS` (English)
+             */
+            label: string;
+            /**
+             * Last Used At
+             * Format: date-time
+             * @description The last refresh (about every 10 minutes)
+             */
+            last_used_at: string;
+            /**
+             * Method
+             * @description How it started: `pwd`, `passkey`, `github`, `apple`
+             */
+            method: string | null;
+            /**
+             * Network
+             * @description `local`: a private, loopback or link-local address (the home network)
+             * @enum {string}
+             */
+            network: "local" | "public" | "unknown";
+            /**
+             * Os
+             * @description Operating system from the user agent
+             */
+            os: string | null;
+        };
+        /**
+         * SessionsRevokedOut
+         * @description ``POST /me/sessions/revoke-others``.
+         */
+        SessionsRevokedOut: {
+            /**
+             * Revoked
+             * @description How many sessions ended
+             */
+            revoked: number;
+        };
+        /**
          * StepUpPasskeyIn
          * @description ``POST /me/step-up/passkey``: the answer to a challenge of the options endpoint.
          */
@@ -3504,6 +3838,38 @@ export interface operations {
             };
         };
     };
+    demo_session_api_v1_identity_demo_session_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `cookie-only`: the refresh token is only set as the HttpOnly cookie and `refresh_token` in the body is null (browsers). Without it the body carries it too. */
+                "X-Mowdeck-Refresh"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_methods_api_v1_identity_login_methods_get: {
         parameters: {
             query?: never;
@@ -3993,6 +4359,160 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MePlatformOut"];
+                };
+            };
+        };
+    };
+    security_overview_api_v1_identity_me_security_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityOverviewOut"];
+                };
+            };
+        };
+    };
+    my_security_events_api_v1_identity_me_security_events_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityEventOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_security_alerts_api_v1_identity_me_security_alerts_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecurityAlertsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityAlertsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_sessions_api_v1_identity_me_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionOut"][];
+                };
+            };
+        };
+    };
+    revoke_session_api_v1_identity_me_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_other_sessions_api_v1_identity_me_sessions_revoke_others_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionsRevokedOut"];
                 };
             };
         };

@@ -1,4 +1,4 @@
-"""The cloud providers Fleet can link accounts of (ADR 0065).
+"""The cloud providers Fleet can link accounts of (ADR 0066).
 
 Fleet knows no vendor: the Device-Gateway loads the provider plugins of the installed adapter
 packages and answers ``gateway.cloud.providers`` with the enabled ones and their credential

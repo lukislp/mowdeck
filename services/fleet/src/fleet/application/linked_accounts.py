@@ -1,4 +1,4 @@
-"""Linked vendor cloud accounts (ADR 0034, ADR 0065): link, list, re-read, delete; their device
+"""Linked vendor cloud accounts (ADR 0034, ADR 0066): link, list, re-read, delete; their device
 lists; the withheld credentials the Device-Gateway fetches for their mowers.
 
 Fleet never talks to a vendor cloud and knows no vendor by name: the provider plugins of the
@@ -88,7 +88,7 @@ CLOUD_PROVIDER_OPTION: Final = "cloud_provider"
 that provider's plugin (``mowdeck_control.CLOUD_PROVIDER_OPTION``)."""
 LEGACY_IDENTITY_KEY: Final = "email"
 LEGACY_SECRET_KEY: Final = "password"  # noqa: S105 - a field key, not a password
-"""The two fields of a linked account stored before ADR 0065 (``secret_format`` 1)."""
+"""The two fields of a linked account stored before ADR 0066 (``secret_format`` 1)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -635,7 +635,7 @@ class LinkedAccountService:
             row.last_sync_error = None
             row.updated_at = now
             if new or self.vault.cipher.needs_reseal(row.password_encrypted):
-                # Stored again in the form of ADR 0065 (a row of ADR 0034 moves over here).
+                # Stored again in the form of ADR 0066 (a row of ADR 0034 moves over here).
                 row.password_encrypted = self.vault.seal_secrets(
                     row.id, {k: v for k, v in merged.items() if k in descriptor.secret_keys}
                 )

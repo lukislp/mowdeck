@@ -1,4 +1,4 @@
-"""Cloud provider plugins: how a vendor adapter links accounts and connects their mowers (ADR 0065).
+"""Cloud provider plugins: how a vendor adapter links accounts and connects their mowers (ADR 0066).
 
 A vendor whose mowers are reached through its cloud ships a package (Apache-2.0, or GPL-3.0 when
 its SDK is GPL) that registers a :class:`ProviderSpec` in the entry point group
@@ -43,7 +43,7 @@ PROVIDER_ENTRY_POINT_GROUP = "mowdeck.cloud_providers"
 
 CLOUD_PROVIDER_OPTION = "cloud_provider"
 """Option of a ``cloud`` registration naming the provider of its linked account (set by Fleet).
-Registrations without it (cloud mowers from before ADR 0065) go to the provider whose spec says
+Registrations without it (cloud mowers from before ADR 0066) go to the provider whose spec says
 ``unqualified_cloud``."""
 
 _log = logging.getLogger("mowdeck_control.providers")
@@ -112,7 +112,7 @@ class ProviderSpec:
     enabled_by_default: bool = False
     """True only for providers tested on real hardware; operators enable the others."""
     unqualified_cloud: bool = False
-    """Also serves ``cloud`` registrations that name no provider (from before ADR 0065). At most
+    """Also serves ``cloud`` registrations that name no provider (from before ADR 0066). At most
     one enabled provider may say so."""
 
 

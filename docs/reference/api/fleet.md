@@ -186,7 +186,7 @@ Link a vendor account: Fleet checks the credentials against the provider's field
 
 **List Cloud Providers**
 
-The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the link form (with hints and links to where the vendor hands them out), whether the user needs a developer account at the vendor and whether the adapter was tested on real hardware. Disabled providers are not listed.
+The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the link form (with hints and links to where the vendor hands them out), whether the user needs a developer account at the vendor and whether the adapter was tested on real hardware. Disabled providers are not listed; the public demo (ADR 0068) lists none and refuses every change under this path.
 
 | Status | Meaning | Body |
 | --- | --- | --- |

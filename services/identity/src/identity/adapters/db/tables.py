@@ -69,6 +69,8 @@ users = Table(
     Column("created_by", Uuid),
     Column("must_change_password", Boolean, nullable=False, server_default=text("false")),
     Column("last_login_at", TS),
+    Column("password_changed_at", TS),
+    Column("new_login_alerts", Boolean, nullable=False, server_default=text("true")),
 )
 
 memberships = Table(
@@ -192,6 +194,9 @@ audit_log = Table(
     Column("ip", String(64)),
     Column("correlation_id", String(128)),
     Index("ix_audit_log_account_id_id", "account_id", "id"),
+    # The security center (ADR 0065) reads a user's own events across accounts.
+    Index("ix_audit_log_target_id_at", "target_id", "at"),
+    Index("ix_audit_log_actor_subject_at", "actor_subject", "at"),
 )
 
 login_attempts = Table(
@@ -312,6 +317,20 @@ onboarding_progress = Table(
     Column("dismissed_hints", JSONB, nullable=False),
     Column("created_at", TS, nullable=False),
     Column("updated_at", TS, nullable=False),
+)
+
+# Security center (ADR 0065): the browsers and app installations a user signed in from.
+known_devices = Table(
+    "known_devices",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("token_hash", String(64), nullable=False),
+    Column("label", String(100), nullable=False),
+    Column("first_seen_at", TS, nullable=False),
+    Column("last_seen_at", TS, nullable=False),
+    Column("last_ip_prefix", String(64)),
+    UniqueConstraint("user_id", "token_hash", name="uq_known_devices_user_id_token_hash"),
 )
 
 # Schema only in Phase 1 (design section 5): support access and invitations.

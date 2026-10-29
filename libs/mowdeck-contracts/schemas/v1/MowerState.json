@@ -903,7 +903,7 @@
       "type": "string"
     },
     "MowerErrorCategory": {
-      "description": "What kind of fault ``MowerState.error_code`` names, manufacturer neutral.",
+      "description": "What kind of fault ``MowerState.error_code`` names, manufacturer neutral.\n\nThe same words classify the entries of an error lexicon (ADR 0067), so rules such as the\ntheft alarm can match a category instead of vendor codes.",
       "enum": [
         "trapped",
         "obstacle",
@@ -915,6 +915,9 @@
         "blade_motor",
         "rain",
         "positioning",
+        "communication",
+        "docking",
+        "firmware",
         "other"
       ],
       "title": "MowerErrorCategory",

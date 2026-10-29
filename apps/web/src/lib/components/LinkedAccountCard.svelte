@@ -1,5 +1,5 @@
 <!--
-  One linked vendor account on the settings page (ADR 0034, ADR 0065): the vendor and the
+  One linked vendor account on the settings page (ADR 0034, ADR 0066): the vendor and the
   account's identity, its status (connected, needs attention, provider not enabled), the
   non-secret fields it was linked with, device and mower counts, the last read and (prominently)
   why it failed, "read again" (optionally with new secret fields: a re-authentication, rendered
