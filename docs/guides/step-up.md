@@ -8,6 +8,7 @@ For actions that are hard to undo or that change who can get in, MowDeck asks yo
 - creating an API token,
 - creating or removing users, changing roles and admin rights, setting a sub-user's password,
 - removing a passkey, unlinking GitHub or Apple, adding a passkey or linking one,
+- signing out another device or all other devices, turning off the alerts about new sign-ins ([Your security page](security.md)),
 - deleting the account.
 
 Your confirmation counts for **5 minutes** (your administrator can change that). Signing in counts as a confirmation too, so right after signing in it does not ask again.
