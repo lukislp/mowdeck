@@ -20,13 +20,17 @@ dependencies = [
   "aiohttp>=3.9.3,<4",
 ]
 
-# Linked Husqvarna accounts (application key and secret) and their mowers (ADR 0065). Off by
+# Linked Husqvarna accounts (application key and secret) and their mowers (ADR 0066). Off by
 # default until tested on real hardware: MOWDECK_CLOUD_PROVIDERS_ENABLE=husqvarna.
 [project.entry-points."mowdeck.cloud_providers"]
 husqvarna = "mowdeck_control_husqvarna.plugin:SPEC"
 
-# Vendor boundary (ADR 0065, tools/repo-checks/tests/test_vendor_boundary.py): no core code may
-# import this package or the vendor modules it wraps.
+# Husqvarna's error codes in plain words (ADR 0067), built from aioautomower's table.
+[project.entry-points."mowdeck.error_lexicons"]
+husqvarna = "mowdeck_control_husqvarna.lexicon:husqvarna_lexicon"
+
+# Vendor isolation (ADR 0066, tools/repo-checks/tests/test_vendor_isolation.py): no core code
+# may import this package or the vendor modules it wraps.
 [tool.mowdeck.adapter]
 vendor-modules = ["aioautomower"]
 

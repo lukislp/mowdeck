@@ -1,6 +1,6 @@
 # mowdeck-control-husqvarna
 
-Husqvarna Automower adapter for `mowdeck-control`: a cloud provider plugin ([ADR 0065](../../docs/adr/0065-cloud-provider-plugins-and-more-vendors.md)) on top of [aioautomower](https://github.com/Thomas55555/aioautomower) 3.1.0 (MIT), the library of the Home Assistant core integration `husqvarna_automower`. It talks to the official **Automower Connect API** (REST plus an event websocket) and also covers Gardena smart mowers sold through the same Husqvarna portal.
+Husqvarna Automower adapter for `mowdeck-control`: a cloud provider plugin ([ADR 0066](../../docs/adr/0066-cloud-provider-plugins-and-more-vendors.md)) on top of [aioautomower](https://github.com/Thomas55555/aioautomower) 3.1.0 (MIT), the library of the Home Assistant core integration `husqvarna_automower`. It talks to the official **Automower Connect API** (REST plus an event websocket) and also covers Gardena smart mowers sold through the same Husqvarna portal.
 
 > **Untested on real hardware, off by default.** The adapter was built and tested only against handwritten payloads shaped like the API's answers and a fake Husqvarna cloud. Operators enable it with `MOWDECK_CLOUD_PROVIDERS_ENABLE=husqvarna` (Compose: `GATEWAY_CLOUD_PROVIDERS_ENABLE=husqvarna`); the web app labels it "untested on real hardware".
 
@@ -62,7 +62,7 @@ Map: the API has no geometry (work areas and stay-out zones are names only), so 
 | others | `unknown`, `not_applicable` | `unknown` |
 
 - Battery: `battery.batteryPercent`; position: the newest of the mower's GPS positions (models with `capabilities.position`), `position_source` `unknown` (the API gives no quality).
-- Errors: with activity `error`, `error_code` is Husqvarna's code, `error_message` its English text (aioautomower's table) and `error_category` a neutral category (lift and tilt, trapped, outside, battery, blade motor, positioning, ...); `drive_recoverable` is never set (no manual driving).
+- Errors: with activity `error`, `error_code` is Husqvarna's code, `error_message` its English text (aioautomower's table) and `error_category` the neutral category from the error lexicon (see below); `drive_recoverable` is never set (no manual driving).
 - Theft alarm ([ADR 0027](../../docs/adr/0027-health-history-and-theft-alarm.md)): an error with code 14 (Mower lifted), 15 (Lifted), 71 (Alarm! Mower lifted) or 131 (Lifted in link arm) sets `raw.lifted = true` and `raw.lift_code`; Notifications raises `mower_lifted` without knowing Husqvarna.
 - Blades: not reported by the API; `raw.blade_on` is derived (true exactly while the state is `in_operation` and the activity `mowing`) and marked `raw.blade_on_source = "activity"`.
 - Health counters for Telemetry: `raw.blade_used_s`, `raw.bat_cycles`, `raw.work_time_s`, `raw.mileage_m` from the mower's statistics.
@@ -87,14 +87,20 @@ The API accepts actions and the state confirms them later, so a sent command is 
 
 A start or resume while the mower reports an error raises `SensorStop` (a lift is never cleared by a command); a command for a mower that is not connected to the Husqvarna cloud is rejected (the emergency stop is sent anyway). Vendor answers: 403 and 400 are `rejected`, 429 is `failed` ("rate limit reached"), a refused token `failed` ("re-authenticate the linked account"), network and server errors `failed`.
 
-Connection options (`ConnectionConfig.options`): the account's `app_key` and `app_secret` (merged by the gateway), `iot_id` (the Husqvarna mower id) or `device_name` (the mower's name; the serial number is added when two mowers of the account share a name), and `start_minutes` (1 to 10080). Other options of the `cloud` kind are ignored. `start_minutes` is not in Fleet's option catalogue yet (per-provider mower options are a follow-up of ADR 0065), so it stays at 60 for now.
+Connection options (`ConnectionConfig.options`): the account's `app_key` and `app_secret` (merged by the gateway), `iot_id` (the Husqvarna mower id) or `device_name` (the mower's name; the serial number is added when two mowers of the account share a name), and `start_minutes` (1 to 10080). Other options of the `cloud` kind are ignored. `start_minutes` is not in Fleet's option catalogue yet (per-provider mower options are a follow-up of ADR 0066), so it stays at 60 for now.
 
 ## Known gaps
 
 - Nothing tested on a real mower; the payload shapes follow aioautomower's models and the API documentation.
 - Starting from the web app's map is not possible (no areas); starts go through a plan reference, which the web app does not offer yet.
 - Not mapped: calendars and schedules, stay-out zones, work area settings, cutting height and headlight mode changes, error confirmation, messages, park for a duration.
-- An authorization-code flow (a MowDeck application at Husqvarna, no developer account for the user) is an open decision of ADR 0065.
+- An authorization-code flow (a MowDeck application at Husqvarna, no developer account for the user) is an open decision of ADR 0066.
+
+## Error lexicon
+
+`lexicon.py` ([ADR 0067](../../docs/adr/0067-error-code-lexicon.md), registered as `husqvarna` in `mowdeck.error_lexicons`) explains every code of aioautomower's table (the names of the Automower Connect API): a neutral category (the same function fills `MowerState.error_category`), a severity (lift, tilt and the theft alarms 69 to 74 critical, defects errors, notices such as "Firmware has been updated" info), whether a person has to act, an English and a German title and a description and steps per category. The codes MowDeck acts on (trapped, outside, upside down, lifted, tilted, the theft alarms, battery empty, no power at the charging station, no accurate satellite position) have their own words with the likely cause. Lift and tilt codes (10, 14, 15, 33, 71, 72, 131) are `lift_tilt`, so Notifications raises the theft alarm by category; codes 14, 15, 71 and 131 also set `raw.lifted`.
+
+The lexicon lists no connection kinds: Husqvarna mowers connect as `cloud` like the Mammotion cloud mowers, and a lookup by connection kind takes the first lexicon that lists it, so listing `cloud` here would hand Mammotion's codes to this lexicon. It is found by its vendor key (`GET /api/v1/telemetry/error-codes/husqvarna/15`). The per-mower explanation (Telemetry's `/mowers/{id}/error`, the push texts) looks up by connection kind today and so does not reach it yet; `raw.vendor` (`husqvarna`) is in every state for a core follow-up that looks up by vendor.
 
 ## Fake cloud
 
@@ -114,9 +120,10 @@ With `ProviderContext.fake` (gateway: `MOWDECK_FAKE_CLOUDS=true`, development an
 | `auth.py` | yes | token cache, request throttle, aioautomower `AbstractAuth` |
 | `account.py`, `pool.py` | yes | the shared session per application key |
 | `mapping.py`, `options.py`, `connection.py`, `provider.py` | yes | translation, the `MowerConnection`, the plugin |
+| `lexicon.py` | no (a copy of its code table, kept equal by a test) | the error lexicon (entry point `mowdeck.error_lexicons`: `husqvarna`) |
 | `fake_cloud.py` | yes | the fake vendor (imported only with `ProviderContext.fake`) |
 
-Tests (`tests/`, no network): descriptor and entry point, token cache and refusals, throttle, discovery from a recorded-shape `GET /mowers` payload parsed by aioautomower, the state mapping table, lift codes, command translation and vendor errors, the refresh schedule, websocket events, the fake cloud end to end, and that no secret reaches a log, a message or a `repr`.
+Tests (`tests/`, no network): descriptor and entry point, token cache and refusals, throttle, discovery from a recorded-shape `GET /mowers` payload parsed by aioautomower, the state mapping table, lift codes, command translation and vendor errors, the refresh schedule, websocket events, the error lexicon (every code, both languages, categories equal to the state's), the fake cloud end to end, and that no secret reaches a log, a message or a `repr`.
 
 ```bash
 uv run pytest libs/mowdeck-control-husqvarna

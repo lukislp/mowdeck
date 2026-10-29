@@ -191,7 +191,10 @@ def test_the_recorded_lifted_mower() -> None:
         (24, MowerErrorCategory.BLADE_MOTOR),
         (93, MowerErrorCategory.POSITIONING),
         (148, MowerErrorCategory.COLLISION),
-        (701, MowerErrorCategory.OTHER),
+        (701, MowerErrorCategory.COMMUNICATION),
+        (16, MowerErrorCategory.DOCKING),
+        (134, MowerErrorCategory.FIRMWARE),
+        (8, MowerErrorCategory.OTHER),
     ],
 )
 def test_other_errors_are_categorised_without_the_lift_flag(

@@ -21,7 +21,7 @@ Positions: the newest of the mower's GPS positions (models with ``capabilities.p
 without a quality, so ``position_source`` stays ``unknown``.
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Final
 from uuid import UUID
@@ -40,13 +40,14 @@ from mowdeck_contracts.v1 import (
     GeoReference,
     MowerActivity,
     MowerCapabilities,
-    MowerErrorCategory,
     MowerMap,
     MowerState,
 )
 
+from mowdeck_control_husqvarna import lexicon
+
 LIFT_CODES: Final = frozenset({14, 15, 71, 131})
-"""Mower lifted, Lifted, Alarm! Mower lifted, Lifted in link arm (ADR 0065)."""
+"""Mower lifted, Lifted, Alarm! Mower lifted, Lifted in link arm (ADR 0066)."""
 
 _ERROR_STATES: Final = frozenset(
     {MowerStates.ERROR, MowerStates.FATAL_ERROR, MowerStates.ERROR_AT_POWER_UP}
@@ -60,33 +61,6 @@ _BY_ACTIVITY: Final[Mapping[MowerActivities, MowerActivity]] = {
     MowerActivities.PARKED_IN_CS: MowerActivity.DOCKED,
     MowerActivities.STOPPED_IN_GARDEN: MowerActivity.IDLE,
 }
-
-
-def _codes(category: MowerErrorCategory, codes: Iterable[int]) -> dict[int, MowerErrorCategory]:
-    return dict.fromkeys(codes, category)
-
-
-ERROR_CATEGORIES: Final[Mapping[int, MowerErrorCategory]] = {
-    **_codes(MowerErrorCategory.TRAPPED, (9, 13, 16, 55)),
-    **_codes(MowerErrorCategory.OUTSIDE, (1, 74, 92)),
-    **_codes(MowerErrorCategory.WHEEL_SLIP, (78,)),
-    **_codes(MowerErrorCategory.LIFT_TILT, (10, 14, 15, 33, 71, 72, 131)),
-    **_codes(MowerErrorCategory.COLLISION, (110, 148)),
-    **_codes(MowerErrorCategory.OBSTACLE, (17, 123, 124, 154)),
-    **_codes(
-        MowerErrorCategory.BATTERY,
-        (11, 12, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 114, 125, 126, 127),
-    ),
-    **_codes(
-        MowerErrorCategory.BLADE_MOTOR,
-        (24, 25, 39, 102, 103, 104, 112, 129, 130, 137, 138, 139, 147),
-    ),
-    **_codes(
-        MowerErrorCategory.POSITIONING,
-        (2, 3, 50, 51, 52, 53, 54, 93, 94, 111, 128, 132, 145),
-    ),
-}
-"""Husqvarna error codes by manufacturer-neutral category; other codes are ``other``."""
 
 
 def activity_of(attributes: MowerAttributes) -> MowerActivity:
@@ -217,9 +191,7 @@ def state_of(
         connection=ConnectionKind.CLOUD,
         error_code=str(mower.error_code) if error else None,
         error_message=error_text(mower.error_code) if error else None,
-        error_category=(
-            ERROR_CATEGORIES.get(mower.error_code, MowerErrorCategory.OTHER) if error else None
-        ),
+        error_category=(lexicon.category_of(mower.error_code) if error else None),
         raw=_raw(attributes, activity),
     )
 
