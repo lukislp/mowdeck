@@ -1,12 +1,15 @@
-"""Cloud account discovery and the shared cloud session per account (ADR 0034).
+"""Cloud providers, account discovery and the connections of linked mowers (ADR 0034, 0065).
 
-The fake Mammotion cloud of ``mowdeck-control-mammotion`` stands in for the vendor: its
-accounts are ``*@fake.mowdeck.test`` with the password ``fake-cloud-password``.
+The gateway knows no vendor: a test provider plugin (:class:`AcmeCloud`) stands in for every
+adapter package. It owns one "session" per set of credentials, like the real plugins, so the
+tests can count logins. The plugins of the real packages are tested in their own packages.
 """
 
 import asyncio
-import sys
-from pathlib import Path
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from importlib.metadata import EntryPoint
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -16,20 +19,42 @@ from mowdeck_contracts.v1 import (
     CloudDiscoverErrorCode,
     CloudDiscoverReply,
     CloudDiscoverRequest,
-    CloudProvider,
+    CloudProvidersReply,
+    CloudProvidersRequest,
     ConnectionKind,
+    DeviceType,
+    DiscoveredDevice,
     MowerCredentialsReply,
     MowerCredentialsRequest,
     MowerRegistration,
+    ProviderDescriptor,
 )
-from mowdeck_contracts.v1.subjects import FLEET_MOWERS_CREDENTIALS, GATEWAY_CLOUD_DISCOVER
-from mowdeck_control_mammotion.fake_cloud import FAKE_CLOUD_PASSWORD
+from mowdeck_contracts.v1.subjects import (
+    FLEET_MOWERS_CREDENTIALS,
+    GATEWAY_CLOUD_DISCOVER,
+    GATEWAY_CLOUD_PROVIDERS,
+)
+from mowdeck_control import (
+    CLOUD_PROVIDER_OPTION,
+    CloudLoginRefused,
+    CloudUnavailable,
+    ConnectionConfig,
+    LoadedProviders,
+    MowerConnection,
+    ProviderContext,
+    ProviderDevices,
+    ProviderSpec,
+    load_providers,
+)
+from mowdeck_control.errors import UnknownConnectionKind
+from mowdeck_control.simulator import create_simulated_connection
 from mowdeck_service_kit.bus import BusMessage, InMemoryBus, RequestTimeoutError
 from mowdeck_service_kit.testing import lifespan_client
 from pydantic import ValidationError
 
-from device_gateway.adapters.control.cloud_accounts import CloudBackend, cloud_backend
+from device_gateway.adapters.control import providers as providers_module
 from device_gateway.adapters.control.connections import RegistryConnectionProvider
+from device_gateway.adapters.control.providers import PluginCloudAccounts, cloud_providers
 from device_gateway.application import gateway as gateway_module
 from device_gateway.application.discovery import CloudDiscoveryService
 from device_gateway.application.gateway import DeviceGateway
@@ -43,15 +68,84 @@ from device_gateway.domain.rules import Shard
 from device_gateway.main import build_app
 from device_gateway.settings import Settings
 
-FAKE_ACCOUNT = "garden@fake.mowdeck.test"
+ACCOUNT = "garden@acme.test"
+PASSWORD = "acme-password"  # noqa: S105 - a test value
 ACCOUNT_ID = uuid4()
+
+DESCRIPTOR = ProviderDescriptor.model_validate(
+    {
+        "provider": "acme",
+        "name": "Acme Cloud",
+        "fields": [
+            {"key": "email", "kind": "email", "label": "E-mail", "identity": True},
+            {"key": "password", "kind": "secret", "label": "Password"},
+        ],
+    }
+)
+DEVICES = [
+    DiscoveredDevice(device_name="Acme-1", is_mower=True, online=True, iot_id="a1"),
+    DiscoveredDevice(device_name="Acme-2", is_mower=True, online=False, iot_id="a2"),
+    DiscoveredDevice(
+        device_name="Acme-Base", is_mower=False, device_type=DeviceType.RTK_BASE, iot_id="b1"
+    ),
+]
+
+
+@dataclass
+class AcmeCloud:
+    """A provider plugin with one shared session per set of credentials."""
+
+    context: ProviderContext = field(default_factory=ProviderContext)
+    sessions: dict[tuple[str, str], int] = field(default_factory=dict)
+    logins: int = 0
+    closed: bool = False
+    fail: Exception | None = None
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        return DESCRIPTOR
+
+    def _login(self, email: str, password: str) -> bool:
+        key = (email.lower(), password)
+        if key in self.sessions:
+            return True
+        if email.lower() != ACCOUNT or password != PASSWORD:
+            msg = "the Acme cloud refused the e-mail or password"
+            raise CloudLoginRefused(msg)
+        self.logins += 1
+        self.sessions[key] = 0
+        return False
+
+    async def discover(self, credentials: Mapping[str, str]) -> ProviderDevices:
+        if self.fail is not None:
+            raise self.fail
+        reused = self._login(credentials["email"], credentials["password"])
+        return ProviderDevices(devices=list(DEVICES), reused_session=reused)
+
+    def create_connection(self, config: ConnectionConfig) -> MowerConnection:
+        options = dict(config.options)
+        if options.get("email") is None or options.get("password") is None:
+            msg = "no credentials in the options"
+            raise CloudLoginRefused(msg)
+        self._login(str(options["email"]), str(options["password"]))
+        self.sessions[(str(options["email"]).lower(), str(options["password"]))] += 1
+        return create_simulated_connection(ConnectionConfig(config.mower_id, config.account_id))
+
+    async def close(self) -> None:
+        self.closed = True
+        self.sessions.clear()
+
+
+def _loaded(plugin: AcmeCloud | None = None, *, claims: bool = False) -> LoadedProviders:
+    plugin = plugin or AcmeCloud()
+    return LoadedProviders(plugins={"acme": plugin}, unqualified_cloud="acme" if claims else None)
 
 
 def _request(**changes: object) -> CloudDiscoverRequest:
     values: dict[str, object] = {
+        "provider": "acme",
         "account_id": ACCOUNT_ID,
-        "email": FAKE_ACCOUNT,
-        "password": FAKE_CLOUD_PASSWORD,
+        "credentials": {"email": ACCOUNT, "password": PASSWORD},
     }
     values.update(changes)
     return CloudDiscoverRequest.model_validate(values)
@@ -69,8 +163,9 @@ def _cloud_registration(device_name: str, **options: object) -> MowerRegistratio
         name=device_name,
         connection_kind=ConnectionKind.CLOUD,
         connection_options={
-            "account": FAKE_ACCOUNT,
-            "password": FAKE_CLOUD_PASSWORD,
+            CLOUD_PROVIDER_OPTION: "acme",
+            "email": ACCOUNT,
+            "password": PASSWORD,
             "device_name": device_name,
             "linked_account_id": str(uuid4()),
             **options,
@@ -78,61 +173,84 @@ def _cloud_registration(device_name: str, **options: object) -> MowerRegistratio
     )
 
 
-def _app(bus: InMemoryBus, backend: CloudBackend, *registrations: MowerRegistration) -> FastAPI:
-    settings = make_settings(
-        bootstrap_mowers=[r.model_dump(mode="json") for r in registrations],
-        fake_mammotion_cloud=True,
-    )
-    provider = RegistryConnectionProvider(sim_tick_seconds=0.05, cloud_factory=backend.factory)
+def _app(bus: InMemoryBus, loaded: LoadedProviders, *registrations: MowerRegistration) -> FastAPI:
+    settings = make_settings(bootstrap_mowers=[r.model_dump(mode="json") for r in registrations])
+    provider = RegistryConnectionProvider(sim_tick_seconds=0.05, cloud_providers=loaded)
     return build_app(
-        settings, bus=bus, connection_provider=provider, fleet=SilentFleet(), cloud=backend
+        settings, bus=bus, connection_provider=provider, fleet=SilentFleet(), cloud=loaded
     )
+
+
+async def test_dg_cloud_providers_are_answered_on_the_bus() -> None:
+    bus = InMemoryBus()
+    async with lifespan_client(_app(bus, _loaded())):
+        reply = await bus.request(GATEWAY_CLOUD_PROVIDERS, CloudProvidersRequest(), timeout=2.0)
+        found = reply.model(CloudProvidersReply)
+        assert [d.provider for d in found.providers] == ["acme"]
+        assert found.providers[0].fields[1].key == "password"
 
 
 async def test_dg_cloud_discovery_lists_the_devices_of_the_account() -> None:
     bus = InMemoryBus()
-    backend = cloud_backend(fake=True)
-    async with lifespan_client(_app(bus, backend)):
+    plugin = AcmeCloud()
+    async with lifespan_client(_app(bus, _loaded(plugin))):
         reply = await _ask(bus, _request())
-        assert reply.error is None and reply.devices is not None
-        names = [(d.device_name, d.is_mower, d.online) for d in reply.devices]
-        assert names == [
-            ("Luba-FAKE0001", True, True),
-            ("Luba-FAKE0002", True, False),
-            ("RTK-FAKE0001", False, True),
-        ]
-        assert reply.devices[0].model == "LUBA 2 AWD 5000X"
+        assert reply.error is None and reply.devices == DEVICES
         assert not reply.reused_session
         again = await _ask(bus, _request(linked_account_id=uuid4()))
-        assert again.reused_session and backend.pool.logins == 1  # the session lingers
+        assert again.reused_session and plugin.logins == 1
 
-        refused = await _ask(bus, _request(password="wrong"))  # noqa: S106 - a test value
+        wrong = {"email": ACCOUNT, "password": "wrong"}
+        refused = await _ask(bus, _request(credentials=wrong))
         assert refused.error is not None
         assert refused.error.code is CloudDiscoverErrorCode.LOGIN_FAILED
         assert "wrong" not in refused.error.detail
         with pytest.raises(RequestTimeoutError):  # an invalid request is dropped, not answered
             await bus.request(GATEWAY_CLOUD_DISCOVER, b'{"email": "x"}', timeout=0.2)
+    assert plugin.closed  # shutdown closes the plugins
 
 
-async def test_dg_cloud_mowers_of_one_account_share_one_login() -> None:
+async def test_dg_cloud_discovery_maps_the_deprecated_email_and_password() -> None:
+    plugin = AcmeCloud()
+    service = CloudDiscoveryService(PluginCloudAccounts(_loaded(plugin)), timeout_seconds=1)
+    reply = await service.discover(
+        _request(credentials={}, email=f" {ACCOUNT} ", password=PASSWORD)
+    )
+    assert reply.devices == DEVICES and plugin.logins == 1
+
+
+async def test_dg_cloud_discovery_refuses_unknown_fields_and_disabled_providers() -> None:
+    service = CloudDiscoveryService(PluginCloudAccounts(_loaded()), timeout_seconds=1)
+    extra = await service.discover(
+        _request(credentials={"email": ACCOUNT, "password": PASSWORD, "token": "x"})
+    )
+    assert extra.error is not None and extra.error.code is CloudDiscoverErrorCode.LOGIN_FAILED
+    assert "x" not in extra.error.detail.split()
+    other = await service.discover(_request(provider="zeta"))
+    assert other.error is not None and other.error.code is CloudDiscoverErrorCode.UNSUPPORTED
+
+
+async def test_dg_cloud_mowers_of_one_account_share_one_session() -> None:
     bus = InMemoryBus()
-    backend = cloud_backend(fake=True)
-    front, back = _cloud_registration("Luba-FAKE0001"), _cloud_registration("Luba-FAKE0002")
-    async with lifespan_client(_app(bus, backend, front, back)):
+    plugin = AcmeCloud()
+    front, back = _cloud_registration("Acme-1"), _cloud_registration("Acme-2")
+    async with lifespan_client(_app(bus, _loaded(plugin), front, back)):
         await wait_until(lambda: telemetry(bus, front.mower_id) and telemetry(bus, back.mower_id))
-        assert backend.pool.logins == 1
-        assert backend.pool.users(FAKE_ACCOUNT, FAKE_CLOUD_PASSWORD) == 2
-        # A re-read of the account answers from the mowers' session: no second login.
-        reply = await _ask(bus, _request())
-        assert reply.reused_session and backend.pool.logins == 1
-    assert backend.pool.open_sessions == 0  # shutdown stopped the shared session
+        assert plugin.logins == 1
+        assert plugin.sessions[(ACCOUNT, PASSWORD)] == 2
+        reply = await _ask(bus, _request())  # answered from the mowers' session
+        assert reply.reused_session and plugin.logins == 1
 
 
-async def test_dg_cloud_provider_uses_the_cloud_factory_only_for_cloud_mowers() -> None:
-    backend = cloud_backend(fake=True)
-    provider = RegistryConnectionProvider(cloud_factory=backend.factory)
-    connection = provider.create(_cloud_registration("Luba-FAKE0001"))
-    assert type(connection.port).__name__ == "PooledFakePort"  # type: ignore[attr-defined]
+def test_dg_cloud_registrations_are_routed_by_provider() -> None:
+    plugin = AcmeCloud()
+    provider = RegistryConnectionProvider(cloud_providers=_loaded(plugin, claims=True))
+    provider.create(_cloud_registration("Acme-1"))
+    # Without a provider option the claiming provider takes it (cloud mowers before ADR 0065).
+    plain = _cloud_registration("Acme-2")
+    options = {k: v for k, v in plain.connection_options.items() if k != CLOUD_PROVIDER_OPTION}
+    provider.create(plain.model_copy(update={"connection_options": options}))
+    assert plugin.sessions[(ACCOUNT, PASSWORD)] == 2
     simulated = provider.create(
         MowerRegistration(
             mower_id=uuid4(),
@@ -144,15 +262,10 @@ async def test_dg_cloud_provider_uses_the_cloud_factory_only_for_cloud_mowers() 
     assert simulated.kind is ConnectionKind.SIMULATED
 
 
-def test_dg_real_backend_never_loads_the_fake_cloud(tmp_path: Path) -> None:
-    sys.modules.pop("mowdeck_control_mammotion.fake_cloud", None)
-    backend = cloud_backend(cache_dir=tmp_path)
-    assert not backend.fake and backend.accounts.supports(CloudProvider.MAMMOTION)
-    cache = backend.pool.cache_path("a@example.com")
-    assert cache is not None and cache.parent == tmp_path
-    assert "mowdeck_control_mammotion.fake_cloud" not in sys.modules
-    assert cloud_backend(fake=True).fake
-    assert "mowdeck_control_mammotion.fake_cloud" in sys.modules
+def test_dg_cloud_mower_of_a_disabled_provider_is_never_handed_to_another() -> None:
+    provider = RegistryConnectionProvider(cloud_providers=_loaded(claims=True))
+    with pytest.raises(UnknownConnectionKind, match="zeta is not enabled"):
+        provider.create(_cloud_registration("Zeta-1", **{CLOUD_PROVIDER_OPTION: "zeta"}))
 
 
 class FakeFleetCredentials:
@@ -174,28 +287,26 @@ class FakeFleetCredentials:
 async def test_dg_fetches_withheld_credentials_for_each_connect() -> None:
     """Registrations carry no secrets: the gateway asks Fleet when it opens the connection."""
     bus = InMemoryBus()
-    backend = cloud_backend(fake=True)
-    front = _cloud_registration("Luba-FAKE0001")
-    withheld = {
-        k: v for k, v in front.connection_options.items() if k not in {"account", "password"}
-    }
+    plugin = AcmeCloud()
+    front = _cloud_registration("Acme-1")
+    withheld = {k: v for k, v in front.connection_options.items() if k not in {"email", "password"}}
     front = front.model_copy(
         update={"connection_options": {**withheld, "credentials": "fleet", "credentials_rev": "1"}}
     )
-    unknown = _cloud_registration("Luba-FAKE0002")
-    unknown = unknown.model_copy(update={"connection_options": {"credentials": "fleet"}})
-    fleet = FakeFleetCredentials(
-        {front.mower_id: {"account": FAKE_ACCOUNT, "password": FAKE_CLOUD_PASSWORD}}
+    unknown = _cloud_registration("Acme-2")
+    unknown = unknown.model_copy(
+        update={"connection_options": {CLOUD_PROVIDER_OPTION: "acme", "credentials": "fleet"}}
     )
+    fleet = FakeFleetCredentials({front.mower_id: {"email": ACCOUNT, "password": PASSWORD}})
     await bus.subscribe(FLEET_MOWERS_CREDENTIALS, fleet.handle, queue="fleet")
-    async with lifespan_client(_app(bus, backend, front, unknown)) as client:
+    async with lifespan_client(_app(bus, _loaded(plugin), front, unknown)) as client:
         await wait_until(lambda: telemetry(bus, front.mower_id))
         await wait_until(
             lambda: len([r for r in fleet.requests if r.mower_id == unknown.mower_id]) >= 2
         )
         held = client._transport.app.state.gateway.session(front.mower_id)  # type: ignore[attr-defined]
         assert held.registration == front  # the secrets were not kept on the session
-        assert backend.pool.logins == 1
+        assert plugin.logins == 1
         assert not telemetry(bus, unknown.mower_id)  # no credentials, no connection
     assert {r.mower_id for r in fleet.requests} == {front.mower_id, unknown.mower_id}
     assert all(r.account_id == ACCOUNT_ID for r in fleet.requests)
@@ -208,13 +319,13 @@ async def test_dg_warns_once_about_linked_mowers_with_several_shards(
     monkeypatch.setattr(gateway_module._log, "warning", lambda event, **_: warnings.append(event))
     gateway = DeviceGateway(
         shard=Shard(0, 2),
-        provider=RegistryConnectionProvider(cloud_factory=cloud_backend(fake=True).factory),
+        provider=RegistryConnectionProvider(cloud_providers=_loaded()),
         publisher=SilentPublisher(),
         timing=SessionTiming(),
     )
     registered = 0
     while registered < 2:
-        reg = _cloud_registration("Luba-FAKE0001")
+        reg = _cloud_registration("Acme-1")
         if gateway.shard.owns(reg.mower_id):
             await gateway.register(reg, source="test")
             registered += 1
@@ -228,10 +339,13 @@ class StubAccounts:
         self.supported = supported
         self.delay = 0.0
 
-    def supports(self, provider: CloudProvider) -> bool:
-        return self.supported
+    def descriptors(self) -> list[ProviderDescriptor]:
+        return [DESCRIPTOR] if self.supported else []
 
-    async def discover(self, provider: CloudProvider, email: str, password: str) -> CloudDevices:
+    def descriptor(self, provider: str) -> ProviderDescriptor | None:
+        return DESCRIPTOR if self.supported and provider == "acme" else None
+
+    async def discover(self, provider: str, credentials: Mapping[str, str]) -> CloudDevices:
         if self.delay:
             await asyncio.sleep(self.delay)
         if self.error is not None:
@@ -257,14 +371,31 @@ async def test_dg_cloud_discovery_errors(
     assert outcomes == [code.value]
 
 
+@pytest.mark.parametrize(
+    ("error", "code", "detail"),
+    [
+        (CloudLoginRefused("refused"), CloudDiscoverErrorCode.LOGIN_FAILED, "refused"),
+        (CloudUnavailable("cloud is down"), CloudDiscoverErrorCode.UNAVAILABLE, "cloud is down"),
+        # A plugin bug answers with its type only: its message may echo the request.
+        (KeyError(PASSWORD), CloudDiscoverErrorCode.UNAVAILABLE, "KeyError"),
+    ],
+)
+async def test_dg_plugin_errors_become_discovery_errors(
+    error: Exception, code: CloudDiscoverErrorCode, detail: str
+) -> None:
+    plugin = AcmeCloud(fail=error)
+    service = CloudDiscoveryService(PluginCloudAccounts(_loaded(plugin)), timeout_seconds=1)
+    reply = await service.discover(_request())
+    assert reply.error is not None and reply.error.code is code
+    assert detail in reply.error.detail and PASSWORD not in reply.error.detail
+
+
 async def test_dg_cloud_discovery_runs_at_most_the_configured_logins_at_once() -> None:
     running = 0
     peak = 0
 
     class Slow(StubAccounts):
-        async def discover(
-            self, provider: CloudProvider, email: str, password: str
-        ) -> CloudDevices:
+        async def discover(self, provider: str, credentials: Mapping[str, str]) -> CloudDevices:
             nonlocal running, peak
             running += 1
             peak = max(peak, running)
@@ -287,7 +418,42 @@ async def test_dg_cloud_discovery_times_out() -> None:
     assert empty.devices == []
 
 
-def test_dg_fake_cloud_is_refused_in_production() -> None:
-    with pytest.raises(ValidationError, match="development only"):
-        Settings.model_validate({"environment": "prod", "fake_mammotion_cloud": True})
-    assert make_settings(fake_mammotion_cloud=True).fake_mammotion_cloud
+def test_dg_cloud_providers_follow_the_enable_and_disable_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[ProviderContext] = []
+
+    def create(context: ProviderContext) -> AcmeCloud:
+        created.append(context)
+        return AcmeCloud(context)
+
+    class Point:
+        name = "acme"
+
+        def load(self) -> object:
+            return ProviderSpec("acme", create)
+
+    def source() -> Iterable[EntryPoint]:
+        return [Point()]  # type: ignore[list-item]
+
+    real = load_providers
+
+    def load(context: ProviderContext, **kwargs: Any) -> LoadedProviders:
+        return real(context, source=source, **kwargs)
+
+    monkeypatch.setattr(providers_module, "load_providers", load)
+    assert cloud_providers().plugins == {}  # untested providers are off by default
+    loaded = cloud_providers(fake=True, enable=("acme",))
+    assert list(loaded.plugins) == ["acme"] and created[-1].fake
+    assert cloud_providers(enable=("acme",), disable=("acme",)).plugins == {}
+    settings = make_settings(cloud_providers_enable=" Acme, zeta,", cloud_providers_disable="zeta")
+    assert settings.enabled_cloud_providers == ("acme", "zeta")
+    assert settings.disabled_cloud_providers == ("zeta",)
+
+
+def test_dg_fake_clouds_are_refused_in_production() -> None:
+    for name in ("fake_clouds", "fake_mammotion_cloud"):
+        with pytest.raises(ValidationError, match="development only"):
+            Settings.model_validate({"environment": "prod", name: True})
+        assert make_settings(**{name: True}).use_fake_clouds
+    assert not make_settings().use_fake_clouds

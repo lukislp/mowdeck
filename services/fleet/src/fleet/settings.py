@@ -50,7 +50,7 @@ class Settings(ServiceSettings):
 
     allowed_connection_kinds: str = "simulated"
     """Comma separated connection kinds accepted at registration (``simulated``, ``cloud``,
-    ``ble_bridge``; the real kinds need ``mowdeck-control-mammotion`` in the Device-Gateway)."""
+    ``ble_bridge``; the real kinds need an adapter package in the Device-Gateway)."""
 
     connection_options_max_bytes: int = Field(default=4096, ge=2, le=65536)
     """Maximum size of a mower's ``connection_options`` as JSON."""
@@ -85,7 +85,7 @@ class Settings(ServiceSettings):
     longer than the gateway's ``MOWDECK_PATH_PREVIEW_TIMEOUT_SECONDS``."""
 
     credential_encryption_key: SecretStr | None = None
-    """256-bit key (base64 or hex) that encrypts the passwords of linked Mammotion accounts at
+    """256-bit key (base64 or hex) that encrypts the secrets of linked cloud accounts at
     rest (ADR 0034). Without it linked accounts are unavailable (503) and old cloud mowers keep
     their inline credentials; give it as ``MOWDECK_CREDENTIAL_ENCRYPTION_KEY_FILE`` in
     production and keep a backup: without the key the stored passwords cannot be read."""

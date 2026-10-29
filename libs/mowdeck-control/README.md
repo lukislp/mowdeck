@@ -168,6 +168,26 @@ cloud = "mowdeck_control_mammotion:create_cloud_connection"
 
 Entry points are loaded lazily on the first lookup. Broken or unknown entry points are logged and skipped.
 
+### Cloud providers (`mowdeck.cloud_providers`)
+
+A vendor whose mowers are reached through its cloud also registers a provider plugin ([ADR 0065](../../docs/adr/0065-cloud-provider-plugins-and-more-vendors.md)), so the Device-Gateway can link accounts and connect their mowers without knowing the vendor:
+
+```toml
+[project.entry-points."mowdeck.cloud_providers"]
+acme = "mowdeck_control_acme.plugin:SPEC"
+```
+
+`SPEC` is a `ProviderSpec(provider="acme", create=..., enabled_by_default=False)`; keep the module importable without the vendor SDK and import the SDK inside `create`. `create(ProviderContext)` returns a `CloudProviderPlugin`:
+
+| Member | Does |
+| --- | --- |
+| `descriptor` | the `ProviderDescriptor` (`mowdeck_contracts.v1`): id, name, summary, credential fields (`text`, `email`, `secret`, `choice`; one `identity`, at least one secret), setup steps, links, `needs_developer_account`, `tested_on_hardware` |
+| `discover(credentials)` | log in (or reuse an open session) and return `ProviderDevices`; raise `CloudLoginRefused` or `CloudUnavailable` (messages without credentials) |
+| `create_connection(config)` | the `MowerConnection` of one mower; `config.options` hold its options plus every credential field of its linked account |
+| `close()` | stop shared sessions |
+
+`ProviderContext.fake` asks for the package's fake cloud (development and browser tests), `cache_dir` is a private directory for session caches. `load_providers(context, enable=..., disable=...)` creates the enabled plugins; `LoadedProviders.for_registration(options)` picks the plugin of a `cloud` registration by its option `cloud_provider` (`CLOUD_PROVIDER_OPTION`). Only providers tested on real hardware set `enabled_by_default`; operators enable the others. See [docs/dev/cloud-providers.md](../../docs/dev/cloud-providers.md) for the full checklist.
+
 ## Native jobs
 
 `plan_to_native_job(MowRequest, capabilities)` turns a neutral request (areas, pattern name, angle, spacing, border laps and the job options obstacle detection, laps around no-go zones, order and start progress, each checked against `capabilities.start_options`) into a `NativeJob` (areas, stripe passes, spacing, border laps, order), or raises `UnsupportedPattern` when the mower cannot run the pattern itself. `MowRequest.from_start_mow(StartMow)` reads the `pattern` settings `name`, `angle_deg`, `spacing_m`, `border_laps` and `order`. The Planner (`mowdeck-patterns`, [ADR 0030](../../docs/adr/0030-mowing-patterns-and-planner.md)) attaches such a native job to a spot plan when the chain is one native pattern on a whole map area. Every other plan needs `custom_paths`: the simulator has it (it follows the segments of `StartMow.spot_plan` with the blades and speed of each segment; `SimulationConfig(custom_paths=False)` behaves like a LUBA), the Mammotion adapter does not.
@@ -183,7 +203,7 @@ Entry points are loaded lazily on the first lookup. Broken or unknown entry poin
 7. Raise `CommandRejected` for refusals, `NotConnected` without a link, `SensorStop` while a safety sensor holds the mower; never clear a sensor stop from a command.
 8. Implement `DriveSession`; `stop()` and `close()` are idempotent and work after link loss. Do not add your own dead-man timer: the controller owns it (a device side timeout is an extra safety net, not a replacement).
 9. Do not de-duplicate, check expiry or validate limits in the adapter; the controller does it.
-10. Provide a factory `(ConnectionConfig) -> MowerConnection` and register it under `mowdeck.connections`.
+10. Provide a factory `(ConnectionConfig) -> MowerConnection` and register it under `mowdeck.connections`; a cloud vendor also registers a `ProviderSpec` under `mowdeck.cloud_providers` (see above) and declares `[tool.mowdeck.adapter] vendor-modules` for the boundary test.
 11. Run the controller test scenarios against the adapter with a fake transport.
 12. Optional capabilities (ADR 0038): if the manufacturer has a firmware service, implement `FirmwarePort` and set `capabilities.firmware_update` (only the vendor calls and the `FirmwareInfo` bookkeeping; the preconditions and the lock-out are the controller's). If the connection can open additional links, list their kinds in `capabilities.links_supported`, read them from the `links` option (`{kind: options}`, the registration's links with their secrets merged by the Device-Gateway), report each in `MowerState.links`, set `MowerState.connection` to the link in use and publish a state on every link change; for a Bluetooth bridge also implement `BridgeScanCapable`. A drive frame must never fall back to a slower link when the fast one drops.
 

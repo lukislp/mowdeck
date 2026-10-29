@@ -156,7 +156,7 @@ Link the mower to an RTK base station of the account, or unlink it with `null` (
 
 **List Linked Accounts**
 
-The linked Mammotion accounts of the caller's account (no passwords).
+The linked vendor accounts of the caller's account (no secrets).
 
 | Status | Meaning | Body |
 | --- | --- | --- |
@@ -168,7 +168,7 @@ The linked Mammotion accounts of the caller's account (no passwords).
 
 **Create Linked Account**
 
-Link a Mammotion account: Fleet asks the Device-Gateway to log in and list the devices (`gateway.cloud.discover`) and stores the account with its password encrypted. Use a second Mammotion account the mowers are shared with: a login with the main account logs the phone app out.
+Link a vendor account: Fleet checks the credentials against the provider's fields (422 with one problem per field, `credentials/<key>`), asks the Device-Gateway to log in and list the devices (`gateway.cloud.discover`) and stores the account with its secret fields encrypted. An unknown or disabled provider is 422 (field `provider`).
 
 **Request body** (required): `application/json` [LinkedAccountIn](#linkedaccountin)
 
@@ -179,8 +179,20 @@ Link a Mammotion account: Fleet asks the Device-Gateway to log in and list the d
 | 404 | No such linked account in the caller's account. | no body |
 | 409 | Linked. | no body |
 | 422 | `linked-account-login-failed`: the cloud refused the credentials. | no body |
-| 429 | Too many failed logins for this e-mail (`Retry-After`). | no body |
+| 429 | Too many failed logins for this vendor account (`Retry-After`). | no body |
 | 503 | No credential encryption key, or no Device-Gateway or vendor cloud answered. | no body |
+
+#### GET /api/v1/fleet/linked-accounts/providers
+
+**List Cloud Providers**
+
+The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the link form (with hints and links to where the vendor hands them out), whether the user needs a developer account at the vendor and whether the adapter was tested on real hardware. Disabled providers are not listed.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ProviderList](#providerlist) |
+| 403 | The caller lacks `can_manage_mowers` on the account. | no body |
+| 503 | No Device-Gateway listed the providers. | no body |
 
 #### GET /api/v1/fleet/linked-accounts/{linked_account_id}
 
@@ -258,7 +270,7 @@ Register several mowers of the linked account at once. Each one is an ordinary r
 
 **Sync Linked Account**
 
-Read the device list again ("Konto neu einlesen"), optionally with a new password. The gateway answers from the session the account's connected mowers share when there is one (a second login would log them out). A failure is kept in `last_sync_error`.
+Read the device list again ("Konto neu einlesen"), optionally with new secret fields (a re-authentication). The gateway answers from the session the account's connected mowers share when there is one (a second login would log them out). A failure is kept in `last_sync_error`.
 
 | Parameter | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |
@@ -272,7 +284,7 @@ Read the device list again ("Konto neu einlesen"), optionally with a new passwor
 | 403 | The caller lacks `can_manage_mowers` on the account. | no body |
 | 404 | No such linked account in the caller's account. | no body |
 | 422 | `linked-account-login-failed`: the cloud refused the credentials. | no body |
-| 429 | Too many failed logins for this e-mail (`Retry-After`). | no body |
+| 429 | Too many failed logins for this vendor account (`Retry-After`). | no body |
 | 503 | No credential encryption key, or no Device-Gateway or vendor cloud answered. | no body |
 
 ### mowers
@@ -1319,6 +1331,38 @@ One option of a connection kind (the web app builds its form from these).
 | `title` | string | yes | English label; the app translates the options it knows. |
 | `type` | `"string"` \| `"integer"` \| `"number"` \| `"boolean"` | yes |  |
 
+### CredentialChoice
+
+One option of a `choice` field.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `label` | string | yes | min length 1; max length 80 |
+| `value` | string | yes | min length 1; max length 64 |
+
+### CredentialField
+
+One input of a provider's link form.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `choices` | array of [CredentialChoice](#credentialchoice) | no | max items 20 |
+| `help` | string or null | no | English hint under the input. |
+| `identity` | boolean | no | The field that names the vendor account (exactly one per provider): shown as the linked account's title and unique per provider and MowDeck account, compared without case.; default `false` |
+| `key` | string | yes | pattern `^[a-z][a-z0-9_]{0,39}$` |
+| `kind` | [CredentialFieldKind](#credentialfieldkind) | yes |  |
+| `label` | string | yes | English label of the input.; min length 1; max length 80 |
+| `max_length` | integer | no | min 1.0; max 4096.0; default `256` |
+| `pattern` | string or null | no | Regular expression the value must match. |
+| `placeholder` | string or null | no |  |
+| `required` | boolean | no | default `true` |
+
+### CredentialFieldKind
+
+How a credential field is entered and stored.
+
+Type: `"text"` \| `"email"` \| `"secret"` \| `"choice"`
+
 ### DeviceType
 
 What a discovered device is (ADR 0047).
@@ -1478,22 +1522,24 @@ A linked account with its devices (answer of create and sync).
 | `created_at` | string (date-time) | yes |  |
 | `device_count` | integer | yes |  |
 | `devices` | array of [LinkedDeviceOut](#linkeddeviceout) | yes |  |
-| `email` | string | yes |  |
+| `email` | string | yes | Deprecated: the same as `identity`. |
 | `id` | string (uuid) | yes |  |
+| `identity` | string | yes | The value of the provider's identity field (an e-mail or an application key): the account's title. |
 | `last_sync_error` | string or null | yes | Why the last re-read failed, if it did. |
 | `last_synced_at` | string (date-time) or null | yes | When the device list was last read successfully. |
 | `mower_count` | integer | yes | Mowers of this account that connect through it. |
 | `provider` | string | yes |  |
+| `public_credentials` | map of string | no | The non-secret credential fields as entered (identity included). |
 | `updated_at` | string (date-time) | yes |  |
 
 ### LinkedAccountIn
 
-`POST /linked-accounts`: the Mammotion account to link (the only provider so far). The password is write-only.
+`POST /linked-accounts`: the vendor account to link, with the credential fields of its provider (`GET /linked-accounts/providers`). Secret fields are write-only.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `email` | string | yes | min length 3; max length 254 |
-| `password` | string | yes | min length 1; max length 256 |
+| `credentials` | map of string | yes | Every field of the provider's descriptor by key. |
+| `provider` | string | yes | The provider id.; pattern `^[a-z][a-z0-9_-]{1,31}$` |
 
 ### LinkedAccountList
 
@@ -1505,27 +1551,30 @@ A linked account with its devices (answer of create and sync).
 
 ### LinkedAccountOut
 
-A linked account; the password is never returned.
+A linked account; secret fields are never returned.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `created_at` | string (date-time) | yes |  |
 | `device_count` | integer | yes |  |
-| `email` | string | yes |  |
+| `email` | string | yes | Deprecated: the same as `identity`. |
 | `id` | string (uuid) | yes |  |
+| `identity` | string | yes | The value of the provider's identity field (an e-mail or an application key): the account's title. |
 | `last_sync_error` | string or null | yes | Why the last re-read failed, if it did. |
 | `last_synced_at` | string (date-time) or null | yes | When the device list was last read successfully. |
 | `mower_count` | integer | yes | Mowers of this account that connect through it. |
 | `provider` | string | yes |  |
+| `public_credentials` | map of string | no | The non-secret credential fields as entered (identity included). |
 | `updated_at` | string (date-time) | yes |  |
 
 ### LinkedAccountSyncIn
 
-`POST /linked-accounts/{id}/sync`: optionally a new password (write-only).
+`POST /linked-accounts/{id}/sync`: optionally new secret fields (write-only), e.g. after the vendor revoked a password or a key; the stored values stay for the missing ones.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `password` | string or null | no |  |
+| `credentials` | map of string or null | no | New values of secret fields of the provider by key. |
+| `password` | string or null | no | Deprecated: the same as `credentials: {password: ...}`. |
 
 ### LinkedDeviceList
 
@@ -1656,7 +1705,7 @@ The saved mowing defaults of a mower (`MowerOut.mow_defaults`).
 
 `POST /mowers`: without `site_id` the mower goes to the account's default site.
 
-A `cloud` mower comes from a linked Mammotion account: `linked_account_id` and the `device_name` of its device list (`connection_options` then hold only adapter extras such as `refresh_seconds`); `name` defaults to the device name and `model` to the listed model.
+A `cloud` mower comes from a linked vendor account: `linked_account_id` and the `device_name` of its device list (`connection_options` then hold only adapter extras such as `refresh_seconds`); `name` defaults to the device name and `model` to the listed model.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1818,6 +1867,38 @@ A compact reference to a principal, embedded in commands and audit records.
 | `kind` | [PrincipalKind](#principalkind) | yes | Kind of subject. |
 | `subject` | string (uuid) | yes | Stable subject id (JWT `sub`). |
 | `token_id` | string (uuid) or null | no | Token id (JWT `jti`), if known. |
+
+### ProviderDescriptor
+
+A cloud provider as its adapter declares it: the link form and the guidance.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `fields` | array of [CredentialField](#credentialfield) | yes | min items 1; max items 10 |
+| `links` | array of [ProviderLink](#providerlink) | no | max items 5 |
+| `name` | string | yes | Display name of the vendor cloud.; min length 1; max length 80 |
+| `needs_developer_account` | boolean | no | The user creates an application in the vendor's developer portal (with their own vendor account) to get the credentials.; default `false` |
+| `provider` | string | yes | pattern `^[a-z][a-z0-9_-]{1,31}$` |
+| `setup_steps` | array of string | no | English, short: how the user gets the credentials, in order.; max items 8 |
+| `summary` | string | no | English: which mowers and what MowDeck can do.; max length 500; default `""` |
+| `tested_on_hardware` | boolean | no | False: built and tested against recorded fixtures and fakes only; the web app labels such providers as untested on real hardware.; default `false` |
+
+### ProviderLink
+
+A page of the vendor that explains where the credentials come from.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `label` | string | yes | min length 1; max length 80 |
+| `url` | string | yes | max length 300; pattern `^https://\S+$` |
+
+### ProviderList
+
+`GET /linked-accounts/providers`: the cloud providers enabled in the Device-Gateway, each with its credential fields and guidance (the web app renders the link form from it).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `items` | array of [ProviderDescriptor](#providerdescriptor) | yes |  |
 
 ### ProxyInfo
 

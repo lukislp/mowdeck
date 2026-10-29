@@ -1,8 +1,9 @@
 """Login throttle of linked accounts (ADR 0034): protects the vendor account from lockout.
 
-Every create and re-read of a linked account is a login at the Mammotion cloud. A user (or a
-stolen session) trying passwords would get the Mammotion account locked or the installation's
-address banned, so Fleet limits failed logins per MowDeck account and e-mail:
+Every create and re-read of a linked account is a login at a vendor cloud. A user (or a
+stolen session) trying passwords would get the vendor account locked or the installation's
+address banned, so Fleet limits failed logins per MowDeck account and vendor account
+(provider and identity, ADR 0065):
 
 * at most :attr:`LoginThrottle.max_failures` failed logins within :attr:`LoginThrottle.window`
   (default 5 in 15 minutes); further attempts answer 429 with ``Retry-After`` until the oldest
@@ -31,7 +32,7 @@ class TooManyLoginAttempts(Exception):  # noqa: N818 - reads like the HTTP statu
     """Too many failed logins for this e-mail; retry after ``retry_after_seconds``."""
 
     def __init__(self, retry_after_seconds: int) -> None:
-        super().__init__("too many failed logins for this Mammotion account; try again later")
+        super().__init__("too many failed logins for this vendor account; try again later")
         self.retry_after_seconds = retry_after_seconds
 
 

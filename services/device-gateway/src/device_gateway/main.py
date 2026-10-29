@@ -9,7 +9,7 @@ verified locally against its JWKS (``mowdeck-auth``); without it every request i
 
 Start-up order: registry events, bootstrap mowers, command consumer, camera session and release
 requests, path preview requests, bridge scan and firmware check requests, cloud discovery
-requests, Fleet sync (background).
+and provider requests, Fleet sync (background).
 Shutdown order: stop the command consumer, answer in-flight commands, close every connection
 (publishing ``mower.disconnected``), stop the shared cloud sessions; the kit then drains and
 closes the bus.
@@ -19,6 +19,7 @@ from collections.abc import Mapping
 
 from fastapi import FastAPI
 from mowdeck_auth import principal_resolver_from_env
+from mowdeck_control import LoadedProviders
 from mowdeck_service_kit import (
     PrincipalResolver,
     ReadinessCheck,
@@ -32,7 +33,11 @@ from mowdeck_service_kit.bus import EventBus, Subscription
 from device_gateway.adapters.api.routes import router
 from device_gateway.adapters.bus.bridge import subscribe_bridge_scans
 from device_gateway.adapters.bus.camera import subscribe_camera_releases, subscribe_camera_requests
-from device_gateway.adapters.bus.cloud import DiscoveryMetrics, subscribe_cloud_discovery
+from device_gateway.adapters.bus.cloud import (
+    DiscoveryMetrics,
+    subscribe_cloud_discovery,
+    subscribe_cloud_providers,
+)
 from device_gateway.adapters.bus.firmware import subscribe_firmware_checks
 from device_gateway.adapters.bus.fleet import BusCredentialSource, BusFleetDirectory
 from device_gateway.adapters.bus.path_preview import subscribe_path_previews
@@ -43,8 +48,8 @@ from device_gateway.adapters.bus.subscriptions import (
     subscribe_registry_events,
 )
 from device_gateway.adapters.bus.tracking import subscribe_tracking_leases
-from device_gateway.adapters.control.cloud_accounts import CloudBackend, cloud_backend
 from device_gateway.adapters.control.connections import RegistryConnectionProvider
+from device_gateway.adapters.control.providers import PluginCloudAccounts, cloud_providers
 from device_gateway.adapters.control.snapshot import RelaySnapshotter
 from device_gateway.application.discovery import CloudDiscoveryService
 from device_gateway.application.gateway import DeviceGateway
@@ -86,27 +91,28 @@ def build_app(
     principal_resolver: PrincipalResolver | None = None,
     connection_provider: ConnectionProvider | None = None,
     fleet: FleetDirectory | None = None,
-    cloud: CloudBackend | None = None,
+    cloud: LoadedProviders | None = None,
     cloud_accounts: CloudAccounts | None = None,
     relay_snapshotter: CameraSnapshotter | None = None,
 ) -> FastAPI:
     """Build the app. ``bus`` and ``principal_resolver`` default to the kit's behaviour;
     ``connection_provider`` and ``fleet`` default to the control registry and the bus;
-    ``cloud`` to the real Mammotion cloud (the fake one with ``fake_mammotion_cloud``) and
-    ``cloud_accounts`` to its discovery."""
-    backend = cloud or cloud_backend(
-        fake=settings.fake_mammotion_cloud, cache_dir=settings.cloud_session_cache_dir
+    ``cloud`` to the enabled cloud provider plugins (the fake clouds with ``fake_clouds``) and
+    ``cloud_accounts`` to their discovery."""
+    providers = cloud or cloud_providers(
+        fake=settings.use_fake_clouds,
+        cache_dir=settings.cloud_session_cache_dir,
+        enable=settings.enabled_cloud_providers,
+        disable=settings.disabled_cloud_providers,
     )
-    if backend.fake:
-        _log.warning(
-            "using the FAKE Mammotion cloud (MOWDECK_FAKE_MAMMOTION_CLOUD is for development only)"
-        )
+    if settings.use_fake_clouds:
+        _log.warning("using the FAKE vendor clouds (MOWDECK_FAKE_CLOUDS is for development only)")
     provider = connection_provider or RegistryConnectionProvider(
         sim_time_scale=settings.sim_time_scale,
         sim_tick_seconds=settings.sim_tick_seconds,
-        cloud_factory=backend.factory,
+        cloud_providers=providers,
     )
-    accounts: CloudAccounts = cloud_accounts or backend.accounts
+    accounts: CloudAccounts = cloud_accounts or PluginCloudAccounts(providers)
     # Photos of mowers without an own photo function come from the camera relay (ADR 0045).
     relay = relay_snapshotter or relay_snapshotter_from(settings)
     frames = (relay,) if relay is not None else ()
@@ -175,15 +181,14 @@ def build_app(
         app.state.tracking_leases = await subscribe_tracking_leases(
             active_bus, gateway, registry=app.state.metrics_registry
         )
-        app.state.cloud_discovery = await subscribe_cloud_discovery(
-            active_bus,
-            CloudDiscoveryService(
-                accounts,
-                timeout_seconds=settings.cloud_discovery_timeout_seconds,
-                count=DiscoveryMetrics(app.state.metrics_registry).count,
-                concurrency=settings.cloud_discovery_concurrency,
-            ),
+        discovery = CloudDiscoveryService(
+            accounts,
+            timeout_seconds=settings.cloud_discovery_timeout_seconds,
+            count=DiscoveryMetrics(app.state.metrics_registry).count,
+            concurrency=settings.cloud_discovery_concurrency,
         )
+        app.state.cloud_discovery = await subscribe_cloud_discovery(active_bus, discovery)
+        app.state.cloud_providers = await subscribe_cloud_providers(active_bus, discovery)
         gateway.start_fleet_sync(
             fleet
             or BusFleetDirectory(
@@ -215,9 +220,10 @@ def build_app(
             subscription: Subscription | None = getattr(app.state, name, None)
             if subscription is not None:
                 await subscription.unsubscribe()
-        cloud_discovery: Subscription | None = getattr(app.state, "cloud_discovery", None)
-        if cloud_discovery is not None:
-            await cloud_discovery.unsubscribe()
+        for name in ("cloud_discovery", "cloud_providers"):
+            cloud_subscription: Subscription | None = getattr(app.state, name, None)
+            if cloud_subscription is not None:
+                await cloud_subscription.unsubscribe()
         registry_events: Subscription | None = getattr(app.state, "registry_events", None)
         if registry_events is not None:
             await registry_events.unsubscribe()
@@ -226,7 +232,7 @@ def build_app(
             await photo_requests.unsubscribe()
         if gateway is not None:
             await gateway.close()
-        await backend.pool.close()
+        await providers.close()
 
     return create_app(
         settings,

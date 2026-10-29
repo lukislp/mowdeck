@@ -4,7 +4,8 @@ The schemas drive two things: Fleet's validation of ``connection_options`` befor
 stored (:func:`option_problems`), and ``GET /api/v1/fleet/connection-kinds``, from which the web
 app generates its connection forms. A new adapter kind therefore needs a schema here and no UI
 change (the app falls back to the English ``title`` and ``description`` for options it has no
-translation for). The option semantics follow ``libs/mowdeck-control-mammotion/README.md``.
+translation for). The option semantics follow the READMEs of the adapter packages; which
+vendor a ``cloud`` mower belongs to is its linked account's provider (ADR 0065).
 """
 
 import re
@@ -178,13 +179,12 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
     ),
     "cloud": KindSchema(
         kind="cloud",
-        title="Mammotion cloud",
+        title="Vendor cloud",
         description=(
-            "Connects through the Mammotion cloud (MQTT) with a linked Mammotion account: link "
-            "the account once, then pick its mowers. Manual driving over the cloud (firmware "
-            "1.30.31.19 or newer, forwards and turns only) needs the account that owns the "
-            "mower; a shared account sees and runs everything else. The same account in the "
-            "phone app and in MowDeck at once can drop each other's live connection."
+            "Connects through the vendor's cloud with a linked account (Settings, linked "
+            "accounts): link the account once, then pick its mowers. What a cloud mower can do "
+            "depends on its provider (see the provider's guidance when linking); options a "
+            "provider does not use are ignored by its adapter."
         ),
         linked_account=True,
         supports_links=frozenset({"ble_bridge"}),
@@ -200,7 +200,7 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
                 "iot_id",
                 "string",
                 "IoT id",
-                "The mower's IoT id in the Mammotion cloud, set from the device list.",
+                "The mower's stable id in the vendor cloud, set from the device list.",
                 managed=True,
             ),
             OptionSpec(
@@ -216,8 +216,8 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
                 "refresh_seconds",
                 "number",
                 "State refresh (s)",
-                "How often the mower is asked for a fresh status report; the Mammotion cloud "
-                "sends reports only on request.",
+                "How often the mower is asked for a fresh status report (clouds that send "
+                "reports only on request).",
                 advanced=True,
                 minimum=10,
                 maximum=300,
@@ -252,7 +252,7 @@ SCHEMAS: Final[Mapping[str, KindSchema]] = {
                 "cloud_drive",
                 "boolean",
                 "Manual driving over the cloud",
-                "Joystick, nudges, AI assist moves and spot runs over the Mammotion cloud when no "
+                "Joystick, nudges, AI assist moves and spot runs over the vendor cloud when no "
                 "Bluetooth bridge is connected (forwards and turns only, about 0.3 s delay). Needs "
                 "the mower's owner account; off keeps driving to the bridge.",
                 default=True,
@@ -402,9 +402,10 @@ def links_supported(connection_kind: str) -> frozenset[str]:
 
 LEGACY_CLOUD_SCHEMA: Final = KindSchema(
     kind="cloud",
-    title="Mammotion cloud",
+    title="Vendor cloud (own login)",
     description=(
-        "Connects through the Mammotion cloud (MQTT) with a Mammotion account. Use a second "
+        "Connects through the vendor cloud with an account stored on the mower (before linked "
+        "accounts). Use a second "
         "account the mower is shared with: logging in with the main account logs the phone "
         "app out."
     ),

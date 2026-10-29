@@ -1,8 +1,9 @@
 <!--
-  Linked Mammotion accounts (Fleet's `/linked-accounts`): every account with its counts, last
-  read and last error, "read again" (optionally with a new password), unlinking (refused while
-  mowers use it) and the form to link another one. Needs `can_manage_mowers` on the account;
-  a 403 shows a calm notice instead of an error.
+  Linked vendor cloud accounts (Fleet's `/linked-accounts`, ADR 0034 and ADR 0065): every account
+  with its vendor, status, counts, last read and last error, "read again" (optionally with new
+  secrets), unlinking (refused while mowers use it) and the form to link another one, rendered
+  from the providers the Device-Gateway has enabled (disabled ones are not offered). Needs
+  `can_manage_mowers` on the account; a 403 shows a calm notice instead of an error.
 -->
 <script lang="ts">
   import { Panel, ProblemNotice } from '@mowdeck/ui';
@@ -16,23 +17,35 @@
   import {
     linkAccount,
     listLinkedAccounts,
+    listProviders,
     removeLinkedAccount,
     syncAccount,
   } from '#lib/linked/api.js';
+  import { byId, type CredentialValues, type ProviderDescriptor } from '#lib/linked/providers.js';
   import { m } from '#lib/paraglide/messages.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
 
   let accounts = $state<LinkedAccount[] | null>(null);
+  let providers = $state<ProviderDescriptor[]>([]);
   let problem = $state<ApiProblem | null>(null);
+  let providerProblem = $state<ApiProblem | null>(null);
 
   const forbidden = $derived(problem?.status === 403);
+  const providerOf = $derived(byId(providers));
 
   async function load(): Promise<void> {
-    try {
-      accounts = await listLinkedAccounts();
+    const [listed, offered] = await Promise.allSettled([listLinkedAccounts(), listProviders()]);
+    if (listed.status === 'fulfilled') {
+      accounts = listed.value;
       problem = null;
-    } catch (error) {
-      problem = asProblem(error);
+    } else {
+      problem = asProblem(listed.reason);
+    }
+    if (offered.status === 'fulfilled') {
+      providers = offered.value;
+      providerProblem = null;
+    } else {
+      providerProblem = asProblem(offered.reason);
     }
   }
 
@@ -48,16 +61,16 @@
       : [...list, next];
   }
 
-  async function connect(email: string, password: string): Promise<void> {
-    const linked = await linkAccount(email, password);
+  async function connect(provider: string, credentials: CredentialValues): Promise<void> {
+    const linked = await linkAccount(provider, credentials);
     put(linked);
-    toasts.push('ok', m.linked_connected({ email: linked.email }));
+    toasts.push('ok', m.linked_connected({ email: linked.identity }));
   }
 
-  async function sync(account: LinkedAccount, password?: string): Promise<void> {
+  async function sync(account: LinkedAccount, credentials?: CredentialValues): Promise<void> {
     try {
-      put(await syncAccount(account.id, password));
-      toasts.push('ok', m.linked_synced({ email: account.email }));
+      put(await syncAccount(account.id, credentials));
+      toasts.push('ok', m.linked_synced({ email: account.identity }));
     } catch (error) {
       // The failed read is recorded on the account (`last_sync_error`): show it.
       void load();
@@ -68,7 +81,7 @@
   async function remove(account: LinkedAccount): Promise<void> {
     await removeLinkedAccount(account.id);
     accounts = (accounts ?? []).filter((a) => a.id !== account.id);
-    toasts.push('ok', m.linked_deleted({ email: account.email }));
+    toasts.push('ok', m.linked_deleted({ email: account.identity }));
   }
 </script>
 
@@ -97,7 +110,8 @@
       {#each accounts as account (account.id)}
         <LinkedAccountCard
           {account}
-          onsync={(password) => sync(account, password)}
+          provider={providerOf.get(account.provider) ?? null}
+          onsync={(credentials) => sync(account, credentials)}
           onremove={() => remove(account)}
         />
       {/each}
@@ -106,7 +120,16 @@
 
   <Panel label={m.linked_connect_title()} testid="linked-connect-panel">
     <div class="connect">
-      <LinkedAccountConnect onconnect={connect} />
+      {#if providerProblem}
+        <ProblemNotice
+          title={problemMessage(providerProblem)}
+          detail={providerProblem.detail}
+          reference={providerProblem.correlationId}
+          referenceLabel={m.problem_reference()}
+        />
+      {:else}
+        <LinkedAccountConnect {providers} onconnect={connect} />
+      {/if}
     </div>
   </Panel>
 {/if}

@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from fleet_cloud import link_body, login_of, serve_providers
 from fleet_support import API, Harness, Person, harness
 from mowdeck_contracts.v1 import (
     BridgeScanError,
@@ -72,7 +73,8 @@ class FakeCloud:
 
     async def handle(self, message: BusMessage) -> None:
         request = message.model(CloudDiscoverRequest)
-        if request.email.casefold() != EMAIL or request.password != PASSWORD:
+        email, password = login_of(request)
+        if email.casefold() != EMAIL or password != PASSWORD:
             await message.respond(CloudDiscoverReply(devices=[]))
             return
         devices = [
@@ -115,6 +117,7 @@ class FakeFirmware:
 
 async def _gateway(bus: InMemoryBus) -> tuple[FakeScanner, FakeFirmware]:
     await bus.subscribe(GATEWAY_CLOUD_DISCOVER, FakeCloud().handle, queue="device-gateway")
+    await serve_providers(bus)
     scanner, firmware = FakeScanner(), FakeFirmware()
     await bus.subscribe(ALL_BRIDGE_SCANS, scanner.handle)
     await bus.subscribe(ALL_FIRMWARE_CHECKS, firmware.handle)
@@ -131,7 +134,7 @@ def _settings(**overrides: Any) -> dict[str, Any]:
 
 async def _cloud_mower(h: Harness, owner: Person) -> str:
     linked = await h.client.post(
-        f"{API}/linked-accounts", headers=owner.headers, json={"email": EMAIL, "password": PASSWORD}
+        f"{API}/linked-accounts", headers=owner.headers, json=link_body(EMAIL, PASSWORD)
     )
     assert linked.status_code == 201, linked.text
     created = await h.client.post(
@@ -461,6 +464,7 @@ async def test_fleet_bridge_scan_outcomes_stay_in_the_reply_and_relay_errors_are
 async def test_fleet_bridge_scan_without_any_gateway_is_unavailable() -> None:
     async with harness(**_settings()) as h:
         await h.bus.subscribe(GATEWAY_CLOUD_DISCOVER, FakeCloud().handle, queue="device-gateway")
+        await serve_providers(h.bus)
         owner = await h.owner()
         mower_id = await _cloud_mower(h, owner)
         response = await h.client.post(

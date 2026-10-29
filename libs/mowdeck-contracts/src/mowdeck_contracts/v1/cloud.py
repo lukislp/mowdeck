@@ -1,14 +1,17 @@
 """Linked vendor cloud accounts (ADR 0034): device discovery, Fleet to Device-Gateway.
 
-Fleet stores the linked Mammotion accounts of a MowDeck account but never talks to the vendor
-cloud itself: the code that does is GPL-3.0 (``mowdeck-control-mammotion``) and runs only in
-the Device-Gateway. To check the credentials and list the devices of an account, Fleet sends a
+Fleet stores the linked vendor accounts of a MowDeck account but never talks to a vendor cloud
+itself: that code lives in the adapter packages (some GPL-3.0) and runs only in the
+Device-Gateway. To check the credentials and list the devices of an account, Fleet sends a
 :class:`CloudDiscoverRequest` on :data:`~mowdeck_contracts.v1.subjects.GATEWAY_CLOUD_DISCOVER`
 (core NATS request/reply, queue group ``device-gateway``: any instance answers) and gets a
-:class:`CloudDiscoverReply` with the devices or an error.
+:class:`CloudDiscoverReply` with the devices or an error. Which providers exist and which
+credentials they take is the provider's :class:`~mowdeck_contracts.v1.providers.\
+ProviderDescriptor` (ADR 0065).
 
-``password`` is a secret: excluded from ``repr``, never logged; the request travels only over
-the internal bus, like the credentials in a ``MowerRegistration``.
+``credentials`` (and the deprecated ``password``) are secrets: excluded from ``repr``, never
+logged; the request travels only over the internal bus, like the credentials in a
+``MowerRegistration``.
 """
 
 from enum import StrEnum
@@ -18,12 +21,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from mowdeck_contracts.v1._base import ContractModel
-
-
-class CloudProvider(StrEnum):
-    """Vendor clouds a linked account can belong to."""
-
-    MAMMOTION = "mammotion"
+from mowdeck_contracts.v1.providers import MAX_CREDENTIAL_LENGTH, PROVIDER_ID_PATTERN
 
 
 class DeviceType(StrEnum):
@@ -60,8 +58,8 @@ class DiscoveredDevice(ContractModel):
     model: str | None = Field(
         default=None,
         max_length=100,
-        description="Model name as far as known at login (PyMammotion's `extMod`, else the "
-        "device type), e.g. `Luba VP` or `LUBA 2 AWD 5000X`.",
+        description="Model name as far as the vendor cloud reported it at login, e.g. "
+        "`LUBA 2 AWD 5000X` or `Automower 430X NERA`.",
     )
     online: bool | None = Field(
         default=None, description="Online flag the cloud reported at login; null when unknown."
@@ -80,13 +78,43 @@ class DiscoveredDevice(ContractModel):
 class CloudDiscoverRequest(ContractModel):
     """Request on ``gateway.cloud.discover`` (internal, Fleet to Device-Gateway)."""
 
-    provider: CloudProvider = CloudProvider.MAMMOTION
+    provider: str = Field(pattern=PROVIDER_ID_PATTERN, description="The provider id.")
     account_id: UUID = Field(description="The MowDeck account that links the vendor account.")
     linked_account_id: UUID | None = Field(
         default=None, description="Set for a re-read of a stored linked account; null on create."
     )
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(repr=False, min_length=1, max_length=256)
+    credentials: dict[str, str] = Field(
+        default_factory=dict,
+        repr=False,
+        max_length=10,
+        description="Every credential field of the provider's descriptor by key (secrets "
+        "included).",
+    )
+    email: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=254,
+        description="Deprecated (ADR 0034 senders): the identity field when `credentials` is "
+        "empty.",
+    )
+    password: str | None = Field(
+        default=None,
+        repr=False,
+        min_length=1,
+        max_length=256,
+        description="Deprecated (ADR 0034 senders): the only secret field when `credentials` is "
+        "empty.",
+    )
+
+    @model_validator(mode="after")
+    def _some_credentials(self) -> Self:
+        if not self.credentials and (self.email is None or self.password is None):
+            msg = "credentials (or the deprecated email and password) are required"
+            raise ValueError(msg)
+        if any(len(v) > MAX_CREDENTIAL_LENGTH for v in self.credentials.values()):
+            msg = f"credential values are at most {MAX_CREDENTIAL_LENGTH} characters"
+            raise ValueError(msg)
+        return self
 
 
 class CloudDiscoverErrorCode(StrEnum):
@@ -97,7 +125,7 @@ class CloudDiscoverErrorCode(StrEnum):
     UNAVAILABLE = "unavailable"
     """The vendor cloud did not answer or failed (try again later)."""
     UNSUPPORTED = "unsupported"
-    """The gateway has no adapter for the provider."""
+    """The gateway has no adapter for the provider, or the provider is not enabled."""
 
 
 class CloudDiscoverError(ContractModel):

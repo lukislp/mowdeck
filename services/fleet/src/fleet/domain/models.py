@@ -6,7 +6,7 @@ that PostgreSQL expresses as (partial) unique indexes.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Final
 from uuid import UUID
 
 from mowdeck_contracts.v1 import MowPattern
@@ -87,8 +87,9 @@ class Mower:
     """The linked vendor account a ``cloud`` mower connects through (ADR 0034); its
     credentials are merged into the registration the Device-Gateway receives."""
     iot_id: str | None = None
-    """The vendor's stable device id (Mammotion IoT id) of a cloud mower: one physical mower
-    can be registered in one MowDeck account only, installation-wide (``uq_mowers_iot_id``)."""
+    """The vendor's stable device id (an IoT id or a serial number) of a cloud mower: one
+    physical mower can be registered in one MowDeck account only, installation-wide
+    (``uq_mowers_iot_id``)."""
     mow_defaults: MowDefaults | None = None
     """The mowing defaults every client starts with; None until someone saved them."""
     base_station_id: UUID | None = None
@@ -121,11 +122,17 @@ class BaseStation:
 
 @dataclass(slots=True)
 class LinkedAccount:
-    """A vendor cloud account (Mammotion) linked to a MowDeck account (ADR 0034).
+    """A vendor cloud account linked to a MowDeck account (ADR 0034, ADR 0065).
 
-    The password is stored encrypted (AES-256-GCM, ``MOWDECK_CREDENTIAL_ENCRYPTION_KEY``) and
-    never returned. ``devices`` caches the device list of the last successful discovery
-    (``DiscoveredDevice`` as JSON).
+    ``provider`` is the id of the cloud provider plugin; ``email`` holds the value of the
+    provider's identity field (an e-mail for most providers, an application key for others; the
+    column keeps its ADR 0034 name). The secret fields are stored encrypted (AES-256-GCM,
+    ``MOWDECK_CREDENTIAL_ENCRYPTION_KEY``) in ``password_encrypted`` and never returned:
+    ``secret_format`` :data:`SECRET_FORMAT_PASSWORD` is the ADR 0034 form (one password, with the
+    e-mail as the only public field), :data:`SECRET_FORMAT_FIELDS` a JSON object of every secret
+    field. ``public_credentials`` are the other fields (identity included) as entered.
+    ``devices`` caches the device list of the last successful discovery (``DiscoveredDevice``
+    as JSON).
     """
 
     id: UUID
@@ -139,11 +146,25 @@ class LinkedAccount:
     devices: list[dict[str, Any]] = field(default_factory=list)
     last_synced_at: datetime | None = None
     last_sync_error: str | None = None
+    public_credentials: dict[str, str] = field(default_factory=dict)
+    secret_format: int = 1
+
+    @property
+    def identity(self) -> str:
+        """The value of the provider's identity field."""
+        return self.email
 
     @property
     def email_key(self) -> tuple[str, str]:
         """Unique per account (``uq_linked_accounts_account_email``, ``lower(email)``)."""
         return (self.provider, self.email.lower())
+
+
+SECRET_FORMAT_PASSWORD: Final = 1
+"""``LinkedAccount.secret_format`` of ADR 0034: the sealed value is the password itself."""
+SECRET_FORMAT_FIELDS: Final = 2
+"""``LinkedAccount.secret_format`` of ADR 0065: the sealed value is a JSON object of the secret
+fields by key."""
 
 
 @dataclass(slots=True)

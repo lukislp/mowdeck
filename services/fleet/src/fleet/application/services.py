@@ -12,6 +12,7 @@ from mowdeck_contracts.v1 import (
     CameraSessionRequest,
     CloudDiscoverReply,
     CloudDiscoverRequest,
+    CloudProvidersReply,
     FirmwareCheckReply,
     FirmwareCheckRequest,
     PathPreviewGatewayRequest,
@@ -190,5 +191,9 @@ class _NoCloudDiscovery:
     """Without a bus no gateway can log in to a vendor cloud: every request fails."""
 
     async def discover(self, request: CloudDiscoverRequest) -> CloudDiscoverReply:
+        msg = "no device gateway is reachable (no event bus)"
+        raise ConnectionError(msg)
+
+    async def providers(self) -> CloudProvidersReply:
         msg = "no device gateway is reachable (no event bus)"
         raise ConnectionError(msg)

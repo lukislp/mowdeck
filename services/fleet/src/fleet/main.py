@@ -114,9 +114,7 @@ def build_app(
         previous.get_secret_value() if previous is not None else None,
     )
     if not cipher.enabled:
-        _log.warning(
-            "MOWDECK_CREDENTIAL_ENCRYPTION_KEY is not set: linked Mammotion accounts are off"
-        )
+        _log.warning("MOWDECK_CREDENTIAL_ENCRYPTION_KEY is not set: linked cloud accounts are off")
 
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus

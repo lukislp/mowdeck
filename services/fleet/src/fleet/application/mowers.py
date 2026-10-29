@@ -1,7 +1,7 @@
 """Mowers: register, list, read, change, move between groups, remove; the registry answer for
 the Device-Gateway.
 
-Cloud mowers (ADR 0034) come from a linked Mammotion account: a registration names the linked
+Cloud mowers (ADR 0034, ADR 0065) come from a linked vendor account: a registration names the linked
 account and the device; Fleet stores the device name and IoT id as options and merges the
 account's credentials into the registration the Device-Gateway receives. One physical mower
 (its IoT id) can be registered in one MowDeck account only, installation-wide."""
@@ -205,7 +205,7 @@ class MowerService:
         (422)."""
         password = merged.get("password")
         if password not in (None, "") and password != stored.get("password"):
-            msg = "link the Mammotion account instead of storing its password with the mower"
+            msg = "link the vendor account instead of storing its password with the mower"
             raise InvalidInput(
                 msg,
                 fields=[FieldProblem("connection_options/password", msg, "use_linked_account")],

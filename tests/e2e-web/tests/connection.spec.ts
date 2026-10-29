@@ -121,9 +121,7 @@ test('add-mower form: kinds from Fleet, cloud mowers from a linked account', asy
     await expect(page.locator('#linked-password')).toHaveAttribute('aria-invalid', 'true', {
       timeout: 60_000,
     });
-    await expect(
-      page.getByText('E-Mail oder Passwort wurde von Mammotion abgelehnt.'),
-    ).toBeVisible();
+    await expect(page.getByText('Der Hersteller hat diese Zugangsdaten abgelehnt.')).toBeVisible();
     await expect(page.locator('#linked-password')).toHaveValue(''); // write-only
 
     // The right one links the account and shows its devices.

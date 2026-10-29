@@ -8,6 +8,7 @@ import base64
 from typing import Any
 from uuid import uuid4
 
+from fleet_cloud import link_body, login_of, serve_providers
 from fleet_support import API, Harness, Person, harness
 from mowdeck_contracts.v1 import (
     CloudDiscoverReply,
@@ -51,7 +52,7 @@ class FakeCloud:
 
     async def handle(self, message: BusMessage) -> None:
         request = message.model(CloudDiscoverRequest)
-        devices = DEVICES if request.password == PASSWORD else []
+        devices = DEVICES if login_of(request)[1] == PASSWORD else []
         await message.respond(CloudDiscoverReply(devices=devices))
 
 
@@ -72,6 +73,7 @@ class FakeFirmware:
 
 async def _gateway(bus: InMemoryBus) -> FakeFirmware:
     await bus.subscribe(GATEWAY_CLOUD_DISCOVER, FakeCloud().handle, queue="device-gateway")
+    await serve_providers(bus)
     firmware = FakeFirmware()
     await bus.subscribe(ALL_FIRMWARE_CHECKS, firmware.handle)
     return firmware
@@ -83,7 +85,7 @@ def _settings() -> dict[str, Any]:
 
 async def _linked(h: Harness, who: Person, email: str = EMAIL) -> str:
     response = await h.client.post(
-        f"{API}/linked-accounts", headers=who.headers, json={"email": email, "password": PASSWORD}
+        f"{API}/linked-accounts", headers=who.headers, json=link_body(email, PASSWORD)
     )
     assert response.status_code == 201, response.text
     linked_id: str = response.json()["id"]

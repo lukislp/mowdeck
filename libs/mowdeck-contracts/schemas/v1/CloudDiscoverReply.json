@@ -84,7 +84,7 @@
             }
           ],
           "default": null,
-          "description": "Model name as far as known at login (PyMammotion's `extMod`, else the device type), e.g. `Luba VP` or `LUBA 2 AWD 5000X`.",
+          "description": "Model name as far as the vendor cloud reported it at login, e.g. `LUBA 2 AWD 5000X` or `Automower 430X NERA`.",
           "title": "Model"
         },
         "online": {

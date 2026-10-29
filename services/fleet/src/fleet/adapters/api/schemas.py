@@ -6,17 +6,19 @@ from typing import Any, Literal
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    PROVIDER_ID_PATTERN,
     CameraTransport,
     ConnectionKind,
     DeviceType,
     DriveCalibration,
     MowPattern,
+    ProviderDescriptor,
     ProxyInfo,
 )
 from pydantic import BaseModel, ConfigDict, Field
 
 from fleet.application.base_stations import BaseStationView
-from fleet.application.linked_accounts import DeviceView, LinkedAccountView
+from fleet.application.linked_accounts import CredentialVault, DeviceView, LinkedAccountView
 from fleet.application.links import ScanInput, drive_calibration_of, proxy_info_of
 from fleet.application.mowers import MowerView
 from fleet.domain import models
@@ -164,7 +166,7 @@ Options: Any = Field(
 class MowerIn(In):
     """``POST /mowers``: without ``site_id`` the mower goes to the account's default site.
 
-    A ``cloud`` mower comes from a linked Mammotion account: ``linked_account_id`` and the
+    A ``cloud`` mower comes from a linked vendor account: ``linked_account_id`` and the
     ``device_name`` of its device list (``connection_options`` then hold only adapter extras
     such as ``refresh_seconds``); ``name`` defaults to the device name and ``model`` to the
     listed model."""
@@ -532,27 +534,64 @@ class ConnectionKindList(BaseModel):
 
 
 class LinkedAccountIn(In):
-    """``POST /linked-accounts``: the Mammotion account to link (the only provider so far).
-    The password is write-only."""
+    """``POST /linked-accounts``: the vendor account to link, with the credential fields of its
+    provider (``GET /linked-accounts/providers``). Secret fields are write-only."""
 
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=1, max_length=256, json_schema_extra={"writeOnly": True})
-
-
-class LinkedAccountSyncIn(In):
-    """``POST /linked-accounts/{id}/sync``: optionally a new password (write-only)."""
-
-    password: str | None = Field(
-        default=None, min_length=1, max_length=256, json_schema_extra={"writeOnly": True}
+    provider: str = Field(pattern=PROVIDER_ID_PATTERN, description="The provider id.")
+    credentials: dict[str, str] = Field(
+        max_length=10,
+        description="Every field of the provider's descriptor by key.",
+        json_schema_extra={"writeOnly": True},
     )
 
 
+class LinkedAccountSyncIn(In):
+    """``POST /linked-accounts/{id}/sync``: optionally new secret fields (write-only), e.g. after
+    the vendor revoked a password or a key; the stored values stay for the missing ones."""
+
+    credentials: dict[str, str] | None = Field(
+        default=None,
+        max_length=10,
+        description="New values of secret fields of the provider by key.",
+        json_schema_extra={"writeOnly": True},
+    )
+    password: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=256,
+        description="Deprecated: the same as `credentials: {password: ...}`.",
+        json_schema_extra={"writeOnly": True},
+    )
+
+    def secrets(self) -> dict[str, str] | None:
+        """``credentials`` with the deprecated ``password`` folded in."""
+        merged = dict(self.credentials or {})
+        if self.password is not None:
+            merged.setdefault("password", self.password)
+        return merged or None
+
+
+class ProviderList(BaseModel):
+    """``GET /linked-accounts/providers``: the cloud providers enabled in the Device-Gateway,
+    each with its credential fields and guidance (the web app renders the link form from it)."""
+
+    items: list[ProviderDescriptor]
+
+
 class LinkedAccountOut(BaseModel):
-    """A linked account; the password is never returned."""
+    """A linked account; secret fields are never returned."""
 
     id: UUID
     provider: str
-    email: str
+    identity: str = Field(
+        description="The value of the provider's identity field (an e-mail or an application "
+        "key): the account's title."
+    )
+    public_credentials: dict[str, str] = Field(
+        default_factory=dict,
+        description="The non-secret credential fields as entered (identity included).",
+    )
+    email: str = Field(description="Deprecated: the same as `identity`.")
     created_at: datetime
     updated_at: datetime
     last_synced_at: datetime | None = Field(
@@ -569,6 +608,8 @@ class LinkedAccountOut(BaseModel):
         return cls(
             id=item.id,
             provider=item.provider,
+            identity=item.email,
+            public_credentials=CredentialVault.public_of(item),
             email=item.email,
             created_at=item.created_at,
             updated_at=item.updated_at,

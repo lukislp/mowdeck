@@ -21,6 +21,7 @@ from mowdeck_contracts.v1 import (
     CameraSessionRequest,
     CloudDiscoverReply,
     CloudDiscoverRequest,
+    CloudProvidersReply,
     CommandEnvelope,
     FirmwareCheckReply,
     FirmwareCheckRequest,
@@ -269,10 +270,15 @@ class FirmwareCheckGateway(Protocol):
 
 
 class CloudDiscovery(Protocol):
-    """Asks the Device-Gateway for the devices of a vendor cloud account (ADR 0034)."""
+    """Asks the Device-Gateway for the devices of a vendor cloud account (ADR 0034) and for
+    the enabled cloud providers with their credential fields (ADR 0065)."""
 
     async def discover(self, request: CloudDiscoverRequest) -> CloudDiscoverReply:
         """The gateway's reply; raises when no gateway answers in time."""
+        ...
+
+    async def providers(self) -> CloudProvidersReply:
+        """The enabled providers; raises when no gateway answers in time."""
         ...
 
 

@@ -99,6 +99,10 @@ GATEWAY_CLOUD_DISCOVER = "gateway.cloud.discover"
 ``device-gateway``): ``CloudDiscoverRequest`` in, ``CloudDiscoverReply`` out. Logs in to a
 vendor cloud account (or reuses the open session) and lists its devices (ADR 0034).
 Not below ``device.`` for the same reason as the camera request."""
+GATEWAY_CLOUD_PROVIDERS = "gateway.cloud.providers"
+"""Core NATS request subject (internal, Fleet to Device-Gateway, queue group
+``device-gateway``): ``CloudProvidersRequest`` in, ``CloudProvidersReply`` out. The installed
+and enabled cloud providers with their credential fields (ADR 0065)."""
 
 
 RELAY_CAMERA_ATTACH = "relay.camera.attach"
