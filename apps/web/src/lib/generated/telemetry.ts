@@ -1582,6 +1582,8 @@ export type components = {
              * @description Credit line to show while the layer is visible.
              */
             attribution: string;
+            /** @description The box the source has data in (null: the whole world). Tiles are served only where it overlaps the tracked positions plus `margin_m`. */
+            coverage?: components["schemas"]["AerialBounds"] | null;
             /**
              * Covers Last
              * @description Whether the source has data at the last known position (false: show another layer; e.g. an aerial photo of one state only).
@@ -1593,6 +1595,12 @@ export type components = {
              * @enum {string}
              */
             id: "map" | "aerial";
+            /**
+             * Margin M
+             * @description Metres around the tracked positions where tiles are served; the map keeps its view inside that box (0: no limit known).
+             * @default 0
+             */
+            margin_m: number;
             /**
              * Max Zoom
              * @description Highest zoom with real detail; deeper zooms scale it.

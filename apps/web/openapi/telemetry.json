@@ -1740,6 +1740,17 @@
             "title": "Attribution",
             "type": "string"
           },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AerialBounds"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The box the source has data in (null: the whole world). Tiles are served only where it overlaps the tracked positions plus `margin_m`."
+          },
           "covers_last": {
             "default": true,
             "description": "Whether the source has data at the last known position (false: show another layer; e.g. an aerial photo of one state only).",
@@ -1753,6 +1764,12 @@
             ],
             "title": "Id",
             "type": "string"
+          },
+          "margin_m": {
+            "default": 0,
+            "description": "Metres around the tracked positions where tiles are served; the map keeps its view inside that box (0: no limit known).",
+            "title": "Margin M",
+            "type": "number"
           },
           "max_zoom": {
             "description": "Highest zoom with real detail; deeper zooms scale it.",
