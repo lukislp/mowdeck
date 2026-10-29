@@ -7,7 +7,7 @@ MowDeck can show your mower on the iPhone home screen and lock screen and, while
 1. Open the MowDeck app and sign in.
 2. Go to **Einstellungen**, panel **This app** (the app panel), and choose **Turn on widgets**.
 
-The app creates an access key for this iPhone that can only see and control mowers. It is valid for 90 days and the app renews it by itself. You find it in **Einstellungen -> API-Tokens** as "iOS widgets: ..." and can revoke it there at any time. **Turn off widgets**, or logging out, removes it from the phone and revokes it (if the server cannot be reached at that moment, the app revokes it after your next sign-in). Turning widgets on again replaces the key of this iPhone instead of adding a second one. You need the right to see all mowers of the account (every default role has it).
+The app creates an access key for this iPhone that can only see and control mowers. It is valid for 90 days and the app renews it by itself. You find it in **Einstellungen -> API-Tokens** as "iOS widgets: ..." and can revoke it there at any time. **Turn off widgets** removes it from the phone and revokes it for good. Logging out ends it too and the widgets show no data ("Signed out"), but they stay switched on: after your next sign-in the app sets them up again by itself. A key also stops working as soon as the login it was created in ends, for instance when you end the app's session in the security center. Turning widgets on again replaces the key of this iPhone instead of adding a second one, and another person signing in on the same iPhone gets their own key, never yours. You need the right to see all mowers of the account (every default role has it).
 
 ## Add a widget
 

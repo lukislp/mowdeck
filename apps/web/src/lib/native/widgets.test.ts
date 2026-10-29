@@ -4,6 +4,7 @@ import type { NativePlugin } from './capacitor';
 import {
   CREDENTIAL_KEY,
   REVOKE_KEY,
+  WANTED_KEY,
   WidgetsRegistration,
   wholeSeconds,
   type WidgetsApi,
@@ -17,6 +18,12 @@ function fakeShell(status: Record<string, unknown> = { supported: true, configur
     async call(method, options) {
       calls.push({ method, options });
       if (method === 'getWidgetStatus') return status as never;
+      // like the shell: clearing removes the Keychain item, configuring stores one
+      if (method === 'clearWidgets') status = { ...status, configured: false, credentialId: null };
+      if (method === 'configureWidgets') {
+        const id = (options as { credentialId?: string } | undefined)?.credentialId ?? null;
+        status = { ...status, configured: true, credentialId: id };
+      }
       if (method === 'getInstallationId') return { id: 'inst-1' } as never;
       if (method === 'getPendingActivityRegistrations') return { items: pending } as never;
       return undefined as never;
@@ -229,6 +236,8 @@ function remembering(
   shell: ReturnType<typeof fakeShell>,
   api: WidgetsApi,
   storage: ReturnType<typeof memoryStorage>,
+  user: string | null = 'lukas@home',
+  session: string | null = null,
 ) {
   return new WidgetsRegistration({
     shell: shell.plugin,
@@ -236,22 +245,83 @@ function remembering(
     serverUrl: () => 'https://mow.example',
     deviceName: 'MowDeck iOS',
     storage,
+    user: () => user,
+    session: () => session,
     retryMs: 5,
   });
 }
 
-describe('WidgetsRegistration after a sign-out with an ended session (ADR 0065)', () => {
-  it('remembers a revocation the server refused and retries it after the next sign-in', async () => {
+const held = (storage: ReturnType<typeof memoryStorage>) =>
+  JSON.parse(storage.getItem(CREDENTIAL_KEY) ?? 'null') as { id: string; user: string } | null;
+
+describe('WidgetsRegistration across sign-out and sign-in', () => {
+  it('sign-out ends the credential and clears the widgets, but keeps the wish', async () => {
+    const storage = memoryStorage({ [WANTED_KEY]: '1' });
+    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-1' });
+    const api = fakeApi();
+    const widgets = remembering(shell, api, storage);
+    await widgets.signOut();
+    expect(api.unregisterDevice).toHaveBeenCalledWith('inst-1');
+    expect(api.revokeCredential).toHaveBeenCalledWith('cred-1');
+    expect(shell.calls.find((c) => c.method === 'clearWidgets')?.options).toEqual({
+      signedOut: true,
+    });
+    expect(storage.getItem(WANTED_KEY)).toBe('1');
+    expect(storage.getItem(CREDENTIAL_KEY)).toBeNull();
+    expect(widgets.state).not.toBe('off');
+  });
+
+  it('the next sign-in sets the widgets up again without the switch', async () => {
+    const storage = memoryStorage({ [WANTED_KEY]: '1' });
+    const shell = fakeShell({ supported: true, configured: false });
+    const api = fakeApi();
+    const widgets = remembering(shell, api, storage);
+    await widgets.maintain();
+    expect(api.createCredential).toHaveBeenCalledWith('MowDeck iOS', null);
+    expect(shell.calls.some((c) => c.method === 'configureWidgets')).toBe(true);
+    expect(widgets.state).toBe('on');
+    expect(held(storage)).toMatchObject({ id: 'cred-1', user: 'lukas@home' });
+  });
+
+  it('turning widgets off with the switch clears the wish: no set-up after sign-in', async () => {
+    const storage = memoryStorage({ [WANTED_KEY]: '1' });
+    const api = fakeApi();
+    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-1' });
+    await remembering(shell, api, storage).disable();
+    expect(shell.calls.find((c) => c.method === 'clearWidgets')?.options).toEqual({
+      signedOut: false,
+    });
+    expect(storage.getItem(WANTED_KEY)).toBeNull();
+    const later = remembering(fakeShell({ supported: true, configured: false }), api, storage);
+    await later.maintain();
+    expect(api.createCredential).not.toHaveBeenCalled();
+    expect(later.state).toBe('off');
+  });
+
+  it('enable remembers the wish and a configured shell backfills it', async () => {
     const storage = memoryStorage();
+    await remembering(fakeShell(), fakeApi(), storage).enable();
+    expect(storage.getItem(WANTED_KEY)).toBe('1');
+    const other = memoryStorage();
+    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-7' });
+    await remembering(shell, fakeApi(), other).maintain();
+    expect(other.getItem(WANTED_KEY)).toBe('1');
+    expect(held(other)).toMatchObject({ id: 'cred-7', user: 'lukas@home' });
+  });
+
+  it('remembers a revocation the server refused and retries it after the next sign-in', async () => {
+    const storage = memoryStorage({ [WANTED_KEY]: '1' });
     const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-old' });
     const api = fakeApi({
       revokeCredential: vi.fn(async () => {
         throw problem(401);
       }),
     });
-    await remembering(shell, api, storage).disable();
+    await remembering(shell, api, storage).signOut();
     expect(shell.calls.some((c) => c.method === 'clearWidgets')).toBe(true);
-    expect(JSON.parse(storage.getItem(REVOKE_KEY) ?? '[]')).toEqual(['cred-old']);
+    expect(JSON.parse(storage.getItem(REVOKE_KEY) ?? '[]')).toMatchObject([
+      { id: 'cred-old', user: 'lukas@home' },
+    ]);
 
     const signedInAgain = fakeApi();
     await remembering(fakeShell(), signedInAgain, storage).maintain();
@@ -271,12 +341,14 @@ describe('WidgetsRegistration after a sign-out with an ended session (ADR 0065)'
   });
 
   it('turning widgets on again replaces the credential the shell lost, never adds a second', async () => {
-    const storage = memoryStorage({ [CREDENTIAL_KEY]: 'cred-old' });
+    const storage = memoryStorage({
+      [CREDENTIAL_KEY]: JSON.stringify({ id: 'cred-old', user: 'lukas@home' }),
+    });
     const shell = fakeShell({ supported: true, configured: false });
     const api = fakeApi();
     expect(await remembering(shell, api, storage).enable()).toBe('on');
     expect(api.createCredential).toHaveBeenCalledWith('MowDeck iOS', 'cred-old');
-    expect(storage.getItem(CREDENTIAL_KEY)).toBe('cred-1');
+    expect(held(storage)?.id).toBe('cred-1');
   });
 
   it('creates a fresh credential when the one to replace is already gone', async () => {
@@ -290,34 +362,68 @@ describe('WidgetsRegistration after a sign-out with an ended session (ADR 0065)'
     expect(create).toHaveBeenNthCalledWith(1, 'MowDeck iOS', 'purged');
     expect(create).toHaveBeenNthCalledWith(2, 'MowDeck iOS', null);
   });
+});
 
-  it('disable forgets the remembered credential once it is revoked', async () => {
-    const storage = memoryStorage({ [CREDENTIAL_KEY]: 'cred-9' });
+describe('WidgetsRegistration with another user on the same device', () => {
+  it('never uses or replaces the credential another user left in the shell', async () => {
+    const storage = memoryStorage({
+      [WANTED_KEY]: '1',
+      [CREDENTIAL_KEY]: JSON.stringify({ id: 'cred-anna', user: 'anna@home' }),
+    });
+    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-anna' });
     const api = fakeApi();
-    await remembering(fakeShell({ supported: true, configured: false }), api, storage).disable();
-    expect(api.revokeCredential).toHaveBeenCalledWith('cred-9');
-    expect(storage.getItem(CREDENTIAL_KEY)).toBeNull();
+    await remembering(shell, api, storage, 'ben@home').maintain();
+    expect(shell.calls.find((c) => c.method === 'clearWidgets')?.options).toEqual({
+      signedOut: true,
+    });
+    expect(api.createCredential).toHaveBeenCalledWith('MowDeck iOS', null);
+    expect(api.revokeCredential).not.toHaveBeenCalled(); // Anna's to revoke, not Ben's
+    expect(JSON.parse(storage.getItem(REVOKE_KEY) ?? '[]')).toMatchObject([
+      { id: 'cred-anna', user: 'anna@home' },
+    ]);
+    expect(held(storage)).toMatchObject({ id: 'cred-1', user: 'ben@home' });
+  });
+
+  it('retries a revocation only for its own user', async () => {
+    const storage = memoryStorage({
+      [REVOKE_KEY]: JSON.stringify([{ id: 'cred-anna', user: 'anna@home' }]),
+    });
+    const api = fakeApi();
+    await remembering(fakeShell(), api, storage, 'ben@home').maintain();
+    expect(api.revokeCredential).not.toHaveBeenCalled();
+    await remembering(fakeShell(), api, storage, 'anna@home').maintain();
+    expect(api.revokeCredential).toHaveBeenCalledWith('cred-anna');
     expect(storage.getItem(REVOKE_KEY)).toBeNull();
   });
 });
 
-describe('WidgetsRegistration never shows "off" while this device holds a credential', () => {
-  it('maintain remembers the credential of a configured shell', async () => {
-    const storage = memoryStorage();
-    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-7' });
-    await remembering(shell, fakeApi(), storage).maintain();
-    expect(storage.getItem(CREDENTIAL_KEY)).toBe('cred-7');
+describe('WidgetsRegistration never shows "off" while widgets are wanted', () => {
+  it('sets up a credential the shell lost, replacing it on the server', async () => {
+    const storage = memoryStorage({
+      [CREDENTIAL_KEY]: JSON.stringify({ id: 'cred-7', user: 'lukas@home' }),
+    });
+    const api = fakeApi();
+    const widgets = remembering(fakeShell({ supported: true, configured: false }), api, storage);
+    await widgets.maintain();
+    expect(api.createCredential).toHaveBeenCalledWith('MowDeck iOS', 'cred-7');
+    expect(widgets.state).toBe('on');
   });
 
-  it('is error, not off, when the shell lost a credential this device still holds', async () => {
-    const storage = memoryStorage({ [CREDENTIAL_KEY]: 'cred-7' });
+  it('is error when the set-up after sign-in fails, and tries again', async () => {
+    const storage = memoryStorage({ [WANTED_KEY]: '1' });
+    const create = vi
+      .fn<WidgetsApi['createCredential']>()
+      .mockRejectedValueOnce(problem(503))
+      .mockResolvedValue({ id: 'cred-3', token: 'mdk_y', expires_at: '2027-01-25T12:00:00Z' });
     const widgets = remembering(
       fakeShell({ supported: true, configured: false }),
-      fakeApi(),
+      fakeApi({ createCredential: create }),
       storage,
     );
     await widgets.maintain();
     expect(widgets.state).toBe('error');
+    await vi.waitFor(() => expect(widgets.state).toBe('on'));
+    widgets.stop();
   });
 
   it('is error when the shell cannot report its state, and asks again', async () => {
@@ -333,5 +439,22 @@ describe('WidgetsRegistration never shows "off" while this device holds a creden
     expect(widgets.state).toBe('error');
     await vi.waitFor(() => expect(widgets.state).toBe('on'));
     widgets.stop();
+  });
+});
+
+describe('WidgetsRegistration and the login session', () => {
+  it('replaces a credential of an earlier login session, keeps one of this session', async () => {
+    const storage = memoryStorage({
+      [CREDENTIAL_KEY]: JSON.stringify({ id: 'cred-7', user: 'lukas@home', session: 's1' }),
+    });
+    const shell = fakeShell({ supported: true, configured: true, credentialId: 'cred-7' });
+    const same = fakeApi();
+    await remembering(shell, same, storage, 'lukas@home', 's1').maintain();
+    expect(same.createCredential).not.toHaveBeenCalled();
+
+    const later = fakeApi();
+    await remembering(shell, later, storage, 'lukas@home', 's2').maintain();
+    expect(later.createCredential).toHaveBeenCalledWith('MowDeck iOS', 'cred-7');
+    expect(held(storage)).toEqual({ id: 'cred-1', user: 'lukas@home', session: 's2' });
   });
 });

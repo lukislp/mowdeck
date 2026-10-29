@@ -864,6 +864,38 @@
           }
         }
       }
+    },
+    "Signed out. Open MowDeck to sign in.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed out. Open MowDeck to sign in."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgemeldet. Öffne MowDeck, um dich anzumelden."
+          }
+        }
+      }
+    },
+    "Signed out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed out"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgemeldet"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

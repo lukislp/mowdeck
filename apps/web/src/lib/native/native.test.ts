@@ -332,7 +332,10 @@ describe('ApnsRegistration', () => {
 
 // --- the shell ------------------------------------------------------------------------------
 
-function shellSetup(platform: 'ios' | 'android', options: { ntfy?: boolean } = {}) {
+function shellSetup(
+  platform: 'ios' | 'android',
+  options: { ntfy?: boolean; user?: () => string | null } = {},
+) {
   const plugins = ['App', 'LocalNotifications', 'SplashScreen', 'Badge', 'MowDeckShell'];
   if (platform === 'ios') plugins.push('PushNotifications');
   const cap = new FakeCapacitor(platform, plugins);
@@ -355,6 +358,7 @@ function shellSetup(platform: 'ios' | 'android', options: { ntfy?: boolean } = {
     storage: memoryStorage(),
     apns: api,
     ntfyConfigured: vi.fn().mockResolvedValue(options.ntfy ?? false),
+    user: options.user,
   });
   return { cap, api, shell };
 }
@@ -487,5 +491,18 @@ describe('NativeShell', () => {
     expect(cap.called('MowDeckShell', 'resetServerUrl')).toHaveLength(1);
     await shell.refreshNtfy();
     await shell.enableApns();
+  });
+});
+
+describe('NativeShell sign-in per user', () => {
+  it('runs the sign-in steps once per user, and again for another user', async () => {
+    let user = 'lukas@home';
+    const { cap, shell } = shellSetup('ios', { user: () => user });
+    await shell.signedIn();
+    await shell.signedIn();
+    expect(cap.called('PushNotifications', 'register')).toHaveLength(1);
+    user = 'anna@home'; // the session ended without a sign-out, another user signed in
+    await shell.signedIn();
+    expect(cap.called('PushNotifications', 'register')).toHaveLength(2);
   });
 });

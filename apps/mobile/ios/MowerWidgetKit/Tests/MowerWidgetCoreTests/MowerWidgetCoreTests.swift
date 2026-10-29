@@ -59,6 +59,34 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(stored.credentialId, "c")
     }
 
+    /// A sign-out clears every stored state but leaves the signed-out mark for the widgets.
+    func testTheSignedOutMarkOutlivesTheClearedStates() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "test.signed-out.\(UUID())"))
+        let state = SharedState(defaults: defaults)
+        state.mowers = [MowerRef(id: "m", name: "Luba")]
+        state.clear()
+        state.signedOut = true
+        XCTAssertEqual(state.mowers, [])
+        XCTAssertTrue(state.signedOut)
+        state.signedOut = false
+        XCTAssertFalse(state.signedOut)
+    }
+
+    /// The watch decodes a state from an older iPhone build, which sends no signed-out mark.
+    func testAWatchStateWithoutTheSignedOutMarkDecodes() throws {
+        let state = WatchState.notConfigured(at: Date(timeIntervalSince1970: 0), signedOut: true)
+        XCTAssertEqual(state.signedOut, true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoder.encode(state)) as? [String: Any])
+        json.removeValue(forKey: "signedOut")
+        let older = try JSONDecoder.mowdeck.decode(
+            WatchState.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(older.signedOut)
+        XCTAssertFalse(older.configured)
+    }
+
     func testDecodesTheSchedulerOverviewAndToleratesAnUnknownVerdict() throws {
         let json = """
             {"mower_id":"m","at":"2026-10-27T12:00:00Z",

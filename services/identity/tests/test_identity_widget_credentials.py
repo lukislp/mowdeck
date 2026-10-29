@@ -171,3 +171,55 @@ async def test_a_device_name_is_required() -> None:
         missing = await h.client.post(CREDENTIALS, headers=lukas.headers, json={})
     assert blank.status_code == 422
     assert missing.status_code == 422
+
+
+async def test_the_credential_ends_with_the_login_session_that_created_it() -> None:
+    """A sign-out in the app leaves no usable widget credential, even when the app could not
+    revoke it because the security center had ended its session first (ADR 0059, 0065)."""
+    async with harness() as h:
+        await h.register("lukas")
+        app = await h.login("lukas")
+        browser = await h.login("lukas")
+        created = (
+            await h.client.post(
+                CREDENTIALS, headers=bearer(app["access_token"]), json={"device_name": "iPhone"}
+            )
+        ).json()
+        browser_out = await h.client.post(
+            f"{API}/session/logout", json={"refresh_token": browser["refresh_token"]}
+        )
+        still = await h.client.post(f"{API}/token", json={"token": created["token"]})
+        app_out = await h.client.post(
+            f"{API}/session/logout", json={"refresh_token": app["refresh_token"]}
+        )
+        after = await h.client.post(f"{API}/token", json={"token": created["token"]})
+    assert browser_out.status_code == 204
+    assert still.status_code == 200  # another session ending does not touch it
+    assert app_out.status_code == 204
+    assert after.status_code == 401
+
+
+async def test_a_rotated_credential_belongs_to_the_session_that_rotated_it() -> None:
+    async with harness() as h:
+        await h.register("lukas")
+        first_login = await h.login("lukas")
+        first = (
+            await h.client.post(
+                CREDENTIALS,
+                headers=bearer(first_login["access_token"]),
+                json={"device_name": "iPhone"},
+            )
+        ).json()
+        await h.client.post(
+            f"{API}/session/logout", json={"refresh_token": first_login["refresh_token"]}
+        )
+        second_login = await h.login("lukas")
+        second = (
+            await h.client.post(
+                CREDENTIALS,
+                headers=bearer(second_login["access_token"]),
+                json={"device_name": "iPhone", "replaces": first["id"]},
+            )
+        ).json()
+        works = await h.client.post(f"{API}/token", json={"token": second["token"]})
+    assert works.status_code == 200
