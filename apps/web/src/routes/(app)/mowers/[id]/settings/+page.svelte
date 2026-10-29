@@ -321,7 +321,8 @@
     kind = next;
     const found = kinds.find((k) => k.kind === next);
     const options = mower && next === mower.connection_kind ? mower.connection_options : null;
-    connection = found ? initialState(found, options) : EMPTY;
+    // A cloud mower's provider options belong to the state too (ADR 0066).
+    connection = found ? initialState(withProviderOptions(found, options), options) : EMPTY;
     tried = false;
     serverFound = {};
   }
