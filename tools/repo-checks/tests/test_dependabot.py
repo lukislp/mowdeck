@@ -163,7 +163,9 @@ def test_labeler_runs_no_pr_code(repo_root: Path) -> None:
         # The checkout stays the base branch: no ref/repository of the PR.
         assert "with" not in step or not {"ref", "repository"} & set(step["with"]), step
     run = job["steps"][-1]["run"]
-    assert "git show FETCH_HEAD:uv.lock" in run
+    # The PR's lock file comes through the API as data; no git object of the PR is fetched.
+    assert "contents/uv.lock?ref=$HEAD_SHA" in run
+    assert "git fetch" not in run
     assert "vendor_lib_guard.py changes" in run
 
 

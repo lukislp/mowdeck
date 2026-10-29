@@ -9,7 +9,8 @@ name: Vendor lib label
 #
 # pull_request_target, because a Dependabot PR's pull_request token is read-only. Safe: the
 # checkout is the base branch and so is the script that runs; of the PR only uv.lock is read,
-# as data (git show), and nothing of the PR is executed.
+# as data through the contents API, and nothing of the PR is fetched into the workspace or
+# executed.
 on:
   pull_request_target:
     types: [opened, reopened]
@@ -38,11 +39,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
-          # The PR head's lock file (the merge ref may not exist yet right after opening, or
-          # at all with conflicts), compared with the base branch checked out here.
-          git fetch --no-tags --depth=1 origin "refs/pull/$PR/head"
-          git show FETCH_HEAD:uv.lock > "$RUNNER_TEMP/head.lock"
+          # The PR head's lock file through the API, as data (no git object of the PR ever
+          # reaches the workspace), compared with the base branch checked out here.
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$HEAD_REPO/contents/uv.lock?ref=$HEAD_SHA" > "$RUNNER_TEMP/head.lock"
           updates=$(python3 tools/repo-checks/scripts/vendor_lib_guard.py changes \
             --base uv.lock --head "$RUNNER_TEMP/head.lock")
           if [ -z "$updates" ]; then
