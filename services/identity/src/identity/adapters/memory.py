@@ -20,6 +20,7 @@ from identity.domain.models import (
     AuditEntry,
     CatalogueEntry,
     ExternalIdentity,
+    KnownDevice,
     LoginAttempt,
     Membership,
     OAuthState,
@@ -155,6 +156,7 @@ class MemoryTx:
     external_identities: MemoryTable[ExternalIdentity]
     oauth_states: MemoryTable[OAuthState]
     onboarding: MemoryTable[OnboardingProgress]
+    known_devices: MemoryTable[KnownDevice]
 
 
 class MemoryStore:
@@ -185,6 +187,7 @@ class MemoryStore:
             ),
             oauth_states=MemoryTable("id", [("state_hash",)]),
             onboarding=MemoryTable("user_id"),
+            known_devices=MemoryTable("id", [("user_id", "token_hash")]),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

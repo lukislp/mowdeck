@@ -1,17 +1,21 @@
 """Identity events, the ``implied_by`` permission field and the ``sid`` of a principal."""
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 from mowdeck_contracts.v1 import (
     IDENTITY_EVENT_TYPES,
     IDENTITY_GRANTS_CHANGED,
+    IDENTITY_SESSION_NEW_DEVICE,
     AccountCreated,
     AccountKind,
     ApiTokenRevoked,
     EventEnvelope,
     GrantsChanged,
     ModuleDescriptor,
+    NewDeviceLogin,
+    NotificationKind,
     PermissionDef,
     Principal,
     PrincipalKind,
@@ -68,3 +72,30 @@ def test_principal_session_id_is_optional() -> None:
     principal = Principal(subject=uuid4(), kind=PrincipalKind.USER, session_id=sid)
     assert principal.session_id == sid
     assert Principal(subject=uuid4(), kind=PrincipalKind.API_TOKEN).session_id is None
+
+
+def test_new_device_login_round_trip() -> None:
+    """ADR 0065: the new-device event carries the session to end and no full address."""
+    payload = NewDeviceLogin(
+        user_id=uuid4(),
+        account_id=uuid4(),
+        session_id=uuid4(),
+        device="Firefox on Windows",
+        client="browser",
+        ip_prefix="203.0.113.x",
+        network="public",
+        method="password",
+        at=datetime(2026, 10, 29, 9, 0, tzinfo=UTC),
+    )
+    event = EventEnvelope[NewDeviceLogin](
+        type=IDENTITY_SESSION_NEW_DEVICE, producer="identity", payload=payload
+    )
+    decoded = EventEnvelope[NewDeviceLogin].model_validate_json(event.model_dump_json())
+    assert decoded.payload == payload
+    assert (
+        event_subject_for_type(IDENTITY_SESSION_NEW_DEVICE) == "event.identity.session.new_device"
+    )
+    assert IDENTITY_SESSION_NEW_DEVICE in IDENTITY_EVENT_TYPES
+    assert NotificationKind.SECURITY_NEW_LOGIN.value == "security_new_login"
+    with pytest.raises(ValidationError):
+        NewDeviceLogin.model_validate({**payload.model_dump(), "client": "toaster"})
