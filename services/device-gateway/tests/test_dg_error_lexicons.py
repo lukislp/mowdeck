@@ -1,4 +1,4 @@
-"""Error lexicon lookups over the bus (ADR 0065): the gateway answers from the lexicons the
+"""Error lexicon lookups over the bus (ADR 0067): the gateway answers from the lexicons the
 installed adapter packages register (simulator and Mammotion in this image)."""
 
 from mowdeck_contracts.v1 import (

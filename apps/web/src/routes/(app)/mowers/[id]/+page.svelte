@@ -1033,7 +1033,7 @@
     const text = `${ms.error_code} ${ms.error_message ?? ''}`.trim();
     return ms.error_category ? `${errorCategoryLabel(ms.error_category)} · ${text}` : text;
   });
-  /** The error in plain words from the vendor's lexicon (ADR 0065); until it arrives, or when
+  /** The error in plain words from the vendor's lexicon (ADR 0067); until it arrives, or when
    * Telemetry cannot answer, the notice above stands in. Asked again only for a new code. */
   let errorExplained = $state<ErrorExplanation | null>(null);
   const errorKey = $derived(explainKey(id, ms?.error_code, locale));

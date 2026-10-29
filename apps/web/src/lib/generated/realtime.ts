@@ -219,7 +219,7 @@ export type DriveSpeedMps = (number | null)
 /**
  * What kind of fault ``MowerState.error_code`` names, manufacturer neutral.
  * 
- * The same words classify the entries of an error lexicon (ADR 0065), so rules such as the
+ * The same words classify the entries of an error lexicon (ADR 0067), so rules such as the
  * theft alarm can match a category instead of vendor codes.
  * 
  * This interface was referenced by `RealtimeProtocol`'s JSON-Schema

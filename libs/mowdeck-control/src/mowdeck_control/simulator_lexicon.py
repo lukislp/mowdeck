@@ -1,4 +1,4 @@
-"""The error lexicon of the simulated mower (vendor ``simulated``, ADR 0065).
+"""The error lexicon of the simulated mower (vendor ``simulated``, ADR 0067).
 
 It explains the two codes :class:`~mowdeck_control.simulator.SimulatedMower` reports by itself
 (``lifted`` and ``stuck``) and is registered like every vendor lexicon, through the entry point

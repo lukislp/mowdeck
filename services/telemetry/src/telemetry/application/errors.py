@@ -1,4 +1,4 @@
-"""Vendor error codes in plain words (ADR 0065).
+"""Vendor error codes in plain words (ADR 0067).
 
 Telemetry holds no code table: the lexicons ship with the adapter packages, which only the
 Device-Gateway installs, so every lookup asks the gateway (:class:`ErrorLexiconGateway`, core

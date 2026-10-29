@@ -1,4 +1,4 @@
-"""Error lexicons: vendor error codes in plain words (ADR 0065).
+"""Error lexicons: vendor error codes in plain words (ADR 0067).
 
 A mower reports a vendor code (``MowerState.error_code``, e.g. Mammotion's ``1201``). An *error
 lexicon* explains the codes of one vendor: title, description, likely cause, the steps that fix

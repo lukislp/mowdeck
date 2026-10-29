@@ -1,4 +1,4 @@
-"""Registry of error lexicons, one per vendor (ADR 0065).
+"""Registry of error lexicons, one per vendor (ADR 0067).
 
 Every adapter package ships the lexicon of its vendor's error codes
 (:class:`~mowdeck_contracts.v1.ErrorLexicon`) and registers it through the Python entry point

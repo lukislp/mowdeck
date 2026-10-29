@@ -1,4 +1,4 @@
-"""Error codes in plain words (ADR 0065): telemetry asks the Device-Gateway over the bus, caches
+"""Error codes in plain words (ADR 0067): telemetry asks the Device-Gateway over the bus, caches
 the answers and falls back to generic advice when nobody answers.
 
 A small responder on the in-memory bus stands in for the gateway: it answers from the

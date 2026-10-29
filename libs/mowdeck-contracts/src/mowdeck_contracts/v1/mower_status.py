@@ -120,7 +120,7 @@ class SelfCheck(ContractModel):
 class MowerErrorCategory(StrEnum):
     """What kind of fault ``MowerState.error_code`` names, manufacturer neutral.
 
-    The same words classify the entries of an error lexicon (ADR 0065), so rules such as the
+    The same words classify the entries of an error lexicon (ADR 0067), so rules such as the
     theft alarm can match a category instead of vendor codes.
     """
 

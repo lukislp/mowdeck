@@ -1,4 +1,4 @@
-"""Error lexicon lookups at the Device-Gateway (ADR 0065), core NATS request/reply:
+"""Error lexicon lookups at the Device-Gateway (ADR 0067), core NATS request/reply:
 ``gateway.errors.explain`` and ``gateway.errors.lexicons`` (queue group ``device-gateway``)."""
 
 from collections.abc import Callable

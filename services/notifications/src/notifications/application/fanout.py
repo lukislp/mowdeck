@@ -305,7 +305,7 @@ class Fanout:
 
     async def explained(self, language: str, params: dict[str, Any]) -> dict[str, Any]:
         """``params`` with ``error_detail``: the vendor error code in plain words (the lexicon's
-        title and first step, ADR 0065) when the lexicon knows it; otherwise unchanged, and
+        title and first step, ADR 0067) when the lexicon knows it; otherwise unchanged, and
         :meth:`render` falls back to the vendor's own ``error_message``."""
         code, connection = params.get("error_code"), params.get("error_connection")
         if self._errors is None or not code or code == "unknown" or not connection:

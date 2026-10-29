@@ -1,4 +1,4 @@
-"""Push texts explain the error code with the vendor's lexicon (ADR 0065).
+"""Push texts explain the error code with the vendor's lexicon (ADR 0067).
 
 A responder on the in-memory bus stands in for the Device-Gateway (``gateway.errors.explain``)
 and answers from a small lexicon; without it the text keeps the vendor's message."""

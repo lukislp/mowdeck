@@ -1,4 +1,4 @@
-"""Error lexicon contracts (ADR 0065): entries, lookup with locale fallback, unknown codes."""
+"""Error lexicon contracts (ADR 0067): entries, lookup with locale fallback, unknown codes."""
 
 import pytest
 from mowdeck_contracts.v1 import (

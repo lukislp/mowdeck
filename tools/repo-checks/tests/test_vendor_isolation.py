@@ -1,4 +1,4 @@
-"""The core stays manufacturer independent (ADR 0012, 0019, 0065).
+"""The core stays manufacturer independent (ADR 0012, 0019, 0067).
 
 Vendor code lives only in the adapter packages ``libs/mowdeck-control-<vendor>``, which plug in
 through entry points (``mowdeck.connections``, ``mowdeck.error_lexicons``). These checks fail
@@ -42,11 +42,21 @@ def _requirement_name(requirement: str) -> str:
     return re.split(r"[\s\[<>=!~;]", requirement, maxsplit=1)[0].strip().lower()
 
 
+def _declared_vendor_modules(path: Path) -> list[str]:
+    """``[tool.mowdeck.adapter] vendor-modules`` of an adapter package (the vendor boundary's
+    declaration, ``test_vendor_boundary.py``), empty when the package has none."""
+    data = tomllib.loads((path / "pyproject.toml").read_text("utf-8"))
+    table = data.get("tool", {}).get("mowdeck", {}).get("adapter", {})
+    return [str(m) for m in table.get("vendor-modules", [])]
+
+
 def vendor_modules(repo_root: Path) -> set[str]:
-    """Top-level modules of the adapter packages and of the vendor libraries they depend on."""
+    """Top-level modules of the adapter packages and of the vendor libraries they wrap: the
+    declared ``vendor-modules`` plus every non-MowDeck dependency."""
     modules: set[str] = set()
     for package in _adapter_dirs(repo_root):
         modules.add(package.name.replace("-", "_"))
+        modules.update(_declared_vendor_modules(package))
         dependencies = _project(package).get("dependencies", [])
         assert isinstance(dependencies, list)
         for requirement in dependencies:
@@ -105,6 +115,8 @@ def test_vendor_isolation_core_imports_no_vendor_package(repo_root: Path) -> Non
 def test_vendor_isolation_exceptions_are_still_needed(repo_root: Path) -> None:
     vendors = vendor_modules(repo_root)
     for relative in KNOWN_EXCEPTIONS:
+        if not (repo_root / relative).is_file():
+            continue  # moved behind an entry point (the cloud provider plugins); drop it here
         assert imported_modules(repo_root / relative) & vendors, f"{relative}: drop the exception"
 
 

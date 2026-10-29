@@ -352,7 +352,7 @@ def test_notifications_theft_lift_by_configured_numeric_code() -> None:
 
 def test_notifications_theft_lift_by_lexicon_category() -> None:
     """A vendor without a code list: its lexicon's category ``lift_tilt`` raises the alarm
-    (ADR 0065); configured codes keep working, an empty category list turns it off."""
+    (ADR 0067); configured codes keep working, an empty category list turns it off."""
     run = Run(ALARMS)
     run.state(MowerActivity.MOWING)
     lifted = run.state(

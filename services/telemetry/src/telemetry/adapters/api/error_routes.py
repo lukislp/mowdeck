@@ -1,4 +1,4 @@
-"""Routes of the error lexicon under ``/api/v1/telemetry`` (ADR 0065).
+"""Routes of the error lexicon under ``/api/v1/telemetry`` (ADR 0067).
 
 Vendor error codes in plain words: title, description, likely cause, steps, severity and the
 manufacturer-neutral category, in the requested locale (``locale``, else the first language of

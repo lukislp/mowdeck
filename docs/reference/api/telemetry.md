@@ -1188,7 +1188,7 @@ What the mower can do over its current connection (blade height range, speed, ..
 
 What kind of fault `MowerState.error_code` names, manufacturer neutral.
 
-The same words classify the entries of an error lexicon (ADR 0065), so rules such as the theft alarm can match a category instead of vendor codes.
+The same words classify the entries of an error lexicon (ADR 0067), so rules such as the theft alarm can match a category instead of vendor codes.
 
 Type: `"trapped"` \| `"obstacle"` \| `"outside"` \| `"wheel_slip"` \| `"lift_tilt"` \| `"collision"` \| `"battery"` \| `"blade_motor"` \| `"rain"` \| `"positioning"` \| `"communication"` \| `"docking"` \| `"firmware"` \| `"other"`
 

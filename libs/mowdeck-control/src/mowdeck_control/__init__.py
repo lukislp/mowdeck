@@ -21,7 +21,7 @@
 * :func:`register_connection` and :func:`create_connection`: the adapter registry, extended
   through the entry point group ``mowdeck.connections``.
 * :class:`ErrorLexiconRegistry` and :func:`explain_error`: vendor error codes in plain words,
-  extended through the entry point group ``mowdeck.error_lexicons`` (ADR 0065).
+  extended through the entry point group ``mowdeck.error_lexicons`` (ADR 0067).
 
 The package depends only on ``mowdeck-contracts`` and the standard library (Pillow is an
 optional extra, ``photo``, for the simulator's still images).

@@ -1,4 +1,4 @@
-"""Error lexicon lookups (ADR 0065): ``gateway.errors.explain`` and ``gateway.errors.lexicons``,
+"""Error lexicon lookups (ADR 0067): ``gateway.errors.explain`` and ``gateway.errors.lexicons``,
 core NATS request/reply.
 
 The lexicons ship with the adapter packages installed in this image and register through the

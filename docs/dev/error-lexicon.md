@@ -1,6 +1,6 @@
 # Adding an error lexicon for a vendor
 
-A mower reports faults as vendor codes (`MowerState.error_code`: Mammotion `1201`, the simulator `stuck`). MowDeck shows them in plain words, with a severity, the likely cause and the steps that fix them, in the web app, in the push texts and through the API ([ADR 0065](../adr/0065-error-code-lexicon.md)). The words come from the **error lexicon** of the vendor, which ships with its adapter package. Core services, contracts and the web app hold no code table; nothing there changes for a new vendor.
+A mower reports faults as vendor codes (`MowerState.error_code`: Mammotion `1201`, the simulator `stuck`). MowDeck shows them in plain words, with a severity, the likely cause and the steps that fix them, in the web app, in the push texts and through the API ([ADR 0067](../adr/0067-error-code-lexicon.md)). The words come from the **error lexicon** of the vendor, which ships with its adapter package. Core services, contracts and the web app hold no code table; nothing there changes for a new vendor.
 
 This guide is for the author of an adapter package `libs/mowdeck-control-<vendor>` (for example Husqvarna, Navimow or Worx). It assumes the connection adapter itself exists ([Writing a new adapter](https://github.com/lukislp/mowdeck/blob/main/libs/mowdeck-control/README.md#writing-a-new-adapter-checklist)).
 

@@ -1,4 +1,4 @@
-"""The error lexicon registry (ADR 0065): entry points, normalisation, fallback, simulator."""
+"""The error lexicon registry (ADR 0067): entry points, normalisation, fallback, simulator."""
 
 import logging
 import tomllib

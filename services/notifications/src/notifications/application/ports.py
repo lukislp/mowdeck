@@ -94,7 +94,7 @@ class PhotoSource(Protocol):
 
 class ErrorExplainer(Protocol):
     """Explains a vendor error code in plain words (the error lexicons at the Device-Gateway,
-    ADR 0065)."""
+    ADR 0067)."""
 
     async def explain(
         self, code: str, connection: str, language: str, category: str | None = None

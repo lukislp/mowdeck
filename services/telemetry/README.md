@@ -14,7 +14,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 - **Map and capabilities** of every mower as the Device-Gateway last read them (snapshots from the stream `DEVICE`), for the web app's area picker and setpoint ranges.
 - **Mow path** of the running job (the route the mower planned, with its progress; snapshot `device.mower.<id>.path`), for the path on the web app's map.
 - **iOS widget data** ([ADR 0059](../../docs/adr/0059-ios-widgets-and-live-activity.md)): `GET /mowers/{id}/widget` (compact state with the job's area name) and `GET /mowers/{id}/widget-map.png`, a bounded, cached PNG of the map with the mowed path and the mower, drawn with numpy and zlib in a worker thread (at most two at a time; 503 when busy; ETag, 30 s cache).
-- **Error codes in plain words** ([ADR 0065](../../docs/adr/0065-error-code-lexicon.md)): the mower's current error and any vendor code explained in German or English from the vendor's error lexicon (see [Error lexicon](#error-lexicon)).
+- **Error codes in plain words** ([ADR 0067](../../docs/adr/0067-error-code-lexicon.md)): the mower's current error and any vendor code explained in German or English from the vendor's error lexicon (see [Error lexicon](#error-lexicon)).
 - **Mower directory** (`mower_id` to `account_id`) from Fleet's events and a startup request, because command results carry no account id.
 - **Health history**: blade hours (since the last blade change, too), mowing hours, distance, battery cycles, charge sessions and error counts per mower, as running totals and per UTC day, plus a reminder event when the blade hours cross a threshold (see [Health history](#health-history)).
 - **Retention** of history, positions and the timeline.
@@ -71,7 +71,7 @@ Handler rules: malformed payloads, payloads whose subject names another mower an
 
 ## Error lexicon
 
-Vendor error codes in plain words ([ADR 0065](../../docs/adr/0065-error-code-lexicon.md)). Telemetry holds no code table and installs no adapter package: the lexicons ship with the adapters at the Device-Gateway, which answers `gateway.errors.explain`. The mower routes pick the lexicon by the mower's connection (`MowerState.connection`) and pass the state's `error_category`, so an unknown code still gets advice for its kind. Answers are cached in memory per vendor or connection, code, language and category for an hour (at most 2048). When the gateway does not answer, the routes serve the generic explanation ("Unknown error 1234 from ...", `known: false`) and cache nothing.
+Vendor error codes in plain words ([ADR 0067](../../docs/adr/0067-error-code-lexicon.md)). Telemetry holds no code table and installs no adapter package: the lexicons ship with the adapters at the Device-Gateway, which answers `gateway.errors.explain`. The mower routes pick the lexicon by the mower's connection (`MowerState.connection`) and pass the state's `error_category`, so an unknown code still gets advice for its kind. Answers are cached in memory per vendor or connection, code, language and category for an hour (at most 2048). When the gateway does not answer, the routes serve the generic explanation ("Unknown error 1234 from ...", `known: false`) and cache nothing.
 
 ## Tables (PostgreSQL, Alembic)
 

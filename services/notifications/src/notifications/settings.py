@@ -85,7 +85,7 @@ class Settings(ServiceSettings):
 
     notifications_lift_categories: str = "lift_tilt"
     """Comma separated manufacturer-neutral error categories (``MowerState.error_category``, the
-    categories of the error lexicons, ADR 0065) that mean lifted or tilted; empty: codes only.
+    categories of the error lexicons, ADR 0067) that mean lifted or tilted; empty: codes only.
     Complements ``notifications_lift_error_codes``: a state matching either list alarms."""
 
     notifications_dock_command_window_seconds: float = Field(default=600, ge=0)

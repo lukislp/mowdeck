@@ -1,5 +1,5 @@
 <!--
-  A vendor error code in plain words (ADR 0065): severity and category, the vendor and its code,
+  A vendor error code in plain words (ADR 0067): severity and category, the vendor and its code,
   title, what happened, the likely cause and the steps as a numbered ladder. The words come from
   the vendor's error lexicon (Telemetry); this component only lays them out. A critical error
   (lifted, tilted) carries a hazard stripe; a code the lexicon does not know says so and shows

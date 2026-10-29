@@ -1,4 +1,4 @@
-"""The Mammotion error lexicon (ADR 0065): built from PyMammotion's table plus curated texts,
+"""The Mammotion error lexicon (ADR 0067): built from PyMammotion's table plus curated texts,
 registered through ``mowdeck.error_lexicons`` and consistent with ``MowerState.error_category``."""
 
 import tomllib

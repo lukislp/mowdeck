@@ -109,7 +109,7 @@ class RuleConfig:
     )
     """Error codes that mean "lifted" (besides ``raw["lifted"] is True``)."""
     lift_categories: frozenset[str] = frozenset({"lift_tilt"})
-    """Manufacturer-neutral error categories (``MowerState.error_category``, ADR 0065) that mean
+    """Manufacturer-neutral error categories (``MowerState.error_category``, ADR 0067) that mean
     "lifted", for every vendor whose codes are not in ``lift_error_codes``."""
     dock_command_window_seconds: float = 600
     """A command seen this long before the mower leaves the dock explains the departure."""

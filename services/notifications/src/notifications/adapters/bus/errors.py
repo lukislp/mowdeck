@@ -1,4 +1,4 @@
-"""Explains vendor error codes for the push texts (ADR 0065).
+"""Explains vendor error codes for the push texts (ADR 0067).
 
 Core NATS request/reply on ``gateway.errors.explain`` (queue group ``device-gateway``): the
 Device-Gateway answers from the error lexicons of the installed adapter packages. Answers are

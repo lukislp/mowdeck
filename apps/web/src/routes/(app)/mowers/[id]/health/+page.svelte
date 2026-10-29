@@ -194,7 +194,7 @@
   };
   const extremes = $derived(batteryExtremes(battery));
   const errors = $derived(totals ? errorRows(totals.errors) : []);
-  /** What each counted code means, from the vendor's error lexicon (ADR 0065); a code stays
+  /** What each counted code means, from the vendor's error lexicon (ADR 0067); a code stays
    * bare until the answer arrives or when Telemetry cannot give one. */
   let meanings = $state<Record<string, ErrorExplanation>>({});
   const meaningCodes = $derived(

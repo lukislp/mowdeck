@@ -170,7 +170,7 @@ Entry points are loaded lazily on the first lookup. Broken or unknown entry poin
 
 ### Error lexicons
 
-Vendor error codes in plain words ([ADR 0065](../../docs/adr/0065-error-code-lexicon.md)). Every adapter package ships the lexicon of its vendor (`ErrorLexicon` from `mowdeck-contracts`: per code the category, severity, whether the user has to act and English and German texts) and registers it under the entry point group `mowdeck.error_lexicons`; the name is the vendor key. The object is an `ErrorLexicon`, an `ErrorLexiconProvider` (the lexicon plus an optional `normalise(raw) -> code`) or a callable without arguments returning either:
+Vendor error codes in plain words ([ADR 0067](../../docs/adr/0067-error-code-lexicon.md)). Every adapter package ships the lexicon of its vendor (`ErrorLexicon` from `mowdeck-contracts`: per code the category, severity, whether the user has to act and English and German texts) and registers it under the entry point group `mowdeck.error_lexicons`; the name is the vendor key. The object is an `ErrorLexicon`, an `ErrorLexiconProvider` (the lexicon plus an optional `normalise(raw) -> code`) or a callable without arguments returning either:
 
 ```toml
 [project.entry-points."mowdeck.error_lexicons"]

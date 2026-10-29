@@ -1,4 +1,4 @@
-"""The Mammotion error lexicon (ADR 0065): every code of PyMammotion's table in plain words.
+"""The Mammotion error lexicon (ADR 0067): every code of PyMammotion's table in plain words.
 
 Registered through the entry point group ``mowdeck.error_lexicons`` under ``mammotion``
 (``pyproject.toml``); ``mowdeck-control`` loads it at the first lookup. Built once from two

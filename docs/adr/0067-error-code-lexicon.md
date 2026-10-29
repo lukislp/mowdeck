@@ -1,4 +1,4 @@
-# ADR 0065: Error code lexicon, provider independent
+# ADR 0067: Error code lexicon, provider independent
 
 ## Status
 

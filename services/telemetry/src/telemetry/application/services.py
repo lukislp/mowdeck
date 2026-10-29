@@ -27,7 +27,7 @@ class Services:
     aerial: Aerial
     tracking: Tracking | None = None
     errors: ErrorExplanations | None = None
-    """Vendor error codes in plain words (ADR 0065), wired at startup."""
+    """Vendor error codes in plain words (ADR 0067), wired at startup."""
 
 
 def build_services(

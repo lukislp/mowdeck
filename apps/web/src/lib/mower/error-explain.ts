@@ -1,5 +1,5 @@
 /**
- * Vendor error codes in plain words (ADR 0065). The texts come from the vendor's error lexicon,
+ * Vendor error codes in plain words (ADR 0067). The texts come from the vendor's error lexicon,
  * which ships with its adapter package and is served by Telemetry; the app holds no code table
  * of its own. Only the words around the explanation (severity, labels) are translated here.
  */
