@@ -13,6 +13,7 @@ from mowdeck_contracts.v1 import (
     GeoReference,
     ManualDrive,
     MowerActivity,
+    MowerErrorCategory,
     MowerMapSnapshot,
     PrincipalKind,
     PrincipalRef,
@@ -87,7 +88,14 @@ async def lift(h: Harness, owner: Person, mower_id: UUID, after: float) -> None:
     """Clear any error, wait ``after`` seconds, then lift the mower."""
     await state(h, owner, mower_id, MowerActivity.PAUSED, 1, position=(48.1, 11.5))
     await state(
-        h, owner, mower_id, MowerActivity.ERROR, after, error_code="lifted", position=(48.1, 11.5)
+        h,
+        owner,
+        mower_id,
+        MowerActivity.ERROR,
+        after,
+        error_code="lifted",
+        error_category=MowerErrorCategory.LIFT_TILT,
+        position=(48.1, 11.5),
     )
 
 
@@ -110,7 +118,9 @@ async def test_notifications_theft_alarm_bypasses_quiet_hours() -> None:
             mower_id,
             MowerActivity.ERROR,
             battery=10,
+            # as the Mammotion adapter reports a lift sensor stop: the code with its category
             error_code="2801",
+            error_category=MowerErrorCategory.LIFT_TILT,
             position=(48.1234567, 11.5),
         )
         items = await h.inbox(owner)

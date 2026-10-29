@@ -78,15 +78,16 @@ class Settings(ServiceSettings):
     """At most one theft alarm (``mower_lifted``, ``mower_left_dock_unexpectedly``,
     ``geofence_exit``) of one kind per mower within this time."""
 
-    notifications_lift_error_codes: str = "lifted,1004,1030,2502,2801,11131,11133"
-    """Comma separated error codes that mean the mower was lifted or tilted (``mower_lifted``);
-    a state with ``raw.lifted = true`` counts as lifted regardless. Kept for adapters that do not
-    set ``error_category``; the default lists Mammotion's lift and tilt codes."""
+    notifications_lift_error_codes: str = ""
+    """Comma separated extra error codes that mean the mower was lifted or tilted
+    (``mower_lifted``). Empty by default: lifts are recognised provider neutrally by
+    ``raw.lifted = true`` and ``notifications_lift_categories``. An optional operator override for
+    an adapter that sets neither."""
 
     notifications_lift_categories: str = "lift_tilt"
     """Comma separated manufacturer-neutral error categories (``MowerState.error_category``, the
-    categories of the error lexicons, ADR 0067) that mean lifted or tilted; empty: codes only.
-    Complements ``notifications_lift_error_codes``: a state matching either list alarms."""
+    categories of the error lexicons, ADR 0067) that mean lifted or tilted; empty: only
+    ``raw.lifted`` and ``notifications_lift_error_codes``."""
 
     notifications_dock_command_window_seconds: float = Field(default=600, ge=0)
     """A command seen this long before the mower leaves the dock explains the departure (no

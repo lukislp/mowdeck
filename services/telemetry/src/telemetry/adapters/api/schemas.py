@@ -581,6 +581,20 @@ class WidgetStateOut(BaseModel):
     rain_detected: bool | None
     error_code: str | None
     error_message: str | None
+    error_title: str | None = Field(
+        default=None,
+        description="With activity `error`: the error in plain words from the vendor's error "
+        "lexicon in the requested locale (ADR 0067); for a code no lexicon knows the generic "
+        "title of its category; null when neither is known (show `error_message`).",
+    )
+    error_category: str | None = Field(
+        default=None,
+        description="With activity `error`: the manufacturer-neutral `MowerErrorCategory`.",
+    )
+    error_severity: str | None = Field(
+        default=None,
+        description="With activity `error`: `info`, `warning`, `error` or `critical`.",
+    )
     job: WidgetJobOut | None
 
     @classmethod
@@ -596,6 +610,9 @@ class WidgetStateOut(BaseModel):
             rain_detected=value.rain_detected,
             error_code=value.error_code,
             error_message=value.error_message,
+            error_title=value.error_title,
+            error_category=value.error_category,
+            error_severity=value.error_severity,
             job=(
                 WidgetJobOut(
                     progress_percent=value.job.progress_percent,

@@ -1,5 +1,5 @@
-"""Error lexicon lookups (ADR 0067): ``gateway.errors.explain`` and ``gateway.errors.lexicons``,
-core NATS request/reply.
+"""Error lexicon lookups (ADR 0067): ``gateway.errors.explain``, ``gateway.errors.lexicons`` and
+``gateway.errors.entries`` (a searchable page of one lexicon), core NATS request/reply.
 
 The lexicons ship with the adapter packages installed in this image and register through the
 entry point group ``mowdeck.error_lexicons`` (``mowdeck-control``); the gateway only answers with
@@ -14,8 +14,13 @@ from mowdeck_contracts.v1 import (
     ErrorExplainReply,
     ErrorExplainRequest,
     ErrorLexiconListReply,
+    ErrorLexiconSearchRequest,
 )
-from mowdeck_contracts.v1.subjects import GATEWAY_ERRORS_EXPLAIN, GATEWAY_ERRORS_LEXICONS
+from mowdeck_contracts.v1.subjects import (
+    GATEWAY_ERRORS_ENTRIES,
+    GATEWAY_ERRORS_EXPLAIN,
+    GATEWAY_ERRORS_LEXICONS,
+)
 from mowdeck_control import ErrorLexiconRegistry, default_error_lexicons
 from mowdeck_service_kit.bus import BusMessage, DropMessage, EventBus, Subscription
 from pydantic import ValidationError
@@ -61,13 +66,23 @@ class ErrorLexiconResponder:
         registry = await self._ready()
         await message.respond(ErrorLexiconListReply(lexicons=registry.infos()))
 
+    async def entries(self, message: BusMessage) -> None:
+        """Decode an :class:`ErrorLexiconSearchRequest` and answer a page of the lexicon."""
+        try:
+            request = message.model(ErrorLexiconSearchRequest)
+        except ValidationError as exc:
+            raise DropMessage(f"invalid error lexicon search: {exc.error_count()} errors") from exc
+        registry = await self._ready()
+        await message.respond(registry.search(request))
+
 
 async def subscribe_error_lexicons(
     bus: EventBus, registry: ErrorLexiconRegistry | None = None
 ) -> list[Subscription]:
-    """Subscribe to both lookup subjects in the queue group ``device-gateway``."""
+    """Subscribe to the lookup subjects in the queue group ``device-gateway``."""
     responder = ErrorLexiconResponder(registry)
     return [
         await bus.subscribe(GATEWAY_ERRORS_EXPLAIN, responder.explain, queue=QUEUE),
         await bus.subscribe(GATEWAY_ERRORS_LEXICONS, responder.lexicons, queue=QUEUE),
+        await bus.subscribe(GATEWAY_ERRORS_ENTRIES, responder.entries, queue=QUEUE),
     ]

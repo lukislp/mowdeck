@@ -1,7 +1,9 @@
 """What the iOS widgets read from Telemetry (ADR 0059): a compact state and a map picture.
 
 ``state`` projects the latest state, the job and the area name of one mower into a few fields a
-widget needs (the widget shows state, battery, progress, area and remaining time). ``map_png``
+widget needs (the widget shows state, battery, progress, area and remaining time); an error comes
+with its plain-language title, category and severity from the vendor's error lexicon (ADR 0067),
+so the widgets need no second request and show the words from their stored snapshot. ``map_png``
 draws the mower's map with the mowed path and the mower; pictures are cached for a short time
 and the number of concurrent drawings is bounded, because widgets reload often and the drawing
 is CPU work (done in a worker thread, never on the event loop).
@@ -15,10 +17,18 @@ from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
-from mowdeck_contracts.v1 import MowerMap, MowerState, MowPath
+from mowdeck_contracts.v1 import (
+    ErrorExplanation,
+    MowerErrorCategory,
+    MowerMap,
+    MowerState,
+    MowPath,
+    generic_text,
+)
 from mowdeck_control.geo import from_wgs84
 
 from telemetry.application import mapimage
+from telemetry.application.errors import ErrorExplanations
 from telemetry.application.ports import Clock, Store
 from telemetry.domain.errors import NoSnapshotYetError, NoTelemetryYetError, TelemetryError
 from telemetry.domain.models import LatestRow
@@ -66,6 +76,9 @@ class WidgetState:
     error_code: str | None
     error_message: str | None
     job: WidgetJob | None
+    error_title: str | None = None
+    error_category: str | None = None
+    error_severity: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +100,30 @@ def area_names(map_body: dict[str, Any] | None) -> dict[str, str]:
     return names
 
 
-def widget_state(row: LatestRow, *, stale: bool, names: dict[str, str]) -> WidgetState:
-    """Project a stored state."""
+def error_title(explanation: ErrorExplanation) -> str | None:
+    """The words a widget shows for an error: the lexicon's title, or for a code no lexicon
+    knows MowDeck's generic title of its category; None when even the category is unknown (the
+    widget then keeps the vendor's ``error_message``)."""
+    if explanation.known:
+        return explanation.title
+    if explanation.category is MowerErrorCategory.OTHER:
+        return None
+    return generic_text(explanation.category, explanation.locale).title
+
+
+def widget_state(
+    row: LatestRow,
+    *,
+    stale: bool,
+    names: dict[str, str],
+    explanation: ErrorExplanation | None = None,
+) -> WidgetState:
+    """Project a stored state; ``explanation`` explains its error (only used in ``error``)."""
     state = MowerState.model_validate(row.state)
     job = state.job
     activity = "offline" if stale else state.activity.value
+    in_error = state.activity.value == "error"
+    explained = explanation if in_error and state.error_code else None
     return WidgetState(
         mower_id=row.mower_id,
         observed_at=state.observed_at,
@@ -100,8 +132,8 @@ def widget_state(row: LatestRow, *, stale: bool, names: dict[str, str]) -> Widge
         battery_percent=state.battery_percent,
         charging=state.charging,
         rain_detected=state.rain_detected,
-        error_code=state.error_code if state.activity.value == "error" else None,
-        error_message=state.error_message if state.activity.value == "error" else None,
+        error_code=state.error_code if in_error else None,
+        error_message=state.error_message if in_error else None,
         job=(
             WidgetJob(
                 progress_percent=job.progress_percent,
@@ -114,6 +146,15 @@ def widget_state(row: LatestRow, *, stale: bool, names: dict[str, str]) -> Widge
             if job is not None
             else None
         ),
+        error_title=error_title(explained) if explained is not None else None,
+        error_category=(
+            explained.category.value
+            if explained is not None
+            else state.error_category.value
+            if in_error and state.error_category is not None
+            else None
+        ),
+        error_severity=explained.severity.value if explained is not None else None,
     )
 
 
@@ -127,15 +168,27 @@ class Widget:
         self._cache: OrderedDict[str, tuple[Any, RenderedMap]] = OrderedDict()
         self._slots = asyncio.Semaphore(MAX_RENDERS)
 
-    async def state(self, account_id: UUID, mower_id: UUID) -> WidgetState:
-        """The compact state; :class:`NoTelemetryYetError` before the first state."""
+    async def state(
+        self,
+        account_id: UUID,
+        mower_id: UUID,
+        *,
+        locale: str | None = None,
+        errors: ErrorExplanations | None = None,
+    ) -> WidgetState:
+        """The compact state; :class:`NoTelemetryYetError` before the first state. With
+        ``errors`` an error is explained in ``locale`` (never raises: a gateway that does not
+        answer gives the generic words of the error's category)."""
         row = await self._store.latest_of(account_id, mower_id)
         if row is None:
             msg = "no telemetry yet"
             raise NoTelemetryYetError(msg)
         snapshot = await self._store.snapshot_of(account_id, mower_id, "map")
         names = area_names(snapshot.body if snapshot is not None else None)
-        return widget_state(row, stale=self._is_stale(row), names=names)
+        explanation = None
+        if errors is not None and row.state.get("activity") == "error":
+            explanation = await errors.for_state(row.state, locale)
+        return widget_state(row, stale=self._is_stale(row), names=names, explanation=explanation)
 
     async def map_png(
         self, account_id: UUID, mower_id: UUID, width: int, height: int, theme: str

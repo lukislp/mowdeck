@@ -104,26 +104,39 @@ def test_vision_auto_codes_are_normalised() -> None:
     assert normalise_code("Stuck") == "stuck"
     assert parse_codes("1201, -1032,,STUCK") == frozenset({"1201", "1032", "stuck"})
     assert parse_codes(["a", " "]) == frozenset({"a"})
-    for code in ("stuck", "1201", "1214", "11112", "11121", "1145", "1032", "11134", "2000701"):
-        assert code in CODES
-    for code in ("1004", "1030", "2502", "2801", "11131", "11133", "1005", "1202", "lifted"):
-        assert code not in CODES, f"{code} must never start an automatic analysis"
+
+
+def test_vision_auto_default_lists_no_vendor_codes() -> None:
+    """The trigger is provider neutral (ADR 0067): ``drive_recoverable``, set by the adapters
+    for the recoverable categories of their lexicon; the code list is an operator override."""
+    assert frozenset() == CODES
 
 
 def test_vision_auto_recoverable_errors() -> None:
     mower, account = uuid4(), uuid4()
     error = MowerActivity.ERROR
-    assert recoverable_error(_state(mower, account, error, "-1201"), CODES) == "1201"
-    assert recoverable_error(_state(mower, account, error, "stuck"), CODES) == "stuck"
-    assert recoverable_error(_state(mower, account, MowerActivity.IDLE, "1201"), CODES) is None
+    recoverable = {"drive_recoverable": True}
+    trapped = _state(mower, account, error, "-1201", **recoverable)
+    assert recoverable_error(trapped, CODES) == "1201"
+    assert recoverable_error(_state(mower, account, error, "stuck", **recoverable), CODES) == (
+        "stuck"
+    )
+    idle = _state(mower, account, MowerActivity.IDLE, "1201", **recoverable)
+    assert recoverable_error(idle, CODES) is None
     assert recoverable_error(_state(mower, account, error, "1005"), CODES) is None  # battery
-    assert recoverable_error(_state(mower, account, error, "1202"), CODES) is None  # blade
-    lifted = _state(mower, account, error, "1201", raw={"lifted": True})
+    assert recoverable_error(_state(mower, account, error, "1201"), CODES) is None  # no signal
+    lifted = _state(mower, account, error, "1201", raw={"lifted": True}, **recoverable)
     assert recoverable_error(lifted, CODES) is None
-    unknown = _state(mower, account, error, "9999", drive_recoverable=True)
+    unknown = _state(mower, account, error, "9999", **recoverable)
     assert recoverable_error(unknown, CODES) == "9999"
-    bare = _state(mower, account, error, None, drive_recoverable=True)
+    bare = _state(mower, account, error, None, **recoverable)
     assert recoverable_error(bare, CODES) == DRIVE_RECOVERABLE
+    # an operator's extra codes start one without the flag, a lift still never does
+    extra = parse_codes("-77,E5")
+    assert recoverable_error(_state(mower, account, error, "77"), extra) == "77"
+    assert recoverable_error(_state(mower, account, error, "e5"), extra) == "e5"
+    lifted_extra = _state(mower, account, error, "77", raw={"lifted": True})
+    assert recoverable_error(lifted_extra, extra) is None
 
 
 def test_vision_auto_trapped_mower_that_reports_a_pause_triggers() -> None:
@@ -147,6 +160,7 @@ def test_vision_auto_trapped_mower_that_reports_a_pause_triggers() -> None:
         account,
         error,
         "1214",
+        drive_recoverable=True,
         raw={"work_mode": "MODE_PAUSE", "error_category": "obstacle"},
     )
     assert recoverable_error(obstructed, CODES) == "1214"
@@ -375,12 +389,16 @@ async def test_vision_auto_only_entering_an_error_counts() -> None:
         mower, account = uuid4(), uuid4()
         idle = _state(mower, account, MowerActivity.IDLE)
         assert await auto.on_state(idle) is False
-        assert await auto.on_state(_state(mower, account, MowerActivity.ERROR, "1201")) is True
-        assert await auto.on_state(_state(mower, account, MowerActivity.ERROR, "1201")) is False
-        assert await auto.on_state(_state(mower, account, MowerActivity.ERROR, "11112")) is True
+
+        def stuck(code: str) -> MowerState:
+            return _state(mower, account, MowerActivity.ERROR, code, drive_recoverable=True)
+
+        assert await auto.on_state(stuck("1201")) is True
+        assert await auto.on_state(stuck("1201")) is False
+        assert await auto.on_state(stuck("11112")) is True
         assert await auto.on_state(idle) is False
         assert h.store.watch[mower] is None
-        assert await auto.on_state(_state(mower, account, MowerActivity.ERROR, "-1201")) is True
+        assert await auto.on_state(stuck("-1201")) is True
         lifted = _state(mower, account, MowerActivity.ERROR, "2801", raw={"lifted": True})
         assert await auto.on_state(lifted) is False
         battery = _state(mower, account, MowerActivity.ERROR, "1005")
