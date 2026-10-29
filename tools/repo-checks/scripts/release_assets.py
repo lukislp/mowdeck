@@ -11,6 +11,13 @@ release files.
     python tools/repo-checks/scripts/release_assets.py select --version 0.1.0 \
         --downloads downloads --assets assets --digests digests
     python tools/repo-checks/scripts/release_assets.py check --version 0.1.0 --assets assets
+    python tools/repo-checks/scripts/release_assets.py notes --body notes.md \
+        --section section.md --out notes.md
+
+``notes`` puts the job's section (install snippet, digests, verification) into the release notes
+between two HTML comment markers and replaces an earlier copy, so a rerun of the job never lists
+a digest twice (``infra/compose/verify-release.sh`` refuses a release with two digests for one
+image).
 """
 
 from __future__ import annotations
@@ -21,6 +28,10 @@ import shutil
 import sys
 from pathlib import Path
 
+NOTES_START = "<!-- mowdeck-release-assets -->"
+NOTES_END = "<!-- /mowdeck-release-assets -->"
+# Releases published before the markers: the section started with this heading.
+LEGACY_SECTION = re.compile(r"^## Install$", re.MULTILINE)
 DIGEST = re.compile(r"^digest-[a-z0-9-]+\.txt$")
 SBOM = re.compile(r"^sbom-[a-z0-9-]+\.spdx\.json$")
 
@@ -66,6 +77,22 @@ def check(version: str, assets: Path) -> list[str]:
     )
 
 
+def merge_notes(body: str, section: str) -> str:
+    """The release notes ``body`` with ``section`` as the job's only section, at the end."""
+    start = body.find(NOTES_START)
+    if start != -1:
+        end = body.find(NOTES_END, start)
+        rest = body[end + len(NOTES_END) :] if end != -1 else ""
+        body = body[:start] + rest
+    else:
+        legacy = LEGACY_SECTION.search(body)
+        if legacy and "## Images and chart" in body[legacy.start() :]:
+            body = body[: legacy.start()]
+    head = body.rstrip()
+    block = f"{NOTES_START}\n{section.strip()}\n{NOTES_END}\n"
+    return f"{head}\n\n{block}" if head else block
+
+
 def main(argv: list[str] | None = None) -> int:
     """Command line entry point."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -78,7 +105,16 @@ def main(argv: list[str] | None = None) -> int:
     chk = sub.add_parser("check", help="fail if a file outside the allowed set would be attached")
     chk.add_argument("--version", required=True)
     chk.add_argument("--assets", type=Path, required=True)
+    nts = sub.add_parser("notes", help="put the job's section into the release notes, once")
+    nts.add_argument("--body", type=Path, required=True)
+    nts.add_argument("--section", type=Path, required=True)
+    nts.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
+
+    if args.command == "notes":
+        merged = merge_notes(args.body.read_text("utf-8"), args.section.read_text("utf-8"))
+        args.out.write_text(merged, "utf-8", newline="\n")
+        return 0
 
     if args.command == "select":
         for name in select(args.version, args.downloads, args.assets, args.digests):

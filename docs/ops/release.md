@@ -46,9 +46,9 @@ One-time setup by the owner; the release job fails with a pointer to this sectio
 
 **Before the first release:** if packages with these names (`mowdeck/<image>`, `charts/mowdeck`) already exist under the owner on GHCR, grant this repository write access to them or remove them before the first release; otherwise the push is refused.
 
-**A failed release.** When a job after `tag` fails, the tag and the GitHub release already exist; re-run the failed jobs of the same workflow run (`gh run rerun <run-id> --failed`), which builds from the same tag and fills in the assets. Do not delete or move a published tag.
+**A failed release.** When a job after `tag` fails, the tag and the GitHub release already exist; re-run the failed jobs of the same workflow run (`gh run rerun <run-id> --failed`), which builds from the same tag and fills in the assets. Do not delete or move a published tag. A signing failure is covered in [When signing fails](#when-signing-fails).
 
-**API rate limit.** The workflows share `GITHUB_TOKEN`'s quota of 1,000 REST calls per hour for the repository. The workflow's own `gh` calls (the signing key check in `version`, "Check the signed tag and the release" in `tag`, the upload and the notes in `publish`, and the tag lookup of `apple-testflight.yml`) go through `tools/repo-checks/scripts/gh_retry.sh`: on HTTP 403 or 429 or a "rate limit" answer it waits 30, 60 and 120 seconds and tries again (four attempts), any other error fails the step at once. Only idempotent calls are wrapped (reads, `gh release upload --clobber`, `gh release edit` with the same notes); the tag and the release themselves are created by semantic-release, which waits for the quota on its own. The other workflows spend less of the quota for the same reason: no `*.dockerbuild` build record artifacts, short retention for CI logs and reports, pull request fuzzing only for changes to fuzzed code, and the OpenSSF Scorecard once a day instead of after every merge.
+**API rate limit.** The workflows share `GITHUB_TOKEN`'s quota of 1,000 REST calls per hour for the repository. The workflow's own `gh` calls (the signing key check in `version`, "Check the signed tag and the release" in `tag`, the bundle lookup, the upload and the notes in `publish`, and the tag lookup of `apple-testflight.yml`) go through `tools/repo-checks/scripts/gh_retry.sh`: on HTTP 403 or 429 or a "rate limit" answer it waits 30, 60 and 120 seconds and tries again (four attempts), any other error fails the step at once. Only idempotent calls are wrapped (reads, `gh release upload --clobber`, `gh release edit` with the same notes); the tag and the release themselves are created by semantic-release, which waits for the quota on its own. The other workflows spend less of the quota for the same reason: no `*.dockerbuild` build record artifacts, short retention for CI logs and reports, pull request fuzzing only for changes to fuzzed code, and the OpenSSF Scorecard once a day instead of after every merge.
 
 **Test builds without a release:** `gh workflow run release.yml -f version=0.1.0-rc.1` (optionally `--ref <branch>`) builds, signs and pushes the images and the chart under that version, without a tag, a GitHub release or `:latest`.
 
@@ -173,3 +173,20 @@ gh attestation verify mowdeck-$VERSION.tgz -R lukislp/mowdeck --bundle mowdeck-$
 ```
 
 `gh attestation verify` without `--bundle` fetches the attestation from GitHub; the attached `mowdeck-<version>.intoto.jsonl` (a Sigstore bundle with the in-toto SLSA provenance statement over every asset of the release) lets the check run offline. A test build by hand is signed with the identity of the branch it ran on (`...release.yml@refs/heads/<branch>`), so it never passes as a release.
+
+## When signing fails
+
+Every image, the chart and every release asset is signed keyless with Sigstore (Fulcio certificate, Rekor transparency log entry) and verified right after signing, all through `tools/repo-checks/scripts/cosign_retry.sh`. Sigstore has short outages, and two of them used to fail a release:
+
+- `[POST /api/v1/log/entries][409] createLogEntryConflict ... an equivalent entry already exists in the transparency log`: cosign's own HTTP retry re-posted an entry its first request had already written. The signature is not broken, but cosign gives up without a bundle.
+- `error getting signing config from TUF ... tuf refresh failed: Get "https://tuf-repo-cdn.sigstore.dev/..."`: the trust root could not be fetched (DNS, TCP, TLS or the CDN).
+
+The script retries these and every other transient error (TUF and CDN fetches, network errors, timeouts, HTTP 429 and 5xx of Fulcio, Rekor or the registry) up to five times, waiting 15, 30, 60 and 120 seconds. Each attempt is a new cosign run with a new ephemeral key and a new certificate, so it writes a new log entry instead of colliding with the old one; the bundle of a failed attempt is deleted first. Any other error (an identity mismatch, a missing file) fails the step at once. Nothing is ever published unsigned: a step either ends with a signature that `cosign verify` or `cosign verify-blob` accepts for the release identity, or it fails, and `publish` (which writes the image digests into the release notes) only runs when every image and the chart are signed. Without those digests `infra/compose/verify-release.sh` refuses the release, so a signing failure blocks deploying it, never deploys it unsigned.
+
+When a step still fails after its retries:
+
+1. Look at the error in the step log (the `::error::` line names the file or image). A Sigstore outage shows on [status.sigstore.dev](https://status.sigstore.dev/); wait until it is over.
+2. Re-run the failed jobs of the same run: `gh run rerun <run-id> --failed`. The jobs are idempotent: an image or chart that already verifies is not signed again, `publish` reuses each `<file>.sigstore.json` already attached to the release when it still verifies for the same file (and signs every other file anew), uploads with `--clobber` and replaces its own section of the release notes (between the `<!-- mowdeck-release-assets -->` markers, `release_assets.py notes`) instead of appending a second one, so the notes never list two digests for an image.
+3. A permanent error (identity mismatch, missing file) is a workflow change, not an outage: fix it in a pull request; the next release carries the fix. Do not sign or upload assets by hand: a signature from a laptop has a different identity and fails every verification above.
+
+`publish` has a 45-minute timeout to leave room for the waits.

@@ -508,7 +508,9 @@ jobs:
           # workflow run (a pull request, a test build) must not end up in a published image.
           no-cache: true
       # Keyless signature of the image index, bound to this workflow's identity, and a GitHub
-      # build provenance attestation pushed next to the image (gh attestation verify).
+      # build provenance attestation pushed next to the image (gh attestation verify). Signing
+      # retries transient Sigstore errors and verifies the signature
+      # (tools/repo-checks/scripts/cosign_retry.sh).
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign the image (Sigstore keyless) and verify
         env:
@@ -516,10 +518,8 @@ jobs:
           IDENTITY: https://github.com/${{ github.workflow_ref }}
         run: |
           set -eu
-          cosign sign --yes "$IMAGE@$DIGEST"
-          cosign verify --certificate-identity "$IDENTITY" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            "$IMAGE@$DIGEST" > /dev/null
+          . tools/repo-checks/scripts/cosign_retry.sh
+          cosign_sign_verified "$IDENTITY" "$IMAGE@$DIGEST"
           echo "- \`$IMAGE@$DIGEST\` signed" >> "$GITHUB_STEP_SUMMARY"
           printf '%s@%s\n' "$IMAGE" "$DIGEST" > "digest-${{ matrix.image }}.txt"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -604,10 +604,8 @@ jobs:
           IDENTITY: https://github.com/${{ github.workflow_ref }}
         run: |
           set -eu
-          cosign sign --yes "$CHART@$DIGEST"
-          cosign verify --certificate-identity "$IDENTITY" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            "$CHART@$DIGEST" > /dev/null
+          . tools/repo-checks/scripts/cosign_retry.sh
+          cosign_sign_verified "$IDENTITY" "$CHART@$DIGEST"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.CHART }}
@@ -688,7 +686,8 @@ jobs:
     needs: [version, tag, licence-gate, images, chart, android]
     if: ${{ !cancelled() && needs.version.outputs.release == 'true' && needs.tag.result == 'success' && needs.licence-gate.result == 'success' && needs.images.result == 'success' && needs.chart.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Room for the signing retries (cosign_retry.sh waits up to about 4 minutes per asset).
+    timeout-minutes: 45
     permissions:
       contents: write
       id-token: write
@@ -734,18 +733,37 @@ jobs:
         with:
           subject-checksums: assets/SHA256SUMS
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # Signing retries transient Sigstore errors (a Rekor 409 after cosign's own retry, TUF or
+      # CDN fetches, 5xx, timeouts) with a fresh signature each time and verifies every bundle
+      # (src/tools/repo-checks/scripts/cosign_retry.sh). On a rerun the bundles already attached
+      # to the release are reused when they still verify for the same file; every other file is
+      # signed again.
       - name: Sign every asset (Sigstore keyless) and verify
         env:
           IDENTITY: https://github.com/${{ github.workflow_ref }}
           BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -eu
+          . src/tools/repo-checks/scripts/gh_retry.sh
+          . src/tools/repo-checks/scripts/cosign_retry.sh
+          attached="$(gh_retry gh release view "v$VERSION" -R "$REPOSITORY" --json assets \
+            --jq '[.assets[].name | select(endswith(".sigstore.json"))] | length')"
+          mkdir -p "$RUNNER_TEMP/attached"
+          if [ "$attached" != 0 ]; then
+            gh_retry gh release download "v$VERSION" -R "$REPOSITORY" --clobber \
+              --pattern '*.sigstore.json' -D "$RUNNER_TEMP/attached"
+          fi
+          files=()
           for file in assets/*; do
-            cosign sign-blob --yes --bundle "$file.sigstore.json" "$file"
-            cosign verify-blob --bundle "$file.sigstore.json" \
-              --certificate-identity "$IDENTITY" \
-              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$file"
+            name="${file#assets/}"
+            if [ -f "$RUNNER_TEMP/attached/$name.sigstore.json" ]; then
+              cp "$RUNNER_TEMP/attached/$name.sigstore.json" "$file.sigstore.json"
+            fi
+            files+=("$file")
           done
+          cosign_sign_blob_verified "$IDENTITY" "${files[@]}"
           cp "$BUNDLE" "assets/mowdeck-$VERSION.intoto.jsonl"
           python3 src/tools/repo-checks/scripts/release_assets.py check --version "$VERSION" \
             --assets assets
@@ -757,13 +775,14 @@ jobs:
           set -eu
           # Retried on the rate limit (src/tools/repo-checks/scripts/gh_retry.sh). Every call here
           # is idempotent: reads, an upload with --clobber, and an edit that sets the same notes.
+          # The section below replaces the one an earlier run of this job wrote
+          # (release_assets.py notes), so a rerun never lists a digest twice.
           . src/tools/repo-checks/scripts/gh_retry.sh
           tag="v$VERSION"
           gh_retry gh release view "$tag" -R "$REPOSITORY" --json tagName --jq .tagName
           gh_retry gh release upload "$tag" -R "$REPOSITORY" --clobber assets/*
           gh_retry gh release view "$tag" -R "$REPOSITORY" --json body --jq .body > notes.md
           {
-            echo
             echo "## Install"
             echo
             echo '```bash'
@@ -800,6 +819,8 @@ jobs:
             echo "sha256sum -c SHA256SUMS --ignore-missing"
             echo "gh attestation verify mowdeck-$VERSION.tgz -R $REPOSITORY"
             echo '```'
-          } >> notes.md
+          } > section.md
+          python3 src/tools/repo-checks/scripts/release_assets.py notes --body notes.md \
+            --section section.md --out notes.md
           gh_retry gh release edit "$tag" -R "$REPOSITORY" --notes-file notes.md
           echo "- release \`$tag\` with $(ls assets | wc -l) assets" >> "$GITHUB_STEP_SUMMARY"
