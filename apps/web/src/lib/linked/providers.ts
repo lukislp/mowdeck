@@ -9,7 +9,8 @@ import type { components } from '#lib/generated/fleet.js';
 import { problemMessage } from '#lib/i18n.js';
 import { m } from '#lib/paraglide/messages.js';
 
-export type ProviderDescriptor = components['schemas']['ProviderDescriptor'];
+/** A provider as Fleet answers it: every text already in the UI language (English fallback). */
+export type ProviderDescriptor = components['schemas']['ProviderOut'];
 export type CredentialField = ProviderDescriptor['fields'][number];
 
 /** Values of a link form by field key. */

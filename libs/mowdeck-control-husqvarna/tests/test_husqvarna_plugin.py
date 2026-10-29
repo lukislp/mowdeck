@@ -35,7 +35,8 @@ def test_descriptor_asks_for_application_key_and_secret() -> None:
     assert DESCRIPTOR.needs_developer_account
     assert not DESCRIPTOR.tested_on_hardware
     assert [link.url for link in DESCRIPTOR.links] == [DEVELOPER_PORTAL]
-    assert any("Automower Connect API" in step for step in DESCRIPTOR.setup_steps)
+    assert any("Automower Connect API" in step["en"] for step in DESCRIPTOR.setup_steps)
+    assert all({"en", "de"} <= set(text) for _, text in DESCRIPTOR.texts())
 
 
 def test_descriptor_validates_the_credentials() -> None:

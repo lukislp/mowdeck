@@ -186,12 +186,17 @@ Link a vendor account: Fleet checks the credentials against the provider's field
 
 **List Cloud Providers**
 
-The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the link form (with hints and links to where the vendor hands them out), whether the user needs a developer account at the vendor and whether the adapter was tested on real hardware. Disabled providers are not listed; the public demo (ADR 0068) lists none and refuses every change under this path.
+The cloud providers enabled in the Device-Gateway: id, name, the credential fields of the link form (with hints and links to where the vendor hands them out), whether the user needs a developer account at the vendor and whether the adapter was tested on real hardware. Disabled providers are not listed; the public demo (ADR 0068) lists none and refuses every change under this path. Texts come in the language of `locale` (or the first of `Accept-Language`), else English.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `locale` | query | string or null | no | Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. |
 
 | Status | Meaning | Body |
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [ProviderList](#providerlist) |
 | 403 | The caller lacks `can_manage_mowers` on the account. | no body |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 | 503 | No Device-Gateway listed the providers. | no body |
 
 #### GET /api/v1/fleet/linked-accounts/{linked_account_id}
@@ -308,11 +313,16 @@ One command record of the caller's account whose mower the caller may view (404 
 
 **List Connection Kinds**
 
-The connection kinds this installation accepts (`MOWDECK_ALLOWED_CONNECTION_KINDS`) with the option schema of each: required, optional, secret and alternative options. The web app generates its connection forms from it, so a new adapter kind needs no UI change. For cloud mowers the options of each enabled provider come from its descriptor (`provider_options`, ADR 0066); without an answering gateway that map is empty.
+The connection kinds this installation accepts (`MOWDECK_ALLOWED_CONNECTION_KINDS`) with the option schema of each: required, optional, secret and alternative options. The web app generates its connection forms from it, so a new adapter kind needs no UI change. For cloud mowers the options of each enabled provider come from its descriptor (`provider_options`, ADR 0066, their texts in the language of `locale` or `Accept-Language`); without an answering gateway that map is empty.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `locale` | query | string or null | no | Language of the texts (`de`, `en`; `de-DE` works too). Default: the first language of `Accept-Language`, else `en`; a language without texts falls back to `en`. |
 
 | Status | Meaning | Body |
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [ConnectionKindList](#connectionkindlist) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
 #### GET /api/v1/fleet/mowers
 
@@ -1332,55 +1342,37 @@ One option of a connection kind (the web app builds its form from these).
 | `title` | string | yes | English label; the app translates the options it knows. |
 | `type` | `"string"` \| `"integer"` \| `"number"` \| `"boolean"` | yes |  |
 
-### ConnectionOptionSpec
+### CredentialChoiceOut
 
-One option a provider's cloud mowers take (refresh intervals, a feature switch, ...).
-
-Fleet validates a cloud mower's options against the options its provider declares and the web app renders them on the mower's settings page; only declared options exist, so a vendor with few settings shows few.
+One option of a choice field, its label in the caller's language.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `advanced` | boolean | no | Rarely needed; shown under 'advanced'.; default `false` |
-| `default` | string or integer or number or boolean or null | no |  |
-| `description` | string | no | English help text.; max length 400; default `""` |
-| `examples` | array of string | no | max items 5 |
-| `key` | string | yes | pattern `^[a-z][a-z0-9_]{0,39}$` |
-| `maximum` | number or null | no |  |
-| `minimum` | number or null | no |  |
-| `title` | string | yes | English title.; min length 1; max length 80 |
-| `type` | `"string"` \| `"integer"` \| `"number"` \| `"boolean"` | yes |  |
-
-### CredentialChoice
-
-One option of a `choice` field.
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `label` | string | yes | min length 1; max length 80 |
-| `value` | string | yes | min length 1; max length 64 |
-
-### CredentialField
-
-One input of a provider's link form.
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `choices` | array of [CredentialChoice](#credentialchoice) | no | max items 20 |
-| `help` | string or null | no | English hint under the input. |
-| `identity` | boolean | no | The field that names the vendor account (exactly one per provider): shown as the linked account's title and unique per provider and MowDeck account, compared without case.; default `false` |
-| `key` | string | yes | pattern `^[a-z][a-z0-9_]{0,39}$` |
-| `kind` | [CredentialFieldKind](#credentialfieldkind) | yes |  |
-| `label` | string | yes | English label of the input.; min length 1; max length 80 |
-| `max_length` | integer | no | min 1.0; max 4096.0; default `256` |
-| `pattern` | string or null | no | Regular expression the value must match. |
-| `placeholder` | string or null | no |  |
-| `required` | boolean | no | default `true` |
+| `label` | string | yes |  |
+| `value` | string | yes |  |
 
 ### CredentialFieldKind
 
 How a credential field is entered and stored.
 
 Type: `"text"` \| `"email"` \| `"secret"` \| `"choice"`
+
+### CredentialFieldOut
+
+One input of a provider's link form, its texts in the caller's language.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `choices` | array of [CredentialChoiceOut](#credentialchoiceout) | yes |  |
+| `help` | string or null | yes | Provider-specific hint; generic hints are the app's. |
+| `identity` | boolean | yes |  |
+| `key` | string | yes |  |
+| `kind` | [CredentialFieldKind](#credentialfieldkind) | yes |  |
+| `label` | string | yes |  |
+| `max_length` | integer | yes |  |
+| `pattern` | string or null | yes |  |
+| `placeholder` | string or null | yes |  |
+| `required` | boolean | yes |  |
 
 ### DeviceType
 
@@ -1887,38 +1879,37 @@ A compact reference to a principal, embedded in commands and audit records.
 | `subject` | string (uuid) | yes | Stable subject id (JWT `sub`). |
 | `token_id` | string (uuid) or null | no | Token id (JWT `jti`), if known. |
 
-### ProviderDescriptor
+### ProviderLinkOut
 
-A cloud provider as its adapter declares it: the link form, the guidance and the options of its mowers.
-
-| Field | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `fields` | array of [CredentialField](#credentialfield) | yes | min items 1; max items 10 |
-| `links` | array of [ProviderLink](#providerlink) | no | max items 5 |
-| `mower_options` | array of [ConnectionOptionSpec](#connectionoptionspec) | no | The options a mower of this provider takes (none: the provider has no settings beyond the linked account).; max items 30 |
-| `name` | string | yes | Display name of the vendor cloud.; min length 1; max length 80 |
-| `needs_developer_account` | boolean | no | The user creates an application in the vendor's developer portal (with their own vendor account) to get the credentials.; default `false` |
-| `provider` | string | yes | pattern `^[a-z][a-z0-9_-]{1,31}$` |
-| `setup_steps` | array of string | no | English, short: how the user gets the credentials, in order.; max items 8 |
-| `summary` | string | no | English: which mowers and what MowDeck can do.; max length 500; default `""` |
-| `tested_on_hardware` | boolean | no | False: built and tested against recorded fixtures and fakes only; the web app labels such providers as untested on real hardware.; default `false` |
-
-### ProviderLink
-
-A page of the vendor that explains where the credentials come from.
+A vendor page that explains where the credentials come from.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `label` | string | yes | min length 1; max length 80 |
-| `url` | string | yes | max length 300; pattern `^https://\S+$` |
+| `label` | string | yes |  |
+| `url` | string | yes |  |
 
 ### ProviderList
 
-`GET /linked-accounts/providers`: the cloud providers enabled in the Device-Gateway, each with its credential fields and guidance (the web app renders the link form from it).
+`GET /linked-accounts/providers`: the cloud providers enabled in the Device-Gateway, each with its credential fields and guidance in the caller's language (the web app renders the link form from it).
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `items` | array of [ProviderDescriptor](#providerdescriptor) | yes |  |
+| `items` | array of [ProviderOut](#providerout) | yes |  |
+
+### ProviderOut
+
+A cloud provider with every text in the caller's language (English fallback).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `fields` | array of [CredentialFieldOut](#credentialfieldout) | yes |  |
+| `links` | array of [ProviderLinkOut](#providerlinkout) | yes |  |
+| `name` | string | yes | The vendor's brand, not translated. |
+| `needs_developer_account` | boolean | yes |  |
+| `provider` | string | yes |  |
+| `setup_steps` | array of string | yes |  |
+| `summary` | string or null | yes |  |
+| `tested_on_hardware` | boolean | yes |  |
 
 ### ProxyInfo
 

@@ -442,11 +442,13 @@ class LinkedAccountService:
         await self._require_manage(actor, account_id)
         return await self.catalog.all()
 
-    async def provider_options(self) -> dict[str, tuple[OptionSpec, ...]]:
+    async def provider_options(
+        self, locale: str | None = None
+    ) -> dict[str, tuple[OptionSpec, ...]]:
         """The mower options of every enabled provider (empty when no gateway answers or in
         the public demo, ADR 0068): the connection-kind schemas show them."""
         try:
-            return {d.provider: option_specs(d) for d in await self.catalog.all()}
+            return {d.provider: option_specs(d, locale) for d in await self.catalog.all()}
         except Unavailable:
             return {}
 
