@@ -186,6 +186,8 @@ acme = "mowdeck_control_acme.plugin:SPEC"
 | `create_connection(config)` | the `MowerConnection` of one mower; `config.options` hold its options plus every credential field of its linked account |
 | `close()` | stop shared sessions |
 
+`ProviderSpec.capability_profiles` (optional, [ADR 0071](../../docs/adr/0071-capability-matrix.md)) is a callable returning one `CapabilityProfile` per model family: the capabilities a representative mower of the family declares (computed by the adapter's own capability code), the state it reports, what `varies` by model, firmware or module and what is `not_offered` by the mower or its vendor's API. The [capability matrix](../../docs/reference/capabilities.md) is generated from it (`uv run poe capability-matrix`).
+
 `ProviderContext.fake` asks for the package's fake cloud (development and browser tests), `cache_dir` is a private directory for session caches. `load_providers(context, enable=..., disable=...)` creates the enabled plugins; `LoadedProviders.for_registration(options)` picks the plugin of a `cloud` registration by its option `cloud_provider` (`CLOUD_PROVIDER_OPTION`). Only providers tested on real hardware set `enabled_by_default`; operators enable the others. See [docs/dev/cloud-providers.md](../../docs/dev/cloud-providers.md) for the full checklist.
 
 ### Error lexicons

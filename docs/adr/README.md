@@ -73,3 +73,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0067](0067-error-code-lexicon.md) | Error code lexicon, provider independent | Accepted |
 | [0068](0068-public-demo-mode.md) | Public demo mode | Proposed |
 | [0069](0069-provider-conformance-kit-and-package-template.md) | Provider conformance kit and provider package template | Proposed |
+| [0071](0071-capability-matrix.md) | Capability matrix generated from the adapters | Proposed |
