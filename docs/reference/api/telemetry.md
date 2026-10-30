@@ -643,6 +643,99 @@ The live page of a share link: the position, the track since the alarm, the time
 | 200 | Successful Response | `application/json` [PublicTrackOut](#publictrackout) |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
+### zones
+
+#### GET /api/v1/telemetry/mowers/{mower_id}/zones
+
+**List Zones**
+
+The mower's virtual zones, the zone it is in and whether the editor is offered.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ZonesOut](#zonesout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### POST /api/v1/telemetry/mowers/{mower_id}/zones
+
+**Create Zone**
+
+Draw a zone (`can_control`). The current zone is evaluated again at once.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+
+**Request body** (required): `application/json` [ZoneIn](#zonein)
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 201 | Successful Response | `application/json` [ZoneOut](#zoneout) |
+| 403 | The caller sees the mower but has no `can_control`. | no body |
+| 404 | The mower (or zone) does not exist or is not visible to the caller. | no body |
+| 409 | Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which. | no body |
+| 422 | The ring or the name is not acceptable; the error points at it. | no body |
+
+#### GET /api/v1/telemetry/mowers/{mower_id}/zones/stats
+
+**Zone Stats**
+
+Time per zone (in it, of that mowing, entries) over the last `days` days.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+| `days` | query | integer | no | Whole UTC days, today included.; min 1; max 92; default `7` |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ZoneStatsOut](#zonestatsout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### PATCH /api/v1/telemetry/mowers/{mower_id}/zones/{zone_id}
+
+**Update Zone**
+
+Rename, reshape or (un)link a zone (`can_control`).
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+| `zone_id` | path | string (uuid) | yes |  |
+
+**Request body** (required): `application/json` [ZonePatch](#zonepatch)
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ZoneOut](#zoneout) |
+| 403 | The caller sees the mower but has no `can_control`. | no body |
+| 404 | The mower (or zone) does not exist or is not visible to the caller. | no body |
+| 409 | Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which. | no body |
+| 422 | The ring or the name is not acceptable; the error points at it. | no body |
+
+#### DELETE /api/v1/telemetry/mowers/{mower_id}/zones/{zone_id}
+
+**Delete Zone**
+
+Delete a zone with its recorded time (`can_control`).
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `mower_id` | path | string (uuid) | yes |  |
+| `zone_id` | path | string (uuid) | yes |  |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 204 | Successful Response | no body |
+| 403 | The caller sees the mower but has no `can_control`. | no body |
+| 404 | The mower (or zone) does not exist or is not visible to the caller. | no body |
+| 409 | Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which. | no body |
+| 422 | The ring or the name is not acceptable; the error points at it. | no body |
+
 ## Schemas
 
 ### AerialBounds
@@ -669,6 +762,15 @@ The aerial photo under a mower's map.
 | `min_zoom` | integer or null | yes |  |
 | `mower_id` | string (uuid) | yes |  |
 | `tile_url` | string or null | yes | URL template of the tiles (`{z}`, `{x}`, `{y}`); needs the bearer token. |
+
+### AnchorOut
+
+Where to centre a map that has no vendor geometry.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `lat` | number | yes |  |
+| `lon` | number | yes |  |
 
 ### BaseStationPosition
 
@@ -1469,6 +1571,17 @@ Position track of a mower in a time range, oldest first.
 | `to` | string (date-time) | yes |  |
 | `truncated` | boolean | yes |  |
 
+### PresenceOut
+
+Where the mower is: in a zone (`zone_id`) or in none.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `observed_at` | string (date-time) | yes | The report the evaluation is based on. |
+| `since` | string (date-time) | yes | When it entered this zone (or left the last one). |
+| `zone_id` | string (uuid) or null | yes | The current zone; null outside every zone. |
+| `zone_name` | string or null | no |  |
+
 ### PublicTileIn
 
 Body of a public base map tile: the share token and the tile (in the body, so neither the token nor the place reaches an access log).
@@ -1803,3 +1916,108 @@ The running job as the iOS widgets and the Live Activity show it.
 | `observed_at` | string (date-time) | yes |  |
 | `rain_detected` | boolean or null | yes |  |
 | `stale` | boolean | yes | The mower is offline (see `MowerStateSnapshot.stale`). |
+
+### ZoneDayOut
+
+Time in a zone on one UTC day.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `day` | string (date) | yes |  |
+| `mowing_seconds` | number | yes |  |
+| `seconds` | number | yes |  |
+
+### ZoneIn
+
+A new zone.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `name` | string | yes | min length 1; max length 200 |
+| `ring` | array of array of number | yes | Corners as `[lat, lon]` (WGS84 degrees), open or closed; edges must not cross.; min items 3; max items 65 |
+| `start_plan_ref` | string or null | no |  |
+
+### ZoneLimits
+
+The validation limits, so a client can check a drawing before it is sent.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `max_anchor_distance_m` | number | no | default `1000.0` |
+| `max_area_m2` | number | no | default `100000.0` |
+| `max_corners` | integer | no | default `64` |
+| `max_extent_m` | number | no | default `1000.0` |
+| `max_name_length` | integer | no | default `60` |
+| `max_zones` | integer | no | default `32` |
+| `min_area_m2` | number | no | default `1.0` |
+| `min_corners` | integer | no | default `3` |
+
+### ZoneOut
+
+One virtual zone.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `area_m2` | number | yes |  |
+| `created_at` | string (date-time) | yes |  |
+| `id` | string (uuid) | yes |  |
+| `name` | string | yes |  |
+| `ring` | array of array of number | yes | Corners as `[lat, lon]`, open ring. |
+| `start_plan_ref` | string or null | no | The vendor zone start (`StartPlan` of kind `zone`) this zone is linked to; send it as `StartMow.plan_ref` to start the mower there. |
+| `updated_at` | string (date-time) | yes |  |
+
+### ZonePatch
+
+Changes to a zone; fields left out stay as they are.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `name` | string or null | no |  |
+| `ring` | array of array of number or null | no |  |
+| `start_plan_ref` | string or null | no | Link the zone to this vendor zone start. |
+| `unlink_start_plan` | boolean | no | Remove the link to a start.; default `false` |
+
+### ZonePlanOut
+
+A vendor zone start a zone can be linked to.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `name` | string or null | no |  |
+| `ref` | string | yes |  |
+
+### ZonesOut
+
+The zones of a mower and whether the editor is offered.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `anchor` | [AnchorOut](#anchorout) or null | no |  |
+| `availability` | `"available"` \| `"vendor_map"` \| `"no_position"` | yes | `available`: the vendor shares no map areas and the mower reports positions; `vendor_map`: its vendor's areas are its zones; `no_position`: it reports no position. |
+| `limits` | [ZoneLimits](#zonelimits) | no |  |
+| `presence` | [PresenceOut](#presenceout) or null | no | The current zone; null before the first evaluation. |
+| `zone_plans` | array of [ZonePlanOut](#zoneplanout) | no | Vendor zone starts declared by the mower's connection (ADR 0066); empty when it declares none, then zones cannot be linked to a start. |
+| `zones` | array of [ZoneOut](#zoneout) | yes |  |
+
+### ZoneStatsOut
+
+Time per zone over whole UTC days.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `first_day` | string (date) | yes |  |
+| `items` | array of [ZoneTotalsOut](#zonetotalsout) | yes |  |
+| `last_day` | string (date) | yes |  |
+
+### ZoneTotalsOut
+
+Time in one zone over the period.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `days` | array of [ZoneDayOut](#zonedayout) | yes |  |
+| `entries` | integer | yes | How often it entered the zone. |
+| `mowing_seconds` | number | yes | Of that, time it mowed. |
+| `name` | string | yes |  |
+| `seconds` | number | yes | Time the mower was in the zone while it reported. |
+| `zone_id` | string (uuid) | yes |  |

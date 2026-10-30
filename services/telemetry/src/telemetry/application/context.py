@@ -49,3 +49,5 @@ class TelemetryConfig:
     """... and at most this far apart in space (both limits must hold)."""
     heatmap_default_range: timedelta = timedelta(days=7)
     """Range of a heatmap without ``from``."""
+    zone_max_gap: timedelta = timedelta(minutes=10)
+    """Virtual zones: a longer silence between two reports counts no time in any zone."""

@@ -38,6 +38,15 @@ class Bounds:
             and other.south < self.north
         )
 
+    def union(self, other: "Bounds") -> "Bounds":
+        """The smallest box that holds both."""
+        return Bounds(
+            min(self.south, other.south),
+            min(self.west, other.west),
+            max(self.north, other.north),
+            max(self.east, other.east),
+        )
+
 
 def tile_in_range(z: int, x: int, y: int) -> bool:
     """Whether ``z/x/y`` names a tile of the XYZ scheme."""

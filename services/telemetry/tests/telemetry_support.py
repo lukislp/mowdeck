@@ -202,6 +202,7 @@ async def harness(
     tracking_gateway: Any = None,
     aerial_source: Any = None,
     aerial_cache: Any = None,
+    zone_store: Any = None,
     **overrides: Any,
 ) -> AsyncIterator[Harness]:
     """The app with fakes, inside its lifespan."""
@@ -218,6 +219,7 @@ async def harness(
         background_tasks=background_tasks,
         clock=clock,
         tracking_gateway=tracking_gateway,
+        zone_store=zone_store,
         seed_delay_seconds=0.01,
         aerial_source=aerial_source,
         aerial_cache=aerial_cache,

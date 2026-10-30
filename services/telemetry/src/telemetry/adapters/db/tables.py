@@ -287,3 +287,50 @@ tracking_photos = Table(
     Column("data", LargeBinary, nullable=False),
     Index("ix_tracking_photos_session", "session_id", "taken_at"),
 )
+
+virtual_zones = Table(
+    "virtual_zones",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("account_id", Uuid, nullable=False),
+    Column("mower_id", Uuid, nullable=False),
+    Column("name", String(60), nullable=False),
+    Column("ring", JSONB, nullable=False),
+    Column("area_m2", Double, nullable=False),
+    Column("start_plan_ref", String(100)),
+    Column("created_at", TS, nullable=False),
+    Column("updated_at", TS, nullable=False),
+    Column("created_by", Uuid),
+    Index("ix_virtual_zones_mower", "mower_id", "created_at"),
+    Index("ix_virtual_zones_account", "account_id"),
+)
+
+zone_presence = Table(
+    "zone_presence",
+    metadata,
+    Column("mower_id", Uuid, primary_key=True),
+    Column("account_id", Uuid, nullable=False),
+    Column("zone_id", Uuid),
+    Column("since", TS, nullable=False),
+    Column("observed_at", TS, nullable=False),
+    Column("seen_at", TS),
+    Column("mowing", Boolean, nullable=False, server_default="false"),
+    Column("lat", Double),
+    Column("lon", Double),
+    Column("rtk_fix", String(16), nullable=False, server_default="unknown"),
+    Index("ix_zone_presence_account", "account_id"),
+)
+
+zone_days = Table(
+    "zone_days",
+    metadata,
+    Column("mower_id", Uuid, nullable=False),
+    Column("zone_id", Uuid, ForeignKey("virtual_zones.id", ondelete="CASCADE"), nullable=False),
+    Column("day", Date, nullable=False),
+    Column("account_id", Uuid, nullable=False),
+    Column("seconds", Double, nullable=False, server_default="0"),
+    Column("mowing_seconds", Double, nullable=False, server_default="0"),
+    Column("entries", Integer, nullable=False, server_default="0"),
+    PrimaryKeyConstraint("mower_id", "zone_id", "day", name="pk_zone_days"),
+    Index("ix_zone_days_zone", "zone_id"),
+)

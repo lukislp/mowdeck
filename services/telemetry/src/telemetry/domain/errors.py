@@ -75,3 +75,24 @@ class AerialRateLimitedError(TelemetryError):
 
 class AerialUpstreamError(TelemetryError):
     """The photo source did not deliver an image."""
+
+
+class InvalidZoneError(TelemetryError):
+    """A drawn zone is not acceptable (ADR 0070); ``field`` names the offending input."""
+
+    def __init__(self, field: str, message: str) -> None:
+        super().__init__(message)
+        self.field = field
+
+
+class NoZoneError(TelemetryError):
+    """The mower has no zone with this id."""
+
+
+class ZonesUnavailableError(TelemetryError):
+    """Virtual zones are not offered for this mower (its vendor shares a map, or it reports no
+    position), or it has the most zones already."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
