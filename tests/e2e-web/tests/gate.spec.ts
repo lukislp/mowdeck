@@ -215,8 +215,9 @@ test('5 blade height 50 mm while mowing is executed and confirmed', async () => 
 
 test('6 return to dock: returning or docked', async () => {
   const page = ownerPage;
+  // The simulator keeps no job on the way home (no `dock_keeps_job`): no choice, it just goes.
   await page.getByRole('button', { name: 'Zur Station', exact: true }).click();
-  await page.getByTestId('dock-choice-end').click();
+  await expect(page.getByTestId('dock-choice')).toHaveCount(0);
   await expect(page.getByTestId('mower-state')).toContainText(/Fährt zurück|Angedockt|Lädt/, {
     timeout: 60_000,
   });

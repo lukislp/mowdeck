@@ -11,6 +11,7 @@ type Text = () => string;
 
 const KEYS: Record<string, readonly [Text, Text]> = {
   rain_detection: [m.devset_key_rain_detection, m.devset_hint_rain_detection],
+  rain_delay: [m.devset_key_rain_delay, m.devset_hint_rain_delay],
   recharge_level: [m.devset_key_recharge_level, m.devset_hint_recharge_level],
   smart_recharge_level: [m.devset_key_smart_recharge_level, m.devset_hint_smart_recharge_level],
   resume_level: [m.devset_key_resume_level, m.devset_hint_resume_level],

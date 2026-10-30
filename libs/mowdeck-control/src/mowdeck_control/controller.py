@@ -26,7 +26,8 @@ every :class:`~mowdeck_control.connection.MowerConnection`:
    0049), never sent with the backwards part cut off. A session that implements
    :class:`~mowdeck_control.connection.FrameDeadlineCapable` is told every accepted frame's
    ``ttl_ms``, so a link that repeats the last speed by itself zeroes it in time as well.
-7. ``SetBladeHeight`` and ``SetSpeed`` are checked against the capabilities, ``StartMow`` against
+7. ``SetBladeHeight`` and ``SetSpeed`` are checked against the capabilities (as is a
+   ``ReturnToDock`` that asks to keep the job: ``dock_keeps_job``), ``StartMow`` against
    the map (area ids must exist) and, if a pattern is given, against the native patterns. A
    ``StartMow`` with a ``spot_plan`` runs as a route only when ``capabilities.custom_paths`` is
    True; otherwise its ``native`` job (whole areas, one native pattern) is checked like an area
@@ -797,6 +798,12 @@ class MowerController:
         elif isinstance(command, SetLight):
             if not (await self.capabilities()).light:
                 return "this mower has no switchable light"
+        elif isinstance(command, ReturnToDock) and command.end_job is False:
+            if not (await self.capabilities()).dock_keeps_job:
+                return (
+                    "this mower cannot keep its job while it returns to the dock; send "
+                    "return_to_dock without end_job"
+                )
         elif isinstance(command, StartMow) and command.spot_plan is not None:
             return await self._validate_spot(command)
         elif isinstance(command, StartMow) and command.area_ids:

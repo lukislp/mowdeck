@@ -10,6 +10,7 @@ import pytest
 from mammotion_support import ACCOUNT_ID
 from mowdeck_control import ConnectionConfig
 from mowdeck_control_mammotion import cloud as cloud_module
+from mowdeck_control_mammotion import session as session_module
 from mowdeck_control_mammotion.cloud import (
     cloud_connection_factory,
     default_pool,
@@ -37,7 +38,7 @@ from mowdeck_control_mammotion.session import (
     CloudSessionPool,
     PoolClosedError,
     address_tag,
-    session_key,
+    same_password,
 )
 
 ACCOUNT = "garden@example.com"
@@ -99,14 +100,19 @@ def pool(logins: Logins, linger: float = 0.0) -> CloudSessionPool:
 # --- the pool -------------------------------------------------------------------------------
 
 
-def test_session_key_folds_the_address_and_hides_both_values() -> None:
-    key = session_key(" Garden@Example.com ", PASSWORD)
-    assert key == session_key("garden@example.com", PASSWORD)
-    assert "garden" not in "".join(key) and PASSWORD not in "".join(key)
-    assert session_key("garden@example.com", "other") != key
-    assert session_key("garden@example.com", "other")[0] == key[0]  # same address
+def test_session_key_folds_the_address_and_derives_nothing_from_the_password() -> None:
+    sessions = pool(Logins())
+    key = sessions.session_key(" Garden@Example.com ", PASSWORD)
+    assert key == sessions.session_key("garden@example.com", PASSWORD)
+    assert key is not None and PASSWORD not in "".join(key)
+    other = sessions.session_key("garden@example.com", "other")
+    assert other is not None and other != key and other[0] == key[0]  # same address
+    assert sessions.session_key("garden@example.com", "unseen", create=False) is None
     assert address_tag(" Garden@Example.com") == address_tag("garden@example.com")
     assert "garden" not in address_tag(ACCOUNT) and len(address_tag(ACCOUNT)) == 24
+    assert same_password(PASSWORD, PASSWORD) and not same_password(PASSWORD, "other")
+    source = Path(session_module.__file__).read_text("utf-8")
+    assert "_PROCESS_KEY" not in source and "hmac.new" not in source  # no password digest
 
 
 async def test_the_credential_cache_is_per_address(tmp_path: Path) -> None:

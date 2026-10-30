@@ -8,9 +8,9 @@ address banned, so Fleet limits failed logins per MowDeck account and vendor acc
 * at most :attr:`LoginThrottle.max_failures` failed logins within :attr:`LoginThrottle.window`
   (default 5 in 15 minutes); further attempts answer 429 with ``Retry-After`` until the oldest
   failure leaves the window, without asking the vendor;
-* the password of the last failure is remembered (an HMAC with a per-process random key, never
-  the password) for the same window: trying the same wrong password again is refused at once,
-  without asking the vendor and without counting;
+* the password of the last failure is remembered (a salted scrypt digest with a random salt,
+  never the password, never a fast hash of it) for the same window: trying the same wrong
+  password again is refused at once, without asking the vendor and without counting;
 * a successful login clears both.
 
 The state lives in the memory of one Fleet replica (several replicas multiply the limit by
@@ -39,10 +39,14 @@ class TooManyLoginAttempts(Exception):  # noqa: N818 - reads like the HTTP statu
 @dataclass(slots=True)
 class _State:
     failures: deque[datetime] = field(default_factory=deque)
-    last_wrong: tuple[bytes, datetime] | None = None
+    last_wrong: tuple[bytes, bytes, datetime] | None = None
+    """(salt, scrypt digest of the refused password, when)."""
 
 
 ThrottleKey = tuple[UUID, str]
+
+SCRYPT_N = 2**14
+"""scrypt cost (16 MiB, some tens of milliseconds per check of a remembered password)."""
 
 
 class LoginThrottle:
@@ -58,7 +62,6 @@ class LoginThrottle:
         self.clock = clock
         self.max_failures = max_failures
         self.window = window
-        self._secret = os.urandom(32)
         self._states: dict[ThrottleKey, _State] = {}
 
     @staticmethod
@@ -66,15 +69,18 @@ class LoginThrottle:
         """The throttle key of an e-mail of an account."""
         return account_id, email.strip().lower()
 
-    def _digest(self, password: str) -> bytes:
-        return hmac.new(self._secret, password.encode("utf-8"), hashlib.sha256).digest()
+    @staticmethod
+    def _digest(password: str, salt: bytes) -> bytes:
+        """A deliberately slow, salted digest (scrypt), so a remembered wrong password cannot be
+        brute forced from memory."""
+        return hashlib.scrypt(password.encode("utf-8"), salt=salt, n=SCRYPT_N, r=8, p=1, dklen=32)
 
     def _state(self, key: ThrottleKey) -> _State:
         state = self._states.setdefault(key, _State())
         now = self.clock()
         while state.failures and now - state.failures[0] >= self.window:
             state.failures.popleft()
-        if state.last_wrong is not None and now - state.last_wrong[1] >= self.window:
+        if state.last_wrong is not None and now - state.last_wrong[2] >= self.window:
             state.last_wrong = None
         return state
 
@@ -86,14 +92,15 @@ class LoginThrottle:
             retry = state.failures[0] + self.window - self.clock()
             raise TooManyLoginAttempts(max(1, int(retry.total_seconds()) + 1))
         wrong = state.last_wrong
-        return wrong is None or not hmac.compare_digest(wrong[0], self._digest(password))
+        return wrong is None or not hmac.compare_digest(wrong[1], self._digest(password, wrong[0]))
 
     def failed(self, key: ThrottleKey, password: str) -> None:
         """Record a refused login."""
         state = self._state(key)
         now = self.clock()
         state.failures.append(now)
-        state.last_wrong = (self._digest(password), now)
+        salt = os.urandom(16)
+        state.last_wrong = (salt, self._digest(password, salt), now)
 
     def succeeded(self, key: ThrottleKey) -> None:
         """Forget the failures of ``key``."""

@@ -11,6 +11,7 @@ The libraries under `libs/` are independent Python packages in the uv workspace,
 | `mowdeck-auth` | 0.1.0 | Access tokens: EdDSA JWT verification against Identity's cached JWKS, the kit's principal resolver, token issuing, test keys and a fake JWKS endpoint |
 | `mowdeck-control-mammotion` (GPL-3.0) | 0.1.0 | Mammotion adapter on PyMammotion 0.10.9: `cloud` and `ble_bridge` connections, owner test script |
 | `mowdeck-control-husqvarna` | 0.1.0 | Husqvarna Automower cloud provider on aioautomower 3.1.0 (Automower Connect API), untested on real hardware and off by default ([ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md)) |
+| `mowdeck-control-worx` (GPL-3.0) | 0.1.0 | Worx Landroid, Kress and LandXcape cloud provider on pyworxcloud 6.4.2 (unofficial API, MQTT push), untested on real hardware and off by default ([ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md)) |
 | `mowdeck-ui` | 0.1.0 | Design system of the web app, a pnpm package (`@mowdeck/ui`) rather than a uv package: design tokens, Svelte 5 components, the frontend lint rules and the contrast check; reference in `libs/mowdeck-ui/README.md` and [Web app](web-app.md) |
 | `mowdeck-patterns` | 0.1.0 | Mowing patterns as plug-ins (entry point group `mowdeck.patterns`), the validation chain, chains, coverage and gaps, preview; pure computation on Shapely, reference in `libs/mowdeck-patterns/README.md` ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)) |
 
@@ -138,6 +139,7 @@ flowchart LR
     conn --> sim["SimulatedMower"]
     conn --> mam["mowdeck-control-mammotion (GPL-3.0)"]
     conn --> hus["mowdeck-control-husqvarna"]
+    conn --> wx["mowdeck-control-worx (GPL-3.0)"]
 ```
 
 | Part | Purpose |
@@ -206,6 +208,10 @@ The owner script `libs/mowdeck-control-mammotion/scripts/try_real_mower.py` runs
 ## mowdeck-control-husqvarna
 
 A cloud provider plugin ([ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md)) for Husqvarna Automower and Gardena smart mowers on the official Automower Connect API, built on aioautomower 3.1.0 (MIT, pinned exactly). It registers `husqvarna` in the entry point group `mowdeck.cloud_providers` and is **off by default** (never tested on a real mower): operators enable it with `MOWDECK_CLOUD_PROVIDERS_ENABLE=husqvarna`. The user links their own Husqvarna application (application key and secret from the developer portal); MowDeck gets a token with the OAuth2 client-credentials grant. One session per application key (token, websocket, a REST refresh every 30 minutes) serves the discovery and every mower of the account, which keeps it within Husqvarna's 1 request per second and 10,000 requests a month. The connection reports state, battery, errors with lift codes for the theft alarm, GPS positions and derived blade state, and translates pause, resume (the schedule), park and starts by plan reference (duration, work area); the emergency stop is a pause because the API has no hard stop. No map geometry, patterns, manual driving or camera. Its error lexicon (`mowdeck.error_lexicons`: `husqvarna`, [ADR 0067](../adr/0067-error-code-lexicon.md)) explains every Husqvarna code in English and German. All HTTP goes through a small transport port, so the tests and the fake cloud (`ProviderContext.fake`) run without network. Reference: `libs/mowdeck-control-husqvarna/README.md`.
+
+## mowdeck-control-worx
+
+A cloud provider plugin ([ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md)) for Worx Landroid, Kress and LandXcape mowers (one cloud behind three brand endpoints), built on pyworxcloud 6.4.2, pinned exactly. pyworxcloud's sdist ships a GPL-3.0 `LICENSE` (its PyPI metadata says MIT), so the package is GPL-3.0 and isolated like the Mammotion adapter. It registers `worx` in `mowdeck.cloud_providers` and is **off by default**: operators enable it with `MOWDECK_CLOUD_PROVIDERS_ENABLE=worx`. The user enters the e-mail, password and brand of the app account; the descriptor warns of the unofficial API and the account block risk. One session per account (one login, MQTT push) serves the discovery and every mower; a login guard holds refused, rate limited and failed logins and never repeats a successful one within 60 seconds, and a dropped MQTT link is not a lost connection, so the gateway's reconnects never turn into logins. The connection declares start plans (now, zones, edge cut), pause, resume, home, the cutting height on models with the height module and the rain delay setting; lifted and upside down raise the theft alarm. pyworxcloud is imported only by the real session (`pyworx_session.py`); everything else, and the fake cloud, runs on plain JSON product items. Its error lexicon (`worx`) explains every code in English and German, all marked unverified. Reference: `libs/mowdeck-control-worx/README.md` and the user guide `docs/guides/worx-landroid.md`.
 
 ## mowdeck-authz
 
