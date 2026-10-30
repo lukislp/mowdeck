@@ -14,7 +14,7 @@ Run a demo only as its **own stack**: its own host or VM if possible, its own Co
 
 - The interactive API explorer at `/api-explorer` ([ADR 0072](../adr/0072-api-explorer-in-the-web-app.md)), linked from the band ("Try the API live") and the sign-in page: every service's OpenAPI document in Scalar (self-hosted, nothing from a CDN), "Test Request" with the visitor's demo session. `docker-compose.demo.yml` turns it on (`MOWDECK_WEB_API_EXPLORER=true`); the API docs point visitors to `/api-explorer` of the demo, so once the demo has its public address, link that address in the README and the portfolio.
 
-All visitors share the one demo account: they see each other's commands live.
+All visitors share the one demo account: they see each other's commands live. Not each other's sign-ins, though: the security center's session list, its security events and its session count only show the visitor's own login session, so nobody sees another visitor's browser, network or times.
 
 ## What the demo refuses
 

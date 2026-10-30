@@ -17,6 +17,9 @@
   the list shows each event once.
 * **New-login alerts** (``users.new_login_alerts``, on by default): see
   :mod:`identity.application.devices`. Turning them off needs a recent step-up.
+* **Public demo** (ADR 0068): every visitor signs in as the one demo user, so "the caller's
+  sessions" would be every visitor's browser, network and times. In demo mode the list, the
+  events and the overview's session count only cover the caller's own login session.
 """
 
 from dataclasses import dataclass
@@ -123,6 +126,11 @@ class SecurityService:
     def __init__(self, deps: Deps) -> None:
         self.deps = deps
 
+    @property
+    def _demo(self) -> bool:
+        """Demo mode: all visitors share one user, so only the own session may be shown."""
+        return self.deps.config.demo_username is not None
+
     @staticmethod
     def _user(ctx: RequestContext) -> Principal:
         principal = ctx.principal
@@ -160,7 +168,13 @@ class SecurityService:
             passkeys=passkeys,
             providers=[link.provider for link in links],
             personal_tokens=sum(1 for t in tokens if t.is_usable(now)),
-            sessions=len({row.family_id for row in heads if _live(row, now)}),
+            sessions=len(
+                {
+                    row.family_id
+                    for row in heads
+                    if _live(row, now) and (not self._demo or row.family_id == principal.session_id)
+                }
+            ),
             known_devices=devices,
         )
 
@@ -198,6 +212,8 @@ class SecurityService:
             )
             for head in heads:
                 if not _live(head, now):
+                    continue
+                if self._demo and head.family_id != principal.session_id:
                     continue
                 first = await tx.sessions.find(
                     family_id=head.family_id, order_by="created_at", limit=1
@@ -312,6 +328,8 @@ class SecurityService:
         seen: set[tuple[Any, ...]] = set()
         unique: list[AuditEntry] = []
         for entry in sorted([*about, *done], key=lambda e: (e.at, e.id or 0), reverse=True):
+            if self._demo and (entry.details or {}).get("session") != str(principal.session_id):
+                continue
             key = _event_key(entry)
             if key in seen:
                 continue
