@@ -26,7 +26,7 @@ esphome = [
   "aioesphomeapi==45.0.3",
   "bleak-esphome==3.7.5",
   "habluetooth==6.1.0",
-  "bluetooth-adapters==2.1.1",
+  "bluetooth-adapters==2.4.0",
 ]
 
 [project.entry-points."mowdeck.connections"]

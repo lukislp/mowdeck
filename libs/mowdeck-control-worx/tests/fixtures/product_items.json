@@ -1,0 +1,219 @@
+[
+  {
+    "id": 4711,
+    "uuid": "2c8a7d34-3f9e-4c5a-9e61-0d4b2a1c0001",
+    "product_id": 46,
+    "user_id": 99,
+    "serial_number": "20213026640700012345",
+    "mac_address": "F0FE6B000001",
+    "name": "Rasenwerk",
+    "locked": false,
+    "firmware_version": "3.30",
+    "firmware_auto_upgrade": true,
+    "push_notifications": true,
+    "sim": null,
+    "push_notifications_level": "warning",
+    "test": false,
+    "iot_registered": true,
+    "mqtt_registered": true,
+    "pin_code": null,
+    "registered_at": "2021-05-03 10:11:12",
+    "online": true,
+    "app_settings": null,
+    "accessories": null,
+    "features": null,
+    "blade_work_time": 21840,
+    "blade_work_time_reset": 0,
+    "blade_work_time_reset_at": null,
+    "battery_charge_cycles": 312,
+    "battery_charge_cycles_reset": null,
+    "battery_charge_cycles_reset_at": null,
+    "lawn_size": 600,
+    "lawn_perimeter": 110,
+    "auto_schedule": false,
+    "auto_schedule_settings": null,
+    "improvement": true,
+    "diagnostic": true,
+    "distance_covered": 523456,
+    "mower_work_time": 33120,
+    "zone": {"p": [10, 10, 10, 70], "s": [0, 12, 35, 0]},
+    "capabilities": ["border_cut"],
+    "capabilities_available": [],
+    "mqtt_endpoint": "iot.eu-west-1.worxlandroid.com",
+    "mqtt_topics": {
+      "command_in": "PRM100/F0FE6B000001/commandIn",
+      "command_out": "PRM100/F0FE6B000001/commandOut"
+    },
+    "warranty_registered": true,
+    "purchased_at": "2021-05-01 00:00:00",
+    "warranty_expires_at": "2024-05-01 00:00:00",
+    "setup_location": null,
+    "city": null,
+    "time_zone": "Europe/Berlin",
+    "lawn_mowing_progress": null,
+    "protocol": 0,
+    "pending_radio_link_validation": null,
+    "model": {
+      "code": "WR155E",
+      "friendly_name": "Landroid L 2000 WR155E",
+      "model_year": 2021,
+      "cutting_width": 22
+    },
+    "last_status": {
+      "timestamp": "2026-10-29 08:12:34",
+      "payload": {
+        "cfg": {
+          "id": 0,
+          "lg": "de",
+          "tm": "08:12:34",
+          "dt": "29/10/2026",
+          "sc": {
+            "m": 1,
+            "p": 0,
+            "d": [["10:00", 240, 1], ["10:00", 240, 0], ["10:00", 240, 1], ["10:00", 240, 0], ["10:00", 240, 1], ["00:00", 0, 0], ["00:00", 0, 0]],
+            "ots": {"bc": 0, "wtm": 0}
+          },
+          "cmd": 0,
+          "mz": [12, 35, 0, 0],
+          "mzv": [0, 0, 0, 1, 1, 0, 0, 0, 1, 0],
+          "rd": 60,
+          "sn": "20213026640700012345",
+          "al": {"lvl": 0, "t": 60},
+          "tq": 0,
+          "modules": {"EA": {"h": 45}}
+        },
+        "dat": {
+          "mac": "F0FE6B000001",
+          "fw": 3.3,
+          "bt": {"t": 21.5, "v": 20.1, "p": 87, "nr": 312, "c": 0, "m": 1},
+          "dmp": [0.4, -1.2, 181.0],
+          "st": {"b": 21840, "d": 523456, "wt": 33120, "bl": 0},
+          "ls": 7,
+          "le": 0,
+          "lz": 3,
+          "rsi": -58,
+          "lk": 0,
+          "act": 1,
+          "conn": "wifi",
+          "rain": {"s": 0, "cnt": 0},
+          "modules": {
+            "4G": {"gps": {"coo": [52.52045, 13.40495]}, "stat": "ok"},
+            "EA": {"stat": "ok"}
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": 4712,
+    "uuid": "2c8a7d34-3f9e-4c5a-9e61-0d4b2a1c0002",
+    "product_id": 12,
+    "user_id": 99,
+    "serial_number": "20193018320500054321",
+    "mac_address": null,
+    "name": "Gartenzwerg",
+    "online": true,
+    "capabilities": [],
+    "mqtt_endpoint": "iot.eu-west-1.worxlandroid.com",
+    "mqtt_topics": {
+      "command_in": "PRM100/F0FE6B000002/commandIn",
+      "command_out": "PRM100/F0FE6B000002/commandOut"
+    },
+    "time_zone": "Europe/Berlin",
+    "protocol": 0,
+    "model": {
+      "code": "WR130E",
+      "friendly_name": "Landroid S 390 WR130E",
+      "model_year": 2019,
+      "cutting_width": 18
+    },
+    "last_status": {
+      "timestamp": "2026-10-29 07:55:01",
+      "payload": {
+        "cfg": {
+          "id": 0,
+          "lg": "de",
+          "tm": "07:55:01",
+          "dt": "29/10/2026",
+          "sc": {"m": 1, "p": 0, "d": [["09:00", 180, 0], ["09:00", 180, 0], ["09:00", 180, 0], ["09:00", 180, 0], ["09:00", 180, 0], ["00:00", 0, 0], ["00:00", 0, 0]]},
+          "cmd": 0,
+          "mz": [0, 0, 0, 0],
+          "mzv": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "rd": 180,
+          "sn": "20193018320500054321"
+        },
+        "dat": {
+          "mac": "F0FE6B000002",
+          "fw": 3.27,
+          "bt": {"t": 18.0, "v": 19.6, "p": 100, "nr": 845, "c": 1, "m": 1},
+          "dmp": [1.2, 0.3, 90.0],
+          "st": {"b": 70221, "d": 1203004, "wt": 98110},
+          "ls": 1,
+          "le": 0,
+          "lz": 0,
+          "rsi": -71,
+          "lk": 0,
+          "rain": {"s": 1, "cnt": 142}
+        }
+      }
+    }
+  },
+  {
+    "id": 4713,
+    "uuid": "2c8a7d34-3f9e-4c5a-9e61-0d4b2a1c0003",
+    "product_id": 88,
+    "user_id": 99,
+    "serial_number": "20243050010100099999",
+    "mac_address": "F0FE6B000003",
+    "name": "Vision",
+    "online": true,
+    "capabilities": [],
+    "mqtt_endpoint": "iot.eu-west-1.worxlandroid.com",
+    "mqtt_topics": {
+      "command_in": "Vision/2c8a7d34-3f9e-4c5a-9e61-0d4b2a1c0003/commandIn",
+      "command_out": "Vision/2c8a7d34-3f9e-4c5a-9e61-0d4b2a1c0003/commandOut"
+    },
+    "time_zone": "Europe/Berlin",
+    "protocol": 1,
+    "model": {
+      "code": "WR216E",
+      "friendly_name": "Landroid Vision M 600 WR216E",
+      "model_year": 2024,
+      "cutting_width": 22
+    },
+    "last_status": {
+      "timestamp": "2026-10-29 08:20:00",
+      "payload": {
+        "cfg": {
+          "sc": {"enabled": 1, "once": {"time": 0, "cfg": {"cut": {"b": 0, "z": []}}}, "slots": []},
+          "rtk": {"zs": [{"id": 1}, {"id": 2}]},
+          "modules": {"EA": {"h": 50}}
+        },
+        "dat": {
+          "uuid": "2c8a7d34-3f9e-4c5a-9e61-0d4b2a1c0003",
+          "fw": "4.1.2",
+          "bt": {"p": 54, "c": 0, "nr": 40},
+          "st": {"b": 600, "d": 12000, "wt": 900},
+          "ls": 4,
+          "le": 2,
+          "rsi": -64,
+          "rtk": {"pos": [48.13743, 11.57549]},
+          "cut": {"z": 2},
+          "modules": {"EA": {"stat": "ok"}}
+        }
+      }
+    }
+  },
+  {
+    "id": 4714,
+    "serial_number": "20183017010100011111",
+    "mac_address": null,
+    "name": null,
+    "online": false,
+    "capabilities": [],
+    "mqtt_topics": {"command_in": "x", "command_out": "y"},
+    "protocol": 0,
+    "model": {"code": "WG794E", "friendly_name": "Landroid M 700 WG794E", "model_year": 2018, "cutting_width": 20},
+    "last_status": null
+  }
+]

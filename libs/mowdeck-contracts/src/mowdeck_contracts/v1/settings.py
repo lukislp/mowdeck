@@ -153,6 +153,7 @@ class SettingSpec(ContractModel):
 
 SETTING_KEYS: Final[dict[str, str]] = {
     "rain_detection": "Stop mowing and return to the dock when the rain sensor detects rain.",
+    "rain_delay": "Minutes the mower waits after its rain sensor dried before it mows again.",
     "recharge_level": "Return to the dock to charge at this battery level (percent).",
     "smart_recharge_level": "Let the mower choose when it returns to charge.",
     "resume_level": "Resume an interrupted job once charged to this level (percent).",

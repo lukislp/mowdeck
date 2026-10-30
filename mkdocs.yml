@@ -131,6 +131,7 @@ nav:
       - ops/helm.md
       - ops/ble-bridge-esphome.md
       - ops/release.md
+      - ops/vendor-lib-updates.md
       - ops/billing.md
       - ops/telemetry-retention.md
       - ops/mobile-apps.md
@@ -159,6 +160,7 @@ nav:
       - guides/apple-watch.md
       - guides/setup-tour.md
       - guides/matter.md
+      - guides/worx-landroid.md
       - guides/scripting.md
   - API reference:
       - reference/api/index.md

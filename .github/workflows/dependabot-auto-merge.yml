@@ -5,9 +5,14 @@ name: Dependabot auto-merge
 # here because a reusable workflow cannot declare them for the caller. Needs the AUTOMERGE_TOKEN
 # repository secret (fine-grained PAT, contents + pull requests write).
 #
-# pymammotion is never merged automatically: every release changes the protocol surface of the
-# GPL adapter (mowdeck-control-mammotion) and is tested on a real mower first. Its PRs wait for a
-# manual approval and merge (see CONTRIBUTING.md, "Dependency updates").
+# The vendor libraries of the mower adapters are never merged automatically: pymammotion
+# (mowdeck-control-mammotion), pyworxcloud (mowdeck-control-worx) and aioautomower
+# (mowdeck-control-husqvarna). A bug in a release can break a command, in the worst case the
+# emergency stop, so each update is tested on a real mower first and then merged by hand by the
+# owner (docs/ops/vendor-lib-updates.md; the check "vendor-lib / hardware test" of
+# vendor-lib-guard.yml holds it until then). The list is comma separated and kept equal to
+# VENDOR_LIBS of tools/repo-checks/scripts/vendor_lib_guard.py by
+# tools/repo-checks/tests/test_dependabot.py.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, auto_merge_enabled]
@@ -21,8 +26,8 @@ permissions:
 
 jobs:
   dependabot:
-    uses: lukislp/ci-workflows/.github/workflows/dependabot-auto-merge.yml@6f4cdb006224918fd40221eeb54e3d4216f816f9 # v1.8.11
+    uses: lukislp/ci-workflows/.github/workflows/dependabot-auto-merge.yml@fc2d6420d00d465bbac8b3422ea29322ba2f2bc4 # v1.8.16
     with:
-      exclude-dependencies: pymammotion
+      exclude-dependencies: pymammotion,pyworxcloud,aioautomower
     secrets:
       AUTOMERGE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}

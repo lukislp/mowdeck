@@ -69,5 +69,10 @@ Never log a credential, never put one into an exception message, and never answe
 | --- | --- | --- | --- | --- | --- |
 | `mammotion` | `mowdeck-control-mammotion` | GPL-3.0 | e-mail and password of a second Mammotion account | yes (LUBA 2 AWD X) | yes |
 | `husqvarna` | `mowdeck-control-husqvarna` | Apache-2.0 | application key and secret of their own application in the Husqvarna Developer Portal (free developer account) | no | no (`MOWDECK_CLOUD_PROVIDERS_ENABLE=husqvarna`) |
+| `worx` | `mowdeck-control-worx` | GPL-3.0 | e-mail, password and brand (Worx Landroid, Kress, LandXcape) of the app account; unofficial API, account block risk (descriptor warnings) | no | no (`MOWDECK_CLOUD_PROVIDERS_ENABLE=worx`) |
 
-The Husqvarna adapter's capabilities, state mapping, commands and rate limits are in `libs/mowdeck-control-husqvarna/README.md`. The research behind further vendors (Husqvarna, Segway Navimow, Worx) is in [ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md).
+The Husqvarna adapter's capabilities, state mapping, commands and rate limits are in `libs/mowdeck-control-husqvarna/README.md`, the Worx adapter's (including its login guard) in `libs/mowdeck-control-worx/README.md`.
+
+## Mowers without map areas, and warnings
+
+A vendor that shares no area geometry declares the starts its mowers offer in `MowerCapabilities.start_plans` (`now`, `zone` with the vendor's zone name, `edge`, `schedule`; each sent as `StartMow.plan_ref`, validated by the connection). The mower page then starts through them instead of map areas. A provider whose API is unofficial or may get accounts blocked says so in `ProviderDescriptor.warnings` (localized like every other text); the link form shows them first. Both are neutral: no vendor is named in the core. The research behind further vendors (Husqvarna, Segway Navimow, Worx) is in [ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md).

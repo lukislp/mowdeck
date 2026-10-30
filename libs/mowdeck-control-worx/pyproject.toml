@@ -1,0 +1,48 @@
+[project]
+name = "mowdeck-control-worx"
+version = "0.1.0"
+description = "Worx Landroid (also Kress and LandXcape) adapter for mowdeck-control on top of pyworxcloud (unofficial cloud API, MQTT push). Untested on real hardware."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "mowdeck-contracts",
+  "mowdeck-control",
+  # pyworxcloud: PyPI metadata says MIT, the LICENSE file in its sdist is GPL-3.0, so this
+  # package is GPL-3.0 and isolated like the Mammotion adapter (ADR 0011, ADR 0066). Exact pin:
+  # the cloud API is reverse engineered and changes without notice; upgrade deliberately.
+  "pyworxcloud==6.4.2",
+]
+
+# Linked Worx, Kress and LandXcape accounts and their mowers (ADR 0066). Off by default until
+# tested on real hardware: MOWDECK_CLOUD_PROVIDERS_ENABLE=worx.
+[project.entry-points."mowdeck.cloud_providers"]
+worx = "mowdeck_control_worx.plugin:SPEC"
+
+# The status and error codes of the Positec cloud in plain words (ADR 0067).
+[project.entry-points."mowdeck.error_lexicons"]
+worx = "mowdeck_control_worx.lexicon:worx_lexicon"
+
+# Vendor isolation (ADR 0066, tools/repo-checks/tests/test_vendor_isolation.py): no core code
+# may import this package or the vendor modules it wraps.
+[tool.mowdeck.adapter]
+vendor-modules = ["pyworxcloud"]
+# Brand words that must not appear in core strings or web texts (the vendor name is implied).
+brand-names = ["landroid", "kress", "landxcape", "positec"]
+
+[tool.uv.sources]
+mowdeck-contracts = { workspace = true }
+mowdeck-control = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mowdeck_control_worx"]

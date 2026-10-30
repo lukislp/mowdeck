@@ -148,6 +148,14 @@
   } from '#lib/mower/route.js';
   import { SpotSheetFlow } from '#lib/mower/spot-sheet.svelte.js';
   import { StartSheetFlow } from '#lib/mower/start-sheet.svelte.js';
+  import { dockChoiceOffered } from '#lib/mower/dock-choice.js';
+  import {
+    planCommand,
+    planLabel,
+    startPlans,
+    startRoute,
+    type StartPlan,
+  } from '#lib/mower/start-plans.js';
   import { jobActive, rainStatusOf } from '#lib/mower/start-sheet.js';
   import { assistProposal } from '#lib/notifications/kinds.js';
   import {
@@ -256,6 +264,8 @@
   let aerialInfo = $state.raw<AerialInfo | null>(null);
   // AI assist: the sheet, what a new request asks for, and the proposal a link opened.
   let assisting = $state(false);
+  /** The start plan choice is open (a mower without map areas that offers several starts). */
+  let planChoice = $state(false);
   let assistTask = $state<VisionTask>('recover');
   // The mower's planned mow path: the running job's (polled from Telemetry), the last job's
   // (kept until the next start) and a preview computed in the start sheet (`sheet.preview`); the
@@ -1097,12 +1107,16 @@
     updating: () => m.reason_updating(),
   } as const;
 
+  // Mowers without map areas start through the plans their connection declares (ADR 0066).
+  const plans = $derived(startPlans(caps));
+  const startVia = $derived(startRoute(!!mowerMap?.areas?.length, plans));
+
   const actions = $derived.by((): CommandAction[] => {
     if (!canControl) return [];
     const primary = primaryCommand(activity);
     return BAR.map((item) => {
       const a = availability(item.id, activity);
-      const noAreas = item.id === 'start' && a.enabled && !(mowerMap?.areas?.length ?? 0);
+      const noAreas = item.id === 'start' && a.enabled && startVia === 'none';
       return {
         id: item.id,
         label: item.label(),
@@ -1115,7 +1129,21 @@
     });
   });
 
+  /** Start with one of the mower's own plans (no map areas to choose). */
+  async function startPlan(plan: StartPlan): Promise<void> {
+    planChoice = false;
+    await sendCommand(id, planCommand(plan));
+  }
+
   async function onaction(action: string): Promise<void> {
+    if (action === 'start' && startVia === 'plan' && plans[0]) {
+      await startPlan(plans[0]);
+      return;
+    }
+    if (action === 'start' && startVia === 'choice') {
+      planChoice = true;
+      return;
+    }
     if (action === 'start') {
       // Areas tapped on the map are already chosen; the sheet confirms (and can change) them.
       assisting = false;
@@ -1125,7 +1153,7 @@
       sheet.open();
       return;
     }
-    if (action === 'dock' && jobActive(activity)) {
+    if (action === 'dock' && dockChoiceOffered(caps, jobActive(activity))) {
       sheet.dockChoice = true;
       return;
     }
@@ -1537,8 +1565,8 @@
           />
         </div>
       {:else}
-        <div class="plan-empty">
-          <span>{m.detail_areas_empty()}</span>
+        <div class="plan-empty" data-testid="map-empty">
+          <span>{plans.length > 0 ? m.start_plans_no_map() : m.detail_areas_empty()}</span>
         </div>
       {/if}
     </section>
@@ -2192,6 +2220,27 @@
         {@render spotRunBar(true)}
       {/snippet}
     </SpotSheet>
+    <Sheet
+      open={planChoice}
+      title={m.start_plan_title()}
+      closeLabel={m.close()}
+      onclose={() => (planChoice = false)}
+      testid="start-plan-choice"
+    >
+      <p class="hint">{m.start_plan_hint()}</p>
+      <div class="dock-choice">
+        {#each plans as plan, index (plan.ref)}
+          <Button
+            full
+            variant={index === 0 ? 'primary' : undefined}
+            icon="play"
+            testid="start-plan-{plan.ref.replace(':', '-')}"
+            onclick={() => startPlan(plan)}>{planLabel(plan)}</Button
+          >
+        {/each}
+        <Button variant="ghost" full onclick={() => (planChoice = false)}>{m.cancel()}</Button>
+      </div>
+    </Sheet>
     <Sheet
       open={sheet.dockChoice}
       title={m.dock_choice_title()}

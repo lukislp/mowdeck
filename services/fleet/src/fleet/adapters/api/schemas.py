@@ -629,6 +629,11 @@ class ProviderOut(BaseModel):
     links: list[ProviderLinkOut]
     needs_developer_account: bool
     tested_on_hardware: bool
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Risks the provider warns of before an account is linked (an unofficial "
+        "API, a possible account block); the web app shows them prominently.",
+    )
 
     @classmethod
     def of(cls, item: ProviderDescriptor, locale: str | None) -> "ProviderOut":
@@ -662,6 +667,7 @@ class ProviderOut(BaseModel):
             links=[ProviderLinkOut(label=text(link.label), url=link.url) for link in item.links],
             needs_developer_account=item.needs_developer_account,
             tested_on_hardware=item.tested_on_hardware,
+            warnings=[text(w) for w in item.warnings],
         )
 
 

@@ -15,7 +15,9 @@ package = false
 override-dependencies = ["filelock>=4.2.1"]
 
 [tool.uv.workspace]
-members = ["libs/*/", "services/*/", "tools/*/", "integrations/agora-bridge/"]
+# No trailing "/" in the globs: Dependabot's uv fetcher matches them against directory paths
+# without one and would skip every member (.github/dependabot.yml).
+members = ["libs/*", "services/*", "tools/*", "integrations/agora-bridge"]
 # pnpm packages of the web frontend (pnpm-workspace.yaml), not Python packages.
 exclude = ["libs/mowdeck-ui", "tools/ts-codegen", "services/matter-server"]
 
@@ -45,6 +47,7 @@ dev = [
   "mowdeck-control",
   "mowdeck-control-husqvarna",
   "mowdeck-control-mammotion[esphome]",
+  "mowdeck-control-worx",
   "mowdeck-patterns",
   "mowdeck-service-kit[db,otel,testing]",
   "mowdeck-wiki-sync",
@@ -73,6 +76,7 @@ mowdeck-contracts = { workspace = true }
 mowdeck-control = { workspace = true }
 mowdeck-control-husqvarna = { workspace = true }
 mowdeck-control-mammotion = { workspace = true }
+mowdeck-control-worx = { workspace = true }
 mowdeck-patterns = { workspace = true }
 mowdeck-service-kit = { workspace = true }
 mowdeck-wiki-sync = { workspace = true }
@@ -120,6 +124,7 @@ files = [
   "libs/mowdeck-control",
   "libs/mowdeck-control-husqvarna",
   "libs/mowdeck-control-mammotion",
+  "libs/mowdeck-control-worx",
   "libs/mowdeck-patterns",
   "libs/mowdeck-service-kit",
   "services",
@@ -135,6 +140,12 @@ exclude = ["/migrations/"]
 # are unannotated; missing stubs never fail the build. Our own code stays strict.
 [[tool.mypy.overrides]]
 module = ["pymammotion.*"]
+ignore_missing_imports = true
+
+# pyworxcloud (GPL, used only by libs/mowdeck-control-worx) ships no type information; the
+# adapter keeps it behind its own typed session port.
+[[tool.mypy.overrides]]
+module = ["pyworxcloud", "pyworxcloud.*"]
 ignore_missing_imports = true
 
 # Atheris (the fuzzing engine of fuzz/) is installed only in the ClusterFuzzLite build image.

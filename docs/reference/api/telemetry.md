@@ -1183,6 +1183,7 @@ All fields default to "not supported", so an adapter only declares what it reall
 | `connection_kinds` | array of [ConnectionKind](#connectionkind) | no | Connection kinds this mower can use. |
 | `custom_paths` | boolean | no | The mower can follow an arbitrary path or boundary.; default `false` |
 | `cutting_width_mm` | integer or null | no | Width of the cut swath in millimetres, if known (coverage heatmaps). |
+| `dock_keeps_job` | boolean | no | `ReturnToDock` with `end_job: false` keeps the running job paused, so a later `ResumeMow` continues it. Without it a client offers no 'keep the job' choice and the controller refuses `end_job: false`; the mower ends (or forgets) its job on the way home.; default `false` |
 | `drive_reverse` | boolean | no | The drive link that carries the joystick frames can drive backwards (a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and a spot run's `multi_point` turns fall back to `arc` (ADR 0043).; default `false` |
 | `drive_speed_setting` | [DriveSpeedSetting](#drivespeedsetting) or null | no | The vendor's speed setting for manual driving can be read (`MowerState.drive_speed_mps`) and changed (`set_drive_speed`) within this range; null when the connection cannot (ADR 0042). |
 | `firmware_update` | boolean | no | The connection can ask the manufacturer's firmware service for updates and install them (`firmware_check`, `firmware_update`).; default `false` |
@@ -1199,6 +1200,7 @@ All fields default to "not supported", so an adapter only declares what it reall
 | `rtk_sources` | array of [RtkSource](#rtksource) | no | RTK correction sources the mower can report. |
 | `settings` | array of [SettingSpec](#settingspec) | no | The mower's own settings this connection can read and change with `set_setting` (ADR 0046), each with its type and range or options; current values in `MowerState.settings`. Empty when the connection offers none.; max items 32 |
 | `start_options` | [StartOptions](#startoptions) | no | Job options a native start may carry besides the pattern (obstacle detection, laps around no-go zones, path order, start progress; ADR 0030). Clients show only what is declared here. |
+| `start_plans` | array of [StartPlan](#startplan) | no | Starts the mower offers without map areas (ADR 0066 amendment), in the order a client lists them; each is sent as `StartMow.plan_ref`. Empty for mowers that start on their map areas.; max items 16 |
 | `undock` | boolean | no | The connection can make the mower leave its charging station by itself (`leave_dock`), so a spot run may start from the dock (ADR 0041).; default `false` |
 
 ### MowerCapabilitiesList
@@ -1623,6 +1625,24 @@ Everything defaults to "not offered": a client shows an option only when it is d
 | `obstacle_laps_range` | array of any or null | no | Inclusive (min, max) laps around each no-go zone (`MowPattern.obstacle_laps`), if settable. |
 | `orders` | array of [PathOrder](#pathorder) | no | Path orders the mower offers (`MowPattern.order`); empty when it offers no choice.; max items 2 |
 | `start_progress_range_pct` | array of any or null | no | Inclusive (min, max) progress in percent a job may start at (`MowPattern.start_progress_pct`), if settable. |
+
+### StartPlan
+
+One way to start a mower that has no map areas to choose (ADR 0066 amendment).
+
+A mower whose connection knows no area geometry (its vendor keeps the garden to itself) cannot be started by tapping areas. Its connection declares the starts it offers instead; a client sends `StartMow {plan_ref: ref}` for the one the user picks and labels it by `kind` (plus `name` for a zone).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `kind` | [StartPlanKind](#startplankind) | yes |  |
+| `name` | string or null | no | The mower's own name of a zone, shown as is; null for the other kinds. |
+| `ref` | string | yes | Sent as `StartMow.plan_ref` to start this.; pattern `^[a-z][a-z0-9_]{0,31}(:[A-Za-z0-9_.-]{1,64})?$` |
+
+### StartPlanKind
+
+What a start plan does, so a client can label it without knowing the vendor.
+
+Type: `"now"` \| `"zone"` \| `"edge"` \| `"schedule"`
 
 ### StateHistory
 

@@ -323,6 +323,7 @@ async def test_fleet_resolves_provider_texts_for_the_callers_language() -> None:
         update={
             "summary": {"en": "Zeta mowers", "de": "Zeta-Mäher"},
             "setup_steps": [{"en": "Create an app", "de": "Lege eine Anwendung an"}],
+            "warnings": [{"en": "Unofficial API", "de": "Inoffizielle API"}],
         }
     )
     async with harness(**_settings()) as h:
@@ -336,6 +337,8 @@ async def test_fleet_resolves_provider_texts_for_the_callers_language() -> None:
         french = await h.client.get(url, headers=owner.headers, params={"locale": "fr"})
     zeta = next(i for i in german.json()["items"] if i["provider"] == "zeta")
     assert zeta["summary"] == "Zeta-Mäher" and zeta["setup_steps"] == ["Lege eine Anwendung an"]
+    assert zeta["warnings"] == ["Inoffizielle API"]
+    assert next(i for i in german.json()["items"] if i["provider"] == "acme")["warnings"] == []
     assert zeta["fields"][0]["label"] == "Application key"  # no German text: English
     assert zeta["fields"][2]["choices"][0] == {"value": "eu", "label": "Europe"}
     assert next(i for i in header.json()["items"] if i["provider"] == "zeta")["summary"] == (
