@@ -67,6 +67,8 @@ expect_failure "secrets.SERVICE_DB_PASSWORD" \
 expect_failure "NOTIFICATIONS_VAPID_PRIVATE_KEY" -f "$chart/values-cloud.yaml" \
   --set secrets.OPENFGA_AUTHN_PRESHARED_KEYS=x --set secrets.IDENTITY_KEY_ENCRYPTION_KEY=x \
   --set secrets.SERVICE_DB_PASSWORD=x
+expect_failure "GATEWAY_CLIENT_IP_DEPTH must be empty or a number" -f "$test_values" \
+  --set-string config.GATEWAY_CLIENT_IP_DEPTH=-1
 expect_failure "createRoleSecrets=false" --set secrets.existingSecret=mowdeck-app \
   --set openfgaSecret.create=false
 # Existing Secrets (application, OpenFGA, CloudNativePG roles) replace every secret value.

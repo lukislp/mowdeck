@@ -176,11 +176,14 @@ spec:
     average: 10        # per period, as in the Compose stack (identity-ratelimit)
     period: 1m
     burst: 20
+    sourceCriterion:
+      ipStrategy:
+        depth: 0       # config.GATEWAY_CLIENT_IP_DEPTH: 1 behind one proxy in front of Traefik
 # values: ingress.auth.annotations:
 #   traefik.ingress.kubernetes.io/router.middlewares: mowdeck-identity-ratelimit@kubernetescrd
 ```
 
-The Compose stack uses a looser limit for the refresh path (`identity-session-ratelimit`, 60/min); with Traefik, split it into its own Ingress through `ingress.auth.annotations` per path if you need the difference. Identity trusts `X-Forwarded-For` (`MOWDECK_IDENTITY_TRUST_FORWARDED_FOR=true`), so only the ingress controller may reach it; do not expose the Services otherwise. The chart has no counterpart of the Compose variable `GATEWAY_TRUSTED_PROXIES`: when another proxy or load balancer sits in front of the ingress controller, tell the controller to trust its forwarded headers (for Traefik `--entrypoints.<name>.forwardedHeaders.trustedIPs`, or `proxyProtocol.trustedIPs` for a TCP load balancer), otherwise Identity sees that proxy's address for every user.
+The Compose stack uses a looser limit for the refresh path (`identity-session-ratelimit`, 60/min); with Traefik, split it into its own Ingress through `ingress.auth.annotations` per path if you need the difference. Identity trusts `X-Forwarded-For` (`MOWDECK_IDENTITY_TRUST_FORWARDED_FOR=true`), so only the ingress controller may reach it; do not expose the Services otherwise. The chart has no counterpart of the Compose variable `GATEWAY_TRUSTED_PROXIES`: when another proxy or load balancer sits in front of the ingress controller, tell the controller to trust its forwarded headers (for Traefik `--entrypoints.<name>.forwardedHeaders.trustedIPs`, or `proxyProtocol.trustedIPs` for a TCP load balancer), otherwise Identity sees that proxy's address for every user. Then also set `config.GATEWAY_CLIENT_IP_DEPTH` to the number of those proxies (usually `1`): Identity and Telemetry take the `X-Forwarded-For` entry they wrote as the client address (the leftmost entry stays the rule while it is empty), and a rate limit must count the same entry (`sourceCriterion.ipStrategy.depth`), or every user behind the proxy shares one bucket. `ingress.auth.traefikRateLimit.enabled: true` renders that Middleware (`<fullname>-auth-ratelimit`, 10 a minute, burst 20) with the depth and attaches it to the `-auth` Ingress. Set a depth only when the controller trusts just those proxies' forwarded headers and they set or append `X-Forwarded-For`; see [Client addresses behind a proxy](demo.md#client-addresses-behind-a-proxy).
 
 **WebSockets.** The Realtime socket `/api/v1/realtime/ws` needs no annotation with Traefik. Controllers with short idle timeouts need a read timeout above `REALTIME_PING_SECONDS` (20 s); for example HAProxy or nginx-based controllers default to 60 s, which is enough. (The community ingress-nginx controller is retired; see the [Kubernetes announcement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/).)
 

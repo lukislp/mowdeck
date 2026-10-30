@@ -107,6 +107,18 @@ app.kubernetes.io/component: {{ .component }}
 {{- end }}
 {{- end }}
 
+{{/* config.GATEWAY_CLIENT_IP_DEPTH as a string: empty when unset, else a number 0 to 8
+(MOWDECK_CLIENT_IP_DEPTH of the services, ipStrategy.depth of the Traefik rate limit). */}}
+{{- define "mowdeck.clientIpDepth" -}}
+{{- $depth := .Values.config.GATEWAY_CLIENT_IP_DEPTH }}
+{{- if not (or (kindIs "invalid" $depth) (eq (toString $depth) "")) }}
+{{- if not (regexMatch "^[0-8]$" (toString $depth)) }}
+{{- fail "config.GATEWAY_CLIENT_IP_DEPTH must be empty or a number from 0 to 8" }}
+{{- end }}
+{{- toString $depth }}
+{{- end }}
+{{- end }}
+
 {{/* PostgreSQL ---------------------------------------------------------------------------- */}}
 
 {{- define "mowdeck.pg.clusterName" -}}

@@ -257,6 +257,8 @@ services:
       # Only Traefik reaches the service, so its X-Forwarded-For is trusted. Traefik itself keeps a
       # client's X-Forwarded-For only from GATEWAY_TRUSTED_PROXIES and overwrites it otherwise.
       MOWDECK_IDENTITY_TRUST_FORWARDED_FOR: "true"
+      # Which X-Forwarded-For entry is the client (GATEWAY_CLIENT_IP_DEPTH, see .env.example).
+      MOWDECK_CLIENT_IP_DEPTH: ${GATEWAY_CLIENT_IP_DEPTH:-}
       # Plain HTTP in development; set to true behind HTTPS.
       MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE: ${IDENTITY_REFRESH_COOKIE_SECURE:-false}
       # Passkeys (ADR 0050): the address users open MowDeck at; empty turns passkeys off.
@@ -300,6 +302,7 @@ services:
       - traefik.http.middlewares.identity-ratelimit.ratelimit.average=10
       - traefik.http.middlewares.identity-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.identity-ratelimit.ratelimit.burst=20
+      - traefik.http.middlewares.identity-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth=${GATEWAY_CLIENT_IP_DEPTH:-0}
       # Refresh and logout need a valid refresh cookie anyway; their own, looser limit keeps
       # several devices of a household behind one address (Tailscale, a proxy) logged in.
       - traefik.http.routers.identity-session.rule=PathPrefix(`/api/v1/identity/session/`)
@@ -310,6 +313,7 @@ services:
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.average=60
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.burst=30
+      - traefik.http.middlewares.identity-session-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth=${GATEWAY_CLIENT_IP_DEPTH:-0}
       # A passkey challenge and the app's sign-in request check nothing, and every sign-in page
       # asks for a challenge (the autofill offer): the looser session limit; the answers
       # (/passkeys/session, /app-login/session) have the login limit. So does the start of a
@@ -528,6 +532,8 @@ services:
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+      # The public tracking page's rate limit key (GATEWAY_CLIENT_IP_DEPTH, see .env.example).
+      MOWDECK_CLIENT_IP_DEPTH: ${GATEWAY_CLIENT_IP_DEPTH:-}
       # Access tokens are verified locally against Identity's public keys.
       MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
       MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS: ${TELEMETRY_HEARTBEAT_HISTORY_SECONDS:-300}
@@ -1170,6 +1176,7 @@ services:
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.average=120
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.burst=60
+      - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth=${GATEWAY_CLIENT_IP_DEPTH:-0}
       - traefik.http.services.billing.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]

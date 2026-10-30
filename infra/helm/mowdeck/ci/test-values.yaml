@@ -14,6 +14,8 @@ config:
   RELAY_ICE_HOSTS: 192.0.2.10
   # Rendered only when set (otherwise the images' own value): set here so the CI render checks it.
   SOURCE_URL: https://github.com/lukislp/mowdeck
+  # One proxy in front of the controller: the services and the rate limit below get the depth.
+  GATEWAY_CLIENT_IP_DEPTH: "1"
 # Billing, the camera relay and the Matter server are off by default; the CI render enables them
 # so their templates are linted and checked.
 services:
@@ -28,6 +30,10 @@ ingress:
   # Renders the Traefik Middleware of the -media Ingress, so kubeconform checks it too.
   media:
     traefikStripPrefix: true
+  # Renders the Traefik rate limit Middleware of the -auth Ingress for kubeconform as well.
+  auth:
+    traefikRateLimit:
+      enabled: true
   tls:
     - secretName: mowdeck-tls
       hosts: [mowdeck.example.org]

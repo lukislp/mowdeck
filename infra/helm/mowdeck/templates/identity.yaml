@@ -17,6 +17,7 @@ publishes /.well-known/jwks.json (Compose services identity and identity-migrate
   "MOWDECK_IDENTITY_ARGON2_PROFILE" $c.IDENTITY_ARGON2_PROFILE
   "MOWDECK_IDENTITY_MODULE_URLS" (join "," $modules)
   "MOWDECK_IDENTITY_TRUST_FORWARDED_FOR" "true"
+  "MOWDECK_CLIENT_IP_DEPTH" (include "mowdeck.clientIpDepth" .)
   "MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE" $c.IDENTITY_REFRESH_COOKIE_SECURE
   "MOWDECK_IDENTITY_PUBLIC_URL" (default (include "mowdeck.publicOrigin" .) $c.IDENTITY_PUBLIC_URL)
   "MOWDECK_IDENTITY_PASSKEY_RP_ID" (default "" $c.IDENTITY_PASSKEY_RP_ID)) }}
