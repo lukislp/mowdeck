@@ -217,6 +217,13 @@ class ProviderDescriptor(ContractModel):
         description="False: built and tested against recorded fixtures and fakes only; the web "
         "app labels such providers as untested on real hardware.",
     )
+    warnings: list[LocalizedText] = Field(
+        default_factory=list,
+        max_length=4,
+        description="Short, by locale: risks the user should know before linking an account (an "
+        "unofficial vendor API, an account the vendor may block, ...). The web app shows them "
+        "prominently in the link form.",
+    )
     mower_options: list[ConnectionOptionSpec] = Field(
         default_factory=list,
         max_length=30,
@@ -255,6 +262,8 @@ class ProviderDescriptor(ContractModel):
             yield "summary", self.summary
         for index, step in enumerate(self.setup_steps):
             yield f"setup_steps[{index}]", step
+        for index, warning in enumerate(self.warnings):
+            yield f"warnings[{index}]", warning
         for index, link in enumerate(self.links):
             yield f"links[{index}].label", link.label
         for field in self.fields:

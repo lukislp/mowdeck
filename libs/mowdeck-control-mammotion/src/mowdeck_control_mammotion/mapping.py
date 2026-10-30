@@ -1497,6 +1497,8 @@ def capabilities_of(
         drive_speed_setting=drive_speed_setting_of(device, product_key) if drive_speed else None,
         settings=list(settings),
         start_options=start_options_of(device_name, firmware, product_key),
+        # Without cancel_job the mower pauses its job on the way home and resumes it later.
+        dock_keeps_job=True,
     )
 
 

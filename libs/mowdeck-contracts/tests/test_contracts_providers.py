@@ -176,6 +176,24 @@ def test_descriptor_guards_option_keys(changes: dict[str, Any]) -> None:
     assert "iot_id" in RESERVED_OPTION_KEYS
 
 
+def test_descriptor_warnings_are_short_localized_texts() -> None:
+    assert _descriptor().warnings == []
+    warned = _descriptor(
+        warnings=[{"en": "Unofficial API.", "de": "Inoffizielle API."}, "Plain English risk."]
+    )
+    assert warned.warnings == [
+        {"en": "Unofficial API.", "de": "Inoffizielle API."},
+        {"en": "Plain English risk."},
+    ]
+    assert "warnings[0]" in dict(warned.texts())
+    with pytest.raises(ValidationError):
+        _descriptor(warnings=[{"de": "Nur Deutsch"}])
+    with pytest.raises(ValidationError):
+        _descriptor(warnings=["x" * 501])
+    with pytest.raises(ValidationError):
+        _descriptor(warnings=["a", "b", "c", "d", "e"])
+
+
 def test_texts_are_localized_with_an_english_fallback() -> None:
     found = _descriptor(
         summary={"en": "Acme mowers", "de": "Acme-Mäher"},

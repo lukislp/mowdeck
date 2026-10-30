@@ -396,7 +396,7 @@ class LinkedAccountService:
 
     @staticmethod
     def _secret_digest(descriptor: ProviderDescriptor, credentials: Mapping[str, str]) -> str:
-        """The secrets as one string for the throttle (which keeps only an HMAC of it)."""
+        """The secrets as one string for the throttle (it keeps only a salted scrypt digest)."""
         return json.dumps(
             {k: credentials.get(k, "") for k in sorted(descriptor.secret_keys)}, sort_keys=True
         )

@@ -2472,6 +2472,12 @@
             "description": "Width of the cut swath in millimetres, if known (coverage heatmaps).",
             "title": "Cutting Width Mm"
           },
+          "dock_keeps_job": {
+            "default": false,
+            "description": "`ReturnToDock` with `end_job: false` keeps the running job paused, so a later `ResumeMow` continues it. Without it a client offers no 'keep the job' choice and the controller refuses `end_job: false`; the mower ends (or forgets) its job on the way home.",
+            "title": "Dock Keeps Job",
+            "type": "boolean"
+          },
           "drive_reverse": {
             "default": false,
             "description": "The drive link that carries the joystick frames can drive backwards (a negative `ManualDrive.linear`). Without it the web joystick offers no reverse and a spot run's `multi_point` turns fall back to `arc` (ADR 0043).",
@@ -2628,6 +2634,15 @@
           "start_options": {
             "$ref": "#/components/schemas/StartOptions",
             "description": "Job options a native start may carry besides the pattern (obstacle detection, laps around no-go zones, path order, start progress; ADR 0030). Clients show only what is declared here."
+          },
+          "start_plans": {
+            "description": "Starts the mower offers without map areas (ADR 0066 amendment), in the order a client lists them; each is sent as `StartMow.plan_ref`. Empty for mowers that start on their map areas.",
+            "items": {
+              "$ref": "#/components/schemas/StartPlan"
+            },
+            "maxItems": 16,
+            "title": "Start Plans",
+            "type": "array"
           },
           "undock": {
             "default": false,
@@ -4332,6 +4347,51 @@
         },
         "title": "StartOptions",
         "type": "object"
+      },
+      "StartPlan": {
+        "description": "One way to start a mower that has no map areas to choose (ADR 0066 amendment).\n\nA mower whose connection knows no area geometry (its vendor keeps the garden to itself)\ncannot be started by tapping areas. Its connection declares the starts it offers instead; a\nclient sends ``StartMow {plan_ref: ref}`` for the one the user picks and labels it by\n``kind`` (plus ``name`` for a zone).",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/StartPlanKind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The mower's own name of a zone, shown as is; null for the other kinds.",
+            "title": "Name"
+          },
+          "ref": {
+            "description": "Sent as `StartMow.plan_ref` to start this.",
+            "pattern": "^[a-z][a-z0-9_]{0,31}(:[A-Za-z0-9_.-]{1,64})?$",
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "kind"
+        ],
+        "title": "StartPlan",
+        "type": "object"
+      },
+      "StartPlanKind": {
+        "description": "What a start plan does, so a client can label it without knowing the vendor.",
+        "enum": [
+          "now",
+          "zone",
+          "edge",
+          "schedule"
+        ],
+        "title": "StartPlanKind",
+        "type": "string"
       },
       "StateHistory": {
         "description": "History of a mower in a time range.",

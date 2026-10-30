@@ -7,16 +7,16 @@ once, hands out reference counted :class:`AccountLease` objects and stops it whe
 is released (after ``linger_seconds``, so a discovery followed by the registration of the listed
 mowers needs one login, not two).
 
-The pool key is an HMAC (random key of this process) of the application key and one of the
-secret: a changed secret opens a new session, and neither value is kept in the key or logged.
+Sessions are keyed by the application key (the account's public identity). Which secret a
+session belongs to is decided by comparing the secret itself (``hmac.compare_digest``, constant
+time) with the one the session holds for its login: a changed secret opens a new session, no
+hash or other derivative of a secret is computed or kept, and neither value is logged.
 """
 
 import asyncio
 import contextlib
-import hashlib
 import hmac
 import logging
-import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Final
@@ -30,21 +30,14 @@ _log = logging.getLogger("mowdeck_control_husqvarna.pool")
 DEFAULT_LINGER_SECONDS: Final = 120.0
 """How long an unused session stays open (discovery, then registering the listed mowers)."""
 
-_PROCESS_KEY: Final = os.urandom(32)
-
-PoolKey = tuple[str, str]
 AccountOpener = Callable[[str, str], Awaitable[HusqvarnaAccount]]
 """``open(app_key, app_secret)``: a started account; raises ``CloudLoginRefused`` or
 ``CloudUnavailable``."""
 
 
-def pool_key(app_key: str, app_secret: str) -> PoolKey:
-    """The pool key of a set of credentials (neither value is kept in it)."""
-
-    def tag(value: str) -> str:
-        return hmac.new(_PROCESS_KEY, value.encode("utf-8"), hashlib.sha256).hexdigest()
-
-    return tag("key:" + app_key.strip()), tag("secret:" + app_secret)
+def same_secret(a: str, b: str) -> bool:
+    """Constant-time comparison of two secrets (nothing is derived from them)."""
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
 class PoolClosedError(CloudUnavailable):
@@ -53,7 +46,8 @@ class PoolClosedError(CloudUnavailable):
 
 @dataclass(eq=False, slots=True)
 class _Entry:
-    key: PoolKey
+    key: str
+    secret: str = field(repr=False)
     account: HusqvarnaAccount
     refs: int = 0
     linger: asyncio.Task[None] | None = field(default=None, repr=False)
@@ -84,8 +78,8 @@ class AccountPool:
     ) -> None:
         self._opener = opener
         self._linger_seconds = linger_seconds
-        self._entries: dict[PoolKey, _Entry] = {}
-        self._locks: dict[PoolKey, asyncio.Lock] = {}
+        self._entries: dict[str, list[_Entry]] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
         self._closed = False
         self.logins = 0
         """Sessions started so far (tests and metrics)."""
@@ -93,11 +87,27 @@ class AccountPool:
     @property
     def open_sessions(self) -> int:
         """Sessions currently held (in use or lingering)."""
-        return len(self._entries)
+        return sum(len(entries) for entries in self._entries.values())
+
+    def _find(self, app_key: str, app_secret: str) -> _Entry | None:
+        for entry in self._entries.get(app_key.strip(), []):
+            if same_secret(entry.secret, app_secret):
+                return entry
+        return None
+
+    def _held(self, entry: _Entry) -> bool:
+        return entry in self._entries.get(entry.key, [])
+
+    def _drop(self, entry: _Entry) -> None:
+        entries = self._entries.get(entry.key, [])
+        if entry in entries:
+            entries.remove(entry)
+        if not entries:
+            self._entries.pop(entry.key, None)
 
     def users(self, app_key: str, app_secret: str) -> int:
         """Leases on the session of these credentials (0 when none is open)."""
-        entry = self._entries.get(pool_key(app_key, app_secret))
+        entry = self._find(app_key, app_secret)
         return entry.refs if entry is not None else 0
 
     async def acquire(self, app_key: str, app_secret: str) -> AccountLease:
@@ -105,12 +115,12 @@ class AccountPool:
         Concurrent acquires wait for one start; a failed start leaves nothing behind."""
         if self._closed:
             raise PoolClosedError("the Husqvarna session pool is closed")
-        key = pool_key(app_key, app_secret)
+        key = app_key.strip()
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
-            entry = self._entries.get(key)
+            entry = self._find(app_key, app_secret)
             if entry is not None and not entry.account.alive:
-                self._entries.pop(key, None)
+                self._drop(entry)
                 entry = None
             reused = entry is not None
             if entry is None:
@@ -119,8 +129,8 @@ class AccountPool:
                     await account.stop()
                     raise PoolClosedError("the Husqvarna session pool is closed")
                 self.logins += 1
-                entry = _Entry(key, account)
-                self._entries[key] = entry
+                entry = _Entry(key, app_secret, account)
+                self._entries.setdefault(key, []).append(entry)
             if entry.linger is not None:
                 entry.linger.cancel()
                 entry.linger = None
@@ -131,21 +141,20 @@ class AccountPool:
         entry.refs = max(0, entry.refs - 1)
         if entry.refs > 0:
             return
-        if self._entries.get(entry.key) is not entry or self._linger_seconds <= 0:
+        if not self._held(entry) or self._linger_seconds <= 0:
             await self._stop(entry)
             return
         entry.linger = asyncio.get_running_loop().create_task(self._expire(entry))
 
     async def _expire(self, entry: _Entry) -> None:
         await asyncio.sleep(self._linger_seconds)
-        if entry.refs > 0 or self._entries.get(entry.key) is not entry:
+        if entry.refs > 0 or not self._held(entry):
             return
         entry.linger = None
         await self._stop(entry)
 
     async def _stop(self, entry: _Entry) -> None:
-        if self._entries.get(entry.key) is entry:
-            self._entries.pop(entry.key, None)
+        self._drop(entry)
         try:
             await entry.account.stop()
         except Exception:
@@ -154,7 +163,7 @@ class AccountPool:
     async def close(self) -> None:
         """Stop every session (shutdown); later acquires raise :class:`PoolClosedError`."""
         self._closed = True
-        entries = list(self._entries.values())
+        entries = [e for held in self._entries.values() for e in held]
         for entry in entries:
             if entry.linger is not None:
                 entry.linger.cancel()

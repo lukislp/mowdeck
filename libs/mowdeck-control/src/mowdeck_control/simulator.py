@@ -912,7 +912,7 @@ class SimulatedMower:
                 outcome = self._resume()
             case ReturnToDock():
                 self._pending_start = None
-                outcome = self._return_to_dock(end_job=command.end_job)
+                outcome = self._return_to_dock(end_job=command.end_job is True)
             case SetBladeHeight():
                 outcome = self._set_blade_height(command.mm)
             case SetSpeed():

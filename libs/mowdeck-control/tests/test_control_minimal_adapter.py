@@ -136,6 +136,7 @@ async def test_the_basic_commands_reach_the_minimal_adapter(
         PauseMow(),
         ResumeMow(),
         ReturnToDock(),
+        ReturnToDock(end_job=True),
         EmergencyStop(),
     ):
         result = await controller.handle(_envelope(controller.mower_id, command))
@@ -144,6 +145,7 @@ async def test_the_basic_commands_reach_the_minimal_adapter(
         "start_mow",
         "pause_mow",
         "resume_mow",
+        "return_to_dock",
         "return_to_dock",
         "emergency_stop",
     ]
@@ -157,8 +159,9 @@ async def test_the_basic_commands_reach_the_minimal_adapter(
         SetSpeed(mps=0.4),
         SetLight(on=True),
         StartMow(area_ids=["front"]),
+        ReturnToDock(end_job=False),
     ],
-    ids=["manual_drive", "blade_height", "speed", "light", "unknown_area"],
+    ids=["manual_drive", "blade_height", "speed", "light", "unknown_area", "dock_keep_job"],
 )
 async def test_undeclared_features_are_refused_before_the_adapter_is_asked(
     setup: tuple[MowerController, MinimalMower], command: MowerCommand

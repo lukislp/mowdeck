@@ -28,6 +28,21 @@ describe('LinkedAccountConnect', () => {
     expect(document.getElementById('linked-password')).toHaveAttribute('type', 'password');
   });
 
+  it('shows the warnings of the provider before linking', () => {
+    const warned = {
+      ...ACME,
+      warnings: ['Unofficial API: it may stop working.', 'Account block risk.'],
+    };
+    render(LinkedAccountConnect, { props: { providers: [warned], onconnect: vi.fn() } });
+    const shown = screen.getAllByTestId('provider-warning').map((w) => w.textContent?.trim());
+    expect(shown).toEqual(['Unofficial API: it may stop working.', 'Account block risk.']);
+  });
+
+  it('shows no warning block for a provider without warnings', () => {
+    render(LinkedAccountConnect, { props: { providers: [ACME], onconnect: vi.fn() } });
+    expect(screen.queryByTestId('provider-warning')).toBeNull();
+  });
+
   it('gives secret fields the generic hint of the app, not a provider text', () => {
     render(LinkedAccountConnect, { props: { providers: [ACME], onconnect: vi.fn() } });
     expect(screen.getByText(m.linked_password_hint())).toBeInTheDocument();
