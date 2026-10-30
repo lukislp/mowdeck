@@ -110,9 +110,17 @@ async def test_tracking_store_sessions_links_photos_and_retention(
         photos = await store.photos_of(first.id)
         assert [p.data for p in photos] == [b"\xff\xd8jpeg"]
 
+        assert await store.update_active(first.id, {"points": 5, "stale_notified": False})
+        changed = changed.evolve(points=5, stale_notified=False)
+        assert (await store.session_of(first.account_id, first.id)) == changed
+
         assert not await store.delete_session(first.account_id, first.id)  # still active
         ended = changed.evolve(ended_at=NOW + timedelta(hours=1), end_reason="stopped")
         await store.put_session(ended)
+        # A background write never undoes the end: only an active session takes changes.
+        assert not await store.update_active(first.id, {"last_lat": 1.0})
+        assert not await store.update_active(uuid4(), {"last_lat": 1.0})
+        assert (await store.session_of(first.account_id, first.id)) == ended
         assert await store.active_of(first.account_id, first.mower_id) is None
         assert (await store.latest_of(first.account_id, first.mower_id)) == ended
         again = session(first.account_id, first.mower_id, started_at=NOW + timedelta(hours=2))

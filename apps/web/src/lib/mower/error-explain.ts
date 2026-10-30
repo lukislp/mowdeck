@@ -12,13 +12,43 @@ export type ErrorExplanation = Schemas['ErrorExplanation'];
 export type ErrorSeverity = Schemas['ErrorSeverity'];
 export type MowerErrorOut = Schemas['MowerErrorOut'];
 
-/** The current error of a mower, explained in `locale` (null `error`: none). */
-export function getMowerError(mowerId: string, locale: string): Promise<MowerErrorOut> {
+/**
+ * The current error of a mower, explained in `locale` (null `error`: none). `fresh` skips the
+ * browser's copy (Telemetry lets it keep the answer for 15 s).
+ */
+export function getMowerError(
+  mowerId: string,
+  locale: string,
+  fresh = false,
+): Promise<MowerErrorOut> {
   return unwrap(
     telemetryApi.GET('/api/v1/telemetry/mowers/{mower_id}/error', {
       params: { path: { mower_id: mowerId }, query: { locale } },
+      ...(fresh ? { cache: 'no-cache' as const } : {}),
     }),
   );
+}
+
+/**
+ * Explain the error `code` the live state shows. The live state (Realtime) and Telemetry's
+ * stored state come from the same bus message, but Telemetry may not have stored it yet when the
+ * page asks: while its answer does not carry `code`, ask again (fresh) a few times. Null when the
+ * mower reports no error, the answer never caught up, or `signal` aborted.
+ */
+export async function explainCurrentError(
+  mowerId: string,
+  code: string,
+  locale: string,
+  signal: AbortSignal,
+  { retries = 5, delayMs = 1_000 }: { retries?: number; delayMs?: number } = {},
+): Promise<ErrorExplanation | null> {
+  for (let attempt = 0; !signal.aborted; attempt += 1) {
+    const answer = await getMowerError(mowerId, locale, attempt > 0);
+    const error = answer.error?.code ? answer.error : null;
+    if (error?.code === code.trim() || attempt >= retries) return error;
+    await new Promise((done) => setTimeout(done, delayMs));
+  }
+  return null;
 }
 
 /** Explain several codes of one mower (its vendor's lexicon), in the order given. */

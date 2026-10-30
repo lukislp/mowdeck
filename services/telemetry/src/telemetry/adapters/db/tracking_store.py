@@ -1,7 +1,7 @@
 """PostgreSQL store of the theft tracking mode (SQLAlchemy Core, asyncpg)."""
 
 import dataclasses
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
@@ -53,6 +53,15 @@ class SqlTrackingStore:
             await conn.execute(
                 sa.update(tables.tracking_sessions).where(_S.id == session.id).values(**values)
             )
+
+    async def update_active(self, session_id: UUID, changes: Mapping[str, Any]) -> bool:
+        async with self.engine.begin() as conn:
+            result = await conn.execute(
+                sa.update(tables.tracking_sessions)
+                .where(_S.id == session_id, _S.ended_at.is_(None))
+                .values(**changes)
+            )
+        return result.rowcount > 0
 
     async def _one(self, *conditions: Any, newest: bool = False) -> TrackingSession | None:
         statement = sa.select(tables.tracking_sessions).where(*conditions)

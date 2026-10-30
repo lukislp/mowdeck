@@ -1,8 +1,9 @@
 """Ports of the theft tracking mode (ADR 0058)."""
 
+from collections.abc import Mapping
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
@@ -25,6 +26,11 @@ class TrackingStore(Protocol):
 
     async def put_session(self, session: TrackingSession) -> None:
         """Replace a session row."""
+        ...
+
+    async def update_active(self, session_id: UUID, changes: Mapping[str, Any]) -> bool:
+        """Set ``changes`` on a session only while it is still active; False when it ended in
+        the meantime (a background write must never undo an end)."""
         ...
 
     async def session_of(self, account_id: UUID, session_id: UUID) -> TrackingSession | None:

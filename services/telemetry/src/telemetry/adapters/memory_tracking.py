@@ -1,9 +1,10 @@
 """In-memory tracking store (tests) with the semantics of the PostgreSQL store."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from telemetry.domain.tracking import TrackingLink, TrackingPhoto, TrackingSession
@@ -27,6 +28,13 @@ class MemoryTrackingStore:
 
     async def put_session(self, session: TrackingSession) -> None:
         self.sessions[session.id] = session
+
+    async def update_active(self, session_id: UUID, changes: Mapping[str, Any]) -> bool:
+        found = self.sessions.get(session_id)
+        if found is None or not found.active:
+            return False
+        self.sessions[session_id] = replace(found, **changes)
+        return True
 
     async def session_of(self, account_id: UUID, session_id: UUID) -> TrackingSession | None:
         found = self.sessions.get(session_id)
