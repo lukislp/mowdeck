@@ -295,3 +295,51 @@ def test_demo_override_puts_every_service_in_demo_mode(repo_root: Path) -> None:
     assert services["identity"]["volumes"] == {"!reset": []}
     assert not any("profiles" in svc for svc in services.values())
     assert (compose_dir / "demo" / "seed.py").is_file()
+
+
+def test_every_rate_limit_counts_the_configured_client_entry(repo_root: Path) -> None:
+    """Every Traefik rate limit of every Compose file counts the X-Forwarded-For entry of
+    GATEWAY_CLIENT_IP_DEPTH (default 0: the TCP peer, as without a source criterion), so
+    behind a trusted proxy each client has its own bucket (docs/ops/demo.md)."""
+    compose_dir = _compose_dir(repo_root)
+    depth = "${GATEWAY_CLIENT_IP_DEPTH:-0}"
+    seen = set()
+    for path in sorted(compose_dir.glob("docker-compose*.yml")):
+        data = yaml.load(path.read_text("utf-8"), Loader=_ComposeLoader)  # noqa: S506
+        labels = [
+            label
+            for service in data["services"].values()
+            for label in service.get("labels", [])
+            if isinstance(label, str)
+        ]
+        prefix = "traefik.http.middlewares."
+        limits = {
+            label.removeprefix(prefix).split(".")[0]
+            for label in labels
+            if label.startswith(prefix) and ".ratelimit." in label
+        }
+        defined = {
+            name
+            for name in limits
+            if f"{prefix}{name}.ratelimit.period=1m" in labels
+            or any(label.startswith(f"{prefix}{name}.ratelimit.average=") for label in labels)
+        }
+        for name in defined:
+            if path.name == "docker-compose.e2e.yml":
+                continue  # only loosens limits of the base file
+            assert f"{prefix}{name}.ratelimit.sourcecriterion.ipstrategy.depth={depth}" in labels, (
+                f"{path.name}: {name} has no source criterion"
+            )
+            seen.add(name)
+    assert {
+        "identity-ratelimit",
+        "identity-session-ratelimit",
+        "billing-webhook-ratelimit",
+        "demo-ratelimit",
+    } <= seen
+    env_example = (compose_dir / ".env.example").read_text("utf-8").splitlines()
+    assert "GATEWAY_CLIENT_IP_DEPTH=" in env_example
+    base = yaml.safe_load((compose_dir / "docker-compose.yml").read_text("utf-8"))["services"]
+    for service in ("identity", "telemetry"):
+        env = base[service]["environment"]
+        assert env["MOWDECK_CLIENT_IP_DEPTH"] == "${GATEWAY_CLIENT_IP_DEPTH:-}", service

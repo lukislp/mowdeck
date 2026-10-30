@@ -50,6 +50,17 @@ config:
   # Store the bootstrap job creates and services resolve by name.
   OPENFGA_STORE_NAME: mowdeck
 
+  # --- Client addresses ---
+  # Proxies in front of the Ingress controller that set or append X-Forwarded-For (a TLS proxy or
+  # load balancer that forwards HTTP; the controller itself does not count). Identity and
+  # Telemetry take the entry this many places left of the controller's own as the client address
+  # (MOWDECK_CLIENT_IP_DEPTH), and ingress.auth.traefikRateLimit counts the same entry (its
+  # ipStrategy.depth). Empty: as before (the leftmost entry; the rate limit counts the TCP peer).
+  # 0: clients reach the controller directly. Set it only when the controller trusts just those
+  # proxies' forwarded headers and they never pass a client's value on unchanged
+  # (docs/ops/helm.md). The Compose name is GATEWAY_CLIENT_IP_DEPTH.
+  GATEWAY_CLIENT_IP_DEPTH: ""
+
   # --- Identity ---
   # open: anybody may register; closed: only the first account, then 403 (more owners:
   # kubectl exec ... python -m identity.cli create-user). Cloud installations with invitations
@@ -283,7 +294,8 @@ config:
 # `kubectl port-forward` for local access. GATEWAY_TRUSTED_PROXIES (the reverse proxy whose
 # X-Forwarded-* headers the Compose Traefik keeps) has none either: the chart ships no proxy, so
 # trusted forwarded headers are a setting of your Ingress controller (for Traefik
-# `--entrypoints.<name>.forwardedHeaders.trustedIPs`, see docs/ops/helm.md).
+# `--entrypoints.<name>.forwardedHeaders.trustedIPs`, see docs/ops/helm.md). Its companion
+# GATEWAY_CLIENT_IP_DEPTH is config.GATEWAY_CLIENT_IP_DEPTH above.
 
 # --- Secrets ---
 # Never commit real values. Either give them at install time (--set-file / --set, or a values file
@@ -442,6 +454,15 @@ ingress:
   auth:
     enabled: true
     annotations: {}
+    # Traefik only (needs its CRDs): renders the Middleware <fullname>-auth-ratelimit, the
+    # Compose identity-ratelimit, per client address (config.GATEWAY_CLIENT_IP_DEPTH as its
+    # ipStrategy.depth, empty is 0), and attaches it to the -auth Ingress. Off: attach your own
+    # through annotations.
+    traefikRateLimit:
+      enabled: false
+      average: 10
+      period: 1m
+      burst: 20
   # WHEP signalling of the camera relay's MediaMTX as a third Ingress (-media), rendered with
   # services.cameraRelay.enabled. MediaMTX serves /r/<relay>/<camera>/whep, so the controller
   # must strip /media/whep (the Compose middleware mediamtx-whep-strip). The annotations are

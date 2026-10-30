@@ -15,6 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from mowdeck_service_kit import CurrentAccountId
+from mowdeck_service_kit.client_address import client_address
 from mowdeck_service_kit.errors import NotFound
 from pydantic import BaseModel, Field
 
@@ -460,12 +461,9 @@ async def tracking_report(
 
 
 def _client_key(request: Request) -> str:
-    """The rate limit key: the rightmost ``X-Forwarded-For`` entry (what the trusted proxy
-    saw), else the peer address."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[-1].strip()[:64]
-    return request.client.host if request.client else "unknown"
+    """The rate limit key: the client address by the rule every service shares
+    (:mod:`mowdeck_service_kit.client_address`, ``MOWDECK_CLIENT_IP_DEPTH``)."""
+    return client_address(request) or "unknown"
 
 
 @router.post("/public/tracking/view", tags=["public"])
