@@ -19,6 +19,7 @@ members = [
     "mowdeck-control-mammotion",
     "mowdeck-control-worx",
     "mowdeck-patterns",
+    "mowdeck-provider-testkit",
     "mowdeck-repo-checks",
     "mowdeck-service-kit",
     "mowdeck-wiki-sync",
@@ -1918,6 +1919,25 @@ requires-dist = [
 ]
 
 [[package]]
+name = "mowdeck-provider-testkit"
+version = "0.1.0"
+source = { editable = "libs/mowdeck-provider-testkit" }
+dependencies = [
+    { name = "mowdeck-contracts" },
+    { name = "mowdeck-control" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
+    { name = "mowdeck-control", editable = "libs/mowdeck-control" },
+    { name = "pytest", specifier = ">=8.3.4" },
+    { name = "pytest-asyncio", specifier = ">=0.25.0" },
+]
+
+[[package]]
 name = "mowdeck-repo-checks"
 version = "0.1.0"
 source = { editable = "tools/repo-checks" }
@@ -2009,6 +2029,7 @@ dev = [
     { name = "mowdeck-control-mammotion", extra = ["esphome"] },
     { name = "mowdeck-control-worx" },
     { name = "mowdeck-patterns" },
+    { name = "mowdeck-provider-testkit" },
     { name = "mowdeck-service-kit", extra = ["db", "otel", "testing"] },
     { name = "mowdeck-wiki-sync" },
     { name = "mypy" },
@@ -2053,6 +2074,7 @@ dev = [
     { name = "mowdeck-control-mammotion", extras = ["esphome"], editable = "libs/mowdeck-control-mammotion" },
     { name = "mowdeck-control-worx", editable = "libs/mowdeck-control-worx" },
     { name = "mowdeck-patterns", editable = "libs/mowdeck-patterns" },
+    { name = "mowdeck-provider-testkit", editable = "libs/mowdeck-provider-testkit" },
     { name = "mowdeck-service-kit", extras = ["db", "otel", "testing"], editable = "libs/mowdeck-service-kit" },
     { name = "mowdeck-wiki-sync", editable = "tools/wiki-sync" },
     { name = "mypy", specifier = ">=1.13.0" },

@@ -9,6 +9,7 @@ Reusable libraries (Apache-2.0, except `mowdeck-control-mammotion`: GPL-3.0). Ea
 | [`mowdeck-contracts`](mowdeck-contracts/README.md) | API and event formats as Pydantic v2 models, NATS subjects, JSON Schemas |
 | [`mowdeck-control`](mowdeck-control/README.md) | `MowerConnection` adapter interface, safety controller, simulated mower, demo CLI |
 | [`mowdeck-control-mammotion`](mowdeck-control-mammotion/README.md) | **GPL-3.0**: Mammotion adapter on PyMammotion (`cloud`, `ble_bridge`), owner test script |
+| [`mowdeck-provider-testkit`](mowdeck-provider-testkit/README.md) | Provider conformance kit (test-only): the vendor-neutral pytest suite every adapter runs on its fake vendor client ([ADR 0069](../docs/adr/0069-provider-conformance-kit-and-package-template.md)); new adapters start from `templates/provider` |
 | [`mowdeck-patterns`](mowdeck-patterns/README.md) | Mowing patterns as plug-ins, the route validation chain, chains, coverage and gaps, preview; pure computation on Shapely |
 | [`mowdeck-service-kit`](mowdeck-service-kit/README.md) | Skeleton of every service: settings, logging, errors, health, event bus, tenancy, test utilities |
 | [`mowdeck-ui`](mowdeck-ui/README.md) | pnpm package `@mowdeck/ui`: design system of the web app (design tokens, Svelte 5 components, the frontend lint rules, the contrast check) |
