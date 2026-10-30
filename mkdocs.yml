@@ -112,12 +112,15 @@ nav:
       - adr/0066-cloud-provider-plugins-and-more-vendors.md
       - adr/0067-error-code-lexicon.md
       - adr/0068-public-demo-mode.md
+      - adr/0069-provider-conformance-kit-and-package-template.md
+      - adr/0071-capability-matrix.md
       - adr/0072-api-explorer-in-the-web-app.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
       - dev/libraries.md
       - "Cloud providers: adding a vendor": dev/cloud-providers.md
+      - "Adding a provider: template and conformance kit": dev/adding-a-provider.md
       - "Adding an error lexicon for a vendor": dev/error-lexicon.md
       - "Design: identity and authorization": dev/design-identity-authz.md
       - "Design: fleet, telemetry, realtime": dev/design-fleet-telemetry-realtime.md
@@ -163,6 +166,7 @@ nav:
       - guides/matter.md
       - guides/worx-landroid.md
       - guides/scripting.md
+  - Capability matrix: reference/capabilities.md
   - API reference:
       - reference/api/index.md
       - reference/api/billing.md

@@ -8,6 +8,7 @@ mower yet; operators enable it with ``MOWDECK_CLOUD_PROVIDERS_ENABLE=worx``.
 
 from typing import Final
 
+from mowdeck_contracts.v1 import CapabilityProfile
 from mowdeck_control import CloudProviderPlugin, ProviderContext, ProviderSpec
 
 from mowdeck_control_worx.descriptor import PROVIDER
@@ -20,5 +21,17 @@ def create(context: ProviderContext) -> CloudProviderPlugin:
     return create_provider(context)
 
 
-SPEC: Final = ProviderSpec(provider=PROVIDER, create=create, enabled_by_default=False)
+def capability_profiles() -> list[CapabilityProfile]:
+    """The model families (ADR 0071); see :mod:`mowdeck_control_worx.profiles`."""
+    from mowdeck_control_worx.profiles import capability_profiles as profiles
+
+    return profiles()
+
+
+SPEC: Final = ProviderSpec(
+    provider=PROVIDER,
+    create=create,
+    enabled_by_default=False,
+    capability_profiles=capability_profiles,
+)
 """The entry point object (``mowdeck.cloud_providers``: ``worx``)."""

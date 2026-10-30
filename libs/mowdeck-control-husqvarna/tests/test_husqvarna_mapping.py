@@ -228,6 +228,21 @@ def test_capabilities_are_honest() -> None:
     assert mapping.capabilities_of(None).model is None
 
 
+def test_start_plans_replace_the_missing_map_areas() -> None:
+    """ADR 0066 amendment: without area geometry the mower starts through its plans (found by
+    the provider conformance kit, ADR 0069: no start was offered before)."""
+    plans = mapping.capabilities_of(attributes(HUGO)).start_plans
+    assert [(p.ref, p.kind.value, p.name) for p in plans] == [
+        ("duration", "now", None),
+        ("work_area:0", "zone", "my_lawn"),  # aioautomower names the main area
+        ("work_area:123456", "zone", "Front lawn"),
+        ("schedule", "schedule", None),
+    ]
+    without_areas = mapping.capabilities_of(attributes(LISA_CHARGING)).start_plans
+    assert [p.ref for p in without_areas] == ["duration", "schedule"]
+    assert mapping.capabilities_of(None).start_plans == []
+
+
 def test_the_map_has_a_reference_and_no_geometry() -> None:
     position = _state(attributes(HUGO)).position
     found = mapping.map_of(position)

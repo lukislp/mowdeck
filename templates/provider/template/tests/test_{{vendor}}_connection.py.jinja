@@ -1,0 +1,40 @@
+"""The {{ vendor_name }} state mapping and the rules the conformance kit cannot know."""
+
+from dataclasses import replace
+from uuid import uuid4
+
+import pytest
+from mowdeck_contracts.v1 import MowerActivity, StartMow
+from mowdeck_control import ConnectionConfig, SensorStop
+from {{ package }}.client import VendorStatus
+from {{ package }}.connection import PLAN_NOW, {{ class_prefix }}Connection, state_of
+from {{ package }}.descriptor import EMAIL, PASSWORD
+from {{ package }}.fake_client import FAKE_PASSWORD, FakeCloud, fake_email
+
+CONFIG = ConnectionConfig(
+    mower_id=uuid4(),
+    account_id=uuid4(),
+    options={EMAIL: fake_email("garden"), PASSWORD: FAKE_PASSWORD, "iot_id": "fake-0001"},
+)
+
+
+async def test_states_follow_the_vendor_status() -> None:
+    session = await FakeCloud().login(fake_email("garden"), FAKE_PASSWORD)
+    online, offline = await session.mowers()
+    assert state_of(online, CONFIG).activity is MowerActivity.DOCKED
+    assert state_of(offline, CONFIG).activity is MowerActivity.OFFLINE
+    broken = replace(online, status=VendorStatus.ERROR, error_code=7)
+    state = state_of(broken, CONFIG)
+    assert (state.activity, state.error_code) == (MowerActivity.ERROR, "7")
+
+
+async def test_a_start_during_an_error_is_a_sensor_stop() -> None:
+    cloud = FakeCloud()
+    connection = {{ class_prefix }}Connection(cloud.login, CONFIG)
+    await connection.connect()
+    account = next(iter(cloud.accounts.values()))
+    account.mowers["fake-0001"] = replace(account.mowers["fake-0001"], status=VendorStatus.ERROR)
+    await connection.refresh()
+    with pytest.raises(SensorStop):
+        await connection.execute(StartMow(plan_ref=PLAN_NOW))
+    await connection.disconnect()

@@ -1,0 +1,77 @@
+"""The port between the adapter and the {{ vendor_name }} cloud.
+
+The connection and the provider talk only to this small interface. The real client
+(``sdk_client``) implements it with the vendor SDK; the fake (``fake_client``) implements it in
+memory for the tests, development and the browser tests. Keep vendor SDK types out of this
+module, so everything above it is testable without the SDK.
+"""
+
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Protocol
+
+
+class VendorStatus(StrEnum):
+    """What the vendor reports a mower is doing (map the SDK's own values onto these)."""
+
+    DOCKED = "docked"
+    CHARGING = "charging"
+    MOWING = "mowing"
+    PAUSED = "paused"
+    RETURNING = "returning"
+    ERROR = "error"
+
+
+class VendorAction(StrEnum):
+    """The commands the vendor cloud takes."""
+
+    START = "start"
+    PAUSE = "pause"
+    RESUME = "resume"
+    HOME = "home"
+
+
+@dataclass(frozen=True, slots=True)
+class VendorMower:
+    """One mower of the account, as the vendor reports it."""
+
+    id: str
+    name: str
+    model: str | None
+    online: bool
+    status: VendorStatus
+    battery: int
+    error_code: int | None = None
+
+
+class LoginRefused(Exception):  # noqa: N818 - reads like the vendor's answer
+    """The vendor refused the credentials; the message never holds them."""
+
+
+class VendorUnavailable(Exception):  # noqa: N818 - reads like the HTTP status it maps to
+    """The vendor cloud did not answer or failed."""
+
+
+class MowerOffline(Exception):  # noqa: N818 - reads like the vendor's answer
+    """The vendor cloud reports the mower offline and did not pass the command on."""
+
+
+class VendorSession(Protocol):
+    """A logged-in session of one vendor account."""
+
+    async def mowers(self) -> list[VendorMower]:
+        """Every mower of the account with its current status."""
+        ...
+
+    async def send(self, mower_id: str, action: VendorAction) -> None:
+        """Send ``action``; raises :class:`MowerOffline` or :class:`VendorUnavailable`."""
+        ...
+
+    async def close(self) -> None:
+        """End the session."""
+        ...
+
+
+Login = Callable[[str, str], Awaitable[VendorSession]]
+"""Log in with e-mail and password; raises :class:`LoginRefused` or :class:`VendorUnavailable`."""
