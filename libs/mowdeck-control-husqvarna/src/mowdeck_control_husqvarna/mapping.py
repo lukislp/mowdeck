@@ -42,9 +42,20 @@ from mowdeck_contracts.v1 import (
     MowerCapabilities,
     MowerMap,
     MowerState,
+    StartPlan,
+    StartPlanKind,
 )
 
 from mowdeck_control_husqvarna import lexicon
+
+PLAN_SCHEDULE: Final = "schedule"
+"""``StartMow.plan_ref`` of a return to the mower's schedule."""
+PLAN_DURATION: Final = "duration"
+"""``StartMow.plan_ref`` of a start for a number of minutes (``duration[:<minutes>]``)."""
+PLAN_WORK_AREA: Final = "work_area"
+"""``StartMow.plan_ref`` of a start in a work area (``work_area:<id>[:<minutes>]``)."""
+MAX_START_PLANS: Final = 16
+"""``MowerCapabilities.start_plans`` holds at most this many."""
 
 LIFT_CODES: Final = frozenset({14, 15, 71, 131})
 """Mower lifted, Lifted, Alarm! Mower lifted, Lifted in link arm (ADR 0066)."""
@@ -196,16 +207,38 @@ def state_of(
     )
 
 
+def start_plans_of(attributes: MowerAttributes) -> list[StartPlan]:
+    """The starts the mower offers without map geometry (ADR 0066 amendment): mow now for the
+    option ``start_minutes`` (``duration``), each work area of a model with work areas
+    (``work_area:<id>``, the vendor's name; the main area 0 often has none) and back to the
+    schedule (``schedule``). :func:`~mowdeck_control_husqvarna.connection.action_for_plan`
+    validates the reference."""
+    plans = [StartPlan(ref=PLAN_DURATION, kind=StartPlanKind.NOW)]
+    if attributes.capabilities.work_areas and attributes.work_areas:
+        plans.extend(
+            StartPlan(
+                ref=f"{PLAN_WORK_AREA}:{area_id}",
+                kind=StartPlanKind.ZONE,
+                name=area.name.strip()[:64] or None,
+            )
+            for area_id, area in sorted(attributes.work_areas.items())[: MAX_START_PLANS - 2]
+        )
+    plans.append(StartPlan(ref=PLAN_SCHEDULE, kind=StartPlanKind.SCHEDULE))
+    return plans
+
+
 def capabilities_of(attributes: MowerAttributes | None) -> MowerCapabilities:
     """Honest capabilities: everything MowDeck could drive itself is off.
 
     No native patterns (the API has no pattern parameters), no manual driving, no camera, no
     light switch (headlights are a mode, not a switch), no RTK reporting, no custom paths and no
-    blade height (the API's cutting height is a level from 1 to 9, not millimetres).
+    blade height (the API's cutting height is a level from 1 to 9, not millimetres). The map has
+    no areas, so the mower is started through its start plans (:func:`start_plans_of`).
     """
     return MowerCapabilities(
         model=attributes.system.model[:64] if attributes is not None else None,
         connection_kinds=frozenset({ConnectionKind.CLOUD}),
+        start_plans=start_plans_of(attributes) if attributes is not None else [],
     )
 
 
