@@ -283,6 +283,9 @@ class _SqlTx:
             tables.mower_health_daily,
             tables.blade_changes,
             tables.tracking_sessions,
+            tables.zone_days,
+            tables.zone_presence,
+            tables.virtual_zones,
         ):
             await self._conn.execute(sa.delete(table).where(table.c.mower_id == mower_id))
 

@@ -275,6 +275,7 @@ curl http://localhost/api/v1/scheduler/schedules/<schedule_id>/runs -H "Authoriz
 | `WEB_CAMERA_ENABLED` | `false` | Direct live camera of cloud mowers through Agora (the CSP then allows `*.agora.io` and `*.sd-rtn.com`; video and IP address go to Agora and Mammotion) |
 | `WEB_AGORA_SDK` | `include` | Build argument: `include` keeps the proprietary Agora Web SDK in the locally built image (for your own installation only, never redistribute it), `exclude` is what releases publish |
 | `WEB_LEGAL_ENABLED` | `false` | Links the legal pages from the login page (replace the placeholder pages first) |
+| `WEB_API_EXPLORER` | `false` | Interactive API explorer at `/api-explorer` ([ADR 0072](../../docs/adr/0072-api-explorer-in-the-web-app.md)): the services' OpenAPI documents in Scalar (self-hosted, nothing from a CDN), "try it" with the signed-in user's own session. Meant for the public demo, which turns it on |
 
 ```bash
 docker compose up -d --build web     # rebuild after a change to apps/web or libs/mowdeck-ui

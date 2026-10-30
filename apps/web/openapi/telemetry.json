@@ -114,6 +114,25 @@
         "title": "AerialOut",
         "type": "object"
       },
+      "AnchorOut": {
+        "description": "Where to centre a map that has no vendor geometry.",
+        "properties": {
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "AnchorOut",
+        "type": "object"
+      },
       "BaseStationPosition": {
         "description": "Where the base station stands (WGS84 degrees), as the mower knows it.",
         "properties": {
@@ -3756,6 +3775,54 @@
         "title": "PositionTrack",
         "type": "object"
       },
+      "PresenceOut": {
+        "description": "Where the mower is: in a zone (``zone_id``) or in none.",
+        "properties": {
+          "observed_at": {
+            "description": "The report the evaluation is based on.",
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "since": {
+            "description": "When it entered this zone (or left the last one).",
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "zone_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The current zone; null outside every zone.",
+            "title": "Zone Id"
+          },
+          "zone_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zone Name"
+          }
+        },
+        "required": [
+          "zone_id",
+          "since",
+          "observed_at"
+        ],
+        "title": "PresenceOut",
+        "type": "object"
+      },
       "PublicTileIn": {
         "description": "Body of a public base map tile: the share token and the tile (in the body, so neither\nthe token nor the place reaches an access log).",
         "properties": {
@@ -5125,6 +5192,406 @@
           "job"
         ],
         "title": "WidgetStateOut",
+        "type": "object"
+      },
+      "ZoneDayOut": {
+        "description": "Time in a zone on one UTC day.",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "mowing_seconds": {
+            "title": "Mowing Seconds",
+            "type": "number"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "day",
+          "seconds",
+          "mowing_seconds"
+        ],
+        "title": "ZoneDayOut",
+        "type": "object"
+      },
+      "ZoneIn": {
+        "description": "A new zone.",
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "ring": {
+            "description": "Corners as `[lat, lon]` (WGS84 degrees), open or closed; edges must not cross.",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "maxItems": 65,
+            "minItems": 3,
+            "title": "Ring",
+            "type": "array"
+          },
+          "start_plan_ref": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Plan Ref"
+          }
+        },
+        "required": [
+          "name",
+          "ring"
+        ],
+        "title": "ZoneIn",
+        "type": "object"
+      },
+      "ZoneLimits": {
+        "description": "The validation limits, so a client can check a drawing before it is sent.",
+        "properties": {
+          "max_anchor_distance_m": {
+            "default": 1000.0,
+            "title": "Max Anchor Distance M",
+            "type": "number"
+          },
+          "max_area_m2": {
+            "default": 100000.0,
+            "title": "Max Area M2",
+            "type": "number"
+          },
+          "max_corners": {
+            "default": 64,
+            "title": "Max Corners",
+            "type": "integer"
+          },
+          "max_extent_m": {
+            "default": 1000.0,
+            "title": "Max Extent M",
+            "type": "number"
+          },
+          "max_name_length": {
+            "default": 60,
+            "title": "Max Name Length",
+            "type": "integer"
+          },
+          "max_zones": {
+            "default": 32,
+            "title": "Max Zones",
+            "type": "integer"
+          },
+          "min_area_m2": {
+            "default": 1.0,
+            "title": "Min Area M2",
+            "type": "number"
+          },
+          "min_corners": {
+            "default": 3,
+            "title": "Min Corners",
+            "type": "integer"
+          }
+        },
+        "title": "ZoneLimits",
+        "type": "object"
+      },
+      "ZoneOut": {
+        "description": "One virtual zone.",
+        "properties": {
+          "area_m2": {
+            "title": "Area M2",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ring": {
+            "description": "Corners as `[lat, lon]`, open ring.",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Ring",
+            "type": "array"
+          },
+          "start_plan_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The vendor zone start (`StartPlan` of kind `zone`) this zone is linked to; send it as `StartMow.plan_ref` to start the mower there.",
+            "title": "Start Plan Ref"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "ring",
+          "area_m2",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ZoneOut",
+        "type": "object"
+      },
+      "ZonePatch": {
+        "description": "Changes to a zone; fields left out stay as they are.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "ring": {
+            "anyOf": [
+              {
+                "description": "Corners as `[lat, lon]` (WGS84 degrees), open or closed; edges must not cross.",
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                "maxItems": 65,
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ring"
+          },
+          "start_plan_ref": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Link the zone to this vendor zone start.",
+            "title": "Start Plan Ref"
+          },
+          "unlink_start_plan": {
+            "default": false,
+            "description": "Remove the link to a start.",
+            "title": "Unlink Start Plan",
+            "type": "boolean"
+          }
+        },
+        "title": "ZonePatch",
+        "type": "object"
+      },
+      "ZonePlanOut": {
+        "description": "A vendor zone start a zone can be linked to.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "title": "ZonePlanOut",
+        "type": "object"
+      },
+      "ZoneStatsOut": {
+        "description": "Time per zone over whole UTC days.",
+        "properties": {
+          "first_day": {
+            "format": "date",
+            "title": "First Day",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneTotalsOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "last_day": {
+            "format": "date",
+            "title": "Last Day",
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_day",
+          "last_day",
+          "items"
+        ],
+        "title": "ZoneStatsOut",
+        "type": "object"
+      },
+      "ZoneTotalsOut": {
+        "description": "Time in one zone over the period.",
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneDayOut"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "entries": {
+            "description": "How often it entered the zone.",
+            "title": "Entries",
+            "type": "integer"
+          },
+          "mowing_seconds": {
+            "description": "Of that, time it mowed.",
+            "title": "Mowing Seconds",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "seconds": {
+            "description": "Time the mower was in the zone while it reported.",
+            "title": "Seconds",
+            "type": "number"
+          },
+          "zone_id": {
+            "format": "uuid",
+            "title": "Zone Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zone_id",
+          "name",
+          "seconds",
+          "mowing_seconds",
+          "entries",
+          "days"
+        ],
+        "title": "ZoneTotalsOut",
+        "type": "object"
+      },
+      "ZonesOut": {
+        "description": "The zones of a mower and whether the editor is offered.",
+        "properties": {
+          "anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnchorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availability": {
+            "description": "`available`: the vendor shares no map areas and the mower reports positions; `vendor_map`: its vendor's areas are its zones; `no_position`: it reports no position.",
+            "enum": [
+              "available",
+              "vendor_map",
+              "no_position"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ZoneLimits"
+          },
+          "presence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PresenceOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The current zone; null before the first evaluation."
+          },
+          "zone_plans": {
+            "description": "Vendor zone starts declared by the mower's connection (ADR 0066); empty when it declares none, then zones cannot be linked to a start.",
+            "items": {
+              "$ref": "#/components/schemas/ZonePlanOut"
+            },
+            "title": "Zone Plans",
+            "type": "array"
+          },
+          "zones": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneOut"
+            },
+            "title": "Zones",
+            "type": "array"
+          }
+        },
+        "required": [
+          "availability",
+          "zones"
+        ],
+        "title": "ZonesOut",
         "type": "object"
       }
     }
@@ -7455,6 +7922,275 @@
         "summary": "Get Widget Map",
         "tags": [
           "telemetry"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/zones": {
+      "get": {
+        "description": "The mower's virtual zones, the zone it is in and whether the editor is offered.",
+        "operationId": "list_zones_api_v1_telemetry_mowers__mower_id__zones_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZonesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Zones",
+        "tags": [
+          "zones"
+        ]
+      },
+      "post": {
+        "description": "Draw a zone (``can_control``). The current zone is evaluated again at once.",
+        "operationId": "create_zone_api_v1_telemetry_mowers__mower_id__zones_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_control`."
+          },
+          "404": {
+            "description": "The mower (or zone) does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which."
+          },
+          "422": {
+            "description": "The ring or the name is not acceptable; the error points at it."
+          }
+        },
+        "summary": "Create Zone",
+        "tags": [
+          "zones"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/zones/stats": {
+      "get": {
+        "description": "Time per zone (in it, of that mowing, entries) over the last ``days`` days.",
+        "operationId": "zone_stats_api_v1_telemetry_mowers__mower_id__zones_stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Whole UTC days, today included.",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "description": "Whole UTC days, today included.",
+              "maximum": 92,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneStatsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Zone Stats",
+        "tags": [
+          "zones"
+        ]
+      }
+    },
+    "/api/v1/telemetry/mowers/{mower_id}/zones/{zone_id}": {
+      "delete": {
+        "description": "Delete a zone with its recorded time (``can_control``).",
+        "operationId": "delete_zone_api_v1_telemetry_mowers__mower_id__zones__zone_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "zone_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Zone Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_control`."
+          },
+          "404": {
+            "description": "The mower (or zone) does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which."
+          },
+          "422": {
+            "description": "The ring or the name is not acceptable; the error points at it."
+          }
+        },
+        "summary": "Delete Zone",
+        "tags": [
+          "zones"
+        ]
+      },
+      "patch": {
+        "description": "Rename, reshape or (un)link a zone (``can_control``).",
+        "operationId": "update_zone_api_v1_telemetry_mowers__mower_id__zones__zone_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mower_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mower Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "zone_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Zone Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZonePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "The caller sees the mower but has no `can_control`."
+          },
+          "404": {
+            "description": "The mower (or zone) does not exist or is not visible to the caller."
+          },
+          "409": {
+            "description": "Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which."
+          },
+          "422": {
+            "description": "The ring or the name is not acceptable; the error points at it."
+          }
+        },
+        "summary": "Update Zone",
+        "tags": [
+          "zones"
         ]
       }
     },

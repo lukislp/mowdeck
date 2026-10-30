@@ -1,0 +1,40 @@
+/*
+ * MowDeck's look on top of Scalar's default theme (ADR 0072): the app's background, ink and the
+ * amber of the HUD as the accent, IBM Plex when the browser has it, the system fonts otherwise
+ * (the frame loads no font file and no font from a third party).
+ */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+.light-mode {
+  --scalar-background-1: #f4f5f2;
+  --scalar-background-2: #fff;
+  --scalar-color-1: #111412;
+  --scalar-color-accent: #9a5b00;
+  --scalar-background-accent: #f2b24a33;
+}
+
+.dark-mode {
+  --scalar-background-1: #0e1011;
+  --scalar-background-2: #16191b;
+  --scalar-color-1: #ecefea;
+  --scalar-color-accent: #f2b24a;
+  --scalar-background-accent: #f2b24a26;
+}
+
+:root {
+  --scalar-font: 'IBM Plex Sans Variable', 'IBM Plex Sans', system-ui, sans-serif;
+  --scalar-font-code: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', menlo, consolas, monospace;
+  --scalar-radius: 2px;
+  --scalar-radius-lg: 4px;
+  --scalar-radius-xl: 6px;
+}
+
+.explorer-status {
+  padding: 24px;
+  font-family: var(--scalar-font);
+  font-size: 14px;
+}

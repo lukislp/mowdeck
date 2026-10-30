@@ -15,7 +15,9 @@ Every MowDeck service publishes an HTTP API under `/api/v1/<service>` on the sam
 | [planner](planner.md) | `/api/v1/planner` | 8 | Mowing patterns, spot paths and plans. |
 | [realtime](realtime.md) | `/api/v1/realtime` | 0 | The WebSocket for live state and command results (protocol in the guide). |
 | [scheduler](scheduler.md) | `/api/v1/scheduler` | 14 | Schedules, their runs, rain pause and the weather. |
-| [telemetry](telemetry.md) | `/api/v1/telemetry` | 39 | Current state, history, positions, maps, health and reports. |
+| [telemetry](telemetry.md) | `/api/v1/telemetry` | 44 | Current state, history, positions, maps, health and reports. |
 | [vision](vision.md) | `/api/v1/vision` | 16 | AI assisted recovery: proposals, approvals and the provider settings. |
 
 The raw OpenAPI 3.1 documents are in [`apps/web/openapi`](https://github.com/lukislp/mowdeck/blob/main/apps/web/openapi): load them into Swagger UI, Redoc, Scalar, Insomnia, Bruno or a client generator of your choice.
+
+**Try it live on the demo:** a public demo installation has an interactive explorer of these documents at `/api-explorer` (after "Try the demo"; simulated mowers, refused actions answer 403 `demo-mode`). See [Scripting MowDeck](../../guides/scripting.md#try-it-live-on-the-demo) and [ADR 0072](../../adr/0072-api-explorer-in-the-web-app.md).

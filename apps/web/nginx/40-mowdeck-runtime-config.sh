@@ -26,6 +26,10 @@
 #                                sign-in page (the services enforce the demo themselves)
 #   MOWDECK_WEB_DEMO_RESET_HOURS hours between two resets of the demo, shown in the banner
 #                                (1 to 168, default 6)
+#   MOWDECK_WEB_API_EXPLORER     true: the interactive API explorer at /api-explorer (ADR 0072),
+#                                meant for the public demo: "try it" calls run with the visitor's
+#                                own session. Anything else: no page, and nginx answers 404 for
+#                                every file of its frame (/_explorer/, /tmp/mowdeck/explorer.conf)
 #
 # The build and its source code (AGPL-3.0 section 13, LICENSING.md), baked into the image by the
 # release build and overridable here; the app shows them on the sign-in page and under Settings:
@@ -137,7 +141,22 @@ case "$(printf '%s' "${MOWDECK_WEB_DEMO_MODE:-false}" | tr '[:upper:]' '[:lower:
     ;;
 esac
 
-printf '{"mapTiles":%s,"legalEnabled":%s,"cameraEnabled":%s,"source":%s%s}\n' "$map_tiles" "$legal_enabled" "$camera_enabled" "$source_json" "$demo_json" > "$out/config.json"
+# The API explorer (ADR 0072): off unless asked for. explorer.conf is included by the /_explorer/
+# location of default.conf; off, it answers 404 before any file is looked up.
+api_explorer=false
+case "$(printf '%s' "${MOWDECK_WEB_API_EXPLORER:-false}" | tr '[:upper:]' '[:lower:]')" in
+  true | 1 | yes | on) api_explorer=true ;;
+  false | 0 | no | off | '') ;;
+  *) echo "mowdeck: MOWDECK_WEB_API_EXPLORER is not true or false; the API explorer stays off" >&2 ;;
+esac
+if [ "$api_explorer" = true ]; then
+  echo "# API explorer on (MOWDECK_WEB_API_EXPLORER=true)" > "$out/explorer.conf"
+  echo "mowdeck: API explorer at /api-explorer (try it out with the visitor's own session)"
+else
+  echo "return 404;" > "$out/explorer.conf"
+fi
+
+printf '{"mapTiles":%s,"legalEnabled":%s,"cameraEnabled":%s,"apiExplorer":%s,"source":%s%s}\n' "$map_tiles" "$legal_enabled" "$camera_enabled" "$api_explorer" "$source_json" "$demo_json" > "$out/config.json"
 sed -e "s#img-src 'self' data: blob:#img-src 'self' data: blob:${img_extra}#" \
   -e "s#connect-src 'self'#connect-src 'self'${connect_extra}#" \
   -e "s#style-src 'self'#style-src 'self'${style_extra}#" \

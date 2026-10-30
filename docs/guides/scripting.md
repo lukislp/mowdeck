@@ -2,6 +2,10 @@
 
 MowDeck has an HTTP API for everything the web app does. With a **personal access token** your own scripts can read the state of your mowers, start, pause and dock them, read their history and follow them live. This guide shows how, with examples in curl, Python ([httpx](https://www.python-httpx.org/)) and JavaScript (`fetch`, Node 18 or newer and browsers). The full list of operations is in the [API reference](../reference/api/index.md); the design is in [ADR 0064](../adr/0064-personal-access-tokens-and-public-api-docs.md).
 
+## Try it live on the demo
+
+A public demo installation ([ADR 0068](../adr/0068-public-demo-mode.md)) has an interactive **API explorer**: open the demo, click **Try the demo**, then **Try the API live** in the demo band (or go to `/api-explorer` of the demo, for example `http://localhost:8580/api-explorer` for a demo you run yourself, see [Public demo](../ops/demo.md)). It shows every service's operations from the same OpenAPI documents as the [API reference](../reference/api/index.md) and sends "Test Request" calls with your demo session, so you need no token there. The mowers are simulated, actions the demo does not allow answer 403 `demo-mode` (creating tokens among them), and the demo resets every few hours. On your own installation the explorer is off; use the steps below. Design: [ADR 0072](../adr/0072-api-explorer-in-the-web-app.md).
+
 ## 1. Create a personal access token
 
 In the web app open **Einstellungen → API-Zugang** (Settings → API access):
@@ -400,5 +404,6 @@ Personal tokens are managed with a **user session**, never with a token: `GET`, 
 ## See also
 
 - [API reference](../reference/api/index.md), generated from the OpenAPI documents of this version.
+- The API explorer of a demo installation (`/api-explorer`, [ADR 0072](../adr/0072-api-explorer-in-the-web-app.md)): the same documents, interactive.
 - [Home Assistant integration](../dev/home-assistant.md): the same API, with an account API token created by an admin.
 - [Confirming critical actions](step-up.md).

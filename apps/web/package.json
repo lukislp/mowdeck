@@ -9,7 +9,7 @@
     "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy localStorage preferredLanguage baseLocale",
     "i18n:check": "node scripts/i18n-check.mjs",
     "dev": "pnpm i18n:compile && vite dev",
-    "build": "pnpm i18n:compile && vite build && node scripts/csp-hashes.mjs build",
+    "build": "pnpm i18n:compile && vite build && node scripts/csp-hashes.mjs build && node build-tools/api-explorer.mjs build",
     "preview": "vite preview",
     "lint": "eslint . && prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore && stylelint \"src/**/*.{css,svelte}\" && node scripts/i18n-check.mjs",
     "check": "pnpm i18n:compile && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc --noEmit -p src/service-worker/tsconfig.json",
@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.29.2",
+    "@scalar/api-reference": "1.75.1",
     "@sveltejs/adapter-static": "4.0.0",
     "@sveltejs/kit": "3.1.0",
     "@sveltejs/vite-plugin-svelte": "7.3.1",

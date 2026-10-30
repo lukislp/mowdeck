@@ -109,5 +109,6 @@ export function mapLabels(): MowerMapLabels {
     pathAhead: m.map_path_ahead(),
     pathPreview: m.map_path_preview(),
     spot: m.map_spot(),
+    selectZone: (name) => m.zones_select({ name }),
   };
 }

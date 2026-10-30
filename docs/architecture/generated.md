@@ -486,6 +486,7 @@ flowchart LR
     telemetry_public["public<br/>2 operations"]
     telemetry_telemetry["telemetry<br/>26 operations"]
     telemetry_tracking["tracking<br/>13 operations"]
+    telemetry_zones["zones<br/>5 operations"]
   end
   subgraph vision["vision"]
     direction TB
@@ -527,6 +528,7 @@ flowchart LR
 | `telemetry` | `public` | 2 | 2 |
 | `telemetry` | `telemetry` | 26 | 26 |
 | `telemetry` | `tracking` | 13 | 11 |
+| `telemetry` | `zones` | 5 | 3 |
 | `vision` | `operations` | 1 | 1 |
 | `vision` | `vision` | 16 | 13 |
 
@@ -557,7 +559,7 @@ flowchart LR
     db_notifications[("notifications<br/>9 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>4 migrations")]
-    db_telemetry[("telemetry<br/>12 migrations")]
+    db_telemetry[("telemetry<br/>13 migrations")]
     db_vision[("vision<br/>7 migrations")]
   end
   billing -->|owns| db_billing

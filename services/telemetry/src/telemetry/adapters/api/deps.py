@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from mowdeck_authz import ObjectRef, Relation, account, principal_subject
 from mowdeck_authz.fastapi import get_authorizer, path_object, require_or_not_found
-from mowdeck_contracts.v1 import Principal
+from mowdeck_contracts.v1 import Principal, ProblemFieldError
 from mowdeck_service_kit.errors import (
     Conflict,
     NotFound,
@@ -31,15 +31,18 @@ from telemetry.domain.errors import (
     AerialRateLimitedError,
     AerialUpstreamError,
     InvalidQueryError,
+    InvalidZoneError,
     LinkLimitError,
     NoSnapshotYetError,
     NoTelemetryYetError,
     NoTrackingError,
+    NoZoneError,
     RateLimitedError,
     TelemetryError,
     TileOutsideMapError,
     TrackingStateError,
     UnknownTrackedMowerError,
+    ZonesUnavailableError,
 )
 
 
@@ -76,6 +79,21 @@ class NoTrackingProblem(NotFound):
 
     problem_type: ClassVar[str] = "no-tracking"
     title: ClassVar[str] = "No tracking session"
+
+
+class NoZoneProblem(NotFound):
+    """The mower has no virtual zone with this id."""
+
+    problem_type: ClassVar[str] = "no-zone"
+    title: ClassVar[str] = "No such zone"
+
+
+class ZonesUnavailableProblem(Conflict):
+    """Virtual zones are not offered for the mower, or it has the most already (409; the
+    error's ``code`` says which: ``vendor_map``, ``no_position``, ``limit``)."""
+
+    problem_type: ClassVar[str] = "zones-unavailable"
+    title: ClassVar[str] = "Zones not available"
 
 
 class TooManyRequests(ServiceError):  # noqa: N818 - HTTP status names read best
@@ -177,6 +195,17 @@ def to_service_error(exc: TelemetryError) -> ServiceError:
             return NoCapabilitiesProblem(exc.message)
         case InvalidQueryError():
             return ValidationFailed(exc.message)
+        case InvalidZoneError():
+            return ValidationFailed(
+                exc.message,
+                errors=[ProblemFieldError(detail=exc.message, pointer=f"#/{exc.field}")],
+            )
+        case NoZoneError():
+            return NoZoneProblem(exc.message)
+        case ZonesUnavailableError():
+            return ZonesUnavailableProblem(
+                exc.message, errors=[ProblemFieldError(detail=exc.message, code=exc.reason)]
+            )
         case UnknownTrackedMowerError() | NoTrackingError():
             return NoTrackingProblem(exc.message)
         case TrackingStateError() | LinkLimitError():

@@ -94,7 +94,7 @@ def main() -> None:
 2. Middleware: correlation id (outermost), generic 500 handler, HTTP metrics.
 3. Exception handlers rendering `application/problem+json`.
 4. Operational endpoints `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` (outside `/api/v1`).
-5. Your routers under `/api/v1` (HTTP and WebSocket routes; the kit's middlewares pass `websocket` scopes through untouched); OpenAPI at `/api/v1/openapi.json`, Swagger UI at `/api/v1/docs`.
+5. Your routers under `/api/v1` (HTTP and WebSocket routes; the kit's middlewares pass `websocket` scopes through untouched); OpenAPI at `/api/v1/openapi.json`. There is no Swagger UI or ReDoc page (FastAPI loads them from a CDN); the interactive explorer is the web app's `/api-explorer`, self-hosted and off by default ([ADR 0072](../../docs/adr/0072-api-explorer-in-the-web-app.md)).
 6. OpenTelemetry instrumentation when `MOWDECK_OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 7. Lifespan: connect the bus (a `JetStreamBus` when `nats_enabled`, unless you pass `bus=`), add the `nats` readiness check, run `on_startup` hooks. On shutdown: mark the service as draining (`/readyz` returns 503), run `on_shutdown` hooks within `shutdown_grace_seconds`, then drain and close the bus, then flush traces.
 

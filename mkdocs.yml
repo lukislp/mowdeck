@@ -113,7 +113,9 @@ nav:
       - adr/0067-error-code-lexicon.md
       - adr/0068-public-demo-mode.md
       - adr/0069-provider-conformance-kit-and-package-template.md
+      - adr/0070-virtual-zones.md
       - adr/0071-capability-matrix.md
+      - adr/0072-api-explorer-in-the-web-app.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
