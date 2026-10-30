@@ -1,5 +1,12 @@
-import { render, screen } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { describe, expect, it, vi } from 'vitest';
+
+const { session, navigatePath } = vi.hoisted(() => ({
+  session: { status: 'anonymous' as string, tryDemo: vi.fn(async () => {}) },
+  navigatePath: vi.fn(async () => {}),
+}));
+vi.mock('#lib/auth/session.svelte.js', () => ({ session }));
+vi.mock('#lib/navigate.js', () => ({ navigatePath }));
 
 import { demoTitle, keepDemoTitle } from './demo';
 import DemoBanner from './DemoBanner.svelte';
@@ -21,6 +28,30 @@ describe('DemoBanner', () => {
     });
     expect(screen.getByTestId('demo-api-explorer')).toHaveAttribute('href', '/api-explorer');
     expect(screen.getAllByRole('link')).toHaveLength(2);
+  });
+
+  it('signs in to the demo first when the explorer is opened signed out', async () => {
+    session.status = 'anonymous';
+    session.tryDemo.mockClear();
+    navigatePath.mockClear();
+    render(DemoBanner, {
+      props: { resetHours: 6, href: 'https://example.org/src', explorer: true },
+    });
+    await fireEvent.click(screen.getByTestId('demo-api-explorer'));
+    await waitFor(() => expect(navigatePath).toHaveBeenCalledWith('/api-explorer'));
+    expect(session.tryDemo).toHaveBeenCalledOnce();
+  });
+
+  it('just follows the link when already signed in', async () => {
+    session.status = 'authenticated';
+    session.tryDemo.mockClear();
+    navigatePath.mockClear();
+    render(DemoBanner, {
+      props: { resetHours: 6, href: 'https://example.org/src', explorer: true },
+    });
+    await fireEvent.click(screen.getByTestId('demo-api-explorer'));
+    expect(session.tryDemo).not.toHaveBeenCalled();
+    expect(navigatePath).not.toHaveBeenCalled();
   });
 });
 
