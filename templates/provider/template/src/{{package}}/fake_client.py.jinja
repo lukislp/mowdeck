@@ -1,0 +1,88 @@
+"""A fake {{ vendor_name }} cloud for the tests, development and the browser tests
+(``ProviderContext.fake``).
+
+Every account below :data:`FAKE_CLOUD_DOMAIN` exists and takes :data:`FAKE_PASSWORD`; anything
+else is refused like a wrong login at the vendor. Each account holds two mowers: ``Front lawn``
+(online, docked) and ``Back lawn`` (offline). Commands change the online mower at once; the
+offline mower refuses them like the vendor would.
+"""
+
+from dataclasses import dataclass, field, replace
+from typing import Final
+
+from {{ package }}.client import (
+    LoginRefused,
+    MowerOffline,
+    VendorAction,
+    VendorMower,
+    VendorSession,
+    VendorStatus,
+)
+
+FAKE_CLOUD_DOMAIN: Final = "fake.mowdeck.test"
+"""E-mail domain of the fake accounts, e.g. ``garden@fake.mowdeck.test``."""
+FAKE_PASSWORD: Final = "fake-cloud-password"  # noqa: S105 - a public test value
+"""The password every fake account takes."""
+
+_NEXT: Final = {
+    VendorAction.START: VendorStatus.MOWING,
+    VendorAction.PAUSE: VendorStatus.PAUSED,
+    VendorAction.RESUME: VendorStatus.MOWING,
+    VendorAction.HOME: VendorStatus.DOCKED,
+}
+
+
+def fake_email(name: str) -> str:
+    """A fake account's e-mail address."""
+    return f"{name}@{FAKE_CLOUD_DOMAIN}"
+
+
+def _fake_mowers() -> dict[str, VendorMower]:
+    mowers = [
+        VendorMower("fake-0001", "Front lawn", "Fake 1000", True, VendorStatus.DOCKED, 100),
+        VendorMower("fake-0002", "Back lawn", "Fake 500", False, VendorStatus.DOCKED, 40),
+    ]
+    return {mower.id: mower for mower in mowers}
+
+
+@dataclass
+class FakeAccount:
+    """The mowers of one fake account and every action sent to them."""
+
+    mowers: dict[str, VendorMower] = field(default_factory=_fake_mowers)
+    actions: list[tuple[str, VendorAction]] = field(default_factory=list)
+
+
+class FakeSession:
+    """A :class:`~{{ package }}.client.VendorSession` on a :class:`FakeCloud` account."""
+
+    def __init__(self, account: FakeAccount) -> None:
+        self.account = account
+        self.closed = False
+
+    async def mowers(self) -> list[VendorMower]:
+        return list(self.account.mowers.values())
+
+    async def send(self, mower_id: str, action: VendorAction) -> None:
+        mower = self.account.mowers[mower_id]
+        self.account.actions.append((mower_id, action))
+        if not mower.online:
+            raise MowerOffline("the mower is offline")
+        self.account.mowers[mower_id] = replace(mower, status=_NEXT[action])
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class FakeCloud:
+    """The fake vendor: accounts by e-mail, created on first login."""
+
+    def __init__(self) -> None:
+        self.accounts: dict[str, FakeAccount] = {}
+
+    async def login(self, email: str, password: str) -> VendorSession:
+        """The :data:`~{{ package }}.client.Login` of the fake cloud."""
+        address = email.strip().casefold()
+        if not address.endswith(f"@{FAKE_CLOUD_DOMAIN}") or password != FAKE_PASSWORD:
+            raise LoginRefused("login refused")
+        return FakeSession(self.accounts.setdefault(address, FakeAccount()))

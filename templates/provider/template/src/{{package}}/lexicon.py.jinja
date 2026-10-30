@@ -1,0 +1,51 @@
+"""The {{ vendor_name }} error codes in plain words (ADR 0067), registered as ``{{ vendor }}``.
+
+Starts empty: an unknown code gets MowDeck's generic explanation. Fill :data:`ERROR_TITLES`
+from the vendor SDK's code table (English required, German where known, ``verified=False`` where
+the meaning is a guess); the conformance kit then checks that every code the adapter can report
+is explained, and the connection takes each code's category from here.
+"""
+
+from collections.abc import Mapping
+from functools import cache
+from typing import Final
+
+from mowdeck_contracts.v1 import (
+    ErrorLexicon,
+    ErrorLexiconEntry,
+    ErrorText,
+    MowerErrorCategory,
+)
+from mowdeck_control.error_lexicons import ErrorLexiconProvider
+
+from {{ package }}.descriptor import PROVIDER
+
+ERROR_TITLES: Final[Mapping[int, tuple[str, str | None, MowerErrorCategory]]] = {
+    # 1: ("Mower is stuck", "Mäher steckt fest", MowerErrorCategory.TRAPPED),
+}
+"""Code to English title, German title (None: not translated yet) and category."""
+
+
+def _entry(
+    code: int, english: str, german: str | None, category: MowerErrorCategory
+) -> ErrorLexiconEntry:
+    texts = {"en": ErrorText(title=english)}
+    if german is not None:
+        texts["de"] = ErrorText(title=german)
+    return ErrorLexiconEntry(code=str(code), category=category, texts=texts, verified=False)
+
+
+def build_lexicon() -> ErrorLexicon:
+    """The lexicon from :data:`ERROR_TITLES`."""
+    return ErrorLexicon(
+        vendor=PROVIDER,
+        vendor_name="{{ vendor_name }}",
+        source="{{ sdk_module }} error table",
+        entries=[_entry(code, *row) for code, row in sorted(ERROR_TITLES.items())],
+    )
+
+
+@cache
+def {{ vendor }}_lexicon() -> ErrorLexiconProvider:
+    """The entry point object (``mowdeck.error_lexicons``: ``{{ vendor }}``)."""
+    return ErrorLexiconProvider(build_lexicon())

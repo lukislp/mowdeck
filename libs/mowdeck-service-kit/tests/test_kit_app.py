@@ -172,6 +172,17 @@ def test_openapi_lives_under_api_prefix() -> None:
     assert "/healthz" not in paths
 
 
+async def test_no_interactive_docs_from_a_cdn() -> None:
+    # FastAPI's Swagger UI and ReDoc load their bundles from cdn.jsdelivr.net; the interactive
+    # explorer is the web app's, self-hosted (ADR 0072). The OpenAPI document stays.
+    app = make_test_app(routers=[router])
+    assert app.docs_url is None
+    assert app.redoc_url is None
+    async with lifespan_client(app) as client:
+        assert (await client.get(f"{API_PREFIX}/docs")).status_code == 404
+        assert (await client.get(f"{API_PREFIX}/openapi.json")).status_code == 200
+
+
 def test_run_uses_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
 

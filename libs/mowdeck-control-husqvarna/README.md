@@ -40,6 +40,7 @@ Husqvarna allows **1 request per second and 10,000 requests per month per applic
 | `rtk_sources` | none | EPOS models use RTK internally, the API does not report it |
 | `blade_height_range_mm` | none | the API's cutting height is a level from 1 to 9, not millimetres; reported as `raw.cutting_height_level` |
 | `settings`, `maintenance`, `firmware_update` | none | |
+| `start_plans` | `duration` (kind `now`), `work_area:<id>` per work area (kind `zone`, the work area's name; models with work areas), `schedule` (kind `schedule`) | the map has no areas, so the web app starts the mower through these ([ADR 0066](../../docs/adr/0066-cloud-provider-plugins-and-more-vendors.md) amendment); `duration` mows for the option `start_minutes` |
 
 Map: the API has no geometry (work areas and stay-out zones are names only), so `get_map` returns a map without areas whose geo reference is the mower's first known GPS position (0/0 on models without GPS). Work area names are in `raw.work_areas`.
 
@@ -92,7 +93,7 @@ Connection options (`ConnectionConfig.options`): the account's `app_key` and `ap
 ## Known gaps
 
 - Nothing tested on a real mower; the payload shapes follow aioautomower's models and the API documentation.
-- Starting from the web app's map is not possible (no areas); starts go through a plan reference, which the web app does not offer yet.
+- Starting from the web app's map is not possible (no areas); starts go through the declared start plans (a duration, a work area, the schedule). Before the provider conformance kit ([ADR 0069](../../docs/adr/0069-provider-conformance-kit-and-package-template.md)) found it, none were declared and no client could start the mower.
 - Not mapped: calendars and schedules, stay-out zones, work area settings, cutting height and headlight mode changes, error confirmation, messages, park for a duration.
 - An authorization-code flow (a MowDeck application at Husqvarna, no developer account for the user) is an open decision of ADR 0066.
 
@@ -123,7 +124,7 @@ With `ProviderContext.fake` (gateway: `MOWDECK_FAKE_CLOUDS=true`, development an
 | `lexicon.py` | no (a copy of its code table, kept equal by a test) | the error lexicon (entry point `mowdeck.error_lexicons`: `husqvarna`) |
 | `fake_cloud.py` | yes | the fake vendor (imported only with `ProviderContext.fake`) |
 
-Tests (`tests/`, no network): descriptor and entry point, token cache and refusals, throttle, discovery from a recorded-shape `GET /mowers` payload parsed by aioautomower, the state mapping table, lift codes, command translation and vendor errors, the refresh schedule, websocket events, the error lexicon (every code, both languages, categories equal to the state's), the fake cloud end to end, and that no secret reaches a log, a message or a `repr`.
+Tests (`tests/`, no network): descriptor and entry point, token cache and refusals, throttle, discovery from a recorded-shape `GET /mowers` payload parsed by aioautomower, the state mapping table, lift codes, command translation and vendor errors, the refresh schedule, websocket events, the error lexicon (every code, both languages, categories equal to the state's), the fake cloud end to end, and that no secret reaches a log, a message or a `repr`. `test_husqvarna_conformance.py` runs the provider conformance kit (`mowdeck-provider-testkit`, [ADR 0069](../../docs/adr/0069-provider-conformance-kit-and-package-template.md)) on the fake cloud, with aioautomower's code table as the codes the lexicon must explain.
 
 ```bash
 uv run pytest libs/mowdeck-control-husqvarna

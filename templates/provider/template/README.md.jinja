@@ -1,0 +1,41 @@
+# {{ distribution }}
+
+{{ vendor_name }} adapter for MowDeck: a cloud provider plugin ([ADR 0066](../../docs/adr/0066-cloud-provider-plugins-and-more-vendors.md)) with its connection and its error lexicon ([ADR 0067](../../docs/adr/0067-error-code-lexicon.md)). **Untested on real hardware**, off by default: operators enable it with `MOWDECK_CLOUD_PROVIDERS_ENABLE={{ vendor }}`.
+
+Generated from `templates/provider` ([ADR 0069](../../docs/adr/0069-provider-conformance-kit-and-package-template.md)); the step-by-step guide is [Adding a provider](../../docs/dev/adding-a-provider.md).
+
+## Licence
+
+{{ licence }}. The vendor SDK `{{ sdk_distribution }}` (import name `{{ sdk_module }}`) was declared **{{ sdk_licence }}** when this package was generated. {% if sdk_licence == 'gpl' %}A package that imports a GPL library must be GPL-3.0 itself and stays isolated in its own package ([ADR 0005](../../docs/adr/0005-licensing.md), [ADR 0011](../../docs/adr/0011-gpl-package-for-pymammotion-adapter.md)); only the Device-Gateway installs it.{% else %}Permissive SDK licences (MIT, BSD, Apache-2.0) keep the package Apache-2.0 like `mowdeck-control`. If the SDK turns out to be GPL (read the `LICENSE` file inside its sdist, not only PyPI), the package must become GPL-3.0 ([ADR 0005](../../docs/adr/0005-licensing.md), [ADR 0011](../../docs/adr/0011-gpl-package-for-pymammotion-adapter.md)).{% endif %}
+
+## What the user provides
+
+The e-mail address and password of their {{ vendor_name }} app account (`descriptor.py`). Change the credential fields to what the vendor really needs (an application key and secret, a brand choice, ...); every text is English and German.
+
+## Capabilities
+
+| Feature | Supported |
+| --- | --- |
+| State (activity, battery, charging, error code with category) | yes |
+| Start (start plan `now`), pause, resume, return to the dock | yes |
+| Emergency stop | yes, as an immediate pause (sent even when the vendor reports the mower offline) |
+| Map areas, patterns, manual driving, blade height, speed, light, camera, settings, firmware, maintenance | no (not declared, so MowDeck refuses and hides them) |
+
+Declare more in `connection.py` only together with its implementation; the conformance kit checks both directions.
+
+## Layout
+
+| Module | Role |
+| --- | --- |
+| `plugin.py` | `SPEC`, the `mowdeck.cloud_providers` entry point (imports no SDK) |
+| `provider.py` | the `CloudProviderPlugin`: descriptor, discovery, connections |
+| `descriptor.py` | credential fields, guidance, texts in English and German |
+| `connection.py` | the `MowerConnection`: capabilities, state mapping, commands |
+| `client.py` | the port to the vendor cloud (no SDK types) |
+| `sdk_client.py` | the real client on `{{ sdk_module }}` (a stub until wired in) |
+| `fake_client.py` | the fake cloud: accounts `*@fake.mowdeck.test`, password `fake-cloud-password`, one online and one offline mower |
+| `lexicon.py` | the error lexicon (`mowdeck.error_lexicons`), empty until filled from the SDK's table |
+
+## Tests
+
+`uv run pytest libs/{{ distribution }}`: `tests/test_{{ vendor }}_conformance.py` runs the provider conformance kit (`mowdeck-provider-testkit`) on the fake cloud, `tests/test_{{ vendor }}_connection.py` the rules the kit cannot know. No network, no vendor account.

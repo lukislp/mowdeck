@@ -29,6 +29,11 @@ export interface RuntimeConfig {
    * domains. The simulator's test pattern works without it.
    */
   cameraEnabled: boolean;
+  /**
+   * The interactive API explorer at `/api-explorer` (ADR 0072, `MOWDECK_WEB_API_EXPLORER`),
+   * meant for the public demo. Off everywhere else: no page, and nginx serves none of its files.
+   */
+  apiExplorer: boolean;
   /** The build and where its source code is (AGPL-3.0 section 13, `#lib/legal/source.js`). */
   source: SourceInfo;
   /**
@@ -47,6 +52,7 @@ export const DEFAULT_CONFIG: RuntimeConfig = Object.freeze({
   mapTiles: null,
   legalEnabled: false,
   cameraEnabled: false,
+  apiExplorer: false,
   source: DEFAULT_SOURCE,
 });
 
@@ -55,23 +61,28 @@ const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 /** Validate an untrusted config object; anything invalid becomes the default. */
 export function parseConfig(raw: unknown): RuntimeConfig {
   if (!raw || typeof raw !== 'object') return DEFAULT_CONFIG;
-  const { mapTiles, legalEnabled, cameraEnabled, source, demo } = raw as {
+  const { mapTiles, legalEnabled, cameraEnabled, apiExplorer, source, demo } = raw as {
     mapTiles?: unknown;
     legalEnabled?: unknown;
     cameraEnabled?: unknown;
+    apiExplorer?: unknown;
     source?: unknown;
     demo?: unknown;
   };
   const legal = legalEnabled === true;
   const camera = cameraEnabled === true;
+  const explorer = apiExplorer === true;
   const tiles = parseMapTiles(mapTiles);
   const build = parseSource(source);
   const showcase = parseDemo(demo);
-  if (!tiles && !legal && !camera && build === DEFAULT_SOURCE && !showcase) return DEFAULT_CONFIG;
+  if (!tiles && !legal && !camera && !explorer && build === DEFAULT_SOURCE && !showcase) {
+    return DEFAULT_CONFIG;
+  }
   return {
     mapTiles: tiles,
     legalEnabled: legal,
     cameraEnabled: camera,
+    apiExplorer: explorer,
     source: build,
     ...(showcase ? { demo: showcase } : {}),
   };

@@ -1,0 +1,110 @@
+# Copier template for a MowDeck provider package (a vendor adapter, ADR 0066 and ADR 0069).
+#
+#   uv run copier copy --trust templates/provider libs/mowdeck-control-<vendor>
+#   uv run poe new-provider <vendor>
+#
+# See templates/README.md and docs/dev/adding-a-provider.md. --trust is needed for the one task
+# below: it copies the licence text the package's licence choice asks for from LICENSES/.
+
+_min_copier_version: "9.4.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+
+vendor:
+  type: str
+  help: >-
+    Vendor key, lower-case letters and digits (e.g. acme). It names the package
+    (mowdeck-control-<vendor>), the cloud provider id and the error lexicon.
+  validator: >-
+    {% if not (vendor | regex_search('^[a-z][a-z0-9]{1,30}$')) %}
+    Use 2 to 31 lower-case letters and digits, starting with a letter.
+    {% endif %}
+
+vendor_name:
+  type: str
+  help: The vendor's brand as users know it (shown on the link form, never translated)
+  default: "{{ vendor | capitalize }}"
+
+sdk_module:
+  type: str
+  help: >-
+    Import name of the vendor SDK the package will wrap (e.g. acme_cloud). It goes into
+    [tool.mowdeck.adapter] vendor-modules, so the core can never import it.
+  default: "{{ vendor }}_sdk"
+  validator: >-
+    {% if not (sdk_module | regex_search('^[a-z_][a-z0-9_]*$')) %}
+    Use a Python module name (lower-case letters, digits, underscores).
+    {% endif %}
+
+sdk_distribution:
+  type: str
+  help: The SDK's distribution name on PyPI (pinned exactly once the real client uses it)
+  default: "{{ sdk_module | replace('_', '-') }}"
+
+sdk_licence:
+  type: str
+  help: >-
+    Licence of the vendor SDK, read from the LICENSE file inside its sdist, not only from the
+    PyPI metadata (ADR 0066). A package that imports a GPL library is a derivative work and
+    must be GPL-3.0 itself, kept in its own package (ADR 0005, ADR 0011). There is no default:
+    this is a choice to make consciously.
+  choices:
+    "Permissive (MIT, BSD, Apache-2.0): the package is Apache-2.0": permissive
+    "GPL: the package is GPL-3.0-only, isolated in its own package": gpl
+
+brand_names:
+  type: yaml
+  help: >-
+    Words that name the vendor or its products besides the vendor key (YAML list, e.g.
+    [acmemow, gardenbot]); the core and the web app must never use them.
+  default: "[]"
+  validator: >-
+    {% if brand_names is not sequence or brand_names is string %}
+    Give a YAML list of words.
+    {% endif %}
+
+# Computed values (not asked, not stored in the answers file).
+package:
+  type: str
+  when: false
+  default: "mowdeck_control_{{ vendor }}"
+
+distribution:
+  type: str
+  when: false
+  default: "mowdeck-control-{{ vendor }}"
+
+class_prefix:
+  type: str
+  when: false
+  default: "{{ vendor | capitalize }}"
+
+licence:
+  type: str
+  when: false
+  default: "{% if sdk_licence == 'gpl' %}GPL-3.0-only{% else %}Apache-2.0{% endif %}"
+
+licence_text:
+  type: str
+  when: false
+  default: "{% if sdk_licence == 'gpl' %}GPL-3.0{% else %}Apache-2.0{% endif %}"
+
+_tasks:
+  # The full licence text from the repository's LICENSES/ (the template lives two levels below).
+  - command:
+      - "{{ _copier_python }}"
+      - "-c"
+      - "import shutil, sys; shutil.copyfile(sys.argv[1], 'LICENSE')"
+      - "{{ _copier_conf.src_path }}/../../LICENSES/{{ licence_text }}.txt"
+
+_message_after_copy: |
+  Provider package {{ distribution }} ({{ licence }}) created. Next steps
+  (docs/dev/adding-a-provider.md):
+    1. Root pyproject.toml: add "{{ distribution }}" to the dev group and [tool.uv.sources],
+       and libs/{{ distribution }} to the mypy files; then uv sync.
+    2. uv run pytest libs/{{ distribution }}: the conformance kit runs green on the fake client.
+    3. Replace sdk_client.py with the real {{ sdk_module }} client, pin {{ sdk_distribution }},
+       grow the capabilities, the mapping and the lexicon; keep the conformance kit green.
+    4. Register the vendor library (docs/ops/vendor-lib-updates.md) and add the package to
+       services/device-gateway/pyproject.toml.

@@ -1,0 +1,17 @@
+"""The real {{ vendor_name }} client: the ``Login`` of ``client`` on the vendor SDK.
+
+A stub until the SDK is wired in. Import the SDK here (and only in modules the plugin imports
+inside ``create``), map its models onto ``VendorMower`` and its errors onto ``LoginRefused``,
+``VendorUnavailable`` and ``MowerOffline``. Real adapters share one logged-in session per vendor
+account between the mowers of that account (the existing adapters keep an account pool for it);
+never log a credential.
+"""
+
+from {{ package }}.client import VendorSession, VendorUnavailable
+
+
+async def login(email: str, password: str) -> VendorSession:
+    """Log in at the vendor cloud (not implemented yet)."""
+    del email, password
+    msg = "the {{ vendor_name }} cloud client is not implemented yet"
+    raise VendorUnavailable(msg)

@@ -116,7 +116,9 @@ def create_app(
         version=descriptor.version,
         lifespan=lifespan,
         openapi_url=f"{API_PREFIX}/openapi.json",
-        docs_url=f"{API_PREFIX}/docs",
+        # No Swagger UI or ReDoc: FastAPI's pages load their bundles from a CDN. The interactive
+        # explorer is the web app's, self-hosted (ADR 0072); the reference is docs/reference/api.
+        docs_url=None,
         redoc_url=None,
     )
     app.state.settings = settings
