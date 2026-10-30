@@ -48,8 +48,10 @@ To update the toolchain: edit `.clusterfuzzlite/requirements.in` and compile it 
 
 ```bash
 uv pip compile .clusterfuzzlite/requirements.in --generate-hashes --python-version 3.13 \
-  --python-platform x86_64-manylinux_2_28 --no-header -o .clusterfuzzlite/requirements.txt
+  --python-platform x86_64-manylinux_2_28 -o .clusterfuzzlite/requirements.txt
 ```
+
+Keep the header uv writes: Dependabot reads it and then updates the file with `uv pip compile` too. Without it Dependabot falls back to pip-compile, which leaves out `setuptools` (an "unsafe" package to pip-compile, but needed by PyInstaller), and the `--require-hashes` install in the image fails.
 
 The builder image digest is bumped deliberately, like the other images; the uv image is the `UV_IMAGE` of `infra/compose/.env.example` (the repo check keeps them equal).
 
