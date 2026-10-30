@@ -49,6 +49,8 @@ dev = [
   "mowdeck-control-mammotion[esphome]",
   "mowdeck-control-worx",
   "mowdeck-patterns",
+  # The provider conformance kit (ADR 0069), run by every adapter package's tests.
+  "mowdeck-provider-testkit",
   "mowdeck-service-kit[db,otel,testing]",
   "mowdeck-wiki-sync",
   # The Agora camera source bridge (Apache-2.0, standard library only; the SDK is never
@@ -78,6 +80,7 @@ mowdeck-control-husqvarna = { workspace = true }
 mowdeck-control-mammotion = { workspace = true }
 mowdeck-control-worx = { workspace = true }
 mowdeck-patterns = { workspace = true }
+mowdeck-provider-testkit = { workspace = true }
 mowdeck-service-kit = { workspace = true }
 mowdeck-wiki-sync = { workspace = true }
 agora-bridge = { workspace = true }
@@ -97,8 +100,9 @@ vision = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-# templates/service/template holds Jinja sources; the generated services are linted instead.
-extend-exclude = ["site", "templates/service/template"]
+# templates/*/template hold Jinja sources; the generated services and providers are linted
+# instead (tools/repo-checks/tests/test_provider_template.py lints a rendered provider).
+extend-exclude = ["site", "templates/service/template", "templates/provider/template"]
 # Service packages are first-party everywhere (their tests and scripts import them).
 src = [".", "services/*/src", "integrations/agora-bridge/src", "fuzz"]
 
@@ -126,6 +130,7 @@ files = [
   "libs/mowdeck-control-mammotion",
   "libs/mowdeck-control-worx",
   "libs/mowdeck-patterns",
+  "libs/mowdeck-provider-testkit",
   "libs/mowdeck-service-kit",
   "services",
   "integrations/agora-bridge/src",
@@ -215,6 +220,12 @@ compose-check ="docker compose -f infra/compose/docker-compose.yml --env-file in
 fga-test = "docker run --rm -v ${POE_ROOT}/infra/openfga:/w -w /w openfga/cli:v0.8.1 model test --tests model.fga.yaml"
 # Regenerate the JSON form of the model packaged in mowdeck-authz (after editing model.fga).
 fga-json = "python infra/openfga/sync_model_json.py --write"
+
+[tool.poe.tasks.new-provider]
+# A provider package from templates/provider (ADR 0069): uv run poe new-provider <vendor>.
+cmd = "copier copy --trust -d vendor=${vendor} templates/provider libs/mowdeck-control-${vendor}"
+help = "Generate libs/mowdeck-control-<vendor> from the provider template"
+args = [{ name = "vendor", positional = true, required = true, help = "vendor key, e.g. acme" }]
 
 [tool.poe.tasks.lint]
 sequence = ["lint-ruff", "lint-format", "lint-mypy"]

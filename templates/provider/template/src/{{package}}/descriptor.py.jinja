@@ -1,0 +1,50 @@
+"""What the {{ vendor_name }} provider asks for on the link form (ADR 0066).
+
+Every user-visible text exists in English and German, the web app's languages
+(``tools/repo-checks/tests/test_provider_texts.py`` and the conformance kit check it). Generic
+hints (that a secret is stored encrypted, the "untested on real hardware" label) come from the
+web app, not from here. Descriptors are public data and never hold credentials.
+"""
+
+from typing import Final
+
+from mowdeck_contracts.v1 import CredentialField, CredentialFieldKind, ProviderDescriptor
+
+PROVIDER: Final = "{{ vendor }}"
+EMAIL: Final = "email"
+PASSWORD: Final = "password"  # noqa: S105 - a field key, not a secret
+
+DESCRIPTOR: Final = ProviderDescriptor(
+    provider=PROVIDER,
+    name="{{ vendor_name }}",
+    summary={
+        "en": "{{ vendor_name }} mowers through the {{ vendor_name }} cloud: state, start, pause "
+        "and return to the dock.",
+        "de": "{{ vendor_name }}-Mäher über die {{ vendor_name }}-Cloud: Zustand, Start, Pause "
+        "und Rückkehr zur Ladestation.",
+    },
+    fields=[
+        CredentialField(
+            key=EMAIL,
+            kind=CredentialFieldKind.EMAIL,
+            label={"en": "E-mail address", "de": "E-Mail-Adresse"},
+            help={
+                "en": "The {{ vendor_name }} app account the mowers belong to.",
+                "de": "Das Konto der {{ vendor_name }}-App, zu dem die Mäher gehören.",
+            },
+            identity=True,
+        ),
+        CredentialField(
+            key=PASSWORD,
+            kind=CredentialFieldKind.SECRET,
+            label={"en": "Password", "de": "Passwort"},
+        ),
+    ],
+    setup_steps=[
+        {
+            "en": "Use the e-mail address and password of your {{ vendor_name }} app account.",
+            "de": "Verwende E-Mail-Adresse und Passwort deines Kontos der {{ vendor_name }}-App.",
+        },
+    ],
+    tested_on_hardware=False,
+)
