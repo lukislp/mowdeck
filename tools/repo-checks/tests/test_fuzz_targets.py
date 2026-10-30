@@ -86,7 +86,9 @@ def test_build_script_builds_every_target(repo_root: Path) -> None:
     script = (repo_root / ".clusterfuzzlite" / "build.sh").read_text("utf-8")
     assert "for target in fuzz/fuzz_*.py" in script
     assert "compile_python_fuzzer" in script
-    assert "uv pip install --require-hashes" in script
+    # The export is installed as is: hash-checked, no resolution, no project config (its
+    # override-dependencies would add unpinned requirements).
+    assert "uv pip install --no-deps --no-config --require-hashes" in script
 
 
 @pytest.mark.usefixtures("fake_atheris")
