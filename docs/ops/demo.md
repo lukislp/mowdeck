@@ -40,15 +40,76 @@ demo/reset.sh                              # deletes any previous demo, builds, 
 
 The demo answers at `http://127.0.0.1:8580` (`GATEWAY_HTTP_PORT`). The seed job's last lines are printed at the end; `docker compose -p mowdeck-demo logs demo-seed` shows them again.
 
-`reset.sh --dry-run` prints the commands without running them; `--no-build` reuses the images of the last build. The script refuses the project name `mowdeck`, any `COMPOSE_PROFILES` (relay, agora, matter and billing do not belong in a demo) and the placeholder secrets.
+`reset.sh --dry-run` prints the commands without running them; `--no-build` reuses the images of the last build. The script refuses the project name `mowdeck`, any `COMPOSE_PROFILES` (relay, agora, matter and billing do not belong in a demo) and the placeholder secrets. A git-ignored `demo/demo.override.yml` adds host specific settings ([below](#host-specific-settings-demooverrideyml)).
 
 Behind a proxy, set in `demo/demo.env`:
 
 | Setting | Value |
 | --- | --- |
-| `GATEWAY_TRUSTED_PROXIES` | the proxy's address, so the rate limits see the visitors' addresses |
-| `REALTIME_ALLOWED_ORIGINS` | the public address, e.g. `https://demo.example.org` |
+| `GATEWAY_TRUSTED_PROXIES` | the proxy's address (as the gateway sees it), so Traefik keeps the `X-Forwarded-For` the proxy sends |
+| `GATEWAY_CLIENT_IP_DEPTH` | `1` for one proxy that sets or appends `X-Forwarded-For` (Caddy, nginx), so the rate limits and the services count each visitor instead of the proxy; see [Client addresses behind a proxy](#client-addresses-behind-a-proxy) |
+| `REALTIME_ALLOWED_ORIGINS` | the public address, e.g. `https://demo.example.org`, exactly as the browser sends it in `Origin` (scheme and host, no path) |
 | `IDENTITY_REFRESH_COOKIE_SECURE` | `true` (HTTPS) |
+
+`REALTIME_ALLOWED_ORIGINS` is checked on every WebSocket handshake of `/api/v1/realtime/ws`. A wrong or missing origin shows up as **HTTP 403 on the handshake** (the browser console reports the WebSocket as failed, the live status and the mower positions stop updating) while every other page works. Check it with the browser's network tab (filter `ws`) or `docker compose -p mowdeck-demo logs realtime`.
+
+### Client addresses behind a proxy
+
+Traefik's rate limits (`demo-ratelimit` on every request, `identity-ratelimit` on "Try the demo" and the sign-in, `identity-session-ratelimit`, `billing-webhook-ratelimit`) and the client address of Identity and Telemetry depend on two settings:
+
+- `GATEWAY_TRUSTED_PROXIES` (`forwardedHeaders.trustedIPs`): from these peers Traefik keeps the incoming `X-Forwarded-For`; from every other peer it deletes it. This alone does **not** change the rate limits: without a source criterion Traefik counts the TCP peer, which behind a proxy is the proxy, so every visitor shares one bucket (10 "Try the demo" a minute and 1200 requests a minute for the whole internet).
+- `GATEWAY_CLIENT_IP_DEPTH` (`sourceCriterion.ipStrategy.depth` of every rate limit, `MOWDECK_CLIENT_IP_DEPTH` of the services): the number of trusted proxies in front of the gateway. Traefik counts that many entries from the right of the `X-Forwarded-For` it received; the services, which see one more entry (Traefik appends its own peer), count one further. With `1` and Caddy sending `X-Forwarded-For: <visitor>`, both take the visitor.
+
+| `GATEWAY_CLIENT_IP_DEPTH` | Rate limits count | Identity and Telemetry take |
+| --- | --- | --- |
+| empty (default) | the TCP peer (as before) | the leftmost entry (as before) |
+| `0` | the TCP peer | the gateway's peer |
+| `1` | the last entry the proxy sent | the same entry |
+
+**Spoofing.** A depth only reads entries that a trusted proxy wrote, because Traefik deletes the header of every untrusted peer, and it counts from the right, where a client cannot add anything as long as each proxy **overwrites** the header (Caddy with `header_up X-Forwarded-For {client_ip}`) or **appends** to it (nginx `$proxy_add_x_forwarded_for`). Do not set a depth when a trusted proxy passes the client's header on unchanged, and never list in `GATEWAY_TRUSTED_PROXIES` addresses that ordinary clients connect from. A request that reaches the gateway without the proxy has no `X-Forwarded-For` left, so all such requests share one bucket (stricter, not looser).
+
+**Why not `excludedIPs`.** Traefik's alternative strategy walks `X-Forwarded-For` from the right and takes the first entry outside a list of proxy ranges. It is not safer here: a visitor whose real address falls inside such a range is skipped, so the next entry to the left, which the visitor wrote, becomes the key; the list has to be kept in step with `GATEWAY_TRUSTED_PROXIES`; and Traefik ignores it as soon as a depth is set. The depth is exact for a fixed chain of proxies, which is what a demo host has.
+
+The settings for Cloudflare, Caddy and the gateway on an internal Docker network: Caddy resolves the visitor from `CF-Connecting-IP` (trusting Cloudflare's ranges) and sends exactly one `X-Forwarded-For`, so
+
+```dotenv
+GATEWAY_TRUSTED_PROXIES=10.250.80.0/28     # the internal edge network only Caddy and the gateway are on
+GATEWAY_CLIENT_IP_DEPTH=1
+REALTIME_ALLOWED_ORIGINS=https://mowdeck-demo.example.org
+IDENTITY_REFRESH_COOKIE_SECURE=true
+```
+
+Check it: more than 20 "Try the demo" sign-ins within a minute from one connection get 429, while a second connection (another network, a phone on mobile data) still signs in. Without the depth both would get 429.
+
+### Host specific settings (demo.override.yml)
+
+`reset.sh` uses `demo/demo.override.yml` as a last Compose file when it exists. The file is git-ignored and belongs to the host: join the gateway to an existing network of the proxy, or limit memory and CPU. Example for a proxy on the external network `mowdeck-demo-edge` that reaches the gateway as `mowdeck-demo-gateway`:
+
+```yaml
+# infra/compose/demo/demo.override.yml (git-ignored)
+services:
+  traefik:
+    networks:
+      mowdeck: {}
+      mowdeck-demo-edge:
+        aliases: [mowdeck-demo-gateway]
+    mem_limit: 256m
+    cpus: 0.5
+  postgres:
+    mem_limit: 512m
+networks:
+  mowdeck-demo-edge:
+    external: true
+```
+
+Create the network once (`docker network create --driver bridge --internal --subnet 10.250.80.0/28 mowdeck-demo-edge`); `reset.sh` never removes an external network. With the gateway on the proxy's network the reconnect step after each reset is no longer needed.
+
+The override has the full power of a Compose file, so `reset.sh` compares the merged configuration with and without it before it deletes anything (with `--dry-run` too) and refuses it when
+
+- the service list differs: it adds a service or enables one of a profile (relay, agora, matter, billing);
+- any line of the demo mode (`MOWDECK_DEMO_MODE`), the seed secret (`MOWDECK_DEMO_SEED_TOKEN`, the `X-MowDeck-Demo*` header labels), Traefik's entry point and provider flags or a rate limit (`ratelimit` labels and router middlewares) changes.
+
+Everything else is not checked and is the operator's responsibility: keep the file to networks and resource limits, no ports, volumes, environment or other labels. Those belong in `demo.env` or in the repository. The project name, profile and secret checks run before the override is read, so it cannot get around them. `reset.sh` prints `using .../demo.override.yml` when it takes the file.
 
 ## Settings
 

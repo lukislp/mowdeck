@@ -9,6 +9,13 @@
 # mowdeck-demo), refuses the regular project "mowdeck", any COMPOSE_PROFILES (relay, agora, matter
 # and billing do not belong in a demo) and the placeholder secrets of demo.env.example. It never
 # prints a secret.
+#
+# Host specific settings: demo/demo.override.yml (git-ignored) is added as the last Compose file
+# when it exists, for example to join the gateway to the network of a proxy or to set mem_limit
+# and cpus (docs/ops/demo.md). It is refused when the merged stack has other services than
+# without it (an added service or an enabled profile) or when it changes the demo mode, the seed
+# secret, the Traefik entry points or the rate limits. Everything else in it is the operator's
+# responsibility: keep it to networks and resource limits.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -65,6 +72,24 @@ compose=(
   -f "$compose_dir/docker-compose.yml"
   -f "$compose_dir/docker-compose.demo.yml"
 )
+
+override="$here/demo.override.yml"
+if [ -f "$override" ]; then
+  with_override=("${compose[@]}" -f "$override")
+  # What the override must leave as it is: the service list (no added service, no profile
+  # enabled) and the lines of the demo mode, the seed secret, Traefik's entry points and the
+  # rate limits. Compared, never printed (the merged config contains secrets).
+  guarded() {
+    "$@" config | grep -E 'MOWDECK_DEMO_MODE|MOWDECK_DEMO_SEED_TOKEN|X-MowDeck-Demo|--entrypoints[.]|--providers[.]|ratelimit' | sort || true
+  }
+  base_services="$("${compose[@]}" config --services | sort)" || die "docker compose config failed"
+  override_services="$("${with_override[@]}" config --services | sort)" || die "docker compose config failed with $override"
+  [ "$base_services" = "$override_services" ] || die "$override must not add services or enable profiles"
+  [ "$(guarded "${compose[@]}")" = "$(guarded "${with_override[@]}")" ] ||
+    die "$override must not change the demo mode, the seed secret, Traefik's entry points or rate limits"
+  echo "demo-reset: using $override"
+  compose=("${with_override[@]}")
+fi
 
 run() {
   echo "demo-reset: $*"
