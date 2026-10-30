@@ -13,7 +13,7 @@ import asyncio
 import hashlib
 import time
 from collections import defaultdict, deque
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Protocol
@@ -25,6 +25,7 @@ from telemetry.application.queries import Queries
 from telemetry.domain.aerial import (
     Bounds,
     map_bounds,
+    points_bounds,
     tile_bounds,
     tile_in_range,
     wms_get_map_url,
@@ -38,6 +39,9 @@ from telemetry.domain.errors import (
 
 MAX_TILE_BYTES = 2_000_000
 """Largest image accepted from the photo source."""
+
+ZonePoints = Callable[[UUID, UUID], Awaitable[list[tuple[float, float]]]]
+"""The ``(lat, lon)`` corners of a mower's virtual zones, by account and mower."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +172,7 @@ class Aerial:
         *,
         now: Callable[[], float] = time.monotonic,
         concurrency: int = 4,
+        zone_points: ZonePoints | None = None,
     ) -> None:
         self._config = config
         self._queries = queries
@@ -175,6 +180,7 @@ class Aerial:
         self._cache = cache
         self._limiter = MissLimiter(config.misses_per_minute, now)
         self._gate = asyncio.Semaphore(concurrency)
+        self._zone_points = zone_points
 
     @property
     def enabled(self) -> bool:
@@ -185,9 +191,21 @@ class Aerial:
         row = await self._queries.snapshot(account_id, mower_id, "map")
         return MowerMap.model_validate(row.body)
 
+    async def _bounds(self, account_id: UUID, mower_id: UUID) -> Bounds:
+        """The map's box plus margin, grown by the corners of the virtual zones (ADR 0070), so
+        a zone drawn beyond the vendor's map still lies on the photo."""
+        bounds = map_bounds(await self._map(account_id, mower_id), self._config.margin_m)
+        if self._zone_points is not None:
+            extra = points_bounds(
+                await self._zone_points(account_id, mower_id), self._config.margin_m
+            )
+            if extra is not None:
+                bounds = bounds.union(extra)
+        return bounds
+
     async def info(self, account_id: UUID, mower_id: UUID) -> AerialInfo:
         """The source's attribution and zoom range with the box of the map plus margin."""
-        mower_map = await self._map(account_id, mower_id)
+        bounds = await self._bounds(account_id, mower_id)
         if not self.enabled:
             return AerialInfo(enabled=False)
         return AerialInfo(
@@ -195,7 +213,7 @@ class Aerial:
             attribution=self._config.attribution,
             min_zoom=self._config.min_zoom,
             max_zoom=self._config.max_zoom,
-            bounds=map_bounds(mower_map, self._config.margin_m),
+            bounds=bounds,
         )
 
     def upstream_url(self, z: int, x: int, y: int) -> str:
@@ -217,7 +235,7 @@ class Aerial:
 
     async def tile(self, account_id: UUID, mower_id: UUID, z: int, x: int, y: int) -> FetchedTile:
         """The tile ``z/x/y`` of the photo, if it lies around the mower's map."""
-        mower_map = await self._map(account_id, mower_id)
+        bounds = await self._bounds(account_id, mower_id)
         if not self.enabled or self._source is None:
             msg = "no aerial photo source is configured"
             raise AerialDisabledError(msg)
@@ -225,7 +243,7 @@ class Aerial:
         if not (tile_in_range(z, x, y) and cfg.min_zoom <= z <= cfg.max_zoom):
             msg = "the tile is outside the zoom range of the aerial photo"
             raise TileOutsideMapError(msg)
-        if not map_bounds(mower_map, cfg.margin_m).intersects(tile_bounds(z, x, y)):
+        if not bounds.intersects(tile_bounds(z, x, y)):
             msg = "the tile is not around the mower's map"
             raise TileOutsideMapError(msg)
 

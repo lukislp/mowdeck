@@ -37,6 +37,7 @@ from telemetry.adapters.api.deps import install_error_mapping
 from telemetry.adapters.api.error_routes import router as error_router
 from telemetry.adapters.api.routes import router
 from telemetry.adapters.api.tracking_routes import router as tracking_router
+from telemetry.adapters.api.zone_routes import router as zone_router
 from telemetry.adapters.bus.errors import BusErrorLexicons
 from telemetry.adapters.bus.fleet import seed_directory
 from telemetry.adapters.bus.health_events import BusHealthEvents
@@ -48,7 +49,9 @@ from telemetry.adapters.bus.tracking import (
 )
 from telemetry.adapters.db.store import SqlStore
 from telemetry.adapters.db.tracking_store import SqlTrackingStore
+from telemetry.adapters.db.zone_store import SqlZoneStore
 from telemetry.adapters.memory_tracking import MemoryTrackingStore
+from telemetry.adapters.memory_zones import MemoryZoneStore
 from telemetry.adapters.metrics import PrometheusRetentionObserver
 from telemetry.application.aerial import TileCache, TileSource
 from telemetry.application.errors import ErrorExplanations, ErrorLexiconGateway
@@ -57,6 +60,7 @@ from telemetry.application.services import Services, build_services
 from telemetry.application.tracking import Tracking
 from telemetry.application.tracking_map import BaseLayer, TrackingMap, street_layer
 from telemetry.application.tracking_ports import TrackingGateway, TrackingStore
+from telemetry.application.zone_ports import ZoneStore
 from telemetry.module import DESCRIPTOR
 from telemetry.settings import Settings
 
@@ -81,6 +85,7 @@ def build_app(
     store: Store | None = None,
     tracking_store: TrackingStore | None = None,
     tracking_gateway: TrackingGateway | None = None,
+    zone_store: ZoneStore | None = None,
     authorizer: Authorizer | None = None,
     principal_resolver: PrincipalResolver | None = None,
     clock: Clock | None = None,
@@ -99,12 +104,16 @@ def build_app(
         engine = create_engine(settings)
         store = SqlStore(engine)
         tracking_store = tracking_store or SqlTrackingStore(engine)
+        zone_store = zone_store or SqlZoneStore(engine)
     connection: FgaConnection | None = None
     if authorizer is None:
         connection = FgaConnection(AuthzSettings.from_env())
     active_clock: Clock = clock or utc_now
     if tracking_store is None:
         tracking_store = MemoryTrackingStore()  # only reached with an injected store (tests)
+    if zone_store is None:
+        zone_store = MemoryZoneStore()  # only reached with an injected store (tests)
+    zones_ref: ZoneStore = zone_store
     tasks: list[asyncio.Task[Any]] = []
     store_ref: Store = store
     aerial_config = settings.to_aerial_config()
@@ -141,6 +150,7 @@ def build_app(
             aerial_source=aerial_source,
             aerial_cache=aerial_cache,
             retention_observer=observer,
+            zone_store=zones_ref,
         )
         tracking = (
             Tracking(
@@ -207,7 +217,7 @@ def build_app(
     app = create_app(
         settings,
         DESCRIPTOR,
-        routers=[router, tracking_router, error_router, demo_router],
+        routers=[router, tracking_router, zone_router, error_router, demo_router],
         readiness_checks=[
             *([readiness_check_db(engine)] if engine is not None else []),
             ReadinessCheck(name="subscriptions", check=subscriptions_active),

@@ -72,3 +72,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0066](0066-cloud-provider-plugins-and-more-vendors.md) | Cloud provider plugins and adapters for more vendors | Proposed |
 | [0067](0067-error-code-lexicon.md) | Error code lexicon, provider independent | Accepted |
 | [0068](0068-public-demo-mode.md) | Public demo mode | Proposed |
+| [0070](0070-virtual-zones.md) | Virtual zones for mowers without a vendor map | Accepted |

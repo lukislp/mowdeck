@@ -187,6 +187,13 @@
   import { lastLoad } from '#lib/stores/last-load.js';
   import { mowers as states } from '#lib/stores/mowers.svelte.js';
   import { publishStopClearance } from '#lib/stop-clearance.js';
+  import {
+    currentZoneName,
+    getZones,
+    zoneMap,
+    zonesShown,
+    type ZonesOverview,
+  } from '#lib/zones/zones.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
   import type { VisionTask } from '#lib/vision/api.js';
 
@@ -266,6 +273,11 @@
   // source): shown or not and its opacity are remembered per browser.
   let aerialPrefs = $state<AerialPrefs>(loadAerialPrefs());
   let aerialInfo = $state.raw<AerialInfo | null>(null);
+  let zonesOverview = $state.raw<ZonesOverview | null>(null);
+  const zonesOffered = $derived(zonesShown(zonesOverview));
+  /** The map a mower without vendor areas is drawn on (its zones, ADR 0070). */
+  const zoneBase = $derived(zonesOffered ? zoneMap(mowerMap, zonesOverview?.anchor) : null);
+  const zoneNow = $derived(currentZoneName(zonesOverview));
   // AI assist: the sheet, what a new request asks for, and the proposal a link opened.
   let assisting = $state(false);
   /** The start plan choice is open (a mower without map areas that offers several starts). */
@@ -459,7 +471,26 @@
       .catch(() => undefined);
     void loadRecent(mowerId);
     void loadNextSchedule(mowerId, mower.group_ids);
+    void loadZones(mowerId);
   }
+
+  /** The virtual zones (ADR 0070): offered or not, and the zone the mower is in. */
+  async function loadZones(mowerId: string): Promise<void> {
+    try {
+      const next = await getZones(mowerId);
+      if (mowerId === id) zonesOverview = next;
+    } catch {
+      if (mowerId === id) zonesOverview = null;
+    }
+  }
+
+  // The current zone follows the mower while zones exist.
+  $effect(() => {
+    const mowerId = id;
+    if (!zonesOverview?.zones.length) return;
+    const timer = setInterval(() => void loadZones(mowerId), 30_000);
+    return () => clearInterval(timer);
+  });
 
   async function loadWeather(
     mowerId: string,
@@ -1567,6 +1598,31 @@
             {areaName}
           />
         </div>
+      {:else if zonesOffered && zoneBase && !mapFailed}
+        <!-- No vendor areas, but the mower reports positions: its own zones (ADR 0070). -->
+        <div class="map-box" data-testid="zone-map-box">
+          <MowerMap
+            map={zoneBase}
+            state={ms}
+            {route}
+            {stale}
+            {tiles}
+            {aerial}
+            {labels}
+            {areaName}
+            virtualZones={zonesOverview?.zones ?? []}
+            currentZone={zonesOverview?.presence?.zone_id ?? null}
+            onfail={() => (mapFailed = true)}
+            testid="mower-zone-map"
+          />
+          <a class="zone-edit" href="/mowers/{id}/zones" data-testid="map-zones-link">
+            <Icon name="pin" size={16} />
+            {zonesOverview?.zones.length ? m.zones_open() : m.zones_draw()}
+          </a>
+        </div>
+        <p class="map-caption" data-testid="map-empty">
+          {plans.length > 0 ? m.start_plans_no_map() : m.detail_areas_empty()}
+        </p>
       {:else}
         <div class="plan-empty" data-testid="map-empty">
           <span>{plans.length > 0 ? m.start_plans_no_map() : m.detail_areas_empty()}</span>
@@ -1590,6 +1646,21 @@
               <span class="values-age" data-testid="mower-values-age">{valuesAge}</span>
             {/if}
           </span>
+          {#if zonesOverview?.zones.length}
+            <a
+              class="zone-chip"
+              class:is-in={!!zoneNow}
+              href="/mowers/{id}/zones"
+              data-testid="mower-zone"
+            >
+              <Icon name="pin" size={14} />
+              {zoneNow
+                ? m.zones_chip_in({ name: zoneNow })
+                : zonesOverview.presence
+                  ? m.zones_chip_outside()
+                  : m.zones_open()}
+            </a>
+          {/if}
         </div>
         {#if errorTitle}
           <div class="error-notice" data-testid="mower-error" data-category={ms?.error_category}>
@@ -2434,6 +2505,36 @@
     min-height: 300px;
   }
 
+  /* The way to the zone editor, pinned to the map's top left like a tag (ADR 0070). */
+  .zone-edit {
+    position: absolute;
+    inset-block-start: var(--md-space-3);
+    inset-inline-start: var(--md-space-3);
+    z-index: 1000;
+    display: inline-flex;
+    gap: var(--md-space-2);
+    align-items: center;
+    min-block-size: var(--md-target);
+    padding: 0 var(--md-space-3);
+    border: var(--md-border-control) solid var(--md-state-returning);
+    background: var(--md-color-surface);
+    color: var(--md-state-returning);
+    font-weight: var(--md-weight-semibold);
+    text-decoration: none;
+  }
+
+  .map-caption {
+    margin: 0;
+    padding: var(--md-space-2) var(--md-gutter);
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-14);
+  }
+
+  .zone-edit:focus-visible {
+    outline: 2px solid var(--md-color-focus);
+    outline-offset: 2px;
+  }
+
   .plan > :global(.gaps) {
     max-height: 14rem;
   }
@@ -2467,7 +2568,9 @@
 
   .plan-empty {
     display: grid;
+    place-content: center;
     place-items: center;
+    gap: var(--md-space-4);
     height: min(60dvh, 520px);
     min-height: 300px;
     padding: var(--md-space-4);
@@ -2577,6 +2680,7 @@
 
   .state-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--md-space-3);
@@ -2602,6 +2706,31 @@
     font-family: var(--md-font-mono);
     font-size: var(--md-font-size-11);
     opacity: 0.8;
+  }
+
+  /* The zone the mower is in (ADR 0070): dashed like the zone outlines, solid while inside. */
+  .zone-chip {
+    display: inline-flex;
+    gap: var(--md-space-1);
+    align-items: center;
+    padding: var(--md-space-0_5) var(--md-space-2);
+    border: var(--md-hairline) dashed var(--md-state-returning);
+    color: var(--md-state-returning);
+    font-size: var(--md-font-size-13);
+    font-weight: var(--md-weight-semibold);
+    text-decoration: none;
+  }
+
+  .zone-chip.is-in {
+    border-style: solid;
+    border-color: var(--md-state-mowing);
+    background: var(--md-state-mowing-bg);
+    color: var(--md-state-mowing);
+  }
+
+  .zone-chip:focus-visible {
+    outline: 2px solid var(--md-color-focus);
+    outline-offset: 2px;
   }
 
   .readouts {
