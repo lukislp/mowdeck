@@ -64,3 +64,7 @@ Considered for the reference: Swagger UI, Redoc or Scalar as a static page, and 
 - The reference pages are large (fleet and telemetry about 100 KB of Markdown); the site search handles them, and the wiki mirror splits nothing.
 - The step-up is needed once per token: a script that creates its own tokens has to run with a user session that recently confirmed, which is the point.
 - Follow-up: Swagger-style "try it out" in the web app, if users ask for it, would reuse the same OpenAPI documents; a gateway rate limit for the API beyond the login routes is still open and documented as such in the guide.
+
+## Amendment (2026-10-30): "try it out" in the web app
+
+The follow-up above is decided in [ADR 0072](0072-api-explorer-in-the-web-app.md): an interactive explorer at `/api-explorer` with Scalar, pinned and self-hosted in a same-origin frame with its own CSP, fed with the same OpenAPI documents and the visitor's own session; on in the public demo only (`MOWDECK_WEB_API_EXPLORER`). The generated Markdown reference stays the canonical one. The services no longer serve FastAPI's Swagger UI, which loaded from a CDN.

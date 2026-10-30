@@ -12,6 +12,15 @@ describe('DemoBanner', () => {
     expect(band).toHaveTextContent(/4 h/);
     expect(band.querySelector('button')).toBeNull();
     expect(screen.getByRole('link')).toHaveAttribute('href', 'https://example.org/src');
+    expect(screen.queryByTestId('demo-api-explorer')).toBeNull();
+  });
+
+  it('links the API explorer when the demo has it', () => {
+    render(DemoBanner, {
+      props: { resetHours: 6, href: 'https://example.org/src', explorer: true },
+    });
+    expect(screen.getByTestId('demo-api-explorer')).toHaveAttribute('href', '/api-explorer');
+    expect(screen.getAllByRole('link')).toHaveLength(2);
   });
 });
 

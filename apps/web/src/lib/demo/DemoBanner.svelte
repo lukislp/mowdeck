@@ -7,7 +7,11 @@
 <script lang="ts">
   import { m } from '#lib/paraglide/messages.js';
 
-  let { resetHours, href }: { resetHours: number; href: string } = $props();
+  let {
+    resetHours,
+    href,
+    explorer = false,
+  }: { resetHours: number; href: string; explorer?: boolean } = $props();
 </script>
 
 <div class="band" role="note" aria-label={m.demo_badge()} data-testid="demo-banner">
@@ -16,6 +20,12 @@
     <span class="long">{m.demo_banner({ hours: resetHours })}</span>
     <span class="short">{m.demo_banner_short({ hours: resetHours })}</span>
   </span>
+  {#if explorer}
+    <a class="get" href="/api-explorer" data-testid="demo-api-explorer">
+      <span class="long">{m.api_explorer_open()}</span>
+      <span class="short">{m.api_explorer_open_short()}</span>
+    </a>
+  {/if}
   <a class="get" {href} target="_blank" rel="noopener">{m.demo_get()}</a>
 </div>
 

@@ -12,6 +12,9 @@
 // The policy names no third party. nginx/40-mowdeck-runtime-config.sh adds the tile server to
 // img-src and, with MOWDECK_WEB_CAMERA_ENABLED=true, the Agora domains to connect-src and blob:
 // to media-src and worker-src (ADR 0032), matching the directives below literally.
+//
+// The API explorer's frame (build/_explorer, ADR 0072) is skipped: nginx serves it with its own
+// policy (nginx/security-headers-explorer.conf), so nothing in it can widen the app's.
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,6 +23,7 @@ const dir = process.argv[2] ?? 'build';
 
 function filesWith(root, extension) {
   return readdirSync(root).flatMap((name) => {
+    if (name === '_explorer') return [];
     const path = join(root, name);
     if (statSync(path).isDirectory()) return filesWith(path, extension);
     return name.endsWith(extension) ? [path] : [];

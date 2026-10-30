@@ -21,6 +21,7 @@ describe('parseConfig', () => {
       mapTiles: null,
       legalEnabled: false,
       cameraEnabled: false,
+      apiExplorer: false,
       source: DEFAULT_SOURCE,
     });
     expect(parseConfig('nope')).toEqual(DEFAULT_CONFIG);
@@ -33,6 +34,7 @@ describe('parseConfig', () => {
       mapTiles: { url: OSM, attribution: 'Tiles: me', maxZoom: 18 },
       legalEnabled: false,
       cameraEnabled: false,
+      apiExplorer: false,
       source: DEFAULT_SOURCE,
     });
   });
@@ -42,6 +44,7 @@ describe('parseConfig', () => {
       mapTiles: { url: OSM, attribution: '© OpenStreetMap contributors', maxZoom: 19 },
       legalEnabled: false,
       cameraEnabled: false,
+      apiExplorer: false,
       source: DEFAULT_SOURCE,
     });
     const other = parseConfig({ mapTiles: { url: 'https://t.example/{z}/{x}/{y}.png' } });
@@ -73,6 +76,7 @@ describe('parseConfig legalEnabled', () => {
       mapTiles: null,
       legalEnabled: true,
       cameraEnabled: false,
+      apiExplorer: false,
       source: DEFAULT_SOURCE,
     });
     const both = parseConfig({ mapTiles: { url: OSM }, legalEnabled: true });
@@ -83,6 +87,7 @@ describe('parseConfig legalEnabled', () => {
       mapTiles: null,
       legalEnabled: true,
       cameraEnabled: false,
+      apiExplorer: false,
       source: DEFAULT_SOURCE,
     });
   });
@@ -97,6 +102,22 @@ describe('cameraEnabled', () => {
       mapTiles: null,
       legalEnabled: false,
       cameraEnabled: true,
+      apiExplorer: false,
+      source: DEFAULT_SOURCE,
+    });
+  });
+});
+
+describe('apiExplorer', () => {
+  it('is off unless the flag is exactly true', () => {
+    expect(DEFAULT_CONFIG.apiExplorer).toBe(false);
+    expect(parseConfig({ apiExplorer: 'true' }).apiExplorer).toBe(false);
+    expect(parseConfig({ apiExplorer: 1 })).toBe(DEFAULT_CONFIG);
+    expect(parseConfig({ apiExplorer: true })).toEqual({
+      mapTiles: null,
+      legalEnabled: false,
+      cameraEnabled: false,
+      apiExplorer: true,
       source: DEFAULT_SOURCE,
     });
   });

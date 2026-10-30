@@ -19,3 +19,5 @@ Every MowDeck service publishes an HTTP API under `/api/v1/<service>` on the sam
 | [vision](vision.md) | `/api/v1/vision` | 16 | AI assisted recovery: proposals, approvals and the provider settings. |
 
 The raw OpenAPI 3.1 documents are in [`apps/web/openapi`](https://github.com/lukislp/mowdeck/blob/main/apps/web/openapi): load them into Swagger UI, Redoc, Scalar, Insomnia, Bruno or a client generator of your choice.
+
+**Try it live on the demo:** a public demo installation has an interactive explorer of these documents at `/api-explorer` (after "Try the demo"; simulated mowers, refused actions answer 403 `demo-mode`). See [Scripting MowDeck](../../guides/scripting.md#try-it-live-on-the-demo) and [ADR 0072](../../adr/0072-api-explorer-in-the-web-app.md).
