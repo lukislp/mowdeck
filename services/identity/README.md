@@ -177,7 +177,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_LOGIN_IP_BURST` | `20` | Burst per client IP |
 | `MOWDECK_IDENTITY_LOGIN_MAX_FAILURES` | `10` | Failures per username within the window before 429 |
 | `MOWDECK_IDENTITY_LOGIN_FAILURE_WINDOW_SECONDS` | `900` | Window of the username throttle |
-| `MOWDECK_IDENTITY_TRUST_FORWARDED_FOR` | `false` | Client IP from `X-Forwarded-For` (only behind a trusted proxy; Compose sets it) |
+| `MOWDECK_IDENTITY_TRUST_FORWARDED_FOR` | `false` | Client IP from `X-Forwarded-For` (only behind a trusted proxy; Compose sets it), by the kit's rule with `MOWDECK_CLIENT_IP_DEPTH` (`GATEWAY_CLIENT_IP_DEPTH`; unset: the leftmost entry) |
 | `MOWDECK_IDENTITY_DELETION_GRACE_DAYS` | `7` | Grace period of an account deletion |
 | `MOWDECK_IDENTITY_DEFAULT_PLAN` | `unlimited` | Plan of new accounts while billing is off |
 | `MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE` | `true` | `Secure` flag of the refresh cookie (Compose development: `false`) |

@@ -144,6 +144,17 @@ class ServiceSettings(BaseSettings):
     with it in ``X-MowDeck-Demo-Seed`` a request passes the demo policy and may call the seed
     endpoints. Only in demo mode; the gateway strips the header from outside requests."""
 
+    client_ip_depth: int | None = Field(default=None, ge=0, le=8)
+    """Trusted proxies in front of the gateway that set or append ``X-Forwarded-For``
+    (``MOWDECK_CLIENT_IP_DEPTH``, Compose and Helm pass ``GATEWAY_CLIENT_IP_DEPTH``): the client
+    address is the entry this many places left of the gateway's own (see
+    :mod:`mowdeck_service_kit.client_address`). Empty: the leftmost entry, as before."""
+
+    @field_validator("client_ip_depth", mode="before")
+    @classmethod
+    def _empty_depth_is_unset(cls, value: Any) -> Any:
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("log_level", mode="before")
     @classmethod
     def _upper_log_level(cls, value: Any) -> Any:

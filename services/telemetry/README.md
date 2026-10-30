@@ -190,6 +190,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_TELEMETRY_TRACKING_PUBLIC_RATE_PER_MINUTE` | `60` | Requests per minute and client to the public share page |
 | `MOWDECK_TELEMETRY_TRACKING_PUBLIC_FAILURES_PER_MINUTE` | `20` | Unusable tokens per minute and client before it is slowed down |
 | `MOWDECK_TELEMETRY_TRACKING_PUBLIC_TILES_PER_MINUTE` | `600` | Base map tiles per minute and client on the public share page |
+| `MOWDECK_CLIENT_IP_DEPTH` | unset | Which `X-Forwarded-For` entry is the client of the public share page's limits (the kit's rule, `GATEWAY_CLIENT_IP_DEPTH`; unset: the leftmost entry) |
 | `MOWDECK_TELEMETRY_TRACKING_MAP_MARGIN_METERS` | `2000` | Base map tiles of a tracking session are served this far around its positions |
 | `MOWDECK_TELEMETRY_BASEMAP_URL` | empty (off) | Street map under a tracking track: an https XYZ template with `{z}`, `{x}`, `{y}` in any order, fetched and cached by Telemetry only around the track. Recommended: OpenStreetMap `https://tile.openstreetmap.org/{z}/{x}/{y}.png` (see [ops guide](../../docs/ops/theft-tracking.md#base-map), tile usage policy) |
 | `MOWDECK_TELEMETRY_BASEMAP_ATTRIBUTION` / `_MIN_ZOOM` / `_MAX_ZOOM` | empty / `8` / `19` | Its credit line and zoom range |

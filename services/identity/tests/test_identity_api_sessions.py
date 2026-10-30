@@ -129,6 +129,27 @@ async def test_forwarded_for_is_used_only_when_trusted() -> None:
     assert (first.status_code, other_ip.status_code, same_ip.status_code) == (401, 401, 429)
 
 
+async def test_forwarded_for_behind_an_appending_proxy_cannot_be_forged() -> None:
+    """MOWDECK_CLIENT_IP_DEPTH=1 (nginx appends, Traefik appends nginx): the entry the proxy
+    wrote counts, not what the client put in front of it."""
+    async with harness(
+        identity_login_ip_burst=1, identity_trust_forwarded_for=True, client_ip_depth=1
+    ) as h:
+        codes = []
+        for chain in (
+            "198.51.100.7, 203.0.113.1, 192.0.2.10",
+            "198.51.100.8, 203.0.113.1, 192.0.2.10",
+            "203.0.113.2, 192.0.2.10",
+        ):
+            response = await h.client.post(
+                f"{API}/session",
+                json={"username": "x-user", "password": PASSWORD},
+                headers={"X-Forwarded-For": chain},
+            )
+            codes.append(response.status_code)
+    assert codes == [401, 429, 401]
+
+
 async def test_refresh_rotates_and_reuse_revokes_the_family() -> None:
     async with harness() as h:
         lukas = await h.register("lukas")

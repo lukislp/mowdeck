@@ -10,6 +10,7 @@ from mowdeck_authz import ObjectRef, Relation, account
 from mowdeck_authz.fastapi import require_or_not_found
 from mowdeck_contracts.v1 import Principal
 from mowdeck_service_kit import get_logger
+from mowdeck_service_kit.client_address import client_address
 from mowdeck_service_kit.correlation import get_correlation_id
 from mowdeck_service_kit.errors import (
     Conflict,
@@ -60,13 +61,10 @@ ServicesDep = Annotated[Services, Depends(get_services)]
 
 
 def client_ip(request: Request) -> str | None:
-    """The client address; from ``X-Forwarded-For`` only when the proxy is trusted."""
-    if getattr(request.app.state, "trust_forwarded_for", False):
-        forwarded = request.headers.get("x-forwarded-for", "")
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first[:64]
-    return request.client.host if request.client else None
+    """The client address (:mod:`mowdeck_service_kit.client_address`); from
+    ``X-Forwarded-For`` only with ``MOWDECK_IDENTITY_TRUST_FORWARDED_FOR``."""
+    trusted = bool(getattr(request.app.state, "trust_forwarded_for", False))
+    return client_address(request, trust_forwarded_for=trusted)
 
 
 DEVICE_COOKIE = "mowdeck_device"

@@ -539,6 +539,44 @@ async def test_public_view_unknown_tokens_look_alike_and_are_rate_limited() -> N
         assert miss.status_code == 422
 
 
+async def _failures(h: Harness, chains: list[str]) -> list[int]:
+    codes = []
+    for chain in chains:
+        response = await h.client.post(
+            f"{API}/public/tracking/view",
+            json={"token": new_token()},
+            headers={"X-Forwarded-For": chain},
+        )
+        codes.append(response.status_code)
+    return codes
+
+
+async def test_public_view_limits_each_visitor_behind_a_proxy() -> None:
+    """Caddy -> Traefik (MOWDECK_CLIENT_IP_DEPTH=1): the header ends with the proxy's address;
+    every visitor still gets a bucket of their own."""
+    async with harness(
+        clock=Clock(),
+        tracking_gateway=Gateway(),
+        telemetry_tracking_public_failures_per_minute=1,
+        client_ip_depth=1,
+    ) as h:
+        codes = await _failures(h, ["203.0.113.1, 10.250.80.2", "203.0.113.2, 10.250.80.2"])
+        assert codes == [404, 404]
+        assert await _failures(h, ["203.0.113.1, 10.250.80.2"]) == [429]
+
+
+async def test_public_view_key_cannot_be_forged_through_an_appending_proxy() -> None:
+    """nginx appends to what the client sent: a forged first entry changes nothing."""
+    async with harness(
+        clock=Clock(),
+        tracking_gateway=Gateway(),
+        telemetry_tracking_public_failures_per_minute=1,
+        client_ip_depth=1,
+    ) as h:
+        chains = ["198.51.100.7, 203.0.113.1, 192.0.2.10", "198.51.100.8, 203.0.113.1, 192.0.2.10"]
+        assert await _failures(h, chains) == [404, 429]
+
+
 # --- report --------------------------------------------------------------------------------
 
 
