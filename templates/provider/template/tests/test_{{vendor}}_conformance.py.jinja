@@ -1,0 +1,21 @@
+"""The provider conformance kit (ADR 0069) on the fake {{ vendor_name }} cloud.
+
+The whole suite of ``mowdeck_provider_testkit`` runs here: entry points, descriptor texts,
+discovery, the connection's lifecycle and state, the commands the capabilities offer (and the
+ones they do not), the emergency stop rules and the error lexicon. Keep it green while the
+adapter grows: declare a capability only together with what it needs.
+"""
+
+from {{ package }}.descriptor import EMAIL, PASSWORD
+from {{ package }}.fake_client import FAKE_PASSWORD, fake_email
+from {{ package }}.lexicon import ERROR_TITLES
+from mowdeck_provider_testkit import ProviderConformance, ProviderUnderTest
+
+
+class Test{{ class_prefix }}Conformance(ProviderConformance):
+    subject = ProviderUnderTest(
+        distribution="{{ distribution }}",
+        fake_credentials={EMAIL: fake_email("conformance"), PASSWORD: FAKE_PASSWORD},
+        # Every code the adapter can report; fill ERROR_TITLES from the SDK's table.
+        emitted_error_codes=lambda: (str(code) for code in ERROR_TITLES),
+    )

@@ -59,7 +59,7 @@ Husqvarna Automower (and Gardena smart) mowers through the official Automower Co
 | --- | --- |
 | Mowing patterns on map areas | not offered |
 | Job options of a start | not offered |
-| Start plans (starts without map areas) | not yet |
+| Start plans (starts without map areas) | varies: now, zone, schedule |
 | Return to dock and resume the job later | not yet |
 | Blade height | not yet |
 | Path spacing | not offered |

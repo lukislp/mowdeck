@@ -363,3 +363,5 @@ uv run pytest libs/mowdeck-control-mammotion --cov=mowdeck_control_mammotion
 ```
 
 Tests build fakes from the real PyMammotion data classes (`MowerDevice`, `HashList`, `NavGetCommData`), so a renamed field in a PyMammotion upgrade breaks them. Test helpers live in `tests/mammotion_support.py` (no `conftest.py`).
+
+`tests/test_mammotion_conformance.py` runs the provider conformance kit (`mowdeck-provider-testkit`, [ADR 0069](../../docs/adr/0069-provider-conformance-kit-and-package-template.md)) on the fake cloud: entry points, descriptor texts, discovery, the connection's states, every declared and undeclared command, the settings round trip, manual driving, the emergency stop rules and the lexicon against PyMammotion's code table. One known violation is listed there as a strict xfail: the cloud provider spec cannot be imported without PyMammotion, because the package `__init__` imports the connections (a lazy `__init__` would fix it; harmless while the provider is on by default).

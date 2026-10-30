@@ -1,0 +1,79 @@
+"""The {{ vendor_name }} cloud as a MowDeck cloud provider (ADR 0066).
+
+The plugin links accounts (``discover``), builds the connection of each mower
+(``create_connection``) and closes shared sessions when the gateway stops. With
+``ProviderContext.fake`` it answers from the fake cloud (``fake_client``), imported only then.
+"""
+
+from collections.abc import Mapping
+
+from mowdeck_contracts.v1 import DeviceType, DiscoveredDevice, ProviderDescriptor
+from mowdeck_control import (
+    CloudLoginRefused,
+    CloudUnavailable,
+    ConnectionConfig,
+    MowerConnection,
+    ProviderContext,
+    ProviderDevices,
+)
+
+from {{ package }}.client import Login, LoginRefused, VendorUnavailable
+from {{ package }}.connection import {{ class_prefix }}Connection
+from {{ package }}.descriptor import DESCRIPTOR, EMAIL, PASSWORD
+
+
+class {{ class_prefix }}Provider:
+    """:class:`~mowdeck_control.CloudProviderPlugin` of the {{ vendor_name }} cloud."""
+
+    def __init__(self, login: Login) -> None:
+        self._login = login
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        """:data:`~{{ package }}.descriptor.DESCRIPTOR`."""
+        return DESCRIPTOR
+
+    async def discover(self, credentials: Mapping[str, str]) -> ProviderDevices:
+        """Log in and list the account's mowers."""
+        try:
+            session = await self._login(credentials.get(EMAIL, ""), credentials.get(PASSWORD, ""))
+        except LoginRefused as exc:
+            raise CloudLoginRefused("{{ vendor_name }} refused the login") from exc
+        except VendorUnavailable as exc:
+            raise CloudUnavailable("the {{ vendor_name }} cloud did not answer") from exc
+        try:
+            mowers = await session.mowers()
+        except VendorUnavailable as exc:
+            raise CloudUnavailable("the {{ vendor_name }} cloud did not answer") from exc
+        finally:
+            await session.close()
+        devices = [
+            DiscoveredDevice(
+                device_name=mower.name,
+                iot_id=mower.id,
+                model=mower.model,
+                online=mower.online,
+                is_mower=True,
+                device_type=DeviceType.MOWER,
+            )
+            for mower in mowers
+        ]
+        return ProviderDevices(devices=devices)
+
+    def create_connection(self, config: ConnectionConfig) -> MowerConnection:
+        """The connection of one mower (credentials and device in ``config.options``)."""
+        return {{ class_prefix }}Connection(self._login, config)
+
+    async def close(self) -> None:
+        """Nothing shared to stop yet (each connection holds its own session)."""
+
+
+def create_provider(context: ProviderContext) -> {{ class_prefix }}Provider:
+    """The plugin for ``context``: the fake cloud, or the real one."""
+    if context.fake:
+        from {{ package }}.fake_client import FakeCloud
+
+        return {{ class_prefix }}Provider(FakeCloud().login)
+    from {{ package }}.sdk_client import login
+
+    return {{ class_prefix }}Provider(login)

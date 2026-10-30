@@ -25,7 +25,7 @@ A change is done when:
 3. Documentation is updated (affected README, `docs/`), and an ADR is added or updated for every architecture decision.
 4. `mkdocs build --strict` passes.
 
-A new service is generated from `templates/service` and has its own definition of done in `docs/dev/service-template.md`.
+A new service is generated from `templates/service` and has its own definition of done in `docs/dev/service-template.md`. A new mower vendor is generated from `templates/provider` (`uv run poe new-provider <vendor>`) and keeps the provider conformance kit green (`docs/dev/adding-a-provider.md`).
 
 A new third-party image (a base image, an infrastructure container, an image only CI runs) is pinned under "Image sources" in `infra/compose/.env.example` and used through its `*_IMAGE` variable or build argument; `tools/repo-checks/tests/test_images.py` keeps every default equal to that list. CI pulls the list through the repository's GHCR mirror: the workflow `mirror-images.yml` copies a new or bumped image there when the pull request changes the list (re-run CI jobs that pulled before the copy finished). See `infra/compose/README.md`, "Image sources".
 
