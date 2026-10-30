@@ -5,9 +5,29 @@
   layout below has to know about it. A hatched "calibration tape" tag, as on a test rig.
 -->
 <script lang="ts">
+  import { session } from '#lib/auth/session.svelte.js';
+  import { navigatePath } from '#lib/navigate.js';
   import { m } from '#lib/paraglide/messages.js';
 
-  let { resetHours, href }: { resetHours: number; href: string } = $props();
+  let {
+    resetHours,
+    href,
+    explorer = false,
+  }: { resetHours: number; href: string; explorer?: boolean } = $props();
+
+  /** Signed out (the sign-in page): start the demo session first, then open the explorer,
+   * instead of landing on the sign-in page again. A failed demo sign-in falls back to the
+   * link, which the sign-in page then explains. */
+  async function openExplorer(event: MouseEvent): Promise<void> {
+    if (session.status === 'authenticated') return;
+    event.preventDefault();
+    try {
+      await session.tryDemo();
+    } catch {
+      // The sign-in page shows why the demo is unavailable.
+    }
+    await navigatePath('/api-explorer');
+  }
 </script>
 
 <div class="band" role="note" aria-label={m.demo_badge()} data-testid="demo-banner">
@@ -16,6 +36,12 @@
     <span class="long">{m.demo_banner({ hours: resetHours })}</span>
     <span class="short">{m.demo_banner_short({ hours: resetHours })}</span>
   </span>
+  {#if explorer}
+    <a class="get" href="/api-explorer" data-testid="demo-api-explorer" onclick={openExplorer}>
+      <span class="long">{m.api_explorer_open()}</span>
+      <span class="short">{m.api_explorer_open_short()}</span>
+    </a>
+  {/if}
   <a class="get" {href} target="_blank" rel="noopener">{m.demo_get()}</a>
 </div>
 

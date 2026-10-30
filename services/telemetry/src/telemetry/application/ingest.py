@@ -16,7 +16,7 @@ a request.
 import hashlib
 import json
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
@@ -54,6 +54,14 @@ from telemetry.domain.rules import (
 _log = get_logger("telemetry.ingest")
 
 
+class PositionObserver(Protocol):
+    """Follows the stored states after their commit (the virtual zones, ADR 0070)."""
+
+    async def observe(self, state: MowerState) -> object:
+        """Look at one stored state."""
+        ...
+
+
 class Ingest:
     """Writes what arrives on the bus."""
 
@@ -63,11 +71,13 @@ class Ingest:
         config: TelemetryConfig,
         clock: Clock,
         events: HealthEvents | None = None,
+        observer: PositionObserver | None = None,
     ) -> None:
         self._store = store
         self._config = config
         self._clock = clock
         self._events = events
+        self._observer = observer
         self._limits = health_limits(config)
 
     async def record_state(self, state: MowerState) -> bool:
@@ -120,7 +130,17 @@ class Ingest:
             crossed = await self._advance_health(tx, state)
         if crossed is not None:
             await self._publish_threshold(crossed)
+        await self._observe(state)
         return True
+
+    async def _observe(self, state: MowerState) -> None:
+        """Hand the stored state to the observer; its failure never fails the ingestion."""
+        if self._observer is None:
+            return
+        try:
+            await self._observer.observe(state)
+        except Exception:
+            _log.exception("evaluating the zones failed", mower_id=str(state.mower_id))
 
     async def _advance_health(self, tx: Tx, state: MowerState) -> BladeHoursThreshold | None:
         """Add the state to the health totals; the threshold event when it was crossed."""

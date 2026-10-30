@@ -394,6 +394,12 @@ def _index(documents: dict[str, dict[str, Any]]) -> str:
         "The raw OpenAPI 3.1 documents are in "
         f"[`apps/web/openapi`]({SOURCE_URL.rsplit('/', 1)[0]}/openapi): load them into "
         "Swagger UI, Redoc, Scalar, Insomnia, Bruno or a client generator of your choice.",
+        "",
+        "**Try it live on the demo:** a public demo installation has an interactive explorer of "
+        'these documents at `/api-explorer` (after "Try the demo"; simulated mowers, refused '
+        "actions answer 403 `demo-mode`). See "
+        "[Scripting MowDeck](../../guides/scripting.md#try-it-live-on-the-demo) and "
+        "[ADR 0072](../../adr/0072-api-explorer-in-the-web-app.md).",
     ]
     return "\n".join(lines) + "\n"
 

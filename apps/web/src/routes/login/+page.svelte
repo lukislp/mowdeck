@@ -369,6 +369,7 @@
         <li>{m.login_demo_point_drive()}</li>
         <li>{m.login_demo_point_maps()}</li>
         <li>{m.login_demo_point_plan()}</li>
+        {#if demo.apiExplorer}<li>{m.login_demo_point_api()}</li>{/if}
       </ul>
       {#if problem}
         <ProblemNotice

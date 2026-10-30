@@ -1342,6 +1342,8 @@ services:
       MOWDECK_WEB_LEGAL_ENABLED: ${WEB_LEGAL_ENABLED:-false}
       # Live camera through Agora (ADR 0032): adds the Agora domains to the CSP.
       MOWDECK_WEB_CAMERA_ENABLED: ${WEB_CAMERA_ENABLED:-false}
+      # Interactive API explorer at /api-explorer (ADR 0072), meant for the public demo: off.
+      MOWDECK_WEB_API_EXPLORER: ${WEB_API_EXPLORER:-false}
     labels:
       - traefik.enable=true
       - traefik.http.routers.web.rule=PathPrefix(`/`)

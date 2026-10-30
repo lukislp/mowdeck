@@ -750,6 +750,74 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemetry/mowers/{mower_id}/zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Zones
+         * @description The mower's virtual zones, the zone it is in and whether the editor is offered.
+         */
+        get: operations["list_zones_api_v1_telemetry_mowers__mower_id__zones_get"];
+        put?: never;
+        /**
+         * Create Zone
+         * @description Draw a zone (``can_control``). The current zone is evaluated again at once.
+         */
+        post: operations["create_zone_api_v1_telemetry_mowers__mower_id__zones_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/zones/{zone_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Zone
+         * @description Delete a zone with its recorded time (``can_control``).
+         */
+        delete: operations["delete_zone_api_v1_telemetry_mowers__mower_id__zones__zone_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Zone
+         * @description Rename, reshape or (un)link a zone (``can_control``).
+         */
+        patch: operations["update_zone_api_v1_telemetry_mowers__mower_id__zones__zone_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/telemetry/mowers/{mower_id}/zones/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Zone Stats
+         * @description Time per zone (in it, of that mowing, entries) over the last ``days`` days.
+         */
+        get: operations["zone_stats_api_v1_telemetry_mowers__mower_id__zones_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/public/tracking/tile": {
         parameters: {
             query?: never;
@@ -870,6 +938,16 @@ export type components = {
              * @description URL template of the tiles (`{z}`, `{x}`, `{y}`); needs the bearer token.
              */
             tile_url: string | null;
+        };
+        /**
+         * AnchorOut
+         * @description Where to centre a map that has no vendor geometry.
+         */
+        AnchorOut: {
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
         };
         /**
          * BaseStationPosition
@@ -2710,6 +2788,31 @@ export type components = {
             truncated: boolean;
         };
         /**
+         * PresenceOut
+         * @description Where the mower is: in a zone (``zone_id``) or in none.
+         */
+        PresenceOut: {
+            /**
+             * Observed At
+             * Format: date-time
+             * @description The report the evaluation is based on.
+             */
+            observed_at: string;
+            /**
+             * Since
+             * Format: date-time
+             * @description When it entered this zone (or left the last one).
+             */
+            since: string;
+            /**
+             * Zone Id
+             * @description The current zone; null outside every zone.
+             */
+            zone_id: string | null;
+            /** Zone Name */
+            zone_name?: string | null;
+        };
+        /**
          * PublicTileIn
          * @description Body of a public base map tile: the share token and the tile (in the body, so neither
          *     the token nor the place reaches an access log).
@@ -3370,6 +3473,219 @@ export type components = {
              * @description The mower is offline (see `MowerStateSnapshot.stale`).
              */
             stale: boolean;
+        };
+        /**
+         * ZoneDayOut
+         * @description Time in a zone on one UTC day.
+         */
+        ZoneDayOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Mowing Seconds */
+            mowing_seconds: number;
+            /** Seconds */
+            seconds: number;
+        };
+        /**
+         * ZoneIn
+         * @description A new zone.
+         */
+        ZoneIn: {
+            /** Name */
+            name: string;
+            /**
+             * Ring
+             * @description Corners as `[lat, lon]` (WGS84 degrees), open or closed; edges must not cross.
+             */
+            ring: number[][];
+            /** Start Plan Ref */
+            start_plan_ref?: string | null;
+        };
+        /**
+         * ZoneLimits
+         * @description The validation limits, so a client can check a drawing before it is sent.
+         */
+        ZoneLimits: {
+            /**
+             * Max Anchor Distance M
+             * @default 1000
+             */
+            max_anchor_distance_m: number;
+            /**
+             * Max Area M2
+             * @default 100000
+             */
+            max_area_m2: number;
+            /**
+             * Max Corners
+             * @default 64
+             */
+            max_corners: number;
+            /**
+             * Max Extent M
+             * @default 1000
+             */
+            max_extent_m: number;
+            /**
+             * Max Name Length
+             * @default 60
+             */
+            max_name_length: number;
+            /**
+             * Max Zones
+             * @default 32
+             */
+            max_zones: number;
+            /**
+             * Min Area M2
+             * @default 1
+             */
+            min_area_m2: number;
+            /**
+             * Min Corners
+             * @default 3
+             */
+            min_corners: number;
+        };
+        /**
+         * ZoneOut
+         * @description One virtual zone.
+         */
+        ZoneOut: {
+            /** Area M2 */
+            area_m2: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Ring
+             * @description Corners as `[lat, lon]`, open ring.
+             */
+            ring: number[][];
+            /**
+             * Start Plan Ref
+             * @description The vendor zone start (`StartPlan` of kind `zone`) this zone is linked to; send it as `StartMow.plan_ref` to start the mower there.
+             */
+            start_plan_ref?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ZonePatch
+         * @description Changes to a zone; fields left out stay as they are.
+         */
+        ZonePatch: {
+            /** Name */
+            name?: string | null;
+            /** Ring */
+            ring?: number[][] | null;
+            /**
+             * Start Plan Ref
+             * @description Link the zone to this vendor zone start.
+             */
+            start_plan_ref?: string | null;
+            /**
+             * Unlink Start Plan
+             * @description Remove the link to a start.
+             * @default false
+             */
+            unlink_start_plan: boolean;
+        };
+        /**
+         * ZonePlanOut
+         * @description A vendor zone start a zone can be linked to.
+         */
+        ZonePlanOut: {
+            /** Name */
+            name?: string | null;
+            /** Ref */
+            ref: string;
+        };
+        /**
+         * ZonesOut
+         * @description The zones of a mower and whether the editor is offered.
+         */
+        ZonesOut: {
+            anchor?: components["schemas"]["AnchorOut"] | null;
+            /**
+             * Availability
+             * @description `available`: the vendor shares no map areas and the mower reports positions; `vendor_map`: its vendor's areas are its zones; `no_position`: it reports no position.
+             * @enum {string}
+             */
+            availability: "available" | "vendor_map" | "no_position";
+            limits?: components["schemas"]["ZoneLimits"];
+            /** @description The current zone; null before the first evaluation. */
+            presence?: components["schemas"]["PresenceOut"] | null;
+            /**
+             * Zone Plans
+             * @description Vendor zone starts declared by the mower's connection (ADR 0066); empty when it declares none, then zones cannot be linked to a start.
+             */
+            zone_plans?: components["schemas"]["ZonePlanOut"][];
+            /** Zones */
+            zones: components["schemas"]["ZoneOut"][];
+        };
+        /**
+         * ZoneStatsOut
+         * @description Time per zone over whole UTC days.
+         */
+        ZoneStatsOut: {
+            /**
+             * First Day
+             * Format: date
+             */
+            first_day: string;
+            /** Items */
+            items: components["schemas"]["ZoneTotalsOut"][];
+            /**
+             * Last Day
+             * Format: date
+             */
+            last_day: string;
+        };
+        /**
+         * ZoneTotalsOut
+         * @description Time in one zone over the period.
+         */
+        ZoneTotalsOut: {
+            /** Days */
+            days: components["schemas"]["ZoneDayOut"][];
+            /**
+             * Entries
+             * @description How often it entered the zone.
+             */
+            entries: number;
+            /**
+             * Mowing Seconds
+             * @description Of that, time it mowed.
+             */
+            mowing_seconds: number;
+            /** Name */
+            name: string;
+            /**
+             * Seconds
+             * @description Time the mower was in the zone while it reported.
+             */
+            seconds: number;
+            /**
+             * Zone Id
+             * Format: uuid
+             */
+            zone_id: string;
         };
     };
     responses: never;
@@ -4611,6 +4927,229 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    list_zones_api_v1_telemetry_mowers__mower_id__zones_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZonesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_zone_api_v1_telemetry_mowers__mower_id__zones_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoneIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoneOut"];
+                };
+            };
+            /** @description The caller sees the mower but has no `can_control`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The mower (or zone) does not exist or is not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The ring or the name is not acceptable; the error points at it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_zone_api_v1_telemetry_mowers__mower_id__zones__zone_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+                zone_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The caller sees the mower but has no `can_control`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The mower (or zone) does not exist or is not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The ring or the name is not acceptable; the error points at it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_zone_api_v1_telemetry_mowers__mower_id__zones__zone_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mower_id: string;
+                zone_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZonePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoneOut"];
+                };
+            };
+            /** @description The caller sees the mower but has no `can_control`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The mower (or zone) does not exist or is not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Zones are not offered for this mower (`vendor_map`, `no_position`) or it has the most zones (`limit`); the error's `code` says which. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The ring or the name is not acceptable; the error points at it. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    zone_stats_api_v1_telemetry_mowers__mower_id__zones_stats_get: {
+        parameters: {
+            query?: {
+                /** @description Whole UTC days, today included. */
+                days?: number;
+            };
+            header?: never;
+            path: {
+                mower_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoneStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

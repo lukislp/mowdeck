@@ -129,6 +129,8 @@ services:
     environment:
       MOWDECK_WEB_DEMO_MODE: "true"
       MOWDECK_WEB_DEMO_RESET_HOURS: ${DEMO_RESET_HOURS:-6}
+      # The interactive API explorer (ADR 0072): visitors try the API with their demo session.
+      MOWDECK_WEB_API_EXPLORER: "true"
     labels:
       # Entry point middlewares of the demo (Traefik command above): every response is labelled,
       # the seed secret header never comes in from outside (an empty value removes it), and every

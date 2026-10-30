@@ -33,6 +33,13 @@
   and the spot with its route preview is panned (or, when larger, fitted) into the part above it
   whenever the spot, the preview or the inset changes (`viewport.ts`).
 
+  Virtual zones (`virtualZones`, see `virtual-zones.ts`, ADR 0070): the owner's own zones of a
+  mower without vendor areas, outlined like surveyor's tape with their names; the zone the mower
+  is in (`currentZone`) is filled, one zone can be highlighted (`selectedZone`) or left out while
+  it is redrawn (`hiddenZone`), and `zoneDraft` (local metres) shows a zone being drawn corner by
+  corner. They are part of the fitted view. With `onzonetap` a zone is tappable (not while
+  `onmaptap` places corners).
+
   Texts arrive translated in `labels`; area selection is reported with `onselectionchange`.
   With `onarealabel` each area label gets a small edit button (rename an area from the map).
 -->
@@ -83,6 +90,8 @@
     pathPreview?: string;
     /** Legend entry of the spot of a spot-mowing run. */
     spot?: string;
+    /** Accessible name of a tappable virtual zone, given its name. */
+    selectZone?: (name: string) => string;
   }
 
   /** An optional raster tile layer (from the installation's runtime config). */
@@ -116,7 +125,13 @@
   import { RTK_CELL_SIZES, binRtk, cellRing, type RtkAggregate, type RtkCellSize } from './rtk';
   import { gapOutlines, heatCells, heatRing, type HeatGap, type HeatLayerData } from './heat';
   import { pathLayers, type MapMowPath } from './mow-path';
-  import { spotLayer, type MapSpot } from './spot';
+  import { spotLayer, type LocalPoint, type MapSpot } from './spot';
+  import {
+    unionBounds,
+    virtualZoneLayers,
+    zoneDraftLayer,
+    type MapVirtualZone,
+  } from './virtual-zones';
   import { scaleFor } from './scale';
   import { pixelBox, revealPan } from './viewport';
 
@@ -141,6 +156,18 @@
     spot?: MapSpot | null;
     /** A tap on the map (its local metres); given, the cursor becomes a crosshair. */
     onmaptap?: (local: [number, number]) => void;
+    /** The owner's virtual zones (WGS84 rings), or null for none. */
+    virtualZones?: readonly MapVirtualZone[] | null;
+    /** The zone the mower is in (filled). */
+    currentZone?: string | null;
+    /** A zone to highlight (picked in a list). */
+    selectedZone?: string | null;
+    /** A zone not to draw (it is being redrawn as `zoneDraft`). */
+    hiddenZone?: string | null;
+    /** A zone being drawn: its corners in local metres. */
+    zoneDraft?: readonly LocalPoint[] | null;
+    /** A tap on a virtual zone (not while `onmaptap` places corners). */
+    onzonetap?: (id: string) => void;
     /**
      * Points of the RTK signal map (defaults to `route`), e.g. a longer time range.
      * @deprecated Use `heat` with the `rtk` layer of the heatmap endpoint.
@@ -192,6 +219,12 @@
     pathPreview = false,
     spot = null,
     onmaptap,
+    virtualZones = null,
+    currentZone = null,
+    selectedZone = null,
+    hiddenZone = null,
+    zoneDraft = null,
+    onzonetap,
     rtkPoints = null,
     showRtk = $bindable(false),
     rtkCellSize = $bindable(1),
@@ -238,6 +271,8 @@
     | 'paths'
     | 'mowpath'
     | 'spot'
+    | 'vzones'
+    | 'vdraft'
     | 'route'
     | 'labels'
     | 'dock',
@@ -274,6 +309,16 @@
   );
   const pathPieces = $derived(pathLayers(path, projection));
   const spotDrawn = $derived(spotLayer(spot, projection));
+  const vzoneModel = $derived(
+    virtualZoneLayers(virtualZones, projection, {
+      current: currentZone,
+      selected: selectedZone,
+      hidden: hiddenZone,
+    }),
+  );
+  const draftDrawn = $derived(zoneDraftLayer(zoneDraft, projection));
+  /** Everything the fit control frames: the vendor map and the virtual zones. */
+  const fitBounds = $derived(unionBounds(geometry.bounds, vzoneModel.bounds));
   const pathHasProgress = $derived(!!path?.progress && pathPieces.some((piece) => piece.done));
 
   // --- Leaflet loading and the map instance -------------------------------------------------
@@ -322,9 +367,11 @@
       ['md-grid', 210],
       ['md-heat', 380],
       ['md-rtk', 390],
+      ['md-vzone', 420],
       ['md-gap', 440],
       ['md-mowpath', 445],
       ['md-spot', 447],
+      ['md-vdraft', 448],
       ['md-route', 450],
       ['md-mower', 650],
     ] as const) {
@@ -368,6 +415,8 @@
       paths: lib.layerGroup().addTo(instance),
       mowpath: lib.layerGroup().addTo(instance),
       spot: lib.layerGroup().addTo(instance),
+      vzones: lib.layerGroup().addTo(instance),
+      vdraft: lib.layerGroup().addTo(instance),
       route: lib.layerGroup().addTo(instance),
       labels: lib.layerGroup().addTo(instance),
       dock: lib.layerGroup().addTo(instance),
@@ -501,10 +550,105 @@
         })
         .addTo(g.dock);
     }
-    if (!fitted && layers.bounds) {
+    if (!fitted && (layers.bounds || untrack(() => vzoneModel.bounds))) {
       fitted = true;
       untrack(() => fit(false));
     }
+  });
+
+  // --- virtual zones: surveyor's tape outlines with names, the current zone filled ----------
+
+  $effect(() => {
+    void generation;
+    const lib = L;
+    const g = groups;
+    const model = vzoneModel;
+    const tap = onmaptap ? undefined : onzonetap;
+    if (!lib || !g || !lmap) return;
+    g.vzones.clearLayers();
+    for (const zone of model.zones) {
+      const classes = ['md-vzone'];
+      if (zone.current) classes.push('md-vzone--current');
+      if (zone.selected) classes.push('md-vzone--selected');
+      const polygon = lib
+        .polygon(zone.ring, {
+          pane: 'md-vzone',
+          interactive: !!tap,
+          className: classes.join(' '),
+          bubblingMouseEvents: false,
+        })
+        .addTo(g.vzones);
+      const el = polygon.getElement();
+      if (el) {
+        el.setAttribute('data-vzone', zone.id);
+        if (zone.current) el.setAttribute('data-current', 'true');
+        if (tap) {
+          el.setAttribute('tabindex', '0');
+          el.setAttribute('role', 'button');
+          el.setAttribute('aria-label', labels.selectZone?.(zone.name) ?? zone.name);
+          el.addEventListener('keydown', (event) => {
+            const key = (event as KeyboardEvent).key;
+            if (key === 'Enter' || key === ' ') {
+              event.preventDefault();
+              tap(zone.id);
+            }
+          });
+        }
+      }
+      if (tap) polygon.on('click', () => tap(zone.id));
+      const label = document.createElement('span');
+      label.className = 'md-vzone-label';
+      if (zone.current) label.classList.add('is-current');
+      label.setAttribute('data-testid', 'vzone-label');
+      label.textContent = zone.name;
+      lib
+        .marker(zone.labelAt, {
+          icon: lib.divIcon({ html: label, className: 'md-map-icon', iconSize: [0, 0] }),
+          pane: 'md-vzone',
+          interactive: false,
+          keyboard: false,
+        })
+        .addTo(g.vzones);
+    }
+    if (!fitted && model.bounds) {
+      fitted = true;
+      untrack(() => fit(false));
+    }
+  });
+
+  // --- a zone being drawn: the corners so far and, from three on, its outline ---------------
+
+  $effect(() => {
+    void generation;
+    const lib = L;
+    const g = groups;
+    const drawn = draftDrawn;
+    if (!lib || !g) return;
+    g.vdraft.clearLayers();
+    if (!drawn) return;
+    if (drawn.ring.length >= 3) {
+      lib
+        .polygon(drawn.ring, { pane: 'md-vdraft', interactive: false, className: 'md-vdraft' })
+        .addTo(g.vdraft);
+    } else if (drawn.corners.length >= 2) {
+      lib
+        .polyline(drawn.corners, {
+          pane: 'md-vdraft',
+          interactive: false,
+          className: 'md-vdraft md-vdraft--open',
+        })
+        .addTo(g.vdraft);
+    }
+    drawn.corners.forEach((corner, index) => {
+      lib
+        .circleMarker(corner, {
+          pane: 'md-vdraft',
+          interactive: false,
+          radius: index === 0 ? 7 : 5,
+          className: index === 0 ? 'md-vdraft-corner md-vdraft-corner--first' : 'md-vdraft-corner',
+        })
+        .addTo(g.vdraft);
+    });
   });
 
   // --- selection: classes, aria-pressed and order badges ------------------------------------
@@ -868,8 +1012,7 @@
 
   function fit(animate = true, byUser = false): void {
     const m = lmap;
-    const bounds =
-      geometry.bounds ?? (mower ? ([mower.at, mower.at] as [MapCoord, MapCoord]) : null);
+    const bounds = fitBounds ?? (mower ? ([mower.at, mower.at] as [MapCoord, MapCoord]) : null);
     if (!m || !bounds) return;
     if (byUser) follow = false;
     m.fitBounds(bounds, {
@@ -969,6 +1112,9 @@
   data-path-preview={path && pathPreview ? 'true' : undefined}
   data-spot={spot ? spot.kind : undefined}
   data-spot-corners={spot?.kind === 'polygon' ? spot.points.length : undefined}
+  data-vzones={virtualZones ? vzoneModel.zones.length : undefined}
+  data-vzone-current={currentZone ?? undefined}
+  data-vzone-draft={zoneDraft ? zoneDraft.length : undefined}
   data-inset-bottom={insetBottom > 0 ? Math.round(insetBottom) : undefined}
   style:--md-map-inset-bottom="{Math.max(0, insetBottom)}px"
   style:--md-map-inset-top="{Math.max(0, insetTop)}px"
@@ -1419,6 +1565,94 @@
 
   .md-map.is-tapping .canvas {
     cursor: crosshair;
+  }
+
+  /* --- virtual zones: surveyor's tape (long dash, short gap), the current zone filled ------ */
+
+  .md-map :global(path.md-vzone) {
+    fill: var(--md-state-returning);
+    fill-opacity: 0.06;
+    stroke: var(--md-state-returning);
+    stroke-width: 2;
+    stroke-dasharray: 10 3 2 3;
+    stroke-linejoin: round;
+    transition:
+      fill-opacity var(--md-motion-fast) var(--md-ease),
+      stroke-width var(--md-motion-fast) var(--md-ease);
+  }
+
+  .md-map :global(path.md-vzone[role='button']) {
+    cursor: pointer;
+  }
+
+  .md-map :global(path.md-vzone[role='button']:focus-visible) {
+    outline: none;
+    stroke: var(--md-color-focus);
+    stroke-width: 3;
+  }
+
+  .md-map :global(path.md-vzone--current) {
+    fill: var(--md-state-mowing);
+    fill-opacity: 0.2;
+    stroke: var(--md-state-mowing);
+    stroke-width: 3;
+    stroke-dasharray: none;
+  }
+
+  .md-map :global(path.md-vzone--selected) {
+    stroke: var(--md-color-focus);
+    stroke-width: 3;
+    fill-opacity: 0.14;
+  }
+
+  .md-map :global(.md-vzone-label) {
+    position: absolute;
+    padding: 1px var(--md-space-2);
+    transform: translate(-50%, -50%);
+    border: var(--md-hairline) solid var(--md-state-returning);
+    background: var(--md-color-surface);
+    color: var(--md-state-returning);
+    font-size: var(--md-font-size-12);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    line-height: var(--md-line-16);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .md-map :global(.md-vzone-label.is-current) {
+    border-color: var(--md-state-mowing);
+    background: var(--md-state-mowing);
+    color: var(--md-color-ink-inverse);
+  }
+
+  .md-map :global(path.md-vdraft) {
+    fill: var(--md-color-focus);
+    fill-opacity: 0.12;
+    stroke: var(--md-color-focus);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+  }
+
+  .md-map :global(path.md-vdraft--open) {
+    fill: none;
+    stroke-dasharray: 4 4;
+  }
+
+  .md-map :global(path.md-vdraft-corner) {
+    fill: var(--md-color-surface);
+    stroke: var(--md-color-focus);
+    stroke-width: 2.5;
+  }
+
+  .md-map :global(path.md-vdraft-corner--first) {
+    fill: var(--md-color-focus);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .md-map :global(path.md-vzone) {
+      transition: none;
+    }
   }
 
   /* --- RTK signal map --------------------------------------------------------------------- */

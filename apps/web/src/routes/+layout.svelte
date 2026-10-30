@@ -49,7 +49,11 @@
 </script>
 
 {#if demo.config}
-  <DemoBanner resetHours={demo.config.resetHours} href={demo.sourceUrl} />
+  <DemoBanner
+    resetHours={demo.config.resetHours}
+    href={demo.sourceUrl}
+    explorer={demo.apiExplorer}
+  />
 {/if}
 
 {#if appUpdate.waiting && !install.native}
