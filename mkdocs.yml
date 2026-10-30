@@ -112,6 +112,7 @@ nav:
       - adr/0066-cloud-provider-plugins-and-more-vendors.md
       - adr/0067-error-code-lexicon.md
       - adr/0068-public-demo-mode.md
+      - adr/0071-capability-matrix.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -162,6 +163,7 @@ nav:
       - guides/matter.md
       - guides/worx-landroid.md
       - guides/scripting.md
+  - Capability matrix: reference/capabilities.md
   - API reference:
       - reference/api/index.md
       - reference/api/billing.md

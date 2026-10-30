@@ -206,6 +206,10 @@ openapi-check = "python tools/repo-checks/scripts/export_openapi.py --check"
 # HTTP API reference (Markdown) rendered from those OpenAPI documents: docs/reference/api.
 api-reference = "python tools/repo-checks/scripts/api_reference.py"
 api-reference-check = "python tools/repo-checks/scripts/api_reference.py --check"
+# Capability matrix (Markdown) rendered from the providers' capability profiles (ADR 0071):
+# docs/reference/capabilities.md.
+capability-matrix = "python tools/repo-checks/scripts/capability_matrix.py"
+capability-matrix-check = "python tools/repo-checks/scripts/capability_matrix.py --check"
 # Architecture diagrams (Mermaid) generated from the Compose file, the NATS subjects and the
 # OpenAPI documents: docs/architecture/generated.md.
 arch-diagrams = "python tools/repo-checks/scripts/arch_diagrams.py"

@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping
 from typing import Any, Final
 
 from mowdeck_contracts.v1 import (
+    CapabilityProfile,
     ConnectionOptionSpec,
     CredentialField,
     CredentialFieldKind,
@@ -337,7 +338,18 @@ def create_provider(context: ProviderContext) -> MammotionProvider:
     return MammotionProvider(pool, cloud_connection_factory(pool))
 
 
+def capability_profiles() -> list[CapabilityProfile]:
+    """The model families (ADR 0071); see :mod:`mowdeck_control_mammotion.profiles`."""
+    from mowdeck_control_mammotion.profiles import capability_profiles as profiles
+
+    return profiles()
+
+
 SPEC: Final = ProviderSpec(
-    provider=PROVIDER, create=create_provider, enabled_by_default=True, unqualified_cloud=True
+    provider=PROVIDER,
+    create=create_provider,
+    enabled_by_default=True,
+    unqualified_cloud=True,
+    capability_profiles=capability_profiles,
 )
 """The entry point object (``mowdeck.cloud_providers``: ``mammotion``)."""

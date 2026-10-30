@@ -21,6 +21,10 @@ only talks to the plugin:
   account (merged by the gateway, never logged);
 * ``close()``: stop shared sessions when the gateway stops.
 
+The spec may also declare ``capability_profiles``: one
+:class:`~mowdeck_contracts.v1.CapabilityProfile` per model family (ADR 0071), from which the
+capability matrix of the documentation is generated.
+
 The plugin is a thin translator like every connection: the safety rules stay in
 :class:`~mowdeck_control.controller.MowerController`. Which providers are enabled is the
 gateway's configuration (``ProviderSpec.enabled_by_default`` plus the operator's enable and
@@ -34,7 +38,7 @@ from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from mowdeck_contracts.v1 import DiscoveredDevice, ProviderDescriptor
+from mowdeck_contracts.v1 import CapabilityProfile, DiscoveredDevice, ProviderDescriptor
 
 from mowdeck_control.connection import ConnectionConfig, MowerConnection
 from mowdeck_control.errors import ControlError
@@ -114,6 +118,10 @@ class ProviderSpec:
     unqualified_cloud: bool = False
     """Also serves ``cloud`` registrations that name no provider (from before ADR 0066). At most
     one enabled provider may say so."""
+    capability_profiles: Callable[[], Sequence[CapabilityProfile]] | None = None
+    """The provider's model families and what MowDeck offers on each (ADR 0071), built on demand
+    (it may import the vendor SDK). The capability matrix in the documentation is rendered from
+    it; None: the provider declares none and the matrix says so."""
 
 
 EntryPointSource = Callable[[], Iterable[EntryPoint]]

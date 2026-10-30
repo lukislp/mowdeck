@@ -47,7 +47,7 @@ MowDeck is the same for every provider; a mower shows what its adapter declares 
     `tools/repo-checks/tests/test_vendor_isolation.py` then keeps the vendor out of the core. The lexicon guide: [Adding an error lexicon for a vendor](error-lexicon.md).
 5. **Tests** against recorded or handwritten payloads and a fake SDK client, no network.
 6. **Image** (the one mechanical core step): add the package to `services/device-gateway/pyproject.toml` and to the workspace `pyproject.toml` (dev group, `tool.uv.sources`, mypy files), then `uv lock`.
-7. **Docs**: a package README (what the user provides, capabilities, limits, rate limits, the fake accounts, "untested on real hardware") and a row in the root README.
+7. **Docs**: a package README (what the user provides, capabilities, limits, rate limits, the fake accounts, "untested on real hardware") and a row in the root README. Declare `ProviderSpec.capability_profiles` ([ADR 0071](../adr/0071-capability-matrix.md)): one `CapabilityProfile` per model family, its `capabilities` computed by your own capability code for a representative mower (never written by hand), the `reports` it fills, what `varies` by model, firmware or module, and what is `not_offered` by the mower or the vendor's API (everything else reads "not yet" in MowDeck). Then run `uv run poe capability-matrix` and commit `docs/reference/capabilities.md`; CI fails on a stale page.
 8. **Enable**: off by default until tested on real hardware; operators set `MOWDECK_CLOUD_PROVIDERS_ENABLE=<id>` (Compose: `GATEWAY_CLOUD_PROVIDERS_ENABLE`).
 
 ## Credentials
