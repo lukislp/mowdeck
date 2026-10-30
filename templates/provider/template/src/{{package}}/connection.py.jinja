@@ -1,0 +1,224 @@
+"""The ``cloud`` connection of one {{ vendor_name }} mower: a thin translator (ADR 0012).
+
+It declares honest capabilities and nothing more: the mower reports its state and takes start
+(the start plan ``now``), pause, resume, return to the dock and the emergency stop. Everything it
+does not declare (map areas, patterns, manual driving, blade height, light, settings, firmware,
+maintenance, ...) is refused by :class:`~mowdeck_control.MowerController` before this class is
+asked, and the web app shows no control for it (ADR 0066). Declare a feature in
+:meth:`{{ class_prefix }}Connection.capabilities` only together with its implementation; the
+conformance kit (ADR 0069) checks both directions.
+
+Safety rules (expiry, de-duplication, emergency stop priority, dead-man switch, capability
+checks) stay in the controller. This class only follows the adapter rules of
+:mod:`mowdeck_control.connection`: the emergency stop acts at once and is sent even when the
+vendor reports the mower offline, a start or resume during an error raises
+:class:`~mowdeck_control.SensorStop`, ``watch_state`` yields the current state first.
+"""
+
+import asyncio
+from collections.abc import AsyncIterator, Mapping
+from datetime import UTC, datetime
+from typing import Final
+
+from mowdeck_contracts.v1 import (
+    ConnectionKind,
+    EmergencyStop,
+    GeoReference,
+    MowerActivity,
+    MowerCapabilities,
+    MowerMap,
+    MowerState,
+    PauseMow,
+    ResumeMow,
+    ReturnToDock,
+    StartMow,
+    StartPlan,
+    StartPlanKind,
+)
+from mowdeck_control import (
+    CommandRejected,
+    ConnectionConfig,
+    DriveSession,
+    JobCommand,
+    NotConnected,
+    Outcome,
+    SensorStop,
+    StateBroadcaster,
+)
+
+from {{ package }}.client import (
+    Login,
+    LoginRefused,
+    MowerOffline,
+    VendorAction,
+    VendorMower,
+    VendorSession,
+    VendorStatus,
+    VendorUnavailable,
+)
+from {{ package }}.descriptor import EMAIL, PASSWORD
+from {{ package }}.lexicon import {{ vendor }}_lexicon
+
+PLAN_NOW: Final = "now"
+"""``StartMow.plan_ref`` of a start: the vendor shares no map, so there are no areas to tap."""
+START_PLANS: Final = (StartPlan(ref=PLAN_NOW, kind=StartPlanKind.NOW),)
+
+_ACTIVITY: Final[Mapping[VendorStatus, MowerActivity]] = {
+    VendorStatus.DOCKED: MowerActivity.DOCKED,
+    VendorStatus.CHARGING: MowerActivity.CHARGING,
+    VendorStatus.MOWING: MowerActivity.MOWING,
+    VendorStatus.PAUSED: MowerActivity.PAUSED,
+    VendorStatus.RETURNING: MowerActivity.RETURNING,
+    VendorStatus.ERROR: MowerActivity.ERROR,
+}
+
+
+def state_of(mower: VendorMower, config: ConnectionConfig) -> MowerState:
+    """The MowDeck state of ``mower``; the error category comes from the lexicon."""
+    activity = _ACTIVITY[mower.status] if mower.online else MowerActivity.OFFLINE
+    code = None
+    if activity is MowerActivity.ERROR and mower.error_code is not None:
+        code = str(mower.error_code)
+    return MowerState(
+        mower_id=config.mower_id,
+        account_id=config.account_id,
+        observed_at=datetime.now(UTC),
+        activity=activity,
+        battery_percent=max(0, min(100, mower.battery)),
+        charging=mower.status is VendorStatus.CHARGING,
+        connection=ConnectionKind.CLOUD,
+        error_code=code,
+        error_category={{ vendor }}_lexicon().category_of(code) if code is not None else None,
+        raw={"vendor_status": mower.status.value},
+    )
+
+
+class {{ class_prefix }}Connection:
+    """:class:`~mowdeck_control.MowerConnection` of one mower of a linked account."""
+
+    def __init__(self, login: Login, config: ConnectionConfig) -> None:
+        self._login = login
+        self._config = config
+        self._lock = asyncio.Lock()
+        self._session: VendorSession | None = None
+        self._vendor_id: str | None = None
+        self._model: str | None = None
+        self._state: MowerState | None = None
+        self._broadcaster = StateBroadcaster()
+
+    @property
+    def kind(self) -> ConnectionKind:
+        return ConnectionKind.CLOUD
+
+    @property
+    def is_connected(self) -> bool:
+        return self._session is not None
+
+    async def connect(self) -> None:
+        async with self._lock:
+            if self._session is not None:
+                return
+            options = self._config.options
+            try:
+                session = await self._login(
+                    str(options.get(EMAIL, "")), str(options.get(PASSWORD, ""))
+                )
+            except (LoginRefused, VendorUnavailable) as exc:
+                raise NotConnected(str(exc)) from exc
+            mower = self._pick(await session.mowers())
+            if mower is None:
+                await session.close()
+                raise NotConnected("the mower is not on this {{ vendor_name }} account (any more)")
+            self._session, self._vendor_id, self._model = session, mower.id, mower.model
+            self._publish(mower)
+
+    def _pick(self, mowers: list[VendorMower]) -> VendorMower | None:
+        options = self._config.options
+        by_id = next((m for m in mowers if m.id == options.get("iot_id")), None)
+        return by_id or next((m for m in mowers if m.name == options.get("device_name")), None)
+
+    async def disconnect(self) -> None:
+        async with self._lock:
+            session, self._session = self._session, None
+            if session is not None:
+                await session.close()
+            self._broadcaster.close()
+
+    async def capabilities(self) -> MowerCapabilities:
+        return MowerCapabilities(
+            model=self._model[:64] if self._model else None,
+            connection_kinds=frozenset({ConnectionKind.CLOUD}),
+            start_plans=list(START_PLANS),
+        )
+
+    async def get_state(self) -> MowerState:
+        if self._session is None or self._state is None:
+            raise NotConnected("not connected to the {{ vendor_name }} cloud")
+        return self._state
+
+    def watch_state(self) -> AsyncIterator[MowerState]:
+        return self._broadcaster.subscribe(initial=self._state)
+
+    async def get_map(self) -> MowerMap:
+        # The vendor shares no map geometry: only a reference, no areas.
+        return MowerMap(reference=GeoReference(origin_lat=0, origin_lon=0))
+
+    async def start_drive_session(self) -> DriveSession:
+        raise CommandRejected("manual driving is not supported by the {{ vendor_name }} cloud")
+
+    async def execute(self, command: JobCommand) -> Outcome:
+        session, vendor_id = self._session, self._vendor_id
+        if session is None or vendor_id is None:
+            raise NotConnected("not connected to the {{ vendor_name }} cloud")
+        if isinstance(command, EmergencyStop):
+            # Sent at once, also for a mower the vendor reports offline. The cloud has no hard
+            # stop; a pause stops blades and wheels.
+            return await self._send(session, vendor_id, VendorAction.PAUSE, "paused at once")
+        action = self._action_for(command)
+        if action is None:
+            return Outcome.rejected(f"{command.kind} is not supported by this adapter")
+        return await self._send(session, vendor_id, action, f"{action.value} sent")
+
+    def _action_for(self, command: JobCommand) -> VendorAction | None:
+        state = self._state
+        starts = isinstance(command, StartMow | ResumeMow)
+        if starts and state is not None and state.activity is MowerActivity.ERROR:
+            raise SensorStop(f"mower error {state.error_code}")
+        if isinstance(command, StartMow):
+            if command.plan_ref != PLAN_NOW or command.area_ids or command.spot_plan is not None:
+                raise CommandRejected(f"unknown start; this mower starts with plan {PLAN_NOW!r}")
+            return VendorAction.START
+        if isinstance(command, PauseMow):
+            return VendorAction.PAUSE
+        if isinstance(command, ResumeMow):
+            return VendorAction.RESUME
+        if isinstance(command, ReturnToDock):
+            return VendorAction.HOME
+        return None
+
+    async def _send(
+        self, session: VendorSession, vendor_id: str, action: VendorAction, sent: str
+    ) -> Outcome:
+        try:
+            await session.send(vendor_id, action)
+        except MowerOffline:
+            return Outcome.rejected("the {{ vendor_name }} cloud reports the mower offline")
+        except VendorUnavailable:
+            return Outcome.failed("the {{ vendor_name }} cloud did not answer")
+        await self.refresh()
+        # The vendor does not confirm commands, so a sent command is "accepted".
+        return Outcome.accepted(sent)
+
+    async def refresh(self) -> None:
+        """Read the mower again and publish its state (a real adapter listens to the vendor's
+        push channel instead, so it never polls)."""
+        session, vendor_id = self._session, self._vendor_id
+        if session is None or vendor_id is None:
+            return
+        mower = next((m for m in await session.mowers() if m.id == vendor_id), None)
+        if mower is not None:
+            self._publish(mower)
+
+    def _publish(self, mower: VendorMower) -> None:
+        self._state = state_of(mower, self._config)
+        self._broadcaster.publish(self._state)

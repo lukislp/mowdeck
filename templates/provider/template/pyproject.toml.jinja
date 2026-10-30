@@ -1,0 +1,53 @@
+[project]
+name = "{{ distribution }}"
+version = "0.1.0"
+description = "{{ vendor_name }} adapter for mowdeck-control (cloud provider plugin). Untested on real hardware."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "{{ licence }}"
+license-files = ["LICENSE"]
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "mowdeck-contracts",
+  "mowdeck-control",
+  # The vendor SDK ({{ sdk_licence }} licence, so this package is {{ licence }}; ADR 0005,
+  # ADR 0011). Pin it exactly and upgrade deliberately (docs/ops/vendor-lib-updates.md);
+  # uncomment once sdk_client.py uses it:
+  # "{{ sdk_distribution }}==X.Y.Z",
+]
+
+[dependency-groups]
+# The provider conformance kit (ADR 0069) runs in tests/test_{{ vendor }}_conformance.py.
+dev = ["mowdeck-provider-testkit", "pytest>=8.3.4", "pytest-asyncio>=0.25.0"]
+
+# Linked {{ vendor_name }} accounts and their mowers (ADR 0066). Off by default until tested on
+# real hardware: MOWDECK_CLOUD_PROVIDERS_ENABLE={{ vendor }}.
+[project.entry-points."mowdeck.cloud_providers"]
+{{ vendor }} = "{{ package }}.plugin:SPEC"
+
+# The vendor's error codes in plain words (ADR 0067).
+[project.entry-points."mowdeck.error_lexicons"]
+{{ vendor }} = "{{ package }}.lexicon:{{ vendor }}_lexicon"
+
+# Vendor isolation (ADR 0066, tools/repo-checks/tests/test_vendor_isolation.py): no core code
+# may import this package or the vendor modules it wraps.
+[tool.mowdeck.adapter]
+vendor-modules = ["{{ sdk_module }}"]
+# Brand words that must not appear in core strings or web texts (the vendor key is implied).
+brand-names = {{ brand_names | to_json }}
+
+[tool.uv.sources]
+mowdeck-contracts = { workspace = true }
+mowdeck-control = { workspace = true }
+mowdeck-provider-testkit = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{{ package }}"]

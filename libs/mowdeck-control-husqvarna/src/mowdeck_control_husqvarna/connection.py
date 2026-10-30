@@ -79,9 +79,9 @@ from mowdeck_control_husqvarna.pool import AccountLease, AccountPool
 
 _log = logging.getLogger("mowdeck_control_husqvarna.connection")
 
-PLAN_SCHEDULE: Final = "schedule"
-PLAN_DURATION: Final = "duration"
-PLAN_WORK_AREA: Final = "work_area"
+PLAN_SCHEDULE: Final = mapping.PLAN_SCHEDULE
+PLAN_DURATION: Final = mapping.PLAN_DURATION
+PLAN_WORK_AREA: Final = mapping.PLAN_WORK_AREA
 
 NO_HARD_STOP: Final = (
     "pause sent at once; the Automower Connect API has no hard stop, the mower stops its "
