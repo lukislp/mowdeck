@@ -11,12 +11,15 @@ class DemoState {
   config = $state<DemoConfig | null>(null);
   /** Where "Get MowDeck" leads: the source code of this build. */
   sourceUrl = $state('');
+  /** The API explorer is on (ADR 0072): the banner and the sign-in page link it. */
+  apiExplorer = $state(false);
   loaded = $state(false);
 
   async load(): Promise<DemoConfig | null> {
     const runtime = await loadConfig();
     this.config = runtime.demo ?? null;
     this.sourceUrl = sourceCodeUrl(runtime.source);
+    this.apiExplorer = runtime.apiExplorer;
     this.loaded = true;
     return this.config;
   }

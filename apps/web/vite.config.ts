@@ -5,6 +5,7 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
+import { apiExplorerDev } from './build-tools/api-explorer.mjs';
 import { agoraIncluded, releaseLicences } from './build-tools/release-licences.js';
 
 /** The Compose stack's gateway; `pnpm dev` proxies the API (and the WebSocket) to it so the
@@ -39,6 +40,9 @@ export default defineConfig({
     }),
     svelteTesting(),
     ...releaseLicences(agora),
+    // The API explorer's frame (ADR 0072) under /_explorer/ in `pnpm dev`; the build writes it
+    // after the SPA (build-tools/api-explorer.mjs).
+    apiExplorerDev(),
   ],
   server: {
     port: 5173,
@@ -63,7 +67,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.test.ts', 'build-tools/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'build-tools/**/*.test.ts', 'api-explorer/**/*.test.ts'],
     setupFiles: ['src/tests/setup.ts'],
     coverage: {
       provider: 'v8',

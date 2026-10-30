@@ -74,3 +74,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0068](0068-public-demo-mode.md) | Public demo mode | Proposed |
 | [0069](0069-provider-conformance-kit-and-package-template.md) | Provider conformance kit and provider package template | Proposed |
 | [0071](0071-capability-matrix.md) | Capability matrix generated from the adapters | Proposed |
+| [0072](0072-api-explorer-in-the-web-app.md) | API explorer in the web app, for the public demo | Accepted |

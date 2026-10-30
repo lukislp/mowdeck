@@ -1,8 +1,8 @@
 {{- /* The web app (Compose service web): static SvelteKit PWA on an unprivileged, read-only
 nginx at /, same origin as the API. /config.json and the CSP are rendered from MOWDECK_WEB_MAP_*
 into /tmp at container start (also MOWDECK_WEB_LEGAL_ENABLED: links to the legal pages, and
-MOWDECK_WEB_CAMERA_ENABLED: the live camera, and the build's source code link: MOWDECK_SOURCE_URL
-when config.SOURCE_URL is set). */ -}}
+MOWDECK_WEB_CAMERA_ENABLED: the live camera, MOWDECK_WEB_API_EXPLORER: the API explorer, and the
+build's source code link: MOWDECK_SOURCE_URL when config.SOURCE_URL is set). */ -}}
 {{- $c := .Values.config }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "web" "key" "web" "image" "web" "port" 8080 "web" true
   "env" (merge (include "mowdeck.sourceEnv" . | fromJson) (dict
@@ -10,4 +10,5 @@ when config.SOURCE_URL is set). */ -}}
     "MOWDECK_WEB_MAP_ATTRIBUTION" $c.WEB_MAP_ATTRIBUTION
     "MOWDECK_WEB_MAP_MAX_ZOOM" $c.WEB_MAP_MAX_ZOOM
     "MOWDECK_WEB_LEGAL_ENABLED" (toString $c.WEB_LEGAL_ENABLED)
-    "MOWDECK_WEB_CAMERA_ENABLED" (toString $c.WEB_CAMERA_ENABLED)))) }}
+    "MOWDECK_WEB_CAMERA_ENABLED" (toString $c.WEB_CAMERA_ENABLED)
+    "MOWDECK_WEB_API_EXPLORER" (toString $c.WEB_API_EXPLORER)))) }}

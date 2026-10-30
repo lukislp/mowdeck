@@ -12,6 +12,7 @@
 
   import { identityApi, unwrap } from '#lib/api/client.js';
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { loadConfig } from '#lib/config.js';
   import { formatDate, formatDateTime, problemMessage } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
   import {
@@ -54,6 +55,8 @@
   let copied = $state<'' | 'secret' | 'example' | 'base'>('');
   let note = $state('');
   let secretBox = $state<HTMLElement | null>(null);
+  /** The API explorer of this installation (ADR 0072; the public demo). */
+  let explorer = $state(false);
 
   const sorted = $derived(
     [...(tokens ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -74,6 +77,7 @@
 
   $effect(() => {
     void load();
+    void loadConfig().then((config) => (explorer = config.apiExplorer));
   });
 
   async function create(event: SubmitEvent): Promise<void> {
@@ -173,6 +177,11 @@
       <span class="hint">{m.pat_base_url_hint()}</span>
     </div>
     <nav class="docs" aria-label={m.pat_docs_reference()}>
+      {#if explorer}
+        <a href="/api-explorer" data-testid="pat-explorer">
+          <Icon name="play" size={16} /><span>{m.api_explorer_link()}</span>
+        </a>
+      {/if}
       <a href={SCRIPTING_GUIDE_URL} rel="external noopener" target="_blank" data-testid="pat-guide">
         <Icon name="route" size={16} /><span>{m.pat_docs_guide()}</span><span aria-hidden="true"
           >↗</span

@@ -38,6 +38,9 @@ FROM ${NGINX_IMAGE}
 COPY apps/web/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY apps/web/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY apps/web/nginx/security-headers-track.conf /etc/nginx/snippets/security-headers-track.conf
+# The API explorer's frame (/_explorer/, ADR 0072) has its own CSP; it ships in build/_explorer
+# and is served only with MOWDECK_WEB_API_EXPLORER=true.
+COPY apps/web/nginx/security-headers-explorer.conf /etc/nginx/snippets/security-headers-explorer.conf
 COPY --from=build /repo/apps/web/build/csp.conf /etc/nginx/snippets/csp.conf
 # Renders /config.json and the final CSP from MOWDECK_WEB_MAP_* and MOWDECK_WEB_LEGAL_ENABLED
 # into /tmp at container start.

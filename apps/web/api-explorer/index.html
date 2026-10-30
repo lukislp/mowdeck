@@ -1,0 +1,22 @@
+<!doctype html>
+<!--
+  The API explorer's frame (ADR 0072): embedded by the web app's page /api-explorer, served by
+  nginx at /_explorer/ with its own CSP (nginx/security-headers-explorer.conf). build-tools/
+  api-explorer.mjs fills in the integrity hashes and ships this page with the pinned Scalar bundle
+  and the services' OpenAPI documents. Nothing here loads from another origin.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="same-origin" />
+    <title>MowDeck API explorer</title>
+    <link rel="stylesheet" href="explorer.css" integrity="%EXPLORER_CSS_INTEGRITY%" />
+  </head>
+  <body>
+    <div id="explorer"><p class="explorer-status">Loading the API documents…</p></div>
+    <script src="scalar.js" integrity="%SCALAR_INTEGRITY%"></script>
+    <script type="module" src="explorer.js" integrity="%EXPLORER_JS_INTEGRITY%"></script>
+  </body>
+</html>
