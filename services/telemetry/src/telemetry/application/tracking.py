@@ -423,8 +423,10 @@ class Tracking:
                     notice_lat=current.last_lat, notice_lon=current.last_lon, notice_at=now
                 )
                 events.append((TRACKING_MOVED, _event(current, now, distance_m=moved)))
-        if changes:
-            await self._store.put_session(session.evolve(**changes))
+        # Only the changed fields and only while the session runs: a session the owner ended
+        # while this tick read the mower's state stays ended (no lease, no notices after it).
+        if changes and not await self._store.update_active(session.id, changes):
+            return
         for event_type, event in events:
             await self._events.publish(event_type, event)
         await self._renew_lease(session)
