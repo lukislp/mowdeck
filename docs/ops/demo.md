@@ -12,7 +12,7 @@ Run a demo only as its **own stack**: its own host or VM if possible, its own Co
 - Everything that works on simulated mowers: start, pause, resume, dock, emergency stop, manual driving with the camera test pattern, spot mowing, path previews, mowing defaults, area names, device settings, firmware update, sites and groups, schedules, the in-app notification inbox, theft tracking and the AI assistant with a built-in demo model.
 - A band above every page ("Demo · simulated mowers, shared with every visitor, resets every 6 h"), "Demo" in front of every page title and a demo badge on the sign-in page. None of them can be dismissed. Every response of the API carries `X-MowDeck-Demo: 1`.
 
-All visitors share the one demo account: they see each other's commands live.
+All visitors share the one demo account: they see each other's commands live. Not each other's sign-ins, though: the security center's session list, its security events and its session count only show the visitor's own login session, so nobody sees another visitor's browser, network or times.
 
 ## What the demo refuses
 

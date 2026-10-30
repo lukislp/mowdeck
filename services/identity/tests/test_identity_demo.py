@@ -169,6 +169,29 @@ async def test_the_demo_keeps_the_session_and_the_tour() -> None:
     assert logout.status_code == 204, logout.text
 
 
+async def test_a_demo_visitor_sees_only_their_own_session() -> None:
+    """All visitors share the demo user: the security center must not show the other visitors'
+    browsers, networks and times."""
+    async with harness(**DEMO) as h:
+        await _seed(h.client)
+        tokens = []
+        for agent in ("VisitorA/1.0", "VisitorB/2.0"):
+            response = await h.client.post(f"{API}/demo/session", headers={"User-Agent": agent})
+            assert response.status_code == 200, response.text
+            tokens.append(response.json()["access_token"])
+        sessions = await h.client.get(f"{API}/me/sessions", headers=bearer(tokens[0]))
+        events = await h.client.get(f"{API}/me/security-events", headers=bearer(tokens[0]))
+        overview = await h.client.get(f"{API}/me/security", headers=bearer(tokens[0]))
+    assert sessions.status_code == 200, sessions.text
+    (own,) = sessions.json()
+    assert own["current"] is True
+    assert own["label"] == "VisitorA"
+    assert events.status_code == 200, events.text
+    sessions_in_events = {event["details"].get("session") for event in events.json()}
+    assert sessions_in_events == {own["id"]}
+    assert overview.json()["sessions"] == 1
+
+
 def test_demo_mode_closes_registration_and_the_other_sign_in_methods() -> None:
     settings = make_settings(
         demo_mode=True,
