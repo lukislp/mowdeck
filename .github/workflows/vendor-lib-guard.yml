@@ -1,0 +1,43 @@
+name: Vendor lib guard
+
+# The merge gate for vendor library updates (pymammotion, pyworxcloud, aioautomower; see
+# docs/ops/vendor-lib-updates.md). The check "vendor-lib / hardware test" compares the locked
+# versions of the PR's merge commit with its base: a PR that updates a vendor library fails it
+# while it carries the label "needs-hardware-test" (vendor-lib-label.yml adds it when the PR is
+# opened) and passes once the owner removed that label after testing on the mower. Every other
+# PR passes at once, so the check can be required without blocking routine updates. It runs on
+# label changes too, so removing the label is all it takes. No comments: the job summary says
+# what to do.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: vendor-lib-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  hardware-test:
+    name: vendor-lib / hardware test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      # The merge commit and its first parent, the base it is compared with.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Check vendor library updates
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          git show HEAD^1:uv.lock > "$RUNNER_TEMP/base.lock"
+          python3 tools/repo-checks/scripts/vendor_lib_guard.py check \
+            --base "$RUNNER_TEMP/base.lock" --head uv.lock --labels "$LABELS"

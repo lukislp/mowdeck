@@ -1,5 +1,6 @@
 # Daily dependency PRs for the ecosystems this repository builds from, in the same shape as the
-# other lukislp repositories: fix(...) commit prefixes, at most two open PRs per ecosystem.
+# other lukislp repositories: fix(...) commit prefixes, at most two open PRs per ecosystem (uv:
+# ten, see there).
 #
 # Not covered here, on purpose:
 #   * Container images. Every third-party image is pinned once under "Image sources" in
@@ -34,19 +35,48 @@ updates:
     reviewers:
       - "lukislp"
     open-pull-requests-limit: 2
-  # One uv workspace with a single uv.lock for every service, library and tool.
+  # One uv workspace with a single uv.lock for every service, library and tool. From the root
+  # Dependabot reads the root pyproject.toml and every workspace member's pyproject.toml (the
+  # [tool.uv.workspace] members globs; they must not end in "/", which Dependabot's uv fetcher
+  # does not match, so no member was read before), and updates uv.lock with them.
   - package-ecosystem: uv
     directory: /
     schedule:
       interval: daily
-    # pymammotion (GPL adapter, mowdeck-control-mammotion) is pinned exactly and is NOT ignored:
-    # every release changes the protocol surface the adapter depends on, so its PRs exist to make
-    # new releases visible and are only merged after a test on a real mower.
+    # Vendor libraries of the mower adapters, each pinned exactly in its adapter:
+    # pymammotion (mowdeck-control-mammotion), pyworxcloud (mowdeck-control-worx) and
+    # aioautomower (mowdeck-control-husqvarna). They are NOT ignored and NOT grouped: every
+    # release gets its own PR, so new releases are visible. Such a PR is labelled vendor-lib and
+    # needs-hardware-test (vendor-lib-label.yml), the check "vendor-lib / hardware test" fails
+    # until the owner has tested it on a real mower and removed needs-hardware-test, and
+    # dependabot-auto-merge.yml never merges it (exclude-dependencies). Policy and checklist:
+    # docs/ops/vendor-lib-updates.md.
+    ignore:
+      # The workspace members are sources of this repository ({ workspace = true }), but
+      # Dependabot looks their names up on PyPI, where unrelated packages called fleet, vision,
+      # telemetry, ... exist, and then fails the whole run ("your workspace requires fleet").
+      # tools/repo-checks/tests/test_dependabot.py keeps this list equal to the members.
+      - dependency-name: "mowdeck-*"
+      - dependency-name: "agora-bridge"
+      - dependency-name: "billing"
+      - dependency-name: "camera-relay"
+      - dependency-name: "device-gateway"
+      - dependency-name: "entitlements"
+      - dependency-name: "fleet"
+      - dependency-name: "identity"
+      - dependency-name: "notifications"
+      - dependency-name: "planner"
+      - dependency-name: "realtime"
+      - dependency-name: "scheduler"
+      - dependency-name: "telemetry"
+      - dependency-name: "vision"
     commit-message:
       prefix: "fix(deps)"
     reviewers:
       - "lukislp"
-    open-pull-requests-limit: 2
+    # The vendor library PRs stay open until the hardware test (one slot each), so the limit
+    # leaves room for the routine updates next to all three.
+    open-pull-requests-limit: 10
   # The pnpm workspace of the web frontend (apps/*, libs/mowdeck-ui, tests/e2e-web,
   # tools/ts-codegen) with its single pnpm-lock.yaml.
   - package-ecosystem: npm

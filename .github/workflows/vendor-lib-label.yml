@@ -1,0 +1,60 @@
+name: Vendor lib label
+
+# Labels a PR that updates a vendor library (pymammotion, pyworxcloud, aioautomower) with
+# "vendor-lib" and "needs-hardware-test" when it is opened or reopened, Dependabot's included
+# (dependabot.yml cannot label single dependencies of the one uv entry). vendor-lib-guard.yml
+# fails such a PR until the owner removes "needs-hardware-test" after the hardware test
+# (docs/ops/vendor-lib-updates.md). Only on opened/reopened, so a rebase or a branch update
+# never puts the label back after the test.
+#
+# pull_request_target, because a Dependabot PR's pull_request token is read-only. Safe: the
+# checkout is the base branch and so is the script that runs; of the PR only uv.lock is read,
+# as data through the contents API, and nothing of the PR is fetched into the workspace or
+# executed.
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions: {}
+
+jobs:
+  label:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # gh pr edit --add-label and gh label create.
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Label vendor library updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          # The PR head's lock file through the API, as data (no git object of the PR ever
+          # reaches the workspace), compared with the base branch checked out here.
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$HEAD_REPO/contents/uv.lock?ref=$HEAD_SHA" > "$RUNNER_TEMP/head.lock"
+          updates=$(python3 tools/repo-checks/scripts/vendor_lib_guard.py changes \
+            --base uv.lock --head "$RUNNER_TEMP/head.lock")
+          if [ -z "$updates" ]; then
+            echo "No vendor library update."
+            exit 0
+          fi
+          printf 'Vendor library update:\n%s\n' "$updates" | tee -a "$GITHUB_STEP_SUMMARY"
+          gh label create vendor-lib --color 5319e7 --force \
+            --description "Updates a vendor library of a mower adapter"
+          gh label create needs-hardware-test --color d93f0b --force \
+            --description "Merge only after the hardware test (docs/ops/vendor-lib-updates.md)"
+          gh pr edit "$PR" --add-label vendor-lib --add-label needs-hardware-test

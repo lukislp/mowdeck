@@ -131,6 +131,7 @@ nav:
       - ops/helm.md
       - ops/ble-bridge-esphome.md
       - ops/release.md
+      - ops/vendor-lib-updates.md
       - ops/billing.md
       - ops/telemetry-retention.md
       - ops/mobile-apps.md

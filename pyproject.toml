@@ -15,7 +15,9 @@ package = false
 override-dependencies = ["filelock>=4.2.1"]
 
 [tool.uv.workspace]
-members = ["libs/*/", "services/*/", "tools/*/", "integrations/agora-bridge/"]
+# No trailing "/" in the globs: Dependabot's uv fetcher matches them against directory paths
+# without one and would skip every member (.github/dependabot.yml).
+members = ["libs/*", "services/*", "tools/*", "integrations/agora-bridge"]
 # pnpm packages of the web frontend (pnpm-workspace.yaml), not Python packages.
 exclude = ["libs/mowdeck-ui", "tools/ts-codegen", "services/matter-server"]
 
