@@ -99,7 +99,11 @@
   import { rainNow, readoutBars, stripBars } from '#lib/mower/rain.js';
   import { hasReception } from '#lib/mower/reception.js';
   import { errorCategoryLabel } from '#lib/mower/reception-labels.js';
-  import { explainKey, getMowerError, type ErrorExplanation } from '#lib/mower/error-explain.js';
+  import {
+    explainCurrentError,
+    explainKey,
+    type ErrorExplanation,
+  } from '#lib/mower/error-explain.js';
   import type { RainDecision } from '#lib/schedules/types.js';
   import {
     availability,
@@ -1044,7 +1048,8 @@
     return ms.error_category ? `${errorCategoryLabel(ms.error_category)} · ${text}` : text;
   });
   /** The error in plain words from the vendor's lexicon (ADR 0067); until it arrives, or when
-   * Telemetry cannot answer, the notice above stands in. Asked again only for a new code. */
+   * Telemetry cannot answer, the notice above stands in. Asked again only for a new code (and
+   * while Telemetry has not stored the state the live stream already showed). */
   let errorExplained = $state<ErrorExplanation | null>(null);
   const errorKey = $derived(explainKey(id, ms?.error_code, locale));
   $effect(() => {
@@ -1054,17 +1059,15 @@
       errorExplained = null;
       return;
     }
-    let current = true;
-    getMowerError(id, locale)
-      .then((answer) => {
-        if (current) errorExplained = answer.error?.code ? answer.error : null;
+    const asked = new AbortController();
+    explainCurrentError(id, code, locale, asked.signal)
+      .then((error) => {
+        if (!asked.signal.aborted) errorExplained = error;
       })
       .catch(() => {
-        if (current) errorExplained = null;
+        if (!asked.signal.aborted) errorExplained = null;
       });
-    return () => {
-      current = false;
-    };
+    return () => asked.abort();
   });
   const renamingArea = $derived(
     renaming ? ((mowerMap?.areas ?? []).find((a) => a.id === renaming) ?? null) : null,

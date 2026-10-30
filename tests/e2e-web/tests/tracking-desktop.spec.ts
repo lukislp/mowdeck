@@ -128,7 +128,9 @@ test('tracking: start, positions arrive, share link works logged out, report, fa
       { timeout: 30_000 },
     )
     .toBe(0);
-  expect(await loadedTiles(page)).toBeGreaterThan(0);
+  // The new zoom level's tiles load only after the zoom settled (`updateWhenIdle`), and the
+  // levels passed on the way out are pruned: right after the last click there may be none yet.
+  await expect.poll(() => loadedTiles(page), { timeout: 30_000 }).toBeGreaterThan(0);
   // The last position as text with a copy button and links to the maps apps.
   await expect(page.getByTestId('tracking-fix-coordinates')).toHaveValue(
     /^-?\d{1,2}\.\d{6}, -?\d{1,3}\.\d{6}$/,

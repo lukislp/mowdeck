@@ -269,6 +269,38 @@ async def test_tracking_only_one_replica_ticks() -> None:
 # --- offline / stale / moved ---------------------------------------------------------------
 
 
+async def test_tracking_tick_never_undoes_an_end_that_happened_while_it_ran() -> None:
+    gateway = Gateway()
+    clock = Clock()
+    async with harness(clock=clock, tracking_gateway=gateway) as h:
+        events = await collect(h)
+        owner, mower_id = await setup(h, with_position=False)
+        url = f"{API}/mowers/{mower_id}/tracking"
+        await h.client.post(url, headers=owner.headers)
+        await h.publish_state(
+            make_state(mower_id, owner.account_id, at=clock.now, position=(48.0, 11.0))
+        )
+        tracking = tracking_of(h)
+        latest_of = tracking._data.latest_of
+
+        async def ended_meanwhile(account_id: UUID, mower: UUID) -> Any:
+            # The owner says "false alarm" after the tick read the active sessions.
+            stopped = await h.client.post(
+                f"{url}/stop", headers=owner.headers, json={"reason": "false_alarm"}
+            )
+            assert stopped.status_code == 200
+            return await latest_of(account_id, mower)
+
+        tracking._data.latest_of = ended_meanwhile  # type: ignore[method-assign, assignment]
+        leases = len(gateway.leases)
+        await tracking.tick()
+        view = (await h.client.get(url, headers=owner.headers)).json()
+        assert view["session"]["active"] is False
+        assert view["session"]["end_reason"] == "false_alarm"
+        assert [lease.lease_seconds for lease in gateway.leases[leases:]] == [0]  # not renewed
+        assert [t for t, _ in events] == [TRACKING_STARTED, TRACKING_ENDED]
+
+
 async def test_tracking_stale_once_per_outage_keeps_last_position_and_recovers() -> None:
     clock = Clock()
     async with harness(clock=clock, tracking_gateway=Gateway()) as h:
