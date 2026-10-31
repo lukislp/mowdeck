@@ -52,7 +52,8 @@ start of a sign-in stays on the main Ingress like the passkey challenge. */ -}}
 {{- $_ := set $limit "traefik.ingress.kubernetes.io/router.middlewares" (printf "%s-%s-auth-ratelimit@kubernetescrd" .Release.Namespace (include "mowdeck.fullname" .)) }}
 ---
 # Traefik: the login limit per client address (ingress.auth.traefikRateLimit). The client is the
-# X-Forwarded-For entry config.GATEWAY_CLIENT_IP_DEPTH places from the right (0: the TCP peer).
+# X-Forwarded-For entry config.GATEWAY_CLIENT_IP_DEPTH places from the right (0: the TCP peer),
+# an IPv6 client counts by its /64.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -67,6 +68,8 @@ spec:
     sourceCriterion:
       ipStrategy:
         depth: {{ include "mowdeck.clientIpDepth" . | default "0" }}
+        # IPv6: one bucket per /64 (what one connection gets), not per address.
+        ipv6Subnet: 64
 {{- end }}
 {{- $ingresses = append $ingresses (dict "suffix" "-auth" "annotations" (merge (dict) $ing.auth.annotations $limit $ing.annotations) "routes" $auth) }}
 {{- end }}

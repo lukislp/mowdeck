@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 from mowdeck_service_kit import ServiceSettings
-from mowdeck_service_kit.client_address import client_address, forwarded_client
+from mowdeck_service_kit.client_address import client_address, forwarded_client, limiter_key
 from mowdeck_service_kit.testing import make_test_settings
 
 CADDY = "10.250.80.2"
@@ -51,6 +51,45 @@ def test_without_a_header_the_peer_counts(header: str | None) -> None:
 def test_entries_are_cut_to_64_characters() -> None:
     assert forwarded_client("a" * 200, None, proxy_depth=0) == "a" * 64
     assert forwarded_client(None, "b" * 200, proxy_depth=0) == "b" * 64
+
+
+@pytest.mark.parametrize(
+    ("address", "expected"),
+    [
+        # IPv4 is unchanged.
+        ("203.0.113.1", "203.0.113.1"),
+        # IPv6: the /64, so every address of one connection shares the key.
+        ("2001:db8:1:2::1", "2001:db8:1:2::/64"),
+        ("2001:db8:1:2:ffff:ffff:ffff:ffff", "2001:db8:1:2::/64"),
+        ("2001:0DB8:0001:0002:abcd::9", "2001:db8:1:2::/64"),
+        ("[2001:db8:1:2::1]", "2001:db8:1:2::/64"),
+        ("fe80::1%eth0", "fe80::/64"),
+        # The next /64 is another client.
+        ("2001:db8:1:3::1", "2001:db8:1:3::/64"),
+        # IPv4-mapped IPv6 counts as the IPv4 address.
+        ("::ffff:203.0.113.1", "203.0.113.1"),
+        # No address: kept as it is (cut), or the shared unknown key.
+        ("testclient", "testclient"),
+        ("x" * 200, "x" * 64),
+        (None, "unknown"),
+        ("", "unknown"),
+    ],
+)
+def test_limiter_key_counts_ipv6_per_64(address: str | None, expected: str) -> None:
+    assert limiter_key(address) == expected
+
+
+def test_limiter_key_of_a_whole_64_is_one_key() -> None:
+    keys = {limiter_key(f"2001:db8:aa:bb:{i:x}::{i:x}") for i in range(1, 500)}
+    assert keys == {"2001:db8:aa:bb::/64"}
+
+
+async def test_client_address_keeps_the_whole_ipv6_address() -> None:
+    """The address itself stays whole (audit logs, the security center); only the key is
+    masked."""
+    app = _app(client_ip_depth=1)
+    chain = [("X-Forwarded-For", f"2001:db8:1:2::77, {CADDY}")]
+    assert await _ip(app, chain) == "2001:db8:1:2::77"
 
 
 def _app(**settings: Any) -> FastAPI:
