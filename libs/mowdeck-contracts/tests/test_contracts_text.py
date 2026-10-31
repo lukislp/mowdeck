@@ -34,6 +34,10 @@ class Named(BaseModel):
         (FAMILY, FAMILY),
         (PERSIAN, PERSIAN),
         (HEBREW_ARABIC, HEBREW_ARABIC),
+        (f"{ZWJ}{ZWNJ}", ""),
+        (f" {ZWJ}\u3000{ZWNJ}\n", ""),
+        ("   ", ""),
+        (f"a{ZWJ}", f"a{ZWJ}"),
     ],
 )
 def test_clean_text(raw: str, clean: str) -> None:
@@ -48,9 +52,16 @@ def test_plain_text_cleans_before_the_length_checks() -> None:
     with pytest.raises(ValidationError):
         Named(name=RLO + ZWSP)
     with pytest.raises(ValidationError):
+        Named(name=ZWJ)
+    with pytest.raises(ValidationError):
+        Named(name=f" {ZWNJ} {ZWJ} ")
+    assert Named(name="x", note=f"{ZWJ} ").note == ""
+    with pytest.raises(ValidationError):
         Named(name=123)  # type: ignore[arg-type]
 
 
 def test_area_names_lose_invisible_characters() -> None:
     assert clean_area_name(f" Side{ZWSP} {RLO}strip ") == "Side strip"
     assert clean_area_name(RLO) is None
+    assert clean_area_name(f"{ZWJ}{ZWNJ}") is None
+    assert clean_area_name(f" {ZWJ} ") is None

@@ -212,11 +212,17 @@ BASE: dict[str, Any] = {
 }
 
 
+DROP = "<drop>"
+"""A value in a ``_with`` change that removes the key."""
+
+
 def _with(change: dict[str, Any]) -> dict[str, Any]:
     def merge(left: Any, right: Any) -> Any:
         if isinstance(left, dict) and isinstance(right, dict):
             return {
-                k: merge(left.get(k), right[k]) if k in right else left[k] for k in left | right
+                k: merge(left.get(k), right[k]) if k in right else left[k]
+                for k in left | right
+                if right.get(k) != DROP
             }
         return right
 
@@ -230,11 +236,21 @@ def _with(change: dict[str, Any]) -> dict[str, Any]:
         {},
         {"services": {"traefik": {"mem_limit": "268435456", "cpus": 0.5, "pids_limit": 200}}},
         {"services": {"identity": {"deploy": {"resources": {"limits": {"memory": "512m"}}}}}},
+        # What `docker compose config` renders for the line above: `placement: {}` comes along.
+        {
+            "services": {
+                "identity": {
+                    "deploy": {"resources": {"limits": {"memory": "536870912"}}, "placement": {}}
+                }
+            }
+        },
         {"services": {"identity": {"logging": {"driver": "json-file"}}}},
         {
             "services": {"traefik": {"networks": {"edge": {"aliases": ["mowdeck-demo-gateway"]}}}},
             "networks": {"edge": {"name": "mowdeck-demo-edge", "external": True}},
         },
+        # `mowdeck: {}` in the override where the base renders `mowdeck: null`: unchanged.
+        {"services": {"traefik": {"networks": {"mowdeck": {}}}}},
     ],
 )
 def test_guard_accepts_networks_limits_and_logging(repo_root: Path, change: dict[str, Any]) -> None:
@@ -265,7 +281,38 @@ def test_guard_accepts_networks_limits_and_logging(repo_root: Path, change: dict
             {"services": {"identity": {"deploy": {"replicas": 3}}}},
             "services.identity.deploy.replicas",
         ),
+        (
+            {"services": {"identity": {"deploy": {"placement": {"constraints": ["x"]}}}}},
+            "services.identity.deploy.placement.constraints",
+        ),
         ({"services": {"identity": {"volumes": []}}}, "services.identity.volumes"),
+        # Networks: only the gateway joins networks, and only networks outside the demo.
+        (
+            {
+                "services": {"identity": {"networks": {"edge": {}}}},
+                "networks": {"edge": {"name": "edge", "external": True}},
+            },
+            "services.identity.networks",
+        ),
+        (
+            {"services": {"identity": {"networks": {"mowdeck": {"aliases": ["traefik"]}}}}},
+            "services.identity.networks",
+        ),
+        (
+            {"services": {"traefik": {"networks": {"mowdeck": {"aliases": ["identity"]}}}}},
+            "services.traefik.networks.mowdeck",
+        ),
+        (
+            {"services": {"traefik": {"networks": {"mowdeck": DROP}}}},
+            "services.traefik.networks.mowdeck",
+        ),
+        (
+            {
+                "services": {"traefik": {"networks": {"edge": {"aliases": ["gw", "identity"]}}}},
+                "networks": {"edge": {"name": "edge", "external": True}},
+            },
+            "services.traefik.networks.edge.aliases",
+        ),
         ({"networks": {"mowdeck": {"internal": False}}}, "networks.mowdeck.internal"),
         ({"networks": {"open": {"driver": "bridge"}}}, "networks.open"),
         ({"volumes": {"data": {}}}, "volumes"),
@@ -407,6 +454,18 @@ REFUSED = {
     "seed-history": 'services:\n  demo-seed:\n    environment:\n      DEMO_HISTORY_DAYS: "31"\n',
     "replicas": "services:\n  realtime:\n    deploy:\n      replicas: 3\n",
     "own-network": "services:\n  nats:\n    networks: [open]\nnetworks:\n  open: {}\n",
+    "nats-on-edge": (
+        "services:\n  nats:\n    networks:\n      mowdeck: {}\n      mowdeck-demo-edge: {}\n"
+        "networks:\n  mowdeck-demo-edge:\n    external: true\n"
+    ),
+    "alias-on-the-demo-network": (
+        "services:\n  traefik:\n    networks:\n      mowdeck:\n        aliases: [nats]\n"
+    ),
+    "alias-shadows-a-service": (
+        "services:\n  traefik:\n    networks:\n      mowdeck: {}\n"
+        "      mowdeck-demo-edge:\n        aliases: [identity]\n"
+        "networks:\n  mowdeck-demo-edge:\n    external: true\n"
+    ),
 }
 
 
@@ -427,10 +486,21 @@ def real_stack(repo_root: Path, tmp_path: Path) -> Path:
     return compose
 
 
+ALLOWED = {
+    "edge-network": ALLOWED_EDGE,
+    # Compose renders `deploy.placement: {}` along with these.
+    "deploy-resources": (
+        "services:\n  identity:\n    deploy:\n      resources:\n"
+        "        limits:\n          memory: 256m\n          cpus: '0.5'\n"
+    ),
+}
+
+
 @needs_bash
 @needs_compose
-def test_real_compose_accepts_the_documented_edge_network(real_stack: Path) -> None:
-    (real_stack / "demo" / "demo.override.yml").write_text(ALLOWED_EDGE, "utf-8")
+@pytest.mark.parametrize("name", sorted(ALLOWED))
+def test_real_compose_accepts_the_documented_overrides(real_stack: Path, name: str) -> None:
+    (real_stack / "demo" / "demo.override.yml").write_text(ALLOWED[name], "utf-8")
     result, _ = _run(real_stack, "--dry-run")
     assert result.returncode == 0, result.stderr
     assert "using" in result.stdout
