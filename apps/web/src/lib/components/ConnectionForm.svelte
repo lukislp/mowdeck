@@ -24,6 +24,7 @@
     optionHelp,
     optionLabel,
   } from '#lib/connection/text.js';
+  import { demo } from '#lib/demo/state.svelte.js';
   import { m } from '#lib/paraglide/messages.js';
 
   interface Props {
@@ -137,7 +138,7 @@
 
 <div class="connection" data-testid="connection-form" data-kind={schema.kind}>
   <div class="plate">
-    <span class="code">{schema.kind}</span>
+    {#if !demo.active}<span class="code">{schema.kind}</span>{/if}
     <span class="title">{kindTitle(schema)}</span>
     <p class="about">{kindDescription(schema)}</p>
   </div>

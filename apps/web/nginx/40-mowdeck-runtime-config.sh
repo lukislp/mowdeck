@@ -14,7 +14,11 @@
 #                             without JavaScript see the label too; otherwise only a comment.
 #                             Only text in <head> changes, no script: the CSP hashes stay valid.
 #
-# MOWDECK_CONFIG_DIR and MOWDECK_CSP_TEMPLATE replace /tmp/mowdeck and the build CSP (tests).
+# config.json also says whether the image ships /whats-new.json (`whatsNew`, written by the release
+# build only), so the app does not request a file that is not there.
+#
+# MOWDECK_CONFIG_DIR, MOWDECK_CSP_TEMPLATE and MOWDECK_WEB_ROOT replace /tmp/mowdeck, the build CSP
+# and the served directory (tests).
 #
 # Environment (all optional; empty keeps the metric grid and sends nothing to third parties):
 #   MOWDECK_WEB_MAP_TILES        raster tile URL template, e.g. https://tile.example.org/{z}/{x}/{y}.png
@@ -173,7 +177,11 @@ else
   echo "return 404;" > "$out/explorer.conf"
 fi
 
-printf '{"mapTiles":%s,"legalEnabled":%s,"cameraEnabled":%s,"apiExplorer":%s,"source":%s%s}\n' "$map_tiles" "$legal_enabled" "$camera_enabled" "$api_explorer" "$source_json" "$demo_json" > "$out/config.json"
+# The notes of "Was ist neu": only a release build writes them into the image.
+whats_new=false
+if [ -f "${MOWDECK_WEB_ROOT:-/usr/share/nginx/html}/whats-new.json" ]; then whats_new=true; fi
+
+printf '{"mapTiles":%s,"legalEnabled":%s,"cameraEnabled":%s,"apiExplorer":%s,"whatsNew":%s,"source":%s%s}\n' "$map_tiles" "$legal_enabled" "$camera_enabled" "$api_explorer" "$whats_new" "$source_json" "$demo_json" > "$out/config.json"
 sed -e "s#img-src 'self' data: blob:#img-src 'self' data: blob:${img_extra}#" \
   -e "s#connect-src 'self'#connect-src 'self'${connect_extra}#" \
   -e "s#style-src 'self'#style-src 'self'${style_extra}#" \

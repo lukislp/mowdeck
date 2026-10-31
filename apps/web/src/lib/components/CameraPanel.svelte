@@ -6,7 +6,8 @@
   mower page's collapse toggle) or leaving the page leaves the channel. The picker lists only
   cameras that publish video; with two front cameras (a stereo pair) it also offers "Both". The
   data note reminds that the video goes through Mammotion's and Agora's servers and counts
-  against the 4G allowance. Two collapsible lines follow: "Diagnose" (receive statistics every
+  against the 4G allowance; for a simulated mower (or a `fake` session) it says instead that the
+  picture is a test pattern made by this installation. Two collapsible lines follow: "Diagnose" (receive statistics every
   2 s, real cameras) and "Advanced" (options stored per browser: the transport, `auto`, `relay`
   or `direct` (ADR 0045), and the Agora options of the direct path).
 -->
@@ -30,6 +31,8 @@
     fullscreen?: boolean;
     /** Show the full-screen link in the panel's own head (off when the host shows it). */
     link?: boolean;
+    /** The mower is simulated: its picture is a test pattern, whichever transport carries it. */
+    simulated?: boolean;
     onclose?: () => void;
   }
 
@@ -47,6 +50,7 @@
     position = null,
     fullscreen = false,
     link = true,
+    simulated = false,
     onclose,
   }: Props = $props();
 
@@ -54,6 +58,8 @@
   let viewer = $state<CameraViewer | null>(null);
 
   const fake = $derived(viewer?.session?.provider === 'fake');
+  /** A test pattern from this installation: no vendor servers, no video allowance. */
+  const testPattern = $derived(fake || simulated);
   const cameraOptions = $derived(
     viewer
       ? optionsOf(viewer.cameras, viewer.publishing, viewer.cameraUid, viewer.pair !== null)
@@ -145,7 +151,9 @@
       {/if}
     </div>
 
-    <p class="hint" data-testid="camera-data-note">{m.camera_data_note()}</p>
+    <p class="hint" data-testid="camera-data-note">
+      {testPattern ? m.camera_data_note_simulated() : m.camera_data_note()}
+    </p>
     {#if v.both && !fake}
       <p class="hint" data-testid="camera-both-note">{m.camera_both_note()}</p>
     {/if}

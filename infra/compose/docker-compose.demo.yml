@@ -187,4 +187,6 @@ services:
         condition: service_healthy
       telemetry:
         condition: service_healthy
+      notifications:
+        condition: service_healthy
     networks: [mowdeck]

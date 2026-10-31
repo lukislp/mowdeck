@@ -3,7 +3,9 @@
  * (`localStorage`, key `mowdeck.whats-new-seen`) and whether the sheet is open. The version
  * comes from `/config.json` (`source.version`, the same value Settings → About shows), so it
  * works in the browser, the installed web app and the native shells, which have no service
- * worker. A device that cannot store the flag shows the sheet once per page load.
+ * worker. A device that cannot store the flag shows the sheet once per page load. When the
+ * config says the image ships no notes (`whatsNew: false`, a build that is not a release) the
+ * file is not requested at all.
  */
 import { loadConfig } from '#lib/config.js';
 
@@ -60,7 +62,8 @@ class WhatsNew {
   async load(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
-    const [config, releases] = await Promise.all([loadConfig(), fetchWhatsNew()]);
+    const config = await loadConfig();
+    const releases = config.whatsNew === false ? null : await fetchWhatsNew();
     const version = parseVersion(config.source.version)?.join('.') ?? null;
     this.current = version;
     this.loaded = true;

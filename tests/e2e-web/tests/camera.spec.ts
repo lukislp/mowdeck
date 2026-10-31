@@ -122,7 +122,8 @@ test('camera: the simulated mower shows the test pattern; a viewer can open it',
   await expect(panel).toHaveAttribute('data-phase', 'live');
   await expectPatternRunning(page);
   await expect(page.getByTestId('camera-status')).toContainText('Testbild');
-  await expect(page.getByTestId('camera-data-note')).toContainText('Videodienst');
+  // A simulated mower: the note names the test pattern, not the vendor's video servers.
+  await expect(page.getByTestId('camera-data-note')).toContainText('Testbild des Simulators');
   await expect(page.getByTestId('camera-expiry')).toBeVisible();
   await expect(page.getByTestId('camera-active-uid')).toContainText('1');
   // Two front cameras: the picker switches between them (labels from the placement).
