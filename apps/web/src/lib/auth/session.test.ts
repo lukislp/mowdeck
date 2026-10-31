@@ -123,7 +123,7 @@ describe('SessionManager', () => {
     expect(env.session.status).toBe('anonymous');
   });
 
-  describe('session hint', () => {
+  describe('whether the start asks for a refresh', () => {
     function memoryStorage(initial: Record<string, string> = {}) {
       const data = new Map(Object.entries(initial));
       return {
@@ -136,52 +136,86 @@ describe('SessionManager', () => {
         },
       };
     }
+    /** Identity's companion cookie as the browser keeps it. */
+    function companion(present: boolean) {
+      const state = { present };
+      return {
+        state,
+        present: () => state.present,
+        drop: () => void (state.present = false),
+      };
+    }
     const refreshing = {
       '/api/v1/identity/session/refresh': { status: 200, body: TOKEN },
       '/api/v1/identity/me': { status: 200, body: ME },
       '/api/v1/identity/session/logout': { status: 204 },
     };
 
-    it('makes no refresh call in a browser that never used MowDeck', async () => {
+    it('makes no refresh call without the companion cookie in a browser new to MowDeck', async () => {
       // Paraglide stores the locale on every first load: no sign of an earlier session.
       const storage = memoryStorage({ PARAGLIDE_LOCALE: 'de' });
-      const env = setup(refreshing, { storage });
+      const env = setup(refreshing, { storage, sessionCookie: companion(false) });
       expect(await env.session.restore()).toBe(false);
       expect(env.session.status).toBe('anonymous');
       expect(env.calls).toEqual([]);
     });
 
-    it('remembers a sign-in and a sign-out', async () => {
-      const storage = memoryStorage();
-      const env = setup(
-        { ...refreshing, '/api/v1/identity/session': { status: 200, body: TOKEN } },
-        { storage },
-      );
-      await env.session.login('lukas', 'secret-password');
-      expect(storage.data.get(SESSION_HINT_KEY)).toBe('1');
-
-      const next = setup(refreshing, { storage });
-      expect(await next.session.restore()).toBe(true);
-      await next.session.logout();
-      expect(storage.data.get(SESSION_HINT_KEY)).toBe('0');
-
-      const after = setup(refreshing, { storage });
-      expect(await after.session.restore()).toBe(false);
-      expect(after.calls).toEqual([]);
-    });
-
-    it('still asks where MowDeck was used before the hint existed', async () => {
-      const storage = memoryStorage({ 'mowdeck.whats-new-seen': '0.53.0' });
-      const env = setup(refreshing, { storage });
+    it('asks whenever the companion cookie is there, whatever the hint says', async () => {
+      // A provider's redirect (GitHub, Apple) sets the cookies only; the hint may still say "0".
+      const storage = memoryStorage({ [SESSION_HINT_KEY]: '0' });
+      const env = setup(refreshing, { storage, sessionCookie: companion(true) });
       expect(await env.session.restore()).toBe(true);
       expect(storage.data.get(SESSION_HINT_KEY)).toBe('1');
     });
 
-    it('forgets the hint when the refresh cookie is gone', async () => {
-      const storage = memoryStorage({ [SESSION_HINT_KEY]: '1' });
-      const env = setup({ '/api/v1/identity/session/refresh': { status: 401 } }, { storage });
+    it('still asks for a session from before the companion cookie, once', async () => {
+      const storage = memoryStorage({ 'mowdeck.whats-new-seen': '0.53.0' });
+      const env = setup(refreshing, { storage, sessionCookie: companion(false) });
+      expect(await env.session.restore()).toBe(true);
+
+      const gone = memoryStorage({ 'mowdeck.theme': 'dark' });
+      const old = setup(
+        { '/api/v1/identity/session/refresh': { status: 422 } },
+        { storage: gone, sessionCookie: companion(false) },
+      );
+      expect(await old.session.restore()).toBe(false);
+      expect(gone.data.get(SESSION_HINT_KEY)).toBe('0');
+      const again = setup(refreshing, { storage: gone, sessionCookie: companion(false) });
+      expect(await again.session.restore()).toBe(false);
+      expect(again.calls).toEqual([]);
+    });
+
+    it('drops the companion when the refresh cookie holds no session', async () => {
+      const cookie = companion(true);
+      const env = setup(
+        { '/api/v1/identity/session/refresh': { status: 401 } },
+        { storage: memoryStorage(), sessionCookie: cookie },
+      );
       expect(await env.session.restore()).toBe(false);
-      expect(storage.data.get(SESSION_HINT_KEY)).toBe('0');
+      expect(cookie.state.present).toBe(false);
+    });
+
+    it('always asks when the cookie cannot be read (tests, other hosts)', async () => {
+      const env = setup(refreshing, { storage: memoryStorage() });
+      expect(await env.session.restore()).toBe(true);
+    });
+
+    it('keeps the companion when the refresh failed on the way (a reload aborts it)', async () => {
+      const cookie = companion(true);
+      const storage = memoryStorage({ [SESSION_HINT_KEY]: '1' });
+      const session = new SessionManager({
+        fetch: (async () => {
+          throw new DOMException('aborted', 'AbortError');
+        }) as unknown as typeof globalThis.fetch,
+        now: () => 1_000_000,
+        locks: null,
+        channel: null,
+        storage,
+        sessionCookie: cookie,
+      });
+      expect(await session.restore()).toBe(false);
+      expect(cookie.state.present).toBe(true);
+      expect(storage.data.get(SESSION_HINT_KEY)).toBe('1');
     });
   });
 

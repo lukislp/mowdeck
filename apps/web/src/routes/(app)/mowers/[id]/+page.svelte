@@ -1419,6 +1419,7 @@
           .join(' · ')}
         backHref="/mowers"
         backLabel={m.back()}
+        stackActions
       >
         {#snippet status()}
           <LiveStatus phase={realtime.phase} tooMany={realtime.tooMany} />

@@ -1,7 +1,7 @@
 /**
  * "Was ist neu": a version bump shows the sheet once, with the changes since the version this
- * device saw, and Settings → Neuigkeiten keeps the history. The build's version (/config.json)
- * and notes (/whats-new.json, written by the release build) are simulated with routes, so the
+ * device saw, and Settings → Neuigkeiten keeps the history. The build's version and `whatsNew`
+ * (/config.json) and notes (/whats-new.json, written by the release build) are simulated with routes, so the
  * test needs no release image. On a mower's page the sheet stops above the emergency stop (phone
  * and desktop) and never covers it. Screenshots (light and dark, phone and desktop) are written to
  * the directory in MOWDECK_E2E_SHOTS when it is set.
@@ -52,8 +52,13 @@ let mowerId = '';
 async function simulate(context: BrowserContext): Promise<void> {
   await context.route('**/config.json', async (route) => {
     const response = await route.fetch();
-    const config = (await response.json()) as { source?: Record<string, unknown> };
+    const config = (await response.json()) as {
+      source?: Record<string, unknown>;
+      whatsNew?: boolean;
+    };
     config.source = { ...config.source, version: build };
+    // A release image ships the notes and says so; the test image has none of its own.
+    config.whatsNew = true;
     await route.fulfill({ response, json: config });
   });
   await context.route('**/whats-new.json', (route) => route.fulfill({ json: notes }));

@@ -4,6 +4,10 @@
   On phones the bar is pinned under the status bar while the page scrolls (sticky against the
   document; a page that wraps it in a smaller box must let that box span the page, for example
   with `display: contents`). On the desktop it scrolls with the shell's content area.
+
+  `stackActions`: on a phone (below 560 px) the actions always take their own line under the
+  title, for a page with several actions whose number or status width changes after loading (the
+  mower page): the bar keeps one height instead of wrapping later and moving the page under it.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -16,11 +20,12 @@
     backLabel?: string;
     actions?: Snippet;
     status?: Snippet;
+    stackActions?: boolean;
   }
-  let { title, meta, backHref, backLabel, actions, status }: Props = $props();
+  let { title, meta, backHref, backLabel, actions, status, stackActions = false }: Props = $props();
 </script>
 
-<header class="md-top">
+<header class="md-top" class:stack={stackActions && !!actions}>
   {#if backHref}
     <a class="back" href={backHref} aria-label={backLabel}><Icon name="back" size={22} /></a>
   {/if}
@@ -102,5 +107,11 @@
     flex-wrap: wrap;
     justify-content: flex-end;
     margin-inline-start: auto;
+  }
+
+  @media (max-width: 559px) {
+    .stack .actions {
+      flex-basis: 100%;
+    }
   }
 </style>
