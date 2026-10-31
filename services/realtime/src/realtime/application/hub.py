@@ -69,6 +69,7 @@ from mowdeck_contracts.v1.realtime import (
     VisionProposalSummary,
 )
 from mowdeck_service_kit import get_logger
+from mowdeck_service_kit.client_address import limiter_key
 from mowdeck_service_kit.entitlements import Entitlements
 
 from realtime.application.config import RealtimeConfig
@@ -156,7 +157,8 @@ class Hub:
 
     def open(self, socket: Socket, *, address: str | None = None) -> Session:
         """A new session for an accepted socket (closed at once while shutting down);
-        ``address`` is the client address of the handshake (for the per-address limit)."""
+        ``address`` is the client address of the handshake; the per-address limit counts its
+        :func:`~mowdeck_service_kit.client_address.limiter_key` (IPv6 per /64)."""
         session = Session(
             self,
             socket,
@@ -166,7 +168,7 @@ class Hub:
             clock=self.clock,
             metrics=self.metrics,
         )
-        session.address = address
+        session.address = limiter_key(address) if address else None
         self.sessions.add(session)
         self._idle.clear()
         self.metrics.connections(len(self.sessions))
@@ -237,7 +239,7 @@ class Hub:
         if account is not None:
             return len(self._by_account.get(account, ()))
         if address is not None:
-            return len(self._by_address.get(address, ()))
+            return len(self._by_address.get(limiter_key(address), ()))
         return len(self.sessions)
 
     # --- subscriptions ------------------------------------------------------------------------

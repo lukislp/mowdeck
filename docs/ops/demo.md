@@ -16,9 +16,9 @@ Run a demo only as its **own stack**: its own host or VM if possible, its own Co
 
 All visitors share the one demo account: they see each other's commands live. Not each other's sign-ins, though: the security center's session list, its security events and its session count, and the account's audit log (`GET /accounts/{id}/audit`, one click away in the API explorer) only show the visitor's own login session, and the audit log leaves out every address, so nobody sees another visitor's browser, network or times.
 
-Live updates (the WebSocket of `/api/v1/realtime/ws`) are limited per login session instead of per user, since every visitor is the same user: 10 sockets per visitor session, 20 per client address (`DEMO_REALTIME_MAX_CONNECTIONS_PER_ADDRESS`) and 500 for the whole demo (`DEMO_REALTIME_MAX_CONNECTIONS`). One visitor cannot take the live view from the others.
+Live updates (the WebSocket of `/api/v1/realtime/ws`) are limited per login session instead of per user, since every visitor is the same user: 10 sockets per visitor session, 20 per client address (`DEMO_REALTIME_MAX_CONNECTIONS_PER_ADDRESS`, IPv6 per /64) and 500 for the whole demo (`DEMO_REALTIME_MAX_CONNECTIONS`). One visitor cannot take the live view from the others.
 
-Names visitors type in (sites, groups, area names, zones, schedules) lose control and format characters such as right-to-left overrides and zero-width spaces, so nobody can spoof a label the other visitors read.
+Names visitors type in (sites, groups, area names, zones, schedules) lose control and format characters such as right-to-left overrides and zero-width spaces, so nobody can spoof a label the other visitors read; a name of nothing but blanks and joiners counts as empty, and a planner template name with such characters is refused.
 
 ## What the demo refuses
 
@@ -122,12 +122,12 @@ The override has the full power of a Compose file, so `reset.sh` checks it again
 
 | Allowed | Where |
 | --- | --- |
-| attach an existing service to networks, with aliases or a fixed address | `services.<name>.networks` |
+| attach the gateway to networks outside the demo, with aliases or a fixed address; no alias may be the name of a service of the stack | `services.traefik.networks.<external network>` |
 | add networks that exist outside the demo | top-level `networks.<name>` with `external: true` |
-| limit resources | `mem_limit`, `mem_reservation`, `memswap_limit`, `cpus`, `cpu_shares`, `cpu_quota`, `cpu_period`, `cpuset`, `pids_limit`, `deploy.resources` of an existing service |
+| limit resources | `mem_limit`, `mem_reservation`, `memswap_limit`, `cpus`, `cpu_shares`, `cpu_quota`, `cpu_period`, `cpuset`, `pids_limit`, `deploy.resources` of an existing service (the empty `deploy.placement` Compose renders along with it is accepted) |
 | change logging | `services.<name>.logging` |
 
-Every other difference refuses the reset: a service or a profile (relay, agora, matter, billing, whoami), environment (the demo mode, the seed secret, `MOWDECK_CLIENT_IP_DEPTH`, ...), labels (an extra router, a middleware, a rate limit), Traefik's command (API or dashboard flags, entry points, trusted headers), image, ports, volumes, `network_mode`, other `deploy` keys and any change of the demo's own network. Settings like the demo's history or rate limits belong in `demo.env`; everything else in the repository. The refusal names the paths it refused (for example `services.identity.labels.traefik.http.routers.zz.rule`), never a value: the merged configuration holds the demo's secrets, and it is only compared in memory, never printed or written to a file.
+Every other difference refuses the reset: a service or a profile (relay, agora, matter, billing, whoami), environment (the demo mode, the seed secret, `MOWDECK_CLIENT_IP_DEPTH`, ...), labels (an extra router, a middleware, a rate limit), Traefik's command (API or dashboard flags, entry points, trusted headers), image, ports, volumes, `network_mode`, other `deploy` keys, networks of any service but the gateway (NATS or Postgres on the proxy's network, an alias that answers for another service) and any change of the demo's own network, including the gateway's entry on it. Settings like the demo's history or rate limits belong in `demo.env`; everything else in the repository. The refusal names the paths it refused (for example `services.identity.labels.traefik.http.routers.zz.rule`), never a value: the merged configuration holds the demo's secrets, and it is only compared in memory, never printed or written to a file.
 
 The project name, profile and secret checks run before the override is read, so it cannot get around them. `reset.sh` prints `using .../demo.override.yml` when it takes the file. Without an override `reset.sh` needs no `python3`.
 

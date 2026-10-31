@@ -4,7 +4,9 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Path, Response
+from mowdeck_contracts.v1 import clean_text
 from mowdeck_service_kit import CurrentAccountId, CurrentPrincipal
+from pydantic import AfterValidator
 
 from planner.adapters.api.deps import ServicesDep, SpotMowing
 from planner.adapters.api.schemas import (
@@ -25,6 +27,21 @@ from planner.application.services import Services
 router = APIRouter(prefix="/planner", tags=["planner"])
 
 NameParam = Annotated[str, Path(min_length=1, max_length=100)]
+
+
+def _plain_name(name: str) -> str:
+    """Refuse a new template name that :func:`~mowdeck_contracts.v1.clean_text` would change.
+
+    The name is the key in the URL, so it cannot be cleaned silently like a body field (the
+    template would be stored under another name than the one sent): bidi overrides, zero-width
+    spaces, other control or format characters and invisible-only names are a 422 instead."""
+    if clean_text(name) != name:
+        raise ValueError("must be visible text without control or invisible format characters")
+    return name
+
+
+NewNameParam = Annotated[str, Path(min_length=1, max_length=100), AfterValidator(_plain_name)]
+"""The name of ``PUT``; reading and deleting take any name (older entries stay removable)."""
 
 
 @router.get("/patterns")
@@ -135,7 +152,7 @@ async def get_template(
 
 @router.put("/templates/{name}")
 async def put_template(
-    name: NameParam,
+    name: NewNameParam,
     body: TemplateIn,
     principal: SpotMowing,
     account_id: CurrentAccountId,

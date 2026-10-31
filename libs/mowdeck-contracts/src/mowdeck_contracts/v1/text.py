@@ -12,7 +12,9 @@ check:
   the bidirectional embeddings, overrides and isolates, zero-width spaces, the byte order mark,
   soft hyphens, invisible operators, tag characters) is removed;
 * except the zero-width joiner and non-joiner (U+200D, U+200C): emoji sequences and several
-  scripts (Persian, Indic) need them, and they reorder nothing.
+  scripts (Persian, Indic) need them, and they reorder nothing;
+* text left with nothing but whitespace and those joiners looks blank and becomes empty
+  (``min_length=1`` then refuses it).
 
 Usage: ``name: PlainText = Field(min_length=1, max_length=100)``, or ``PlainText | None``.
 """
@@ -30,16 +32,19 @@ _SEPARATORS_WIDE: Final = frozenset({"\x85", "\u2028", "\u2029"})
 
 
 def clean_text(value: str) -> str:
-    """``value`` without control and format characters (separators become spaces)."""
+    """``value`` without control and format characters (separators become spaces); empty when
+    only whitespace and joiners are left."""
     if value.isascii() and value.isprintable():
-        return value
+        return value if value.strip() else ""
     kept: list[str] = []
     for char in value:
         if char in _SEPARATORS or char in _SEPARATORS_WIDE:
             kept.append(" ")
         elif char in KEPT_FORMAT_CHARACTERS or unicodedata.category(char) not in ("Cc", "Cf"):
             kept.append(char)
-    return "".join(kept)
+    cleaned = "".join(kept)
+    visible = any(not c.isspace() and c not in KEPT_FORMAT_CHARACTERS for c in cleaned)
+    return cleaned if visible else ""
 
 
 def _clean(value: object) -> object:

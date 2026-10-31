@@ -37,6 +37,7 @@
   },
   "pnpm": {
     "overrides": {
+      "axios>follow-redirects": "^1.16.2",
       "minimatch@^10": "^11.0.1",
       "rimraf>glob": "^14.0.2",
       "xcode>uuid": "^11.1.1"
