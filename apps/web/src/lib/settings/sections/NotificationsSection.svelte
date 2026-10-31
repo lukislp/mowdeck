@@ -4,6 +4,7 @@
   import { fleetApi, notificationsApi, unwrap } from '#lib/api/client.js';
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
   import type { components } from '#lib/generated/notifications.js';
   import { formatDateTime, problemMessage } from '#lib/i18n.js';
   import NativeAppPanel from '#lib/native/NativeAppPanel.svelte';
@@ -445,215 +446,219 @@
     </form>
 
     <div class="column">
-      {#if nativeShell.active}
-        <!-- Inside the iOS/Android app: Apple Push, local notifications, ntfy instead of Web Push. -->
-        <NativeAppPanel
-          apnsOnServer={prefs.available_channels.includes('apns')}
-          ntfyTarget={ntfy}
-        />
-      {:else if prefs.available_channels.includes('webpush')}
-        <Panel label={m.notif_push_title()} testid="push-panel">
-          <div class="stack">
-            <div class="readouts">
-              <Readout
-                label={m.notif_push_permission()}
-                value={permissionLabel(permission)}
-                size="inline"
-                emptyText={m.no_data()}
-                testid="push-permission"
-              />
-              <Readout
-                label={m.notif_push_device()}
-                value={deviceListed ? m.notif_push_device_on() : m.notif_push_device_off()}
-                size="inline"
-                emptyText={m.no_data()}
-                testid="push-device"
-              />
-            </div>
-            {#if supportNotice(support)}
-              <ProblemNotice tone="info" title={supportNotice(support) ?? ''} />
-            {:else}
-              {#if pushFailure}
-                <ProblemNotice title={failureNotice(pushFailure)} />
-              {:else if permission === 'denied' && !deviceListed}
-                <ProblemNotice tone="info" title={m.notif_push_denied()} />
-              {/if}
-              {#if !deviceListed}
-                <div>
-                  <Button
-                    variant="primary"
-                    icon="bell"
-                    pending={pushBusy}
-                    disabled={permission === 'denied'}
-                    testid="push-enable"
-                    onclick={enablePush}>{m.notif_push_enable()}</Button
-                  >
-                </div>
-                <p class="quiet small">{m.notif_push_enable_hint()}</p>
-              {/if}
-            {/if}
-            {#if pushProblem}
-              <ProblemNotice
-                title={problemMessage(pushProblem)}
-                detail={pushProblem.detail}
-                reference={pushProblem.correlationId}
-                referenceLabel={m.problem_reference()}
-              />
-            {/if}
-            <span class="label">{m.notif_push_devices()}</span>
-            <ul class="devices" data-testid="push-subscriptions">
-              {#each subscriptions as item (item.id)}
-                <li data-testid="push-subscription">
-                  <Icon name="phone" size={20} />
-                  <span class="device">
-                    <span class="name">
-                      {describeAgent(item.user_agent) ?? m.notif_push_unknown_device()}
-                      {#if item.id === thisDevice}
-                        <span class="this" data-testid="push-this-device"
-                          >{m.notif_push_this()}</span
-                        >
-                      {/if}
-                    </span>
-                    <span class="meta"
-                      >{item.endpoint_host} · {formatDateTime(item.created_at)}</span
-                    >
-                  </span>
-                  <Button
-                    variant="ghost"
-                    icon="trash"
-                    label={m.remove()}
-                    pending={removing === item.id}
-                    testid="push-remove-{item.id}"
-                    onclick={() => removeSubscription(item.id)}
-                  />
-                </li>
+      <!-- The demo sends nothing outside the app (Notifications' DEMO_POLICY): no push, ntfy or
+           test message; the preferences on the left and the inbox work. -->
+      <DemoLock inset testid="demo-lock-channels">
+        {#if nativeShell.active}
+          <!-- Inside the iOS/Android app: Apple Push, local notifications, ntfy instead of Web Push. -->
+          <NativeAppPanel
+            apnsOnServer={prefs.available_channels.includes('apns')}
+            ntfyTarget={ntfy}
+          />
+        {:else if prefs.available_channels.includes('webpush')}
+          <Panel label={m.notif_push_title()} testid="push-panel">
+            <div class="stack">
+              <div class="readouts">
+                <Readout
+                  label={m.notif_push_permission()}
+                  value={permissionLabel(permission)}
+                  size="inline"
+                  emptyText={m.no_data()}
+                  testid="push-permission"
+                />
+                <Readout
+                  label={m.notif_push_device()}
+                  value={deviceListed ? m.notif_push_device_on() : m.notif_push_device_off()}
+                  size="inline"
+                  emptyText={m.no_data()}
+                  testid="push-device"
+                />
+              </div>
+              {#if supportNotice(support)}
+                <ProblemNotice tone="info" title={supportNotice(support) ?? ''} />
               {:else}
-                <li class="none">{m.notif_push_none()}</li>
-              {/each}
-            </ul>
-          </div>
-        </Panel>
-      {/if}
-
-      {#if prefs.available_channels.includes('ntfy')}
-        <Panel label={m.notif_ntfy_title()} testid="ntfy-panel">
-          <form
-            class="stack"
-            novalidate
-            onsubmit={(event) => {
-              event.preventDefault();
-              void saveNtfy();
-            }}
-          >
-            <p class="quiet small">{m.notif_ntfy_hint()}</p>
-            <Readout
-              label={m.notif_ntfy_status()}
-              value={ntfy ? `${ntfy.server_url}/${ntfy.topic}` : m.notif_ntfy_none()}
-              size="inline"
-              emptyText={m.no_data()}
-              testid="ntfy-status"
-            />
-            <Field
-              id="ntfy-server"
-              type="url"
-              label={m.notif_ntfy_server()}
-              mono
-              bind:value={ntfyServer}
-              error={ntfyProblem?.fieldError('server_url') ?? null}
-            />
-            <Field
-              id="ntfy-topic"
-              label={m.notif_ntfy_topic()}
-              hint={m.notif_ntfy_topic_hint()}
-              mono
-              maxlength={64}
-              bind:value={ntfyTopic}
-              error={ntfyProblem?.fieldError('topic') ?? null}
-            />
-            <div class="secret">
-              {#if ntfy?.has_token}
-                <span class="set" data-testid="ntfy-token-set">
-                  <Icon name="check" size={14} />{m.conn_secret_set()}
-                </span>
+                {#if pushFailure}
+                  <ProblemNotice title={failureNotice(pushFailure)} />
+                {:else if permission === 'denied' && !deviceListed}
+                  <ProblemNotice tone="info" title={m.notif_push_denied()} />
+                {/if}
+                {#if !deviceListed}
+                  <div>
+                    <Button
+                      variant="primary"
+                      icon="bell"
+                      pending={pushBusy}
+                      disabled={permission === 'denied'}
+                      testid="push-enable"
+                      onclick={enablePush}>{m.notif_push_enable()}</Button
+                    >
+                  </div>
+                  <p class="quiet small">{m.notif_push_enable_hint()}</p>
+                {/if}
               {/if}
-              <Field
-                id="ntfy-token"
-                type="password"
-                label={m.notif_ntfy_token()}
-                autocomplete="new-password"
-                mono
-                hint={ntfy?.has_token ? m.conn_secret_keep_hint() : m.notif_ntfy_token_hint()}
-                bind:value={ntfyToken}
-              />
+              {#if pushProblem}
+                <ProblemNotice
+                  title={problemMessage(pushProblem)}
+                  detail={pushProblem.detail}
+                  reference={pushProblem.correlationId}
+                  referenceLabel={m.problem_reference()}
+                />
+              {/if}
+              <span class="label">{m.notif_push_devices()}</span>
+              <ul class="devices" data-testid="push-subscriptions">
+                {#each subscriptions as item (item.id)}
+                  <li data-testid="push-subscription">
+                    <Icon name="phone" size={20} />
+                    <span class="device">
+                      <span class="name">
+                        {describeAgent(item.user_agent) ?? m.notif_push_unknown_device()}
+                        {#if item.id === thisDevice}
+                          <span class="this" data-testid="push-this-device"
+                            >{m.notif_push_this()}</span
+                          >
+                        {/if}
+                      </span>
+                      <span class="meta"
+                        >{item.endpoint_host} · {formatDateTime(item.created_at)}</span
+                      >
+                    </span>
+                    <Button
+                      variant="ghost"
+                      icon="trash"
+                      label={m.remove()}
+                      pending={removing === item.id}
+                      testid="push-remove-{item.id}"
+                      onclick={() => removeSubscription(item.id)}
+                    />
+                  </li>
+                {:else}
+                  <li class="none">{m.notif_push_none()}</li>
+                {/each}
+              </ul>
             </div>
-            {#if ntfyProblem}
+          </Panel>
+        {/if}
+
+        {#if prefs.available_channels.includes('ntfy')}
+          <Panel label={m.notif_ntfy_title()} testid="ntfy-panel">
+            <form
+              class="stack"
+              novalidate
+              onsubmit={(event) => {
+                event.preventDefault();
+                void saveNtfy();
+              }}
+            >
+              <p class="quiet small">{m.notif_ntfy_hint()}</p>
+              <Readout
+                label={m.notif_ntfy_status()}
+                value={ntfy ? `${ntfy.server_url}/${ntfy.topic}` : m.notif_ntfy_none()}
+                size="inline"
+                emptyText={m.no_data()}
+                testid="ntfy-status"
+              />
+              <Field
+                id="ntfy-server"
+                type="url"
+                label={m.notif_ntfy_server()}
+                mono
+                bind:value={ntfyServer}
+                error={ntfyProblem?.fieldError('server_url') ?? null}
+              />
+              <Field
+                id="ntfy-topic"
+                label={m.notif_ntfy_topic()}
+                hint={m.notif_ntfy_topic_hint()}
+                mono
+                maxlength={64}
+                bind:value={ntfyTopic}
+                error={ntfyProblem?.fieldError('topic') ?? null}
+              />
+              <div class="secret">
+                {#if ntfy?.has_token}
+                  <span class="set" data-testid="ntfy-token-set">
+                    <Icon name="check" size={14} />{m.conn_secret_set()}
+                  </span>
+                {/if}
+                <Field
+                  id="ntfy-token"
+                  type="password"
+                  label={m.notif_ntfy_token()}
+                  autocomplete="new-password"
+                  mono
+                  hint={ntfy?.has_token ? m.conn_secret_keep_hint() : m.notif_ntfy_token_hint()}
+                  bind:value={ntfyToken}
+                />
+              </div>
+              {#if ntfyProblem}
+                <ProblemNotice
+                  title={problemMessage(ntfyProblem)}
+                  detail={ntfyProblem.detail}
+                  reference={ntfyProblem.correlationId}
+                  referenceLabel={m.problem_reference()}
+                />
+              {/if}
+              <div class="row">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  pending={ntfyBusy}
+                  disabled={!ntfyServer.trim() || !ntfyTopic.trim()}
+                  testid="ntfy-save">{m.save()}</Button
+                >
+                {#if ntfy?.has_token}
+                  <Button variant="ghost" pending={ntfyBusy} onclick={() => saveNtfy(true)}
+                    >{m.notif_ntfy_clear_token()}</Button
+                  >
+                {/if}
+                {#if ntfy}
+                  <Button
+                    variant="danger"
+                    icon="trash"
+                    pending={ntfyBusy}
+                    testid="ntfy-remove"
+                    onclick={removeNtfy}>{m.remove()}</Button
+                  >
+                {/if}
+              </div>
+            </form>
+          </Panel>
+        {/if}
+
+        <Panel label={m.notif_test_title()} testid="test-panel">
+          <div class="stack">
+            <p class="quiet small">{m.notif_test_hint()}</p>
+            <div>
+              <Button
+                icon="send"
+                pending={testBusy}
+                disabled={cooldown > 0}
+                testid="notif-test"
+                onclick={sendTest}>{m.notif_test_send()}</Button
+              >
+            </div>
+            {#if cooldown > 0}
+              <p class="status" data-testid="notif-test-cooldown" role="status">
+                <Icon name="pause" size={16} />{m.notif_test_cooldown({ seconds: cooldown })}
+              </p>
+            {:else if testSent}
+              <p class="status" data-testid="notif-test-result" role="status">
+                <Icon name="check" size={16} />{testSent.length
+                  ? m.notif_test_sent({ channels: testSent.map(channelLabel).join(', ') })
+                  : m.notif_test_inbox_only()}
+              </p>
+            {/if}
+            {#if testProblem}
               <ProblemNotice
-                title={problemMessage(ntfyProblem)}
-                detail={ntfyProblem.detail}
-                reference={ntfyProblem.correlationId}
+                title={problemMessage(testProblem)}
+                detail={testProblem.detail}
+                reference={testProblem.correlationId}
                 referenceLabel={m.problem_reference()}
               />
             {/if}
-            <div class="row">
-              <Button
-                type="submit"
-                variant="primary"
-                pending={ntfyBusy}
-                disabled={!ntfyServer.trim() || !ntfyTopic.trim()}
-                testid="ntfy-save">{m.save()}</Button
-              >
-              {#if ntfy?.has_token}
-                <Button variant="ghost" pending={ntfyBusy} onclick={() => saveNtfy(true)}
-                  >{m.notif_ntfy_clear_token()}</Button
-                >
-              {/if}
-              {#if ntfy}
-                <Button
-                  variant="danger"
-                  icon="trash"
-                  pending={ntfyBusy}
-                  testid="ntfy-remove"
-                  onclick={removeNtfy}>{m.remove()}</Button
-                >
-              {/if}
-            </div>
-          </form>
-        </Panel>
-      {/if}
-
-      <Panel label={m.notif_test_title()} testid="test-panel">
-        <div class="stack">
-          <p class="quiet small">{m.notif_test_hint()}</p>
-          <div>
-            <Button
-              icon="send"
-              pending={testBusy}
-              disabled={cooldown > 0}
-              testid="notif-test"
-              onclick={sendTest}>{m.notif_test_send()}</Button
-            >
           </div>
-          {#if cooldown > 0}
-            <p class="status" data-testid="notif-test-cooldown" role="status">
-              <Icon name="pause" size={16} />{m.notif_test_cooldown({ seconds: cooldown })}
-            </p>
-          {:else if testSent}
-            <p class="status" data-testid="notif-test-result" role="status">
-              <Icon name="check" size={16} />{testSent.length
-                ? m.notif_test_sent({ channels: testSent.map(channelLabel).join(', ') })
-                : m.notif_test_inbox_only()}
-            </p>
-          {/if}
-          {#if testProblem}
-            <ProblemNotice
-              title={problemMessage(testProblem)}
-              detail={testProblem.detail}
-              reference={testProblem.correlationId}
-              referenceLabel={m.problem_reference()}
-            />
-          {/if}
-        </div>
-      </Panel>
+        </Panel>
+      </DemoLock>
     </div>
   </div>
 {/if}

@@ -6,7 +6,8 @@
  * Covers: "Try the demo" signs in with one click into the seeded account; registration and the
  * other sign-in methods are neither shown nor reachable; the banner and the "Demo" title label
  * are on every main page and cannot be dismissed; the API marks its responses and refuses what
- * the demo does not allow.
+ * the demo does not allow; the app locks those actions with one hint ("In der Demo nicht
+ * verfügbar") and shows a refusal as one German sentence; the served HTML is labelled too.
  */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
@@ -100,6 +101,87 @@ test('the banner and the title label stay on every main page', async ({ page }) 
   for (const path of pages) {
     await page.goto(path);
     await expectLabelled(page);
+  }
+});
+
+test('the app locks what the demo refuses, with one hint', async ({ page }) => {
+  await tryTheDemo(page);
+  const first = page.locator('[data-testid^="mower-row-"]').first();
+  await expect(first).toBeVisible({ timeout: 60_000 });
+  const mowerId = ((await first.getAttribute('data-testid')) ?? '').replace('mower-row-', '');
+  // No way into adding mowers (Fleet refuses it); the page itself is locked when typed in.
+  await expect(page.getByTestId('add-mower')).toHaveCount(0);
+
+  const hint = /In der Demo nicht verfügbar/;
+  const locked = async (testid: string) => {
+    const lock = page.getByTestId(testid);
+    await expect(lock).toBeVisible();
+    await expect(lock).toContainText(hint);
+    // A disabled fieldset disables every control inside (Playwright judges controls, not it).
+    await expect(lock.locator('fieldset').first()).toHaveAttribute('disabled', '');
+    return lock;
+  };
+
+  await page.goto('/settings');
+  await expectLabelled(page);
+  const password = await locked('demo-lock-password');
+  await expect(password.getByRole('button')).toBeDisabled();
+  await locked('demo-lock-security');
+  await expect(page.getByTestId('security-alerts-switch')).toBeDisabled();
+  await locked('demo-lock-users');
+  await expect(page.getByTestId('user-submit')).toBeDisabled();
+  await locked('demo-lock-channels');
+  await expect(page.getByTestId('notif-test')).toBeDisabled();
+  // What works in the demo stays usable: the notification preferences.
+  await expect(page.getByTestId('notif-save')).toBeEnabled();
+
+  await page.goto('/mowers/new');
+  await locked('demo-lock-mower-new');
+  await expect(page.getByTestId('mower-submit')).toBeDisabled();
+
+  await page.goto(`/mowers/${mowerId}/settings`);
+  await locked('demo-lock-mower-settings');
+  await expect(page.getByTestId('mower-save')).toBeDisabled();
+  await locked('demo-lock-mower-delete');
+  await expect(page.getByTestId('mower-delete')).toBeDisabled();
+  await locked('demo-lock-placement');
+  await expect(page.getByTestId('placement-move')).toBeDisabled();
+
+  await page.goto('/fleet/base-stations');
+  await expectLabelled(page);
+  await expect(page.getByTestId('bs-add')).toHaveCount(0);
+});
+
+test('a refusal of the server is one sentence in the language of the app', async ({ page }) => {
+  await tryTheDemo(page);
+  await page.goto('/settings');
+  const lock = page.getByTestId('demo-lock-password');
+  const fieldset = lock.locator('fieldset').first();
+  await expect(fieldset).toHaveAttribute('disabled', '');
+  await expect(lock.getByRole('button')).toBeDisabled();
+  // The lock is only the app's courtesy; Identity refuses the change itself. Lift it the way a
+  // stale page or a script would, and send the form.
+  await fieldset.evaluate((node) => node.removeAttribute('disabled'));
+  await page.locator('#current-password').fill('a-long-password-1');
+  await page.locator('#account-new-password').fill('another-long-password-2');
+  const refused = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/v1/identity/me/password') && response.status() === 403,
+  );
+  await lock.getByRole('button').click();
+  expect((await (await refused).json()).type).toBe(DEMO_PROBLEM);
+  const notice = lock.getByRole('alert');
+  await expect(notice).toContainText('In der Demo nicht verfügbar');
+  // Only the German sentence: not the service's English reason under it.
+  await expect(notice).not.toContainText(/showcase|cannot be changed here/i);
+});
+
+test('the served page carries the demo label without JavaScript', async ({ request }) => {
+  for (const path of ['/', '/login', '/track']) {
+    const html = await (await request.get(path)).text();
+    expect(html).toContain('<title>Demo · MowDeck</title>');
+    expect(html).toContain('<meta property="og:title" content="Demo · MowDeck" />');
+    expect(html).toMatch(/<meta name="description" content="[^"]*Demo[^"]*"/);
   }
 });
 

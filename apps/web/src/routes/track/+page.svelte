@@ -13,7 +13,7 @@
 
   import { clock } from '#lib/clock.svelte.js';
   import { loadConfig, type MapTilesConfig } from '#lib/config.js';
-  import { formatAge, formatDateTime } from '#lib/i18n.js';
+  import { formatAge, formatDateTime, formatMoment } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
   import {
     loadLayer,
@@ -157,8 +157,8 @@
     noneHere: m.tracking_map_none_here(),
   });
 
-  const shortTime = (value: string) =>
-    new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(new Date(value));
+  // The time alone only for today: an outage before midnight shows its date too.
+  const shortTime = (value: string) => formatMoment(value, now);
 </script>
 
 <svelte:head>

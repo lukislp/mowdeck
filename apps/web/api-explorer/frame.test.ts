@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   READY_MESSAGE,
+  SDK_INSTALLATION,
   SECURITY_SCHEME,
   TOKEN_MESSAGE,
   parseIndex,
@@ -68,6 +69,31 @@ describe('prepareDocument', () => {
       scheme: 'bearer',
     });
     expect(prepared.components.schemas).toEqual(document.components.schemas);
+  });
+
+  it('lists SDK instructions, so Scalar never offers "Generate SDK" (scalar.com) on any host', () => {
+    const prepared = prepareDocument(document, ORIGIN);
+    expect(prepared.info).toMatchObject({ title: 'fleet', version: '0.1.0' });
+    const sdks = prepared.info['x-scalar-sdk-installation'];
+    expect(sdks).toBe(SDK_INSTALLATION);
+    // Scalar's rule (hasRenderableSdks, 1.75.1): an array with an entry that has a string `lang`
+    // and a non-empty description or source hides the button and its dialog.
+    expect(Array.isArray(sdks)).toBe(true);
+    expect(
+      sdks.some(
+        (sdk: { lang?: unknown; description?: unknown }) =>
+          typeof sdk.lang === 'string' &&
+          typeof sdk.description === 'string' &&
+          sdk.description.trim() !== '',
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(sdks)).not.toMatch(/https?:\/\//);
+    // A service's own (empty) list does not bring the button back.
+    const own = prepareDocument(
+      { ...document, info: { ...document.info, 'x-scalar-sdk-installation': [] } },
+      ORIGIN,
+    );
+    expect(own.info['x-scalar-sdk-installation']).toBe(SDK_INSTALLATION);
   });
 
   it('leaves the input as it was', () => {

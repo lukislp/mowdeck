@@ -13,6 +13,7 @@
   import { passkeysEnabled } from '#lib/auth/passkey.js';
   import LevelPicker from '#lib/components/LevelPicker.svelte';
   import UserPasskeysSheet from '#lib/components/UserPasskeysSheet.svelte';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
   import { levelLabel, loadPlaces, type LevelType, type Places } from '#lib/fleet/data.js';
   import type { components } from '#lib/generated/identity.js';
   import { formatDateTime, problemMessage, roleLabel } from '#lib/i18n.js';
@@ -201,134 +202,138 @@
     />
   </div>
 {:else}
-  <ul class="members" data-testid="members">
-    {#each members ?? [] as member (member.id)}
-      <li data-testid="member-{member.username}">
-        <span class="who">
-          <span class="name">{member.display_name || member.username}</span>
-          <span class="mono">{member.username}</span>
-        </span>
-        <span class="side">
-          <span class="status" data-status={member.status}>
-            {member.status === 'active' ? m.users_active() : m.users_disabled()}
+  <!-- The demo refuses every change of users and roles (Identity's DEMO_POLICY). -->
+  <DemoLock inset testid="demo-lock-users">
+    <ul class="members" data-testid="members">
+      {#each members ?? [] as member (member.id)}
+        <li data-testid="member-{member.username}">
+          <span class="who">
+            <span class="name">{member.display_name || member.username}</span>
+            <span class="mono">{member.username}</span>
           </span>
-          <span class="mono last">
-            {member.last_login_at ? formatDateTime(member.last_login_at) : m.never()}
+          <span class="side">
+            <span class="status" data-status={member.status}>
+              {member.status === 'active' ? m.users_active() : m.users_disabled()}
+            </span>
+            <span class="mono last">
+              {member.last_login_at ? formatDateTime(member.last_login_at) : m.never()}
+            </span>
           </span>
-        </span>
-        <ul class="roles" aria-label={m.users_roles()}>
-          {#if member.is_owner}<li class="tag">{m.users_owner()}</li>{/if}
-          {#if member.is_admin && !member.is_owner}<li class="tag">{m.users_admin()}</li>{/if}
-          {#each member.assignments ?? [] as assignment (assignment.id)}
-            <li class="tag assignment" data-testid="assignment-{assignment.id}">
-              <span>{roleNames.get(assignment.role_id) ?? ''}</span>
-              <span class="where" data-level={assignment.level.type}>{levelText(assignment)}</span>
-              {#if !member.is_owner}
-                <button
-                  type="button"
-                  class="remove"
-                  aria-label={m.users_unassign({
-                    role: roleNames.get(assignment.role_id) ?? '',
-                    level: levelText(assignment),
-                  })}
-                  disabled={removing !== null}
-                  onclick={() => unassign(assignment)}
+          <ul class="roles" aria-label={m.users_roles()}>
+            {#if member.is_owner}<li class="tag">{m.users_owner()}</li>{/if}
+            {#if member.is_admin && !member.is_owner}<li class="tag">{m.users_admin()}</li>{/if}
+            {#each member.assignments ?? [] as assignment (assignment.id)}
+              <li class="tag assignment" data-testid="assignment-{assignment.id}">
+                <span>{roleNames.get(assignment.role_id) ?? ''}</span>
+                <span class="where" data-level={assignment.level.type}>{levelText(assignment)}</span
                 >
-                  <Icon name="close" size={14} />
-                </button>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-        {#if !member.is_owner}
-          <div class="assign">
-            <Button
-              variant="ghost"
-              icon="plus"
-              testid="assign-{member.username}"
-              onclick={() => openAssign(member)}>{m.users_assign()}</Button
-            >
-            {#if passkeys && member.subuser}
+                {#if !member.is_owner}
+                  <button
+                    type="button"
+                    class="remove"
+                    aria-label={m.users_unassign({
+                      role: roleNames.get(assignment.role_id) ?? '',
+                      level: levelText(assignment),
+                    })}
+                    disabled={removing !== null}
+                    onclick={() => unassign(assignment)}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+          {#if !member.is_owner}
+            <div class="assign">
               <Button
                 variant="ghost"
-                icon="key"
-                testid="passkeys-{member.username}"
-                onclick={() =>
-                  (passkeysFor = {
-                    id: member.id,
-                    name: member.display_name || member.username,
-                  })}>{m.users_passkeys()}</Button
+                icon="plus"
+                testid="assign-{member.username}"
+                onclick={() => openAssign(member)}>{m.users_assign()}</Button
               >
-            {/if}
-          </div>
-        {/if}
-      </li>
-    {/each}
-  </ul>
+              {#if passkeys && member.subuser}
+                <Button
+                  variant="ghost"
+                  icon="key"
+                  testid="passkeys-{member.username}"
+                  onclick={() =>
+                    (passkeysFor = {
+                      id: member.id,
+                      name: member.display_name || member.username,
+                    })}>{m.users_passkeys()}</Button
+                >
+              {/if}
+            </div>
+          {/if}
+        </li>
+      {/each}
+    </ul>
 
-  <Panel label={m.users_create_title()}>
-    <form class="form" onsubmit={create} novalidate>
-      <Field
-        id="new-username"
-        label={m.users_username()}
-        required
-        bind:value={username}
-        autocomplete="off"
-      />
-      <Field
-        id="new-display"
-        label={m.users_display_name()}
-        hint={m.optional()}
-        bind:value={displayName}
-      />
-      <Field
-        id="new-password"
-        type="password"
-        label={m.users_password()}
-        hint={m.password_hint()}
-        required
-        autocomplete="new-password"
-        bind:value={password}
-      />
-      <Select
-        id="new-role"
-        label={m.users_role()}
-        options={[{ value: '', label: m.users_no_role() }, ...roleOptions]}
-        bind:value={roleId}
-      />
-      {#if roleId}
-        <LevelPicker
-          id="new-level"
-          {places}
-          bind:type={levelType}
-          bind:objectId={levelId}
-          testid="new-level"
+    <Panel label={m.users_create_title()}>
+      <form class="form" onsubmit={create} novalidate>
+        <Field
+          id="new-username"
+          label={m.users_username()}
+          required
+          bind:value={username}
+          autocomplete="off"
         />
-      {/if}
-      <label class="check">
-        <input type="checkbox" bind:checked={mustChange} />
-        <span>{m.users_must_change()}</span>
-      </label>
-      {#if createProblem}
-        <ProblemNotice
-          title={problemMessage(createProblem)}
-          detail={createProblem.detail}
-          reference={createProblem.correlationId}
-          referenceLabel={m.problem_reference()}
+        <Field
+          id="new-display"
+          label={m.users_display_name()}
+          hint={m.optional()}
+          bind:value={displayName}
         />
-      {/if}
-      <div>
-        <Button
-          type="submit"
-          variant="primary"
-          icon="plus"
-          pending={busy}
-          disabled={!username || !password || (!!roleId && !level(levelType, levelId))}
-          testid="user-submit">{m.users_create()}</Button
-        >
-      </div>
-    </form>
-  </Panel>
+        <Field
+          id="new-password"
+          type="password"
+          label={m.users_password()}
+          hint={m.password_hint()}
+          required
+          autocomplete="new-password"
+          bind:value={password}
+        />
+        <Select
+          id="new-role"
+          label={m.users_role()}
+          options={[{ value: '', label: m.users_no_role() }, ...roleOptions]}
+          bind:value={roleId}
+        />
+        {#if roleId}
+          <LevelPicker
+            id="new-level"
+            {places}
+            bind:type={levelType}
+            bind:objectId={levelId}
+            testid="new-level"
+          />
+        {/if}
+        <label class="check">
+          <input type="checkbox" bind:checked={mustChange} />
+          <span>{m.users_must_change()}</span>
+        </label>
+        {#if createProblem}
+          <ProblemNotice
+            title={problemMessage(createProblem)}
+            detail={createProblem.detail}
+            reference={createProblem.correlationId}
+            referenceLabel={m.problem_reference()}
+          />
+        {/if}
+        <div>
+          <Button
+            type="submit"
+            variant="primary"
+            icon="plus"
+            pending={busy}
+            disabled={!username || !password || (!!roleId && !level(levelType, levelId))}
+            testid="user-submit">{m.users_create()}</Button
+          >
+        </div>
+      </form>
+    </Panel>
+  </DemoLock>
 {/if}
 
 <UserPasskeysSheet {accountId} user={passkeysFor} onclose={() => (passkeysFor = null)} />

@@ -64,6 +64,14 @@ test('the explorer renders the API documents with the demo note, nothing from el
   expect(foreign).toEqual([]);
 });
 
+test('no "Generate SDK" (a scalar.com dialog), not even on a local address', async ({ page }) => {
+  // The stack runs on localhost, where Scalar would offer it unless the document lists SDKs.
+  const frame = await openExplorer(page);
+  await expect(frame.getByText(/has no generated SDK/).first()).toBeVisible({ timeout: 60_000 });
+  await expect(frame.getByRole('button', { name: /generate sdk/i })).toHaveCount(0);
+  await expect(frame.getByText(/generate sdk/i)).toHaveCount(0);
+});
+
 test('"try it" lists the simulated mowers; the same credential cannot do what the demo refuses', async ({
   page,
 }) => {

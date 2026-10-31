@@ -524,6 +524,47 @@ async def test_tracking_link_survives_the_end_of_the_session_until_it_expires() 
         assert body["active"] is False and body["ended_at"] is not None
 
 
+async def test_tracking_link_counts_each_viewer_once_however_often_the_page_polls() -> None:
+    """The share page polls every few seconds; "Aufrufe" counts viewers, not polls: one per
+    client address within the view window, again when it comes back after it."""
+    clock = Clock()
+    async with harness(clock=clock, tracking_gateway=Gateway(), client_ip_depth=1) as h:
+        owner, mower_id = await setup(h)
+        base = f"{API}/mowers/{mower_id}/tracking"
+        await h.client.post(base, headers=owner.headers)
+        token = (await h.client.post(f"{base}/links", headers=owner.headers, json={})).json()[
+            "token"
+        ]
+
+        async def poll(address: str) -> None:
+            response = await h.client.post(
+                f"{API}/public/tracking/view",
+                json={"token": token},
+                headers={"X-Forwarded-For": f"{address}, 10.250.80.2"},
+            )
+            assert response.status_code == 200
+
+        async def link() -> dict[str, Any]:
+            listing = await h.client.get(f"{base}/links", headers=owner.headers)
+            first: dict[str, Any] = listing.json()[0]
+            return first
+
+        for _ in range(14):  # one open page for a minute
+            await poll("203.0.113.1")
+            clock.advance(seconds=4)
+        assert (await link())["uses"] == 1
+        await poll("203.0.113.2")  # a second viewer
+        assert (await link())["uses"] == 2
+        clock.advance(minutes=29)
+        await poll("203.0.113.1")  # still the same visit (the page kept polling)
+        assert (await link())["uses"] == 2
+        clock.advance(minutes=31)
+        await poll("203.0.113.1")  # back after the window: a new view
+        latest = await link()
+        assert latest["uses"] == 3
+        assert datetime.fromisoformat(latest["last_used_at"]) == clock.now
+
+
 async def test_public_view_unknown_tokens_look_alike_and_are_rate_limited() -> None:
     async with harness(
         clock=Clock(), tracking_gateway=Gateway(), telemetry_tracking_public_failures_per_minute=3

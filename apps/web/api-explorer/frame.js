@@ -36,9 +36,27 @@ export function tokenFromMessage(event, self) {
 }
 
 /**
+ * What the explorer says about SDKs, as Scalar's `x-scalar-sdk-installation` extension. Scalar
+ * 1.75 has no option to turn its "Generate SDK" off: it shows the button (a dialog that uploads
+ * the document to scalar.com and links to scalar.com and x.com) whenever the page runs on a
+ * local URL, which includes 127.0.0.1 and LAN addresses, and the document lists no SDKs of its
+ * own. With this entry it never does, on any host.
+ */
+export const SDK_INSTALLATION = [
+  {
+    lang: 'curl',
+    description:
+      'MowDeck has no generated SDK. Call `/api/v1` directly: here with your session, from ' +
+      'scripts with a personal access token (Settings, API access). The scripting guide in the ' +
+      'MowDeck documentation has examples.',
+  },
+];
+
+/**
  * A service's OpenAPI document as the explorer shows it: only the public API under `/api/v1`
- * (the gateway routes nothing else), the installation's own origin as the one server, and the
- * session's Bearer token as the security of every operation. The input is not changed.
+ * (the gateway routes nothing else), the installation's own origin as the one server, the
+ * session's Bearer token as the security of every operation, and no "Generate SDK"
+ * ({@link SDK_INSTALLATION}). The input is not changed.
  *
  * @param {Record<string, any>} document
  * @param {string} origin
@@ -50,6 +68,7 @@ export function prepareDocument(document, origin) {
   );
   return {
     ...document,
+    info: { ...document.info, 'x-scalar-sdk-installation': SDK_INSTALLATION },
     servers: [{ url: origin, description: 'This installation' }],
     paths,
     components: {

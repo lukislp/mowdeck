@@ -11,6 +11,7 @@
   import BillingPanel from '#lib/components/BillingPanel.svelte';
   import PlanPanel from '#lib/components/PlanPanel.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
   import { problemMessage, roleLabel } from '#lib/i18n.js';
   import { nativeShell } from '#lib/native/runtime.js';
   import { m } from '#lib/paraglide/messages.js';
@@ -209,39 +210,41 @@
 {/if}
 
 <Panel label={m.account_password()}>
-  <form class="form" class:focus={focusPassword} onsubmit={changePassword} novalidate>
-    <Field
-      id="current-password"
-      type="password"
-      label={m.password_current()}
-      autocomplete="current-password"
-      bind:value={current}
-    />
-    <Field
-      id="account-new-password"
-      type="password"
-      label={m.password_new()}
-      autocomplete="new-password"
-      hint={m.password_hint()}
-      bind:value={next}
-    />
-    {#if problem}
-      <ProblemNotice
-        title={problemMessage(problem)}
-        detail={problem.detail}
-        reference={problem.correlationId}
-        referenceLabel={m.problem_reference()}
+  <DemoLock testid="demo-lock-password">
+    <form class="form" class:focus={focusPassword} onsubmit={changePassword} novalidate>
+      <Field
+        id="current-password"
+        type="password"
+        label={m.password_current()}
+        autocomplete="current-password"
+        bind:value={current}
       />
-    {/if}
-    <div>
-      <Button
-        type="submit"
-        variant={focusPassword ? 'primary' : 'secondary'}
-        pending={busy}
-        disabled={!current || !next}>{m.password_save()}</Button
-      >
-    </div>
-  </form>
+      <Field
+        id="account-new-password"
+        type="password"
+        label={m.password_new()}
+        autocomplete="new-password"
+        hint={m.password_hint()}
+        bind:value={next}
+      />
+      {#if problem}
+        <ProblemNotice
+          title={problemMessage(problem)}
+          detail={problem.detail}
+          reference={problem.correlationId}
+          referenceLabel={m.problem_reference()}
+        />
+      {/if}
+      <div>
+        <Button
+          type="submit"
+          variant={focusPassword ? 'primary' : 'secondary'}
+          pending={busy}
+          disabled={!current || !next}>{m.password_save()}</Button
+        >
+      </div>
+    </form>
+  </DemoLock>
 </Panel>
 
 <Panel label={m.account_logout()}>

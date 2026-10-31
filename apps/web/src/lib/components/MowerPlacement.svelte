@@ -13,6 +13,7 @@
   import { problemMessage } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
 
   interface Props {
     mower: Mower;
@@ -90,21 +91,24 @@
 
 <Panel label={m.placement_title()} testid="mower-placement">
   <p class="hint">{m.placement_hint()}</p>
-  <div class="row">
-    <Select
-      id="placement-site"
-      label={m.placement_site()}
-      options={siteOptions}
-      bind:value={siteId}
-    />
-    <Button
-      icon="chevron"
-      pending={busy}
-      disabled={siteId === mower.site_id}
-      testid="placement-move"
-      onclick={move}>{m.sites_move()}</Button
-    >
-  </div>
+  <!-- Moving a mower to another site changes the mower, which the demo refuses (Fleet). -->
+  <DemoLock testid="demo-lock-placement">
+    <div class="row">
+      <Select
+        id="placement-site"
+        label={m.placement_site()}
+        options={siteOptions}
+        bind:value={siteId}
+      />
+      <Button
+        icon="chevron"
+        pending={busy}
+        disabled={siteId === mower.site_id}
+        testid="placement-move"
+        onclick={move}>{m.sites_move()}</Button
+      >
+    </div>
+  </DemoLock>
   {#if groups.length}
     <h3 class="label">{m.placement_groups()}</h3>
     <ul class="toggles">

@@ -8,6 +8,11 @@
 #                             the tile server added to img-src when tiles are configured and
 #                             the Agora domains and the hash of the SDK's one inline style
 #                             added when the live camera is enabled
+#   /tmp/mowdeck/demo.conf    included by every location that serves the app's HTML: in a demo,
+#                             sub_filter rules that put "Demo" into the served page itself (title,
+#                             description, Open Graph), so link previews, crawlers and visitors
+#                             without JavaScript see the label too; otherwise only a comment.
+#                             Only text in <head> changes, no script: the CSP hashes stay valid.
 #
 # MOWDECK_CONFIG_DIR and MOWDECK_CSP_TEMPLATE replace /tmp/mowdeck and the build CSP (tests).
 #
@@ -140,6 +145,18 @@ case "$(printf '%s' "${MOWDECK_WEB_DEMO_MODE:-false}" | tr '[:upper:]' '[:lower:
     echo "mowdeck: PUBLIC DEMO (banner on every page, reset every $reset_hours h)"
     ;;
 esac
+
+# The demo label in the served HTML (app.html's <title>MowDeck</title>, once per page).
+if [ -n "$demo_json" ]; then
+  demo_text="Öffentliche MowDeck-Demo mit simulierten Mähern, geteilt mit allen Besuchern, alle $reset_hours h zurückgesetzt."
+  {
+    echo "# Public demo (MOWDECK_WEB_DEMO_MODE=true): the label in the page itself."
+    echo "sub_filter_once on;"
+    echo "sub_filter '<title>MowDeck</title>' '<title>Demo · MowDeck</title><meta name=\"description\" content=\"$demo_text\" /><meta property=\"og:title\" content=\"Demo · MowDeck\" /><meta property=\"og:site_name\" content=\"MowDeck Demo\" /><meta property=\"og:description\" content=\"$demo_text\" />';"
+  } > "$out/demo.conf"
+else
+  echo "# Not a demo: the page is served as built." > "$out/demo.conf"
+fi
 
 # The API explorer (ADR 0072): off unless asked for. explorer.conf is included by the /_explorer/
 # location of default.conf; off, it answers 404 before any file is looked up.

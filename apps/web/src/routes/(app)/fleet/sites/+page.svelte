@@ -32,6 +32,7 @@
   import { m } from '#lib/paraglide/messages.js';
   import { notifyPlanProblem } from '#lib/plan/problems.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
 
   const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
@@ -320,12 +321,14 @@
             >
           {/if}
           {#if right.manage}
-            <Button
-              variant="ghost"
-              icon="mower"
-              testid="site-move-{site.id}"
-              onclick={() => (moveSite = site)}>{m.sites_move_here()}</Button
-            >
+            <DemoLock variant="inline" testid="demo-lock-site-move">
+              <Button
+                variant="ghost"
+                icon="mower"
+                testid="site-move-{site.id}"
+                onclick={() => (moveSite = site)}>{m.sites_move_here()}</Button
+              >
+            </DemoLock>
           {/if}
           {#if right.manage && !site.is_default}
             <Button

@@ -105,10 +105,11 @@ class MemoryTrackingStore:
         self.links[link_id] = replace(link, revoked_at=now)
         return True
 
-    async def touch_link(self, link_id: UUID, now: datetime) -> None:
+    async def touch_link(self, link_id: UUID, now: datetime, *, counted: bool = True) -> None:
         link = self.links.get(link_id)
         if link is not None:
-            self.links[link_id] = replace(link, last_used_at=now, uses=link.uses + 1)
+            uses = link.uses + 1 if counted else link.uses
+            self.links[link_id] = replace(link, last_used_at=now, uses=uses)
 
     async def add_photo(self, photo: TrackingPhoto) -> None:
         self.photos.append(photo)

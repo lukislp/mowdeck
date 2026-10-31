@@ -17,6 +17,7 @@
   import PlanBanner from '#lib/components/PlanBanner.svelte';
   import SetupCard from '#lib/onboarding/SetupCard.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
   import type { components } from '#lib/generated/fleet.js';
   import {
     activityLabel,
@@ -151,7 +152,10 @@
   {/snippet}
   {#snippet actions()}
     {#if canManage}
-      <Button href="/mowers/new" icon="plus" label={m.mowers_add()} testid="add-mower" />
+      <!-- The demo comes with its simulated mowers; Fleet refuses adding more. -->
+      <DemoLock variant="hide">
+        <Button href="/mowers/new" icon="plus" label={m.mowers_add()} testid="add-mower" />
+      </DemoLock>
     {/if}
   {/snippet}
 </TopBar>

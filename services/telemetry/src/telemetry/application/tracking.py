@@ -101,6 +101,31 @@ class TrackingConfig:
     public_failures_per_minute: int = 20
     public_tiles_per_minute: int = 600
     """Base map tiles per minute and client on the public share page."""
+    public_view_window: timedelta = timedelta(minutes=30)
+    """A link's views: one viewer (client address) counts once within this time, however often
+    its open page polls."""
+
+
+class RecentKeys:
+    """Keys seen within ``window`` (in process, bounded): whether a key is new or was seen
+    lately. Seeing a key again keeps it fresh, so an open page never counts twice."""
+
+    def __init__(self, window: timedelta, clock: Clock, max_keys: int = 10_000) -> None:
+        self._window = window
+        self._clock = clock
+        self._max_keys = max_keys
+        self._seen: dict[tuple[Any, ...], datetime] = {}
+
+    def first_seen(self, key: tuple[Any, ...]) -> bool:
+        """Record ``key``; True when it was not seen within the window before."""
+        now = self._clock()
+        last = self._seen.get(key)
+        if last is None and len(self._seen) >= self._max_keys:
+            self._seen = {k: t for k, t in self._seen.items() if now - t < self._window}
+            if len(self._seen) >= self._max_keys:
+                self._seen.clear()  # flooded with keys: start over (a view may count again)
+        self._seen[key] = now
+        return last is None or now - last >= self._window
 
 
 class SlidingWindow:
@@ -223,6 +248,7 @@ class Tracking:
         self._public_tiles = SlidingWindow(
             config.public_tiles_per_minute, timedelta(minutes=1), clock
         )
+        self._public_viewers = RecentKeys(config.public_view_window, clock)
 
     def now(self) -> datetime:
         """The current time of the tracking clock."""
@@ -620,7 +646,10 @@ class Tracking:
         if session is None:
             self._public_bad.hit(client)
             return None
-        await self._store.touch_link(link.id, now)
+        # The open page polls every few seconds: only a viewer new to this link (or back after
+        # the window) is a view; every poll still marks the link as used now.
+        new_viewer = self._public_viewers.first_seen((link.id, client))
+        await self._store.touch_link(link.id, now, counted=new_viewer)
         last: TrackPoint | None = None
         if session.active:
             latest = await self._data.latest_of(session.account_id, session.mower_id)

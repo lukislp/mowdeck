@@ -47,6 +47,7 @@
   import type { CommandOutcome } from '#lib/stores/commands.svelte.js';
   import { mowers as states } from '#lib/stores/mowers.svelte.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
 
   type Mower = components['schemas']['MowerOut'];
 
@@ -355,7 +356,15 @@
 <TopBar title={m.bs_title()} meta={bases ? String(bases.length) : undefined}>
   {#snippet actions()}
     {#if canManage}
-      <Button icon="plus" label={m.bs_add()} testid="bs-add" onclick={() => void openRegister()} />
+      <!-- Fleet refuses adding and removing RTK base stations in the demo. -->
+      <DemoLock variant="hide">
+        <Button
+          icon="plus"
+          label={m.bs_add()}
+          testid="bs-add"
+          onclick={() => void openRegister()}
+        />
+      </DemoLock>
     {/if}
   {/snippet}
 </TopBar>
@@ -377,12 +386,14 @@
     <h2>{m.bs_empty_title()}</h2>
     <p class="quiet">{m.bs_empty_body()}</p>
     {#if canManage}
-      <Button
-        variant="primary"
-        icon="plus"
-        testid="bs-add-empty"
-        onclick={() => void openRegister()}>{m.bs_add()}</Button
-      >
+      <DemoLock variant="inline" testid="demo-lock-bs-add">
+        <Button
+          variant="primary"
+          icon="plus"
+          testid="bs-add-empty"
+          onclick={() => void openRegister()}>{m.bs_add()}</Button
+        >
+      </DemoLock>
     {:else}
       <p class="quiet small">{m.bs_no_permission()}</p>
     {/if}
@@ -448,13 +459,15 @@
                   renameValue = base.name;
                 }}
               />
-              <Button
-                variant="ghost"
-                icon="trash"
-                label={m.bs_delete()}
-                testid="bs-delete"
-                onclick={() => (confirmDelete = base.id)}
-              />
+              <DemoLock variant="hide">
+                <Button
+                  variant="ghost"
+                  icon="trash"
+                  label={m.bs_delete()}
+                  testid="bs-delete"
+                  onclick={() => (confirmDelete = base.id)}
+                />
+              </DemoLock>
             </div>
           {/if}
         </header>

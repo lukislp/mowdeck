@@ -15,6 +15,11 @@ class DemoState {
   apiExplorer = $state(false);
   loaded = $state(false);
 
+  /** This is the demo: the forms of actions the services refuse there are locked (`DemoLock`). */
+  get active(): boolean {
+    return this.config !== null;
+  }
+
   async load(): Promise<DemoConfig | null> {
     const runtime = await loadConfig();
     this.config = runtime.demo ?? null;
