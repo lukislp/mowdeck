@@ -1334,6 +1334,10 @@ services:
         # only; the published web image never contains it (apps/web/README.md, "Agora Web SDK").
         # "exclude" builds what the release publishes.
         WEB_AGORA_SDK: ${WEB_AGORA_SDK:-include}
+        # Version and source ref the app shows (AGPL-3.0 section 13); empty: "development build".
+        # The release build sets them itself; demo/reset.sh sets them from a checked-out tag.
+        MOWDECK_VERSION: ${MOWDECK_BUILD_VERSION:-}
+        MOWDECK_SOURCE_REF: ${MOWDECK_BUILD_REF:-}
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
