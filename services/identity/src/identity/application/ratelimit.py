@@ -1,5 +1,8 @@
 """In-process token buckets (per client IP) for the login and token endpoints.
 
+The callers key ``mowdeck_service_kit.client_address.limiter_key`` of the address: IPv4 as it
+is, IPv6 per /64 (the share of one connection).
+
 Per IP limits live in memory: they protect one instance against a burst and need no shared
 state. With several instances, Traefik's ``rateLimit`` middleware is the shared outer limit.
 The per username limit (failures in a time window) lives in the database (``login_attempts``),

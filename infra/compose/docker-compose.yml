@@ -303,6 +303,7 @@ services:
       - traefik.http.middlewares.identity-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.identity-ratelimit.ratelimit.burst=20
       - traefik.http.middlewares.identity-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth=${GATEWAY_CLIENT_IP_DEPTH:-0}
+      - traefik.http.middlewares.identity-ratelimit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=64
       # Refresh and logout need a valid refresh cookie anyway; their own, looser limit keeps
       # several devices of a household behind one address (Tailscale, a proxy) logged in.
       - traefik.http.routers.identity-session.rule=PathPrefix(`/api/v1/identity/session/`)
@@ -314,6 +315,7 @@ services:
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.burst=30
       - traefik.http.middlewares.identity-session-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth=${GATEWAY_CLIENT_IP_DEPTH:-0}
+      - traefik.http.middlewares.identity-session-ratelimit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=64
       # A passkey challenge and the app's sign-in request check nothing, and every sign-in page
       # asks for a challenge (the autofill offer): the looser session limit; the answers
       # (/passkeys/session, /app-login/session) have the login limit. So does the start of a
@@ -1177,6 +1179,7 @@ services:
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.burst=60
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth=${GATEWAY_CLIENT_IP_DEPTH:-0}
+      - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=64
       - traefik.http.services.billing.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]

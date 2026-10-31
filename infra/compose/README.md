@@ -24,7 +24,7 @@ docker compose --profile whoami up -d --wait
 curl http://localhost/api/v1/whoami
 ```
 
-A public demo with simulated mowers (one-click "Try the demo", reset every few hours) is a separate stack with the override `docker-compose.demo.yml`; see [docs/ops/demo.md](../../docs/ops/demo.md).
+A public demo with simulated mowers (one-click "Try the demo", reset every few hours) is a separate stack with the override `docker-compose.demo.yml`; see [docs/ops/demo.md](../../docs/ops/demo.md). It publishes only the gateway's HTTP port (no HTTPS port, no host port of NATS, Postgres or OpenFGA), and `demo/reset.sh` accepts a host override `demo/demo.override.yml` only for networks, resource limits and logging (an allow-list checked by `demo/override_guard.py`).
 
 ## What runs
 
@@ -113,7 +113,7 @@ Services are built from the repository root (`build.context: ../..`); `docker co
 
 ### Identity
 
-`identity-migrate` runs the Alembic migrations and exits; `identity` starts after it, after `authz-bootstrap` and with NATS and OpenFGA healthy. On first start Identity creates its signing key. Traefik routes `/api/v1/identity` and `/.well-known/jwks.json`. Three routers with priority 100 and 101 add rate limits per client IP:
+`identity-migrate` runs the Alembic migrations and exits; `identity` starts after it, after `authz-bootstrap` and with NATS and OpenFGA healthy. On first start Identity creates its signing key. Traefik routes `/api/v1/identity` and `/.well-known/jwks.json`. Three routers with priority 100 and 101 add rate limits per client IP (an IPv6 client counts by its /64, `ipstrategy.ipv6subnet=64`, like Identity's and Telemetry's own limits):
 
 | Router | Rule | Middleware | Limit |
 | --- | --- | --- | --- |

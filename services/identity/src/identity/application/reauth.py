@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from mowdeck_auth.step_up import ensure_recent_auth
 from mowdeck_contracts.v1 import Principal
+from mowdeck_service_kit.client_address import limiter_key
 
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
@@ -47,7 +48,7 @@ class Reauthenticator:
                 raise AuthenticationFailed("user vanished")
             return found
         if self.ip_limiter is not None:
-            wait = self.ip_limiter.take(ctx.ip or "unknown")
+            wait = self.ip_limiter.take(limiter_key(ctx.ip))
             if wait > 0:
                 msg = "too many attempts from this address; try again later"
                 raise RateLimited(msg, int(wait) + 1)

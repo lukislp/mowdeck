@@ -28,6 +28,7 @@ from mowdeck_contracts.v1 import (
     Principal,
     PrincipalKind,
 )
+from mowdeck_service_kit.client_address import limiter_key
 
 from identity.application.access import token_principal, user_principal
 from identity.application.authenticators import (
@@ -154,7 +155,7 @@ class SessionService:
         self._limit_ip(ctx)
 
     def _limit_ip(self, ctx: RequestContext, limiter: TokenBucketLimiter | None = None) -> None:
-        wait = (limiter or self.ip_limiter).take(ctx.ip or "unknown")
+        wait = (limiter or self.ip_limiter).take(limiter_key(ctx.ip))
         if wait > 0:
             msg = "too many attempts from this address; try again later"
             raise RateLimited(msg, int(wait) + 1)
