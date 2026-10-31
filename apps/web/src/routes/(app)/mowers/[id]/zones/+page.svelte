@@ -6,7 +6,9 @@
   when its connection declares them; then it gets a start button. Drawing: tap corners on the
   map, undo, done, name. Drawing, editing and deleting need `can_control` (checked first, hidden
   after a 403); everyone who sees the mower sees the zones. Whether zones are offered comes from
-  the server (`availability`), never from the vendor.
+  the server (`availability`), never from the vendor. A mower with its own map (`vendor_map`)
+  gets no editor: the page lists its areas as its zones and shows neither the current zone nor
+  the per-zone times, which Telemetry evaluates for drawn zones only.
 -->
 <script lang="ts">
   import {
@@ -43,7 +45,7 @@
     type AerialInfo,
     type AerialPrefs,
   } from '#lib/map/aerial.js';
-  import { mapLabels } from '#lib/mower/map-labels.js';
+  import { areaNamer, mapLabels } from '#lib/mower/map-labels.js';
   import { m } from '#lib/paraglide/messages.js';
   import { getLocale } from '#lib/paraglide/runtime.js';
   import { mowers as states } from '#lib/stores/mowers.svelte.js';
@@ -106,6 +108,18 @@
   const current = $derived(overview?.presence?.zone_id ?? null);
   const available = $derived(overview?.availability === 'available');
   const canDraw = $derived(canControl && available);
+  /** Virtual zones are in use here: offered, or some were drawn before the vendor map came. The
+   * presence and the per-zone time exist only for virtual zones (Telemetry evaluates nothing
+   * without them), so without zones in use the page shows neither. */
+  const inUse = $derived(available || zones.length > 0);
+  /** Area names as on the mower page (custom names, else the vendor's, else "Area N"). */
+  const areaName = $derived(areaNamer(snapshot?.areas, mower?.area_names));
+  /** A vendor-map mower's own areas, listed as its zones. */
+  const vendorAreas = $derived(
+    overview?.availability === 'vendor_map'
+      ? (snapshot?.areas ?? []).map((area) => ({ id: area.id, name: areaName(area) }))
+      : [],
+  );
   const limits = $derived(overview?.limits);
   const reached = $derived(!!limits && zones.length >= limits.max_zones);
   const problemOfDraft = $derived(
@@ -364,7 +378,7 @@
           state={ms}
           {aerial}
           {labels}
-          areaName={(area) => area.name ?? area.id}
+          {areaName}
           virtualZones={zones}
           currentZone={current}
           selectedZone={selected}
@@ -450,28 +464,30 @@
     </div>
 
     <div class="side">
-      <section class="now" data-testid="zones-now" data-zone={current ?? ''}>
-        {#if overview.presence?.zone_id}
-          <span class="now-badge is-in"><Icon name="pin" size={16} /></span>
-          <span class="now-text">
-            <strong>{m.zones_now_in({ name: currentZoneName(overview) ?? '' })}</strong>
-            <span class="now-since"
-              >{m.zones_since({ time: shortTime(overview.presence.since) })}</span
-            >
-          </span>
-        {:else if overview.presence}
-          <span class="now-badge"><Icon name="pin" size={16} /></span>
-          <span class="now-text">
-            <strong>{m.zones_now_outside()}</strong>
-            <span class="now-since"
-              >{m.zones_since({ time: shortTime(overview.presence.since) })}</span
-            >
-          </span>
-        {:else}
-          <span class="now-badge"><Icon name="pin" size={16} /></span>
-          <span class="now-text"><strong>{m.zones_now_unknown()}</strong></span>
-        {/if}
-      </section>
+      {#if inUse}
+        <section class="now" data-testid="zones-now" data-zone={current ?? ''}>
+          {#if overview.presence?.zone_id}
+            <span class="now-badge is-in"><Icon name="pin" size={16} /></span>
+            <span class="now-text">
+              <strong>{m.zones_now_in({ name: currentZoneName(overview) ?? '' })}</strong>
+              <span class="now-since"
+                >{m.zones_since({ time: shortTime(overview.presence.since) })}</span
+              >
+            </span>
+          {:else if overview.presence}
+            <span class="now-badge"><Icon name="pin" size={16} /></span>
+            <span class="now-text">
+              <strong>{m.zones_now_outside()}</strong>
+              <span class="now-since"
+                >{m.zones_since({ time: shortTime(overview.presence.since) })}</span
+              >
+            </span>
+          {:else}
+            <span class="now-badge"><Icon name="pin" size={16} /></span>
+            <span class="now-text"><strong>{m.zones_now_unknown()}</strong></span>
+          {/if}
+        </section>
+      {/if}
 
       {#if overview.availability === 'vendor_map'}
         <ProblemNotice tone="info" title={m.zones_unavailable_vendor_map()} />
@@ -499,76 +515,96 @@
         <ProblemNotice title={problemMessage(actionProblem)} />
       {/if}
 
-      <section class="list" aria-label={m.zones_title()}>
-        <header class="list-head">
-          <h2>{m.zones_title()}</h2>
-          <span class="list-period">{m.zones_week()}</span>
-        </header>
-        {#if zones.length === 0}
-          <p class="hint" data-testid="zones-empty">{m.zones_empty()}</p>
-        {:else}
-          <ol class="zones">
-            {#each zones as zone (zone.id)}
-              {@const total = totals.get(zone.id)}
-              <li
-                class="zone"
-                class:is-current={zone.id === current}
-                class:is-selected={zone.id === selected}
-                data-testid="zone-row"
-                data-zone-id={zone.id}
-              >
-                <button
-                  type="button"
-                  class="zone-pick"
-                  aria-pressed={zone.id === selected}
-                  onclick={() => (selected = selected === zone.id ? null : zone.id)}
-                >
-                  <span class="zone-name" data-testid="zone-name">{zone.name}</span>
-                  <span class="zone-area mono"
-                    >{m.zones_area({
-                      area: formatNumber(zone.area_m2, zone.area_m2 < 100 ? 1 : 0),
-                    })}</span
-                  >
-                </button>
-                <span class="zone-bar" aria-hidden="true"
-                  ><span style:inline-size="{Math.round((shares.get(zone.id) ?? 0) * 100)}%"
-                  ></span></span
-                >
-                <span class="zone-facts" data-testid="zone-time">
-                  {m.zones_time({ time: formatZoneTime(total?.seconds ?? 0) })}
-                  {#if total && total.mowing_seconds > 0}
-                    · {m.zones_mowing({ time: formatZoneTime(total.mowing_seconds) })}
-                  {/if}
-                  {#if total && total.entries > 0}
-                    · {m.zones_entries({ count: formatNumber(total.entries) })}
-                  {/if}
-                </span>
-                {#if zone.start_plan_ref}
-                  <span class="zone-link"
-                    >{m.zones_linked({ name: planName(zone.start_plan_ref) })}</span
-                  >
-                {/if}
-                {#if canControl}
-                  <span class="zone-actions">
-                    {#if zone.start_plan_ref}
-                      <Button icon="play" testid="zone-start" onclick={() => startIn(zone)}
-                        >{m.zones_start()}</Button
-                      >
-                    {/if}
-                    <Button
-                      variant="ghost"
-                      icon="edit"
-                      testid="zone-edit"
-                      disabled={!!draft}
-                      onclick={() => openEdit(zone)}>{m.zones_edit()}</Button
-                    >
-                  </span>
-                {/if}
+      {#if vendorAreas.length}
+        <section class="list" aria-label={m.zones_vendor_areas()} data-testid="zones-vendor-areas">
+          <header class="list-head">
+            <h2>{m.zones_vendor_areas()}</h2>
+          </header>
+          <ul class="zones">
+            {#each vendorAreas as area (area.id)}
+              <li class="zone vendor-area" data-testid="zones-vendor-area">
+                <span class="zone-name">{area.name}</span>
               </li>
             {/each}
-          </ol>
-        {/if}
-      </section>
+          </ul>
+          <Button variant="ghost" icon="fleet" href="/mowers/{id}" testid="zones-vendor-open"
+            >{m.zones_vendor_open()}</Button
+          >
+        </section>
+      {/if}
+
+      {#if inUse}
+        <section class="list" aria-label={m.zones_title()}>
+          <header class="list-head">
+            <h2>{m.zones_title()}</h2>
+            <span class="list-period">{m.zones_week()}</span>
+          </header>
+          {#if zones.length === 0}
+            <p class="hint" data-testid="zones-empty">{m.zones_empty()}</p>
+          {:else}
+            <ol class="zones">
+              {#each zones as zone (zone.id)}
+                {@const total = totals.get(zone.id)}
+                <li
+                  class="zone"
+                  class:is-current={zone.id === current}
+                  class:is-selected={zone.id === selected}
+                  data-testid="zone-row"
+                  data-zone-id={zone.id}
+                >
+                  <button
+                    type="button"
+                    class="zone-pick"
+                    aria-pressed={zone.id === selected}
+                    onclick={() => (selected = selected === zone.id ? null : zone.id)}
+                  >
+                    <span class="zone-name" data-testid="zone-name">{zone.name}</span>
+                    <span class="zone-area mono"
+                      >{m.zones_area({
+                        area: formatNumber(zone.area_m2, zone.area_m2 < 100 ? 1 : 0),
+                      })}</span
+                    >
+                  </button>
+                  <span class="zone-bar" aria-hidden="true"
+                    ><span style:inline-size="{Math.round((shares.get(zone.id) ?? 0) * 100)}%"
+                    ></span></span
+                  >
+                  <span class="zone-facts" data-testid="zone-time">
+                    {m.zones_time({ time: formatZoneTime(total?.seconds ?? 0) })}
+                    {#if total && total.mowing_seconds > 0}
+                      · {m.zones_mowing({ time: formatZoneTime(total.mowing_seconds) })}
+                    {/if}
+                    {#if total && total.entries > 0}
+                      · {m.zones_entries({ count: formatNumber(total.entries) })}
+                    {/if}
+                  </span>
+                  {#if zone.start_plan_ref}
+                    <span class="zone-link"
+                      >{m.zones_linked({ name: planName(zone.start_plan_ref) })}</span
+                    >
+                  {/if}
+                  {#if canControl}
+                    <span class="zone-actions">
+                      {#if zone.start_plan_ref}
+                        <Button icon="play" testid="zone-start" onclick={() => startIn(zone)}
+                          >{m.zones_start()}</Button
+                        >
+                      {/if}
+                      <Button
+                        variant="ghost"
+                        icon="edit"
+                        testid="zone-edit"
+                        disabled={!!draft}
+                        onclick={() => openEdit(zone)}>{m.zones_edit()}</Button
+                      >
+                    </span>
+                  {/if}
+                </li>
+              {/each}
+            </ol>
+          {/if}
+        </section>
+      {/if}
     </div>
   </div>
 

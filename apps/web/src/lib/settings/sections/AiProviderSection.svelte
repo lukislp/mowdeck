@@ -14,6 +14,7 @@
 
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
   import DemoLock from '#lib/demo/DemoLock.svelte';
+  import { demo } from '#lib/demo/state.svelte.js';
   import { formatDateTime, formatNumber } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
@@ -222,7 +223,8 @@
       </p>
     {/if}
 
-    {#if !secrets}
+    <!-- The missing key is an operator matter; the demo locks the whole form anyway. -->
+    {#if !secrets && !demo.active}
       <ProblemNotice
         tone="info"
         title={m.vision_problem_secrets()}

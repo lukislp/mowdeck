@@ -7,7 +7,9 @@ Device-Gateway starts (``docker-compose.demo.yml``, service ``demo-seed``).
    marked done.
 3. Fleet registers the simulated mowers (each in its own garden); the seed secret lets these
    calls pass the demo policy, which refuses them to visitors.
-4. The Scheduler gets a weekly schedule per mower.
+4. The Scheduler gets a weekly schedule per mower, and the user's notification preferences are
+   stored (the defaults): the demo has no delivery target, and Notifications fills the in-app
+   inbox only for users who saved preferences or registered a target.
 5. Telemetry simulates and ingests the past days (tracks, coverage, heatmaps, health).
 
 Every step is idempotent: an account that already has mowers is left as it is, so a restarted
@@ -137,9 +139,31 @@ def _origin(offset_m: tuple[float, float]) -> tuple[float, float]:
     return round(lat, 7), round(lon, 7)
 
 
+PREFERENCE_FIELDS = (
+    "enabled_kinds",
+    "all_mowers",
+    "mower_ids",
+    "quiet_hours",
+    "timezone",
+    "language",
+    "channels",
+)
+"""The fields of ``PUT /notifications/preferences`` (``GET`` answers them plus read-only ones)."""
+
+
+def _store_notification_preferences(api: Api) -> None:
+    """Store the demo user's notification defaults once, so the inbox fills (see step 4)."""
+    url = f"{_url('notifications')}/preferences"
+    current = api.call("GET", url)
+    if current.get("stored"):
+        return
+    api.call("PUT", url, {key: current[key] for key in PREFERENCE_FIELDS})
+    _log("notification preferences stored (the defaults: the inbox fills)")
+
+
 def main() -> int:
     api = Api(_seed_token())
-    _wait_ready(["identity", "fleet", "scheduler", "telemetry"])
+    _wait_ready(["identity", "fleet", "scheduler", "telemetry", "notifications"])
     seeded = api.call("POST", f"{_url('identity')}/demo/seed", seed=True)
     _log(f"account {seeded['account_id']} ({'created' if seeded['created'] else 'existing'})")
     session = api.call("POST", f"{_url('identity')}/demo/session")
@@ -149,7 +173,8 @@ def main() -> int:
 
     existing = api.call("GET", f"{_url('fleet')}/mowers")["items"]
     if existing:
-        _log(f"the account has {len(existing)} mowers already; nothing to do")
+        _log(f"the account has {len(existing)} mowers already; no new mowers")
+        _store_notification_preferences(api)
         return 0
 
     created: list[dict[str, Any]] = []
@@ -178,6 +203,8 @@ def main() -> int:
         }
         api.call("POST", f"{_url('scheduler')}/schedules", schedule)
     _log(f"{len(created)} schedules")
+    # After the mowers: Notifications admits a user who may view a mower.
+    _store_notification_preferences(api)
 
     days = int(os.environ.get("DEMO_HISTORY_DAYS", "7"))
     history = api.call(

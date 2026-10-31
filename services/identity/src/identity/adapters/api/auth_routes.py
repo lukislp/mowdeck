@@ -48,6 +48,10 @@ router = APIRouter(prefix="/identity", tags=["identity: sessions"])
 
 REFRESH_COOKIE = "mowdeck_refresh"
 REFRESH_COOKIE_PATH = "/api/v1/identity/session"
+SESSION_HINT_COOKIE = "mowdeck_session"
+"""Readable companion of the refresh cookie (no secret, value ``1``, path ``/``, same lifetime):
+the web app asks for a refresh at start only when it is there, so a browser without a session
+makes no refresh call that can only fail. Set and dropped together with the refresh cookie."""
 JWKS_CACHE_CONTROL = "public, max-age=300"
 UI_AREAS_CACHE_CONTROL = "private, max-age=300"
 REFRESH_TRANSPORT_HEADER = "X-Mowdeck-Refresh"
@@ -74,7 +78,8 @@ def token_out(pair: TokenPair, transport: str | None) -> TokenOut:
 
 
 def set_refresh_cookie(request: Request, response: Response, pair: TokenPair) -> None:
-    """The refresh cookie of a login or refresh, and after a login the device cookie."""
+    """The refresh cookie of a login or refresh with its readable companion
+    (:data:`SESSION_HINT_COOKIE`), and after a login the device cookie."""
     secure = getattr(request.app.state, "refresh_cookie_secure", True)
     if pair.device_token is not None:
         response.set_cookie(
@@ -94,10 +99,26 @@ def set_refresh_cookie(request: Request, response: Response, pair: TokenPair) ->
         pair.refresh_token,
         max_age=max(0, max_age),
         path=REFRESH_COOKIE_PATH,
-        secure=getattr(request.app.state, "refresh_cookie_secure", True),
+        secure=secure,
         httponly=True,
         samesite="strict",
     )
+    response.set_cookie(
+        SESSION_HINT_COOKIE,
+        "1",
+        max_age=max(0, max_age),
+        path="/",
+        secure=secure,
+        httponly=False,
+        # Lax, not strict: it must be readable on the page a provider's redirect lands on.
+        samesite="lax",
+    )
+
+
+def drop_refresh_cookie(response: Response) -> None:
+    """Drop the refresh cookie and its readable companion (logout, app hand-off)."""
+    response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
+    response.delete_cookie(SESSION_HINT_COOKIE, path="/")
 
 
 def _refresh_token(body: RefreshIn | None, cookie: str | None, requested_with: str | None) -> str:
@@ -176,7 +197,7 @@ async def logout(
 ) -> None:
     """End the login session of the refresh token."""
     await services.sessions.logout(_refresh_token(body, cookie, requested_with), ctx)
-    response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
+    drop_refresh_cookie(response)
 
 
 @router.post("/session/logout-all", status_code=204)
@@ -206,7 +227,7 @@ async def app_login_code(
     sign-in request and its PKCE challenge (403 for an unknown, used or expired request). The
     browser session ends; the page sends the code to the app's URL scheme."""
     code = await services.sessions.issue_app_code(ctx, body.request_id)
-    response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
+    drop_refresh_cookie(response)
     response.headers["Cache-Control"] = "no-store"
     ttl = int(services.deps.config.app_code_ttl.total_seconds())
     return AppCodeOut(code=code, expires_in=ttl)

@@ -16,6 +16,13 @@
  * - A caller that waited for the lock, or a request that got a 401 for a token that has been
  *   replaced meanwhile, takes the new token instead of refreshing again: one 401 wave (and one
  *   expiry across several tabs) costs exactly one refresh.
+ * - The start of the app asks for a refresh only when this browser may hold a refresh cookie, so
+ *   a visitor without a session makes no refresh call that can only fail (a 4xx in the console).
+ *   Identity sets a readable companion cookie `mowdeck_session` with every refresh cookie and
+ *   drops it with it (every sign-in path, the provider redirects included). When it is missing,
+ *   only a session from before the companion existed can be there: the start still asks when
+ *   `localStorage` has MowDeck keys and the hint `mowdeck.session` is not "0" ("0" once the
+ *   session ended here, "1" with a token). A refresh that finds no session drops the companion.
  */
 import { ApiProblem, problemFromResponse } from '#lib/api/problem.js';
 
@@ -27,6 +34,8 @@ export const LOCK_TIMEOUT_MS = 15_000;
 /** Abort a refresh request after this long. */
 export const REFRESH_TIMEOUT_MS = 10_000;
 const CSRF_HEADERS = { 'X-Requested-With': 'mowdeck-web', 'X-Mowdeck-Refresh': 'cookie-only' };
+/** `localStorage` key of the session hint (see the module documentation). */
+export const SESSION_HINT_KEY = 'mowdeck.session';
 
 export interface Membership {
   account_id: string;
@@ -66,11 +75,44 @@ interface LocksLike {
   ): Promise<T>;
 }
 
+/** The part of `Storage` the session hint needs. */
+export type HintStorage = Pick<Storage, 'getItem' | 'setItem' | 'key' | 'length'>;
+
+/** Identity's readable companion of the refresh cookie (see the module documentation). */
+export interface SessionCookie {
+  present(): boolean;
+  drop(): void;
+}
+
+export const SESSION_COOKIE = 'mowdeck_session';
+
+function browserSessionCookie(): SessionCookie {
+  return {
+    present: () =>
+      document.cookie.split(';').some((c) => c.trim().startsWith(`${SESSION_COOKIE}=`)),
+    drop: () => {
+      document.cookie = `${SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`;
+    },
+  };
+}
+
 export interface SessionDeps {
   fetch: typeof fetch;
   now: () => number;
   locks: LocksLike | null;
   channel: ChannelLike | null;
+  /** Identity's companion cookie; absent: unknown, the start always asks for a refresh. */
+  sessionCookie?: SessionCookie | null;
+  /** Where the session hint lives (only for sessions from before the companion cookie). */
+  storage?: HintStorage | null;
+}
+
+function browserStorage(): HintStorage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
 }
 
 export type SessionStatus = 'unknown' | 'anonymous' | 'authenticated';
@@ -85,6 +127,8 @@ function browserDeps(): SessionDeps {
       hasWindow && 'BroadcastChannel' in window
         ? (new BroadcastChannel('mowdeck-auth') as unknown as ChannelLike)
         : null,
+    sessionCookie: typeof document === 'undefined' ? null : browserSessionCookie(),
+    storage: hasWindow ? browserStorage() : null,
   };
 }
 
@@ -101,6 +145,8 @@ export class SessionManager {
   #inflight: Promise<string | null> | null = null;
   #shared: { token: string; expiresAt: number; at: number } | null = null;
   #listeners = new Set<(token: string | null) => void>();
+  /** The last refresh was answered "no session" (not a network or server failure). */
+  #rejected = false;
 
   constructor(deps: SessionDeps = browserDeps()) {
     this.#deps = deps;
@@ -169,15 +215,21 @@ export class SessionManager {
     if (!response.ok) throw await problemFromResponse(response);
     const { code } = (await response.json()) as { code: string };
     this.#deps.channel?.postMessage({ type: 'logout' });
+    this.#writeHint(false);
     this.#clear('anonymous');
     return code;
   }
 
   /** Start of the app: get a token from the refresh cookie, if there is one. */
   async restore(): Promise<boolean> {
+    if (!this.#mayHaveSession()) {
+      this.status = 'anonymous';
+      return false;
+    }
     const token = await this.refresh();
     if (token === null) {
       this.status = 'anonymous';
+      this.#ended();
       return false;
     }
     try {
@@ -244,6 +296,7 @@ export class SessionManager {
   /** The API said the session is gone (refresh failed after a 401). */
   expire(): void {
     if (this.status === 'authenticated') this.ended = 'expired';
+    this.#ended();
     this.#clear('anonymous');
   }
 
@@ -259,6 +312,7 @@ export class SessionManager {
     }
     this.#deps.channel?.postMessage({ type: 'logout' });
     this.ended = null;
+    this.#writeHint(false);
     this.#clear('anonymous');
   }
 
@@ -292,7 +346,11 @@ export class SessionManager {
         });
         // A server error is no verdict on the session: keep the token and try again later.
         if (response.status >= 500 || response.status === 429) throw ApiProblem.network();
-        if (!response.ok) return null;
+        if (!response.ok) {
+          this.#rejected = true;
+          return null;
+        }
+        this.#rejected = false;
         body = (await response.json()) as { access_token: string; expires_in: number };
       } catch (error) {
         if (error instanceof ApiProblem) throw error;
@@ -321,6 +379,47 @@ export class SessionManager {
     }
   }
 
+  /** Whether this browser may hold a refresh cookie (see the module documentation). */
+  #mayHaveSession(): boolean {
+    const cookie = this.#deps.sessionCookie;
+    if (!cookie || cookie.present()) return true;
+    // No companion: only a session from before it existed can be there. MowDeck's own keys tell
+    // that the browser was used (Paraglide's locale key is written on every first load).
+    const storage = this.#deps.storage;
+    if (!storage) return false;
+    try {
+      if (storage.getItem(SESSION_HINT_KEY) === '0') return false;
+      for (let i = 0; i < storage.length; i += 1) {
+        if (storage.key(i)?.startsWith('mowdeck.')) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The refresh cookie holds no session (any more): ask no more at the next start. Only after
+   * Identity said so; a refresh that failed on the way (a reload aborts it) proves nothing.
+   */
+  #ended(): void {
+    if (!this.#rejected) return;
+    this.#writeHint(false);
+    try {
+      this.#deps.sessionCookie?.drop();
+    } catch {
+      // nothing to drop
+    }
+  }
+
+  #writeHint(signedIn: boolean): void {
+    try {
+      this.#deps.storage?.setItem(SESSION_HINT_KEY, signedIn ? '1' : '0');
+    } catch {
+      // storage blocked: the next start asks for a refresh as before
+    }
+  }
+
   /** Run `task` under the cross-tab lock; without it when the lock is not granted in time. */
   async #locked<T>(task: () => Promise<T>): Promise<T> {
     const locks = this.#deps.locks;
@@ -345,6 +444,7 @@ export class SessionManager {
 
   #onBroadcast(message: Broadcast): void {
     if (message.type === 'logout') {
+      this.#writeHint(false);
       this.#clear('anonymous');
       return;
     }
@@ -361,6 +461,7 @@ export class SessionManager {
   #applyToken(token: string, expiresAt: number): void {
     this.#token = token;
     this.#expiresAt = expiresAt;
+    this.#writeHint(true);
     this.#schedule(Math.max(1_000, expiresAt - this.#deps.now() - REFRESH_LEAD_MS));
     for (const listener of this.#listeners) listener(token);
   }

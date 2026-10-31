@@ -542,7 +542,7 @@
   "conn_secret_set": "set",
   "conn_secret_hint": "Stored and never shown again.",
   "conn_secret_keep_hint": "Stored. Leave empty to keep it, or enter a new value.",
-  "conn_simulated_description": "A simulated mower in the Device-Gateway with a demo garden. It needs no settings; simulator settings such as time_scale are kept.",
+  "conn_simulated_description": "A simulated mower in the Device-Gateway with a demo garden. It needs no settings; existing simulator settings such as its time-lapse speed are kept.",
   "conn_cloud_description": "Connects through the vendor's cloud with a linked account: link the account once, then pick its mowers.",
   "conn_ble_description": "Connects over Bluetooth through an ESPHome Bluetooth proxy near the mower; no camera. With a cloud account it is better added as an additional link (mower settings, Bluetooth bridge). Manual driving works only over this link.",
   "conn_group_device": "Identify the mower by",
@@ -1449,6 +1449,7 @@
   "camera_mute": "Sound off",
   "camera_unmute": "Sound on",
   "camera_data_note": "The video runs through the servers of the mower's manufacturer and its video service. On 4G every minute counts against the video allowance; close the camera when you do not need it.",
+  "camera_data_note_simulated": "This is the simulator's test pattern: it is made by this installation, goes through no vendor server and uses no mobile data.",
   "camera_quota": "4G video allowance: {used} of {total} minutes used",
   "camera_expires": "Session valid until {time}",
   "camera_renewed": "Session renewed {count} times",
@@ -2556,7 +2557,16 @@
   "tracking_share_title": "Share link",
   "tracking_share_text": "Anyone with the link sees the position and the track without an account. The link expires and can be revoked at any time.",
   "tracking_share_hours": "Valid for",
-  "tracking_share_hours_option": "{hours} hours",
+  "tracking_share_hours_option": [
+    {
+      "declarations": ["input hours", "local hoursPlural = hours: plural"],
+      "selectors": ["hoursPlural"],
+      "match": {
+        "hoursPlural=one": "{hours} hour",
+        "hoursPlural=other": "{hours} hours"
+      }
+    }
+  ],
   "tracking_share_create": "Create link",
   "tracking_share_once": "This link is shown only now. Copy or share it before you close this window.",
   "tracking_share_address": "Link address",
@@ -2840,6 +2850,8 @@
   "zones_unavailable_no_position": "This mower reports no position, so MowDeck cannot tell where it is. Zones need a mower with GPS.",
   "zones_no_map": "Waiting for the mower's first position to place the map.",
   "zones_map_failed": "The map could not be loaded. The zones are listed below.",
+  "zones_vendor_areas": "This mower's areas",
+  "zones_vendor_open": "Open on the mower map",
   "zones_empty": "No zones yet.",
   "zones_draw": "Draw a zone",
   "zones_redraw": "Redraw shape",

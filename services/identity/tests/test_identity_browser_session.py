@@ -3,6 +3,7 @@ web app's ``ui-areas``."""
 
 from datetime import timedelta
 
+import httpx
 from identity_support import API, GATEWAY, PASSWORD, FakeModules, harness
 from mowdeck_contracts.v1 import ModuleDescriptor, PermissionDef, UiAreaDef
 
@@ -33,6 +34,37 @@ async def test_cookie_only_login_keeps_the_refresh_token_out_of_the_body() -> No
     assert rotated_cookie and rotated_cookie != cookie
     assert plain.status_code == 200
     assert plain.json()["refresh_token"]  # without the header the body still carries it
+
+
+def _cookie(response: httpx.Response, name: str) -> str:
+    """The ``Set-Cookie`` line of ``name`` in a response."""
+    lines: list[str] = response.headers.get_list("set-cookie")
+    return next(line for line in lines if line.startswith(f"{name}="))
+
+
+async def test_the_refresh_cookie_has_a_readable_companion_dropped_with_it() -> None:
+    async with harness() as h:
+        await h.register("lukas")
+        h.client.cookies.clear()
+        login = await h.client.post(
+            f"{API}/session",
+            json={"username": "lukas", "password": PASSWORD},
+            headers=COOKIE_ONLY,
+        )
+        refreshed = await h.client.post(f"{API}/session/refresh", headers={**CSRF, **COOKIE_ONLY})
+        logout = await h.client.post(f"{API}/session/logout", headers=CSRF)
+    for response in (login, refreshed):
+        hint = _cookie(response, "mowdeck_session")
+        refresh = _cookie(response, "mowdeck_refresh")
+        # Readable by the page (no secret in it), for every path, with the refresh cookie's age.
+        assert hint.startswith("mowdeck_session=1;")
+        assert "HttpOnly" not in hint and "Path=/;" in hint and "SameSite=lax" in hint
+        age = next(p for p in refresh.split("; ") if p.startswith("Max-Age="))
+        assert age in hint
+    assert logout.status_code == 204
+    dropped = _cookie(logout, "mowdeck_session")
+    assert "Max-Age=0" in dropped and "Path=/" in dropped
+    assert "Max-Age=0" in _cookie(logout, "mowdeck_refresh")
 
 
 async def test_cookie_refresh_ignores_a_stale_access_token_on_the_request() -> None:

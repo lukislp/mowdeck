@@ -1419,6 +1419,7 @@
           .join(' · ')}
         backHref="/mowers"
         backLabel={m.back()}
+        stackActions
       >
         {#snippet status()}
           <LiveStatus phase={realtime.phase} tooMany={realtime.tooMany} />
@@ -1821,6 +1822,7 @@
                     mowerId={id}
                     mowerName={mower.name}
                     position={ms?.position ?? null}
+                    simulated={mower.connection_kind === 'simulated'}
                     link={false}
                   />
                 {/key}
