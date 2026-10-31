@@ -150,6 +150,60 @@ test('the app locks what the demo refuses, with one hint', async ({ page }) => {
   await page.goto('/fleet/base-stations');
   await expectLabelled(page);
   await expect(page.getByTestId('bs-add')).toHaveCount(0);
+  await locked('demo-lock-bs-add');
+  await expect(page.getByTestId('bs-add-empty')).toBeDisabled();
+});
+
+test('a base station in the demo can be looked at, not changed', async ({ page }) => {
+  await tryTheDemo(page);
+  const first = page.locator('[data-testid^="mower-row-"]').first();
+  await expect(first).toBeVisible({ timeout: 60_000 });
+  const mowerId = ((await first.getAttribute('data-testid')) ?? '').replace('mower-row-', '');
+  // The demo has no base station and Fleet refuses registering one, so the list answers with a
+  // simulated base station that one demo mower uses (as an older demo state would show it).
+  const now = new Date().toISOString();
+  await page.route('**/api/v1/fleet/base-stations', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    await route.fulfill({
+      json: {
+        items: [
+          {
+            id: '00000000-0000-4000-8000-0000000000b5',
+            name: 'RTK Garten',
+            source: 'simulated',
+            device_name: null,
+            iot_id: null,
+            model: null,
+            linked_account_id: null,
+            mower_ids: [mowerId],
+            created_at: now,
+            updated_at: now,
+          },
+        ],
+      },
+    });
+  });
+
+  await page.goto('/fleet/base-stations');
+  await expectLabelled(page);
+  const base = page.locator('li[data-testid^="bs-"][data-name="RTK Garten"]');
+  await expect(base).toBeVisible();
+  // Its state, mowers and firmware stay readable.
+  await expect(base.getByTestId('bs-mowers')).toBeVisible();
+  await expect(base.getByTestId('bs-firmware')).toBeVisible();
+  // Rename and remove are entry points: hidden. Neither may a mower be taken off it.
+  await expect(base.getByTestId('bs-rename')).toHaveCount(0);
+  await expect(base.getByTestId('bs-delete')).toHaveCount(0);
+  await expect(base.getByTestId('bs-unlink')).toHaveCount(0);
+
+  const hint = /In der Demo nicht verfügbar/;
+  const assign = base.getByTestId('demo-lock-bs-assign');
+  await expect(assign).toContainText(hint);
+  await expect(assign.locator('fieldset').first()).toHaveAttribute('disabled', '');
+  await expect(base.getByTestId('bs-link')).toBeDisabled();
+  const firmware = base.getByTestId('demo-lock-bs-fw');
+  await expect(firmware).toContainText(hint);
+  await expect(base.getByTestId('bs-fw-check')).toBeDisabled();
 });
 
 test('a refusal of the server is one sentence in the language of the app', async ({ page }) => {
