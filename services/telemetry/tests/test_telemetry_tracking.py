@@ -546,7 +546,8 @@ async def test_tracking_link_counts_each_viewer_once_however_often_the_page_poll
 
         async def link() -> dict[str, Any]:
             listing = await h.client.get(f"{base}/links", headers=owner.headers)
-            return listing.json()[0]
+            first: dict[str, Any] = listing.json()[0]
+            return first
 
         for _ in range(14):  # one open page for a minute
             await poll("203.0.113.1")
