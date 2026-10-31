@@ -96,6 +96,10 @@ async def test_tracking_store_sessions_links_photos_and_retention(
         await store.touch_link(b.id, NOW)
         touched = await store.link_by_hash("b" * 64)
         assert touched is not None and touched.uses == 1 and touched.last_used_at == NOW
+        later = NOW + timedelta(seconds=5)
+        await store.touch_link(b.id, later, counted=False)  # a poll of the same viewer
+        polled = await store.link_by_hash("b" * 64)
+        assert polled is not None and polled.uses == 1 and polled.last_used_at == later
 
         await store.add_photo(
             TrackingPhoto(

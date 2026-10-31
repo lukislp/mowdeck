@@ -28,7 +28,13 @@
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import { loadConfig, type MapTilesConfig } from '#lib/config.js';
   import type { components as Fleet } from '#lib/generated/fleet.js';
-  import { formatAge, formatDateTime, formatNumber, problemMessage } from '#lib/i18n.js';
+  import {
+    formatAge,
+    formatDateTime,
+    formatMoment,
+    formatNumber,
+    problemMessage,
+  } from '#lib/i18n.js';
   import { permissions, revoked } from '#lib/live.svelte.js';
   import { tileLoader } from '#lib/map/aerial.js';
   import { m } from '#lib/paraglide/messages.js';
@@ -297,8 +303,8 @@
     }
   }
 
-  const shortTime = (value: string) =>
-    new Intl.DateTimeFormat(locale, { timeStyle: 'short' }).format(new Date(value));
+  // The time alone only for today: an end or outage after midnight shows its date too.
+  const shortTime = (value: string) => formatMoment(value, now, locale);
 
   const mapLabels = $derived({
     region: m.tracking_map_region(),

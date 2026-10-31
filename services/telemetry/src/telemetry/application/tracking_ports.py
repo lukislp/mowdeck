@@ -79,8 +79,8 @@ class TrackingStore(Protocol):
         """Revoke a link of an account; False when none matched or it was revoked already."""
         ...
 
-    async def touch_link(self, link_id: UUID, now: datetime) -> None:
-        """Count a use of the link."""
+    async def touch_link(self, link_id: UUID, now: datetime, *, counted: bool = True) -> None:
+        """Mark the link as used now; ``counted`` also counts a view (``uses``)."""
         ...
 
     async def add_photo(self, photo: TrackingPhoto) -> None:

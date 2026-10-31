@@ -339,6 +339,27 @@ export function formatClock(value: string | number | Date, locale: string = getL
 }
 
 /**
+ * A moment close to now, short: the time of day when it falls on today (local time), else the
+ * date and the time, so "Endet automatisch 23:59" never hides that it means tomorrow.
+ */
+export function formatMoment(
+  value: string | number | Date,
+  now: number | Date = Date.now(),
+  locale: string = getLocale(),
+): string {
+  const at = new Date(value);
+  const today = new Date(now);
+  const sameDay =
+    at.getFullYear() === today.getFullYear() &&
+    at.getMonth() === today.getMonth() &&
+    at.getDate() === today.getDate();
+  return new Intl.DateTimeFormat(
+    locale,
+    sameDay ? { timeStyle: 'short' } : { dateStyle: 'short', timeStyle: 'short' },
+  ).format(at);
+}
+
+/**
  * The link line of a mower (ADR 0040): "Verbunden" while the gateway holds a live connection,
  * else "Offline, zuletzt verbunden vor 3 min" from the last link heartbeat.
  */

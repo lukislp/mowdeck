@@ -150,12 +150,13 @@ class SqlTrackingStore:
             )
         return result.rowcount > 0
 
-    async def touch_link(self, link_id: UUID, now: datetime) -> None:
+    async def touch_link(self, link_id: UUID, now: datetime, *, counted: bool = True) -> None:
+        values: dict[str, Any] = {"last_used_at": now}
+        if counted:
+            values["uses"] = _L.uses + 1
         async with self.engine.begin() as conn:
             await conn.execute(
-                sa.update(tables.tracking_links)
-                .where(_L.id == link_id)
-                .values(last_used_at=now, uses=_L.uses + 1)
+                sa.update(tables.tracking_links).where(_L.id == link_id).values(**values)
             )
 
     async def add_photo(self, photo: TrackingPhoto) -> None:
