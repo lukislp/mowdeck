@@ -79,3 +79,32 @@ async def test_planner_templates_need_control_and_valid_chains() -> None:
     assert first.status_code == 201
     assert second.status_code == 409
     assert viewer_delete.status_code == 403
+
+
+async def test_planner_template_names_refuse_invisible_characters() -> None:
+    """The name is the URL key: bidi overrides, zero-width spaces and blank-looking names are a
+    422, never stored (every account member, every demo visitor sees the list)."""
+    async with harness() as h:
+        owner = await h.owner()
+        refused = [
+            await h.client.put(
+                f"{API}/templates/{name}", headers=owner.headers, json={"chain": CHAIN}
+            )
+            for name in (
+                "%E2%80%AELawn",  # U+202E right-to-left override
+                "La%E2%80%8Bwn",  # U+200B zero-width space
+                "%E2%80%8D%E2%80%8C",  # only joiners
+                "%20%20",
+                "tab%09name",
+            )
+        ]
+        family = "%F0%9F%91%A8%E2%80%8D%F0%9F%91%A9"  # emoji sequence with a joiner
+        kept = await h.client.put(
+            f"{API}/templates/{family}", headers=owner.headers, json={"chain": CHAIN}
+        )
+        listed = await h.client.get(f"{API}/templates", headers=owner.headers)
+    assert [r.status_code for r in refused] == [422] * 5
+    assert kept.status_code == 201, kept.text
+    assert [t["name"] for t in listed.json()["items"]] == [
+        "\U0001f468\N{ZERO WIDTH JOINER}\U0001f469"
+    ]

@@ -302,10 +302,15 @@ class Harness:
         )
         return command_id
 
-    async def connect(self, *, origin: str | None = None) -> Client:
-        """Open a socket (not yet authenticated)."""
-        headers = {"Origin": origin} if origin else None
-        ws = await connect(self.url, additional_headers=headers, open_timeout=3)
+    async def connect(
+        self, *, origin: str | None = None, forwarded_for: str | None = None
+    ) -> Client:
+        """Open a socket (not yet authenticated); ``forwarded_for`` is the client address the
+        gateway would report (``X-Forwarded-For``)."""
+        headers = {"Origin": origin} if origin else {}
+        if forwarded_for:
+            headers["X-Forwarded-For"] = forwarded_for
+        ws = await connect(self.url, additional_headers=headers or None, open_timeout=3)
         client = Client(ws)
         self.clients.append(client)
         return client

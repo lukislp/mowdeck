@@ -306,6 +306,34 @@ async def test_realtime_demo_counts_per_login_session_and_address() -> None:
         assert hub.connections_of(address="127.0.0.1") == 3
 
 
+async def test_realtime_address_limit_counts_ipv6_per_64() -> None:
+    """Like every other limit, the per-address cap counts an IPv6 client by its /64: one
+    connection rotating through its prefix gets no fresh slots, another /64 does."""
+    async with harness(
+        demo_mode=True,
+        realtime_max_connections_per_user=10,
+        realtime_max_connections_per_address=2,
+        realtime_max_connections_per_account=10,
+    ) as h:
+        owner = await h.owner()
+
+        def visitor() -> str:
+            principal = owner.principal.model_copy(update={"session_id": uuid4()})
+            return h.keys.mint(principal)
+
+        await (await h.connect(forwarded_for="2001:db8:1:2::a")).auth(visitor())
+        await (await h.connect(forwarded_for="2001:db8:1:2:ffff::b")).auth(visitor())
+        same_64 = await h.connect(forwarded_for="2001:db8:1:2:1234::c")
+        await same_64.send({"type": "auth", "token": visitor()})
+        error = await same_64.expect("error")
+        assert "per address" in error["message"]
+        assert await same_64.closed_code() == RealtimeCloseCode.LIMIT_EXCEEDED
+        await (await h.connect(forwarded_for="2001:db8:1:3::a")).auth(visitor())
+        hub = h.app.state.hub
+        assert hub.connections_of(address="2001:db8:1:2::99") == 2
+        assert hub.connections_of(address="2001:db8:1:3::a") == 1
+
+
 async def test_realtime_closed_sockets_free_their_slots() -> None:
     async with harness(
         realtime_max_connections_per_user=1, realtime_max_connections_per_address=1
