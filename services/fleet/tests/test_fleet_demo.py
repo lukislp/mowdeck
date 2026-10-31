@@ -6,6 +6,8 @@ from typing import Any
 from fleet_support import API, harness, make_settings
 from mowdeck_service_kit.demo import DEMO_HEADER, DEMO_SEED_HEADER
 
+from fleet.adapters.api.demo import DEMO_POLICY
+
 SEED = "demo-seed-secret"
 DEMO: dict[str, Any] = {
     "demo_mode": True,
@@ -70,6 +72,47 @@ async def test_visitors_drive_but_do_not_reconfigure_the_demo_mowers() -> None:
         assert refused.status_code == 403, refused.text
         assert refused.json()["type"] == DEMO_PROBLEM
     assert command.status_code == 202, command.text
+
+
+def test_the_demo_policy_refuses_every_base_station_change() -> None:
+    """Base stations belong to manufacturer accounts: adding, renaming, removing, firmware and
+    the assignment of a mower are refused, also on sub-paths; reading them is not."""
+    base = f"{API}/base-stations"
+    station = f"{base}/00000000-0000-0000-0000-000000000001"
+    mower = f"{API}/mowers/00000000-0000-0000-0000-000000000002"
+    for method, path in (
+        ("POST", base),
+        ("PATCH", station),
+        ("DELETE", station),
+        ("POST", f"{station}/firmware/check"),
+        ("POST", f"{station}/firmware/update"),
+        ("PUT", f"{mower}/base-station"),
+    ):
+        assert DEMO_POLICY.refusal(method, path) is not None, (method, path)
+    assert DEMO_POLICY.refusal("GET", station) is None
+    # The simulator's own firmware update stays a thing to try (ADR 0068).
+    assert DEMO_POLICY.refusal("POST", f"{mower}/firmware/check") is None
+
+
+async def test_base_station_changes_reach_no_handler_in_the_demo() -> None:
+    async with harness(**DEMO) as h:
+        owner = await h.owner()
+        station = f"{API}/base-stations/00000000-0000-0000-0000-000000000001"
+        calls = [
+            await h.client.patch(station, headers=owner.headers, json={"name": "Shed"}),
+            await h.client.post(f"{station}/firmware/check", headers=owner.headers),
+            await h.client.post(
+                f"{station}/firmware/update", headers=owner.headers, json={"version": "1"}
+            ),
+            await h.client.put(
+                f"{API}/mowers/00000000-0000-0000-0000-000000000002/base-station",
+                headers=owner.headers,
+                json={"base_station_id": None},
+            ),
+        ]
+    for response in calls:
+        assert response.status_code == 403, response.text
+        assert response.json()["type"] == DEMO_PROBLEM
 
 
 async def test_no_cloud_provider_is_offered_or_linked_in_the_demo() -> None:

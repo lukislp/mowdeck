@@ -25,6 +25,7 @@ from pydantic import Field
 
 from mowdeck_contracts.v1._base import ContractModel
 from mowdeck_contracts.v1.maps import MapArea, MowerMap
+from mowdeck_contracts.v1.text import clean_text
 
 FLEET_AREA_NAMES_CHANGED: Final = "fleet.mower.area_names_changed"
 """Event type: the custom area names of a mower changed (payload :class:`AreaNamesChanged`)."""
@@ -96,9 +97,11 @@ def area_display_names(
 
 
 def clean_area_name(name: str | None) -> str | None:
-    """A custom name as Fleet stores it: trimmed, inner whitespace collapsed; None for empty
-    (which deletes the override). Raises ``ValueError`` above :data:`AREA_NAME_MAX_LENGTH`."""
-    cleaned = " ".join((name or "").split())
+    """A custom name as Fleet stores it: without control and format characters
+    (:func:`~mowdeck_contracts.v1.text.clean_text`), trimmed, inner whitespace collapsed; None
+    for empty (which deletes the override). Raises ``ValueError`` above
+    :data:`AREA_NAME_MAX_LENGTH`."""
+    cleaned = " ".join(clean_text(name or "").split())
     if not cleaned:
         return None
     if len(cleaned) > AREA_NAME_MAX_LENGTH:

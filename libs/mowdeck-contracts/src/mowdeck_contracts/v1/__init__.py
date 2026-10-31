@@ -446,6 +446,7 @@ from mowdeck_contracts.v1.spot import (
     resolve_turn_style,
     spot_plan_hash,
 )
+from mowdeck_contracts.v1.text import PlainText, clean_text
 from mowdeck_contracts.v1.tracking import (
     TRACKING_ENDED,
     TRACKING_MOVED,
@@ -766,6 +767,7 @@ __all__ = [
     "PhotoFrame",
     "PhotoReply",
     "PhotoRequest",
+    "PlainText",
     "PlanChanged",
     "PlanLimits",
     "PlanSetError",
@@ -877,6 +879,7 @@ __all__ = [
     "camera_side",
     "check_profiles",
     "clean_area_name",
+    "clean_text",
     "decode_polyline",
     "drive_correlation_id",
     "drive_session_of",

@@ -136,6 +136,8 @@ In demo mode `create_app` adds `DemoModeMiddleware` (`mowdeck_service_kit.demo`)
 
 Every HTTP response carries `X-Source-Code` with the address of the source of the running build (`mowdeck_service_kit.source`): `<MOWDECK_SOURCE_URL>/tree/<ref>` with the ref from `MOWDECK_SOURCE_REF` or `v<MOWDECK_VERSION>`, and the repository itself for a development build. The web app shows the same link in its footer and under Settings, About (LICENSING.md).
 
+Every HTTP response also carries `X-Content-Type-Options: nosniff`, and a response to a request with an `Authorization` header gets `Cache-Control: no-store` unless the route set its own `Cache-Control` (aerial tiles, error lexicons and other reusable answers keep theirs; `mowdeck_service_kit.hardening`). WebSockets are untouched.
+
 The field docstrings in `settings.py` are the source of this table and become the generated configuration reference later.
 
 ## Log redaction

@@ -113,6 +113,25 @@ async def test_scheduler_api_validation() -> None:
     assert bad_patch.status_code == 422
 
 
+async def test_scheduler_names_lose_invisible_characters() -> None:
+    """A schedule name is read by everybody of the account: no bidi override (U+202E) or
+    zero-width space (U+200B) to spoof it."""
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.register(owner)
+        target = {"target_type": "mower", "target_id": str(mower_id)}
+        created = await h.schedule(owner, **target, name="\u202eMorning\u200b")
+        patched = await h.client.patch(
+            f"{API}/schedules/{created['id']}",
+            headers=owner.headers,
+            json={"name": "Eve\u200bning"},
+        )
+        invisible = await h.create(owner, **target, name="\u202e\u200b")
+    assert created["name"] == "Morning"
+    assert patched.json()["name"] == "Evening"
+    assert invisible.status_code == 422
+
+
 async def test_scheduler_api_rights_on_the_target() -> None:
     async with harness() as h:
         owner = await h.owner()

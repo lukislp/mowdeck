@@ -14,7 +14,11 @@ Run a demo only as its **own stack**: its own host or VM if possible, its own Co
 
 - The interactive API explorer at `/api-explorer` ([ADR 0072](../adr/0072-api-explorer-in-the-web-app.md)), linked from the band ("Try the API live") and the sign-in page: every service's OpenAPI document in Scalar (self-hosted, nothing from a CDN), "Test Request" with the visitor's demo session. `docker-compose.demo.yml` turns it on (`MOWDECK_WEB_API_EXPLORER=true`); the API docs point visitors to `/api-explorer` of the demo, so once the demo has its public address, link that address in the README and the portfolio.
 
-All visitors share the one demo account: they see each other's commands live. Not each other's sign-ins, though: the security center's session list, its security events and its session count only show the visitor's own login session, so nobody sees another visitor's browser, network or times.
+All visitors share the one demo account: they see each other's commands live. Not each other's sign-ins, though: the security center's session list, its security events and its session count, and the account's audit log (`GET /accounts/{id}/audit`, one click away in the API explorer) only show the visitor's own login session, and the audit log leaves out every address, so nobody sees another visitor's browser, network or times.
+
+Live updates (the WebSocket of `/api/v1/realtime/ws`) are limited per login session instead of per user, since every visitor is the same user: 10 sockets per visitor session, 20 per client address (`DEMO_REALTIME_MAX_CONNECTIONS_PER_ADDRESS`) and 500 for the whole demo (`DEMO_REALTIME_MAX_CONNECTIONS`). One visitor cannot take the live view from the others.
+
+Names visitors type in (sites, groups, area names, zones, schedules) lose control and format characters such as right-to-left overrides and zero-width spaces, so nobody can spoof a label the other visitors read.
 
 ## What the demo refuses
 
@@ -22,7 +26,7 @@ Every service enforces this itself (403, problem type `urn:mowdeck:problem:demo-
 
 - registration, password, passkey, GitHub and Apple sign-in, the app hand-off, every change of the account, its users, roles and security settings (the security center's alert switch, ending one or all other sessions; the overview stays readable), logout everywhere;
 - personal access tokens, account API tokens, widget credentials, token exchange;
-- linking manufacturer accounts, adding, renaming, reconfiguring or removing mowers, Bluetooth bridge links, adding base stations;
+- linking manufacturer accounts, adding, renaming, reconfiguring or removing mowers, Bluetooth bridge links, every base station change (adding, renaming, removing, its firmware, which base station a mower uses);
 - Web Push, APNs, Live Activities, ntfy and test notifications (the demo has no delivery channel at all);
 - an own AI provider and picture uploads;
 - plan and billing changes, the scheduler's development endpoints.
@@ -139,6 +143,8 @@ In `infra/compose/demo/demo.env` (read after `../.env.example`):
 | `DEMO_SIM_TIME_SCALE` | `3` | Simulated seconds per real second of the live mowers |
 | `DEMO_RATE_PER_MINUTE`, `DEMO_RATE_BURST` | `1200`, `600` | Requests per client address at the gateway; the web app's files count too, so the burst must hold a first visit with an empty cache (a few hundred requests) |
 | `DEMO_USERNAME` | `demo` | The shared demo user |
+| `DEMO_REALTIME_MAX_CONNECTIONS` | `500` | Live-update sockets of the whole demo (per Realtime instance) |
+| `DEMO_REALTIME_MAX_CONNECTIONS_PER_ADDRESS` | `20` | Live-update sockets per client address; each visitor's login session has at most 10 |
 
 `MOWDECK_DEMO_MODE` (every service) and `MOWDECK_WEB_DEMO_MODE` (web app) are set by `docker-compose.demo.yml`; they are not meant for an installation with real mowers.
 

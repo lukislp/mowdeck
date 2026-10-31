@@ -34,8 +34,12 @@ def test_realtime_settings_defaults_and_config() -> None:
     assert settings.realtime_queue_size == 256
     assert settings.realtime_ping_seconds == 20
     assert settings.allowed_origins == frozenset()
+    assert settings.realtime_max_connections_per_address == 0
     config = settings.to_config()
     assert (config.queue_size, config.max_subscriptions) == (256, 200)
+    assert config.limit_per_login_session is False
+    demo = make_settings(demo_mode=True, realtime_max_connections_per_address=20).to_config()
+    assert (demo.limit_per_login_session, demo.max_connections_per_address) == (True, 20)
     origins = make_settings(realtime_allowed_origins=" https://a , https://b ,").allowed_origins
     assert origins == {"https://a", "https://b"}
 

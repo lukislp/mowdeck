@@ -11,6 +11,13 @@ class RealtimeConfig:
     recheck_seconds: float = 60.0
     max_connections_per_account: int = 50
     max_connections_per_user: int = 10
+    """Per user (or API token); per login session with ``limit_per_login_session``."""
+    max_connections_per_address: int = 0
+    """Per client address (the handshake's, :mod:`mowdeck_service_kit.client_address`); 0 is no
+    limit."""
+    limit_per_login_session: bool = False
+    """Count the user limit per login session (``sid``) instead of per user: the public demo
+    (ADR 0068), where every visitor is the same user."""
     max_subscriptions: int = 200
     queue_size: int = 256
     send_timeout_seconds: float = 10.0

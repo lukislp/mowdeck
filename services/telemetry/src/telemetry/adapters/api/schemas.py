@@ -5,7 +5,14 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import GeoReference, MowerCapabilities, MowerMap, MowerState, MowPath
+from mowdeck_contracts.v1 import (
+    GeoReference,
+    MowerCapabilities,
+    MowerMap,
+    MowerState,
+    MowPath,
+    PlainText,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from telemetry.application.aerial import AerialInfo
@@ -433,7 +440,7 @@ class BatterySeries(BaseModel):
 class BladeResetIn(BaseModel):
     """Body of the blade reset."""
 
-    note: str | None = Field(default=None, max_length=500, description="Free text, optional.")
+    note: PlainText | None = Field(default=None, max_length=500, description="Free text, optional.")
 
 
 class BladeChangeOut(BaseModel):
