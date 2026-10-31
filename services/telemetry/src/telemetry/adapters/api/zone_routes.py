@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
+from mowdeck_contracts.v1 import PlainText
 from mowdeck_service_kit import CurrentAccountId
 from mowdeck_service_kit.errors import NotFound
 from pydantic import BaseModel, Field
@@ -179,7 +180,7 @@ class ZonesOut(BaseModel):
 class ZoneIn(BaseModel):
     """A new zone."""
 
-    name: str = Field(min_length=1, max_length=200)
+    name: PlainText = Field(min_length=1, max_length=200)
     ring: Ring
     start_plan_ref: str | None = Field(default=None, min_length=1, max_length=START_PLAN_REF_MAX)
 
@@ -187,7 +188,7 @@ class ZoneIn(BaseModel):
 class ZonePatch(BaseModel):
     """Changes to a zone; fields left out stay as they are."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: PlainText | None = Field(default=None, min_length=1, max_length=200)
     ring: Ring | None = None
     start_plan_ref: str | None = Field(
         default=None,

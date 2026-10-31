@@ -14,6 +14,7 @@ from mowdeck_contracts.v1 import (
     DeviceType,
     DriveCalibration,
     MowPattern,
+    PlainText,
     ProviderDescriptor,
     ProxyInfo,
     text_for,
@@ -39,9 +40,9 @@ class In(BaseModel):
 class Address(In):
     """Postal address of a site (all optional)."""
 
-    street: str | None = Field(default=None, max_length=200)
+    street: PlainText | None = Field(default=None, max_length=200)
     postal_code: str | None = Field(default=None, max_length=20)
-    city: str | None = Field(default=None, max_length=100)
+    city: PlainText | None = Field(default=None, max_length=100)
     country: str | None = Field(default=None, max_length=2, description="ISO 3166-1 alpha-2")
 
 
@@ -56,7 +57,7 @@ class SiteIn(In):
     """``POST /sites``. ``latitude`` and ``longitude`` (both or none) locate the site for the
     Scheduler's rain pause."""
 
-    name: str = Name
+    name: PlainText = Name
     timezone: str | None = Field(default=None, max_length=64, description="IANA name")
     address: Address | None = None
     latitude: float | None = Latitude
@@ -66,7 +67,7 @@ class SiteIn(In):
 class SitePatch(In):
     """``PATCH /sites/{id}``: only the given fields change (``address: null`` clears it)."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=100)
+    name: PlainText | None = Field(default=None, min_length=1, max_length=100)
     timezone: str | None = Field(default=None, max_length=64)
     address: Address | None = None
     latitude: float | None = Latitude
@@ -113,14 +114,14 @@ class SiteList(BaseModel):
 class GroupIn(In):
     """``POST /groups``: ``site_id`` null or missing makes a cross-site group."""
 
-    name: str = Name
+    name: PlainText = Name
     site_id: UUID | None = None
 
 
 class GroupPatch(In):
     """``PATCH /groups/{id}``: ``site_id: null`` makes it a cross-site group."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=100)
+    name: PlainText | None = Field(default=None, min_length=1, max_length=100)
     site_id: UUID | None = None
 
 
@@ -174,7 +175,7 @@ class MowerIn(In):
     such as ``refresh_seconds``); ``name`` defaults to the device name and ``model`` to the
     listed model."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=100)
+    name: PlainText | None = Field(default=None, min_length=1, max_length=100)
     connection_kind: ConnectionKind
     linked_account_id: UUID | None = None
     device_name: str | None = Field(default=None, min_length=1, max_length=100)
@@ -188,7 +189,7 @@ class MowerIn(In):
 class MowerPatch(In):
     """``PATCH /mowers/{id}``: only the given fields change."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=100)
+    name: PlainText | None = Field(default=None, min_length=1, max_length=100)
     connection_kind: ConnectionKind | None = None
     connection_options: dict[str, Any] | None = None
     model: str | None = Field(default=None, max_length=100)
@@ -422,7 +423,7 @@ class AreaNameIn(In):
     """``PUT /mowers/{id}/area-names/{area_id}``: the custom name; ``null`` or blank drops it.
     Surrounding blanks are trimmed; at most 60 characters remain (422 otherwise)."""
 
-    name: str | None = Field(max_length=200)
+    name: PlainText | None = Field(max_length=200)
 
 
 class AreaNamesOut(BaseModel):
@@ -789,7 +790,7 @@ class LinkedMowerIn(In):
     """One mower of ``POST /linked-accounts/{id}/mowers``."""
 
     device_name: str = Field(min_length=1, max_length=100)
-    name: str | None = Field(default=None, min_length=1, max_length=100)
+    name: PlainText | None = Field(default=None, min_length=1, max_length=100)
     site_id: UUID | None = None
     group_ids: list[UUID] = Field(default_factory=list, max_length=50)
     serial: str | None = Field(default=None, min_length=1, max_length=64)
@@ -825,7 +826,7 @@ class BaseStationIn(In):
     simulator's base station (``simulated``)."""
 
     source: Literal["cloud", "simulated"] = "cloud"
-    name: str | None = Field(
+    name: PlainText | None = Field(
         default=None,
         min_length=1,
         max_length=100,
@@ -845,7 +846,7 @@ class BaseStationIn(In):
 class BaseStationPatch(In):
     """``PATCH /base-stations/{id}``."""
 
-    name: str = Field(min_length=1, max_length=100)
+    name: PlainText = Field(min_length=1, max_length=100)
 
 
 class BaseStationOut(BaseModel):

@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from typing import Any, ClassVar, Literal, Self
 from uuid import UUID
 
-from mowdeck_contracts.v1 import PrincipalRef, SchedulePattern, ScheduleRunOutcome
+from mowdeck_contracts.v1 import PlainText, PrincipalRef, SchedulePattern, ScheduleRunOutcome
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scheduler.application.angles import MowerAngles
@@ -93,7 +93,7 @@ class ScheduleIn(In):
     mower's map; a group target always mows every area of each mower.
     """
 
-    name: str = Field(min_length=1, max_length=100)
+    name: PlainText = Field(min_length=1, max_length=100)
     target_type: Literal["mower", "group"]
     target_id: UUID
     kind: Literal["weekly", "every_n_days"]
@@ -143,7 +143,7 @@ class ScheduleIn(In):
 class SchedulePatch(In):
     """``PATCH /schedules/{id}``: only the given fields change; the caller becomes the owner."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=100)
+    name: PlainText | None = Field(default=None, min_length=1, max_length=100)
     target_type: Literal["mower", "group"] | None = None
     target_id: UUID | None = None
     kind: Literal["weekly", "every_n_days"] | None = None

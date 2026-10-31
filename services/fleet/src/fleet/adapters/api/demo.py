@@ -4,7 +4,8 @@ The visitor drives the prepared simulated mowers: commands, camera, manual drive
 area names, mowing defaults, sites and groups all work. Refused: linking manufacturer accounts,
 adding, removing or reconfiguring mowers (only simulated ones exist, and the seed job adds them),
 the Bluetooth bridge link (it would make the server connect to an address the visitor names)
-and RTK base stations of manufacturer accounts.
+and RTK base stations of manufacturer accounts: adding, renaming, removing, their firmware and
+which base station a mower uses.
 """
 
 from mowdeck_service_kit.demo import DemoPolicy, rule
@@ -34,10 +35,12 @@ DEMO_POLICY = DemoPolicy(
             "Bluetooth bridges cannot be linked in the demo.",
         ),
         rule(
-            rf"{_P}/base-stations(/[^/]+)?",
-            "RTK base stations cannot be added or removed in the demo.",
-            "POST",
-            "DELETE",
+            rf"{_P}/base-stations(/.*)?",
+            "RTK base stations cannot be changed in the demo.",
+        ),
+        rule(
+            rf"{_MOWER}/base-station",
+            "RTK base stations cannot be changed in the demo.",
         ),
     )
 )

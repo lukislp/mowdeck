@@ -269,6 +269,60 @@ async def test_realtime_connection_limits_close_4429() -> None:
         assert h.app.state.hub.connections_of(account=owner.account_id) == 3
 
 
+async def test_realtime_demo_counts_per_login_session_and_address() -> None:
+    """The public demo (ADR 0068): every visitor is the same user, so the user limit counts per
+    login session; the per-address limit keeps one visitor from taking every socket."""
+    async with harness(
+        demo_mode=True,
+        realtime_max_connections_per_user=2,
+        realtime_max_connections_per_address=3,
+        realtime_max_connections_per_account=10,
+    ) as h:
+        owner = await h.owner()
+
+        def visitor() -> str:
+            principal = owner.principal.model_copy(update={"session_id": uuid4()})
+            return h.keys.mint(principal)
+
+        first, second = visitor(), visitor()
+        await (await h.connect()).auth(first)
+        await (await h.connect()).auth(first)
+        third = await h.connect()
+        await third.send({"type": "auth", "token": first})
+        error = await third.expect("error")
+        assert error["code"] == "limit_exceeded"
+        assert "login session" in error["message"]
+        assert await third.closed_code() == RealtimeCloseCode.LIMIT_EXCEEDED
+        # Another visitor (the same user, another login session) still gets a socket ...
+        await (await h.connect()).auth(second)
+        # ... until the address has its three.
+        fourth = await h.connect()
+        await fourth.send({"type": "auth", "token": visitor()})
+        error = await fourth.expect("error")
+        assert "per address" in error["message"]
+        assert await fourth.closed_code() == RealtimeCloseCode.LIMIT_EXCEEDED
+        hub = h.app.state.hub
+        assert hub.connections_of(user=owner.principal.subject) == 3
+        assert hub.connections_of(address="127.0.0.1") == 3
+
+
+async def test_realtime_closed_sockets_free_their_slots() -> None:
+    async with harness(
+        realtime_max_connections_per_user=1, realtime_max_connections_per_address=1
+    ) as h:
+        owner = await h.owner()
+        client = await h.connect_as(owner)
+        await client.ws.close()
+        hub = h.app.state.hub
+        for _ in range(50):
+            if hub.connections_of(address="127.0.0.1") == 0:
+                break
+            await asyncio.sleep(0.02)
+        assert hub.connections_of(address="127.0.0.1") == 0
+        assert hub.connections_of(user=owner.principal.subject) == 0
+        await h.connect_as(owner)
+
+
 async def test_realtime_subscription_limit_closes_4429() -> None:
     async with harness(realtime_max_subscriptions=2) as h:
         owner = await h.owner()

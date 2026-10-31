@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 from uuid import UUID
 
-from mowdeck_contracts.v1 import MowerMap, SpotMowPlan, StartMow, TurnStyle
+from mowdeck_contracts.v1 import MowerMap, PlainText, SpotMowPlan, StartMow, TurnStyle
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from planner.application.planning import (
@@ -346,7 +346,7 @@ class GapsOut(BaseModel):
 class TemplateIn(_Body):
     """A saved chain."""
 
-    description: str | None = Field(default=None, max_length=500)
+    description: PlainText | None = Field(default=None, max_length=500)
     chain: list[ChainStepIn] = Field(min_length=1, max_length=8)
 
 

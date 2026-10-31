@@ -192,6 +192,46 @@ async def test_a_demo_visitor_sees_only_their_own_session() -> None:
     assert overview.json()["sessions"] == 1
 
 
+async def test_the_demo_audit_log_shows_only_the_own_session_without_addresses() -> None:
+    """The demo user holds ``audit.view``: the account's audit log must not list the other
+    visitors' sign-ins, addresses, sessions or token ids."""
+    async with harness(**DEMO) as h:
+        seeded = await _seed(h.client)
+        tokens = []
+        for agent in ("VisitorA/1.0", "VisitorB/2.0"):
+            response = await h.client.post(f"{API}/demo/session", headers={"User-Agent": agent})
+            assert response.status_code == 200, response.text
+            tokens.append(response.json()["access_token"])
+        own = (await h.client.get(f"{API}/me/sessions", headers=bearer(tokens[0]))).json()[0]
+        audit = await h.client.get(
+            f"{API}/accounts/{seeded['account_id']}/audit?limit=200", headers=bearer(tokens[0])
+        )
+        logins = await h.client.get(
+            f"{API}/accounts/{seeded['account_id']}/audit?action=session.login&limit=1",
+            headers=bearer(tokens[0]),
+        )
+    assert audit.status_code == 200, audit.text
+    entries = audit.json()
+    assert entries, "the own sign-in is listed"
+    assert {e["details"].get("session") for e in entries} == {own["id"]}
+    assert all(e["ip"] is None for e in entries)
+    (login,) = logins.json()
+    assert login["details"]["session"] == own["id"]
+
+
+async def test_the_audit_log_outside_the_demo_keeps_every_row_and_address() -> None:
+    async with harness() as h:
+        owner = await h.register("owner")
+        await h.client.post(f"{API}/session", json={"username": "owner", "password": PASSWORD})
+        audit = await h.client.get(
+            f"{API}/accounts/{owner.account_id}/audit?action=session.login",
+            headers=owner.headers,
+        )
+    assert audit.status_code == 200, audit.text
+    assert len({e["details"].get("session") for e in audit.json()}) >= 2
+    assert all(e["ip"] for e in audit.json())
+
+
 def test_demo_mode_closes_registration_and_the_other_sign_in_methods() -> None:
     settings = make_settings(
         demo_mode=True,

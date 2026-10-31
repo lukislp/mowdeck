@@ -16,6 +16,7 @@ from mowdeck_service_kit.errors import (
     UnhandledErrorMiddleware,
     install_error_handlers,
 )
+from mowdeck_service_kit.hardening import HardeningHeadersMiddleware
 from mowdeck_service_kit.health import (
     CheckFunction,
     HttpMetricsMiddleware,
@@ -152,6 +153,8 @@ def create_app(
         _log.warning("DEMO MODE: simulated mowers only, unsafe actions are refused")
     app.add_middleware(CorrelationIdMiddleware)
     app.add_middleware(SourceCodeMiddleware, url=settings.source_code_url)
+    # nosniff everywhere, no-store on authenticated answers without their own Cache-Control.
+    app.add_middleware(HardeningHeadersMiddleware)
 
     app.include_router(build_health_router(descriptor, metrics=settings.metrics_enabled))
     for router in routers:

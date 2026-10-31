@@ -9,6 +9,11 @@ Isolation without a database: a subscription exists only after ``can_view`` allo
 state is additionally handed only to sessions of the state's own account (a third check
 without I/O).
 
+Connection limits (4429): per user or API token, per client address (optional) and per
+account. In the public demo (ADR 0068) every visitor is the same user, so the user limit counts
+per login session (``sid``) instead, and the per-address limit keeps one visitor from taking
+every socket of the shared account.
+
 Manual driving (ADR 0026): the hub knows the open drive sessions of its sockets, so a rejected
 frame result ends the session that sent it, and it keeps the newest capabilities of every
 mower (``manual_drive``). Accepted frame results (ten per second) are not fanned out; the
@@ -95,6 +100,16 @@ def receives_account_notifications(principal: Principal | None) -> bool:
     )
 
 
+def _discard[K](index: defaultdict[K, set[Session]], key: K, session: Session) -> None:
+    """Remove ``session`` from ``index[key]`` and drop the key once it is empty."""
+    sessions = index.get(key)
+    if sessions is None:
+        return
+    sessions.discard(session)
+    if not sessions:
+        del index[key]
+
+
 class Hub:
     """Sessions, subscriptions and the fan-out of one instance."""
 
@@ -124,6 +139,11 @@ class Hub:
         self.sessions: set[Session] = set()
         self._by_account: defaultdict[UUID, set[Session]] = defaultdict(set)
         self._by_user: defaultdict[UUID, set[Session]] = defaultdict(set)
+        """Sessions of a person (inbox delivery)."""
+        self._by_owner: defaultdict[tuple[str, UUID], set[Session]] = defaultdict(set)
+        """Sessions counted against the user limit (see :meth:`_owner_key`)."""
+        self._by_address: defaultdict[str, set[Session]] = defaultdict(set)
+        """Sessions counted against the per-address limit."""
         self._by_mower: defaultdict[UUID, set[Session]] = defaultdict(set)
         self._last_state: OrderedDict[UUID, tuple[UUID, Frame]] = OrderedDict()
         self._subscription_count = 0
@@ -134,8 +154,9 @@ class Hub:
 
     # --- sessions -----------------------------------------------------------------------------
 
-    def open(self, socket: Socket) -> Session:
-        """A new session for an accepted socket (closed at once while shutting down)."""
+    def open(self, socket: Socket, *, address: str | None = None) -> Session:
+        """A new session for an accepted socket (closed at once while shutting down);
+        ``address`` is the client address of the handshake (for the per-address limit)."""
         session = Session(
             self,
             socket,
@@ -145,6 +166,7 @@ class Hub:
             clock=self.clock,
             metrics=self.metrics,
         )
+        session.address = address
         self.sessions.add(session)
         self._idle.clear()
         self.metrics.connections(len(self.sessions))
@@ -152,25 +174,35 @@ class Hub:
             session.close(RealtimeCloseCode.GOING_AWAY, "going away")
         return session
 
+    def _owner_key(self, principal: Principal) -> tuple[str, UUID]:
+        """What the user limit counts: the user (or API token), or in the public demo, where
+        every visitor is the same user, the login session (``sid``)."""
+        if self.config.limit_per_login_session and principal.session_id is not None:
+            return ("session", principal.session_id)
+        return ("subject", principal.subject)
+
     def admit(self, session: Session, principal: Principal) -> None:
-        """Count the session against the limits of its user and account."""
+        """Count the session against the limits of its user (or login session), its client
+        address and its account."""
         assert principal.account_id is not None  # noqa: S101 - checked by the session
-        if len(self._by_user[principal.subject]) >= self.config.max_connections_per_user:
-            self._forget_empty(principal)
-            msg = f"at most {self.config.max_connections_per_user} connections per user"
-            raise LimitExceededError(msg)
-        if len(self._by_account[principal.account_id]) >= self.config.max_connections_per_account:
-            self._forget_empty(principal)
-            msg = f"at most {self.config.max_connections_per_account} connections per account"
-            raise LimitExceededError(msg)
+        owner = self._owner_key(principal)
+        per_owner = self.config.max_connections_per_user
+        if len(self._by_owner.get(owner, ())) >= per_owner:
+            unit = "login session" if owner[0] == "session" else "user"
+            raise LimitExceededError(f"at most {per_owner} connections per {unit}")
+        per_address = self.config.max_connections_per_address
+        address = session.address
+        if per_address and address and len(self._by_address.get(address, ())) >= per_address:
+            raise LimitExceededError(f"at most {per_address} connections per address")
+        per_account = self.config.max_connections_per_account
+        if len(self._by_account.get(principal.account_id, ())) >= per_account:
+            raise LimitExceededError(f"at most {per_account} connections per account")
+        session.owner_key = owner
+        self._by_owner[owner].add(session)
+        if address:
+            self._by_address[address].add(session)
         self._by_user[principal.subject].add(session)
         self._by_account[principal.account_id].add(session)
-
-    def _forget_empty(self, principal: Principal) -> None:
-        if not self._by_user.get(principal.subject):
-            self._by_user.pop(principal.subject, None)
-        if principal.account_id is not None and not self._by_account.get(principal.account_id):
-            self._by_account.pop(principal.account_id, None)
 
     def remove(self, session: Session) -> None:
         """Forget a finished session everywhere."""
@@ -180,24 +212,32 @@ class Hub:
         self.unsubscribe(session, list(session.subscriptions))
         principal = session.principal
         if principal is not None:
-            users = self._by_user.get(principal.subject)
-            if users is not None:
-                users.discard(session)
+            _discard(self._by_user, principal.subject, session)
             if principal.account_id is not None:
-                accounts = self._by_account.get(principal.account_id)
-                if accounts is not None:
-                    accounts.discard(session)
-            self._forget_empty(principal)
+                _discard(self._by_account, principal.account_id, session)
+        if session.owner_key is not None:
+            _discard(self._by_owner, session.owner_key, session)
+        if session.address:
+            _discard(self._by_address, session.address, session)
         if not self.sessions:
             self._idle.set()
         self.metrics.connections(len(self.sessions))
 
-    def connections_of(self, *, user: UUID | None = None, account: UUID | None = None) -> int:
-        """Open authenticated sessions of a user or an account (for tests and metrics)."""
+    def connections_of(
+        self,
+        *,
+        user: UUID | None = None,
+        account: UUID | None = None,
+        address: str | None = None,
+    ) -> int:
+        """Open authenticated sessions of a user, an account or a client address (for tests and
+        metrics)."""
         if user is not None:
             return len(self._by_user.get(user, ()))
         if account is not None:
             return len(self._by_account.get(account, ()))
+        if address is not None:
+            return len(self._by_address.get(address, ()))
         return len(self.sessions)
 
     # --- subscriptions ------------------------------------------------------------------------

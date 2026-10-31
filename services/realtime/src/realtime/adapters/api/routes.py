@@ -6,9 +6,13 @@ port and hands the connection to the hub; the protocol lives in
 sends it in the first message.
 """
 
+from typing import cast
+
 from fastapi import APIRouter, WebSocket
 from mowdeck_contracts.v1.realtime import RealtimeCloseCode
 from mowdeck_service_kit import get_logger
+from mowdeck_service_kit.client_address import client_address
+from starlette.requests import Request
 from starlette.websockets import WebSocketState
 
 from realtime.application.hub import Hub
@@ -36,6 +40,13 @@ class StarletteSocket:
         """Send the close frame unless the socket is closed already."""
         if self.websocket.application_state != WebSocketState.DISCONNECTED:
             await self.websocket.close(code=code, reason=reason)
+
+
+def handshake_address(websocket: WebSocket) -> str | None:
+    """The client address of the handshake, by the one rule every service uses
+    (:mod:`mowdeck_service_kit.client_address`, ``MOWDECK_CLIENT_IP_DEPTH``)."""
+    # client_address reads only what every HTTP connection has (client, headers, app).
+    return client_address(cast("Request", websocket))
 
 
 def receiver(websocket: WebSocket, max_bytes: int) -> Receive:
@@ -73,5 +84,5 @@ async def realtime_socket(websocket: WebSocket) -> None:
         await websocket.close(code=POLICY_VIOLATION)
         return
     await websocket.accept()
-    session = hub.open(StarletteSocket(websocket))
+    session = hub.open(StarletteSocket(websocket), address=handshake_address(websocket))
     await session.serve(receiver(websocket, hub.config.max_message_bytes))

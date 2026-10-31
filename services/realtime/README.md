@@ -105,7 +105,8 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_REALTIME_AUTH_TIMEOUT_SECONDS` | `5` | Time for the first `auth` message |
 | `MOWDECK_REALTIME_RECHECK_SECONDS` | `60` | Periodic re-check of every subscription |
 | `MOWDECK_REALTIME_MAX_CONNECTIONS_PER_ACCOUNT` | `50` | Open sockets per account and instance |
-| `MOWDECK_REALTIME_MAX_CONNECTIONS_PER_USER` | `10` | Open sockets per user (or API token) and instance |
+| `MOWDECK_REALTIME_MAX_CONNECTIONS_PER_USER` | `10` | Open sockets per user (or API token) and instance; in demo mode per login session (`sid`), since every demo visitor is the same user |
+| `MOWDECK_REALTIME_MAX_CONNECTIONS_PER_ADDRESS` | `0` | Open sockets per client address and instance (`MOWDECK_CLIENT_IP_DEPTH` rule); 0 is no limit. The public demo sets it |
 | `MOWDECK_REALTIME_MAX_SUBSCRIPTIONS` | `200` | Subscribed mowers per socket |
 | `MOWDECK_REALTIME_QUEUE_SIZE` | `256` | Unsent non-state messages per socket before 4430 |
 | `MOWDECK_REALTIME_SEND_TIMEOUT_SECONDS` | `10` | A single send slower than this closes with 4430 |
