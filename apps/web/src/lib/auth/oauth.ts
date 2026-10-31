@@ -16,6 +16,7 @@
  */
 import { problemFromResponse } from '#lib/api/problem.js';
 
+import { methodEnabled } from './login-methods';
 import { IDENTITY } from './session.svelte';
 
 /** Read access to a query (`page.url.searchParams` is read-only). */
@@ -38,18 +39,8 @@ function browserDeps(): OAuthDeps {
 }
 
 /** Whether the installation offers a provider (`GET /login-methods`); never rejects. */
-export async function providerEnabled(
-  provider: string,
-  fetchFn: typeof fetch = (...args) => globalThis.fetch(...args),
-): Promise<boolean> {
-  try {
-    const response = await fetchFn(`${IDENTITY}/login-methods`, { credentials: 'omit' });
-    if (!response.ok) return false;
-    const body = (await response.json()) as Record<string, unknown>;
-    return body[provider] === true;
-  } catch {
-    return false;
-  }
+export function providerEnabled(provider: string, fetchFn?: typeof fetch): Promise<boolean> {
+  return methodEnabled(provider, fetchFn);
 }
 
 /** The sign-in page's query to come back to: only what the page understands. */

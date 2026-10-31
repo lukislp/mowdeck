@@ -10,6 +10,7 @@
  */
 import { problemFromResponse } from '#lib/api/problem.js';
 
+import { methodEnabled } from './login-methods';
 import { IDENTITY, type SessionManager } from './session.svelte';
 import { credentialJson, creationOptions, requestOptions } from './webauthn';
 
@@ -30,18 +31,9 @@ function browserDeps(): PasskeyDeps {
   };
 }
 
-/** The login methods of the installation (`GET /login-methods`); never rejects. */
-export async function passkeysEnabled(
-  fetchFn: typeof fetch = (...args) => globalThis.fetch(...args),
-): Promise<boolean> {
-  try {
-    const response = await fetchFn(`${IDENTITY}/login-methods`, { credentials: 'omit' });
-    if (!response.ok) return false;
-    const body = (await response.json()) as { passkey?: unknown };
-    return body.passkey === true;
-  } catch {
-    return false;
-  }
+/** Whether the installation offers passkeys (`GET /login-methods`); never rejects. */
+export function passkeysEnabled(fetchFn?: typeof fetch): Promise<boolean> {
+  return methodEnabled('passkey', fetchFn);
 }
 
 /**
