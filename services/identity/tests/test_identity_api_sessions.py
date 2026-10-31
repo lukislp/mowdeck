@@ -150,6 +150,21 @@ async def test_forwarded_for_behind_an_appending_proxy_cannot_be_forged() -> Non
     assert codes == [401, 429, 401]
 
 
+async def test_ipv6_clients_share_the_login_limit_of_their_64() -> None:
+    """One IPv6 connection owns a whole /64: another address of it is the same client for the
+    login limit, the next /64 is another client."""
+    async with harness(identity_login_ip_burst=1, identity_trust_forwarded_for=True) as h:
+        codes = []
+        for address in ("2001:db8:1:2::1", "2001:db8:1:2:abcd::9", "2001:db8:1:3::1"):
+            response = await h.client.post(
+                f"{API}/session",
+                json={"username": "x-user", "password": PASSWORD},
+                headers={"X-Forwarded-For": address},
+            )
+            codes.append(response.status_code)
+    assert codes == [401, 429, 401]
+
+
 async def test_refresh_rotates_and_reuse_revokes_the_family() -> None:
     async with harness() as h:
         lukas = await h.register("lukas")

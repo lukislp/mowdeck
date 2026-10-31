@@ -24,14 +24,20 @@ def test_compose_file_parses(repo_root: Path) -> None:
 
 
 class _ComposeLoader(yaml.SafeLoader):
-    """Reads Compose's ``!reset`` tag (it drops a value of the base file)."""
+    """Reads Compose's ``!reset`` tag (it drops a value of the base file) and ``!override``
+    (it replaces the value of the base file instead of merging)."""
 
 
 def _reset(loader: yaml.SafeLoader, node: yaml.SequenceNode) -> dict[str, list[object]]:
     return {"!reset": loader.construct_sequence(node)}
 
 
+def _override(loader: yaml.SafeLoader, node: yaml.SequenceNode) -> dict[str, list[object]]:
+    return {"!override": loader.construct_sequence(node)}
+
+
 _ComposeLoader.add_constructor("!reset", _reset)
+_ComposeLoader.add_constructor("!override", _override)
 
 
 def test_e2e_override_adds_the_marker_and_the_relay_with_test_hooks(repo_root: Path) -> None:
@@ -297,10 +303,39 @@ def test_demo_override_puts_every_service_in_demo_mode(repo_root: Path) -> None:
     assert (compose_dir / "demo" / "seed.py").is_file()
 
 
+def test_demo_publishes_only_the_gateway_http_port(repo_root: Path) -> None:
+    """The demo publishes the gateway's HTTP entry point and nothing else: no websecure port,
+    no NATS (unauthenticated), Postgres or OpenFGA port on the host; the base stack keeps its
+    ports."""
+    compose_dir = _compose_dir(repo_root)
+    base = yaml.safe_load((compose_dir / "docker-compose.yml").read_text("utf-8"))["services"]
+    text = (compose_dir / "docker-compose.demo.yml").read_text("utf-8")
+    services = yaml.load(text, Loader=_ComposeLoader)["services"]  # noqa: S506
+    assert services["traefik"]["ports"] == {"!override": ["${GATEWAY_HTTP_PORT:-80}:80"]}
+    for name in ("nats", "postgres", "openfga"):
+        assert base[name]["ports"], name
+        assert services[name]["ports"] == {"!reset": []}, name
+    published = {name for name, svc in base.items() if svc.get("ports")}
+    allowed = {"traefik", "nats", "postgres", "openfga"}
+    # Services with profiles (mediamtx) never run in a demo (reset.sh refuses profiles).
+    assert {name for name in published - allowed if "profiles" not in base[name]} == set()
+    example = (compose_dir / "demo" / "demo.env.example").read_text("utf-8").splitlines()
+    for variable in (
+        "GATEWAY_HTTPS_PORT",
+        "POSTGRES_PORT",
+        "NATS_CLIENT_PORT",
+        "NATS_MONITOR_PORT",
+        "OPENFGA_HTTP_PORT",
+        "OPENFGA_GRPC_PORT",
+    ):
+        assert not any(line.startswith(f"{variable}=") for line in example), variable
+
+
 def test_every_rate_limit_counts_the_configured_client_entry(repo_root: Path) -> None:
     """Every Traefik rate limit of every Compose file counts the X-Forwarded-For entry of
     GATEWAY_CLIENT_IP_DEPTH (default 0: the TCP peer, as without a source criterion), so
-    behind a trusted proxy each client has its own bucket (docs/ops/demo.md)."""
+    behind a trusted proxy each client has its own bucket, and an IPv6 client per /64
+    (docs/ops/demo.md)."""
     compose_dir = _compose_dir(repo_root)
     depth = "${GATEWAY_CLIENT_IP_DEPTH:-0}"
     seen = set()
@@ -329,6 +364,10 @@ def test_every_rate_limit_counts_the_configured_client_entry(repo_root: Path) ->
                 continue  # only loosens limits of the base file
             assert f"{prefix}{name}.ratelimit.sourcecriterion.ipstrategy.depth={depth}" in labels, (
                 f"{path.name}: {name} has no source criterion"
+            )
+            # IPv6: one bucket per /64 (what one connection gets), not per address.
+            assert f"{prefix}{name}.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=64" in labels, (
+                f"{path.name}: {name} counts every IPv6 address of a /64 separately"
             )
             seen.add(name)
     assert {

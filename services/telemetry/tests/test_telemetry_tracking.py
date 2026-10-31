@@ -3,7 +3,7 @@ report, permissions, retention."""
 
 import base64
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from typing import Any
 from uuid import UUID, uuid4
@@ -33,7 +33,7 @@ from mowdeck_service_kit.bus import BusMessage, publish_event
 from PIL import Image
 from telemetry_support import API, T0, Harness, Person, harness, make_state, seconds
 
-from telemetry.application.tracking import Tracking
+from telemetry.application.tracking import SlidingWindow, Tracking
 from telemetry.domain.tracking import is_plausible_token, new_token, token_hash
 
 
@@ -616,6 +616,73 @@ async def test_public_view_key_cannot_be_forged_through_an_appending_proxy() -> 
     ) as h:
         chains = ["198.51.100.7, 203.0.113.1, 192.0.2.10", "198.51.100.8, 203.0.113.1, 192.0.2.10"]
         assert await _failures(h, chains) == [404, 429]
+
+
+async def test_public_view_counts_an_ipv6_visitor_per_64() -> None:
+    """Every address of one IPv6 connection (/64) shares the bucket; the next /64 does not."""
+    async with harness(
+        clock=Clock(),
+        tracking_gateway=Gateway(),
+        telemetry_tracking_public_failures_per_minute=1,
+        client_ip_depth=1,
+    ) as h:
+        chains = [
+            "2001:db8:1:2::1, 10.250.80.2",
+            "2001:db8:1:2:dead:beef:0:7, 10.250.80.2",
+            "2001:db8:1:3::1, 10.250.80.2",
+        ]
+        assert await _failures(h, chains) == [404, 429, 404]
+
+
+def _window(limit: int, max_keys: int) -> tuple[SlidingWindow, list[datetime]]:
+    now = [datetime(2026, 10, 31, 12, tzinfo=UTC)]
+    return SlidingWindow(limit, timedelta(minutes=1), lambda: now[0], max_keys=max_keys), now
+
+
+def test_sliding_window_limits_and_recovers() -> None:
+    window, now = _window(2, 100)
+    window.hit("a")
+    window.hit("a")
+    assert window.retry_after("a") == 61
+    now[0] += timedelta(seconds=30)
+    assert window.retry_after("a") == 31
+    assert window.retry_after("b") == 0
+    now[0] += timedelta(seconds=31)
+    assert window.retry_after("a") == 0
+
+
+def test_sliding_window_many_keys_do_not_reset_an_active_client() -> None:
+    """Rotating through more keys than the limiter keeps forgets the quietest keys, never the
+    count of a client that is still active (the earlier limiter cleared every key)."""
+    window, now = _window(1, 100)
+    window.hit("victim")
+    assert window.retry_after("victim") > 0
+    for i in range(10_000):
+        now[0] += timedelta(milliseconds=1)
+        window.hit(f"2001:db8:{i:x}::/64")
+        if i % 50 == 0:
+            window.hit("victim")  # still active: stays among the most recent keys
+    assert len(window) <= 100
+    assert window.retry_after("victim") > 0
+
+
+def test_sliding_window_drops_expired_keys() -> None:
+    window, now = _window(3, 1000)
+    for i in range(50):
+        window.hit(f"k{i}")
+    now[0] += timedelta(minutes=2)
+    window.hit("fresh")
+    assert len(window) == 1
+    assert window.retry_after("k1") == 0
+
+
+def test_sliding_window_keeps_at_most_limit_hits_per_key() -> None:
+    window, now = _window(3, 10)
+    for _ in range(1000):
+        now[0] += timedelta(milliseconds=1)
+        window.hit("a")
+    assert len(window._hits["a"]) == 3
+    assert window.retry_after("a") > 0
 
 
 # --- report --------------------------------------------------------------------------------
