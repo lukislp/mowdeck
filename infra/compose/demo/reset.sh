@@ -64,6 +64,18 @@ done
 [ "$(value MOWDECK_NETWORK)" = "$project" ] || die "MOWDECK_NETWORK must be the project name ($project)"
 [ "$(value MOWDECK_TRAEFIK_PROJECT)" = "$project" ] || die "MOWDECK_TRAEFIK_PROJECT must be the project name ($project)"
 
+# A checkout of a release tag builds the web app as that release: it shows the version and links
+# the source of exactly that tag instead of "development build".
+if [ "$build" = "--build" ] && [ -z "${MOWDECK_BUILD_VERSION:-}" ]; then
+  tag="$(git -C "$compose_dir" describe --tags --exact-match 2>/dev/null || true)"
+  case "$tag" in
+    v[0-9]*.[0-9]*.[0-9]*)
+      export MOWDECK_BUILD_VERSION="${tag#v}" MOWDECK_BUILD_REF="$tag"
+      echo "demo-reset: building release $tag"
+      ;;
+  esac
+fi
+
 compose=(
   docker compose -p "$project"
   --project-directory "$compose_dir"

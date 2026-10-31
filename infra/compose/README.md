@@ -330,6 +330,7 @@ The Device-Gateway loads its mowers from Fleet (`fleet.mowers.list` on start, th
 | Variable | `.env.example` | Meaning |
 | --- | --- | --- |
 | `MOWDECK_VERSION` | `dev` | Tag of the locally built images |
+| `MOWDECK_BUILD_VERSION`, `MOWDECK_BUILD_REF` | empty | Version and git ref a locally built web app shows (empty: "development build"); `demo/reset.sh` sets them from a checked-out release tag |
 | `MOWDECK_SIM_TIME_SCALE` | `30` | Simulated seconds per real second, so a lawn is mown in minutes |
 | `MOWDECK_TELEMETRY_HEARTBEAT_SECONDS` | `10` | Telemetry heartbeat |
 
