@@ -16,6 +16,7 @@ exactly the allowed fields and nothing else.
 import asyncio
 import base64
 import contextlib
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -103,19 +104,34 @@ class TrackingConfig:
 
 
 class SlidingWindow:
-    """A small in-process rate limiter: at most ``limit`` hits per key within ``window``."""
+    """A small in-process rate limiter: at most ``limit`` hits per key within ``window``.
+
+    Bounded: each key keeps at most its last ``limit`` hits, and at most ``max_keys`` keys are
+    kept, ordered by their last hit. Keys whose window has passed go first; beyond ``max_keys``
+    the least recently active key is forgotten, never everyone's counters at once. So a client
+    that rotates through many keys (addresses) only pushes out the quietest keys, which are
+    mostly its own earlier ones, and an active client keeps its count.
+    """
 
     def __init__(self, limit: int, window: timedelta, clock: Clock, max_keys: int = 10_000) -> None:
         self._limit = limit
         self._window = window
         self._clock = clock
         self._max_keys = max_keys
-        self._hits: dict[str, list[datetime]] = {}
+        self._hits: OrderedDict[str, deque[datetime]] = OrderedDict()
+
+    def _recent(self, key: str, now: datetime) -> deque[datetime]:
+        hits = self._hits.get(key)
+        if hits is None:
+            return deque(maxlen=max(1, self._limit))
+        while hits and now - hits[0] >= self._window:
+            hits.popleft()
+        return hits
 
     def retry_after(self, key: str) -> int:
         """Seconds until ``key`` may hit again; 0 when it may now (does not record)."""
         now = self._clock()
-        recent = [t for t in self._hits.get(key, []) if now - t < self._window]
+        recent = self._recent(key, now)
         if len(recent) < self._limit:
             return 0
         return max(1, int((recent[0] + self._window - now).total_seconds()) + 1)
@@ -123,13 +139,22 @@ class SlidingWindow:
     def hit(self, key: str) -> None:
         """Record a hit of ``key``."""
         now = self._clock()
-        if len(self._hits) >= self._max_keys:
-            self._hits = {k: v for k, v in self._hits.items() if v and now - v[-1] < self._window}
-            if len(self._hits) >= self._max_keys:
-                self._hits.clear()  # an attack on the limiter itself: start over
-        recent = [t for t in self._hits.get(key, []) if now - t < self._window]
+        recent = self._recent(key, now)
         recent.append(now)
         self._hits[key] = recent
+        self._hits.move_to_end(key)
+        # The front holds the keys hit longest ago: drop the expired ones, then, when still
+        # too many, the least recently active.
+        while self._hits:
+            oldest_key, oldest = next(iter(self._hits.items()))
+            expired = not oldest or now - oldest[-1] >= self._window
+            if not expired and len(self._hits) <= self._max_keys:
+                break
+            del self._hits[oldest_key]
+
+    def __len__(self) -> int:
+        """The number of keys kept."""
+        return len(self._hits)
 
 
 @dataclass(frozen=True, slots=True)

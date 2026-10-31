@@ -33,7 +33,7 @@ Every service enforces this itself (403, problem type `urn:mowdeck:problem:demo-
 
 ## Run it
 
-Requirements: Docker with Compose, a checkout of the repository (the demo builds its images), and a TLS proxy or tunnel in front if it is public.
+Requirements: Docker with Compose (2.24.4 or later: the demo uses `!reset` and `!override`), a checkout of the repository (the demo builds its images), a TLS proxy or tunnel in front if it is public, and `python3` when you use a [`demo/demo.override.yml`](#host-specific-settings-demooverrideyml) (`reset.sh` checks it with a standard-library script; Debian: `apt install python3`).
 
 ```bash
 cd infra/compose
@@ -45,6 +45,12 @@ demo/reset.sh                              # deletes any previous demo, builds, 
 ```
 
 The demo answers at `http://127.0.0.1:8580` (`GATEWAY_HTTP_PORT`). The seed job's last lines are printed at the end; `docker compose -p mowdeck-demo logs demo-seed` shows them again.
+
+### Host ports
+
+`GATEWAY_HTTP_PORT` is the only port the demo publishes. `docker-compose.demo.yml` drops the gateway's HTTPS port (the TLS proxy in front talks plain HTTP to the gateway; no demo router listens on `websecure`) and the host ports of NATS (client and monitor), Postgres and OpenFGA, which the regular stack binds to `127.0.0.1` for local tools. Only the demo's own containers reach them. `GATEWAY_HTTPS_PORT`, `POSTGRES_PORT`, `NATS_*_PORT` and `OPENFGA_*_PORT` in `demo.env` have no effect; for a look inside use `docker compose -p mowdeck-demo exec postgres psql -U postgres` and the like.
+
+NATS has no authentication, in the demo and in the regular stack: any process that reaches it can publish commands and telemetry past every authorization check. That is why no stack publishes it beyond loopback and the demo not at all; never attach a NATS container to a network that other workloads share. Authenticating the services to NATS (one credential per service) is a planned follow-up with its own ADR.
 
 `reset.sh --dry-run` prints the commands without running them; `--no-build` reuses the images of the last build. The script refuses the project name `mowdeck`, any `COMPOSE_PROFILES` (relay, agora, matter and billing do not belong in a demo) and the placeholder secrets. A git-ignored `demo/demo.override.yml` adds host specific settings ([below](#host-specific-settings-demooverrideyml)).
 
@@ -87,6 +93,8 @@ IDENTITY_REFRESH_COOKIE_SECURE=true
 
 Check it: more than 20 "Try the demo" sign-ins within a minute from one connection get 429, while a second connection (another network, a phone on mobile data) still signs in. Without the depth both would get 429.
 
+**IPv6.** One IPv6 connection (a home line, a cheap server) usually owns a whole /64, so counting each address would give one client 2^64 buckets. Every rate limit therefore counts an IPv6 client by its /64 (`sourceCriterion.ipStrategy.ipv6Subnet=64` in Compose and in the Helm chart's `-auth-ratelimit`), and so do the in-process limits of Identity (login, re-authentication) and Telemetry (public tracking page) through `mowdeck_service_kit.client_address.limiter_key`. IPv4 counts per address as before. Audit logs keep the whole address; the security center shows it shortened (IPv4 to three octets, IPv6 to its /48). A visitor behind Cloudflare reaches the demo over IPv6 whenever the host name has an AAAA record or Cloudflare's IPv6 compatibility is on; a Cloudflare rate-limiting rule on `/api/v1/identity/demo/session` is a cheap outer layer.
+
 ### Host specific settings (demo.override.yml)
 
 `reset.sh` uses `demo/demo.override.yml` as a last Compose file when it exists. The file is git-ignored and belongs to the host: join the gateway to an existing network of the proxy, or limit memory and CPU. Example for a proxy on the external network `mowdeck-demo-edge` that reaches the gateway as `mowdeck-demo-gateway`:
@@ -110,12 +118,18 @@ networks:
 
 Create the network once (`docker network create --driver bridge --internal --subnet 10.250.80.0/28 mowdeck-demo-edge`); `reset.sh` never removes an external network. With the gateway on the proxy's network the reconnect step after each reset is no longer needed.
 
-The override has the full power of a Compose file, so `reset.sh` compares the merged configuration with and without it before it deletes anything (with `--dry-run` too) and refuses it when
+The override has the full power of a Compose file, so `reset.sh` checks it against an **allow-list** before it deletes anything (with `--dry-run` too). It renders the stack with `docker compose config --format json` without and with the override and compares the two structurally (`demo/override_guard.py`, standard library only, needs `python3`). The override may only:
 
-- the service list differs: it adds a service or enables one of a profile (relay, agora, matter, billing);
-- any line of the demo mode (`MOWDECK_DEMO_MODE`), the seed secret (`MOWDECK_DEMO_SEED_TOKEN`, the `X-MowDeck-Demo*` header labels), Traefik's entry point and provider flags or a rate limit (`ratelimit` labels and router middlewares) changes.
+| Allowed | Where |
+| --- | --- |
+| attach an existing service to networks, with aliases or a fixed address | `services.<name>.networks` |
+| add networks that exist outside the demo | top-level `networks.<name>` with `external: true` |
+| limit resources | `mem_limit`, `mem_reservation`, `memswap_limit`, `cpus`, `cpu_shares`, `cpu_quota`, `cpu_period`, `cpuset`, `pids_limit`, `deploy.resources` of an existing service |
+| change logging | `services.<name>.logging` |
 
-Everything else is not checked and is the operator's responsibility: keep the file to networks and resource limits, no ports, volumes, environment or other labels. Those belong in `demo.env` or in the repository. The project name, profile and secret checks run before the override is read, so it cannot get around them. `reset.sh` prints `using .../demo.override.yml` when it takes the file.
+Every other difference refuses the reset: a service or a profile (relay, agora, matter, billing, whoami), environment (the demo mode, the seed secret, `MOWDECK_CLIENT_IP_DEPTH`, ...), labels (an extra router, a middleware, a rate limit), Traefik's command (API or dashboard flags, entry points, trusted headers), image, ports, volumes, `network_mode`, other `deploy` keys and any change of the demo's own network. Settings like the demo's history or rate limits belong in `demo.env`; everything else in the repository. The refusal names the paths it refused (for example `services.identity.labels.traefik.http.routers.zz.rule`), never a value: the merged configuration holds the demo's secrets, and it is only compared in memory, never printed or written to a file.
+
+The project name, profile and secret checks run before the override is read, so it cannot get around them. `reset.sh` prints `using .../demo.override.yml` when it takes the file. Without an override `reset.sh` needs no `python3`.
 
 ## Settings
 

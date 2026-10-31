@@ -22,12 +22,26 @@ The rule (one for every service, the same count as the gateway's rate limits):
 * Without a usable header, the TCP peer.
 
 Entries are cut to 64 characters; they are keys and log values, not parsed addresses.
+
+Rate limits and throttles key :func:`limiter_key`, not the address itself: one IPv6 connection
+(a home line, a cheap server) gets a whole /64, so a per-address key would give one client 2^64
+buckets. :func:`limiter_key` counts an IPv6 client by its /64, as the gateway's rate limits do
+(``ipstrategy.ipv6subnet=64``). The address stays whole for audit logs and the security center,
+which shortens it for display on its own (``ip_prefix``: IPv4 to three octets, IPv6 to the /48).
 """
+
+import ipaddress
 
 from starlette.requests import Request
 
 MAX_LENGTH = 64
 """Longest address a service keeps (an IPv6 address with a zone fits)."""
+
+IPV6_LIMITER_PREFIX = 64
+"""IPv6 clients count per /64 in every limiter (the gateway's ``ipstrategy.ipv6subnet``)."""
+
+UNKNOWN_KEY = "unknown"
+"""The key of requests without any address: they share one bucket."""
 
 
 def forwarded_client(
@@ -57,3 +71,24 @@ def client_address(request: Request, *, trust_forwarded_for: bool = True) -> str
     # Several header lines count as one list in order (RFC 9110, section 5.3).
     forwarded = ",".join(request.headers.getlist("x-forwarded-for"))
     return forwarded_client(forwarded, peer, proxy_depth=depth)
+
+
+def limiter_key(address: str | None) -> str:
+    """The rate limit key of a client address (from :func:`client_address`).
+
+    IPv4 stays the address; IPv6 becomes its /64 (``2001:db8:1:2::/64``), an IPv4-mapped IPv6
+    address its IPv4 address. Brackets and a zone (``%eth0``) are ignored. Anything that is no
+    address stays as it is (cut to :data:`MAX_LENGTH`), without an address :data:`UNKNOWN_KEY`.
+    """
+    if not address:
+        return UNKNOWN_KEY
+    raw = address.strip().strip("[]").split("%", 1)[0]
+    try:
+        parsed = ipaddress.ip_address(raw)
+    except ValueError:
+        return address[:MAX_LENGTH]
+    if isinstance(parsed, ipaddress.IPv6Address):
+        if parsed.ipv4_mapped is not None:
+            return str(parsed.ipv4_mapped)
+        return str(ipaddress.IPv6Network(f"{parsed}/{IPV6_LIMITER_PREFIX}", strict=False))
+    return str(parsed)

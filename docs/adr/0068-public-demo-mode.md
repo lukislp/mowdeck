@@ -70,7 +70,8 @@ Calls the policy refuses to visitors (registering mowers, the seed endpoints) ca
 - sets `MOWDECK_DEMO_MODE=true` on every service and the forced values above;
 - adds two Traefik entry point middlewares: `demo-headers` (labels every response, the web app included, and empties `X-MowDeck-Demo-Seed`) and `demo-ratelimit` (per client address, default 1200 requests a minute, burst 600, the web app's files included); "Try the demo" also has Identity's login limit;
 - runs the seed job and the live simulation a little faster than real time (`DEMO_SIM_TIME_SCALE`, default 3);
-- leaves map tiles, aerial photos, the street map, the camera relay, Agora, Matter and Billing off. `demo/reset.sh` refuses `COMPOSE_PROFILES`.
+- leaves map tiles, aerial photos, the street map, the camera relay, Agora, Matter and Billing off. `demo/reset.sh` refuses `COMPOSE_PROFILES`;
+- publishes only the gateway's HTTP entry point (`GATEWAY_HTTP_PORT`): no HTTPS port, and no host port of NATS, Postgres or OpenFGA (amendment below).
 
 ### Periodic reset
 
@@ -94,6 +95,14 @@ The labels in the web app are a courtesy; the enforcement is in the services.
 - All visitors share one account: one visitor can pause another's mower or delete a schedule. The reset bounds the damage; the policy keeps the mowers themselves and the account intact.
 - Unit tests cover the middleware, every service's policy and forced settings, the seed endpoints, the gardens and the history; the Playwright specs `demo.spec.ts` (projects `demo`, `demo-phone`) run in the CI job `e2e-demo` against the test stack with the demo override.
 - Nothing is deployed by this change; where and under which address the demo runs is the owner's decision.
+
+## Amendment (2026-10-31): hardening after the network audit
+
+A network audit of a local demo found three gaps; the decision above is unchanged, the stack is tightened:
+
+- **IPv6 per /64.** Per-address limits keyed the full IPv6 address, so one connection (a /64) had unlimited buckets. Every Traefik rate limit (Compose and Helm) now sets `sourceCriterion.ipStrategy.ipv6Subnet=64`, and the in-process limiters (Identity's login throttle, Telemetry's public tracking limits) key `mowdeck_service_kit.client_address.limiter_key`: IPv4 unchanged, IPv6 its /64. The client address itself stays whole for audit logs and the security center. Telemetry's limiter no longer clears every counter when it holds 10,000 addresses; it forgets the least recently active ones.
+- **Host ports.** The demo published NATS (client and monitor), Postgres and OpenFGA on host loopback and an HTTPS port no router used. `docker-compose.demo.yml` now drops them (`ports: !reset []`, Traefik `ports: !override`); the regular stack is unchanged. NATS has no authentication in any stack; authenticating the services to NATS (one credential per service) is a follow-up with its own ADR.
+- **Override allow-list.** `demo/reset.sh` compared a deny-list of lines, which a new router, Traefik API flags, `MOWDECK_CLIENT_IP_DEPTH`, ports or an image swap got around. It now diffs `docker compose config --format json` with and without `demo/demo.override.yml` (`demo/override_guard.py`, needs `python3`) and accepts only networks of existing services, new external networks, resource limits and logging.
 
 ## Amendment (2026-10-31): guarantees for the shared demo user
 

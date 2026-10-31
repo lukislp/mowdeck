@@ -45,6 +45,21 @@ services:
       - --api.dashboard=false
       - --ping=true
       - --log.level=INFO
+    # Only the HTTP entry point is published (GATEWAY_HTTP_PORT): the TLS proxy in front talks
+    # plain HTTP to it, and nothing outside needs websecure.
+    ports: !override
+      - "${GATEWAY_HTTP_PORT:-80}:80"
+
+  # No host port for the backing services: only the containers of this project reach them.
+  # NATS has no authentication (docs/ops/demo.md, "Host ports").
+  nats:
+    ports: !reset []
+
+  postgres:
+    ports: !reset []
+
+  openfga:
+    ports: !reset []
 
   identity:
     environment:
@@ -147,6 +162,7 @@ services:
       - traefik.http.middlewares.demo-ratelimit.ratelimit.period=1m
       - traefik.http.middlewares.demo-ratelimit.ratelimit.burst=${DEMO_RATE_BURST:-600}
       - traefik.http.middlewares.demo-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth=${GATEWAY_CLIENT_IP_DEPTH:-0}
+      - traefik.http.middlewares.demo-ratelimit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=64
 
   # One-shot job: the demo account, its mowers, schedules and history (demo/seed.py, standard
   # library only) in the identity image, which the stack builds anyway. Talks to the services

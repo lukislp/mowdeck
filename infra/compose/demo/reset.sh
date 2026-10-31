@@ -12,10 +12,10 @@
 #
 # Host specific settings: demo/demo.override.yml (git-ignored) is added as the last Compose file
 # when it exists, for example to join the gateway to the network of a proxy or to set mem_limit
-# and cpus (docs/ops/demo.md). It is refused when the merged stack has other services than
-# without it (an added service or an enabled profile) or when it changes the demo mode, the seed
-# secret, the Traefik entry points or the rate limits. Everything else in it is the operator's
-# responsibility: keep it to networks and resource limits.
+# and cpus (docs/ops/demo.md). It is an allow-list (demo/override_guard.py, needs python3): the
+# merged stack may differ from the one without it only in the networks of existing services, new
+# external networks, resource limits and logging. Anything else (a service, a profile, ports,
+# environment, labels, command, image, volumes) refuses the reset before anything is deleted.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,17 +76,18 @@ compose=(
 override="$here/demo.override.yml"
 if [ -f "$override" ]; then
   with_override=("${compose[@]}" -f "$override")
-  # What the override must leave as it is: the service list (no added service, no profile
-  # enabled) and the lines of the demo mode, the seed secret, Traefik's entry points and the
-  # rate limits. Compared, never printed (the merged config contains secrets).
-  guarded() {
-    "$@" config | grep -E 'MOWDECK_DEMO_MODE|MOWDECK_DEMO_SEED_TOKEN|X-MowDeck-Demo|--entrypoints[.]|--providers[.]|ratelimit' | sort || true
-  }
-  base_services="$("${compose[@]}" config --services | sort)" || die "docker compose config failed"
-  override_services="$("${with_override[@]}" config --services | sort)" || die "docker compose config failed with $override"
-  [ "$base_services" = "$override_services" ] || die "$override must not add services or enable profiles"
-  [ "$(guarded "${compose[@]}")" = "$(guarded "${with_override[@]}")" ] ||
-    die "$override must not change the demo mode, the seed secret, Traefik's entry points or rate limits"
+  # An allow-list (demo/override_guard.py): the merged configuration with the override may
+  # differ from the one without it only in networks (external ones, attached to existing
+  # services), resource limits and logging. Compared in memory, never printed or written to a
+  # file (the merged configuration contains secrets).
+  python="$(command -v python3 || true)"
+  [ -n "$python" ] || die "python3 is needed to check $override (Debian: apt install python3)"
+  base_json="$("${compose[@]}" config --format json)" || die "docker compose config failed"
+  override_json="$("${with_override[@]}" config --format json)" || die "docker compose config failed with $override"
+  printf '{"base": %s, "override": %s}\n' "$base_json" "$override_json" |
+    "$python" "$here/override_guard.py" ||
+    die "$override may only add networks, resource limits and logging (docs/ops/demo.md)"
+  unset base_json override_json
   echo "demo-reset: using $override"
   compose=("${with_override[@]}")
 fi

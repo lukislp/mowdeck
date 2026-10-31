@@ -118,7 +118,7 @@ All settings come from environment variables with the prefix `MOWDECK_`. Any set
 | `MOWDECK_NATS_ENABLED` | `true` | Connect to NATS on startup |
 | `MOWDECK_DATABASE_URL` | unset | PostgreSQL URL (secret; usually `MOWDECK_DATABASE_URL_FILE`) |
 | `MOWDECK_OTEL_EXPORTER_OTLP_ENDPOINT` | unset | OTLP/HTTP collector, e.g. `http://otel-collector:4318`; tracing is off when unset |
-| `MOWDECK_CLIENT_IP_DEPTH` | unset | Trusted proxies in front of the gateway that set or append `X-Forwarded-For`; `client_address.client_address()` takes the entry that many places left of the gateway's own (unset: the leftmost entry). Compose and Helm pass `GATEWAY_CLIENT_IP_DEPTH` |
+| `MOWDECK_CLIENT_IP_DEPTH` | unset | Trusted proxies in front of the gateway that set or append `X-Forwarded-For`; `client_address.client_address()` takes the entry that many places left of the gateway's own (unset: the leftmost entry). Compose and Helm pass `GATEWAY_CLIENT_IP_DEPTH`. Rate limits key `client_address.limiter_key()` of that address (IPv6 per /64, IPv4 unchanged); audit logs keep the whole address |
 | `MOWDECK_METRICS_ENABLED` | `true` | Serve Prometheus metrics at `/metrics` |
 | `MOWDECK_SHUTDOWN_GRACE_SECONDS` | `10` | Budget for shutdown hooks; also uvicorn's graceful shutdown timeout |
 | `MOWDECK_ENTITLEMENTS_BILLING_ENABLED` | `false` | Installation switch of the plans (`billing.enabled`); the Entitlements client's fallback when Entitlements does not answer (off: allowed, on: refused) |
