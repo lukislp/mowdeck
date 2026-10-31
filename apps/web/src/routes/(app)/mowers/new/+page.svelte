@@ -25,6 +25,7 @@
   import { m } from '#lib/paraglide/messages.js';
   import { notifyPlanProblem } from '#lib/plan/problems.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
 
   type ConnectionKind = components['schemas']['ConnectionKind'];
 
@@ -130,64 +131,73 @@
   />
 {/snippet}
 
-{#if linked && schema}
-  <div class="form">
-    <Panel label={m.mower_settings_general()}>
-      <div class="fields">{@render kindSelect()}</div>
-    </Panel>
-    {#key schema.kind}
-      <LinkedMowerFlow {schema} />
-    {/key}
-  </div>
-{:else}
-  <form class="form" onsubmit={submit} novalidate>
-    <Panel label={m.mower_settings_general()}>
-      <div class="fields">
-        {@render kindSelect()}
-        <Field
-          id="name"
-          label={m.mower_name()}
-          required
-          maxlength={100}
-          bind:value={name}
-          error={problem?.fieldError('name') ?? null}
-        />
-        <Field id="model" label={m.mower_model()} hint={m.optional()} bind:value={model} />
-        <Field id="serial" label={m.mower_serial()} hint={m.optional()} mono bind:value={serial} />
-      </div>
-    </Panel>
-    <Panel label={m.mower_connection_title()}>
-      {#if kindsProblem}
-        <ProblemNotice
-          title={problemMessage(kindsProblem)}
-          reference={kindsProblem.correlationId}
-          referenceLabel={m.problem_reference()}
-        />
-      {:else if schema}
-        <ConnectionForm {schema} bind:state={connection} {issues} />
-      {:else}
-        <p class="quiet" role="status"><SlowLoading /></p>
-      {/if}
-    </Panel>
-    <div class="actions">
-      {#if problem}
-        <ProblemNotice
-          title={problemMessage(problem)}
-          detail={problem.detail}
-          reference={problem.correlationId}
-          referenceLabel={m.problem_reference()}
-        />
-      {/if}
-      <Button
-        type="submit"
-        variant="primary"
-        pending={busy}
-        disabled={!name.trim() || !schema}
-        testid="mower-submit">{m.mower_register_submit()}</Button
-      >
+<!-- The demo comes with its simulated mowers: Fleet refuses registering more. -->
+<DemoLock inset testid="demo-lock-mower-new">
+  {#if linked && schema}
+    <div class="form">
+      <Panel label={m.mower_settings_general()}>
+        <div class="fields">{@render kindSelect()}</div>
+      </Panel>
+      {#key schema.kind}
+        <LinkedMowerFlow {schema} />
+      {/key}
     </div>
-  </form>
-{/if}
+  {:else}
+    <form class="form" onsubmit={submit} novalidate>
+      <Panel label={m.mower_settings_general()}>
+        <div class="fields">
+          {@render kindSelect()}
+          <Field
+            id="name"
+            label={m.mower_name()}
+            required
+            maxlength={100}
+            bind:value={name}
+            error={problem?.fieldError('name') ?? null}
+          />
+          <Field id="model" label={m.mower_model()} hint={m.optional()} bind:value={model} />
+          <Field
+            id="serial"
+            label={m.mower_serial()}
+            hint={m.optional()}
+            mono
+            bind:value={serial}
+          />
+        </div>
+      </Panel>
+      <Panel label={m.mower_connection_title()}>
+        {#if kindsProblem}
+          <ProblemNotice
+            title={problemMessage(kindsProblem)}
+            reference={kindsProblem.correlationId}
+            referenceLabel={m.problem_reference()}
+          />
+        {:else if schema}
+          <ConnectionForm {schema} bind:state={connection} {issues} />
+        {:else}
+          <p class="quiet" role="status"><SlowLoading /></p>
+        {/if}
+      </Panel>
+      <div class="actions">
+        {#if problem}
+          <ProblemNotice
+            title={problemMessage(problem)}
+            detail={problem.detail}
+            reference={problem.correlationId}
+            referenceLabel={m.problem_reference()}
+          />
+        {/if}
+        <Button
+          type="submit"
+          variant="primary"
+          pending={busy}
+          disabled={!name.trim() || !schema}
+          testid="mower-submit">{m.mower_register_submit()}</Button
+        >
+      </div>
+    </form>
+  {/if}
+</DemoLock>
 
 <style>
   .form {

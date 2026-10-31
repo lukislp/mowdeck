@@ -5,10 +5,10 @@
  * "Try the demo" instead of the sign-in forms. Nothing here can be dismissed.
  */
 
-import { PROBLEM_PREFIX } from '#lib/api/problem.js';
+import { DEMO_MODE_PROBLEM } from '#lib/api/problem.js';
 
 /** Problem type of an action the demo refuses (403). */
-export const DEMO_PROBLEM = `${PROBLEM_PREFIX}demo-mode`;
+export const DEMO_PROBLEM = DEMO_MODE_PROBLEM;
 
 /** Class on `<html>` while the demo banner is shown (it reserves the banner's height). */
 export const DEMO_ROOT_CLASS = 'md-demo';

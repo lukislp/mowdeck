@@ -37,6 +37,7 @@
     type PersonalToken,
     type Scope,
   } from '#lib/settings/personal-tokens.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
 
   const PATH = '/api/v1/identity/me/api-tokens';
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
@@ -256,141 +257,145 @@
   </div>
 {/if}
 
-{#if tokens && tokens.length === 0}
-  <p class="pad quiet" data-testid="pat-empty">{m.pat_empty()}</p>
-{:else if tokens}
-  {#if active.length}
-    <ul class="tokens" data-testid="pat-list" aria-label={m.pat_list_title()}>
-      {#each active as token (token.id)}
-        {@const left = lifeLeft(token, now)}
-        <li data-testid="pat-row" data-name={token.name} class:soon={expiresSoon(token, now)}>
-          <span class="who">
-            <span class="name">{token.name}</span>
-            <span class="mono">{token.prefix}…</span>
-            {@render scopeChips(token.scopes)}
-          </span>
-          <span class="life">
-            <span class="meter" aria-hidden="true"
-              ><span style:inline-size="{left * 100}%"></span></span
+<!-- Identity refuses new and revoked access tokens in the demo. -->
+<DemoLock inset testid="demo-lock-api-access">
+  {#if tokens && tokens.length === 0}
+    <p class="pad quiet" data-testid="pat-empty">{m.pat_empty()}</p>
+  {:else if tokens}
+    {#if active.length}
+      <ul class="tokens" data-testid="pat-list" aria-label={m.pat_list_title()}>
+        {#each active as token (token.id)}
+          {@const left = lifeLeft(token, now)}
+          <li data-testid="pat-row" data-name={token.name} class:soon={expiresSoon(token, now)}>
+            <span class="who">
+              <span class="name">{token.name}</span>
+              <span class="mono">{token.prefix}…</span>
+              {@render scopeChips(token.scopes)}
+            </span>
+            <span class="life">
+              <span class="meter" aria-hidden="true"
+                ><span style:inline-size="{left * 100}%"></span></span
+              >
+              <span class="mono" data-testid="pat-expiry">{expiryLabel(token)}</span>
+              <span class="mono">
+                {m.pat_last_used()}
+                {token.last_used_at ? formatDateTime(token.last_used_at) : m.never()}
+              </span>
+            </span>
+            <Button
+              variant="danger"
+              testid="pat-revoke"
+              label={m.pat_revoke_named({ name: token.name })}
+              onclick={() => revoke(token)}>{m.pat_revoke()}</Button
             >
-            <span class="mono" data-testid="pat-expiry">{expiryLabel(token)}</span>
-            <span class="mono">
-              {m.pat_last_used()}
-              {token.last_used_at ? formatDateTime(token.last_used_at) : m.never()}
-            </span>
-          </span>
-          <Button
-            variant="danger"
-            testid="pat-revoke"
-            label={m.pat_revoke_named({ name: token.name })}
-            onclick={() => revoke(token)}>{m.pat_revoke()}</Button
-          >
-        </li>
-      {/each}
-    </ul>
-  {:else}
-    <p class="pad quiet" data-testid="pat-no-active">{m.pat_no_active()}</p>
-  {/if}
-  {#if inactive.length}
-    <details class="inactive" data-testid="pat-inactive">
-      <summary>
-        <Icon name="chevron" size={16} />{m.pat_inactive_group({ count: inactive.length })}
-      </summary>
-      <ul>
-        {#each inactive as token (token.id)}
-          <li data-testid="pat-inactive-row" data-name={token.name}>
-            <span class="name">{token.name}</span>
-            <span class="mono">{token.prefix}…</span>
-            <span class="mono when">
-              {#if token.revoked_at}
-                {m.pat_revoked_on()} {formatDateTime(token.revoked_at)}
-              {:else}
-                {expiryLabel(token)}
-              {/if}
-            </span>
           </li>
         {/each}
       </ul>
-    </details>
-  {/if}
-{/if}
-
-<p class="md-visually-hidden" role="status" data-testid="pat-status">{note}</p>
-
-<Panel label={m.pat_create_title()}>
-  <form class="form" onsubmit={create} novalidate>
-    <Field
-      id="pat-name"
-      label={m.pat_name()}
-      placeholder={m.pat_name_hint()}
-      required
-      maxlength={100}
-      bind:value={name}
-    />
-
-    <fieldset class="group" data-testid="pat-scopes">
-      <legend class="label">{m.pat_scopes()}</legend>
-      <div class="scopes">
-        {#each SCOPES as key, index (key)}
-          {@const needed = key === VIEW_SCOPE && locked}
-          <label class="scope" class:on={scopes.includes(key)} class:locked={needed}>
-            <input
-              type="checkbox"
-              data-testid="pat-scope-{key}"
-              checked={scopes.includes(key)}
-              disabled={needed}
-              onchange={(event) => (scopes = toggleScope(scopes, key, event.currentTarget.checked))}
-            />
-            <span class="scope-num mono" aria-hidden="true"
-              >{String(index + 1).padStart(2, '0')}</span
-            >
-            <span class="scope-name">{scopeName(key)}</span>
-            <code class="scope-key">{key}</code>
-            <span class="scope-hint">{scopeHint(key)}</span>
-            {#if needed}<span class="scope-note">{m.pat_scope_needed()}</span>{/if}
-          </label>
-        {/each}
-      </div>
-      <p class="hint never"><Icon name="shield" size={16} />{m.pat_scope_never()}</p>
-    </fieldset>
-
-    <fieldset class="group" data-testid="pat-lifetime">
-      <legend class="label">{m.pat_lifetime()}</legend>
-      <div class="segments">
-        {#each LIFETIMES as days (days)}
-          <label class="segment" class:on={lifetime === days}>
-            <input
-              type="radio"
-              name="pat-lifetime"
-              value={days}
-              data-testid="pat-lifetime-{days}"
-              checked={lifetime === days}
-              onchange={() => (lifetime = days)}
-            />
-            {days === MAX_LIFETIME ? m.pat_lifetime_year() : m.pat_lifetime_days({ days })}
-          </label>
-        {/each}
-      </div>
-      <p class="hint" data-testid="pat-until">{m.pat_lifetime_until({ date: until })}</p>
-    </fieldset>
-
-    {#if scopes.length === 0}
-      <p class="none">{m.pat_none_selected()}</p>
+    {:else}
+      <p class="pad quiet" data-testid="pat-no-active">{m.pat_no_active()}</p>
     {/if}
+    {#if inactive.length}
+      <details class="inactive" data-testid="pat-inactive">
+        <summary>
+          <Icon name="chevron" size={16} />{m.pat_inactive_group({ count: inactive.length })}
+        </summary>
+        <ul>
+          {#each inactive as token (token.id)}
+            <li data-testid="pat-inactive-row" data-name={token.name}>
+              <span class="name">{token.name}</span>
+              <span class="mono">{token.prefix}…</span>
+              <span class="mono when">
+                {#if token.revoked_at}
+                  {m.pat_revoked_on()} {formatDateTime(token.revoked_at)}
+                {:else}
+                  {expiryLabel(token)}
+                {/if}
+              </span>
+            </li>
+          {/each}
+        </ul>
+      </details>
+    {/if}
+  {/if}
 
-    <div class="submit">
-      <Button
-        type="submit"
-        variant="primary"
-        icon="key"
-        pending={busy}
-        disabled={!name.trim() || scopes.length === 0}
-        testid="pat-create">{m.pat_create()}</Button
-      >
-      <span class="hint"><Icon name="shield" size={16} />{m.pat_stepup_note()}</span>
-    </div>
-  </form>
-</Panel>
+  <p class="md-visually-hidden" role="status" data-testid="pat-status">{note}</p>
+
+  <Panel label={m.pat_create_title()}>
+    <form class="form" onsubmit={create} novalidate>
+      <Field
+        id="pat-name"
+        label={m.pat_name()}
+        placeholder={m.pat_name_hint()}
+        required
+        maxlength={100}
+        bind:value={name}
+      />
+
+      <fieldset class="group" data-testid="pat-scopes">
+        <legend class="label">{m.pat_scopes()}</legend>
+        <div class="scopes">
+          {#each SCOPES as key, index (key)}
+            {@const needed = key === VIEW_SCOPE && locked}
+            <label class="scope" class:on={scopes.includes(key)} class:locked={needed}>
+              <input
+                type="checkbox"
+                data-testid="pat-scope-{key}"
+                checked={scopes.includes(key)}
+                disabled={needed}
+                onchange={(event) =>
+                  (scopes = toggleScope(scopes, key, event.currentTarget.checked))}
+              />
+              <span class="scope-num mono" aria-hidden="true"
+                >{String(index + 1).padStart(2, '0')}</span
+              >
+              <span class="scope-name">{scopeName(key)}</span>
+              <code class="scope-key">{key}</code>
+              <span class="scope-hint">{scopeHint(key)}</span>
+              {#if needed}<span class="scope-note">{m.pat_scope_needed()}</span>{/if}
+            </label>
+          {/each}
+        </div>
+        <p class="hint never"><Icon name="shield" size={16} />{m.pat_scope_never()}</p>
+      </fieldset>
+
+      <fieldset class="group" data-testid="pat-lifetime">
+        <legend class="label">{m.pat_lifetime()}</legend>
+        <div class="segments">
+          {#each LIFETIMES as days (days)}
+            <label class="segment" class:on={lifetime === days}>
+              <input
+                type="radio"
+                name="pat-lifetime"
+                value={days}
+                data-testid="pat-lifetime-{days}"
+                checked={lifetime === days}
+                onchange={() => (lifetime = days)}
+              />
+              {days === MAX_LIFETIME ? m.pat_lifetime_year() : m.pat_lifetime_days({ days })}
+            </label>
+          {/each}
+        </div>
+        <p class="hint" data-testid="pat-until">{m.pat_lifetime_until({ date: until })}</p>
+      </fieldset>
+
+      {#if scopes.length === 0}
+        <p class="none">{m.pat_none_selected()}</p>
+      {/if}
+
+      <div class="submit">
+        <Button
+          type="submit"
+          variant="primary"
+          icon="key"
+          pending={busy}
+          disabled={!name.trim() || scopes.length === 0}
+          testid="pat-create">{m.pat_create()}</Button
+        >
+        <span class="hint"><Icon name="shield" size={16} />{m.pat_stepup_note()}</span>
+      </div>
+    </form>
+  </Panel>
+</DemoLock>
 
 <style>
   .pad {

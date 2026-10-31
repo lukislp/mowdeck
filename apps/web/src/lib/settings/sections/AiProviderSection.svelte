@@ -13,6 +13,7 @@
   import { Button, Field, Panel, ProblemNotice, Switch } from '@mowdeck/ui';
 
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
   import { formatDateTime, formatNumber } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
@@ -238,147 +239,152 @@
       />
     {/if}
 
-    <form class="form" onsubmit={save} novalidate>
-      <fieldset class="families">
-        <legend class="label">{m.ai_provider_family()}</legend>
-        {#each families as option (option.key)}
-          <label class="family" class:chosen={form.family === option.key}>
-            <input
-              type="radio"
-              name="family"
-              value={option.key}
-              checked={form.family === option.key}
-              onchange={() => pick(option)}
-            />
-            <span class="family-name">{option.label}</span>
-            <span class="family-meta mono">
-              {option.local ? m.ai_provider_local() : m.ai_provider_cloud()}
-              {#if option.needs_key && option.key_env}· {option.key_env}{/if}
-            </span>
-          </label>
-        {/each}
-      </fieldset>
+    <!-- The demo uses its built-in model: Vision refuses an own provider (it would call out). -->
+    <DemoLock testid="demo-lock-ai-provider">
+      <form class="form" onsubmit={save} novalidate>
+        <fieldset class="families">
+          <legend class="label">{m.ai_provider_family()}</legend>
+          {#each families as option (option.key)}
+            <label class="family" class:chosen={form.family === option.key}>
+              <input
+                type="radio"
+                name="family"
+                value={option.key}
+                checked={form.family === option.key}
+                onchange={() => pick(option)}
+              />
+              <span class="family-name">{option.label}</span>
+              <span class="family-meta mono">
+                {option.local ? m.ai_provider_local() : m.ai_provider_cloud()}
+                {#if option.needs_key && option.key_env}· {option.key_env}{/if}
+              </span>
+            </label>
+          {/each}
+        </fieldset>
 
-      {#if family}
-        <p class="note" data-testid="ai-provider-key-need">
-          {#if family.needs_key}
-            {m.ai_provider_needs_key({ env: family.key_env ?? family.label })}
-          {:else}
-            {m.ai_provider_no_key()}
-          {/if}
-        </p>
-      {/if}
+        {#if family}
+          <p class="note" data-testid="ai-provider-key-need">
+            {#if family.needs_key}
+              {m.ai_provider_needs_key({ env: family.key_env ?? family.label })}
+            {:else}
+              {m.ai_provider_no_key()}
+            {/if}
+          </p>
+        {/if}
 
-      <Field
-        id="ai-model"
-        label={m.ai_provider_model()}
-        bind:value={form.model}
-        mono
-        required
-        autocomplete="off"
-        hint={family?.examples.length
-          ? m.ai_provider_model_hint({ examples: family.examples.join(', ') })
-          : undefined}
-        error={(submitted ? errors.model : null) ?? fieldError('model')}
-        testid="ai-model"
-      />
-
-      {#if family?.needs_api_base || form.apiBase}
         <Field
-          id="ai-base"
-          label={m.ai_provider_base()}
-          type="url"
-          inputmode="url"
-          bind:value={form.apiBase}
+          id="ai-model"
+          label={m.ai_provider_model()}
+          bind:value={form.model}
           mono
-          required={family?.needs_api_base}
+          required
           autocomplete="off"
-          placeholder={family?.default_api_base ?? undefined}
-          hint={m.ai_provider_base_hint()}
-          error={(submitted ? errors.apiBase : null) ?? fieldError('api_base')}
-          testid="ai-base"
+          hint={family?.examples.length
+            ? m.ai_provider_model_hint({ examples: family.examples.join(', ') })
+            : undefined}
+          error={(submitted ? errors.model : null) ?? fieldError('model')}
+          testid="ai-model"
         />
-      {/if}
 
-      {#if family?.needs_key !== false || settings.api_key_set}
-        <div class="key">
+        {#if family?.needs_api_base || form.apiBase}
           <Field
-            id="ai-key"
-            label={m.ai_provider_key()}
-            type="password"
-            bind:value={form.apiKey}
-            autocomplete="new-password"
-            disabled={!secrets || form.removeKey}
-            placeholder={settings.api_key_set && !form.removeKey
-              ? m.ai_provider_key_stored()
-              : undefined}
-            hint={settings.api_key_set ? m.ai_provider_key_keep() : m.ai_provider_key_hint()}
-            error={fieldError('api_key')}
-            testid="ai-key"
+            id="ai-base"
+            label={m.ai_provider_base()}
+            type="url"
+            inputmode="url"
+            bind:value={form.apiBase}
+            mono
+            required={family?.needs_api_base}
+            autocomplete="off"
+            placeholder={family?.default_api_base ?? undefined}
+            hint={m.ai_provider_base_hint()}
+            error={(submitted ? errors.apiBase : null) ?? fieldError('api_base')}
+            testid="ai-base"
           />
-          {#if settings.api_key_set}
-            <Button
-              variant="ghost"
-              icon={form.removeKey ? 'back' : 'trash'}
-              onclick={() => (form = { ...form, removeKey: !form.removeKey, apiKey: '' })}
-              testid="ai-key-remove"
-              >{form.removeKey
-                ? m.ai_provider_key_keep_action()
-                : m.ai_provider_key_remove()}</Button
-            >
-          {/if}
-          {#if missingKey}
-            <p class="note">{m.ai_provider_key_missing()}</p>
+        {/if}
+
+        {#if family?.needs_key !== false || settings.api_key_set}
+          <div class="key">
+            <Field
+              id="ai-key"
+              label={m.ai_provider_key()}
+              type="password"
+              bind:value={form.apiKey}
+              autocomplete="new-password"
+              disabled={!secrets || form.removeKey}
+              placeholder={settings.api_key_set && !form.removeKey
+                ? m.ai_provider_key_stored()
+                : undefined}
+              hint={settings.api_key_set ? m.ai_provider_key_keep() : m.ai_provider_key_hint()}
+              error={fieldError('api_key')}
+              testid="ai-key"
+            />
+            {#if settings.api_key_set}
+              <Button
+                variant="ghost"
+                icon={form.removeKey ? 'back' : 'trash'}
+                onclick={() => (form = { ...form, removeKey: !form.removeKey, apiKey: '' })}
+                testid="ai-key-remove"
+                >{form.removeKey
+                  ? m.ai_provider_key_keep_action()
+                  : m.ai_provider_key_remove()}</Button
+              >
+            {/if}
+            {#if missingKey}
+              <p class="note">{m.ai_provider_key_missing()}</p>
+            {/if}
+          </div>
+        {/if}
+
+        <Switch
+          id="ai-enabled"
+          label={m.ai_provider_enabled()}
+          hint={m.ai_provider_enabled_hint()}
+          states={{ on: m.switch_on(), off: m.switch_off() }}
+          bind:checked={form.enabled}
+          testid="ai-enabled"
+        />
+
+        <div class="notes">
+          <p class="note">{m.ai_provider_cost_note()}</p>
+          {#if family && !family.local}
+            <p class="note warn" data-testid="ai-provider-cloud-note">
+              {m.ai_provider_cloud_note()}
+            </p>
+          {:else if family}
+            <p class="note">{m.ai_provider_local_note()}</p>
           {/if}
         </div>
-      {/if}
 
-      <Switch
-        id="ai-enabled"
-        label={m.ai_provider_enabled()}
-        hint={m.ai_provider_enabled_hint()}
-        states={{ on: m.switch_on(), off: m.switch_off() }}
-        bind:checked={form.enabled}
-        testid="ai-enabled"
-      />
-
-      <div class="notes">
-        <p class="note">{m.ai_provider_cost_note()}</p>
-        {#if family && !family.local}
-          <p class="note warn" data-testid="ai-provider-cloud-note">{m.ai_provider_cloud_note()}</p>
-        {:else if family}
-          <p class="note">{m.ai_provider_local_note()}</p>
-        {/if}
-      </div>
-
-      <div class="row">
-        <Button
-          type="submit"
-          variant="primary"
-          icon="check"
-          pending={busy === 'save'}
-          disabled={busy !== null}
-          testid="ai-save">{m.ai_provider_save()}</Button
-        >
-        <Button
-          icon="pulse"
-          pending={busy === 'test'}
-          disabled={busy !== null || !settings.configured}
-          onclick={runTest}
-          testid="ai-test">{m.ai_provider_test()}</Button
-        >
-        {#if settings.configured}
+        <div class="row">
           <Button
-            variant="danger"
-            icon="trash"
-            pending={busy === 'delete'}
+            type="submit"
+            variant="primary"
+            icon="check"
+            pending={busy === 'save'}
             disabled={busy !== null}
-            onclick={remove}
-            testid="ai-delete">{m.ai_provider_delete()}</Button
+            testid="ai-save">{m.ai_provider_save()}</Button
           >
-        {/if}
-      </div>
-    </form>
+          <Button
+            icon="pulse"
+            pending={busy === 'test'}
+            disabled={busy !== null || !settings.configured}
+            onclick={runTest}
+            testid="ai-test">{m.ai_provider_test()}</Button
+          >
+          {#if settings.configured}
+            <Button
+              variant="danger"
+              icon="trash"
+              pending={busy === 'delete'}
+              disabled={busy !== null}
+              onclick={remove}
+              testid="ai-delete">{m.ai_provider_delete()}</Button
+            >
+          {/if}
+        </div>
+      </form>
+    </DemoLock>
 
     <Panel label={m.ai_provider_preferences()} testid="ai-preferences">
       <Switch

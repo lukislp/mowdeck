@@ -12,6 +12,7 @@
   import LinkedAccountCard from '#lib/components/LinkedAccountCard.svelte';
   import LinkedAccountConnect from '#lib/components/LinkedAccountConnect.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
   import { problemMessage } from '#lib/i18n.js';
   import type { LinkedAccount } from '#lib/linked/accounts.js';
   import {
@@ -103,35 +104,38 @@
 {:else if !accounts}
   <p class="pad quiet" role="status"><SlowLoading /></p>
 {:else}
-  <section class="list" data-testid="linked-accounts" aria-label={m.linked_title()}>
-    {#if accounts.length === 0}
-      <p class="pad quiet" data-testid="linked-empty">{m.linked_empty()}</p>
-    {:else}
-      {#each accounts as account (account.id)}
-        <LinkedAccountCard
-          {account}
-          provider={providerOf.get(account.provider) ?? null}
-          onsync={(credentials) => sync(account, credentials)}
-          onremove={() => remove(account)}
-        />
-      {/each}
-    {/if}
-  </section>
-
-  <Panel label={m.linked_connect_title()} testid="linked-connect-panel">
-    <div class="connect">
-      {#if providerProblem}
-        <ProblemNotice
-          title={problemMessage(providerProblem)}
-          detail={providerProblem.detail}
-          reference={providerProblem.correlationId}
-          referenceLabel={m.problem_reference()}
-        />
+  <!-- The demo has simulated mowers only: Fleet refuses linking manufacturer accounts. -->
+  <DemoLock inset testid="demo-lock-linked-accounts">
+    <section class="list" data-testid="linked-accounts" aria-label={m.linked_title()}>
+      {#if accounts.length === 0}
+        <p class="pad quiet" data-testid="linked-empty">{m.linked_empty()}</p>
       {:else}
-        <LinkedAccountConnect {providers} onconnect={connect} />
+        {#each accounts as account (account.id)}
+          <LinkedAccountCard
+            {account}
+            provider={providerOf.get(account.provider) ?? null}
+            onsync={(credentials) => sync(account, credentials)}
+            onremove={() => remove(account)}
+          />
+        {/each}
       {/if}
-    </div>
-  </Panel>
+    </section>
+
+    <Panel label={m.linked_connect_title()} testid="linked-connect-panel">
+      <div class="connect">
+        {#if providerProblem}
+          <ProblemNotice
+            title={problemMessage(providerProblem)}
+            detail={providerProblem.detail}
+            reference={providerProblem.correlationId}
+            referenceLabel={m.problem_reference()}
+          />
+        {:else}
+          <LinkedAccountConnect {providers} onconnect={connect} />
+        {/if}
+      </div>
+    </Panel>
+  </DemoLock>
 {/if}
 
 <style>

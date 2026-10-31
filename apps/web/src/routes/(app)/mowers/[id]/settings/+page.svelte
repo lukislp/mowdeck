@@ -73,6 +73,7 @@
   import { accountPlan } from '#lib/plan/plan.svelte.js';
   import { mowers as states } from '#lib/stores/mowers.svelte.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
 
   type Mower = components['schemas']['MowerOut'];
   type ConnectionKind = components['schemas']['ConnectionKind'];
@@ -470,66 +471,75 @@
     />
   </div>
 {:else if mower}
-  <form class="form" onsubmit={save} novalidate>
-    <Panel label={m.mower_settings_general()}>
-      <div class="fields">
-        <Field id="name" label={m.mower_name()} required maxlength={100} bind:value={name} />
-        <Select
-          id="connection_kind"
-          label={m.mower_connection_kind()}
-          options={kindOptions}
-          bind:value={() => kind, selectKind}
-          hint={problem?.fieldError('connection_kind') ??
-            (sameKind ? undefined : m.mower_kind_change_warning())}
-        />
-        <Field id="model" label={m.mower_model()} hint={m.optional()} bind:value={model} />
-        <Field id="serial" label={m.mower_serial()} hint={m.optional()} mono bind:value={serial} />
+  <!-- The demo mowers stay as they are: Fleet refuses renaming and reconfiguring them. -->
+  <DemoLock inset testid="demo-lock-mower-settings">
+    <form class="form" onsubmit={save} novalidate>
+      <Panel label={m.mower_settings_general()}>
+        <div class="fields">
+          <Field id="name" label={m.mower_name()} required maxlength={100} bind:value={name} />
+          <Select
+            id="connection_kind"
+            label={m.mower_connection_kind()}
+            options={kindOptions}
+            bind:value={() => kind, selectKind}
+            hint={problem?.fieldError('connection_kind') ??
+              (sameKind ? undefined : m.mower_kind_change_warning())}
+          />
+          <Field id="model" label={m.mower_model()} hint={m.optional()} bind:value={model} />
+          <Field
+            id="serial"
+            label={m.mower_serial()}
+            hint={m.optional()}
+            mono
+            bind:value={serial}
+          />
+        </div>
+      </Panel>
+      <Panel label={m.mower_connection_title()}>
+        {#if sameKind && mower.linked_account_id}
+          <div class="via" data-testid="linked-via">
+            <span class="label">{m.linked_via()}</span>
+            <a href="/settings#linked-accounts" data-testid="linked-via-email"
+              >{linkedAccount?.email ?? (linkedUnreadable ? m.linked_account_unreadable() : '…')}</a
+            >
+          </div>
+        {/if}
+        {#if legacy}
+          <div class="legacy" data-testid="linked-legacy">
+            <p class="hint">{m.linked_legacy_hint()}</p>
+            <ul>
+              {#each storedEntries as [key, value] (key)}
+                <li><span class="key">{key}</span><span>{JSON.stringify(value)}</span></li>
+              {/each}
+            </ul>
+          </div>
+        {:else if toLinked}
+          <p class="hint" data-testid="linked-kind-change">{m.linked_kind_change_hint()}</p>
+        {:else if schema}
+          <ConnectionForm {schema} bind:state={connection} {issues} {extras} />
+        {:else}
+          <p class="hint">{m.conn_unknown_kind()}</p>
+        {/if}
+      </Panel>
+      <div class="actions">
+        {#if problem}
+          <ProblemNotice
+            title={problemMessage(problem)}
+            detail={problem.detail}
+            reference={problem.correlationId}
+            referenceLabel={m.problem_reference()}
+          />
+        {/if}
+        <Button
+          type="submit"
+          variant="primary"
+          pending={busy}
+          disabled={!name.trim() || toLinked}
+          testid="mower-save">{m.save()}</Button
+        >
       </div>
-    </Panel>
-    <Panel label={m.mower_connection_title()}>
-      {#if sameKind && mower.linked_account_id}
-        <div class="via" data-testid="linked-via">
-          <span class="label">{m.linked_via()}</span>
-          <a href="/settings#linked-accounts" data-testid="linked-via-email"
-            >{linkedAccount?.email ?? (linkedUnreadable ? m.linked_account_unreadable() : '…')}</a
-          >
-        </div>
-      {/if}
-      {#if legacy}
-        <div class="legacy" data-testid="linked-legacy">
-          <p class="hint">{m.linked_legacy_hint()}</p>
-          <ul>
-            {#each storedEntries as [key, value] (key)}
-              <li><span class="key">{key}</span><span>{JSON.stringify(value)}</span></li>
-            {/each}
-          </ul>
-        </div>
-      {:else if toLinked}
-        <p class="hint" data-testid="linked-kind-change">{m.linked_kind_change_hint()}</p>
-      {:else if schema}
-        <ConnectionForm {schema} bind:state={connection} {issues} {extras} />
-      {:else}
-        <p class="hint">{m.conn_unknown_kind()}</p>
-      {/if}
-    </Panel>
-    <div class="actions">
-      {#if problem}
-        <ProblemNotice
-          title={problemMessage(problem)}
-          detail={problem.detail}
-          reference={problem.correlationId}
-          referenceLabel={m.problem_reference()}
-        />
-      {/if}
-      <Button
-        type="submit"
-        variant="primary"
-        pending={busy}
-        disabled={!name.trim() || toLinked}
-        testid="mower-save">{m.save()}</Button
-      >
-    </div>
-  </form>
+    </form>
+  </DemoLock>
   <div class="links">
     {#if settingSpecList.length}
       <Panel label={m.devset_title()} testid="device-settings-section">
@@ -543,16 +553,19 @@
       </Panel>
     {/if}
     {#if bridgeOffered}
-      <Panel label={m.bridge_title()} testid="bridge-panel">
-        <BridgeLinkPanel
-          link={bridgeLink}
-          status={bridgeStatus}
-          onadd={() => bridge.start()}
-          check={() => checkBridge(id)}
-          remove={() => deleteBridgeLink(id)}
-          onremoved={() => (bridgeLink = null)}
-        />
-      </Panel>
+      <!-- Fleet refuses Bluetooth bridge links in the demo (the server would connect out). -->
+      <DemoLock inset testid="demo-lock-bridge">
+        <Panel label={m.bridge_title()} testid="bridge-panel">
+          <BridgeLinkPanel
+            link={bridgeLink}
+            status={bridgeStatus}
+            onadd={() => bridge.start()}
+            check={() => checkBridge(id)}
+            remove={() => deleteBridgeLink(id)}
+            onremoved={() => (bridgeLink = null)}
+          />
+        </Panel>
+      </DemoLock>
     {/if}
     {#if driveOffered}
       <Panel label={m.drive_settings_title()} testid="drive-section">
@@ -623,15 +636,18 @@
     <SiteLocation siteId={mower.site_id} {origin} />
   </div>
   <Panel label={m.mower_delete_title()}>
-    <p class="hint">{m.mower_delete_body()}</p>
-    <div class="danger">
-      <Button variant="danger" icon="trash" pending={busy} onclick={remove} testid="mower-delete"
-        >{confirmDelete ? m.mower_delete() : m.mower_delete_title()}</Button
-      >
-      {#if confirmDelete}
-        <Button variant="ghost" onclick={() => (confirmDelete = false)}>{m.cancel()}</Button>
-      {/if}
-    </div>
+    <!-- Fleet refuses removing the demo's mowers. -->
+    <DemoLock testid="demo-lock-mower-delete">
+      <p class="hint">{m.mower_delete_body()}</p>
+      <div class="danger">
+        <Button variant="danger" icon="trash" pending={busy} onclick={remove} testid="mower-delete"
+          >{confirmDelete ? m.mower_delete() : m.mower_delete_title()}</Button
+        >
+        {#if confirmDelete}
+          <Button variant="ghost" onclick={() => (confirmDelete = false)}>{m.cancel()}</Button>
+        {/if}
+      </div>
+    </DemoLock>
   </Panel>
 {:else}
   <p class="pad quiet" role="status"><SlowLoading /></p>

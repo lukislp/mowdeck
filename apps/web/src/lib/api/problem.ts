@@ -11,6 +11,9 @@ export interface ProblemFieldError {
 
 export const PROBLEM_PREFIX = 'urn:mowdeck:problem:';
 
+/** Problem type of an action the public demo refuses (403, ADR 0068). */
+export const DEMO_MODE_PROBLEM = `${PROBLEM_PREFIX}demo-mode`;
+
 /** A failed API call. `slug` is the part after `urn:mowdeck:problem:` (e.g. `not-found`). */
 export class ApiProblem extends Error {
   readonly type: string;
@@ -31,12 +34,16 @@ export class ApiProblem extends Error {
     errors?: ProblemFieldError[];
     retryAfter?: number | null;
   }) {
-    super(init.detail ?? init.title ?? `HTTP ${init.status}`);
+    super(
+      (init.type === DEMO_MODE_PROBLEM ? null : init.detail) ?? init.title ?? `HTTP ${init.status}`,
+    );
     this.name = 'ApiProblem';
     this.type = init.type ?? 'about:blank';
     this.status = init.status;
     this.title = init.title ?? '';
-    this.detail = init.detail ?? null;
+    // A demo refusal (ADR 0068) is one translated sentence in the app (`problem_demo_mode`); the
+    // service's English reason would only repeat it in the wrong language under it.
+    this.detail = this.type === DEMO_MODE_PROBLEM ? null : (init.detail ?? null);
     this.correlationId = init.correlationId ?? null;
     this.errors = init.errors ?? [];
     this.retryAfter = init.retryAfter ?? null;

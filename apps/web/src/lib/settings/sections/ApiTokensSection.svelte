@@ -38,6 +38,7 @@
     type CatalogueEntry,
     type Choice,
   } from '#lib/settings/token-permissions.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
 
   type Token = components['schemas']['ApiTokenOut'];
 
@@ -404,174 +405,177 @@
   </div>
 {/if}
 
-{#if tokens && tokens.length === 0}
-  <p class="pad quiet">{m.tokens_empty()}</p>
-{:else if tokens}
-  {#if active.length}
-    <ul class="tokens" data-testid="token-list">
-      {#each active as token (token.id)}
-        {@render row(token)}
-      {/each}
-    </ul>
-  {:else}
-    <p class="pad quiet" data-testid="token-no-active">{m.tokens_no_active()}</p>
-  {/if}
-  {#if revoked.length}
-    <details class="revoked" data-testid="token-revoked" bind:this={revokedBox}>
-      <summary>
-        <Icon name="chevron" size={16} />{m.tokens_revoked_group({ count: revoked.length })}
-      </summary>
-      <div class="revoked-tools">
-        <p class="revoked-hint">{m.tokens_purge_hint()}</p>
-        <Button
-          icon="trash"
-          pending={purgingAll}
-          testid="token-purge-all"
-          onclick={() => (confirmPurge = true)}>{m.tokens_purge_all()}</Button
-        >
-      </div>
-      <ul class="revoked-list">
-        {#each revoked as token (token.id)}
-          <li data-testid="token-revoked-row" data-name={token.name}>
-            <span class="revoked-info">
-              <span class="name">{token.name}</span>
-              <span class="mono">{token.prefix}…</span>
-              <span class="mono revoked-when">
-                {m.tokens_revoked_on()}
-                {formatDateTime(token.revoked_at ?? token.created_at)}
-              </span>
-            </span>
-            <button
-              type="button"
-              class="remove"
-              aria-label={m.tokens_purge_one({ name: token.name })}
-              title={m.tokens_purge_one({ name: token.name })}
-              data-testid="token-purge"
-              disabled={purgingAll}
-              onclick={() => purge(token)}
-            >
-              <Icon name="trash" size={16} />
-            </button>
-          </li>
+<!-- Identity refuses new and revoked API tokens in the demo. -->
+<DemoLock inset testid="demo-lock-api-tokens">
+  {#if tokens && tokens.length === 0}
+    <p class="pad quiet">{m.tokens_empty()}</p>
+  {:else if tokens}
+    {#if active.length}
+      <ul class="tokens" data-testid="token-list">
+        {#each active as token (token.id)}
+          {@render row(token)}
         {/each}
       </ul>
-    </details>
+    {:else}
+      <p class="pad quiet" data-testid="token-no-active">{m.tokens_no_active()}</p>
+    {/if}
+    {#if revoked.length}
+      <details class="revoked" data-testid="token-revoked" bind:this={revokedBox}>
+        <summary>
+          <Icon name="chevron" size={16} />{m.tokens_revoked_group({ count: revoked.length })}
+        </summary>
+        <div class="revoked-tools">
+          <p class="revoked-hint">{m.tokens_purge_hint()}</p>
+          <Button
+            icon="trash"
+            pending={purgingAll}
+            testid="token-purge-all"
+            onclick={() => (confirmPurge = true)}>{m.tokens_purge_all()}</Button
+          >
+        </div>
+        <ul class="revoked-list">
+          {#each revoked as token (token.id)}
+            <li data-testid="token-revoked-row" data-name={token.name}>
+              <span class="revoked-info">
+                <span class="name">{token.name}</span>
+                <span class="mono">{token.prefix}…</span>
+                <span class="mono revoked-when">
+                  {m.tokens_revoked_on()}
+                  {formatDateTime(token.revoked_at ?? token.created_at)}
+                </span>
+              </span>
+              <button
+                type="button"
+                class="remove"
+                aria-label={m.tokens_purge_one({ name: token.name })}
+                title={m.tokens_purge_one({ name: token.name })}
+                data-testid="token-purge"
+                disabled={purgingAll}
+                onclick={() => purge(token)}
+              >
+                <Icon name="trash" size={16} />
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </details>
+    {/if}
   {/if}
-{/if}
 
-<p class="md-visually-hidden" role="status" data-testid="token-purge-status">{purgeNote}</p>
+  <p class="md-visually-hidden" role="status" data-testid="token-purge-status">{purgeNote}</p>
 
-<Sheet
-  open={confirmPurge && revoked.length > 0}
-  title={revoked.length === 1
-    ? m.tokens_purge_title_one()
-    : m.tokens_purge_title_many({ count: revoked.length })}
-  closeLabel={m.close()}
-  onclose={() => (confirmPurge = false)}
-  testid="token-purge-confirm"
->
-  <p class="confirm-body">{m.tokens_purge_body()}</p>
-  <ul class="confirm-names" data-testid="token-purge-names">
-    {#each revoked as token (token.id)}
-      <li><span class="name">{token.name}</span> <span class="mono">{token.prefix}…</span></li>
-    {/each}
-  </ul>
-  {#snippet footer()}
-    <div class="confirm-footer">
-      <Button variant="ghost" onclick={() => (confirmPurge = false)}>{m.cancel()}</Button>
-      <Button variant="danger" icon="trash" testid="token-purge-go" onclick={purgeAll}
-        >{m.tokens_purge_go()}</Button
-      >
-    </div>
-  {/snippet}
-</Sheet>
-
-<Panel label={m.tokens_create_title()}>
-  <form class="form" onsubmit={create} novalidate>
-    <Field id="token-name" label={m.tokens_name()} required maxlength={100} bind:value={name} />
-
-    <fieldset class="presets" data-testid="token-presets">
-      <legend class="label">{m.tokens_preset()}</legend>
-      {#each choices as option (option.value)}
-        <label class="preset" class:chosen={choice === option.value}>
-          <input
-            type="radio"
-            name="token-preset"
-            value={option.value}
-            data-testid="token-preset-{option.value}"
-            checked={choice === option.value}
-            onchange={() => pick(option.value)}
-          />
-          <span class="preset-name">{option.label}</span>
-          <span class="preset-hint">{option.hint}</span>
-          {#if option.value !== 'custom'}
-            <ul class="chips">
-              {#each PRESETS[option.value] as key (key)}
-                {@render chip(key)}
-              {/each}
-            </ul>
-          {/if}
-        </label>
+  <Sheet
+    open={confirmPurge && revoked.length > 0}
+    title={revoked.length === 1
+      ? m.tokens_purge_title_one()
+      : m.tokens_purge_title_many({ count: revoked.length })}
+    closeLabel={m.close()}
+    onclose={() => (confirmPurge = false)}
+    testid="token-purge-confirm"
+  >
+    <p class="confirm-body">{m.tokens_purge_body()}</p>
+    <ul class="confirm-names" data-testid="token-purge-names">
+      {#each revoked as token (token.id)}
+        <li><span class="name">{token.name}</span> <span class="mono">{token.prefix}…</span></li>
       {/each}
-    </fieldset>
-    <p class="hint" data-testid="token-preset-difference">
-      {m.tokens_preset_difference()}
-      {m.tokens_account_wide()}
-    </p>
+    </ul>
+    {#snippet footer()}
+      <div class="confirm-footer">
+        <Button variant="ghost" onclick={() => (confirmPurge = false)}>{m.cancel()}</Button>
+        <Button variant="danger" icon="trash" testid="token-purge-go" onclick={purgeAll}
+          >{m.tokens_purge_go()}</Button
+        >
+      </div>
+    {/snippet}
+  </Sheet>
 
-    {#if choice === 'custom'}
-      <div class="custom" data-testid="token-custom">
-        {#if !catalogue}
-          <p class="quiet">{m.tokens_catalogue_loading()}</p>
-        {:else}
-          <fieldset class="rights">
-            <legend class="label">{m.tokens_custom_rights()}</legend>
-            {#each rights as entry (entry.key)}
-              {@render right(entry)}
-            {/each}
-          </fieldset>
-          {#if accountRights.length}
+  <Panel label={m.tokens_create_title()}>
+    <form class="form" onsubmit={create} novalidate>
+      <Field id="token-name" label={m.tokens_name()} required maxlength={100} bind:value={name} />
+
+      <fieldset class="presets" data-testid="token-presets">
+        <legend class="label">{m.tokens_preset()}</legend>
+        {#each choices as option (option.value)}
+          <label class="preset" class:chosen={choice === option.value}>
+            <input
+              type="radio"
+              name="token-preset"
+              value={option.value}
+              data-testid="token-preset-{option.value}"
+              checked={choice === option.value}
+              onchange={() => pick(option.value)}
+            />
+            <span class="preset-name">{option.label}</span>
+            <span class="preset-hint">{option.hint}</span>
+            {#if option.value !== 'custom'}
+              <ul class="chips">
+                {#each PRESETS[option.value] as key (key)}
+                  {@render chip(key)}
+                {/each}
+              </ul>
+            {/if}
+          </label>
+        {/each}
+      </fieldset>
+      <p class="hint" data-testid="token-preset-difference">
+        {m.tokens_preset_difference()}
+        {m.tokens_account_wide()}
+      </p>
+
+      {#if choice === 'custom'}
+        <div class="custom" data-testid="token-custom">
+          {#if !catalogue}
+            <p class="quiet">{m.tokens_catalogue_loading()}</p>
+          {:else}
             <fieldset class="rights">
-              <legend class="label">{m.tokens_custom_account()}</legend>
-              {#each accountRights as entry (entry.key)}
+              <legend class="label">{m.tokens_custom_rights()}</legend>
+              {#each rights as entry (entry.key)}
                 {@render right(entry)}
               {/each}
             </fieldset>
+            {#if accountRights.length}
+              <fieldset class="rights">
+                <legend class="label">{m.tokens_custom_account()}</legend>
+                {#each accountRights as entry (entry.key)}
+                  {@render right(entry)}
+                {/each}
+              </fieldset>
+            {/if}
           {/if}
-        {/if}
-      </div>
-    {/if}
-
-    {#if warnings.length}
-      <div class="warning" role="note" data-testid="token-warning">
-        <Icon name="bolt" size={20} />
-        <div>
-          <strong>{m.tokens_powerful_title()}</strong>
-          <ul>
-            {#each warnings as key (key)}
-              <li><code>{key}</code> {powerfulWarning(key)}</li>
-            {/each}
-          </ul>
         </div>
+      {/if}
+
+      {#if warnings.length}
+        <div class="warning" role="note" data-testid="token-warning">
+          <Icon name="bolt" size={20} />
+          <div>
+            <strong>{m.tokens_powerful_title()}</strong>
+            <ul>
+              {#each warnings as key (key)}
+                <li><code>{key}</code> {powerfulWarning(key)}</li>
+              {/each}
+            </ul>
+          </div>
+        </div>
+      {/if}
+
+      {#if permissions.length === 0}
+        <p class="none" data-testid="token-none">{m.tokens_none_selected()}</p>
+      {/if}
+
+      <div>
+        <Button
+          type="submit"
+          variant="primary"
+          icon="key"
+          pending={busy}
+          disabled={!name.trim() || permissions.length === 0}
+          testid="token-create">{m.tokens_create()}</Button
+        >
       </div>
-    {/if}
-
-    {#if permissions.length === 0}
-      <p class="none" data-testid="token-none">{m.tokens_none_selected()}</p>
-    {/if}
-
-    <div>
-      <Button
-        type="submit"
-        variant="primary"
-        icon="key"
-        pending={busy}
-        disabled={!name.trim() || permissions.length === 0}
-        testid="token-create">{m.tokens_create()}</Button
-      >
-    </div>
-  </form>
-</Panel>
+    </form>
+  </Panel>
+</DemoLock>
 
 <style>
   .pad {

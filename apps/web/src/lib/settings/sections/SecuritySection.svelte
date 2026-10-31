@@ -20,6 +20,7 @@
   import LoginLinksPanel from '#lib/components/LoginLinksPanel.svelte';
   import PasskeysPanel from '#lib/components/PasskeysPanel.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
   import { formatAge, formatDate, formatDateTime, formatClock, problemMessage } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
   import { daysLeft, isActive, type PersonalToken } from '#lib/settings/personal-tokens.js';
@@ -361,55 +362,58 @@
     </Panel>
   </div>
 
-  <Panel label={m.sec_alerts_title()} testid="security-alerts">
-    <Switch
-      id="security-new-login-alerts"
-      label={m.sec_alerts_label()}
-      hint={m.sec_alerts_hint()}
-      checked={overview.new_login_alerts}
-      states={{ on: m.switch_on(), off: m.switch_off() }}
-      disabled={alertsBusy}
-      testid="security-alerts-switch"
-      onchange={(on) => void setAlerts(on)}
-    />
-  </Panel>
-
-  <div id="security-passkeys"><PasskeysPanel /></div>
-  <div id="security-providers"><LoginLinksPanel /></div>
-
-  <div id="security-tokens">
-    <Panel label={m.sec_tokens_title()} testid="security-tokens">
-      {#if activeTokens.length === 0}
-        <p class="quiet small">{m.sec_tokens_empty()}</p>
-      {:else}
-        <ul class="tokens">
-          {#each activeTokens as token (token.id)}
-            <li class="token" data-testid="security-token-{token.id}">
-              <div class="what">
-                <span class="device">{token.name}</span>
-                <span class="meta"
-                  ><code>{token.prefix}…</code> · {m.sec_token_expires({
-                    days: Math.max(0, daysLeft(token.expires_at, now)),
-                  })}{#if token.last_used_at}
-                    · {m.sec_active({ age: formatAge(token.last_used_at, now) })}{/if}</span
-                >
-              </div>
-              <div class="act">
-                <Button
-                  variant="ghost"
-                  icon="trash"
-                  pending={working === token.id}
-                  testid="security-token-revoke-{token.id}"
-                  onclick={() => revokeToken(token)}>{m.sec_token_revoke()}</Button
-                >
-              </div>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-      <p class="hint"><a href="#api-access">{m.sec_tokens_manage()}</a></p>
+  <!-- The demo refuses every change of the account's security (Identity's DEMO_POLICY). -->
+  <DemoLock inset testid="demo-lock-security">
+    <Panel label={m.sec_alerts_title()} testid="security-alerts">
+      <Switch
+        id="security-new-login-alerts"
+        label={m.sec_alerts_label()}
+        hint={m.sec_alerts_hint()}
+        checked={overview.new_login_alerts}
+        states={{ on: m.switch_on(), off: m.switch_off() }}
+        disabled={alertsBusy}
+        testid="security-alerts-switch"
+        onchange={(on) => void setAlerts(on)}
+      />
     </Panel>
-  </div>
+
+    <div id="security-passkeys"><PasskeysPanel /></div>
+    <div id="security-providers"><LoginLinksPanel /></div>
+
+    <div id="security-tokens">
+      <Panel label={m.sec_tokens_title()} testid="security-tokens">
+        {#if activeTokens.length === 0}
+          <p class="quiet small">{m.sec_tokens_empty()}</p>
+        {:else}
+          <ul class="tokens">
+            {#each activeTokens as token (token.id)}
+              <li class="token" data-testid="security-token-{token.id}">
+                <div class="what">
+                  <span class="device">{token.name}</span>
+                  <span class="meta"
+                    ><code>{token.prefix}…</code> · {m.sec_token_expires({
+                      days: Math.max(0, daysLeft(token.expires_at, now)),
+                    })}{#if token.last_used_at}
+                      · {m.sec_active({ age: formatAge(token.last_used_at, now) })}{/if}</span
+                  >
+                </div>
+                <div class="act">
+                  <Button
+                    variant="ghost"
+                    icon="trash"
+                    pending={working === token.id}
+                    testid="security-token-revoke-{token.id}"
+                    onclick={() => revokeToken(token)}>{m.sec_token_revoke()}</Button
+                  >
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        <p class="hint"><a href="#api-access">{m.sec_tokens_manage()}</a></p>
+      </Panel>
+    </div>
+  </DemoLock>
 
   <Panel label={m.sec_events_title({ days: EVENT_DAYS })} testid="security-events">
     {#if days.length === 0}
