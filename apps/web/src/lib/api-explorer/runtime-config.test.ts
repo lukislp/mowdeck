@@ -68,6 +68,17 @@ describe.skipIf(!hasSh)('MOWDECK_WEB_API_EXPLORER', () => {
     expect(out.stderr).toContain('MOWDECK_WEB_API_EXPLORER');
   });
 
+  it('says whether the image ships the notes of "Was ist neu"', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mowdeck-root-'));
+    const without = render({ MOWDECK_WEB_ROOT: root });
+    expect(without.config.whatsNew).toBe(false);
+    expect(parseConfig(without.config).whatsNew).toBe(false);
+    writeFileSync(join(root, 'whats-new.json'), '{"releases":[]}');
+    const shipped = render({ MOWDECK_WEB_ROOT: root });
+    expect(shipped.config.whatsNew).toBe(true);
+    expect(parseConfig(shipped.config).whatsNew).toBe(true);
+  });
+
   it('leaves the app policy alone', () => {
     const off = render({});
     const on = render({ MOWDECK_WEB_API_EXPLORER: 'true' });

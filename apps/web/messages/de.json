@@ -542,7 +542,7 @@
   "conn_secret_set": "gesetzt",
   "conn_secret_hint": "Wird gespeichert und nie wieder angezeigt.",
   "conn_secret_keep_hint": "Gespeichert. Leer lassen, um den Wert zu behalten, oder neu eingeben.",
-  "conn_simulated_description": "Ein simulierter Mäher im Device-Gateway mit einem Demo-Garten. Er braucht keine Angaben; Simulator-Einstellungen wie time_scale bleiben erhalten.",
+  "conn_simulated_description": "Ein simulierter Mäher im Device-Gateway mit einem Demo-Garten. Er braucht keine Angaben; vorhandene Simulator-Einstellungen wie das Zeitraffer-Tempo bleiben erhalten.",
   "conn_cloud_description": "Verbindet über die Cloud des Herstellers mit einem verbundenen Konto: Konto einmal verbinden, dann seine Mäher auswählen.",
   "conn_ble_description": "Verbindung per Bluetooth über einen ESPHome-Bluetooth-Proxy in Mähernähe; ohne Kamera. Mit Cloud-Konto besser als Zusatz-Link anlegen (Mähereinstellungen, Bluetooth-Bridge). Manuelles Fahren geht nur über diese Verbindung.",
   "conn_group_device": "Mäher angeben über",
@@ -1449,6 +1449,7 @@
   "camera_mute": "Ton aus",
   "camera_unmute": "Ton an",
   "camera_data_note": "Das Video läuft über die Server des Mäherherstellers und seines Videodienstes. Im 4G-Netz zählt jede Minute zum Videokontingent; schließ die Kamera, wenn du sie nicht brauchst.",
+  "camera_data_note_simulated": "Das ist ein Testbild des Simulators: Es entsteht in dieser Installation, läuft über keinen Herstellerserver und verbraucht kein Datenvolumen.",
   "camera_quota": "4G-Videokontingent: {used} von {total} Minuten verbraucht",
   "camera_expires": "Sitzung gültig bis {time}",
   "camera_renewed": "Sitzung {count}-mal erneuert",
@@ -2556,7 +2557,16 @@
   "tracking_share_title": "Link teilen",
   "tracking_share_text": "Wer den Link hat, sieht Position und Spur ohne Konto. Der Link läuft ab und lässt sich jederzeit widerrufen.",
   "tracking_share_hours": "Gültig für",
-  "tracking_share_hours_option": "{hours} Stunden",
+  "tracking_share_hours_option": [
+    {
+      "declarations": ["input hours", "local hoursPlural = hours: plural"],
+      "selectors": ["hoursPlural"],
+      "match": {
+        "hoursPlural=one": "{hours} Stunde",
+        "hoursPlural=other": "{hours} Stunden"
+      }
+    }
+  ],
   "tracking_share_create": "Link erstellen",
   "tracking_share_once": "Dieser Link wird nur jetzt angezeigt. Kopiere oder teile ihn, bevor du das Fenster schließt.",
   "tracking_share_address": "Adresse des Links",
@@ -2840,6 +2850,8 @@
   "zones_unavailable_no_position": "Dieser Mäher meldet keine Position, also weiß MowDeck nicht, wo er ist. Zonen brauchen einen Mäher mit GPS.",
   "zones_no_map": "Warte auf die erste Position des Mähers, um die Karte zu platzieren.",
   "zones_map_failed": "Die Karte konnte nicht geladen werden. Die Zonen stehen unten.",
+  "zones_vendor_areas": "Flächen dieses Mähers",
+  "zones_vendor_open": "Auf der Mäherkarte öffnen",
   "zones_empty": "Noch keine Zonen.",
   "zones_draw": "Zone zeichnen",
   "zones_redraw": "Form neu zeichnen",

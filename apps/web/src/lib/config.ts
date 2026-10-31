@@ -34,6 +34,11 @@ export interface RuntimeConfig {
    * meant for the public demo. Off everywhere else: no page, and nginx serves none of its files.
    */
   apiExplorer: boolean;
+  /**
+   * Whether the image ships `/whats-new.json` (only release builds do). Absent when unknown (an
+   * older image, `vite dev`): the app then just asks for the file.
+   */
+  whatsNew?: boolean;
   /** The build and where its source code is (AGPL-3.0 section 13, `#lib/legal/source.js`). */
   source: SourceInfo;
   /**
@@ -61,11 +66,12 @@ const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 /** Validate an untrusted config object; anything invalid becomes the default. */
 export function parseConfig(raw: unknown): RuntimeConfig {
   if (!raw || typeof raw !== 'object') return DEFAULT_CONFIG;
-  const { mapTiles, legalEnabled, cameraEnabled, apiExplorer, source, demo } = raw as {
+  const { mapTiles, legalEnabled, cameraEnabled, apiExplorer, whatsNew, source, demo } = raw as {
     mapTiles?: unknown;
     legalEnabled?: unknown;
     cameraEnabled?: unknown;
     apiExplorer?: unknown;
+    whatsNew?: unknown;
     source?: unknown;
     demo?: unknown;
   };
@@ -75,7 +81,16 @@ export function parseConfig(raw: unknown): RuntimeConfig {
   const tiles = parseMapTiles(mapTiles);
   const build = parseSource(source);
   const showcase = parseDemo(demo);
-  if (!tiles && !legal && !camera && !explorer && build === DEFAULT_SOURCE && !showcase) {
+  const notes = typeof whatsNew === 'boolean' ? whatsNew : undefined;
+  if (
+    !tiles &&
+    !legal &&
+    !camera &&
+    !explorer &&
+    notes === undefined &&
+    build === DEFAULT_SOURCE &&
+    !showcase
+  ) {
     return DEFAULT_CONFIG;
   }
   return {
@@ -83,6 +98,7 @@ export function parseConfig(raw: unknown): RuntimeConfig {
     legalEnabled: legal,
     cameraEnabled: camera,
     apiExplorer: explorer,
+    ...(notes === undefined ? {} : { whatsNew: notes }),
     source: build,
     ...(showcase ? { demo: showcase } : {}),
   };

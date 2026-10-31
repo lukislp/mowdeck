@@ -8,6 +8,15 @@ from typing import Any
 import pytest
 
 ACCOUNT = "11111111-1111-4111-8111-111111111111"
+PREFERENCES = {
+    "enabled_kinds": ["battery_low", "mowing_finished", "tracking_started"],
+    "all_mowers": True,
+    "mower_ids": [],
+    "quiet_hours": None,
+    "timezone": "UTC",
+    "language": "en",
+    "channels": ["apns", "ntfy", "webpush"],
+}
 
 
 def _load(repo_root: Path) -> ModuleType:
@@ -22,10 +31,11 @@ def _load(repo_root: Path) -> ModuleType:
 class Recorder:
     """Answers like the services and records every call (method, path, body, seed header)."""
 
-    def __init__(self, existing: int = 0) -> None:
+    def __init__(self, existing: int = 0, *, stored: bool = False) -> None:
         self.calls: list[tuple[str, str, Any, bool]] = []
         self.existing = existing
         self.created = 0
+        self.stored = stored
 
     def __call__(
         self, method: str, url: str, body: Any = None, *, seed: bool = False, **_: Any
@@ -43,6 +53,8 @@ class Recorder:
             return {"id": f"mower-{self.created}"}
         if path == "/telemetry/demo/history":
             return {"states": 10, "stored": 10}
+        if path == "/notifications/preferences" and method == "GET":
+            return {**PREFERENCES, "stored": self.stored, "available_kinds": ["battery_low"]}
         return {}
 
 
@@ -80,6 +92,12 @@ def test_a_fresh_demo_gets_mowers_schedules_and_history(
     assert len(history) == 1 and history[0][3]
     assert history[0][2]["days"] == 7
     assert {m["account_id"] for m in history[0][2]["mowers"]} == {ACCOUNT}
+    # The demo has no delivery target: stored defaults make the user a recipient of the inbox.
+    puts = [c for c in recorder.calls if c[:2] == ("PUT", "/notifications/preferences")]
+    assert len(puts) == 1 and puts[0][2] == PREFERENCES and not puts[0][3]
+    assert paths.index(("PUT", "/notifications/preferences")) > paths.index(
+        ("POST", "/scheduler/schedules")
+    )
 
 
 def test_a_seeded_account_is_left_alone(seed: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,6 +107,15 @@ def test_a_seeded_account_is_left_alone(seed: ModuleType, monkeypatch: pytest.Mo
     posts = [path for method, path, _, _ in recorder.calls if method == "POST"]
     assert posts == ["/identity/demo/seed", "/identity/demo/session"]
     assert recorder.created == 0
+    puts = [path for method, path, _, _ in recorder.calls if method == "PUT"]
+    assert puts == ["/identity/me/onboarding", "/notifications/preferences"]
+
+
+def test_saved_preferences_are_kept(seed: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    recorder = Recorder(existing=3, stored=True)
+    monkeypatch.setattr(seed.Api, "call", recorder)
+    assert seed.main() == 0
+    assert ("PUT", "/notifications/preferences") not in [c[:2] for c in recorder.calls]
 
 
 def test_the_seed_needs_its_secret(seed: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:

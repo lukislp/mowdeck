@@ -110,17 +110,16 @@ describe('texts', () => {
 describe('store', () => {
   const file = { releases: [release('0.2.0', 'b'), release('0.1.0', 'a')] };
 
-  function serve(version: string | null, notes: unknown = file) {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        const body = url === '/config.json' ? { source: { version } } : notes;
-        return new Response(JSON.stringify(body), {
-          status: notes === null && url !== '/config.json' ? 404 : 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }),
-    );
+  function serve(version: string | null, notes: unknown = file, config: object = {}) {
+    const fetchFn = vi.fn(async (url: string) => {
+      const body = url === '/config.json' ? { ...config, source: { version } } : notes;
+      return new Response(JSON.stringify(body), {
+        status: notes === null && url !== '/config.json' ? 404 : 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchFn);
+    return fetchFn;
   }
 
   beforeEach(() => {
@@ -170,6 +169,24 @@ describe('store', () => {
     store = await fresh();
     await store.load();
     expect(store.open).toBe(false);
+  });
+
+  it('does not ask for the notes when the image ships none', async () => {
+    const fetchFn = serve('0.2.0', file, { whatsNew: false });
+    const store = await fresh();
+    await store.load();
+    expect(store.loaded).toBe(true);
+    expect(store.open).toBe(false);
+    expect(fetchFn.mock.calls.map(([url]) => url)).toEqual(['/config.json']);
+    expect(localStorage.getItem(SEEN_KEY)).toBeNull();
+  });
+
+  it('asks for the notes when the image ships them', async () => {
+    const fetchFn = serve('0.2.0', file, { whatsNew: true });
+    const store = await fresh();
+    await store.load();
+    expect(fetchFn.mock.calls.map(([url]) => url)).toEqual(['/config.json', '/whats-new.json']);
+    expect(store.open).toBe(true);
   });
 
   it('fetchWhatsNew rejects the SPA fallback page', async () => {

@@ -16,6 +16,11 @@
  * - A caller that waited for the lock, or a request that got a 401 for a token that has been
  *   replaced meanwhile, takes the new token instead of refreshing again: one 401 wave (and one
  *   expiry across several tabs) costs exactly one refresh.
+ * - The start of the app asks for a refresh only when this browser may hold a refresh cookie:
+ *   `localStorage` keeps a hint (`mowdeck.session`, "1" after a sign-in or refresh, "0" once the
+ *   session ended). Without a hint, a browser that never used MowDeck has no cookie either, so
+ *   a first visit makes no refresh call that can only fail; a browser with other `mowdeck.*` keys
+ *   (signed in before the hint existed) and one without storage still ask.
  */
 import { ApiProblem, problemFromResponse } from '#lib/api/problem.js';
 
@@ -27,6 +32,8 @@ export const LOCK_TIMEOUT_MS = 15_000;
 /** Abort a refresh request after this long. */
 export const REFRESH_TIMEOUT_MS = 10_000;
 const CSRF_HEADERS = { 'X-Requested-With': 'mowdeck-web', 'X-Mowdeck-Refresh': 'cookie-only' };
+/** `localStorage` key of the session hint (see the module documentation). */
+export const SESSION_HINT_KEY = 'mowdeck.session';
 
 export interface Membership {
   account_id: string;
@@ -66,11 +73,24 @@ interface LocksLike {
   ): Promise<T>;
 }
 
+/** The part of `Storage` the session hint needs. */
+export type HintStorage = Pick<Storage, 'getItem' | 'setItem' | 'key' | 'length'>;
+
 export interface SessionDeps {
   fetch: typeof fetch;
   now: () => number;
   locks: LocksLike | null;
   channel: ChannelLike | null;
+  /** Where the session hint lives; absent: no hint, the start always asks for a refresh. */
+  storage?: HintStorage | null;
+}
+
+function browserStorage(): HintStorage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
 }
 
 export type SessionStatus = 'unknown' | 'anonymous' | 'authenticated';
@@ -85,6 +105,7 @@ function browserDeps(): SessionDeps {
       hasWindow && 'BroadcastChannel' in window
         ? (new BroadcastChannel('mowdeck-auth') as unknown as ChannelLike)
         : null,
+    storage: hasWindow ? browserStorage() : null,
   };
 }
 
@@ -169,15 +190,21 @@ export class SessionManager {
     if (!response.ok) throw await problemFromResponse(response);
     const { code } = (await response.json()) as { code: string };
     this.#deps.channel?.postMessage({ type: 'logout' });
+    this.#writeHint(false);
     this.#clear('anonymous');
     return code;
   }
 
   /** Start of the app: get a token from the refresh cookie, if there is one. */
   async restore(): Promise<boolean> {
+    if (!this.#mayHaveSession()) {
+      this.status = 'anonymous';
+      return false;
+    }
     const token = await this.refresh();
     if (token === null) {
       this.status = 'anonymous';
+      this.#writeHint(false);
       return false;
     }
     try {
@@ -244,6 +271,7 @@ export class SessionManager {
   /** The API said the session is gone (refresh failed after a 401). */
   expire(): void {
     if (this.status === 'authenticated') this.ended = 'expired';
+    this.#writeHint(false);
     this.#clear('anonymous');
   }
 
@@ -259,6 +287,7 @@ export class SessionManager {
     }
     this.#deps.channel?.postMessage({ type: 'logout' });
     this.ended = null;
+    this.#writeHint(false);
     this.#clear('anonymous');
   }
 
@@ -321,6 +350,33 @@ export class SessionManager {
     }
   }
 
+  /** Whether this browser may hold a refresh cookie (the session hint). */
+  #mayHaveSession(): boolean {
+    const storage = this.#deps.storage;
+    if (!storage) return true;
+    try {
+      const hint = storage.getItem(SESSION_HINT_KEY);
+      if (hint !== null) return hint === '1';
+      // No hint yet: MowDeck used before the hint existed may have left a refresh cookie. Its
+      // own keys tell (the signed-in app writes some at once); Paraglide's locale key does not,
+      // it is written on every first load.
+      for (let i = 0; i < storage.length; i += 1) {
+        if (storage.key(i)?.startsWith('mowdeck.')) return true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  #writeHint(signedIn: boolean): void {
+    try {
+      this.#deps.storage?.setItem(SESSION_HINT_KEY, signedIn ? '1' : '0');
+    } catch {
+      // storage blocked: the next start asks for a refresh as before
+    }
+  }
+
   /** Run `task` under the cross-tab lock; without it when the lock is not granted in time. */
   async #locked<T>(task: () => Promise<T>): Promise<T> {
     const locks = this.#deps.locks;
@@ -345,6 +401,7 @@ export class SessionManager {
 
   #onBroadcast(message: Broadcast): void {
     if (message.type === 'logout') {
+      this.#writeHint(false);
       this.#clear('anonymous');
       return;
     }
@@ -361,6 +418,7 @@ export class SessionManager {
   #applyToken(token: string, expiresAt: number): void {
     this.#token = token;
     this.#expiresAt = expiresAt;
+    this.#writeHint(true);
     this.#schedule(Math.max(1_000, expiresAt - this.#deps.now() - REFRESH_LEAD_MS));
     for (const listener of this.#listeners) listener(token);
   }

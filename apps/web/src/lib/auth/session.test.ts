@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LOCK_TIMEOUT_MS,
   REFRESH_TIMEOUT_MS,
+  SESSION_HINT_KEY,
   SessionManager,
   type SessionDeps,
 } from './session.svelte';
@@ -120,6 +121,68 @@ describe('SessionManager', () => {
     const env = setup({ '/api/v1/identity/session/refresh': { status: 422 } });
     expect(await env.session.restore()).toBe(false);
     expect(env.session.status).toBe('anonymous');
+  });
+
+  describe('session hint', () => {
+    function memoryStorage(initial: Record<string, string> = {}) {
+      const data = new Map(Object.entries(initial));
+      return {
+        data,
+        getItem: (key: string) => data.get(key) ?? null,
+        setItem: (key: string, value: string) => void data.set(key, value),
+        key: (index: number) => [...data.keys()][index] ?? null,
+        get length() {
+          return data.size;
+        },
+      };
+    }
+    const refreshing = {
+      '/api/v1/identity/session/refresh': { status: 200, body: TOKEN },
+      '/api/v1/identity/me': { status: 200, body: ME },
+      '/api/v1/identity/session/logout': { status: 204 },
+    };
+
+    it('makes no refresh call in a browser that never used MowDeck', async () => {
+      // Paraglide stores the locale on every first load: no sign of an earlier session.
+      const storage = memoryStorage({ PARAGLIDE_LOCALE: 'de' });
+      const env = setup(refreshing, { storage });
+      expect(await env.session.restore()).toBe(false);
+      expect(env.session.status).toBe('anonymous');
+      expect(env.calls).toEqual([]);
+    });
+
+    it('remembers a sign-in and a sign-out', async () => {
+      const storage = memoryStorage();
+      const env = setup(
+        { ...refreshing, '/api/v1/identity/session': { status: 200, body: TOKEN } },
+        { storage },
+      );
+      await env.session.login('lukas', 'secret-password');
+      expect(storage.data.get(SESSION_HINT_KEY)).toBe('1');
+
+      const next = setup(refreshing, { storage });
+      expect(await next.session.restore()).toBe(true);
+      await next.session.logout();
+      expect(storage.data.get(SESSION_HINT_KEY)).toBe('0');
+
+      const after = setup(refreshing, { storage });
+      expect(await after.session.restore()).toBe(false);
+      expect(after.calls).toEqual([]);
+    });
+
+    it('still asks where MowDeck was used before the hint existed', async () => {
+      const storage = memoryStorage({ 'mowdeck.whats-new-seen': '0.53.0' });
+      const env = setup(refreshing, { storage });
+      expect(await env.session.restore()).toBe(true);
+      expect(storage.data.get(SESSION_HINT_KEY)).toBe('1');
+    });
+
+    it('forgets the hint when the refresh cookie is gone', async () => {
+      const storage = memoryStorage({ [SESSION_HINT_KEY]: '1' });
+      const env = setup({ '/api/v1/identity/session/refresh': { status: 401 } }, { storage });
+      expect(await env.session.restore()).toBe(false);
+      expect(storage.data.get(SESSION_HINT_KEY)).toBe('0');
+    });
   });
 
   it('runs one refresh for concurrent callers', async () => {

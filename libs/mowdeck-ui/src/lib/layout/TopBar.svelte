@@ -62,11 +62,14 @@
     color: var(--md-color-ink);
   }
 
+  /* The title grows into the free space but never below about ten characters: when the back
+     link, the status and the actions leave less, the actions wrap to a second line instead of
+     squeezing the name to a letter (a mower page at 390 px). */
   .titles {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-width: 0;
+    flex: 1 1 0;
+    min-width: min(9rem, 100%);
   }
 
   h1 {
@@ -76,6 +79,7 @@
   }
 
   .meta {
+    overflow-wrap: anywhere;
     color: var(--md-color-ink-muted);
     font-family: var(--md-font-mono);
     font-size: var(--md-font-size-12);
@@ -92,7 +96,8 @@
   /* When the back link, the status and the actions no longer fit one line on a narrow phone (four
      actions at 320 px, or a long status such as "Offline, letzte Werte"), the actions move to a
      second line, right-aligned, instead of pushing the page wider than the screen. The title
-     takes no width of its own (flex-basis 0), so the bar only wraps when it has to. */
+     claims only its minimum width (flex-basis 0, `min-width` above), so the bar only wraps when
+     the name would otherwise be cut to a few letters. */
   .actions {
     flex-wrap: wrap;
     justify-content: flex-end;
