@@ -129,7 +129,10 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      # Over TCP, not the socket: on a fresh volume the image's entrypoint runs the init scripts
+      # on a temporary server that listens on the Unix socket only, so a socket check reports
+      # healthy before the real server accepts the migrations' TCP connections.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d postgres"]
       interval: 5s
       timeout: 3s
       retries: 15

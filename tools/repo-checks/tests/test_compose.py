@@ -23,6 +23,13 @@ def test_compose_file_parses(repo_root: Path) -> None:
         assert not image.endswith(":latest"), f"image {image!r} must not use :latest"
 
 
+def test_postgres_is_healthy_only_once_it_accepts_tcp(repo_root: Path) -> None:
+    # The init scripts run on a socket-only server; the migrations connect over TCP.
+    data = yaml.safe_load((_compose_dir(repo_root) / "docker-compose.yml").read_text("utf-8"))
+    test = " ".join(data["services"]["postgres"]["healthcheck"]["test"])
+    assert "pg_isready -h 127.0.0.1 " in test
+
+
 class _ComposeLoader(yaml.SafeLoader):
     """Reads Compose's ``!reset`` tag (it drops a value of the base file) and ``!override``
     (it replaces the value of the base file instead of merging)."""

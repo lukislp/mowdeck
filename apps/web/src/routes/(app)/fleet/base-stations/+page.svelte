@@ -448,18 +448,19 @@
             </span>
           </div>
           {#if canManage && renaming !== base.id}
-            <div class="tools">
-              <Button
-                variant="ghost"
-                icon="edit"
-                label={m.bs_rename()}
-                testid="bs-rename"
-                onclick={() => {
-                  renaming = base.id;
-                  renameValue = base.name;
-                }}
-              />
-              <DemoLock variant="hide">
+            <!-- Fleet refuses renaming and removing RTK base stations in the demo. -->
+            <DemoLock variant="hide">
+              <div class="tools">
+                <Button
+                  variant="ghost"
+                  icon="edit"
+                  label={m.bs_rename()}
+                  testid="bs-rename"
+                  onclick={() => {
+                    renaming = base.id;
+                    renameValue = base.name;
+                  }}
+                />
                 <Button
                   variant="ghost"
                   icon="trash"
@@ -467,8 +468,8 @@
                   testid="bs-delete"
                   onclick={() => (confirmDelete = base.id)}
                 />
-              </DemoLock>
-            </div>
+              </div>
+            </DemoLock>
           {/if}
         </header>
 
@@ -489,16 +490,19 @@
                 <li class="chip" data-mower={mower.id}>
                   <a href="/mowers/{mower.id}">{mower.name}</a>
                   {#if canManage}
-                    <button
-                      type="button"
-                      class="chip-x"
-                      aria-label={m.bs_unlink({ mower: mower.name })}
-                      data-testid="bs-unlink"
-                      disabled={busy === `unlink:${mower.id}`}
-                      onclick={() => void unlink(mower.id)}
-                    >
-                      <Icon name="close" size={16} />
-                    </button>
+                    <!-- Fleet refuses changing a mower's base station in the demo. -->
+                    <DemoLock variant="hide">
+                      <button
+                        type="button"
+                        class="chip-x"
+                        aria-label={m.bs_unlink({ mower: mower.name })}
+                        data-testid="bs-unlink"
+                        disabled={busy === `unlink:${mower.id}`}
+                        onclick={() => void unlink(mower.id)}
+                      >
+                        <Icon name="close" size={16} />
+                      </button>
+                    </DemoLock>
                   {/if}
                 </li>
               {/each}
@@ -507,35 +511,38 @@
             <p class="quiet small">{m.bs_mowers_none()}</p>
           {/if}
           {#if canManage}
-            <div class="assign" data-testid="bs-assign">
-              {#if free.length}
-                <Select
-                  id="bs-link-{base.id}"
-                  label={m.bs_link_choose()}
-                  options={free.map((x) => ({
-                    value: x.id,
-                    label: x.base_station_id
-                      ? `${x.name} (${m.bs_link_elsewhere({ name: baseName.get(x.base_station_id) ?? '…' })})`
-                      : x.name,
-                  }))}
-                  bind:value={
-                    () => linkChoice[base.id] || free[0]?.id || '',
-                    (value) => (linkChoice = { ...linkChoice, [base.id]: value })
-                  }
-                />
-                <Button
-                  icon="link"
-                  pending={busy === `link:${base.id}`}
-                  testid="bs-link"
-                  onclick={() => void link(base)}>{m.bs_link_mower()}</Button
-                >
-              {:else}
-                <p class="quiet small">{m.bs_link_choose_none()}</p>
-              {/if}
-              <p class="quiet small">
-                {base.source === 'cloud' ? m.bs_link_hint_cloud() : m.bs_link_hint_simulated()}
-              </p>
-            </div>
+            <!-- Fleet refuses changing a mower's base station in the demo. -->
+            <DemoLock testid="demo-lock-bs-assign">
+              <div class="assign" data-testid="bs-assign">
+                {#if free.length}
+                  <Select
+                    id="bs-link-{base.id}"
+                    label={m.bs_link_choose()}
+                    options={free.map((x) => ({
+                      value: x.id,
+                      label: x.base_station_id
+                        ? `${x.name} (${m.bs_link_elsewhere({ name: baseName.get(x.base_station_id) ?? '…' })})`
+                        : x.name,
+                    }))}
+                    bind:value={
+                      () => linkChoice[base.id] || free[0]?.id || '',
+                      (value) => (linkChoice = { ...linkChoice, [base.id]: value })
+                    }
+                  />
+                  <Button
+                    icon="link"
+                    pending={busy === `link:${base.id}`}
+                    testid="bs-link"
+                    onclick={() => void link(base)}>{m.bs_link_mower()}</Button
+                  >
+                {:else}
+                  <p class="quiet small">{m.bs_link_choose_none()}</p>
+                {/if}
+                <p class="quiet small">
+                  {base.source === 'cloud' ? m.bs_link_hint_cloud() : m.bs_link_hint_simulated()}
+                </p>
+              </div>
+            </DemoLock>
           {/if}
         </section>
 

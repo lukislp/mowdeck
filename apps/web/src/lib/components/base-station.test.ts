@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { demo } from '#lib/demo/state.svelte.js';
 import { setLocale } from '#lib/paraglide/runtime.js';
 
 import BaseStationFirmware from './BaseStationFirmware.svelte';
@@ -116,5 +117,27 @@ describe('BaseStationFirmware', () => {
     expect(screen.getByTestId('bs-fw-request').textContent).toContain('update started');
     await fireEvent.click(screen.getByTestId('bs-fw-check'));
     expect(oncheck).toHaveBeenCalled();
+  });
+
+  it('locks the check and the install in the demo and keeps the versions readable', () => {
+    demo.config = { resetHours: 6 };
+    try {
+      render(BaseStationFirmware, { props: { ...base, oncheck: vi.fn(), oninstall: vi.fn() } });
+      const lock = screen.getByTestId('demo-lock-bs-fw');
+      expect(lock).toHaveTextContent('In der Demo nicht verfügbar');
+      expect(screen.getByTestId('bs-fw-check')).toBeDisabled();
+      expect(screen.getByTestId('bs-fw-install')).toBeDisabled();
+      expect(screen.getByTestId('bs-fw-installed').textContent).toContain('1.0');
+      expect(screen.getByTestId('bs-fw-available').textContent).toContain('1.1');
+    } finally {
+      demo.config = null;
+    }
+  });
+
+  it('offers the check and the install outside the demo', () => {
+    render(BaseStationFirmware, { props: { ...base, oncheck: vi.fn(), oninstall: vi.fn() } });
+    expect(screen.queryByTestId('demo-lock-bs-fw')).toBeNull();
+    expect(screen.getByTestId('bs-fw-check')).toBeEnabled();
+    expect(screen.getByTestId('bs-fw-install')).toBeEnabled();
   });
 });

@@ -4,6 +4,7 @@
   mower) and "Update installieren". The install asks first in a sheet that says what happens
   (the base restarts, every mower that uses it loses its corrections meanwhile) and lets the user
   pick the mower that relays the request; a mower that cannot relay now is named with the reason.
+  In the public demo both buttons are locked (`DemoLock`); the versions and the state stay.
 -->
 <script lang="ts">
   import { Button, Select, Sheet } from '@mowdeck/ui';
@@ -13,6 +14,7 @@
     type BaseUpdateBlocker,
     type FirmwareInfo,
   } from '#lib/fleet/base-stations.js';
+  import DemoLock from '#lib/demo/DemoLock.svelte';
   import { baseUpdateBlockerText, firmwareStateLabel } from '#lib/fleet/base-station-labels.js';
   import { formatAge, formatNumber, outcomeLabel } from '#lib/i18n.js';
   import { m } from '#lib/paraglide/messages.js';
@@ -126,22 +128,25 @@
     </p>
   {/if}
   <div class="actions">
-    <Button
-      icon="signal"
-      pending={checking}
-      disabled={relays.length === 0}
-      testid="bs-fw-check"
-      onclick={oncheck}>{m.bs_fw_check()}</Button
-    >
-    {#if offered}
+    <!-- Fleet refuses the firmware check and update of RTK base stations in the demo. -->
+    <DemoLock variant="inline" testid="demo-lock-bs-fw">
       <Button
-        variant="primary"
-        icon="download"
-        disabled={shownBlocker !== null}
-        testid="bs-fw-install"
-        onclick={open}>{m.bs_fw_install()}</Button
+        icon="signal"
+        pending={checking}
+        disabled={relays.length === 0}
+        testid="bs-fw-check"
+        onclick={oncheck}>{m.bs_fw_check()}</Button
       >
-    {/if}
+      {#if offered}
+        <Button
+          variant="primary"
+          icon="download"
+          disabled={shownBlocker !== null}
+          testid="bs-fw-install"
+          onclick={open}>{m.bs_fw_install()}</Button
+        >
+      {/if}
+    </DemoLock>
   </div>
   {#if (offered || relays.length === 0) && shownBlocker}
     <p class="hint" data-testid="bs-fw-blocker" data-reason={shownBlocker}>
