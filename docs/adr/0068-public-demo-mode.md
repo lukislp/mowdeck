@@ -116,6 +116,12 @@ A security review of the running demo found that the policy, which only looks at
 
 Checklist for a new endpoint, besides the refusal table: **a GET endpoint that lists sessions, addresses, user agents or token ids must filter them to the caller's own login session in demo mode**, since every visitor holds the demo user's rights.
 
+A re-audit tightened three points (every installation unless noted):
+
+- Realtime's per-address socket limit counts `limiter_key` too (IPv6 per /64), like every other per-address limit.
+- A name left with nothing but whitespace and joiners (U+200D, U+200C) looks blank and counts as empty: refused where a name is required, and for an area name it clears the custom name like an empty one. A planner template name, the URL key of `PUT /planner/templates/{name}`, is refused (422) when cleaning would change it, since a key cannot be rewritten silently; reading and deleting take any name.
+- The override allow-list (demo only) lets only the gateway (`traefik`) join networks, only networks outside the demo, and under no alias that is a service name of the stack; `deploy.resources` is accepted with the empty `deploy.placement` Compose renders along with it.
+
 **Follow-up: a reduced demo role.** The cleaner fix is a demo user without the account-admin reads (`audit.view`, `users.manage`, `billing.manage`). OpenFGA derives them from `owner` and `admin` (`can_view_audit: owner or admin or ...`), and the demo user owns the account it was registered with, so it needs a separate owner nobody signs in as and the visitor as a member with a custom role at account level; the seed job, the tuples it writes, and the web app areas that follow the role would change with it. Until then the filters above close the gap.
 
 ## Open questions

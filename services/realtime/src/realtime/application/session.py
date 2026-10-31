@@ -150,7 +150,8 @@ class Session:
         self._expiry: asyncio.Task[None] | None = None
         self.closed_with: int | None = None
         self.address: str | None = None
-        """Client address of the handshake (the hub's per-address limit)."""
+        """Limiter key of the handshake's client address (IPv6 per /64; the hub's per-address
+        limit)."""
         self.owner_key: tuple[str, UUID] | None = None
         """What the hub counted this session against for the user limit (set on admission)."""
 
