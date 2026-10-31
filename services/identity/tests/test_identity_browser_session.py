@@ -3,6 +3,7 @@ web app's ``ui-areas``."""
 
 from datetime import timedelta
 
+import httpx
 from identity_support import API, GATEWAY, PASSWORD, FakeModules, harness
 from mowdeck_contracts.v1 import ModuleDescriptor, PermissionDef, UiAreaDef
 
@@ -35,9 +36,9 @@ async def test_cookie_only_login_keeps_the_refresh_token_out_of_the_body() -> No
     assert plain.json()["refresh_token"]  # without the header the body still carries it
 
 
-def _cookie(response: object, name: str) -> str:
+def _cookie(response: httpx.Response, name: str) -> str:
     """The ``Set-Cookie`` line of ``name`` in a response."""
-    lines = response.headers.get_list("set-cookie")  # type: ignore[attr-defined]
+    lines: list[str] = response.headers.get_list("set-cookie")
     return next(line for line in lines if line.startswith(f"{name}="))
 
 
