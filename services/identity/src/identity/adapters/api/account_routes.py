@@ -400,7 +400,7 @@ async def revoke_token(
 @router.get("/audit")
 async def audit(
     account_id: UUID,
-    _: ViewAudit,
+    principal: ViewAudit,
     services: ServicesDep,
     action: Annotated[str | None, Query(max_length=64)] = None,
     actor: Annotated[str | None, Query(max_length=64)] = None,
@@ -410,6 +410,7 @@ async def audit(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[AuditOut]:
     """Audit log of the account, newest first; page with ``before_id``."""
+    # The public demo (ADR 0068) shows only the caller's own login session, without addresses.
     entries = await services.audit.query(
         account_id,
         AuditQuery(
@@ -420,5 +421,6 @@ async def audit(
             before_id=before_id,
             limit=limit,
         ),
+        principal,
     )
     return [AuditOut.of(e) for e in entries]

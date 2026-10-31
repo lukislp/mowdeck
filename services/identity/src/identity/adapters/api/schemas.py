@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from mowdeck_contracts.v1 import AccountKind, UiAreaDef
+from mowdeck_contracts.v1 import AccountKind, PlainText, UiAreaDef
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 from identity.application.security import SecurityOverview, SessionView
@@ -46,8 +46,8 @@ class RegisterIn(In):
 
     username: Username
     password: Password
-    account_name: str = Field(min_length=1, max_length=200)
-    display_name: str | None = Field(default=None, max_length=200)
+    account_name: PlainText = Field(min_length=1, max_length=200)
+    display_name: PlainText | None = Field(default=None, max_length=200)
     email: str | None = Field(default=None, max_length=254)
     account_kind: AccountKind = AccountKind.HOUSEHOLD
 
@@ -257,7 +257,7 @@ class AccountOut(BaseModel):
 class AccountPatch(In):
     """``PATCH /accounts/{id}``."""
 
-    name: str = Field(min_length=1, max_length=200)
+    name: PlainText = Field(min_length=1, max_length=200)
 
 
 class AccountDeleteIn(In):
@@ -328,7 +328,7 @@ class SubUserIn(In):
 
     username: Username
     password: Password
-    display_name: str | None = Field(default=None, max_length=200)
+    display_name: PlainText | None = Field(default=None, max_length=200)
     email: str | None = Field(default=None, max_length=254)
     must_change_password: bool = False
     assignments: list[AssignmentIn] = Field(default_factory=list, max_length=50)
@@ -337,7 +337,7 @@ class SubUserIn(In):
 class UserPatch(In):
     """``PATCH /users/{id}``."""
 
-    display_name: str = Field(min_length=1, max_length=200)
+    display_name: PlainText = Field(min_length=1, max_length=200)
 
 
 class PasswordSetIn(In):
@@ -389,17 +389,17 @@ class MemberOut(BaseModel):
 class RoleIn(In):
     """``POST /roles``."""
 
-    name: str = Field(min_length=1, max_length=100)
+    name: PlainText = Field(min_length=1, max_length=100)
     permissions: list[PermissionKey] = Field(max_length=100)
-    description: str = Field(default="", max_length=500)
+    description: PlainText = Field(default="", max_length=500)
 
 
 class RolePatch(In):
     """``PATCH /roles/{id}``."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=100)
+    name: PlainText | None = Field(default=None, min_length=1, max_length=100)
     permissions: list[PermissionKey] | None = Field(default=None, max_length=100)
-    description: str | None = Field(default=None, max_length=500)
+    description: PlainText | None = Field(default=None, max_length=500)
 
 
 class RoleOut(BaseModel):
@@ -462,7 +462,7 @@ class TokenGrantIn(In):
 class ApiTokenIn(In):
     """``POST /api-tokens``."""
 
-    name: str = Field(min_length=1, max_length=100)
+    name: PlainText = Field(min_length=1, max_length=100)
     grants: list[TokenGrantIn] = Field(min_length=1, max_length=50)
     expires_at: datetime | None = None
 
@@ -508,7 +508,7 @@ class ApiTokenOut(BaseModel):
 class PersonalTokenIn(In):
     """``POST /me/api-tokens``: a personal access token for the caller's own scripts."""
 
-    name: str = Field(min_length=1, max_length=100, examples=["Garden dashboard script"])
+    name: PlainText = Field(min_length=1, max_length=100, examples=["Garden dashboard script"])
     scopes: list[PermissionKey] = Field(
         min_length=1,
         max_length=3,
@@ -738,13 +738,13 @@ class PasskeyRegistrationIn(In):
 
     ceremony_id: UUID
     credential: WebAuthnResponse
-    name: str | None = Field(default=None, max_length=64)
+    name: PlainText | None = Field(default=None, max_length=64)
 
 
 class PasskeyPatch(In):
     """``PATCH /me/passkeys/{id}``."""
 
-    name: str = Field(min_length=1, max_length=64)
+    name: PlainText = Field(min_length=1, max_length=64)
 
 
 class PasskeyOut(BaseModel):
@@ -865,7 +865,7 @@ class OnboardingIn(In):
 class WidgetCredentialIn(In):
     """``POST /me/widget-credentials``."""
 
-    device_name: str = Field(
+    device_name: PlainText = Field(
         min_length=1,
         max_length=80,
         examples=["Lukas' iPhone"],

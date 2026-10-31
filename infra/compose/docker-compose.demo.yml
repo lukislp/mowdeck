@@ -93,6 +93,10 @@ services:
   realtime:
     environment:
       <<: *demo
+      # Every visitor is the same user: demo mode counts the per-user limit per login session.
+      # The account limit is the total, the address limit keeps one visitor from taking it all.
+      MOWDECK_REALTIME_MAX_CONNECTIONS_PER_ACCOUNT: ${DEMO_REALTIME_MAX_CONNECTIONS:-500}
+      MOWDECK_REALTIME_MAX_CONNECTIONS_PER_ADDRESS: ${DEMO_REALTIME_MAX_CONNECTIONS_PER_ADDRESS:-20}
 
   notifications:
     environment:

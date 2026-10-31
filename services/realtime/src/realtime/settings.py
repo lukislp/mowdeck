@@ -34,7 +34,14 @@ class Settings(ServiceSettings):
     """Open sockets per account and instance; one more is answered with 4429."""
 
     realtime_max_connections_per_user: int = Field(default=10, ge=1, le=10_000)
-    """Open sockets per user (or API token) and instance; one more is answered with 4429."""
+    """Open sockets per user (or API token) and instance; one more is answered with 4429. In
+    demo mode (``MOWDECK_DEMO_MODE``) it counts per login session instead: every visitor of the
+    public demo signs in as the same user (ADR 0068)."""
+
+    realtime_max_connections_per_address: int = Field(default=0, ge=0, le=100_000)
+    """Open sockets per client address and instance (the address rule of
+    ``MOWDECK_CLIENT_IP_DEPTH``); one more is answered with 4429. 0 is no limit. The public demo
+    sets it, so one visitor cannot take every socket of the shared account."""
 
     realtime_max_subscriptions: int = Field(default=200, ge=1, le=1000)
     """Subscribed mowers per socket; a ``subscribe`` beyond it is answered with 4429."""
@@ -82,6 +89,8 @@ class Settings(ServiceSettings):
             recheck_seconds=self.realtime_recheck_seconds,
             max_connections_per_account=self.realtime_max_connections_per_account,
             max_connections_per_user=self.realtime_max_connections_per_user,
+            max_connections_per_address=self.realtime_max_connections_per_address,
+            limit_per_login_session=self.demo_mode,
             max_subscriptions=self.realtime_max_subscriptions,
             queue_size=self.realtime_queue_size,
             send_timeout_seconds=self.realtime_send_timeout_seconds,
