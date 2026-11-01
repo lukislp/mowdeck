@@ -23,7 +23,13 @@ updates:
       prefix: "fix(ci)"
     reviewers:
       - "lukislp"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 5
+    # All lukislp/ci-workflows bumps share one PR, so they take one slot of the
+    # limit and other actions (e.g. harden-runner) are not starved by them.
+    groups:
+      ci-workflows:
+        patterns:
+          - "lukislp/ci-workflows*"
   # The fuzzing toolchain of the ClusterFuzzLite build image (Atheris, PyInstaller, coverage),
   # pinned with hashes in .clusterfuzzlite/requirements.txt (docs/dev/fuzzing.md).
   - package-ecosystem: pip
@@ -34,7 +40,7 @@ updates:
       prefix: "fix(ci)"
     reviewers:
       - "lukislp"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 5
   # One uv workspace with a single uv.lock for every service, library and tool. From the root
   # Dependabot reads the root pyproject.toml and every workspace member's pyproject.toml (the
   # [tool.uv.workspace] members globs; they must not end in "/", which Dependabot's uv fetcher
@@ -103,4 +109,4 @@ updates:
       prefix: "fix(deps)"
     reviewers:
       - "lukislp"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 5
