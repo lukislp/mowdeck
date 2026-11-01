@@ -51,7 +51,7 @@ services:
       - "${GATEWAY_HTTP_PORT:-80}:80"
 
   # No host port for the backing services: only the containers of this project reach them
-  # (docs/ops/demo.md, "Host ports"). NATS authenticates every service (ADR 0073) with the
+  # (docs/ops/demo.md, "Host ports"). NATS authenticates every service (ADR 0074) with the
   # passwords of demo/demo.env.
   nats:
     ports: !reset []

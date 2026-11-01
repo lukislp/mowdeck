@@ -29,7 +29,7 @@ Each update, from `infra/compose` of the checkout (a stack under another [projec
 git fetch --tags && git checkout --detach v<x>      # the Compose files of that release
 docker compose exec -T postgres pg_dumpall -U postgres > ~/mowdeck-before-<x>.sql   # backup
 ./verify-release.sh <x>                             # writes docker-compose.release.yml
-./nats-passwords.sh --check .env                    # the release's NATS passwords (ADR 0073)
+./nats-passwords.sh --check .env                    # the release's NATS passwords (ADR 0074)
 sed -i 's/^MOWDECK_VERSION=.*/MOWDECK_VERSION=<x>/' .env
 docker compose -f docker-compose.yml -f docker-compose.release.yml pull
 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait
@@ -112,7 +112,7 @@ CI pulls the same pinned images through the repository's GHCR mirror `ghcr.io/<o
 
 ## NATS users and permissions
 
-Every service connects to NATS as its own user and may use only the subjects its code uses ([ADR 0073](../adr/0073-nats-authentication-and-subject-permissions.md)): a compromised container cannot command mowers, forge another service's events or read another service's replies. The users and their permissions are `nats/auth.conf`, generated from the subject map in `tools/repo-checks/scripts/nats_auth.py` (`uv run poe nats-auth`; never edit the file by hand). The one-shot job `nats-streams` creates and updates the JetStream streams as the user `streams` before the services start; no service may change a stream.
+Every service connects to NATS as its own user and may use only the subjects its code uses ([ADR 0074](../adr/0074-nats-authentication-and-subject-permissions.md)): a compromised container cannot command mowers, forge another service's events or read another service's replies. The users and their permissions are `nats/auth.conf`, generated from the subject map in `tools/repo-checks/scripts/nats_auth.py` (`uv run poe nats-auth`; never edit the file by hand). The one-shot job `nats-streams` creates and updates the JetStream streams as the user `streams` before the services start; no service may change a stream.
 
 Each user has a password in `.env`, `NATS_PASSWORD_<USER>` (`NATS_PASSWORD_FLEET`, `NATS_PASSWORD_DEVICE_GATEWAY`, ..., `NATS_PASSWORD_STREAMS`). NATS gets all of them, each service only its own. `.env.example` has development placeholders; for any real installation generate them:
 
@@ -123,9 +123,9 @@ cd infra/compose
 docker compose up -d --wait       # after a change: recreates NATS and the services
 ```
 
-The script never prints a value. A password is 24 to 128 letters, digits, `-` and `_` and starts with a letter (NATS reads it from its environment as a configuration value; one that starts with a digit could be taken for a number). Rotate a password by deleting its line and running the script again, then `docker compose up -d --wait`. NATS logs "Plaintext passwords detected" at start: the passwords are kept in its environment on purpose (ADR 0073, "Passwords").
+The script never prints a value. A password is 24 to 128 letters, digits, `-` and `_` and starts with a letter (NATS reads it from its environment as a configuration value; one that starts with a digit could be taken for a number). Rotate a password by deleting its line and running the script again, then `docker compose up -d --wait`. NATS logs "Plaintext passwords detected" at start: the passwords are kept in its environment on purpose (ADR 0074, "Passwords").
 
-**Updating an installation from a release before ADR 0073.** The new release needs the passwords; without them `docker compose pull` (and so `deploy.sh`) stops with `required variable NATS_PASSWORD_... is missing a value` before any container changes. Add them first, then update as usual:
+**Updating an installation from a release before ADR 0074.** The new release needs the passwords; without them `docker compose pull` (and so `deploy.sh`) stops with `required variable NATS_PASSWORD_... is missing a value` before any container changes. Add them first, then update as usual:
 
 ```bash
 cd infra/compose

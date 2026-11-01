@@ -1,5 +1,5 @@
 {{- /*
-JetStream streams (ADR 0073; Compose service nats-streams): creates the streams and updates them
+JetStream streams (ADR 0074; Compose service nats-streams): creates the streams and updates them
 to the contract settings as the NATS user "streams", the only user allowed to. One Job per
 release revision (Jobs are immutable); the services wait for the streams on connect.
 */ -}}

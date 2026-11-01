@@ -1,4 +1,4 @@
-"""The generated NATS permissions against a real server (ADR 0073).
+"""The generated NATS permissions against a real server (ADR 0074).
 
 Skipped unless ``MOWDECK_TEST_NATS_AUTH_URL`` points at a NATS server with JetStream that runs
 ``infra/compose/nats/auth.conf`` with the development passwords of ``infra/compose/.env.example``

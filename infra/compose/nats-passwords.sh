@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The NATS passwords of the stack (ADR 0073): one per service user of nats/auth.conf, stored as
+# The NATS passwords of the stack (ADR 0074): one per service user of nats/auth.conf, stored as
 # NATS_PASSWORD_<USER> in an env file (.env of the stack, demo/demo.env of the public demo).
 #
 #   ./nats-passwords.sh <env-file>           # adds every missing password, replaces placeholders

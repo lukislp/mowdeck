@@ -36,7 +36,7 @@ REPLACED = {
 # One-shot Compose jobs the chart runs as a Job per release revision (templates/<name>.yaml).
 JOBS = {
     "authz-bootstrap": "the OpenFGA store and model",
-    "nats-streams": "the JetStream streams (ADR 0073)",
+    "nats-streams": "the JetStream streams (ADR 0074)",
 }
 
 # Compose services the chart runs with a template of their own instead of mowdeck.workload.

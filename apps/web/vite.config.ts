@@ -126,6 +126,8 @@ export default defineConfig({
         'src/lib/native/apns.ts',
         'src/lib/native/shell.svelte.ts',
         'src/lib/navigate.ts',
+        'src/lib/tour/steps.ts',
+        'src/lib/tour/tour.svelte.ts',
       ],
       reporter: ['text-summary'],
       thresholds: { lines: 80 },

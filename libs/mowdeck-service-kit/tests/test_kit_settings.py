@@ -169,7 +169,7 @@ def test_nats_credentials_from_env_and_secret_file(
     assert settings.nats_password.get_secret_value() == "n0t-a-real-password-0123456789"
     assert "n0t-a-real" not in repr(settings)
     assert settings.nats_inbox_prefix == "_INBOX.device-gateway"
-    # With per-service credentials the nats-streams job manages the streams (ADR 0073).
+    # With per-service credentials the nats-streams job manages the streams (ADR 0074).
     assert settings.nats_streams_managed is False
 
 

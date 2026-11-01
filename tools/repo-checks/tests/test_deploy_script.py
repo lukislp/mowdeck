@@ -183,7 +183,7 @@ exit "${FAKE_NATS_EXIT:-0}"
 
 
 def test_deploy_checks_the_nats_passwords_of_the_release(stack: Stack) -> None:
-    """ADR 0073: after the checkout (the release's own check) and before anything changes."""
+    """ADR 0074: after the checkout (the release's own check) and before anything changes."""
     path = stack.root / "stack" / "nats-passwords.sh"
     path.write_text(STUB_NATS_PASSWORDS, encoding="utf-8", newline="\n")
     result = stack.run("0.2.0")

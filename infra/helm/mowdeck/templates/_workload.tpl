@@ -26,7 +26,7 @@ Call with a dict:
   recreate       true: Deployment strategy Recreate (a ReadWriteOnce volume)
   sidecars       further containers of the pod (full container specs, after the main one)
 
-A component with a NATS user (secrets.NATS_PASSWORD_<COMPONENT>, ADR 0073) gets
+A component with a NATS user (secrets.NATS_PASSWORD_<COMPONENT>, ADR 0074) gets
 MOWDECK_NATS_USER=<component> and its own password, and only its own, as the file
 /run/secrets/nats/password (MOWDECK_NATS_PASSWORD_FILE) from the Secret natsAuth.secretName.
 */}}
@@ -293,7 +293,7 @@ spec:
               {{- end }}
         {{- end }}
         {{- if $natsUser }}
-        # Only this component's own NATS password (ADR 0073).
+        # Only this component's own NATS password (ADR 0074).
         - name: nats-auth
           secret:
             secretName: {{ $ctx.Values.natsAuth.secretName }}

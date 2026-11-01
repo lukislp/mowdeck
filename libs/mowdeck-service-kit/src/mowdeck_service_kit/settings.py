@@ -100,7 +100,7 @@ class ServiceSettings(BaseSettings):
     """Connect to NATS on startup. Disable for services without bus traffic and in tests."""
 
     nats_user: str | None = Field(default=None, max_length=64, pattern=r"^[a-z][a-z0-9\-]*$")
-    """User name of this service on NATS (``MOWDECK_NATS_USER``, ADR 0073); empty: connect
+    """User name of this service on NATS (``MOWDECK_NATS_USER``, ADR 0074); empty: connect
     without credentials (development, tests). It also names the service's reply inbox
     ``_INBOX.<user>``, the only inbox its permissions let it subscribe to."""
 
@@ -111,7 +111,7 @@ class ServiceSettings(BaseSettings):
     """Create and update the JetStream streams on connect. Empty: only without ``nats_user``
     (development, tests); with per-service credentials the one-shot job ``nats-streams``
     (``python -m mowdeck_service_kit.bus.streams``) does it and the services wait for the
-    streams instead (ADR 0073)."""
+    streams instead (ADR 0074)."""
 
     nats_stream_wait_seconds: float = Field(default=120.0, ge=0, le=3600)
     """How long a service that does not manage the streams waits for them on connect."""

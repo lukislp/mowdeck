@@ -61,7 +61,7 @@ for name in POSTGRES_PASSWORD SERVICE_DB_PASSWORD OPENFGA_AUTHN_PRESHARED_KEYS I
     '' | change-me* | *dev-only*) die "set $name in demo.env (it is empty or a placeholder)" ;;
   esac
 done
-# One NATS password per service user (ADR 0073); the script names the bad ones, never a value.
+# One NATS password per service user (ADR 0074); the script names the bad ones, never a value.
 "$compose_dir/nats-passwords.sh" --check "$env_file" >/dev/null ||
   die "set the NATS passwords in demo.env: $compose_dir/nats-passwords.sh $env_file"
 [ "$(value MOWDECK_NETWORK)" = "$project" ] || die "MOWDECK_NETWORK must be the project name ($project)"

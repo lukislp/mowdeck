@@ -100,7 +100,7 @@ services:
     networks: [mowdeck]
 
   # Every client authenticates with its own user and may use only the subjects its service needs
-  # (ADR 0073): nats/auth.conf, generated from the subject map in
+  # (ADR 0074): nats/auth.conf, generated from the subject map in
   # tools/repo-checks/scripts/nats_auth.py. The passwords are NATS_PASSWORD_<USER> in .env
   # (./nats-passwords.sh .env generates them); each service gets only its own.
   nats:
@@ -137,7 +137,7 @@ services:
 
   # One-shot job: creates the JetStream streams and updates them to the contract settings
   # (idempotent, safe on every `up`). It is the only NATS user allowed to change a stream; the
-  # services wait for it (ADR 0073). Runs in the identity image, which the stack builds anyway.
+  # services wait for it (ADR 0074). Runs in the identity image, which the stack builds anyway.
   nats-streams:
     image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/identity:${MOWDECK_VERSION:-dev}
     build:

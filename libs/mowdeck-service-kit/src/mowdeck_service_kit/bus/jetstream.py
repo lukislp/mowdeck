@@ -2,12 +2,12 @@
 
 On :meth:`JetStreamBus.connect` the streams from :data:`mowdeck_contracts.v1.subjects.STREAMS`
 are created or updated (``manage_streams``), or awaited when another process manages them (the
-``nats-streams`` job of an installation with per-service credentials, ADR 0073). Stream subjects
+``nats-streams`` job of an installation with per-service credentials, ADR 0074). Stream subjects
 go through JetStream (persisted, de-duplicated by ``Nats-Msg-Id``, acknowledged); all other
 subjects use core NATS. The client reconnects forever; connection state changes are logged and
 reflected in :attr:`JetStreamBus.is_connected`, which backs the ``nats`` readiness check.
 
-Least privilege (ADR 0073): the client's inboxes live below ``inbox_prefix`` (``_INBOX.<user>``
+Least privilege (ADR 0074): the client's inboxes live below ``inbox_prefix`` (``_INBOX.<user>``
 with credentials), and every stream consumer is created through the subject based API
 (``$JS.API.CONSUMER.CREATE.<stream>.<name>.<filter>``) with its delivery subject in that inbox,
 so the server's permissions can restrict both the filters a service may consume and the inboxes
@@ -236,7 +236,7 @@ class JetStreamBus:
             return
         msg = (
             f"stream {name} does not exist after {self.stream_wait_seconds:g}s; the nats-streams "
-            "job creates it (python -m mowdeck_service_kit.bus.streams, ADR 0073)"
+            "job creates it (python -m mowdeck_service_kit.bus.streams, ADR 0074)"
         )
         raise BusError(msg)
 
@@ -352,7 +352,7 @@ class JetStreamBus:
             return (await js.add_consumer(stream.name, config)).config
         if existing.deliver_subject == deliver:
             return existing
-        # Created before ADR 0073 (a random _INBOX.<nuid>) or under another inbox prefix: keep
+        # Created before ADR 0074 (a random _INBOX.<nuid>) or under another inbox prefix: keep
         # its position and settings, only deliver to this service's inbox from now on.
         # The answer of the update may still name the old delivery subject, so the binding uses
         # the configuration as sent.

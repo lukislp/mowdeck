@@ -1,4 +1,4 @@
-"""NATS authentication and least-privilege permissions (ADR 0073).
+"""NATS authentication and least-privilege permissions (ADR 0074).
 
 * The generated server configuration (infra/compose/nats/auth.conf and the chart's copy) is the
   rendering of the subject map in tools/repo-checks/scripts/nats_auth.py.

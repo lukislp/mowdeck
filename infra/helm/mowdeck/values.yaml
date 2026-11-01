@@ -361,7 +361,7 @@ secrets:
   # than one replica without it). Generate once:
   #   kubectl run vapid --rm -it --image=<registry>/notifications:<tag> -- python -m notifications.cli generate-vapid-keys
   NOTIFICATIONS_VAPID_PRIVATE_KEY: ""
-  # -- NATS passwords, one per user (ADR 0073): every service connects as its own user and may
+  # -- NATS passwords, one per user (ADR 0074): every service connects as its own user and may
   # use only its own subjects (files/nats-auth.conf); "streams" is the nats-streams Job. All are
   # required while natsAuth.createSecret, also of disabled services (the server's configuration
   # names every user). 24 to 128 letters, digits, '-' and '_', starting with a letter:
@@ -391,7 +391,7 @@ openfgaSecret:
   create: true
   name: mowdeck-openfga
 
-# NATS users (ADR 0073). The Secret secretName holds one password per user (keys: the user names
+# NATS users (ADR 0074). The Secret secretName holds one password per user (keys: the user names
 # billing, camera-relay, device-gateway, entitlements, fleet, identity, notifications, planner,
 # realtime, scheduler, streams, telemetry, vision); the NATS server reads all of them
 # (nats.container.env below), each service only its own, as a file. The ConfigMap
@@ -928,7 +928,7 @@ nats:
         path: /spec/volumes/-
         value: {name: mowdeck-nats-auth, configMap: {name: mowdeck-nats-auth}}
   config:
-    # Users and permissions (ADR 0073): no client without credentials. The include path is
+    # Users and permissions (ADR 0074): no client without credentials. The include path is
     # relative to the chart's /etc/nats-config/nats.conf.
     merge:
       $include: ../nats-mowdeck/auth.conf

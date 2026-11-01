@@ -1,4 +1,4 @@
-"""One-shot job that creates and updates the JetStream streams (ADR 0073).
+"""One-shot job that creates and updates the JetStream streams (ADR 0074).
 
     python -m mowdeck_service_kit.bus.streams
 

@@ -1,4 +1,4 @@
-# ADR 0073: NATS authentication and per-service subject permissions
+# ADR 0074: NATS authentication and per-service subject permissions
 
 ## Status
 

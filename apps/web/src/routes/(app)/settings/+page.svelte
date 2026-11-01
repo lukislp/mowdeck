@@ -145,7 +145,12 @@
 <TopBar title={m.settings_title()} meta={session.me?.username ?? undefined} />
 
 <div class="settings" data-testid="settings-page">
-  <nav class="index" aria-label={m.settings_index()} data-testid="settings-index">
+  <nav
+    class="index"
+    aria-label={m.settings_index()}
+    data-testid="settings-index"
+    data-tour="settings"
+  >
     <ol>
       {#each sections as section, index (section.anchor)}
         <li>

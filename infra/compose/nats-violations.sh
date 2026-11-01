@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fails when the NATS server of a running stack refused a client (ADR 0073): a permission
+# Fails when the NATS server of a running stack refused a client (ADR 0074): a permission
 # violation (a service used a subject outside its allow list in nats/auth.conf) or an
 # authentication failure. CI runs it after the end-to-end suites; locally, after any test run:
 #
@@ -13,7 +13,7 @@ found="$(printf '%s\n' "$log" | grep -E 'Publish Violation|Subscription Violatio
 if [ -n "$found" ]; then
   printf '%s\n' "$found"
   echo "nats-violations: the NATS server refused a client; extend the subject map in" \
-    "tools/repo-checks/scripts/nats_auth.py only if the service really needs it (ADR 0073)" >&2
+    "tools/repo-checks/scripts/nats_auth.py only if the service really needs it (ADR 0074)" >&2
   exit 1
 fi
 echo "nats-violations: no NATS permission violations"

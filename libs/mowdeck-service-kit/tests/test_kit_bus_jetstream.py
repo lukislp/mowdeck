@@ -67,7 +67,7 @@ def test_credentials_come_from_the_settings_and_stay_hidden() -> None:
     assert bus.servers == ["nats://a:4222", "nats://b:4222"]
     assert bus.user == "camera-relay"
     assert bus.inbox_prefix == "_INBOX.camera-relay"
-    assert bus.manage_streams is False  # the nats-streams job does it (ADR 0073)
+    assert bus.manage_streams is False  # the nats-streams job does it (ADR 0074)
     assert "hidden-relay-password" not in repr(bus)
     assert "hidden-relay-password" not in str(vars(bus).get("user"))
     assert JetStreamBus.from_settings(settings, manage_streams=True).manage_streams is True
@@ -297,7 +297,7 @@ async def test_closed_bus_raises(bus: JetStreamBus) -> None:
 async def test_a_durable_consumer_of_an_older_release_moves_into_the_inbox(
     bus: JetStreamBus,
 ) -> None:
-    """Before ADR 0073 nats-py chose a random _INBOX.<nuid>; the bus keeps the consumer (and
+    """Before ADR 0074 nats-py chose a random _INBOX.<nuid>; the bus keeps the consumer (and
     its position) and only delivers to its own inbox from then on."""
     assert NATS_URL is not None
     domain = f"t{uuid4().hex[:8]}"

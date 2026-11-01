@@ -89,7 +89,7 @@ app.kubernetes.io/component: {{ .component }}
 {{- end }}
 {{- end }}
 
-{{/* NATS user of a component (ADR 0073): the component name when secrets has its
+{{/* NATS user of a component (ADR 0074): the component name when secrets has its
 NATS_PASSWORD_<COMPONENT>, else empty (the web app, MediaMTX, the Matter server). */}}
 {{- define "mowdeck.natsUser" -}}
 {{- $key := printf "NATS_PASSWORD_%s" (.component | upper | replace "-" "_") }}

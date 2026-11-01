@@ -1,6 +1,6 @@
 # Compose block for {{ service_name }}: paste the entries below "services:" into
 # infra/compose/docker-compose.yml. Build context is the repository root.
-# NATS (ADR 0073): add the user {{ service_name }} with the subjects it uses to USERS in
+# NATS (ADR 0074): add the user {{ service_name }} with the subjects it uses to USERS in
 # tools/repo-checks/scripts/nats_auth.py, run `uv run poe nats-auth`, and add
 # NATS_PASSWORD_{{ service_name | upper | replace('-', '_') }} to the nats service, .env.example,
 # demo/demo.env.example and secrets of the Helm chart's values.yaml.

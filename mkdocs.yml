@@ -116,7 +116,8 @@ nav:
       - adr/0070-virtual-zones.md
       - adr/0071-capability-matrix.md
       - adr/0072-api-explorer-in-the-web-app.md
-      - adr/0073-nats-authentication-and-subject-permissions.md
+      - adr/0073-guided-tour.md
+      - adr/0074-nats-authentication-and-subject-permissions.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md

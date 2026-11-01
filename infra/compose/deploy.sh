@@ -10,7 +10,7 @@
 #      pg_dumpall, whose last lines must say "PostgreSQL database cluster dump complete"
 #   3. git checkout --detach v<version>  (refuses a checkout with local changes)
 #   4. ./verify-release.sh <version>      (fails closed: nothing is pulled when it fails), then
-#      ./nats-passwords.sh --check .env   (the release's NATS passwords, ADR 0073)
+#      ./nats-passwords.sh --check .env   (the release's NATS passwords, ADR 0074)
 #   5. MOWDECK_VERSION=<version> in .env
 #   6. docker compose pull
 #   7. open the maintenance window in Notifications, so the restart of the Device-Gateway sends
@@ -116,7 +116,7 @@ main() {
 
   step "4/9 verify the release images and the secrets it needs"
   run ./verify-release.sh "$version"
-  # A release may need secrets an older one did not (ADR 0073: one NATS password per service).
+  # A release may need secrets an older one did not (ADR 0074: one NATS password per service).
   # Checked before .env or a container changes; the script names what is missing, never a value.
   if [ -f ./nats-passwords.sh ]; then
     run bash ./nats-passwords.sh --check .env ||

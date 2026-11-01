@@ -214,6 +214,28 @@ describe('Onboarding', () => {
     expect(tour.offer).toBe('none');
   });
 
+  it('replaces the hint keys, turning a never started setup tour into the given status', async () => {
+    const d = deps({ status: 'new', skipped: [], hints: ['mower-map'] });
+    const tour = new Onboarding(d);
+    await tour.setHints(['tour-seen'], 'active');
+    // Not loaded yet: nothing is written over the stored choices.
+    expect(d.api.save).not.toHaveBeenCalled();
+    await tour.load();
+    await tour.setHints(['mower-map', 'tour-seen'], 'active');
+    expect(d.api.save).toHaveBeenLastCalledWith({
+      status: 'active',
+      skipped: [],
+      hints: ['mower-map', 'tour-seen'],
+    });
+    await tour.setHints(['tour-done'], 'dismissed');
+    // A started setup tour keeps its status.
+    expect(d.api.save).toHaveBeenLastCalledWith({
+      status: 'active',
+      skipped: [],
+      hints: ['tour-done'],
+    });
+  });
+
   it('is complete only once the facts are known', async () => {
     const done: Facts = {
       ...EMPTY,

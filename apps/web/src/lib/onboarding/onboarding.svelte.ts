@@ -150,6 +150,18 @@ export class Onboarding {
     return this.#save({ ...this.progress, hints: [...this.progress.hints, key] });
   }
 
+  /**
+   * Replace the stored hint keys (the guided tour keeps its outcome there, ADR 0073). A setup
+   * tour that never started (`new`) is stored as `whenNew`: what the mower list would make of
+   * the account (`active` for a new account that may add mowers and has none). Nothing is saved
+   * while the choices are not loaded, so a failed load never overwrites them.
+   */
+  setHints(hints: readonly string[], whenNew: 'active' | 'dismissed'): Promise<void> {
+    if (!this.loaded || this.failed) return Promise.resolve();
+    const status = this.progress.status === 'new' ? whenNew : this.progress.status;
+    return this.#save({ ...this.progress, status, hints: [...hints] });
+  }
+
   /** Signed out: forget everything of the user. */
   reset(): void {
     this.progress = UNTOUCHED;

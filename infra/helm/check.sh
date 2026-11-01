@@ -7,7 +7,7 @@
 #      against the Kubernetes schemas of KUBE_VERSION and the CloudNativePG / Prometheus Operator
 #      CRD schemas of the datreeio CRDs-catalog (pinned commit)
 #   4. negative checks: a render without the required secrets must fail with a clear message,
-#      the NATS users (ADR 0073): every password required and well-formed, the server includes
+#      the NATS users (ADR 0074): every password required and well-formed, the server includes
 #      the generated permissions, every service gets its own user
 #   5. the drift test tools/repo-checks/tests/test_helm.py (Compose services <-> templates,
 #      .env.example <-> values.yaml), when uv is available and SKIP_DRIFT is not set
@@ -80,7 +80,7 @@ helm template mowdeck "$chart" --set secrets.existingSecret=mowdeck-app \
   --set natsAuth.createSecret=false > /dev/null
 echo "ok: secrets.existingSecret renders without secret values"
 
-step "NATS users and permissions (ADR 0073)"
+step "NATS users and permissions (ADR 0074)"
 expect_failure "secrets.NATS_PASSWORD_BILLING is required" -f "$test_values" \
   --set secrets.NATS_PASSWORD_BILLING=
 expect_failure "secrets.NATS_PASSWORD_FLEET must be 24 to 128" -f "$test_values" \

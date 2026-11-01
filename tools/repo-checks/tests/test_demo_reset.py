@@ -82,7 +82,7 @@ def _bin(tmp_path: Path, *, fake_docker: bool) -> Path:
 
 
 def _nats_passwords(compose: Path) -> list[str]:
-    """The NATS_PASSWORD_* variables of nats/auth.conf (ADR 0073)."""
+    """The NATS_PASSWORD_* variables of nats/auth.conf (ADR 0074)."""
     text = (compose / "nats" / "auth.conf").read_text("utf-8")
     return sorted(set(re.findall(r"\$(NATS_PASSWORD_[A-Z0-9_]+)", text)))
 
